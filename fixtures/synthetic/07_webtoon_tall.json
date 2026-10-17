@@ -1,0 +1,60 @@
+{
+  "layout_name": "07_webtoon_tall",
+  "width": 1000,
+  "height": 4800,
+  "reading_direction": "vertical",
+  "panels": [
+    {
+      "id": "p1",
+      "sequence": 1,
+      "x": 80,
+      "y": 150,
+      "width": 840,
+      "height": 950,
+      "normalized_x": 0.08,
+      "normalized_y": 0.0312,
+      "normalized_width": 0.84,
+      "normalized_height": 0.1979,
+      "panel_type": "WEBTOON_SEGMENT"
+    },
+    {
+      "id": "p2",
+      "sequence": 2,
+      "x": 80,
+      "y": 1300,
+      "width": 840,
+      "height": 950,
+      "normalized_x": 0.08,
+      "normalized_y": 0.2708,
+      "normalized_width": 0.84,
+      "normalized_height": 0.1979,
+      "panel_type": "WEBTOON_SEGMENT"
+    },
+    {
+      "id": "p3",
+      "sequence": 3,
+      "x": 80,
+      "y": 2450,
+      "width": 840,
+      "height": 950,
+      "normalized_x": 0.08,
+      "normalized_y": 0.5104,
+      "normalized_width": 0.84,
+      "normalized_height": 0.1979,
+      "panel_type": "WEBTOON_SEGMENT"
+    },
+    {
+      "id": "p4",
+      "sequence": 4,
+      "x": 80,
+      "y": 3600,
+      "width": 840,
+      "height": 950,
+      "normalized_x": 0.08,
+      "normalized_y": 0.75,
+      "normalized_width": 0.84,
+      "normalized_height": 0.1979,
+      "panel_type": "WEBTOON_SEGMENT"
+    }
+  ]
+}

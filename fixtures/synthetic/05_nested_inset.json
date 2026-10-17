@@ -1,0 +1,34 @@
+{
+  "layout_name": "05_nested_inset",
+  "width": 1200,
+  "height": 1600,
+  "reading_direction": "ltr",
+  "panels": [
+    {
+      "id": "p1",
+      "sequence": 1,
+      "x": 50,
+      "y": 50,
+      "width": 1100,
+      "height": 1500,
+      "normalized_x": 0.0417,
+      "normalized_y": 0.0312,
+      "normalized_width": 0.9167,
+      "normalized_height": 0.9375,
+      "panel_type": "STANDARD"
+    },
+    {
+      "id": "p2",
+      "sequence": 2,
+      "x": 650,
+      "y": 950,
+      "width": 450,
+      "height": 550,
+      "normalized_x": 0.5417,
+      "normalized_y": 0.5938,
+      "normalized_width": 0.375,
+      "normalized_height": 0.3438,
+      "panel_type": "INSET"
+    }
+  ]
+}

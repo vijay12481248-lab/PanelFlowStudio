@@ -1,0 +1,47 @@
+{
+  "layout_name": "03_irregular_panels",
+  "width": 1200,
+  "height": 1600,
+  "reading_direction": "ltr",
+  "panels": [
+    {
+      "id": "p1",
+      "sequence": 1,
+      "x": 50,
+      "y": 50,
+      "width": 1100,
+      "height": 450,
+      "normalized_x": 0.0417,
+      "normalized_y": 0.0312,
+      "normalized_width": 0.9167,
+      "normalized_height": 0.2812,
+      "panel_type": "STANDARD"
+    },
+    {
+      "id": "p2",
+      "sequence": 2,
+      "x": 50,
+      "y": 540,
+      "width": 450,
+      "height": 1000,
+      "normalized_x": 0.0417,
+      "normalized_y": 0.3375,
+      "normalized_width": 0.375,
+      "normalized_height": 0.625,
+      "panel_type": "STANDARD"
+    },
+    {
+      "id": "p3",
+      "sequence": 3,
+      "x": 540,
+      "y": 540,
+      "width": 610,
+      "height": 1000,
+      "normalized_x": 0.45,
+      "normalized_y": 0.3375,
+      "normalized_width": 0.5083,
+      "normalized_height": 0.625,
+      "panel_type": "STANDARD"
+    }
+  ]
+}

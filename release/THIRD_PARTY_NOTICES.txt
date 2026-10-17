@@ -1,0 +1,80 @@
+================================================================================
+PANELFLOW STUDIO — THIRD-PARTY SOFTWARE NOTICES & LICENSES
+================================================================================
+
+PanelFlow Studio incorporates or interacts with third-party open-source components.
+This document contains the required notices, attributions, and license summaries.
+
+--------------------------------------------------------------------------------
+1. Tauri Framework
+   Copyright (c) 2019-2024 Tauri Programme within The Commons Conservancy
+   License: Apache License 2.0 / MIT License
+   Website: https://tauri.app/
+
+2. React & React DOM
+   Copyright (c) Meta Platforms, Inc. and affiliates
+   License: MIT License
+   Website: https://react.dev/
+
+3. Vite Frontend Tooling
+   Copyright (c) 2019-present Yuxi (Evan) You and Vite contributors
+   License: MIT License
+   Website: https://vitejs.dev/
+
+4. FastAPI Framework
+   Copyright (c) 2018-2024 Sebastián Ramírez
+   License: MIT License
+   Website: https://fastapi.tiangolo.com/
+
+5. SQLAlchemy
+   Copyright (c) 2005-2024 Michael Bayer
+   License: MIT License
+   Website: https://www.sqlalchemy.org/
+
+6. Pydantic
+   Copyright (c) 2017-present Samuel Colvin and Pydantic contributors
+   License: MIT License
+   Website: https://docs.pydantic.dev/
+
+7. OpenCV (Open Source Computer Vision Library)
+   Copyright (c) 2000-2024 Intel Corporation, Willow Garage Inc., OpenCV Foundation
+   License: Apache License 2.0
+   Website: https://opencv.org/
+
+8. Playwright for Python
+   Copyright (c) Microsoft Corporation
+   License: Apache License 2.0
+   Website: https://playwright.dev/python/
+
+--------------------------------------------------------------------------------
+EXTERNAL COMPANION TOOLS (USER-INSTALLED / STANDALONE SERVICES)
+--------------------------------------------------------------------------------
+PanelFlow Studio communicates with the following companion software via process
+execution, CLI pipes, or local loopback HTTP (127.0.0.1). These tools are NOT
+statically linked or proprietary-licensed into PanelFlow binaries:
+
+9. FFmpeg & FFprobe
+   Copyright (c) 2000-2024 the FFmpeg developers
+   License: LGPL v2.1+ / GPL v3 (depending on build configuration)
+   Website: https://ffmpeg.org/
+   Redistribution Note: Users install standard FFmpeg builds (e.g., via winget
+   or gyan.dev). PanelFlow invokes ffmpeg/ffprobe via command-line arguments.
+
+10. Ollama
+    Copyright (c) 2023-2024 Jeffrey Morgan and Ollama contributors
+    License: MIT License
+    Website: https://ollama.com/
+    Redistribution Note: Runs as an independent local loopback service on port 11434.
+
+11. F5-TTS Neural Voice Engine
+    Copyright (c) 2024 Yushen Chen and F5-TTS contributors
+    License: MIT License
+    Repository: https://github.com/SWivid/F5-TTS
+    Redistribution Note: Voice model weights are kept in local storage and are
+    governed by their respective open model weights licenses.
+
+12. ACE-Step Music Pipeline
+    Copyright (c) 2024 ACE-Step Audio Research Contributors
+    License: Apache License 2.0
+    Redistribution Note: Evaluates adaptive soundtrack generation rooted in D-Minor.
+================================================================================

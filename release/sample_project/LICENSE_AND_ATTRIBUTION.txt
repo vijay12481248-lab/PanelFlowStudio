@@ -1,0 +1,17 @@
+================================================================================
+PANELFLOW STUDIO SAMPLE PROJECT — LICENSE & ATTRIBUTION
+================================================================================
+
+Title: Lumina: The Shattered Prism — Prelude (Sample Story Comic)
+Pages: 5 Panels/Pages (page_01.jpg - page_05.jpg)
+Author / Copyright Holder: PanelFlow Studio Core Team / Lumina Project
+License: Creative Commons Attribution 4.0 International (CC-BY 4.0)
+License URL: https://creativecommons.org/licenses/by/4.0/
+
+TERMS OF REUSE & DEMO USAGE:
+1. You are free to share, copy, adapt, and transform this sample material for
+   any purpose, including demonstrating PanelFlow video rendering capabilities.
+2. Attribution Requirement: When distributing videos created with this sample
+   comic, please retain attribution to "Lumina: The Shattered Prism / PanelFlow Studio".
+3. No commercial copyright restrictions apply to this sample asset.
+================================================================================

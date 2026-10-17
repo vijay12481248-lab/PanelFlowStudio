@@ -1,0 +1,21 @@
+{
+  "layout_name": "10_ambiguous_layout",
+  "width": 1200,
+  "height": 1600,
+  "reading_direction": "ltr",
+  "panels": [
+    {
+      "id": "p1",
+      "sequence": 1,
+      "x": 0,
+      "y": 0,
+      "width": 1200,
+      "height": 1600,
+      "normalized_x": 0.0,
+      "normalized_y": 0.0,
+      "normalized_width": 1.0,
+      "normalized_height": 1.0,
+      "panel_type": "FULL_PAGE"
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "layout_name": "04_splash_panel",
+  "width": 1200,
+  "height": 1600,
+  "reading_direction": "ltr",
+  "panels": [
+    {
+      "id": "p1",
+      "sequence": 1,
+      "x": 40,
+      "y": 40,
+      "width": 1120,
+      "height": 1520,
+      "normalized_x": 0.0333,
+      "normalized_y": 0.025,
+      "normalized_width": 0.9333,
+      "normalized_height": 0.95,
+      "panel_type": "SPLASH"
+    }
+  ]
+}

@@ -1,0 +1,47 @@
+{
+  "layout_name": "06_borderless_panel",
+  "width": 1200,
+  "height": 1600,
+  "reading_direction": "ltr",
+  "panels": [
+    {
+      "id": "p1",
+      "sequence": 1,
+      "x": 60,
+      "y": 60,
+      "width": 1080,
+      "height": 450,
+      "normalized_x": 0.05,
+      "normalized_y": 0.0375,
+      "normalized_width": 0.9,
+      "normalized_height": 0.2812,
+      "panel_type": "BORDERLESS"
+    },
+    {
+      "id": "p2",
+      "sequence": 2,
+      "x": 60,
+      "y": 550,
+      "width": 520,
+      "height": 990,
+      "normalized_x": 0.05,
+      "normalized_y": 0.3438,
+      "normalized_width": 0.4333,
+      "normalized_height": 0.6188,
+      "panel_type": "BORDERLESS"
+    },
+    {
+      "id": "p3",
+      "sequence": 3,
+      "x": 620,
+      "y": 550,
+      "width": 520,
+      "height": 990,
+      "normalized_x": 0.5167,
+      "normalized_y": 0.3438,
+      "normalized_width": 0.4333,
+      "normalized_height": 0.6188,
+      "panel_type": "BORDERLESS"
+    }
+  ]
+}

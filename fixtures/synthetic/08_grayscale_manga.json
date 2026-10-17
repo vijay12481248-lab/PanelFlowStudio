@@ -1,0 +1,47 @@
+{
+  "layout_name": "08_grayscale_manga",
+  "width": 1200,
+  "height": 1800,
+  "reading_direction": "rtl",
+  "panels": [
+    {
+      "id": "p1",
+      "sequence": 1,
+      "x": 620,
+      "y": 60,
+      "width": 520,
+      "height": 600,
+      "normalized_x": 0.5167,
+      "normalized_y": 0.0333,
+      "normalized_width": 0.4333,
+      "normalized_height": 0.3333,
+      "panel_type": "STANDARD"
+    },
+    {
+      "id": "p2",
+      "sequence": 2,
+      "x": 60,
+      "y": 60,
+      "width": 520,
+      "height": 600,
+      "normalized_x": 0.05,
+      "normalized_y": 0.0333,
+      "normalized_width": 0.4333,
+      "normalized_height": 0.3333,
+      "panel_type": "STANDARD"
+    },
+    {
+      "id": "p3",
+      "sequence": 3,
+      "x": 60,
+      "y": 700,
+      "width": 1080,
+      "height": 1020,
+      "normalized_x": 0.05,
+      "normalized_y": 0.3889,
+      "normalized_width": 0.9,
+      "normalized_height": 0.5667,
+      "panel_type": "STANDARD"
+    }
+  ]
+}

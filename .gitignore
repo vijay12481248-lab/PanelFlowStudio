@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+*.db
+*.sqlite
+*.sqlite3
+
+# Node / Web / Desktop
+node_modules/
+dist/
+build/
+.turbo/
+.npm/
+
+# Rust / Tauri
+target/
+apps/desktop/src-tauri/target/
+
+# Temporary run/render work
+output/
+_render_work/
+*.log
+
+# Environments
+.env
+.env.local
+.venv/
+venv/
+ENV/

@@ -1,0 +1,14 @@
+{
+  "name": "@panelflow/web",
+  "version": "1.0.0-beta.1",
+  "private": true,
+  "description": "PanelFlow Studio Web Application Container Host",
+  "dependencies": {
+    "@panelflow/api-client": "*",
+    "@panelflow/shared-types": "*",
+    "@panelflow/ui": "*"
+  },
+  "scripts": {
+    "build": "node -e \"console.log('@panelflow/web container ready')\""
+  }
+}

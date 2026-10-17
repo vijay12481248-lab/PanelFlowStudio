@@ -1,0 +1,60 @@
+{
+  "layout_name": "01_simple_2x2_grid",
+  "width": 1200,
+  "height": 1600,
+  "reading_direction": "ltr",
+  "panels": [
+    {
+      "id": "p1",
+      "sequence": 1,
+      "x": 60,
+      "y": 60,
+      "width": 520,
+      "height": 680,
+      "normalized_x": 0.05,
+      "normalized_y": 0.0375,
+      "normalized_width": 0.4333,
+      "normalized_height": 0.425,
+      "panel_type": "STANDARD"
+    },
+    {
+      "id": "p2",
+      "sequence": 2,
+      "x": 620,
+      "y": 60,
+      "width": 520,
+      "height": 680,
+      "normalized_x": 0.5167,
+      "normalized_y": 0.0375,
+      "normalized_width": 0.4333,
+      "normalized_height": 0.425,
+      "panel_type": "STANDARD"
+    },
+    {
+      "id": "p3",
+      "sequence": 3,
+      "x": 60,
+      "y": 780,
+      "width": 520,
+      "height": 680,
+      "normalized_x": 0.05,
+      "normalized_y": 0.4875,
+      "normalized_width": 0.4333,
+      "normalized_height": 0.425,
+      "panel_type": "STANDARD"
+    },
+    {
+      "id": "p4",
+      "sequence": 4,
+      "x": 620,
+      "y": 780,
+      "width": 520,
+      "height": 680,
+      "normalized_x": 0.5167,
+      "normalized_y": 0.4875,
+      "normalized_width": 0.4333,
+      "normalized_height": 0.425,
+      "panel_type": "STANDARD"
+    }
+  ]
+}
