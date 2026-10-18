@@ -1218,6 +1218,104 @@ export interface StoryEditorState {
   clipboard_animation?: LayerAnimationConfig; // Chapter 4 copy/paste animation
 }
 
+// ---------------------------------------------------------------------------
+// Chapter 9: Story-Aware AI Music & Sound Design Domain Types
+// ---------------------------------------------------------------------------
+
+export interface MusicTakeRecord {
+  take_id: string;
+  cue_id: string;
+  project_id: string;
+  take_index: number;
+  audio_file_path: string;
+  audio_file_uri: string;
+  duration_sec: number;
+  sample_rate: number;
+  channels: number;
+  format: string;
+  file_size_bytes: number;
+  checksum_sha256: string;
+  prompt: string;
+  seed: number;
+  bpm: number;
+  key_scale: string;
+  time_signature: string;
+  model_id: string;
+  inference_steps: number;
+  guidance_scale: number;
+  measured_peak_dbfs: number;
+  measured_rms_dbfs: number;
+  waveform_peaks: number[];
+  approval_status: "DRAFT" | "APPROVED" | "REJECTED";
+  created_at: number;
+  generation_time_sec: number;
+}
+
+export interface MusicCuePlan {
+  cue_id: string;
+  title: string;
+  scene_ids: string[];
+  start_time_sec: number;
+  end_time_sec: number;
+  duration_sec: number;
+  narrative_function:
+    | "opening_mystery"
+    | "character_discovery"
+    | "rising_threat"
+    | "confrontation"
+    | "emotional_resolution"
+    | "ambient_underscore"
+    | "transitional_stinger";
+  emotional_direction: string;
+  intensity: number;
+  genre_style: string;
+  instrumentation: string[];
+  tempo_bpm: number;
+  tonal_center: string;
+  time_signature: string;
+  instrumental: boolean;
+  musical_continuity: string;
+  editable_prompt: string;
+  selected_take_id?: string | null;
+  takes: MusicTakeRecord[];
+}
+
+export interface MusicDirectionPlan {
+  plan_id: string;
+  project_id: string;
+  storyboard_id?: string | null;
+  overall_musical_theme: string;
+  harmonic_key: string;
+  recommended_headroom_notes: string;
+  cues: MusicCuePlan[];
+  total_score_duration_sec: number;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface MusicGenerationRequest {
+  cue_id?: string;
+  prompt: string;
+  audio_duration?: number;
+  bpm?: number;
+  key_scale?: string;
+  time_signature?: string;
+  seed?: number;
+  use_random_seed?: boolean;
+  inference_steps?: number;
+  guidance_scale?: number;
+  model?: string;
+  thinking?: boolean;
+}
+
+export interface SFXCapabilityReport {
+  local_ai_sfx_model_available: boolean;
+  detected_models: string[];
+  curated_sfx_library_available: boolean;
+  available_categories: string[];
+  notes: string;
+}
+
 
 
 

@@ -154,8 +154,11 @@ class FFmpegEncoder:
                     frame_img = composer.compose_frame(frame_idx, plan)
 
                     # 2. Write raw RGB bytes to FFmpeg stdin
-                    raw_bytes = frame_img.tobytes()
-                    proc.stdin.write(raw_bytes)
+                    try:
+                        raw_bytes = frame_img.tobytes()
+                        proc.stdin.write(raw_bytes)
+                    except (BrokenPipeError, OSError):
+                        break
 
                     # 3. Report progress periodically
                     if progress_cb and (frame_idx % 15 == 0 or frame_idx == total_frames - 1):
@@ -163,7 +166,10 @@ class FFmpegEncoder:
                         progress_cb(RenderStage.ENCODING, frame_idx + 1, total_frames, pct)
 
                 # Close stdin to signal end of stream
-                proc.stdin.close()
+                try:
+                    proc.stdin.close()
+                except Exception:
+                    pass
                 proc.wait(timeout=300)
 
                 if proc.returncode != 0:
@@ -178,6 +184,12 @@ class FFmpegEncoder:
                 return True
 
             except Exception as e:
+                err_msg = ""
+                if log_path.exists():
+                    try:
+                        err_msg = log_path.read_text(encoding="utf-8", errors="ignore")[-1200:]
+                    except Exception:
+                        pass
                 try:
                     proc.kill()
                     proc.wait(timeout=5)
@@ -188,4 +200,4 @@ class FFmpegEncoder:
                         output_mp4_path.unlink()
                 except Exception:
                     pass
-                raise e
+                raise RuntimeError(f"FFmpeg encoding exception: {e} | Stderr: {err_msg}") from e

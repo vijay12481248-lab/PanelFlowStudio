@@ -36,6 +36,11 @@ import type {
   StoryboardDocument,
   StoryboardSegment,
   StoryboardSegmentUpdate,
+  MusicTakeRecord,
+  MusicCuePlan,
+  MusicDirectionPlan,
+  MusicGenerationRequest,
+  SFXCapabilityReport,
 } from "@panelflow/shared-types";
 
 
@@ -896,7 +901,69 @@ export class PanelFlowApiClient {
       method: "POST",
     });
   }
+
+  // ---------------------------------------------------------------------------
+  // Chapter 9: Story-Aware AI Music & Sound Design
+  // ---------------------------------------------------------------------------
+  async getMusicServiceHealth(): Promise<{ service: string; health: any; gpu: any; recommended_tier: string }> {
+    return this.request<{ service: string; health: any; gpu: any; recommended_tier: string }>("/api/music/health");
+  }
+
+  async getSFXCapabilityReport(): Promise<SFXCapabilityReport> {
+    return this.request<SFXCapabilityReport>("/api/music/sfx/capability");
+  }
+
+  async getProjectMusicPlan(projectId: string, forceReplan: boolean = false): Promise<MusicDirectionPlan> {
+    return this.request<MusicDirectionPlan>(`/api/projects/${projectId}/music/plan?force_replan=${forceReplan}`);
+  }
+
+  async saveProjectMusicPlan(projectId: string, plan: MusicDirectionPlan): Promise<{ saved: boolean; plan_id: string; updated_at: number }> {
+    return this.request<{ saved: boolean; plan_id: string; updated_at: number }>(`/api/projects/${projectId}/music/plan`, {
+      method: "POST",
+      body: JSON.stringify(plan),
+    });
+  }
+
+  async updateCuePrompt(projectId: string, cueId: string, prompt: string, bpm?: number, intensity?: number): Promise<MusicCuePlan> {
+    return this.request<MusicCuePlan>(`/api/projects/${projectId}/music/plan/cue-prompt`, {
+      method: "POST",
+      body: JSON.stringify({ cue_id: cueId, prompt, bpm, intensity }),
+    });
+  }
+
+  async generateMusic(projectId: string, req: MusicGenerationRequest): Promise<MusicTakeRecord> {
+    return this.request<MusicTakeRecord>(`/api/projects/${projectId}/music/generate`, {
+      method: "POST",
+      body: JSON.stringify(req),
+    });
+  }
+
+  async listProjectMusicTakes(projectId: string, cueId?: string): Promise<MusicTakeRecord[]> {
+    const url = cueId
+      ? `/api/projects/${projectId}/music/takes?cue_id=${encodeURIComponent(cueId)}`
+      : `/api/projects/${projectId}/music/takes`;
+    return this.request<MusicTakeRecord[]>(url);
+  }
+
+  async selectMusicTake(projectId: string, cueId: string, takeId: string): Promise<MusicDirectionPlan> {
+    return this.request<MusicDirectionPlan>(`/api/projects/${projectId}/music/takes/${takeId}/select`, {
+      method: "POST",
+      body: JSON.stringify({ cue_id: cueId, take_id: takeId }),
+    });
+  }
+
+  async addTakeToTimeline(
+    projectId: string,
+    takeId: string,
+    params: { cue_id: string; volume?: number; fade_in_sec?: number; fade_out_sec?: number; loop?: boolean; start_time_sec?: number }
+  ): Promise<any> {
+    return this.request<any>(`/api/projects/${projectId}/music/takes/${takeId}/add-to-timeline`, {
+      method: "POST",
+      body: JSON.stringify(params),
+    });
+  }
 }
 
 export const api = new PanelFlowApiClient();
+
 

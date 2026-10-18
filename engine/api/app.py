@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from engine.config.settings import settings
 from engine.database.session import init_db
 from engine.jobs.manager import job_manager
-from engine.api.routers import projects, pages, panels, ocr, jobs, adapters, system, story, audio, motion, render
+from engine.api.routers import projects, pages, panels, ocr, jobs, adapters, system, story, audio, motion, render, music
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("panelflow.engine")
@@ -52,6 +52,7 @@ def create_app() -> FastAPI:
     app.include_router(jobs.router)
     app.include_router(adapters.router)
     app.include_router(audio.router)
+    app.include_router(music.router)
     app.include_router(motion.router)
     app.include_router(render.router)
 

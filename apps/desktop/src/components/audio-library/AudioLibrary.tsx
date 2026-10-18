@@ -10,6 +10,7 @@ import { MOCK_AUDIO_ASSETS } from "./AudioLibrary.mock.ts";
 import { AudioCategoryNav } from "./AudioCategoryNav.tsx";
 import { AudioAssetBrowser } from "./AudioAssetBrowser.tsx";
 import { AudioInspector } from "./AudioInspector.tsx";
+import { AIMusicStudio } from "./AIMusicStudio.tsx";
 
 const FAVORITES_STORAGE_KEY = "panelflow_audio_favorites";
 
@@ -21,6 +22,10 @@ export const AudioLibrary: React.FC<AudioLibraryProps> = ({
   onSendToTimeline,
   onClose,
 }) => {
+  const [activeWorkspace, setActiveWorkspace] = useState<"catalog" | "ai_generator">(
+    initialType === "music" ? "ai_generator" : "catalog"
+  );
+
   // Load initial assets and sync favorites from localStorage
   const [assets, setAssets] = useState<AudioAsset[]>(() => {
     const baseAssets = initialAssets && initialAssets.length > 0 ? initialAssets : MOCK_AUDIO_ASSETS;
@@ -297,17 +302,43 @@ export const AudioLibrary: React.FC<AudioLibraryProps> = ({
     >
       {/* Top Application Bar */}
       <header className="h-12 border-b border-zinc-800 bg-zinc-950 flex items-center justify-between px-4 shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="w-7 h-7 rounded-lg bg-indigo-600/20 text-indigo-400 border border-indigo-500/40 flex items-center justify-center font-bold text-sm shadow-sm">
-            🎧
-          </div>
-          <div>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-indigo-600/20 text-indigo-400 border border-indigo-500/40 flex items-center justify-center font-bold text-sm shadow-sm">
+              🎧
+            </div>
             <h1 className="text-sm font-bold tracking-tight text-white flex items-center gap-2">
-              <span>Music & Sound Effects Library</span>
-              <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-indigo-950 text-indigo-300 border border-indigo-800">
-                Chapter 6A
-              </span>
+              <span>PanelFlow Audio Studio</span>
             </h1>
+          </div>
+
+          {/* Workspace Tabs: Catalog vs AI Music Studio */}
+          <div className="flex items-center bg-zinc-900 border border-zinc-800 rounded-lg p-0.5">
+            <button
+              type="button"
+              onClick={() => setActiveWorkspace("catalog")}
+              className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors ${
+                activeWorkspace === "catalog"
+                  ? "bg-zinc-800 text-white shadow-sm"
+                  : "text-zinc-400 hover:text-zinc-200"
+              }`}
+            >
+              Library Catalog
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveWorkspace("ai_generator")}
+              className={`px-3 py-1 text-xs font-semibold rounded-md flex items-center gap-1.5 transition-colors ${
+                activeWorkspace === "ai_generator"
+                  ? "bg-indigo-600 text-white shadow-sm"
+                  : "text-zinc-400 hover:text-zinc-200"
+              }`}
+            >
+              <span>✨ Story-Aware AI Music</span>
+              <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-indigo-950 text-indigo-200 border border-indigo-800">
+                Ch 9
+              </span>
+            </button>
           </div>
         </div>
 
@@ -329,41 +360,49 @@ export const AudioLibrary: React.FC<AudioLibraryProps> = ({
         </div>
       </header>
 
-      {/* 3-Section Workspace Body */}
-      <div className="flex-1 flex min-h-0 overflow-hidden">
-        {/* Left: Category Navigation */}
-        <AudioCategoryNav
-          filter={filter}
-          onUpdateFilter={(updates) => setFilter((prev) => ({ ...prev, ...updates }))}
-          assets={assets}
-        />
-
-        {/* Center: Audio Asset Browser */}
-        <AudioAssetBrowser
-          assets={assets}
-          filter={filter}
-          onUpdateFilter={(updates) => setFilter((prev) => ({ ...prev, ...updates }))}
-          selectedAssetId={activeSelectedId}
-          onSelectAsset={handleSelectAsset}
-          onToggleFavorite={handleToggleFavorite}
-          previewState={previewState}
-          onTogglePlay={handleTogglePlay}
-          onQuickSendToTimeline={handleQuickSend}
-        />
-
-        {/* Right: Audio Inspector */}
-        <AudioInspector
-          asset={selectedAsset}
-          previewState={previewState}
-          onTogglePlay={handleTogglePlay}
-          onStop={handleStop}
-          onSeek={handleSeek}
-          onChangeVolume={handleChangeVolume}
-          onToggleMute={handleToggleMute}
-          onToggleFavorite={handleToggleFavorite}
+      {/* Workspace Body */}
+      {activeWorkspace === "ai_generator" ? (
+        <AIMusicStudio
           onSendToTimeline={onSendToTimeline}
+          onSaveToLibrary={(newAsset) => setAssets((prev) => [newAsset, ...prev])}
         />
-      </div>
+      ) : (
+        /* 3-Section Catalog Workspace Body */
+        <div className="flex-1 flex min-h-0 overflow-hidden">
+          {/* Left: Category Navigation */}
+          <AudioCategoryNav
+            filter={filter}
+            onUpdateFilter={(updates) => setFilter((prev) => ({ ...prev, ...updates }))}
+            assets={assets}
+          />
+
+          {/* Center: Audio Asset Browser */}
+          <AudioAssetBrowser
+            assets={assets}
+            filter={filter}
+            onUpdateFilter={(updates) => setFilter((prev) => ({ ...prev, ...updates }))}
+            selectedAssetId={activeSelectedId}
+            onSelectAsset={handleSelectAsset}
+            onToggleFavorite={handleToggleFavorite}
+            previewState={previewState}
+            onTogglePlay={handleTogglePlay}
+            onQuickSendToTimeline={handleQuickSend}
+          />
+
+          {/* Right: Audio Inspector */}
+          <AudioInspector
+            asset={selectedAsset}
+            previewState={previewState}
+            onTogglePlay={handleTogglePlay}
+            onStop={handleStop}
+            onSeek={handleSeek}
+            onChangeVolume={handleChangeVolume}
+            onToggleMute={handleToggleMute}
+            onToggleFavorite={handleToggleFavorite}
+            onSendToTimeline={onSendToTimeline}
+          />
+        </div>
+      )}
     </div>
   );
 };

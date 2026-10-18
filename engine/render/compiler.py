@@ -138,6 +138,12 @@ class TimelineCompiler:
             candidate_dialogue = audio_dir / "dialogue" / Path(clean_rel).name
             if candidate_dialogue.exists() and candidate_dialogue.is_file():
                 return str(candidate_dialogue.resolve())
+            candidate_music = audio_dir / "music" / Path(clean_rel).name
+            if candidate_music.exists() and candidate_music.is_file():
+                return str(candidate_music.resolve())
+            for sub_p in audio_dir.rglob(Path(clean_rel).name):
+                if sub_p.is_file():
+                    return str(sub_p.resolve())
 
         return None
 
@@ -411,12 +417,16 @@ class TimelineCompiler:
                 duck_amt = float(bgm.get("ducking_amount_db", -12.0))
                 active_ducking = [(s, e, duck_amt) for s, e, _ in speech_intervals] if duck_enabled else []
 
+                s_time = float(bgm.get("start_time_sec", 0.0))
+                d_time = float(bgm.get("duration_sec", 0.0))
+                e_time = min(total_duration, s_time + d_time) if d_time > 0 else total_duration
+
                 audio_tracks.append(
                     RenderAudioTrack(
                         track_type="music",
                         file_path=resolved_p,
-                        start_time=float(bgm.get("start_time_sec", 0.0)),
-                        end_time=total_duration,
+                        start_time=s_time,
+                        end_time=e_time,
                         gain_db=gain_db,
                         ducking_intervals=active_ducking,
                     )

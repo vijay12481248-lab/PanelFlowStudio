@@ -118,29 +118,53 @@ class AudioMixer:
         if len(data) == 0:
             return
 
+        # Calculate track sample boundaries
+        start_idx = max(0, int(round(track.start_time * self.sample_rate)))
+        target_end = int(round(track.end_time * self.sample_rate)) if track.end_time > track.start_time else total_samples
+        end_idx = min(total_samples, max(start_idx, target_end))
+        track_samples = end_idx - start_idx
+        if track_samples <= 0:
+            return
+
         # Handle music duration policy
-        if policy == MusicDurationPolicy.LOOP and len(data) < total_samples:
-            repeats = int(math.ceil(total_samples / len(data)))
-            full_music = np.tile(data, (repeats, 1))[:total_samples]
+        if policy == MusicDurationPolicy.LOOP and len(data) < track_samples:
+            repeats = int(math.ceil(track_samples / len(data)))
+            full_music = np.tile(data, (repeats, 1))[:track_samples]
         else:
-            full_music = np.zeros((total_samples, self.channels), dtype=np.float32)
-            copy_len = min(total_samples, len(data))
+            full_music = np.zeros((track_samples, self.channels), dtype=np.float32)
+            copy_len = min(track_samples, len(data))
             full_music[:copy_len] = data[:copy_len]
 
         # Apply base gain
         base_gain = math.pow(10.0, track.gain_db / 20.0)
         full_music *= base_gain
 
-        # Build smooth ducking envelope (-8 dB attenuation during speech)
-        duck_envelope = self._build_ducking_envelope(total_samples, speech_intervals, duck_db=-8.0)
-        full_music *= duck_envelope[:, np.newaxis]
-        # Short ramps prevent clicks at chapter boundaries, including loop beds.
-        fade_samples = min(len(full_music) // 2, int(self.sample_rate * 0.8))
-        if fade_samples:
-            full_music[:fade_samples] *= np.linspace(0, 1, fade_samples)[:, np.newaxis]
-            full_music[-fade_samples:] *= np.linspace(1, 0, fade_samples)[:, np.newaxis]
+        # Determine ducking amount (-12.0 dB standard for speech clarity)
+        duck_db = -12.0
+        if track.ducking_intervals and len(track.ducking_intervals) > 0:
+            duck_db = float(track.ducking_intervals[0][2])
 
-        master_buffer += full_music
+        # Map speech intervals to track-local coordinates
+        rel_speech: List[Tuple[float, float]] = []
+        for s_t, e_t in speech_intervals:
+            if max(s_t, track.start_time) < min(e_t, track.end_time):
+                rel_s = max(0.0, s_t - track.start_time)
+                rel_e = min(track_samples / float(self.sample_rate), e_t - track.start_time)
+                if rel_e > rel_s:
+                    rel_speech.append((rel_s, rel_e))
+
+        # Build smooth ducking envelope (-12 dB attenuation during speech)
+        duck_envelope = self._build_ducking_envelope(track_samples, rel_speech, duck_db=duck_db)
+        full_music *= duck_envelope[:, np.newaxis]
+
+        # Smooth boundary fades to prevent clicks
+        fade_samples = min(len(full_music) // 2, int(self.sample_rate * 0.5))
+        if fade_samples > 0:
+            full_music[:fade_samples] *= np.linspace(0.0, 1.0, fade_samples)[:, np.newaxis]
+            full_music[-fade_samples:] *= np.linspace(1.0, 0.0, fade_samples)[:, np.newaxis]
+
+        # Accumulate into master buffer
+        master_buffer[start_idx:start_idx + len(full_music)] += full_music
 
     def _build_ducking_envelope(
         self,
