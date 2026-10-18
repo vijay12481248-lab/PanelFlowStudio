@@ -1,5 +1,6 @@
 import React, { useState, useRef } from "react";
 import { Icons, Button, Badge } from "@panelflow/ui";
+import { api } from "@panelflow/api-client";
 import type {
   StoryEditorState,
   VisualLayer,
@@ -159,31 +160,17 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
     }));
 
     try {
-      const resp = await fetch(
-        `http://localhost:8765/api/projects/${activeProjectId}/narration/synthesize-segment`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            segment_id: targetClip.id,
-            text: targetClip.text,
-            voice: targetClip.speaker,
-            emotion: targetClip.emotion,
-            intensity: targetClip.delivery_intensity ?? 0.5,
-            speed: targetClip.speed ?? 1.0,
-            text_revision: targetRevision,
-            content_hash: targetHash,
-            force: true,
-          }),
-        }
-      );
-
-      if (!resp.ok) {
-        const errData = await resp.json().catch(() => ({}));
-        throw new Error(errData.detail || `Server returned ${resp.status}`);
-      }
-
-      const data = await resp.json();
+      const data = await api.synthesizeNarrationSegment(activeProjectId, {
+        segment_id: targetClip.id,
+        text: targetClip.text,
+        voice: targetClip.voice_profile_id || targetClip.speaker || "Marcus",
+        emotion: targetClip.emotion,
+        intensity: targetClip.delivery_intensity ?? 0.5,
+        speed: targetClip.speed ?? 1.0,
+        text_revision: targetRevision,
+        content_hash: targetHash,
+        force: true,
+      });
       const fullUrl = data.audio_url?.startsWith("http")
         ? data.audio_url
         : `http://localhost:8765${data.audio_url}`;

@@ -7,9 +7,12 @@ from typing import Dict, Any, List, Optional
 from pathlib import Path
 import json
 import copy
+import logging
 import soundfile as sf
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
+
+logger = logging.getLogger("panelflow.audio.service")
 
 from engine.database.models import ProjectRecord, VideoScriptRecord, ScriptSegmentRecord, AudioTimelineRecord, VisualTimelineRecord, RenderJobRecord
 from engine.acquisition.models.models import PipelineStage
@@ -153,10 +156,47 @@ class AudioService:
         current_time = 0.5  # 0.5s pre-speech establishing pause
 
         ordered_segments = sorted(script.segments, key=lambda item: item.sequence)
+
+        # Batch synthesize all dialogue speech segments in a single model load session
+        speech_tasks = []
+        for seg in ordered_segments:
+            if not seg.text.strip() or seg.type in ("PAUSE", "TRANSITION", "SFX_CUE"):
+                continue
+            voice = voice_map.get(seg.speaker_character_id or "NARRATOR", "Narrator")
+            speech_tasks.append({
+                "id": seg.id,
+                "directory": str(dialogue_dir),
+                "text": seg.text,
+                "voice": voice,
+                "emotion": seg.emotion or "Neutral",
+                "intensity": seg.intensity if seg.intensity is not None else 0.5,
+                "pace": 1.0,
+                "text_revision": 1,
+                "force": False,
+            })
+
+        batch_results_map: Dict[str, Any] = {}
+        if speech_tasks and hasattr(self.synthesizer, "synthesize_batch"):
+            progress(0.1, f"Synthesizing {len(speech_tasks)} dialogue segments with local TTS...")
+            try:
+                batch_res = self.synthesizer.synthesize_batch(
+                    speech_tasks,
+                    provider_id=(proj.settings or {}).get("tts_provider", "chatterbox_turbo"),
+                    progress_cb=progress,
+                    cancelled_cb=cancelled,
+                )
+                for br in batch_res:
+                    if br.get("success"):
+                        batch_results_map[br["id"]] = br
+                    else:
+                        logger.warning(f"Batch TTS failed for segment {br.get('id')}: {br.get('error')}")
+            except Exception as e:
+                logger.warning(f"Batch synthesis exception: {e}, falling back to per-segment synthesis")
+
         for index, seg in enumerate(ordered_segments):
             if cancelled():
                 raise ValueError("TTS cancelled; approved script and completed speech clips were preserved.")
-            progress(0.05 + 0.8 * index / max(1, len(ordered_segments)), f"TTS: segment {index + 1}/{len(ordered_segments)}")
+            progress(0.7 + 0.2 * index / max(1, len(ordered_segments)), f"Assembling audio timeline: segment {index + 1}/{len(ordered_segments)}")
             if not seg.text.strip() or seg.type in ("PAUSE", "TRANSITION", "SFX_CUE"):
                 end_time = current_time + max(0.0, seg.estimated_duration)
                 intervals.append(AudioInterval(
@@ -165,16 +205,21 @@ class AudioService:
                 ))
                 current_time = end_time
                 continue
-            voice = voice_map.get(seg.speaker_character_id or "NARRATOR", "Narrator")
-            seg_audio_file = self.synthesizer.synthesize(
-                dialogue_dir, seg.text, voice,
-                provider_id=(proj.settings or {}).get("tts_provider", "chatterbox_turbo"),
-                emotion=seg.emotion, intensity=seg.intensity,
-            )
 
-            # Measure exact duration from file on disk
-            info = sf.info(str(seg_audio_file))
-            dur = round(info.duration, 3)
+            br = batch_results_map.get(seg.id)
+            if br and br.get("audio_path"):
+                seg_audio_file = Path(br["audio_path"])
+                dur = round(br.get("duration", 3.0), 3)
+            else:
+                voice = voice_map.get(seg.speaker_character_id or "NARRATOR", "Narrator")
+                seg_audio_file = self.synthesizer.synthesize(
+                    dialogue_dir, seg.text, voice,
+                    provider_id=(proj.settings or {}).get("tts_provider", "chatterbox_turbo"),
+                    emotion=seg.emotion, intensity=seg.intensity,
+                )
+                info = sf.info(str(seg_audio_file))
+                dur = round(info.duration, 3)
+
             start_t = round(current_time, 3)
             end_t = round(start_t + dur, 3)
 

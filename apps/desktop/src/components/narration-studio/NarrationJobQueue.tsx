@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Icons, Button, ProgressBar } from "@panelflow/ui";
+import { api } from "@panelflow/api-client";
 import type {
   NarrationSegment,
   JobStatus,
@@ -70,31 +71,17 @@ export const NarrationJobQueue: React.FC<NarrationJobQueueProps> = ({
         }
       }, 250);
 
-      const resp = await fetch(
-        `http://localhost:8765/api/projects/${activeProject}/narration/synthesize-segment`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            segment_id: targetSegmentId,
-            text: segment.narration_text,
-            voice: segment.speaker_name,
-            emotion: segment.delivery.emotion,
-            intensity: segment.delivery.intensity,
-            speed: segment.delivery.speech_speed,
-            text_revision: targetRevision,
-            content_hash: targetHash,
-            force: true,
-          }),
-        }
-      );
-
-      if (!resp.ok) {
-        const errData = await resp.json().catch(() => ({}));
-        throw new Error(errData.detail || `Server returned ${resp.status}`);
-      }
-
-      const data = await resp.json();
+      const data = await api.synthesizeNarrationSegment(activeProject, {
+        segment_id: targetSegmentId,
+        text: segment.narration_text,
+        voice: segment.voice_profile_id || segment.speaker_name || "Marcus",
+        emotion: segment.delivery.emotion,
+        intensity: segment.delivery.intensity,
+        speed: segment.delivery.speech_speed,
+        text_revision: targetRevision,
+        content_hash: targetHash,
+        force: true,
+      });
 
       // Check if user edited text while job was synthesizing
       if (
@@ -187,32 +174,20 @@ export const NarrationJobQueue: React.FC<NarrationJobQueueProps> = ({
         updated_at: new Date().toISOString(),
       });
 
-      const resp = await fetch(
-        `http://localhost:8765/api/projects/${activeProject}/narration/synthesize-batch`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            segments: outdatedSegments.map((s) => ({
-              segment_id: s.id,
-              text: s.narration_text,
-              voice: s.speaker_name,
-              emotion: s.delivery.emotion,
-              intensity: s.delivery.intensity,
-              speed: s.delivery.speech_speed,
-              text_revision: s.text_revision,
-              content_hash: s.content_hash,
-              force: true,
-            })),
-          }),
-        }
+      const data = await api.synthesizeNarrationBatch(
+        activeProject,
+        outdatedSegments.map((s) => ({
+          segment_id: s.id,
+          text: s.narration_text,
+          voice: s.voice_profile_id || s.speaker_name || "Marcus",
+          emotion: s.delivery.emotion,
+          intensity: s.delivery.intensity,
+          speed: s.delivery.speech_speed,
+          text_revision: s.text_revision,
+          content_hash: s.content_hash,
+          force: true,
+        }))
       );
-
-      if (!resp.ok) {
-        throw new Error(`Batch synthesis failed with status ${resp.status}`);
-      }
-
-      const data = await resp.json();
       for (const res of data.results || []) {
         if (res.success && res.audio_url) {
           const fullUrl = res.audio_url.startsWith("http")

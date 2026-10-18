@@ -125,7 +125,13 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
           next.bgm_tracks !== prev.bgm_tracks ||
           next.sfx_cues !== prev.sfx_cues ||
           next.aspect_ratio !== prev.aspect_ratio ||
-          next.mode !== prev.mode
+          next.mode !== prev.mode ||
+          next.track_states !== prev.track_states ||
+          next.zoom_level !== prev.zoom_level ||
+          next.snapping !== prev.snapping ||
+          next.ripple_edit !== prev.ripple_edit ||
+          next.show_motion_paths !== prev.show_motion_paths ||
+          next.clipboard_animation !== prev.clipboard_animation
         ) {
           setHistory((h) => [...h.slice(-40), prev]);
           setFuture([]);
@@ -148,6 +154,7 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
     setFuture((f) => [editorState, ...f]);
     setHistory((h) => h.slice(0, h.length - 1));
     setEditorState(previous);
+    setSaveStatus("unsaved");
   };
 
   const handleRedo = () => {
@@ -156,6 +163,7 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
     setHistory((h) => [...h, editorState]);
     setFuture((f) => f.slice(1));
     setEditorState(next);
+    setSaveStatus("unsaved");
   };
 
   // Workflow step orchestrator
@@ -249,21 +257,33 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [history.length, future.length, editorState.is_playing, updateEditorState]);
 
-  // Real autosave to localStorage
+  // Persist the editor state to the project backend, retaining localStorage as a recovery copy.
   useEffect(() => {
     if (saveStatus !== "unsaved") return;
+    let cancelled = false;
     const timer = setTimeout(() => {
       setSaveStatus("saving");
-      try {
-        localStorage.setItem(`panelflow_story_editor_${project.id}`, JSON.stringify(editorState));
-      } catch (err) {
-        console.warn("Failed to persist editor state:", err);
-      }
-      setTimeout(() => {
-        setSaveStatus("saved");
-      }, 400);
+      void (async () => {
+        try {
+          await api.saveStoryEditorState(project.id, editorState);
+          try {
+            localStorage.setItem(`panelflow_story_editor_${project.id}`, JSON.stringify(editorState));
+          } catch (err) {
+            console.warn("Failed to write editor recovery copy:", err);
+          }
+          if (!cancelled) setSaveStatus("saved");
+        } catch (err) {
+          console.warn("Failed to persist editor state to backend; keeping local recovery copy:", err);
+          try {
+            localStorage.setItem(`panelflow_story_editor_${project.id}`, JSON.stringify(editorState));
+          } catch (storageErr) {
+            console.warn("Failed to persist editor recovery copy:", storageErr);
+          }
+          if (!cancelled) setSaveStatus("unsaved");
+        }
+      })();
     }, 1000);
-    return () => clearTimeout(timer);
+    return () => { cancelled = true; clearTimeout(timer); };
   }, [saveStatus, editorState, project.id]);
 
   // Load project assets and initialize story scenes
@@ -272,9 +292,12 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
     const loadProjectData = async () => {
       try {
         setLoading(true);
-        const [loadedPages, loadedPanels] = await Promise.all([
+        const [loadedPages, loadedPanels, loadedScript, loadedStoryboard, loadedCharacters] = await Promise.all([
           api.listPages(project.id).catch(() => []),
           api.listPanels(project.id).catch(() => []),
+          api.getScript(project.id).catch(() => null),
+          api.getStoryboard(project.id).catch(() => null),
+          api.listCharacters(project.id).catch(() => []),
         ]);
 
         if (!mounted) return;
@@ -285,13 +308,14 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
           setSelectedPageId(loadedPages[0].id);
         }
 
-        // Restore saved editor state from localStorage if it exists with Schema v2 migration
+        // Restore the backend state first. Local storage is a recovery path for an interrupted save.
         const storageKey = `panelflow_story_editor_${project.id}`;
-        const savedData = localStorage.getItem(storageKey);
+        const backendState = await api.getStoryEditorState(project.id).then((response) => response.state).catch(() => null);
+        const savedData = backendState ? JSON.stringify(backendState) : localStorage.getItem(storageKey);
         if (savedData) {
           try {
             const parsed = JSON.parse(savedData) as StoryEditorState;
-            if (parsed && Array.isArray(parsed.scenes) && parsed.scenes.length > 0) {
+            if (parsed && parsed.project_id === project.id && Array.isArray(parsed.scenes)) {
               const migratedScenes = parsed.scenes.map((sc, scIdx) => ({
                 ...sc,
                 sequence: sc.sequence || scIdx + 1,
@@ -316,8 +340,17 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
                 })),
               }));
 
-              const restoredChapter = parsed.narration_chapter || buildInitialNarrationChapter(project.id, project.title, migratedScenes);
-              const migratedNarration = (parsed.narration_clips && parsed.narration_clips.length > 0)
+              const hasMockArtifacts = parsed.narration_chapter?.segments?.some(
+                (s: any) =>
+                  s.narration_text?.includes("obsidian halls") ||
+                  s.narration_text?.includes("crystal matrix") ||
+                  s.audio_asset_uri?.includes("aria_narration_sample.mp3")
+              );
+
+              const restoredChapter = (parsed.narration_chapter && !hasMockArtifacts)
+                ? parsed.narration_chapter
+                : buildInitialNarrationChapter(project.id, project.title, migratedScenes, undefined, loadedScript, loadedStoryboard, loadedCharacters);
+              const migratedNarration = (parsed.narration_clips && parsed.narration_clips.length > 0 && !hasMockArtifacts)
                 ? parsed.narration_clips.map((n) => ({
                     ...n,
                     linked_to_scene: n.linked_to_scene ?? true,
@@ -326,6 +359,7 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
 
               setEditorState({
                 ...parsed,
+                is_playing: false,
                 schema_version: 2,
                 ripple_edit: parsed.ripple_edit ?? true,
                 scenes: migratedScenes,
@@ -404,7 +438,15 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
             runningTime += duration;
           });
 
-          const initialChapter = buildInitialNarrationChapter(project.id, project.title, initialScenes);
+          const initialChapter = buildInitialNarrationChapter(
+            project.id,
+            project.title,
+            initialScenes,
+            undefined,
+            loadedScript,
+            loadedStoryboard,
+            loadedCharacters
+          );
           const initialNarration = syncChapterToTimelineClips(initialChapter, initialScenes);
 
           setEditorState((prev) => {
@@ -424,6 +466,8 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
             } catch (e) {
               console.warn("Failed to save initial state:", e);
             }
+
+            setSaveStatus("unsaved");
 
             return initialEditorState;
           });
@@ -451,7 +495,15 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
             transition_in: "fade",
           };
 
-          const initialChapter = buildInitialNarrationChapter(project.id, project.title, [initialScene]);
+          const initialChapter = buildInitialNarrationChapter(
+            project.id,
+            project.title,
+            [initialScene],
+            undefined,
+            loadedScript,
+            loadedStoryboard,
+            loadedCharacters
+          );
           const initialNarration = syncChapterToTimelineClips(initialChapter, [initialScene]);
 
           setEditorState((prev) => ({
@@ -461,6 +513,7 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
             narration_clips: initialNarration,
             selected_object: { type: "scene", id: initialScene.id },
           }));
+          setSaveStatus("unsaved");
         }
       } catch (err) {
         console.error("Failed to load project editor data:", err);
@@ -479,8 +532,17 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
   const handleAddPanelToScene = (
     page: Page,
     panel: Panel | null,
-    customCrop?: { x: number; y: number; width: number; height: number },
-    asNewScene: boolean = false
+    customCrop?: {
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      crop_type?: "rect" | "polygon" | "pen";
+      polygon_points?: Array<{ x: number; y: number }>;
+      clip_path?: string;
+    },
+    asNewScene: boolean = false,
+    autoPlay: boolean = false
   ) => {
     const crop = customCrop || (panel
       ? { x: panel.x, y: panel.y, width: panel.width, height: panel.height }
@@ -494,6 +556,9 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
       image_url: api.getPageImageUrl(project.id, page.id),
       page_sequence: page.sequence,
       crop,
+      crop_type: customCrop?.crop_type,
+      clip_path: customCrop?.clip_path,
+      polygon_points: customCrop?.polygon_points,
       transform: {
         x: 0,
         y: 0,
@@ -503,7 +568,9 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
         z_index: 1,
       },
       motion_preset: "slow_zoom_in",
-      name: panel ? `Panel #${panel.page_sequence}` : `Page #${page.sequence} Region`,
+      name: panel
+        ? `Panel #${panel.page_sequence}`
+        : `Page #${page.sequence} ${customCrop?.crop_type ? `(${customCrop.crop_type})` : "Region"}`,
     };
 
     if (asNewScene || editorState.scenes.length === 0) {
@@ -527,6 +594,7 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
         ],
         selected_object: { type: "layer", id: newLayerId, sceneId: newSceneId },
         playhead_sec: totalDuration,
+        is_playing: autoPlay ? true : prev.is_playing,
       }));
     } else {
       // Add as layer into currently selected or active scene
@@ -548,6 +616,7 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
           };
         }),
         selected_object: { type: "layer", id: newLayerId, sceneId: activeSceneId },
+        is_playing: autoPlay ? true : prev.is_playing,
       }));
     }
   };

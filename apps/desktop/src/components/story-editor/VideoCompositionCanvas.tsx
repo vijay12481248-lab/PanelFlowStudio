@@ -22,6 +22,20 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const [showSafeZones, setShowSafeZones] = useState<boolean>(false);
   const [playbackSpeed, setPlaybackSpeed] = useState<number>(1.0);
+  type ResizeHandle = "nw" | "ne" | "se" | "sw" | "n" | "s" | "e" | "w" | "center";
+
+  const [activeHandleDrag, setActiveHandleDrag] = useState<{
+    handle: ResizeHandle;
+    layerId: string;
+    startMouseX: number;
+    startMouseY: number;
+    initialScale: number;
+    initialX: number;
+    initialY: number;
+    centerX: number;
+    centerY: number;
+    initialDist: number;
+  } | null>(null);
   const [isDraggingLayer, setIsDraggingLayer] = useState<boolean>(false);
   const [isCanvasDragOver, setIsCanvasDragOver] = useState<boolean>(false);
   const [dragStartPos, setDragStartPos] = useState<{ mouseX: number; mouseY: number; initialX: number; initialY: number } | null>(null);
@@ -137,7 +151,106 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
     });
   };
 
+  // Handle Bounding Box Handle Drag (Corners, Midpoints, and Center)
+  const handleHandleMouseDown = (
+    e: React.MouseEvent,
+    handle: ResizeHandle,
+    layer: VisualLayer
+  ) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (!activeScene) return;
+
+    onSelectLayer(layer.id, activeScene.id);
+
+    const layerEl = (e.currentTarget.parentElement?.parentElement) as HTMLElement;
+    const rect = layerEl?.getBoundingClientRect() || {
+      left: e.clientX,
+      top: e.clientY,
+      width: 200,
+      height: 200,
+    };
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    const initialDist = Math.hypot(e.clientX - centerX, e.clientY - centerY);
+
+    setActiveHandleDrag({
+      handle,
+      layerId: layer.id,
+      startMouseX: e.clientX,
+      startMouseY: e.clientY,
+      initialScale: layer.transform.scale || 1.0,
+      initialX: layer.transform.x || 0,
+      initialY: layer.transform.y || 0,
+      centerX,
+      centerY,
+      initialDist: Math.max(15, initialDist),
+    });
+  };
+
   const handleMouseMove = (e: React.MouseEvent) => {
+    // 1. Handle Active Bounding Box Handles (Corners, Midpoints, Center)
+    if (activeHandleDrag && selectedLayerId && activeScene) {
+      const container = containerRef.current;
+      if (!container) return;
+      const rect = container.getBoundingClientRect();
+
+      if (activeHandleDrag.handle === "center") {
+        const deltaX = e.clientX - activeHandleDrag.startMouseX;
+        const deltaY = e.clientY - activeHandleDrag.startMouseY;
+        const percentX = (deltaX / rect.width) * 100;
+        const percentY = (deltaY / rect.height) * 100;
+
+        const newX = Math.round((activeHandleDrag.initialX + percentX) * 10) / 10;
+        const newY = Math.round((activeHandleDrag.initialY + percentY) * 10) / 10;
+
+        onUpdateState((prev) => ({
+          ...prev,
+          scenes: prev.scenes.map((sc) => {
+            if (sc.id !== activeScene?.id) return sc;
+            return {
+              ...sc,
+              layers: sc.layers.map((ly) => {
+                if (ly.id !== selectedLayerId) return ly;
+                return {
+                  ...ly,
+                  transform: { ...ly.transform, x: newX, y: newY },
+                };
+              }),
+            };
+          }),
+        }));
+      } else {
+        // Corner and edge scaling
+        const currentDist = Math.hypot(
+          e.clientX - activeHandleDrag.centerX,
+          e.clientY - activeHandleDrag.centerY
+        );
+        const scaleFactor = currentDist / activeHandleDrag.initialDist;
+        const targetScale = Math.max(0.15, Math.min(5.0, activeHandleDrag.initialScale * scaleFactor));
+        const newScale = Math.round(targetScale * 100) / 100;
+
+        onUpdateState((prev) => ({
+          ...prev,
+          scenes: prev.scenes.map((sc) => {
+            if (sc.id !== activeScene?.id) return sc;
+            return {
+              ...sc,
+              layers: sc.layers.map((ly) => {
+                if (ly.id !== selectedLayerId) return ly;
+                return {
+                  ...ly,
+                  transform: { ...ly.transform, scale: newScale },
+                };
+              }),
+            };
+          }),
+        }));
+      }
+      return;
+    }
+
+    // 2. Handle Whole-Layer Direct Drag
     if (!isDraggingLayer || !dragStartPos || !selectedLayerId || !activeScene) return;
     const deltaX = e.clientX - dragStartPos.mouseX;
     const deltaY = e.clientY - dragStartPos.mouseY;
@@ -177,6 +290,7 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
   const handleMouseUp = () => {
     setIsDraggingLayer(false);
     setDragStartPos(null);
+    setActiveHandleDrag(null);
   };
 
   // Chapter 3: Handle panel drop directly onto composition canvas
@@ -313,26 +427,88 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
                         maxHeight: "90%",
                       }}
                     >
+                      {/* Visual Layer Image with ClipPath support for rect/polygon/pen crops */}
                       <img
                         src={layer.image_url}
                         alt={layer.name || "Scene Panel"}
                         className="block object-contain pointer-events-none rounded shadow-md max-w-full max-h-full"
+                        style={{
+                          clipPath: layer.clip_path
+                            ? layer.clip_path
+                            : layer.polygon_points && layer.polygon_points.length >= 3
+                            ? `polygon(${layer.polygon_points.map((p) => `${p.x}% ${p.y}%`).join(", ")})`
+                            : undefined,
+                        }}
                         draggable={false}
                       />
 
-                      {/* On-Canvas Draggable Bounding Handles matching target screenshot */}
+                      {/* On-Canvas Draggable Bounding Handles matching user description */}
                       {isSelected && !state.is_playing && (
                         <div className="absolute inset-0 pointer-events-none border-2 border-cyan-400 shadow-lg">
-                          {/* 4 Corner Round Handles */}
-                          <div className="absolute -top-1.5 -left-1.5 w-3.5 h-3.5 bg-white border-2 border-cyan-400 rounded-full shadow" />
-                          <div className="absolute -top-1.5 -right-1.5 w-3.5 h-3.5 bg-white border-2 border-cyan-400 rounded-full shadow" />
-                          <div className="absolute -bottom-1.5 -left-1.5 w-3.5 h-3.5 bg-white border-2 border-cyan-400 rounded-full shadow" />
-                          <div className="absolute -bottom-1.5 -right-1.5 w-3.5 h-3.5 bg-white border-2 border-cyan-400 rounded-full shadow" />
-                          {/* 4 Edge Midpoint Handles */}
-                          <div className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-white border-2 border-cyan-400 rounded-sm" />
-                          <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-white border-2 border-cyan-400 rounded-sm" />
-                          <div className="absolute top-1/2 -left-1.5 -translate-y-1/2 w-3 h-3 bg-white border-2 border-cyan-400 rounded-sm" />
-                          <div className="absolute top-1/2 -right-1.5 -translate-y-1/2 w-3 h-3 bg-white border-2 border-cyan-400 rounded-sm" />
+                          {/* Live Dimensions & Scale Readout HUD */}
+                          <div className="absolute -top-7 left-1/2 -translate-x-1/2 bg-zinc-950/95 border border-cyan-400 text-cyan-300 font-mono text-[10px] font-bold px-2 py-0.5 rounded shadow-xl whitespace-nowrap pointer-events-none flex items-center gap-1.5">
+                            <span>Scale: {Math.round((layer.transform.scale || 1.0) * 100)}%</span>
+                            <span className="text-zinc-600">|</span>
+                            <span>Pos: {layer.transform.x}%, {layer.transform.y}%</span>
+                            {layer.crop_type && (
+                              <span className="text-[9px] text-amber-400 uppercase bg-amber-950/70 px-1 rounded">
+                                {layer.crop_type}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* 4 Corner Round Handles (nw, ne, sw, se) */}
+                          <div
+                            onMouseDown={(e) => handleHandleMouseDown(e, "nw", layer)}
+                            className="absolute -top-2 -left-2 w-4 h-4 bg-white border-2 border-cyan-400 rounded-full shadow hover:scale-125 cursor-nwse-resize pointer-events-auto transition-transform"
+                            title="Resize Corner (NW)"
+                          />
+                          <div
+                            onMouseDown={(e) => handleHandleMouseDown(e, "ne", layer)}
+                            className="absolute -top-2 -right-2 w-4 h-4 bg-white border-2 border-cyan-400 rounded-full shadow hover:scale-125 cursor-nesw-resize pointer-events-auto transition-transform"
+                            title="Resize Corner (NE)"
+                          />
+                          <div
+                            onMouseDown={(e) => handleHandleMouseDown(e, "sw", layer)}
+                            className="absolute -bottom-2 -left-2 w-4 h-4 bg-white border-2 border-cyan-400 rounded-full shadow hover:scale-125 cursor-nesw-resize pointer-events-auto transition-transform"
+                            title="Resize Corner (SW)"
+                          />
+                          <div
+                            onMouseDown={(e) => handleHandleMouseDown(e, "se", layer)}
+                            className="absolute -bottom-2 -right-2 w-4 h-4 bg-white border-2 border-cyan-400 rounded-full shadow hover:scale-125 cursor-nwse-resize pointer-events-auto transition-transform"
+                            title="Resize Corner (SE)"
+                          />
+
+                          {/* 4 Edge Midpoint Square Handles (n, s, w, e) */}
+                          <div
+                            onMouseDown={(e) => handleHandleMouseDown(e, "n", layer)}
+                            className="absolute -top-2 left-1/2 -translate-x-1/2 w-3.5 h-3.5 bg-white border-2 border-cyan-400 rounded-sm shadow hover:scale-125 cursor-ns-resize pointer-events-auto transition-transform"
+                            title="Adjust Height (Top)"
+                          />
+                          <div
+                            onMouseDown={(e) => handleHandleMouseDown(e, "s", layer)}
+                            className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-3.5 h-3.5 bg-white border-2 border-cyan-400 rounded-sm shadow hover:scale-125 cursor-ns-resize pointer-events-auto transition-transform"
+                            title="Adjust Height (Bottom)"
+                          />
+                          <div
+                            onMouseDown={(e) => handleHandleMouseDown(e, "w", layer)}
+                            className="absolute top-1/2 -left-2 -translate-y-1/2 w-3.5 h-3.5 bg-white border-2 border-cyan-400 rounded-sm shadow hover:scale-125 cursor-ew-resize pointer-events-auto transition-transform"
+                            title="Adjust Width (Left)"
+                          />
+                          <div
+                            onMouseDown={(e) => handleHandleMouseDown(e, "e", layer)}
+                            className="absolute top-1/2 -right-2 -translate-y-1/2 w-3.5 h-3.5 bg-white border-2 border-cyan-400 rounded-sm shadow hover:scale-125 cursor-ew-resize pointer-events-auto transition-transform"
+                            title="Adjust Width (Right)"
+                          />
+
+                          {/* Center Square Handle for Positioning */}
+                          <div
+                            onMouseDown={(e) => handleHandleMouseDown(e, "center", layer)}
+                            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-5 h-5 bg-white border-2 border-cyan-500 rounded-sm shadow-md hover:scale-115 cursor-move pointer-events-auto transition-transform flex items-center justify-center group"
+                            title="Drag to Reposition (Center Anchor)"
+                          >
+                            <span className="w-1.5 h-1.5 bg-cyan-500 rounded-full group-hover:bg-cyan-600" />
+                          </div>
                         </div>
                       )}
                     </div>

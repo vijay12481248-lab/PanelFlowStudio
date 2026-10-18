@@ -100,6 +100,36 @@ def get_project(project_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
     return format_project_response(p, db)
 
+
+@router.get("/{project_id}/story-editor")
+def get_story_editor_state(project_id: str, db: Session = Depends(get_db)):
+    """Return the persisted Story Editor state for a project, when one exists."""
+    p = project_service.get_project(db, project_id)
+    if not p:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+    state = (p.settings or {}).get("story_editor_state")
+    return {"state": state}
+
+
+@router.put("/{project_id}/story-editor")
+def save_story_editor_state(project_id: str, payload: dict, db: Session = Depends(get_db)):
+    """Persist the complete Story Editor state in the project's settings JSON."""
+    p = project_service.get_project(db, project_id)
+    if not p:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+    state = payload.get("state")
+    if not isinstance(state, dict):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="state must be an object")
+    if state.get("project_id") not in (None, project_id):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="state project_id does not match the requested project")
+    settings = dict(p.settings or {})
+    settings["story_editor_state"] = {**state, "project_id": project_id}
+    p.settings = settings
+    db.add(p)
+    db.commit()
+    db.refresh(p)
+    return {"state": settings["story_editor_state"], "updated_at": p.updated_at.isoformat() if p.updated_at else ""}
+
 @router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_project(project_id: str, db: Session = Depends(get_db)):
     deleted = project_service.delete_project(db, project_id)

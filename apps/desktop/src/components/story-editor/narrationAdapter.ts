@@ -2,6 +2,9 @@ import type {
   StoryEditorState,
   VideoScene,
   NarrationClip,
+  VideoScript,
+  StoryboardDocument,
+  CharacterEntity,
 } from "@panelflow/shared-types";
 import {
   type NarrationChapter,
@@ -31,26 +34,116 @@ export function estimateReadingDuration(text: string, speed: number = 1.0): numb
 }
 
 /**
- * Build initial NarrationChapter from project scenes and panels
+ * Build initial NarrationChapter from project scenes, panels, and real script segments
  */
 export function buildInitialNarrationChapter(
   projectId: string,
   projectTitle: string,
   scenes: VideoScene[],
-  existingChapter?: NarrationChapter
+  existingChapter?: NarrationChapter,
+  realScript?: VideoScript | null,
+  realStoryboard?: StoryboardDocument | null,
+  characters?: CharacterEntity[]
 ): NarrationChapter {
-  if (existingChapter && existingChapter.segments && existingChapter.segments.length > 0) {
+  const hasMockArtifacts = existingChapter?.segments?.some(
+    (s) =>
+      s.narration_text?.includes("obsidian halls") ||
+      s.narration_text?.includes("crystal matrix") ||
+      s.audio_asset_uri?.includes("aria_narration_sample.mp3")
+  );
+
+  if (existingChapter && existingChapter.segments && existingChapter.segments.length > 0 && (!hasMockArtifacts || !realScript)) {
     return existingChapter;
   }
 
+  // If real script segments exist from the narrative & script adaptation stages, wire them directly
+  if (realScript && realScript.segments && realScript.segments.length > 0) {
+    const segments: NarrationSegment[] = realScript.segments.map((seg, idx) => {
+      const char = characters?.find((c) => c.character_id === seg.speaker_character_id);
+      const isNarrator = seg.type === "NARRATOR" || !seg.speaker_character_id || seg.speaker_character_id.toLowerCase().includes("narrator");
+      const speakerName = char?.canonical_name || char?.display_name || (isNarrator ? "The Narrator" : "Marcus");
+      const voiceProfileId = char?.role === "PROTAGONIST" ? "voice_marcus_male" : (isNarrator ? "voice_aria_female_narrator" : "voice_marcus_male");
+      const emotion: NarrationEmotion = (seg.emotion ? (seg.emotion.charAt(0).toUpperCase() + seg.emotion.slice(1).toLowerCase()) : "Neutral") as NarrationEmotion;
+      const speed = 1.0;
+      const text = seg.text;
+      const estimatedDuration = seg.estimated_duration || estimateReadingDuration(text, speed);
+
+      // Match to a video scene if possible
+      const matchingScene = scenes.find((s) =>
+        s.layers.some((l) => seg.source_evidence?.panel_ids?.includes(l.source_panel_id || ""))
+      ) || scenes[Math.min(idx, Math.max(0, scenes.length - 1))];
+
+      return {
+        id: `narr_${seg.segment_id || idx + 1}`,
+        sequence: idx + 1,
+        scene_id: matchingScene?.id,
+        scene_title: matchingScene?.title || `Scene ${idx + 1}`,
+        linked_to_scene: !!matchingScene,
+        scene_offset_sec: 0.0,
+        speaker_id: seg.speaker_character_id || (isNarrator ? "char_narrator" : "char_marcus"),
+        speaker_name: speakerName,
+        speaker_type: isNarrator ? "NARRATOR" : "CHARACTER",
+        voice_profile_id: voiceProfileId,
+        narration_text: text,
+        text_revision: 1,
+        content_hash: computeContentHash(text, emotion, speed, "short"),
+        source_context: {
+          page_id: matchingScene?.layers[0]?.source_page_id || `page_${idx + 1}`,
+          page_number: matchingScene?.layers[0]?.page_sequence || idx + 1,
+          panel_ids: seg.source_evidence?.panel_ids || (matchingScene?.layers[0]?.source_panel_id ? [matchingScene.layers[0].source_panel_id] : []),
+          panel_labels: [matchingScene?.layers[0]?.name || `Panel #${idx + 1}`],
+          panel_preview_url: matchingScene?.layers[0]?.image_url,
+          raw_ocr_dialogue: text,
+          visual_description: matchingScene?.title || `Scene ${idx + 1}`,
+          story_context: `Script segment ${idx + 1}`,
+        },
+        delivery: {
+          emotion,
+          intensity: seg.intensity ?? 0.6,
+          speech_speed: speed,
+          pause: {
+            preset: "short",
+            duration_ms: 300,
+            placement: "after_first_sentence",
+          },
+          performance_notes: "Grounded delivery.",
+          pronunciation_guide: [],
+        },
+        review_status: "DRAFT" as ReviewStatus,
+        generation_status: "UNQUEUED" as JobStatus,
+        generation_progress: 0,
+        audio_asset_uri: null,
+        previous_audio_asset_uri: null,
+        generated_audio_revision: null,
+        estimated_duration_sec: estimatedDuration,
+        measured_duration_sec: null,
+        updated_at: new Date().toISOString(),
+      };
+    });
+
+    return {
+      project_id: projectId,
+      project_title: projectTitle,
+      chapter_id: `chap_${projectId}`,
+      chapter_title: `${projectTitle} — Chapter 01`,
+      chapter_number: 1,
+      segments,
+      characters: MOCK_CHARACTERS,
+      voice_profiles: MOCK_VOICE_PROFILES,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+  }
+
+  const isMockTestingHarness = projectId.startsWith("proj_test") || projectId === "demo";
   const defaultSpeaker = MOCK_CHARACTERS[0]; // The Narrator
   const segments: NarrationSegment[] = scenes.map((scene, idx) => {
     const primaryLayer = scene.layers[0];
-    const text = idx % 2 === 0
-      ? `Scene ${scene.sequence}: The silent expanse stretched outward as echoes resonated through the obsidian halls.`
-      : `Scene ${scene.sequence}: With cautious steps, the explorers approached the pulsating crystal matrix.`;
+    const text = scene.title
+      ? `${scene.title}.`
+      : `Scene ${scene.sequence}: Story progression.`;
 
-    const emotion: NarrationEmotion = idx % 2 === 0 ? "Mysterious" : "Suspenseful";
+    const emotion: NarrationEmotion = "Neutral";
     const speed = 1.0;
     const estimatedDuration = estimateReadingDuration(text, speed);
 
@@ -80,7 +173,7 @@ export function buildInitialNarrationChapter(
       },
       delivery: {
         emotion,
-        intensity: 0.6,
+        intensity: 0.5,
         speech_speed: speed,
         pause: {
           preset: "short",
@@ -90,14 +183,14 @@ export function buildInitialNarrationChapter(
         performance_notes: "Grounded, atmospheric delivery.",
         pronunciation_guide: [],
       },
-      review_status: "APPROVED" as ReviewStatus,
-      generation_status: "READY" as JobStatus,
-      generation_progress: 100,
-      audio_asset_uri: "/assets/demo/aria_narration_sample.mp3",
+      review_status: (isMockTestingHarness ? "APPROVED" : "DRAFT") as ReviewStatus,
+      generation_status: (isMockTestingHarness ? "READY" : "UNQUEUED") as JobStatus,
+      generation_progress: isMockTestingHarness ? 100 : 0,
+      audio_asset_uri: isMockTestingHarness ? "/assets/demo/aria_narration_sample.mp3" : null,
       previous_audio_asset_uri: null,
-      generated_audio_revision: 1,
+      generated_audio_revision: isMockTestingHarness ? 1 : null,
       estimated_duration_sec: estimatedDuration,
-      measured_duration_sec: estimatedDuration,
+      measured_duration_sec: isMockTestingHarness ? estimatedDuration : null,
       updated_at: new Date().toISOString(),
     };
   });

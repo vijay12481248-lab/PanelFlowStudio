@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from "react";
+import React, { useRef, useState, useEffect, useCallback } from "react";
 import { Icons, Button } from "@panelflow/ui";
 import type {
   StoryEditorState,
@@ -50,7 +50,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
   onOpenAudioLibrary,
 }) => {
   const rulerRef = useRef<HTMLDivElement>(null);
-  const [snappingEnabled, setSnappingEnabled] = useState<boolean>(true);
+  const snappingEnabled = state.snapping !== false;
 
   // Drag and drop states
   const [dragOverInsertIndex, setDragOverInsertIndex] = useState<number | null>(null);
@@ -302,31 +302,87 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
     };
   }, [trimming, draggingNarration, draggingAudioClip, snappingEnabled, state.playhead_sec, pxPerSec, state.scenes, onUpdateState]);
 
-  // Scrub handler on ruler or track area
-  const handleTimelineScrub = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!rulerRef.current) return;
-    const rect = rulerRef.current.getBoundingClientRect();
-    const clickX = e.clientX - rect.left;
-    let newTime = Math.max(0, Math.min(totalDurationSec, clickX / pxPerSec));
+  // Smooth Scrubber Drag State
+  const [isScrubbing, setIsScrubbing] = useState<boolean>(false);
+  const wasPlayingBeforeScrubRef = useRef<boolean>(false);
+  const scrubRafRef = useRef<number | null>(null);
+  const lastScrubSecRef = useRef<number>(state.playhead_sec);
 
-    // Magnetic snapping to clip start/end boundaries within 0.25s
-    if (snappingEnabled) {
-      let cumulative = 0;
-      for (const scene of state.scenes) {
-        if (Math.abs(newTime - cumulative) < 0.25) {
-          newTime = cumulative;
-          break;
-        }
-        cumulative += scene.duration_sec;
-        if (Math.abs(newTime - cumulative) < 0.25) {
-          newTime = cumulative;
-          break;
+  // Compute precise time from pointer clientX with smooth thresholding
+  const getTimeFromClientX = useCallback(
+    (clientX: number, snap: boolean = snappingEnabled) => {
+      if (!rulerRef.current) return 0;
+      const rect = rulerRef.current.getBoundingClientRect();
+      const clickX = clientX - rect.left;
+      let targetSec = Math.max(0, Math.min(totalDurationSec, clickX / pxPerSec));
+
+      if (snap) {
+        // Tight 0.12s threshold so snapping never feels sticky or stuttery
+        let cumulative = 0;
+        for (const scene of state.scenes) {
+          if (Math.abs(targetSec - cumulative) < 0.12) {
+            targetSec = cumulative;
+            break;
+          }
+          cumulative += scene.duration_sec;
+          if (Math.abs(targetSec - cumulative) < 0.12) {
+            targetSec = cumulative;
+            break;
+          }
         }
       }
-    }
+      return Math.round(targetSec * 1000) / 1000;
+    },
+    [totalDurationSec, pxPerSec, snappingEnabled, state.scenes]
+  );
 
-    onUpdateState((s) => ({ ...s, playhead_sec: Math.round(newTime * 100) / 100 }));
-  };
+  // Smooth Scrubber Drag Handler for playhead diamond, line, and ruler
+  const handleStartScrub = useCallback(
+    (e: React.PointerEvent) => {
+      if (e.button !== 0) return; // Only primary button
+      e.preventDefault();
+      e.stopPropagation();
+
+      wasPlayingBeforeScrubRef.current = state.is_playing;
+      if (state.is_playing) {
+        onUpdateState((s) => ({ ...s, is_playing: false }));
+      }
+
+      setIsScrubbing(true);
+      const initialSec = getTimeFromClientX(e.clientX, snappingEnabled && !e.shiftKey);
+      lastScrubSecRef.current = initialSec;
+      onUpdateState((s) => ({ ...s, playhead_sec: initialSec }));
+
+      const handlePointerMove = (ev: PointerEvent) => {
+        ev.preventDefault();
+        if (scrubRafRef.current) cancelAnimationFrame(scrubRafRef.current);
+        scrubRafRef.current = requestAnimationFrame(() => {
+          const sec = getTimeFromClientX(ev.clientX, snappingEnabled && !ev.shiftKey);
+          lastScrubSecRef.current = sec;
+          onUpdateState((s) => ({ ...s, playhead_sec: sec }));
+        });
+      };
+
+      const handlePointerUp = (ev: PointerEvent) => {
+        ev.preventDefault();
+        window.removeEventListener("pointermove", handlePointerMove);
+        window.removeEventListener("pointerup", handlePointerUp);
+        if (scrubRafRef.current) {
+          cancelAnimationFrame(scrubRafRef.current);
+          scrubRafRef.current = null;
+        }
+        setIsScrubbing(false);
+        onUpdateState((s) => ({
+          ...s,
+          playhead_sec: Math.round(lastScrubSecRef.current * 100) / 100,
+        }));
+      };
+
+      window.addEventListener("pointermove", handlePointerMove);
+      window.addEventListener("pointerup", handlePointerUp);
+    },
+    [state.is_playing, getTimeFromClientX, snappingEnabled, onUpdateState]
+  );
 
   // Reorder scenes state update
   const handleReorderScenes = (fromIndex: number, toIndex: number) => {
@@ -666,7 +722,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
           {/* Magnetic Snapping Toggle */}
           <button
             type="button"
-            onClick={() => setSnappingEnabled((v) => !v)}
+            onClick={() => onUpdateState((s) => ({ ...s, snapping: s.snapping === false }))}
             className={`p-1.5 rounded transition-colors ${
               snappingEnabled ? "text-indigo-400 bg-zinc-800" : "hover:text-white"
             }`}
@@ -706,9 +762,71 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
           </button>
         </div>
 
-        {/* Center Mode Indicator */}
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-zinc-800 text-zinc-400 border border-zinc-700">
+        {/* Center Transport & Playback Controls */}
+        <div className="flex items-center gap-2.5">
+          {/* Return to Start (00:00) */}
+          <button
+            type="button"
+            onClick={() => onUpdateState((s) => ({ ...s, playhead_sec: 0 }))}
+            className="p-1 rounded text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+            title="Return to Start (00:00)"
+          >
+            <Icons.Rotate className="w-3.5 h-3.5" />
+          </button>
+
+          {/* Step Back -0.1s */}
+          <button
+            type="button"
+            onClick={() => onUpdateState((s) => ({ ...s, playhead_sec: Math.max(0, s.playhead_sec - 0.1) }))}
+            className="p-1 rounded text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+            title="Step Back 0.1s"
+          >
+            <Icons.ChevronDown className="w-3.5 h-3.5 rotate-90" />
+          </button>
+
+          {/* Main Play / Pause Button */}
+          <button
+            type="button"
+            onClick={() => onUpdateState((s) => ({ ...s, is_playing: !s.is_playing }))}
+            className={`px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1.5 shadow-md transition-all active:scale-95 ${
+              state.is_playing
+                ? "bg-amber-600 hover:bg-amber-500 text-white ring-2 ring-amber-400/40"
+                : "bg-indigo-600 hover:bg-indigo-500 text-white ring-2 ring-indigo-400/40"
+            }`}
+            title={state.is_playing ? "Pause Video (Space)" : "Play Video (Space)"}
+          >
+            {state.is_playing ? (
+              <>
+                <Icons.Pause className="w-3.5 h-3.5 fill-current" />
+                <span>Pause</span>
+              </>
+            ) : (
+              <>
+                <Icons.Play className="w-3.5 h-3.5 fill-current ml-0.5" />
+                <span>Play</span>
+              </>
+            )}
+          </button>
+
+          {/* Step Forward +0.1s */}
+          <button
+            type="button"
+            onClick={() => onUpdateState((s) => ({ ...s, playhead_sec: Math.min(totalDurationSec, s.playhead_sec + 0.1) }))}
+            className="p-1 rounded text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+            title="Step Forward 0.1s"
+          >
+            <Icons.ChevronDown className="w-3.5 h-3.5 -rotate-90" />
+          </button>
+
+          {/* Timecode Readout */}
+          <div className="font-mono text-xs flex items-center gap-1 bg-zinc-950/80 px-2 py-0.5 rounded border border-zinc-800 shadow-inner">
+            <span className="text-zinc-100 font-bold">{formatRulerTime(state.playhead_sec)}</span>
+            <span className="text-zinc-600">/</span>
+            <span className="text-zinc-400">{formatRulerTime(totalDurationSec)}</span>
+          </div>
+
+          {/* Mode Indicator */}
+          <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-zinc-800/80 text-zinc-400 border border-zinc-750 ml-1">
             {isAdvancedMode ? "Advanced Multitrack" : "Simple Storyline"}
           </span>
         </div>
@@ -876,15 +994,15 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
         </div>
 
         {/* Right Shared Time Ruler & Synchronized Track Lanes */}
-        <div className="flex-1 overflow-x-auto overflow-y-hidden bg-zinc-950 relative">
+        <div className="flex-1 overflow-x-auto overflow-y-hidden bg-zinc-950 relative select-none">
           <div
             ref={rulerRef}
-            onClick={handleTimelineScrub}
+            onPointerDown={handleStartScrub}
             className="relative h-full cursor-pointer"
             style={{ width: `${totalTimelineWidthPx}px` }}
           >
             {/* Top Time Ruler */}
-            <div className="h-6 border-b border-zinc-800/80 relative text-[10px] font-mono text-zinc-500 pointer-events-none">
+            <div className="h-6 border-b border-zinc-800/80 relative text-[10px] font-mono text-zinc-500 pointer-events-none select-none">
               {Array.from({ length: ticksCount }).map((_, idx) => {
                 const sec = idx * tickIntervalSec;
                 const leftPx = sec * pxPerSec;
@@ -900,12 +1018,45 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
               })}
             </div>
 
-            {/* Draggable Indigo Playhead Line */}
+            {/* Draggable Smooth Playhead Vertical Line */}
             <div
-              className="absolute top-0 bottom-0 w-0.5 bg-indigo-500 z-30 pointer-events-none shadow-lg"
+              className={`absolute top-0 bottom-0 z-30 pointer-events-auto transition-opacity ${
+                isScrubbing ? "opacity-100" : "opacity-95"
+              }`}
               style={{ left: `${state.playhead_sec * pxPerSec}px` }}
             >
-              <div className="w-3.5 h-3.5 bg-indigo-500 -ml-[6px] -top-1 rounded-sm rotate-45 pointer-events-auto cursor-ew-resize shadow-md" />
+              {/* Laser line with cyan glow while scrubbing */}
+              <div
+                className={`w-0.5 h-full ${
+                  isScrubbing
+                    ? "bg-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.9)]"
+                    : "bg-indigo-500 shadow-md"
+                }`}
+              />
+
+              {/* Invisible wider grab handle along vertical line */}
+              <div
+                onPointerDown={handleStartScrub}
+                className="absolute top-0 bottom-0 -left-2.5 w-5 cursor-ew-resize"
+                title="Drag Scrubber"
+              />
+
+              {/* Diamond Playhead Handle */}
+              <div
+                onPointerDown={handleStartScrub}
+                className={`absolute -left-[7px] -top-1.5 w-4 h-4 rounded-sm rotate-45 cursor-ew-resize shadow-lg transition-transform ${
+                  isScrubbing
+                    ? "bg-cyan-400 scale-125 ring-2 ring-cyan-200"
+                    : "bg-indigo-500 hover:scale-115 hover:bg-indigo-400"
+                }`}
+              >
+                {/* Live time tooltip while scrubbing */}
+                {isScrubbing && (
+                  <div className="absolute -top-7 left-1/2 -translate-x-1/2 -rotate-45 bg-zinc-950 border border-cyan-400 text-cyan-300 font-mono text-[10px] font-bold px-1.5 py-0.5 rounded shadow-xl whitespace-nowrap pointer-events-none">
+                    {formatRulerTime(state.playhead_sec)}
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* TRACK 1: Narration Track */}

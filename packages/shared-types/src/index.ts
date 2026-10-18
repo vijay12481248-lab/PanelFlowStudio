@@ -1048,6 +1048,9 @@ export interface VisualLayerCrop {
   y: number;
   width: number;
   height: number;
+  crop_type?: "rect" | "polygon" | "pen";
+  polygon_points?: Array<{ x: number; y: number }>;
+  clip_path?: string;
 }
 
 export interface VisualLayerTransform {
@@ -1077,6 +1080,9 @@ export interface VisualLayer {
   name?: string;
   locked?: boolean;
   visible?: boolean;
+  crop_type?: "rect" | "polygon" | "pen";
+  clip_path?: string;
+  polygon_points?: Array<{ x: number; y: number }>;
   // Chapter 3: Independent layer timing within scene
   start_offset_sec?: number; // Relative start offset in scene (default 0)
   duration_sec?: number;     // Active visible duration (default scene.duration_sec)

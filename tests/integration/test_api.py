@@ -68,6 +68,7 @@ def test_full_api_workflow(tmp_path: Path):
     assert pages_resp.status_code == 200
     pages = pages_resp.json()
     assert len(pages) == 2
+
     assert pages[0]["sequence"] == 1
     assert pages[1]["sequence"] == 2
     page1_id = pages[0]["id"]
@@ -115,3 +116,39 @@ def test_full_api_workflow(tmp_path: Path):
     confirm_resp = client.post(f"/api/projects/{project_id}/confirm")
     assert confirm_resp.status_code == 200
     assert confirm_resp.json()["current_stage"] == "ACQUIRED"
+
+
+def test_story_editor_state_persists_in_project_settings():
+    client = TestClient(app)
+    resp = client.post(
+        "/api/projects",
+        json={
+            "title": "Editor State Test",
+            "source_type": "LOCAL_FOLDER",
+            "rights_status": "PUBLIC_DOMAIN",
+            "settings": {},
+        },
+    )
+    assert resp.status_code == 201
+    project_id = resp.json()["id"]
+    state = {
+        "schema_version": 2,
+        "project_id": project_id,
+        "mode": "advanced",
+        "aspect_ratio": "9:16",
+        "scenes": [],
+        "narration_clips": [],
+        "bgm_tracks": [],
+        "sfx_cues": [],
+        "track_states": {},
+        "selected_object": None,
+        "playhead_sec": 0,
+        "is_playing": False,
+        "zoom_level": 125,
+    }
+    save_resp = client.put(f"/api/projects/{project_id}/story-editor", json={"state": state})
+    assert save_resp.status_code == 200
+    assert save_resp.json()["state"]["mode"] == "advanced"
+    get_resp = client.get(f"/api/projects/{project_id}/story-editor")
+    assert get_resp.status_code == 200
+    assert get_resp.json()["state"]["zoom_level"] == 125

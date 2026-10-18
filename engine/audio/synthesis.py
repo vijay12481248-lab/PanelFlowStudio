@@ -28,44 +28,123 @@ CHATTERBOX_PYTHON = TOOLS_ROOT / "Chatterbox" / ".venv" / "Scripts" / "python.ex
 
 # Voice identity mapping to authorized local reference files
 VOICE_MAP: Dict[str, Path] = {
+    # Aria (Female Narrator / Elegant Host)
     "aria_female": VOICE_REF_DIR / "aria_female_narrator.wav",
+    "aria_female_narrator": VOICE_REF_DIR / "aria_female_narrator.wav",
+    "voice_aria_female_narrator": VOICE_REF_DIR / "aria_female_narrator.wav",
     "the narrator": VOICE_REF_DIR / "aria_female_narrator.wav",
     "narrator": VOICE_REF_DIR / "aria_female_narrator.wav",
+    "narrator (local f5-tts)": VOICE_REF_DIR / "aria_female_narrator.wav",
+    "aria (the narrator)": VOICE_REF_DIR / "aria_female_narrator.wav",
     "aria": VOICE_REF_DIR / "aria_female.wav",
+    "aria (pepper female)": VOICE_REF_DIR / "aria_female.wav",
+    "char_aria": VOICE_REF_DIR / "aria_female.wav",
+
+    # Marcus (Male Deep Storyteller / Protagonist / Warrior)
     "marcus_male": VOICE_REF_DIR / "marcus_male.wav",
+    "voice_marcus_male": VOICE_REF_DIR / "marcus_male.wav",
     "marcus": VOICE_REF_DIR / "marcus_male.wav",
     "char_marcus": VOICE_REF_DIR / "marcus_male.wav",
+    "marcus (male deep f5-tts)": VOICE_REF_DIR / "marcus_male.wav",
+    "marcus (male deep)": VOICE_REF_DIR / "marcus_male.wav",
+    "marcus (male warrior)": VOICE_REF_DIR / "marcus_male.wav",
+    "marcus_male_deep": VOICE_REF_DIR / "marcus_male.wav",
+    "char_zhuo_fan": VOICE_REF_DIR / "marcus_male.wav",
+    "zhuo fan": VOICE_REF_DIR / "marcus_male.wav",
+    "danqing shen": VOICE_REF_DIR / "marcus_male.wav",
+    "valerian": VOICE_REF_DIR / "marcus_male.wav",
+
+    # Leon (Youthful Male)
+    "voice_leon_male": VOICE_REF_DIR / "marcus_male.wav",
+    "leon_male": VOICE_REF_DIR / "marcus_male.wav",
+    "leon": VOICE_REF_DIR / "marcus_male.wav",
+    "luo yunhai": VOICE_REF_DIR / "marcus_male.wav",
+
+    # Seraphina (Female Cinematic / Ethereal)
     "seraphina_female": VOICE_REF_DIR / "seraphina_female_cinematic.mp3",
+    "voice_seraphina_female": VOICE_REF_DIR / "seraphina_female_cinematic.mp3",
     "seraphina": VOICE_REF_DIR / "seraphina_female_cinematic.mp3",
     "char_seraphina": VOICE_REF_DIR / "seraphina_female_cinematic.mp3",
+    "seraphina (cinematic)": VOICE_REF_DIR / "seraphina_female_cinematic.mp3",
+    "high priestess": VOICE_REF_DIR / "seraphina_female_cinematic.mp3",
 }
 
 # Emotion delivery mapping for Chatterbox Turbo
+# Controls acoustic style through decoder sampling parameters, avoiding literal vocalization of bracketed tags
 EMOTION_SETTINGS: Dict[str, Dict[str, Any]] = {
-    "neutral": {"tag": "", "temperature": 0.70, "top_p": 0.90, "repetition_penalty": 1.15},
-    "happy": {"tag": "[chuckle] ", "temperature": 0.78, "top_p": 0.92, "repetition_penalty": 1.15},
-    "excited": {"tag": "[chuckle] ", "temperature": 0.82, "top_p": 0.95, "repetition_penalty": 1.15},
-    "sad": {"tag": "[sigh] ", "temperature": 0.65, "top_p": 0.88, "repetition_penalty": 1.20},
-    "fearful": {"tag": "[gasp] ", "temperature": 0.75, "top_p": 0.90, "repetition_penalty": 1.20},
-    "suspenseful": {"tag": "", "temperature": 0.70, "top_p": 0.90, "repetition_penalty": 1.18},
-    "mysterious": {"tag": "", "temperature": 0.68, "top_p": 0.88, "repetition_penalty": 1.18},
-    "whispering": {"tag": "[whisper] ", "temperature": 0.65, "top_p": 0.85, "repetition_penalty": 1.20},
-    "serious": {"tag": "", "temperature": 0.68, "top_p": 0.90, "repetition_penalty": 1.22},
-    "angry": {"tag": "", "temperature": 0.65, "top_p": 0.92, "repetition_penalty": 1.25},
-    "determined": {"tag": "", "temperature": 0.66, "top_p": 0.90, "repetition_penalty": 1.20},
+    "neutral": {"tag": "", "temperature": 0.76, "top_p": 0.92, "repetition_penalty": 1.18, "top_k": 50},
+    "calm": {"tag": "", "temperature": 0.74, "top_p": 0.90, "repetition_penalty": 1.18, "top_k": 50},
+    "happy": {"tag": "", "temperature": 0.80, "top_p": 0.94, "repetition_penalty": 1.16, "top_k": 60},
+    "excited": {"tag": "", "temperature": 0.82, "top_p": 0.95, "repetition_penalty": 1.16, "top_k": 60},
+    "sad": {"tag": "", "temperature": 0.74, "top_p": 0.90, "repetition_penalty": 1.20, "top_k": 40},
+    "fearful": {"tag": "", "temperature": 0.75, "top_p": 0.92, "repetition_penalty": 1.20, "top_k": 50},
+    "suspenseful": {"tag": "", "temperature": 0.74, "top_p": 0.92, "repetition_penalty": 1.20, "top_k": 50},
+    "mysterious": {"tag": "", "temperature": 0.74, "top_p": 0.90, "repetition_penalty": 1.18, "top_k": 50},
+    "whispering": {"tag": "", "temperature": 0.73, "top_p": 0.90, "repetition_penalty": 1.20, "top_k": 40},
+    "serious": {"tag": "", "temperature": 0.74, "top_p": 0.92, "repetition_penalty": 1.20, "top_k": 50},
+    "angry": {"tag": "", "temperature": 0.76, "top_p": 0.92, "repetition_penalty": 1.22, "top_k": 50},
+    "determined": {"tag": "", "temperature": 0.75, "top_p": 0.92, "repetition_penalty": 1.20, "top_k": 50},
 }
 
 
+def sanitize_tts_text(text: str) -> str:
+    """
+    Cleans text for neural TTS generation.
+    Strips bracketed stage directions ([whisper], [sigh], [gasp], [Scene 1:], etc.)
+    and parenthetical acting cues that would otherwise be spoken verbatim or cause
+    degenerate repetition loops in autoregressive decoders.
+    """
+    import re
+    # Remove bracketed directions like [whisper], [sigh], [gasp], [pause]
+    cleaned = re.sub(r"\[[^\]]*\]", " ", text)
+    # Remove parenthetical cues like (whispering), (sighs)
+    cleaned = re.sub(r"\([^\)]*\)", " ", cleaned)
+    # Replace non-breaking spaces and smart quotes/dashes
+    cleaned = cleaned.replace("\u201c", '"').replace("\u201d", '"')
+    cleaned = cleaned.replace("\u2018", "'").replace("\u2019", "'")
+    cleaned = cleaned.replace("\u2014", " - ").replace("\u2013", " - ")
+    cleaned = cleaned.replace("\u2026", "...")
+    # Normalize whitespace
+    cleaned = " ".join(cleaned.split()).strip()
+    return cleaned or text.strip()
+
+
 def resolve_voice_reference(voice_identifier: str) -> Optional[str]:
-    key = voice_identifier.strip().lower()
-    if key in VOICE_MAP and VOICE_MAP[key].exists():
-        return str(VOICE_MAP[key])
-    # Check if voice_identifier is an absolute file path
+    if not voice_identifier:
+        default_ref = VOICE_MAP.get("marcus_male") or VOICE_MAP.get("aria_female")
+        return str(default_ref) if default_ref and default_ref.exists() else None
+
+    # Check direct path
     p = Path(voice_identifier)
     if p.exists() and p.is_file():
         return str(p)
-    # Check default narrator
-    default_ref = VOICE_MAP.get("aria_female")
+
+    key = voice_identifier.strip().lower()
+    if key in VOICE_MAP and VOICE_MAP[key].exists():
+        return str(VOICE_MAP[key])
+
+    # Fuzzy heuristic matching on key tokens
+    if any(k in key for k in ("marcus", "male", "warrior", "zhuo", "danqing", "valerian", "leon", "boy")):
+        target = VOICE_MAP.get("marcus_male")
+        if target and target.exists():
+            return str(target)
+
+    if any(k in key for k in ("seraphina", "priestess", "ethereal", "queen")):
+        target = VOICE_MAP.get("seraphina_female")
+        if target and target.exists():
+            return str(target)
+
+    if any(k in key for k in ("aria", "female", "girl", "woman")):
+        target = VOICE_MAP.get("aria_female")
+        if target and target.exists():
+            return str(target)
+
+    if "narrator" in key:
+        target = VOICE_MAP.get("the narrator")
+        if target and target.exists():
+            return str(target)
+
+    default_ref = VOICE_MAP.get("marcus_male") or VOICE_MAP.get("aria_female")
     if default_ref and default_ref.exists():
         return str(default_ref)
     return None
@@ -210,8 +289,11 @@ class LocalSpeechSynthesizer:
         results = []
 
         for t in tasks:
-            text = t["text"].strip()
-            if not text:
+            raw_text = t["text"].strip()
+            if not raw_text:
+                continue
+            cleaned_text = sanitize_tts_text(raw_text)
+            if not cleaned_text:
                 continue
             directory = Path(t["directory"])
             directory.mkdir(parents=True, exist_ok=True)
@@ -219,14 +301,9 @@ class LocalSpeechSynthesizer:
             emotion_raw = t.get("emotion", "Neutral").strip().lower()
             emo_cfg = EMOTION_SETTINGS.get(emotion_raw, EMOTION_SETTINGS["neutral"])
 
-            # Formulate text with paralinguistic tag if not already present
-            formatted_text = text
-            if emo_cfg["tag"] and not text.startswith("["):
-                formatted_text = f"{emo_cfg['tag']}{text}"
-
             ref_path = resolve_voice_reference(voice)
             content_key = hashlib.sha256(json.dumps([
-                "speech-v3", provider_id, formatted_text, voice, emo_cfg["temperature"], emo_cfg["top_p"],
+                "speech-v4", provider_id, cleaned_text, voice, emo_cfg["temperature"], emo_cfg["top_p"], emo_cfg.get("top_k", 50),
             ], ensure_ascii=False).encode()).hexdigest()
 
             if t.get("force"):
@@ -256,13 +333,14 @@ class LocalSpeechSynthesizer:
                 "id": t["id"],
                 "target_path": str(target_wav),
                 "meta_path": str(meta_path),
-                "text": formatted_text,
-                "raw_text": text,
+                "text": cleaned_text,
+                "raw_text": raw_text,
                 "voice": voice,
                 "ref_audio": ref_path,
                 "temperature": emo_cfg["temperature"],
                 "top_p": emo_cfg["top_p"],
                 "repetition_penalty": emo_cfg["repetition_penalty"],
+                "top_k": emo_cfg.get("top_k", 50),
                 "emotion": emotion_raw,
                 "text_revision": t.get("text_revision", 1),
             })
@@ -302,9 +380,10 @@ for task in tasks:
             current_ref = ref_audio
         wav = model.generate(
             task['text'],
-            temperature=task.get('temperature', 0.70),
-            top_p=task.get('top_p', 0.90),
-            repetition_penalty=task.get('repetition_penalty', 1.15)
+            temperature=task.get('temperature', 0.76),
+            top_p=task.get('top_p', 0.92),
+            repetition_penalty=task.get('repetition_penalty', 1.18),
+            top_k=task.get('top_k', 50)
         )
         audio_np = wav.squeeze().cpu().numpy().astype(np.float32)
         peak = np.max(np.abs(audio_np))

@@ -113,6 +113,17 @@ export class PanelFlowApiClient {
     return this.request<Project>(`/api/projects/${projectId}`);
   }
 
+  async getStoryEditorState(projectId: string): Promise<{ state: any | null }> {
+    return this.request<{ state: any | null }>(`/api/projects/${projectId}/story-editor`);
+  }
+
+  async saveStoryEditorState(projectId: string, state: any): Promise<{ state: any; updated_at: string }> {
+    return this.request<{ state: any; updated_at: string }>(`/api/projects/${projectId}/story-editor`, {
+      method: "PUT",
+      body: JSON.stringify({ state }),
+    });
+  }
+
   async deleteProject(projectId: string): Promise<void> {
     return this.request<void>(`/api/projects/${projectId}`, {
       method: "DELETE",
@@ -667,6 +678,95 @@ export class PanelFlowApiClient {
 
   getAudioFileUrl(projectId: string, filePath: string): string {
     return `${this.baseUrl}/api/projects/${projectId}/audio/file?path=${encodeURIComponent(filePath)}`;
+  }
+
+  async getAudioProviders(): Promise<{
+    primary_provider: string;
+    providers: Array<{
+      id: string;
+      name: string;
+      location: string;
+      license: string;
+      commercial_use: string;
+      status: string;
+      notes?: string;
+      device?: string;
+      capabilities?: any;
+      voices?: any[];
+    }>;
+  }> {
+    return this.request<any>("/api/audio/providers");
+  }
+
+  async draftNarration(
+    projectId: string,
+    scenes: any[],
+    providerId?: string
+  ): Promise<any> {
+    return this.request<any>(`/api/projects/${projectId}/narration/draft`, {
+      method: "POST",
+      body: JSON.stringify({ scenes, provider_id: providerId }),
+    });
+  }
+
+  async synthesizeNarrationSegment(
+    projectId: string,
+    params: {
+      segment_id: string;
+      text: string;
+      voice?: string;
+      emotion?: string;
+      intensity?: number;
+      speed?: number;
+      text_revision?: number;
+      content_hash?: string;
+      force?: boolean;
+    }
+  ): Promise<{
+    success: boolean;
+    segment_id: string;
+    audio_path: string;
+    audio_url: string;
+    measured_duration_sec: number;
+    sample_rate: number;
+    channels: number;
+    generated_audio_revision: number;
+    content_hash?: string;
+  }> {
+    return this.request<any>(`/api/projects/${projectId}/narration/synthesize-segment`, {
+      method: "POST",
+      body: JSON.stringify(params),
+    });
+  }
+
+  async synthesizeNarrationBatch(
+    projectId: string,
+    segments: Array<{
+      segment_id: string;
+      text: string;
+      voice?: string;
+      emotion?: string;
+      intensity?: number;
+      speed?: number;
+      text_revision?: number;
+      content_hash?: string;
+      force?: boolean;
+    }>
+  ): Promise<{
+    project_id: string;
+    results: Array<{
+      id: string;
+      success: boolean;
+      audio_path?: string;
+      audio_url?: string;
+      duration?: number;
+      error?: string;
+    }>;
+  }> {
+    return this.request<any>(`/api/projects/${projectId}/narration/synthesize-batch`, {
+      method: "POST",
+      body: JSON.stringify({ segments }),
+    });
   }
 
   // ---------------------------------------------------------------------------

@@ -15,10 +15,9 @@ import { AudioScreen } from "./screens/AudioScreen";
 import { MotionScreen } from "./screens/MotionScreen";
 import { RenderScreen } from "./screens/RenderScreen";
 import { StoryEditorScreen } from "./screens/StoryEditorScreen";
-import type { LeftRailTab } from "./components/story-editor/StoryEditorLeftRail";
-import type { WorkflowStepId } from "./components/story-editor/WorkflowStepperRibbon";
 import { PipelineNavbar } from "./components/PipelineNavbar";
 import { ProviderHealthModal } from "./components/ProviderHealthModal";
+import { DashboardShell } from "./components/dashboard";
 
 type ScreenMode =
   | "projects"
@@ -91,46 +90,10 @@ export const App: React.FC = () => {
   }, [engineConnected]);
 
   // Dedicated Video-First Story Editor View
-  // Seamlessly routes unified workflows (Story, Script, Audio, Motion, Render, and Story Editor)
-  // directly into the modern Video-First Story Editor with the relevant tool pre-selected.
-  if (
-    selectedProject &&
-    (currentScreen === "story_editor" ||
-      currentScreen === "audio" ||
-      currentScreen === "motion" ||
-      currentScreen === "render" ||
-      currentScreen === "script" ||
-      currentScreen === "story")
-  ) {
-    let initialTab: LeftRailTab | undefined = undefined;
-    let initialWorkflowStep: WorkflowStepId | undefined = undefined;
-    let initialOpenModal: "narration" | "audio" | "export" | undefined = undefined;
-
-    if (currentScreen === "audio") {
-      initialTab = "audio";
-      initialWorkflowStep = 6;
-      initialOpenModal = "audio";
-    } else if (currentScreen === "motion") {
-      initialTab = "motion";
-      initialWorkflowStep = 4;
-    } else if (currentScreen === "render") {
-      initialWorkflowStep = 7;
-      initialOpenModal = "export";
-    } else if (currentScreen === "script") {
-      initialTab = "narration";
-      initialWorkflowStep = 5;
-      initialOpenModal = "narration";
-    } else if (currentScreen === "story") {
-      initialTab = "story";
-      initialWorkflowStep = 3;
-    }
-
+  if (selectedProject && currentScreen === "story_editor") {
     return (
       <StoryEditorScreen
         project={selectedProject}
-        initialTab={initialTab}
-        initialWorkflowStep={initialWorkflowStep}
-        initialOpenModal={initialOpenModal}
         onBack={() => {
           setCurrentScreen("projects");
           setSelectedProject(null);
@@ -139,6 +102,50 @@ export const App: React.FC = () => {
           // Handled via built-in ExportVideoModal
         }}
       />
+    );
+  }
+
+  // Full-Window Redesigned Desktop Dashboard
+  if (currentScreen === "projects") {
+    return (
+      <>
+        <DashboardShell
+          engineConnected={engineConnected}
+          engineVersion={engineVersion}
+          onRetryEngine={handleRetryEngine}
+          retryingEngine={retrying}
+          onOpenToolsModels={() => setHealthModalOpen(true)}
+          onNewProject={() => setCurrentScreen("new_project")}
+          onOpenAcquisition={(proj) => {
+            setSelectedProject(proj);
+            setCurrentScreen("acquisition");
+          }}
+          onOpenReview={(proj) => {
+            setSelectedProject(proj);
+            setCurrentScreen("review");
+          }}
+          onOpenPanels={(proj) => {
+            setSelectedProject(proj);
+            setCurrentScreen("panels");
+          }}
+          onOpenOCR={(proj) => {
+            setSelectedProject(proj);
+            setCurrentScreen("ocr");
+          }}
+          onOpenStoryEditor={(proj) => {
+            setSelectedProject(proj);
+            setCurrentScreen("story_editor");
+          }}
+          onOpenLibrary={() => {
+            setHealthModalOpen(true);
+          }}
+        />
+
+        <ProviderHealthModal
+          open={healthModalOpen}
+          onClose={() => setHealthModalOpen(false)}
+        />
+      </>
     );
   }
 
@@ -225,7 +232,7 @@ export const App: React.FC = () => {
         ) : (
           <>
             {/* Top Interactive Pipeline Progression Navbar */}
-            {selectedProject && currentScreen !== "projects" && currentScreen !== "new_project" && (
+            {selectedProject && currentScreen !== "new_project" && (
               <div className="mb-6 bg-zinc-900/60 border border-zinc-800 rounded-xl p-2.5">
                 <PipelineNavbar
                   currentStage={selectedProject.current_stage}
@@ -234,52 +241,6 @@ export const App: React.FC = () => {
                   staleStages={selectedProject.stale_stages}
                 />
               </div>
-            )}
-
-            {currentScreen === "projects" && (
-              <ProjectsScreen
-                onNewProject={() => setCurrentScreen("new_project")}
-                onOpenAcquisition={(proj) => {
-                  setSelectedProject(proj);
-                  setCurrentScreen("acquisition");
-                }}
-                onOpenReview={(proj) => {
-                  setSelectedProject(proj);
-                  setCurrentScreen("review");
-                }}
-                onOpenPanels={(proj) => {
-                  setSelectedProject(proj);
-                  setCurrentScreen("panels");
-                }}
-                onOpenOCR={(proj) => {
-                  setSelectedProject(proj);
-                  setCurrentScreen("ocr");
-                }}
-                onOpenStory={(proj) => {
-                  setSelectedProject(proj);
-                  setCurrentScreen("story");
-                }}
-                onOpenScript={(proj) => {
-                  setSelectedProject(proj);
-                  setCurrentScreen("script");
-                }}
-                onOpenAudio={(proj) => {
-                  setSelectedProject(proj);
-                  setCurrentScreen("audio");
-                }}
-                onOpenMotion={(proj) => {
-                  setSelectedProject(proj);
-                  setCurrentScreen("motion");
-                }}
-                onOpenRender={(proj) => {
-                  setSelectedProject(proj);
-                  setCurrentScreen("render");
-                }}
-                onOpenStoryEditor={(proj) => {
-                  setSelectedProject(proj);
-                  setCurrentScreen("story_editor");
-                }}
-              />
             )}
 
             {currentScreen === "new_project" && (
@@ -324,11 +285,11 @@ export const App: React.FC = () => {
                 onBack={() => setCurrentScreen("review")}
                 onPanelsApproved={(updated) => {
                   setSelectedProject(updated);
-                  setCurrentScreen("story_editor");
+                  setCurrentScreen("ocr");
                 }}
                 onProceedToOCR={(proj) => {
                   setSelectedProject(proj);
-                  setCurrentScreen("story_editor");
+                  setCurrentScreen("ocr");
                 }}
                 onOpenStoryEditor={(proj) => {
                   setSelectedProject(proj);
@@ -343,11 +304,11 @@ export const App: React.FC = () => {
                 onBack={() => setCurrentScreen("panels")}
                 onOCRApproved={(updated) => {
                   setSelectedProject(updated);
-                  setCurrentScreen("story_editor");
+                  setCurrentScreen("story");
                 }}
                 onProceedToStory={(proj) => {
                   setSelectedProject(proj);
-                  setCurrentScreen("story_editor");
+                  setCurrentScreen("story");
                 }}
                 onOpenStoryEditor={(proj) => {
                   setSelectedProject(proj);
