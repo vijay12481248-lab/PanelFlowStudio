@@ -94,7 +94,107 @@ impl EngineManager {
         ("python".to_string(), vec![])
     }
 
+    fn find_standalone_engine(&self) -> Option<PathBuf> {
+        if let Ok(custom) = std::env::var("PANELFLOW_ENGINE_BINARY") {
+            let p = PathBuf::from(&custom);
+            if p.exists() {
+                return Some(p);
+            }
+        }
+
+        let binary_names = [
+            "panelflow-engine.exe",
+            "panelflow-engine-x86_64-pc-windows-msvc.exe",
+        ];
+
+        let candidates = [
+            PathBuf::from("engine_runtime/panelflow-engine.exe"),
+            PathBuf::from("resources/engine_runtime/panelflow-engine.exe"),
+            PathBuf::from("panelflow-engine.exe"),
+            PathBuf::from("resources/panelflow-engine.exe"),
+            PathBuf::from("binaries/panelflow-engine-x86_64-pc-windows-msvc.exe"),
+            PathBuf::from("../../resources/engine_runtime/panelflow-engine.exe"),
+            PathBuf::from("../resources/engine_runtime/panelflow-engine.exe"),
+            PathBuf::from("release/engine_runtime/panelflow-engine.exe"),
+            PathBuf::from("../release/engine_runtime/panelflow-engine.exe"),
+            PathBuf::from("../../release/engine_runtime/panelflow-engine.exe"),
+            PathBuf::from("release/panelflow-engine.exe"),
+            PathBuf::from("../release/panelflow-engine.exe"),
+            PathBuf::from("../../release/panelflow-engine.exe"),
+        ];
+
+        for p in &candidates {
+            if p.exists() {
+                if let Ok(canon) = p.canonicalize() {
+                    return Some(canon);
+                }
+                return Some(p.clone());
+            }
+        }
+
+        if let Ok(exe) = std::env::current_exe() {
+            let mut curr = exe.parent();
+            while let Some(parent) = curr {
+                for name in &binary_names {
+                    let checks = [
+                        parent.join(name),
+                        parent.join("engine_runtime").join(name),
+                        parent.join("resources").join(name),
+                        parent.join("resources").join("engine_runtime").join(name),
+                        parent.join("binaries").join(name),
+                        parent.join("release").join(name),
+                        parent.join("release").join("engine_runtime").join(name),
+                        parent.join("dist_engine").join(name),
+                        parent.join("dist_engine").join("panelflow-engine").join(name),
+                        parent.join("_up_").join("_up_").join("_up_").join("resources").join("engine_runtime").join(name),
+                    ];
+                    for candidate in &checks {
+                        if candidate.exists() {
+                            return candidate.canonicalize().ok().or_else(|| Some(candidate.clone()));
+                        }
+                    }
+                }
+                curr = parent.parent();
+            }
+        }
+
+        if let Ok(cwd) = std::env::current_dir() {
+            let mut curr = Some(cwd.as_path());
+            while let Some(parent) = curr {
+                for name in &binary_names {
+                    let checks = [
+                        parent.join(name),
+                        parent.join("engine_runtime").join(name),
+                        parent.join("resources").join(name),
+                        parent.join("resources").join("engine_runtime").join(name),
+                        parent.join("binaries").join(name),
+                        parent.join("release").join(name),
+                        parent.join("release").join("engine_runtime").join(name),
+                        parent.join("dist_engine").join(name),
+                        parent.join("dist_engine").join("panelflow-engine").join(name),
+                        parent.join("_up_").join("_up_").join("_up_").join("resources").join("engine_runtime").join(name),
+                    ];
+                    for candidate in &checks {
+                        if candidate.exists() {
+                            return candidate.canonicalize().ok().or_else(|| Some(candidate.clone()));
+                        }
+                    }
+                }
+                curr = parent.parent();
+            }
+        }
+
+        None
+    }
+
     fn find_script(&self) -> Option<PathBuf> {
+        if let Ok(custom) = std::env::var("PANELFLOW_ENGINE_SCRIPT") {
+            let p = PathBuf::from(&custom);
+            if p.exists() {
+                return Some(p);
+            }
+        }
+
         let candidates = [
             PathBuf::from("run_engine.py"),
             PathBuf::from("../../run_engine.py"),
@@ -103,6 +203,8 @@ impl EngineManager {
             PathBuf::from("../../../run_engine.py"),
             PathBuf::from("../../../../run_engine.py"),
             PathBuf::from("resources/run_engine.py"),
+            PathBuf::from("_up_/_up_/_up_/run_engine.py"),
+            PathBuf::from("resources/_up_/_up_/_up_/run_engine.py"),
         ];
 
         for p in &candidates {
@@ -118,21 +220,18 @@ impl EngineManager {
         if let Ok(exe) = std::env::current_exe() {
             let mut curr = exe.parent();
             while let Some(parent) = curr {
-                let candidate = parent.join("run_engine.py");
-                if candidate.exists() {
-                    return candidate.canonicalize().ok().or(Some(candidate));
-                }
-                let nested = parent.join("panelflow").join("run_engine.py");
-                if nested.exists() {
-                    return nested.canonicalize().ok().or(Some(nested));
-                }
-                let res = parent.join("resources").join("run_engine.py");
-                if res.exists() {
-                    return res.canonicalize().ok().or(Some(res));
-                }
-                let res_nested = parent.join("resources").join("panelflow").join("run_engine.py");
-                if res_nested.exists() {
-                    return res_nested.canonicalize().ok().or(Some(res_nested));
+                let checks = [
+                    parent.join("run_engine.py"),
+                    parent.join("panelflow").join("run_engine.py"),
+                    parent.join("resources").join("run_engine.py"),
+                    parent.join("resources").join("panelflow").join("run_engine.py"),
+                    parent.join("_up_").join("_up_").join("_up_").join("run_engine.py"),
+                    parent.join("resources").join("_up_").join("_up_").join("_up_").join("run_engine.py"),
+                ];
+                for candidate in &checks {
+                    if candidate.exists() {
+                        return candidate.canonicalize().ok().or_else(|| Some(candidate.clone()));
+                    }
                 }
                 curr = parent.parent();
             }
@@ -142,17 +241,18 @@ impl EngineManager {
         if let Ok(cwd) = std::env::current_dir() {
             let mut curr = Some(cwd.as_path());
             while let Some(parent) = curr {
-                let candidate = parent.join("run_engine.py");
-                if candidate.exists() {
-                    return candidate.canonicalize().ok().or(Some(candidate));
-                }
-                let nested = parent.join("panelflow").join("run_engine.py");
-                if nested.exists() {
-                    return nested.canonicalize().ok().or(Some(nested));
-                }
-                let res = parent.join("resources").join("run_engine.py");
-                if res.exists() {
-                    return res.canonicalize().ok().or(Some(res));
+                let checks = [
+                    parent.join("run_engine.py"),
+                    parent.join("panelflow").join("run_engine.py"),
+                    parent.join("resources").join("run_engine.py"),
+                    parent.join("resources").join("panelflow").join("run_engine.py"),
+                    parent.join("_up_").join("_up_").join("_up_").join("run_engine.py"),
+                    parent.join("resources").join("_up_").join("_up_").join("_up_").join("run_engine.py"),
+                ];
+                for candidate in &checks {
+                    if candidate.exists() {
+                        return candidate.canonicalize().ok().or_else(|| Some(candidate.clone()));
+                    }
                 }
                 curr = parent.parent();
             }
@@ -166,15 +266,65 @@ impl EngineManager {
             return Ok("Engine is already active on port 8765.".to_string());
         }
 
+        #[cfg(windows)]
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+        let log_path = if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
+            let p = PathBuf::from(local_app_data).join("PanelFlow Studio").join("logs");
+            let _ = std::fs::create_dir_all(&p);
+            p.join("engine.log")
+        } else {
+            PathBuf::from("engine.log")
+        };
+
+        // 1. Prioritize Standalone Packaged Engine Executable (Zero External Dependencies)
+        if let Some(engine_bin) = self.find_standalone_engine() {
+            let working_dir = engine_bin.parent().unwrap_or(&engine_bin);
+            let mut cmd = Command::new(&engine_bin);
+            cmd.current_dir(working_dir);
+
+            #[cfg(windows)]
+            {
+                use std::os::windows::process::CommandExt;
+                cmd.creation_flags(CREATE_NO_WINDOW);
+            }
+
+            if let Ok(file) = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&log_path)
+            {
+                if let Ok(err_file) = file.try_clone() {
+                    cmd.stdout(file);
+                    cmd.stderr(err_file);
+                }
+            }
+
+            let child = cmd
+                .spawn()
+                .map_err(|e| format!("Failed to launch standalone engine ({:?}): {e}", engine_bin))?;
+
+            let mut lock = self.child.lock().map_err(|e| e.to_string())?;
+            *lock = Some(child);
+
+            // Wait up to 15 seconds for engine HTTP port to bind and become healthy
+            for _ in 0..30 {
+                if self.is_port_active() {
+                    return Ok(format!("Standalone engine launched successfully from {:?}", engine_bin));
+                }
+                std::thread::sleep(Duration::from_millis(500));
+            }
+
+            return Ok(format!("Standalone engine process started from {:?}", engine_bin));
+        }
+
+        // 2. Fallback to Python Script (Development Workspace Mode)
         let script = self.find_script().ok_or_else(|| {
-            "Could not locate run_engine.py script in workspace or application directory.".to_string()
+            "Could not locate panelflow-engine.exe or run_engine.py script in application directory.".to_string()
         })?;
 
         let working_dir = script.parent().unwrap_or(&script);
         let (py_cmd, py_args) = self.find_python_command();
-
-        #[cfg(windows)]
-        const CREATE_NO_WINDOW: u32 = 0x08000000;
 
         let mut cmd = Command::new(&py_cmd);
         for arg in py_args {
@@ -189,12 +339,31 @@ impl EngineManager {
             cmd.creation_flags(CREATE_NO_WINDOW);
         }
 
+        if let Ok(file) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&log_path)
+        {
+            if let Ok(err_file) = file.try_clone() {
+                cmd.stdout(file);
+                cmd.stderr(err_file);
+            }
+        }
+
         let child = cmd
             .spawn()
-            .map_err(|e| format!("Failed to launch python engine ({py_cmd}): {e}"))?;
+            .map_err(|e| format!("Failed to launch python engine ({py_cmd}): {e}. Python 3.12+ is required when running from raw source."))?;
 
         let mut lock = self.child.lock().map_err(|e| e.to_string())?;
         *lock = Some(child);
+
+        // Wait up to 10 seconds for engine HTTP port to bind and become healthy
+        for _ in 0..20 {
+            if self.is_port_active() {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(500));
+        }
 
         Ok(format!("Python engine launched successfully from {:?}", script))
     }
