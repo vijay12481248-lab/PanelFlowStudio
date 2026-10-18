@@ -130,6 +130,7 @@ export interface AudioToTimelineContract {
 export interface AudioLibraryProps {
   initialAssets?: AudioAsset[];
   selectedAssetId?: string | null;
+  initialType?: "all" | "music" | "sfx";
   onSelectAsset?: (asset: AudioAsset) => void;
   onSendToTimeline?: (contract: AudioToTimelineContract) => void;
   onClose?: () => void;

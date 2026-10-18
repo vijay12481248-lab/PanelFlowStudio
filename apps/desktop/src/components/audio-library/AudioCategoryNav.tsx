@@ -82,7 +82,12 @@ export const AudioCategoryNav: React.FC<AudioCategoryNavProps> = ({
           </button>
           <button
             type="button"
-            onClick={() => onUpdateFilter({ selected_type: "music" })}
+            onClick={() => onUpdateFilter({
+              selected_type: "music",
+              selected_category: ["environmental", "character", "transitions", "magic_fx"].includes(filter.selected_category)
+                ? "background_music"
+                : filter.selected_category,
+            })}
             className={`py-1 rounded text-center transition-colors ${
               filter.selected_type === "music"
                 ? "bg-indigo-600 text-white font-bold shadow-sm"
@@ -93,7 +98,12 @@ export const AudioCategoryNav: React.FC<AudioCategoryNavProps> = ({
           </button>
           <button
             type="button"
-            onClick={() => onUpdateFilter({ selected_type: "sfx" })}
+            onClick={() => onUpdateFilter({
+              selected_type: "sfx",
+              selected_category: filter.selected_category === "background_music" || ["cinematic", "suspense", "emotional", "action", "fantasy", "ambient"].includes(filter.selected_category)
+                ? "character"
+                : filter.selected_category,
+            })}
             className={`py-1 rounded text-center transition-colors ${
               filter.selected_type === "sfx"
                 ? "bg-indigo-600 text-white font-bold shadow-sm"

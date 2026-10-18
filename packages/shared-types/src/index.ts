@@ -126,10 +126,20 @@ export interface Job {
   input: Record<string, any>;
   output: Record<string, any>;
   error: string | null;
+  priority?: number;
+  depends_on_job_id?: string | null;
+  requires_gpu?: boolean;
+  gpu_vram_mb?: number;
+  cpu_units?: number;
+  worker_lease_id?: string | null;
+  lease_expires_at?: string | null;
+  retry_count?: number;
+  max_retries?: number;
   created_at: string | null;
   started_at: string | null;
   finished_at: string | null;
 }
+
 
 export interface SourceInspection {
   adapter_id: string;
@@ -577,6 +587,7 @@ export interface MasterAudioTimeline {
 }
 
 export interface AudioTimelineResponse {
+  warnings?: string[];
   id: string;
   project_id: string;
   status: "DRAFT" | "APPROVED";
@@ -791,6 +802,423 @@ export interface SanitizedDiagnostics {
   }>;
   privacy_notice: string;
 }
+
+export interface OllamaConfig {
+  endpoint_url: string;
+  is_remote: boolean;
+  has_auth_token: boolean;
+  vision_model: string;
+  reasoning_model: string;
+  narration_model: string;
+  num_ctx: number;
+  concurrency_mode: "AUTO" | "MANUAL";
+  max_gpu_concurrency: number;
+}
+
+export interface OllamaModelCapability {
+  name: string;
+  supports_vision: boolean;
+  supports_tools: boolean;
+  supports_thinking: boolean;
+  family: string;
+  parameter_size: string;
+  quantization_level: string;
+  format: string;
+  capabilities: string[];
+}
+
+export interface OllamaModelsResponse {
+  models: OllamaModelCapability[];
+  recommendations: {
+    vision_model: string;
+    reasoning_model: string;
+    narration_model: string;
+  };
+  endpoint_url: string;
+  is_remote: boolean;
+  healthy: boolean;
+}
+
+export interface SystemResourcesResponse {
+  ram: {
+    total_gb: number;
+    available_gb: number;
+    used_percent: number;
+    sufficient_for_inference: boolean;
+  };
+  gpu: {
+    available: boolean;
+    device_name: string;
+    total_mb: number;
+    free_mb: number;
+    used_mb: number;
+    used_percent: number;
+    headroom_mb: number;
+  };
+  ollama: {
+    online: boolean;
+    loaded_models_count: number;
+    total_ollama_vram_mb: number;
+    models: Array<{
+      name: string;
+      model: string;
+      size_mb: number;
+      vram_mb: number;
+      context_length: number;
+      runner: string;
+    }>;
+  };
+  scheduler: {
+    concurrency_mode: "AUTO" | "MANUAL";
+    configured_limit: number;
+    effective_limit: number;
+    active_gpu_jobs: string[];
+    active_count: number;
+    available_slots: number;
+  };
+}
+
+export interface CameraMotionConfig {
+  type: "SLOW_PUSH" | "CHARACTER_FOCUS" | "REACTION_CLOSEUP" | "IMPACT" | "PAN" | "STATIC" | string;
+  start_zoom: number;
+  end_zoom: number;
+  easing: "EASE_IN_OUT" | "LINEAR" | "EASE_OUT" | string;
+}
+
+export interface StoryboardPanelRef {
+  panel_id: string;
+  reading_order: number;
+  role: "ESTABLISHING" | "REACTION_CLOSEUP" | "ACTION" | "NARRATION_FOCUS" | "TRANSITION" | string;
+  crop_bounds: { x: number; y: number; width: number; height: number };
+  sub_duration_sec: number;
+  camera_motion: CameraMotionConfig;
+  crop_filename: string;
+  image_url?: string;
+}
+
+export interface StoryboardSegment {
+  segment_id: string;
+  scene_id: string;
+  sequence: number;
+  text: string;
+  emotion: string;
+  intensity: number;
+  audio_clip_path?: string | null;
+  measured_duration_sec: number;
+  supporting_panels: StoryboardPanelRef[];
+  music_cue: { intent: string; ducking_gain_db: number };
+  sfx_cue: { type: string; offset_sec: number };
+  manual_override: boolean;
+}
+
+export interface StoryboardDocument {
+  project_id: string;
+  script_id: string;
+  version: string;
+  total_duration_sec: number;
+  segments: StoryboardSegment[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface StoryboardSegmentUpdate {
+  text?: string;
+  emotion?: string;
+  intensity?: number;
+  measured_duration_sec?: number;
+  supporting_panels?: StoryboardPanelRef[];
+  music_cue?: { intent: string; ducking_gain_db: number };
+  sfx_cue?: { type: string; offset_sec: number };
+}
+
+// ==========================================
+// Video-First Story Editor Domain Models
+// ==========================================
+
+export type SceneCameraPreset =
+  | "static"
+  | "slow_zoom_in"
+  | "slow_zoom_out"
+  | "pan_left"
+  | "pan_right"
+  | "pan_up"
+  | "pan_down"
+  | "diagonal_pan"
+  | "custom";
+
+export type AnimationEasing =
+  | "linear"
+  | "ease_in"
+  | "ease_out"
+  | "ease_in_out"
+  | "cubic_bezier";
+
+export interface SceneCameraConfig {
+  id?: string;
+  preset: SceneCameraPreset;
+  zoom_start: number; // 1.0 to 2.0
+  zoom_end: number;   // 1.0 to 2.0
+  pan_x_start: number; // -30% to +30%
+  pan_x_end: number;
+  pan_y_start: number;
+  pan_y_end: number;
+  start_offset_sec?: number;
+  duration_sec?: number;
+  easing?: AnimationEasing;
+}
+
+export type MotionPresetType =
+  | "none"
+  | "slow_zoom_in"
+  | "slow_zoom_out"
+  | "pan_left"
+  | "pan_right"
+  | "pan_up"
+  | "pan_down"
+  | "diagonal_pan"
+  | "slide_in_left"
+  | "slide_in_right"
+  | "slide_in_top"
+  | "slide_in_bottom"
+  | "slide_out_left"
+  | "slide_out_right"
+  | "slide_out"
+  | "move_left"
+  | "move_right"
+  | "move_up"
+  | "move_down"
+  | "move"
+  | "rise"
+  | "fall"
+  | "scale_up"
+  | "scale_down"
+  | "rotate_cw"
+  | "rotate_ccw"
+  | "rotate"
+  | "fade_in"
+  | "fade_out"
+  | "fade_in_out"
+  | "cross_dissolve"
+  | "wipe"
+  | "blur"
+  | "flash"
+  | "shake_impact"
+  | "opacity_reveal"
+  | "custom";
+
+export type AnimatableProperty =
+  | "x"
+  | "y"
+  | "scale"
+  | "rotation"
+  | "opacity"
+  | "blur";
+
+export interface PropertyKeyframe {
+  id: string;
+  time_offset_sec: number; // Layer-relative time offset in seconds (0.0 to layer.duration_sec)
+  value: number;           // Target property value (e.g. x: -20, opacity: 1.0, scale: 1.15)
+  easing?: AnimationEasing;
+  control_points?: [number, number, number, number]; // [x1, y1, x2, y2] for cubic_bezier
+}
+
+export interface PropertyTrack {
+  property: AnimatableProperty;
+  keyframes: PropertyKeyframe[];
+  enabled?: boolean;
+}
+
+export interface LayerAnimationConfig {
+  id: string;
+  enabled: boolean;
+  preset?: MotionPresetType;
+  direction?: "left" | "right" | "up" | "down";
+  duration_sec?: number;
+  easing: AnimationEasing;
+  speed?: number; // 0.5 to 2.0
+  intensity?: number; // 0.1 to 2.0
+  target_layer_id?: string;
+  tracks?: Record<string, PropertyTrack>;
+  start_pos?: { x: number; y: number; scale: number; rotation: number; opacity: number };
+  end_pos?: { x: number; y: number; scale: number; rotation: number; opacity: number };
+}
+
+export interface VisualLayerCrop {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface VisualLayerTransform {
+  x: number; // percentage offset relative to 16:9 canvas center (-50 to +50)
+  y: number; // percentage offset relative to 16:9 canvas center (-50 to +50)
+  scale: number; // 1.0 = native fit, > 1.0 = zoom
+  rotation: number; // in degrees
+  opacity: number; // 0.0 to 1.0
+  z_index: number; // stacking order
+}
+
+export interface VisualLayer {
+  id: string;
+  source_page_id: string;
+  source_panel_id?: string;
+  image_url: string;
+  page_sequence: number;
+  crop: VisualLayerCrop;
+  transform: VisualLayerTransform;
+  motion_preset?: MotionPresetType;
+  motion_direction?: "left" | "right" | "up" | "down";
+  motion_duration_sec?: number;
+  motion_intensity?: number;
+  motion_easing?: AnimationEasing;
+  animation?: LayerAnimationConfig;
+  animation_config?: LayerAnimationConfig;
+  name?: string;
+  locked?: boolean;
+  visible?: boolean;
+  // Chapter 3: Independent layer timing within scene
+  start_offset_sec?: number; // Relative start offset in scene (default 0)
+  duration_sec?: number;     // Active visible duration (default scene.duration_sec)
+}
+
+export type SceneTransitionType =
+  | "none"
+  | "cut"
+  | "fade"
+  | "fade_to_black"
+  | "fade_from_black"
+  | "cross_dissolve"
+  | "wipe_left"
+  | "wipe_right"
+  | "impact_flash"
+  | "dissolve";
+
+export interface VideoScene {
+  id: string;
+  sequence: number;
+  title: string;
+  duration_sec: number;
+  start_time_sec: number;
+  layers: VisualLayer[];
+  narration_id?: string;
+  transition_in?: SceneTransitionType;
+  transition_duration_sec?: number;
+  camera?: SceneCameraConfig;
+  camera_motion?: SceneCameraConfig;
+}
+
+export type NarrationEmotion =
+  | "Neutral"
+  | "Happy"
+  | "Sad"
+  | "Angry"
+  | "Fearful"
+  | "Suspenseful"
+  | "Excited"
+  | "Whispering"
+  | "Serious"
+  | "Mysterious"
+  | "Determined";
+
+export interface NarrationClip {
+  id: string;
+  scene_id?: string;
+  panel_id?: string;
+  speaker: string;
+  text: string;
+  emotion: NarrationEmotion | string;
+  speed: number;
+  status: "UNQUEUED" | "QUEUED" | "PROCESSING" | "READY" | "NEEDS_REVIEW" | "FAILED" | "OUTDATED";
+  start_time_sec: number;
+  duration_sec: number;
+  audio_url?: string;
+  linked_to_scene?: boolean; // Chapter 3 & 5: linked narration shifts when scene is moved/trimmed
+  // Chapter 5B Narration Studio Integration fields:
+  speaker_id?: string;
+  voice_profile_id?: string;
+  speaker_type?: "NARRATOR" | "CHARACTER";
+  text_revision?: number;
+  content_hash?: string;
+  delivery_intensity?: number;
+  scene_offset_sec?: number; // relative offset within scene when linked
+  review_status?: "DRAFT" | "NEEDS_REVIEW" | "APPROVED";
+  previous_audio_asset_uri?: string | null;
+  generated_audio_revision?: number | null;
+  source_panel_ids?: string[];
+  performance_intent?: string;
+  pause_preset?: string;
+}
+
+export interface BgmTrack {
+  id: string;
+  title: string;
+  name?: string;
+  volume: number;
+  start_time_sec: number;
+  duration_sec: number;
+  loop: boolean;
+  asset_id?: string;
+  file_url?: string | null;
+  fade_in_sec?: number;
+  fade_out_sec?: number;
+  category?: string;
+  bpm?: number;
+  key?: string;
+  ducking_enabled?: boolean;
+  ducking_amount_db?: number;
+  measured_peaks?: number[];
+  availability?: string;
+}
+
+export interface SfxCue {
+  id: string;
+  name: string;
+  category: "ambience" | "movement" | "magic" | "impact" | "transition" | string;
+  start_time_sec: number;
+  duration_sec: number;
+  volume: number;
+  asset_id?: string;
+  file_url?: string | null;
+  fade_in_sec?: number;
+  fade_out_sec?: number;
+  loop?: boolean;
+  measured_peaks?: number[];
+  availability?: string;
+}
+
+export type EditorSelectedObject =
+  | { type: "scene"; id: string }
+  | { type: "layer"; id: string; sceneId: string }
+  | { type: "narration"; id: string }
+  | { type: "bgm"; id: string }
+  | { type: "sfx"; id: string }
+  | { type: "page"; id: string }
+  | { type: "panel"; id: string; pageId: string }
+  | null;
+
+export interface StoryEditorState {
+  schema_version?: number; // Chapter 3 schema version (v2)
+  project_id: string;
+  aspect_ratio: "16:9" | "9:16" | "1:1";
+  mode: "simple" | "advanced";
+  scenes: VideoScene[];
+  narration_clips: NarrationClip[];
+  narration_chapter?: any; // Chapter 5B: Full NarrationChapter domain model persisted with project
+  bgm_tracks: BgmTrack[];
+  sfx_cues?: SfxCue[];
+  track_states?: Record<string, { visible: boolean; locked: boolean; collapsed?: boolean }>;
+  selected_object: EditorSelectedObject;
+  playhead_sec: number;
+  is_playing: boolean;
+  zoom_level: number;
+  snapping?: boolean;
+  ripple_edit?: boolean; // Chapter 3 explicit ripple toggle
+  show_motion_paths?: boolean; // Chapter 4 canvas motion path toggle
+  clipboard_animation?: LayerAnimationConfig; // Chapter 4 copy/paste animation
+}
+
+
 
 
 

@@ -16,6 +16,7 @@ const FAVORITES_STORAGE_KEY = "panelflow_audio_favorites";
 export const AudioLibrary: React.FC<AudioLibraryProps> = ({
   initialAssets,
   selectedAssetId: externalSelectedAssetId,
+  initialType,
   onSelectAsset: externalOnSelectAsset,
   onSendToTimeline,
   onClose,
@@ -41,8 +42,8 @@ export const AudioLibrary: React.FC<AudioLibraryProps> = ({
   // Filter state
   const [filter, setFilter] = useState<AudioFilterState>({
     search_query: "",
-    selected_category: "background_music",
-    selected_type: "all",
+    selected_category: initialType === "sfx" ? "character" : "background_music",
+    selected_type: initialType ?? "all",
     sort_by: "recent",
     only_favorites: false,
     only_loopable: false,
