@@ -38,6 +38,8 @@ export const AudioPreviewPlayer: React.FC<AudioPreviewPlayerProps> = ({
   const isOutdated = segment.generation_status === "OUTDATED";
   const hasPlayableAsset = !!activeAudioUri || (isOutdated && !!previousAudioUri);
 
+  const audioElementRef = useRef<HTMLAudioElement | null>(null);
+
   // Clean up audio on unmount or segment change
   useEffect(() => {
     stopPlayback();
@@ -56,6 +58,12 @@ export const AudioPreviewPlayer: React.FC<AudioPreviewPlayerProps> = ({
       timerRef.current = null;
     }
 
+    if (audioElementRef.current) {
+      audioElementRef.current.pause();
+      audioElementRef.current.currentTime = 0;
+      audioElementRef.current = null;
+    }
+
     if (hasBrowserSpeech) {
       window.speechSynthesis?.cancel();
     }
@@ -68,6 +76,49 @@ export const AudioPreviewPlayer: React.FC<AudioPreviewPlayerProps> = ({
         // Ignore if already stopped
       }
       oscillatorRef.current = null;
+    }
+  };
+
+  // Real Local Audio Asset Playback
+  const handlePlayRealAudio = () => {
+    const uri = activeAudioUri || previousAudioUri;
+    if (!uri) return;
+
+    if (isPlaying && activePlaybackMode === "audio_asset") {
+      stopPlayback();
+      return;
+    }
+
+    stopPlayback();
+
+    try {
+      const audio = new Audio(uri);
+      audioElementRef.current = audio;
+      audio.volume = volume;
+
+      audio.onended = () => {
+        stopPlayback();
+      };
+      audio.onerror = (e) => {
+        console.warn("Audio element playback error, falling back to tone:", e);
+        handlePlayDemonstrationTone();
+      };
+
+      audio.play().then(() => {
+        setIsPlaying(true);
+        setActivePlaybackMode("audio_asset");
+        timerRef.current = setInterval(() => {
+          if (audioElementRef.current) {
+            setPlaybackTime(Math.round(audioElementRef.current.currentTime * 10) / 10);
+          }
+        }, 50);
+      }).catch((err) => {
+        console.warn("Audio play prevented or failed:", err);
+        handlePlayDemonstrationTone();
+      });
+    } catch (e) {
+      console.warn("Failed to instantiate Audio:", e);
+      handlePlayDemonstrationTone();
     }
   };
 
@@ -240,9 +291,9 @@ export const AudioPreviewPlayer: React.FC<AudioPreviewPlayerProps> = ({
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={handlePlayDemonstrationTone}
+                onClick={handlePlayRealAudio}
                 className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${
-                  isPlaying && activePlaybackMode === "synth_chime"
+                  isPlaying && (activePlaybackMode === "audio_asset" || activePlaybackMode === "synth_chime")
                     ? "bg-rose-600 text-white animate-pulse"
                     : "bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-950"
                 }`}
@@ -257,16 +308,16 @@ export const AudioPreviewPlayer: React.FC<AudioPreviewPlayerProps> = ({
 
               <div className="flex flex-col">
                 <span className="text-xs font-bold text-zinc-100">
-                  {isPlaying ? "Playing Audio Sample..." : isOutdated ? "Previous Audio Take" : "Current Audio Take"}
+                  {isPlaying ? "Playing Voiceover..." : isOutdated ? "Previous Audio Take" : "Current Voice Take"}
                 </span>
                 <span className="text-[10px] text-zinc-400">
-                  {isOutdated ? "Archived previous take" : "Bundled voice take"}
+                  {isOutdated ? "Archived previous take" : "Local Chatterbox Turbo Take"}
                 </span>
               </div>
             </div>
 
             <span className="font-mono text-xs text-indigo-400 font-bold">
-              {playbackTime.toFixed(1)}s / {Math.min(segment.estimated_duration_sec, 3.5).toFixed(1)}s
+              {playbackTime.toFixed(1)}s / {(segment.measured_duration_sec || segment.estimated_duration_sec || 3.5).toFixed(1)}s
             </span>
           </div>
 
@@ -275,7 +326,7 @@ export const AudioPreviewPlayer: React.FC<AudioPreviewPlayerProps> = ({
             <div
               className="bg-indigo-500 h-1.5 rounded-full transition-all duration-100 ease-linear"
               style={{
-                width: `${Math.min(100, (playbackTime / Math.max(0.1, Math.min(segment.estimated_duration_sec, 3.5))) * 100)}%`,
+                width: `${Math.min(100, (playbackTime / Math.max(0.1, segment.measured_duration_sec || segment.estimated_duration_sec || 3.5)) * 100)}%`,
               }}
             />
           </div>

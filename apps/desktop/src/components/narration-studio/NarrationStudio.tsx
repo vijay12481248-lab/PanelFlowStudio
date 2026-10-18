@@ -21,6 +21,7 @@ import { NarrationJobQueue } from "./NarrationJobQueue";
 
 export const NarrationStudio: React.FC<NarrationStudioProps> = ({
   initialChapter,
+  initialSegmentId,
   onChapterSave,
   onSegmentApproved,
   onExportTimelineContract,
@@ -33,8 +34,23 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
 
   // Active Selected Segment ID
   const [selectedSegmentId, setSelectedSegmentId] = useState<string>(() => {
-    return (initialChapter || MOCK_CHAPTER).segments[0]?.id || "";
+    const ch = initialChapter || MOCK_CHAPTER;
+    if (initialSegmentId) {
+      const match = ch.segments.find((s) => s.id === initialSegmentId || s.scene_id === initialSegmentId);
+      if (match) return match.id;
+    }
+    return ch.segments[0]?.id || "";
   });
+
+  // Keep segment in sync if initialSegmentId changes
+  useEffect(() => {
+    if (initialSegmentId) {
+      const match = chapter.segments.find((s) => s.id === initialSegmentId || s.scene_id === initialSegmentId);
+      if (match) {
+        setSelectedSegmentId(match.id);
+      }
+    }
+  }, [initialSegmentId, chapter.segments]);
 
   // Filter State
   const [filter, setFilter] = useState<NarrationFilterState>({
@@ -494,19 +510,32 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
       <header className="h-13 border-b border-zinc-800 bg-zinc-950 px-4 flex items-center justify-between sticky top-0 z-40 shrink-0">
         {/* Left: Branding & Chapter Breadcrumbs */}
         <div className="flex items-center gap-3">
+          {onClose && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={onClose}
+              className="text-xs h-8 px-2.5 bg-zinc-900 border border-zinc-700 hover:bg-zinc-800 text-zinc-300 font-medium flex items-center gap-1.5"
+              title="Return to Story Editor"
+            >
+              <Icons.ArrowLeft className="w-3.5 h-3.5" />
+              Back to Story Editor
+            </Button>
+          )}
+
           <div
             onClick={onClose}
             className="flex items-center gap-2 cursor-pointer group"
-            title="Return to Projects Dashboard"
+            title="Return to Story Editor"
           >
             <div className="w-7 h-7 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-black text-sm shadow-md shadow-indigo-600/30 group-hover:bg-indigo-500 transition-colors">
               P
             </div>
             <div>
               <div className="font-extrabold text-sm text-white tracking-tight leading-none flex items-center gap-1.5">
-                <span>PanelFlow Studio</span>
+                <h1 className="text-sm font-extrabold text-white">Narration Studio</h1>
                 <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.2 rounded bg-indigo-950 text-indigo-400 border border-indigo-800">
-                  Chapter 5A
+                  Chapter 5
                 </span>
               </div>
               <span className="text-[10px] text-zinc-400 font-medium leading-none block mt-0.5">
@@ -621,6 +650,17 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
           >
             Export Contract
           </Button>
+
+          {onClose && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={onClose}
+              className="text-xs h-8 px-3 border border-zinc-700 hover:border-zinc-500 text-zinc-300 hover:text-white"
+            >
+              Back to Story Editor
+            </Button>
+          )}
 
           {onClose && (
             <button
@@ -783,10 +823,11 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
                 }}
               />
 
-              {/* Simulated Generation Job Interface */}
+              {/* Real Local Generation Job Interface */}
               <NarrationJobQueue
                 segment={selectedSegment}
                 allSegments={chapter.segments}
+                projectId={chapter.project_id}
                 onUpdateSegment={handleUpdateSegment}
                 onBatchUpdateSegments={handleBatchUpdateSegments}
               />

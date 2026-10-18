@@ -23,6 +23,7 @@ import {
   relinkClipToScene,
   unlinkClipFromScene,
   estimateReadingDuration,
+  rippleShiftLinkedNarration,
 } from "./narrationAdapter";
 import {
   updateBgmClip,
@@ -867,6 +868,51 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                             Scene start: {parentScene?.start_time_sec ?? 0}s • Offset: +{selectedNarration.scene_offset_sec ?? 0}s
                           </div>
                         </div>
+
+                        {/* Speech Duration Overflow Choice UI */}
+                        {parentScene && (() => {
+                          const neededSec = (selectedNarration.scene_offset_sec || 0) + (selectedNarration.duration_sec || 3.5);
+                          const overflowSec = Math.round((neededSec - parentScene.duration_sec) * 10) / 10;
+                          if (overflowSec <= 0) return null;
+                          return (
+                            <div className="p-2 rounded bg-amber-950/40 border border-amber-800/80 text-amber-300 text-xs space-y-1.5">
+                              <div className="flex items-center justify-between font-bold text-[11px]">
+                                <span>Speech Exceeds Scene</span>
+                                <span className="font-mono text-[10px]">+{overflowSec}s</span>
+                              </div>
+                              <p className="text-[10px] text-amber-200/80 leading-normal">
+                                Narration ({selectedNarration.duration_sec}s) extends beyond scene duration ({parentScene.duration_sec}s).
+                              </p>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const newSceneDuration = Math.round((neededSec + 0.5) * 10) / 10;
+                                  onUpdateState((prev) => {
+                                    const updatedScenes = prev.scenes.map((s) =>
+                                      s.id === parentScene.id ? { ...s, duration_sec: newSceneDuration } : s
+                                    );
+                                    let acc = 0;
+                                    const resynced = updatedScenes.map((s) => {
+                                      const st = acc;
+                                      acc += s.duration_sec;
+                                      return { ...s, start_time_sec: Math.round(st * 10) / 10 };
+                                    });
+                                    const resyncedClips = rippleShiftLinkedNarration(resynced, prev.narration_clips);
+                                    return {
+                                      ...prev,
+                                      scenes: resynced,
+                                      narration_clips: resyncedClips,
+                                      timeline_duration_sec: Math.round(acc * 10) / 10,
+                                    };
+                                  });
+                                }}
+                                className="w-full py-1 bg-amber-600 hover:bg-amber-500 text-white rounded text-[10px] font-bold transition-colors"
+                              >
+                                Extend Scene to {Math.round((neededSec + 0.5) * 10) / 10}s
+                              </button>
+                            </div>
+                          );
+                        })()}
 
                         {/* Snap vs Preserve vs Unlink Controls */}
                         <div className="grid grid-cols-2 gap-2 pt-1">

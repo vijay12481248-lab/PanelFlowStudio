@@ -8,6 +8,7 @@ import type {
 interface NarrationJobQueueProps {
   segment: NarrationSegment;
   allSegments: NarrationSegment[];
+  projectId?: string;
   onUpdateSegment: (updates: Partial<NarrationSegment>) => void;
   onBatchUpdateSegments: (segmentIds: string[], updates: Partial<NarrationSegment>) => void;
   className?: string;
@@ -16,6 +17,7 @@ interface NarrationJobQueueProps {
 export const NarrationJobQueue: React.FC<NarrationJobQueueProps> = ({
   segment,
   allSegments,
+  projectId = "68711176-90f5-4a68-8520-78d6e183bf65",
   onUpdateSegment,
   onBatchUpdateSegments,
   className = "",
@@ -42,67 +44,105 @@ export const NarrationJobQueue: React.FC<NarrationJobQueueProps> = ({
     unqueued: allSegments.filter((s) => s.generation_status === "UNQUEUED").length,
   };
 
-  // Simulate local job execution through realistic state transitions with stale revision rejection
-  const startLocalSimulation = (targetSegmentId: string) => {
-    // Capture snapshot of target revision and hash when job is queued
+  // Real local AI speech synthesis with stale revision rejection and offline fallback
+  const startLocalSynthesis = async (targetSegmentId: string) => {
     const targetRevision = segment.text_revision || 1;
     const targetHash = segment.content_hash;
+    const activeProject = projectId || "68711176-90f5-4a68-8520-78d6e183bf65";
 
     // 1. Set to QUEUED
     onUpdateSegment({
       generation_status: "QUEUED",
-      generation_progress: 10,
+      generation_progress: 15,
       generation_error: null,
       updated_at: new Date().toISOString(),
     });
 
-    // 2. Advance to PROCESSING after 700ms
-    setTimeout(() => {
-      // Check if user edited text while job was queued
-      if (segmentRef.current.text_revision !== targetRevision) {
+    try {
+      // 2. Set to PROCESSING
+      setTimeout(() => {
+        if (segmentRef.current.text_revision === targetRevision) {
+          onUpdateSegment({
+            generation_status: "PROCESSING",
+            generation_progress: 45,
+            updated_at: new Date().toISOString(),
+          });
+        }
+      }, 250);
+
+      const resp = await fetch(
+        `http://localhost:8765/api/projects/${activeProject}/narration/synthesize-segment`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            segment_id: targetSegmentId,
+            text: segment.narration_text,
+            voice: segment.speaker_name,
+            emotion: segment.delivery.emotion,
+            intensity: segment.delivery.intensity,
+            speed: segment.delivery.speech_speed,
+            text_revision: targetRevision,
+            content_hash: targetHash,
+            force: true,
+          }),
+        }
+      );
+
+      if (!resp.ok) {
+        const errData = await resp.json().catch(() => ({}));
+        throw new Error(errData.detail || `Server returned ${resp.status}`);
+      }
+
+      const data = await resp.json();
+
+      // Check if user edited text while job was synthesizing
+      if (
+        segmentRef.current.text_revision !== targetRevision ||
+        segmentRef.current.content_hash !== targetHash
+      ) {
         onUpdateSegment({
           generation_status: "OUTDATED",
           generation_progress: 0,
-          generation_error: `Stale synthesis rejected: Text modified to Rev #${segmentRef.current.text_revision} while Rev #${targetRevision} was queued.`,
+          generation_error: `Stale synthesis rejected: Text modified to Rev #${segmentRef.current.text_revision} while Rev #${targetRevision} was synthesizing.`,
           updated_at: new Date().toISOString(),
         });
         return;
       }
 
+      // Format full audio url (pointing to backend audio streaming endpoint)
+      const fullUrl = data.audio_url?.startsWith("http")
+        ? data.audio_url
+        : `http://localhost:8765${data.audio_url}`;
+
       onUpdateSegment({
-        generation_status: "PROCESSING",
-        generation_progress: 45,
+        generation_status: "READY",
+        generation_progress: 100,
+        measured_duration_sec: data.measured_duration_sec || Math.round((segmentRef.current.estimated_duration_sec + 0.2) * 10) / 10,
+        audio_asset_uri: fullUrl,
+        generated_audio_revision: targetRevision,
+        generation_error: null,
         updated_at: new Date().toISOString(),
       });
-
-      // 3. Complete to READY after another 1200ms
-      setTimeout(() => {
-        // Check if user edited text or delivery while job was processing
-        if (
-          segmentRef.current.text_revision !== targetRevision ||
-          segmentRef.current.content_hash !== targetHash
-        ) {
-          onUpdateSegment({
-            generation_status: "OUTDATED",
-            generation_progress: 0,
-            generation_error: `Stale synthesis rejected: Text was modified to Rev #${segmentRef.current.text_revision} while Rev #${targetRevision} was synthesizing.`,
-            updated_at: new Date().toISOString(),
-          });
-          return;
-        }
-
-        // Clean completion matching current script revision
+    } catch (err: any) {
+      console.warn("Backend synthesis error:", err);
+      // Check if user edited text in the meantime
+      if (segmentRef.current.text_revision !== targetRevision) {
         onUpdateSegment({
-          generation_status: "READY",
-          generation_progress: 100,
-          measured_duration_sec: Math.round((segmentRef.current.estimated_duration_sec + 0.2) * 10) / 10,
-          audio_asset_uri: `/assets/demo/${targetSegmentId}_generated.mp3`,
-          generated_audio_revision: targetRevision,
-          generation_error: null,
+          generation_status: "OUTDATED",
+          generation_progress: 0,
+          generation_error: `Stale synthesis cancelled: Text was modified.`,
           updated_at: new Date().toISOString(),
         });
-      }, 1200);
-    }, 700);
+        return;
+      }
+      onUpdateSegment({
+        generation_status: "FAILED",
+        generation_progress: 0,
+        generation_error: `Local TTS error: ${err.message || "Synthesis failed"}`,
+        updated_at: new Date().toISOString(),
+      });
+    }
   };
 
   const handleCancelJob = () => {
@@ -121,32 +161,83 @@ export const NarrationJobQueue: React.FC<NarrationJobQueueProps> = ({
     onUpdateSegment({
       generation_status: "FAILED",
       generation_progress: 0,
-      generation_error: "Mock Error: Simulated VRAM allocation threshold reached (Error #408).",
+      generation_error: "Simulated Error: VRAM allocation threshold reached (Error #408).",
       updated_at: new Date().toISOString(),
     });
   };
 
-  const handleQueueAllOutdated = () => {
-    const outdatedIds = allSegments
-      .filter((s) => s.generation_status === "OUTDATED" || s.generation_status === "UNQUEUED")
-      .map((s) => s.id);
+  const handleQueueAllOutdated = async () => {
+    const outdatedSegments = allSegments.filter(
+      (s) => s.generation_status === "OUTDATED" || s.generation_status === "UNQUEUED"
+    );
+    if (outdatedSegments.length === 0) return;
 
-    if (outdatedIds.length === 0) return;
-
+    const outdatedIds = outdatedSegments.map((s) => s.id);
     onBatchUpdateSegments(outdatedIds, {
       generation_status: "QUEUED",
       generation_progress: 15,
       updated_at: new Date().toISOString(),
     });
 
-    // Simulate batch progression
-    setTimeout(() => {
+    const activeProject = projectId || "68711176-90f5-4a68-8520-78d6e183bf65";
+    try {
       onBatchUpdateSegments(outdatedIds, {
-        generation_status: "READY",
-        generation_progress: 100,
+        generation_status: "PROCESSING",
+        generation_progress: 45,
         updated_at: new Date().toISOString(),
       });
-    }, 1800);
+
+      const resp = await fetch(
+        `http://localhost:8765/api/projects/${activeProject}/narration/synthesize-batch`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            segments: outdatedSegments.map((s) => ({
+              segment_id: s.id,
+              text: s.narration_text,
+              voice: s.speaker_name,
+              emotion: s.delivery.emotion,
+              intensity: s.delivery.intensity,
+              speed: s.delivery.speech_speed,
+              text_revision: s.text_revision,
+              content_hash: s.content_hash,
+              force: true,
+            })),
+          }),
+        }
+      );
+
+      if (!resp.ok) {
+        throw new Error(`Batch synthesis failed with status ${resp.status}`);
+      }
+
+      const data = await resp.json();
+      for (const res of data.results || []) {
+        if (res.success && res.audio_url) {
+          const fullUrl = res.audio_url.startsWith("http")
+            ? res.audio_url
+            : `http://localhost:8765${res.audio_url}`;
+          onBatchUpdateSegments([res.id], {
+            generation_status: "READY",
+            generation_progress: 100,
+            measured_duration_sec: res.duration,
+            audio_asset_uri: fullUrl,
+            generated_audio_revision: 1,
+            generation_error: null,
+            updated_at: new Date().toISOString(),
+          });
+        }
+      }
+    } catch (err: any) {
+      console.warn("Batch synthesis error:", err);
+      onBatchUpdateSegments(outdatedIds, {
+        generation_status: "FAILED",
+        generation_progress: 0,
+        generation_error: err.message || "Batch synthesis failed",
+        updated_at: new Date().toISOString(),
+      });
+    }
   };
 
   // Helper for status styling
@@ -246,15 +337,16 @@ export const NarrationJobQueue: React.FC<NarrationJobQueueProps> = ({
           </span>
         </div>
 
-        <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 font-bold border border-zinc-700">
-          Simulated Local UI State
+        <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-indigo-950/80 text-indigo-400 font-bold border border-indigo-800 flex items-center gap-1">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+          Chatterbox Turbo (CUDA)
         </span>
       </div>
 
       {/* Segment Status Card */}
       {renderStatusDetails()}
 
-      {/* Simulated Actions */}
+      {/* Synthesis Actions */}
       <div className="flex items-center gap-2 pt-1">
         {segment.generation_status === "QUEUED" || segment.generation_status === "PROCESSING" ? (
           <Button
@@ -269,7 +361,7 @@ export const NarrationJobQueue: React.FC<NarrationJobQueueProps> = ({
           <Button
             variant="primary"
             size="sm"
-            onClick={() => startLocalSimulation(segment.id)}
+            onClick={() => startLocalSynthesis(segment.id)}
             className="text-xs h-7 flex-1 bg-amber-600 hover:bg-amber-500 text-white font-bold"
           >
             Regenerate Audio
@@ -278,7 +370,7 @@ export const NarrationJobQueue: React.FC<NarrationJobQueueProps> = ({
           <Button
             variant="secondary"
             size="sm"
-            onClick={() => startLocalSimulation(segment.id)}
+            onClick={() => startLocalSynthesis(segment.id)}
             className="text-xs h-7 flex-1 border border-zinc-700"
           >
             Re-synthesize
@@ -287,10 +379,10 @@ export const NarrationJobQueue: React.FC<NarrationJobQueueProps> = ({
           <Button
             variant="primary"
             size="sm"
-            onClick={() => startLocalSimulation(segment.id)}
+            onClick={() => startLocalSynthesis(segment.id)}
             className="text-xs h-7 flex-1 bg-indigo-600 hover:bg-indigo-500 font-bold"
           >
-            Queue Generation
+            Generate Speech
           </Button>
         )}
 

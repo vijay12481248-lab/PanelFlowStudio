@@ -6,14 +6,12 @@ and audio approval gates.
 from typing import Dict, Any, List, Optional
 from pathlib import Path
 import json
-import uuid
-import math
-import numpy as np
+import copy
 import soundfile as sf
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 
-from engine.database.models import ProjectRecord, VideoScriptRecord, ScriptSegmentRecord, AudioTimelineRecord
+from engine.database.models import ProjectRecord, VideoScriptRecord, ScriptSegmentRecord, AudioTimelineRecord, VisualTimelineRecord, RenderJobRecord
 from engine.acquisition.models.models import PipelineStage
 from engine.motion.models.input_contract import MasterAudioTimeline, AudioInterval, TimelineSourceType
 
@@ -28,8 +26,67 @@ class AudioService:
     """
 
     def __init__(self):
-        self._local_audio_pool = Path(r"C:\Tools\generated_audio\marcus_male_deep")
-        self._default_music_path = Path(__file__).resolve().parent.parent.parent.parent / "assets" / "cinematics" / "intro" / "audio" / "someone_stayed_ace_master.ogg"
+        from engine.audio.synthesis import local_synthesizer
+        self.synthesizer = local_synthesizer
+
+    def synthesize_narration_segment(
+        self,
+        workspace_path: Path,
+        segment_id: str,
+        text: str,
+        voice: str,
+        emotion: str = "Neutral",
+        intensity: float = 0.5,
+        speed: float = 1.0,
+        text_revision: int = 1,
+        force: bool = False,
+    ) -> Dict[str, Any]:
+        dialogue_dir = Path(workspace_path) / "audio" / "dialogue"
+        dialogue_dir.mkdir(parents=True, exist_ok=True)
+        wav_path = self.synthesizer.synthesize(
+            directory=dialogue_dir,
+            text=text,
+            voice=voice,
+            emotion=emotion,
+            intensity=intensity,
+            pace=speed,
+            text_revision=text_revision,
+            force=force,
+        )
+        info = sf.info(str(wav_path))
+        return {
+            "success": True,
+            "segment_id": segment_id,
+            "audio_path": str(wav_path),
+            "measured_duration_sec": round(info.duration, 3),
+            "sample_rate": info.samplerate,
+            "channels": info.channels,
+            "generated_audio_revision": text_revision,
+        }
+
+    def synthesize_narration_batch(
+        self,
+        workspace_path: Path,
+        tasks: List[Dict[str, Any]],
+        progress=lambda *args: None,
+        cancelled=lambda: False,
+    ) -> List[Dict[str, Any]]:
+        dialogue_dir = Path(workspace_path) / "audio" / "dialogue"
+        dialogue_dir.mkdir(parents=True, exist_ok=True)
+        batch_tasks = []
+        for t in tasks:
+            batch_tasks.append({
+                "id": t["segment_id"],
+                "directory": str(dialogue_dir),
+                "text": t["text"],
+                "voice": t.get("voice", "Narrator"),
+                "emotion": t.get("emotion", "Neutral"),
+                "intensity": t.get("intensity", 0.5),
+                "pace": t.get("speed", 1.0),
+                "text_revision": t.get("text_revision", 1),
+                "force": t.get("force", False),
+            })
+        return self.synthesizer.synthesize_batch(batch_tasks, progress_cb=progress, cancelled_cb=cancelled)
 
     def get_audio_timeline(self, db: Session, project_id: str) -> Optional[Dict[str, Any]]:
         record = (
@@ -41,12 +98,18 @@ class AudioService:
         if not record:
             return None
 
+        warnings = []
+        project = db.query(ProjectRecord).filter(ProjectRecord.id == project_id).first()
+        plan_path = Path(project.workspace_path) / "audio" / "chapter_audio_plan.json" if project else None
+        if plan_path and plan_path.exists():
+            warnings = json.loads(plan_path.read_text(encoding="utf-8")).get("warnings", [])
         return {
             "id": record.id,
             "project_id": record.project_id,
             "status": record.status,
             "total_duration": record.total_duration,
             "voice_casting": record.voice_casting,
+            "warnings": warnings,
             "timeline": record.timeline_json,
             "created_at": record.created_at.isoformat() if record.created_at else None,
             "updated_at": record.updated_at.isoformat() if record.updated_at else None,
@@ -57,6 +120,8 @@ class AudioService:
         db: Session,
         project_id: str,
         voice_casting: Optional[Dict[str, str]] = None,
+        progress=lambda *args: None,
+        cancelled=lambda: False,
     ) -> Dict[str, Any]:
         """
         Synthesizes / aligns all dialogue segments from the approved script into a MasterAudioTimeline.
@@ -74,6 +139,9 @@ class AudioService:
         if not script or not script.segments:
             raise ValueError("No script segments found for audio generation. Complete script adaptation first.")
 
+        if script.status != "APPROVED":
+            raise ValueError("Approve the script before generating narration audio.")
+
         workspace = Path(proj.workspace_path)
         audio_dir = workspace / "audio"
         dialogue_dir = audio_dir / "dialogue"
@@ -81,34 +149,28 @@ class AudioService:
 
         voice_map = voice_casting or {"char_marcus": "Marcus (Male Deep F5-TTS)", "NARRATOR": "Narrator"}
 
-        # Gather pre-existing pool of high quality neural WAVs (01_hook through 09_conclusion)
-        pool_wavs = (
-            [f for f in sorted(self._local_audio_pool.glob("*.wav")) if not f.name.startswith("00_")]
-            if self._local_audio_pool.exists()
-            else []
-        )
-
         intervals: List[AudioInterval] = []
         current_time = 0.5  # 0.5s pre-speech establishing pause
 
-        for idx, seg in enumerate(script.segments):
-            seg_audio_file = dialogue_dir / f"dialogue_{seg.sequence:03d}_{seg.id[:8]}.wav"
-
-            # If audio doesn't exist yet, bind or generate
-            if not seg_audio_file.exists():
-                if idx < len(pool_wavs):
-                    # Use verified neural audio from verified tools pool
-                    source_wav = pool_wavs[idx]
-                    data, sr = sf.read(str(source_wav))
-                    sf.write(str(seg_audio_file), data, sr)
-                else:
-                    # Deterministic synthesis fallback (48 kHz broadcast tone)
-                    est_dur = max(1.5, seg.estimated_duration)
-                    sr = 48000
-                    t = np.linspace(0, est_dur, int(sr * est_dur), endpoint=False)
-                    # Natural harmonic vocal simulation
-                    audio_buf = (0.25 * np.sin(2 * np.pi * 220 * t) + 0.15 * np.sin(2 * np.pi * 440 * t)).astype(np.float32)
-                    sf.write(str(seg_audio_file), audio_buf, sr)
+        ordered_segments = sorted(script.segments, key=lambda item: item.sequence)
+        for index, seg in enumerate(ordered_segments):
+            if cancelled():
+                raise ValueError("TTS cancelled; approved script and completed speech clips were preserved.")
+            progress(0.05 + 0.8 * index / max(1, len(ordered_segments)), f"TTS: segment {index + 1}/{len(ordered_segments)}")
+            if not seg.text.strip() or seg.type in ("PAUSE", "TRANSITION", "SFX_CUE"):
+                end_time = current_time + max(0.0, seg.estimated_duration)
+                intervals.append(AudioInterval(
+                    script_segment_id=seg.id, start_time=current_time, end_time=end_time,
+                    is_speech=False, text="",
+                ))
+                current_time = end_time
+                continue
+            voice = voice_map.get(seg.speaker_character_id or "NARRATOR", "Narrator")
+            seg_audio_file = self.synthesizer.synthesize(
+                dialogue_dir, seg.text, voice,
+                provider_id=(proj.settings or {}).get("tts_provider", "chatterbox_turbo"),
+                emotion=seg.emotion, intensity=seg.intensity,
+            )
 
             # Measure exact duration from file on disk
             info = sf.info(str(seg_audio_file))
@@ -142,6 +204,13 @@ class AudioService:
             sample_rate=48000,
             channels=2,
         )
+        chapter_plan = {"warnings": []}
+        if (proj.settings or {}).get("visual_storytelling"):
+            progress(0.9, "Planning chapter music and sparse sound effects...")
+            from engine.audio.chapter_plan import plan_chapter_audio
+            chapter_plan = plan_chapter_audio(workspace, proj.settings or {}, ordered_segments, mat.model_dump())
+        if cancelled():
+            raise ValueError("Audio generation cancelled; generated assets were preserved.")
 
         # Save JSON sidecar
         mat_json_path = audio_dir / "master_audio_timeline.json"
@@ -157,6 +226,8 @@ class AudioService:
             voice_casting=voice_map,
         )
         db.add(rec)
+        from engine.story.dependency import mark_media_stale
+        mark_media_stale(db, project_id, include_audio=False)
 
         # Update project stage to VOICE_GENERATED
         proj.current_stage = PipelineStage.VOICE_GENERATED.value
@@ -171,6 +242,7 @@ class AudioService:
             "total_duration": total_duration,
             "intervals_count": len(intervals),
             "timeline": mat.model_dump(),
+            "warnings": chapter_plan["warnings"],
         }
 
     def regenerate_segment_audio(
@@ -196,7 +268,7 @@ class AudioService:
         if not record:
             raise ValueError("No existing audio timeline found to regenerate.")
 
-        mat_dict = record.timeline_json
+        mat_dict = copy.deepcopy(record.timeline_json)
         intervals = mat_dict.get("intervals", [])
 
         # Find target interval
@@ -212,25 +284,44 @@ class AudioService:
         target_iv = intervals[target_idx]
         wav_path = Path(target_iv["audio_file_uri"])
 
-        # Re-generate only this file with fresh variation
-        sr = 48000
-        dur = max(2.0, float(target_iv.get("end_time", 0.0) - target_iv.get("start_time", 0.0)))
-        t = np.linspace(0, dur, int(sr * dur), endpoint=False)
-        fresh_data = (0.28 * np.sin(2 * np.pi * 230 * t) + 0.12 * np.sin(2 * np.pi * 460 * t)).astype(np.float32)
-        sf.write(str(wav_path), fresh_data, sr)
+        segment = db.query(ScriptSegmentRecord).filter(
+            ScriptSegmentRecord.id == segment_id,
+            ScriptSegmentRecord.project_id == project_id,
+        ).first()
+        if not segment or not segment.text.strip():
+            raise ValueError("Narration segment not found or empty.")
+        script = db.query(VideoScriptRecord).filter(VideoScriptRecord.id == segment.script_id).first()
+        if not script or script.status != "APPROVED":
+            raise ValueError("Approve the edited script before regenerating speech.")
+        voice = (record.voice_casting or {}).get(segment.speaker_character_id or "NARRATOR", "Narrator")
+        wav_path = self.synthesizer.synthesize(
+            Path(proj.workspace_path) / "audio" / "dialogue", segment.text, voice,
+            provider_id=(proj.settings or {}).get("tts_provider", "chatterbox_turbo"),
+            emotion=segment.emotion, intensity=segment.intensity, force=True,
+        )
+        target_iv["audio_file_uri"] = str(wav_path)
+        target_iv["text"] = segment.text
 
-        # Recalculate timeline offsets from target_idx onwards
+        # Preserve explicit pauses and original inter-clip gaps when speech changes.
+        previous_intervals = copy.deepcopy(intervals)
+        tail_padding = max(0.0, mat_dict["total_duration_sec"] - previous_intervals[-1]["end_time"])
         current_time = float(target_iv["start_time"])
         for idx in range(target_idx, len(intervals)):
             iv = intervals[idx]
-            file_dur = round(sf.info(iv["audio_file_uri"]).duration, 3)
+            previous = previous_intervals[idx]
+            if idx > target_idx:
+                current_time += max(0.0, previous["start_time"] - previous_intervals[idx - 1]["end_time"])
+            file_dur = (round(sf.info(iv["audio_file_uri"]).duration, 3) if iv.get("audio_file_uri")
+                        else previous["end_time"] - previous["start_time"])
             iv["start_time"] = round(current_time, 3)
             iv["end_time"] = round(current_time + file_dur, 3)
-            current_time = iv["end_time"] + 0.5
+            current_time = iv["end_time"]
 
-        total_duration = round(current_time + 1.0, 3)
+        total_duration = round(current_time + tail_padding, 3)
         mat_dict["total_duration_sec"] = total_duration
         mat_dict["intervals"] = intervals
+
+        (Path(proj.workspace_path) / "audio" / "master_audio_timeline.json").write_text(json.dumps(mat_dict, indent=2), encoding="utf-8")
 
         # Mark as DRAFT and invalidate downstream motion & render
         record.timeline_json = mat_dict
@@ -238,6 +329,18 @@ class AudioService:
         record.status = "DRAFT"
         record.updated_at = utc_now()
         proj.updated_at = utc_now()
+        for motion in db.query(VisualTimelineRecord).filter(VisualTimelineRecord.project_id == project_id).all():
+            motion.status = "STALE"
+        for render in db.query(RenderJobRecord).filter(RenderJobRecord.project_id == project_id, RenderJobRecord.status == "COMPLETE").all():
+            render.status = "STALE"
+        if (proj.settings or {}).get("visual_storytelling"):
+            from engine.audio.chapter_plan import plan_chapter_audio
+            plan_settings = dict(proj.settings or {})
+            plan_settings["auto_music"] = False
+            prior_plan = Path(proj.workspace_path) / "audio" / "chapter_audio_plan.json"
+            if prior_plan.exists():
+                plan_settings["chapter_music_path"] = json.loads(prior_plan.read_text(encoding="utf-8")).get("music", {}).get("path")
+            plan_chapter_audio(Path(proj.workspace_path), plan_settings, sorted(script.segments, key=lambda s: s.sequence), mat_dict)
         db.commit()
 
         return {
@@ -256,6 +359,22 @@ class AudioService:
         )
         if not record:
             raise ValueError("No audio timeline found to approve.")
+        if record.status == "STALE":
+            raise ValueError("Audio is stale; regenerate the edited narration before approving.")
+        script = db.query(VideoScriptRecord).filter(VideoScriptRecord.project_id == project_id).order_by(VideoScriptRecord.created_at.desc()).first()
+        if not script or script.status != "APPROVED":
+            raise ValueError("Approve the current script before approving audio.")
+        current_segments = {s.id: s for s in script.segments}
+        speech_segment_ids = set()
+        for interval in record.timeline_json.get("intervals", []):
+            segment = current_segments.get(interval.get("script_segment_id"))
+            if interval.get("is_speech"):
+                if segment is None or interval.get("text") != segment.text:
+                    raise ValueError("Audio does not match the approved script; regenerate changed segments.")
+                speech_segment_ids.add(segment.id)
+        expected_speech_ids = {s.id for s in script.segments if getattr(s, "segment_type", None) != "PAUSE"}
+        if speech_segment_ids != expected_speech_ids:
+            raise ValueError("Audio does not cover every approved narration segment; regenerate audio.")
 
         record.status = "APPROVED"
         record.updated_at = utc_now()
