@@ -1,17 +1,23 @@
 # PanelFlow Studio — Beta Onboarding & User Guide
 
-Welcome to the **PanelFlow Studio v1 Closed Beta**. This guide explains how to install PanelFlow on a clean Windows machine, configure local dependencies, and produce your first motion comic video in under 10 minutes.
+Welcome to the **PanelFlow Studio v1 Closed Beta (v1.0.0-beta.2)**. This guide explains how to install PanelFlow on a clean Windows machine, configure local dependencies, and produce your first motion comic video in under 10 minutes.
 
 ---
 
-## 1. The 10-Step Beta Onboarding Flow
+## 1. Prerequisites & The 10-Step Beta Onboarding Flow
+
+### ⚠️ System Prerequisite (Backend Strategy B: User-Installed Runtime)
+Before launching PanelFlow Studio, ensure you have **Python 3.12+ (64-bit)** installed on your Windows machine:
+```powershell
+winget install Python.Python.3.12
+```
 
 | Step | Milestone | User Action | Typical Duration |
-| :---: | :--- | :--- | :---: |
-| 1 | **Install** | Run `PanelFlow-Studio-v1.0.0-beta.1-Setup.exe` (or `.msi` / `.exe`). | 30 seconds |
+| :---: | :--- | :--- | :--- |
+| 1 | **Install** | Run `PanelFlow-Studio-v1.0.0-beta.2-Setup.exe` (or `.msi` / `.exe`). | 30 seconds |
 | 2 | **Launch** | Open PanelFlow Studio from the Start Menu or desktop shortcut. | 5 seconds |
 | 3 | **System Check** | Click **Tools & Models** in the top bar to inspect your hardware and tool engines. | 1 minute |
-| 4 | **Configure** | Ensure FFmpeg is available; observe which neural models are detected. | 1–3 minutes |
+| 4 | **Configure** | Ensure FFmpeg and Python are ready; observe which neural models are detected. | 1–3 minutes |
 | 5 | **New Project** | Click **New Project**, choose a title, and select source folder (`sample_project/`). | 30 seconds |
 | 6 | **Rights Gate** | Select your legal source declaration (e.g., `Creative Commons`). | 10 seconds |
 | 7 | **Process** | Follow the PipelineNavbar: Source -> Panels -> OCR. | 1–2 minutes |
@@ -25,6 +31,10 @@ Welcome to the **PanelFlow Studio v1 Closed Beta**. This guide explains how to i
 
 PanelFlow is built with a **graceful degradation philosophy**: missing optional tools will never cause the application to crash or prevent you from navigating projects.
 
+### Required: Python 3.12+ (64-bit)
+- **Why PanelFlow needs it**: Drives the local FastAPI engine, computer vision processing, and pipeline orchestration.
+- **How to install**: Run `winget install Python.Python.3.12` or download from [python.org](https://www.python.org/).
+
 ### Required: FFmpeg Video Encoder
 - **Why PanelFlow needs it**: Encodes raw video frames, mixes multi-track audio, and outputs the final MP4.
 - **How to install on Windows**:
@@ -37,14 +47,12 @@ PanelFlow is built with a **graceful degradation philosophy**: missing optional 
 
 ### Optional: Ollama Local LLM
 - **Why PanelFlow needs it**: Automatically identifies characters, speech bubble speakers, and emotional tone.
-- **How to configure**:
-  1. Download and run Ollama from [ollama.com](https://ollama.com/).
-  2. In your terminal run: `ollama run qwen2.5:14b-instruct` (or `llama3.2`).
-  3. **Graceful Fallback**: If Ollama is offline, PanelFlow automatically uses deterministic rule-based dialogue attribution.
+- **How to configure**: Download and run Ollama from [ollama.com](https://ollama.com/), then run `ollama run qwen3.5:9b`.
+- **Graceful Fallback**: If Ollama is offline, PanelFlow automatically uses deterministic rule-based dialogue attribution.
 
 ### Recommended: F5-TTS Neural Voice
 - **Why PanelFlow needs it**: Synthesizes natural, emotional character voice lines with natural breathiness.
-- **Graceful Fallback**: If F5-TTS is not configured, PanelFlow uses procedural voice synthesizers so audio review and video rendering remain fully functional.
+- **Graceful Fallback**: If F5-TTS neural weights are offline, PanelFlow automatically uses procedural voice synthesizers so audio review and video rendering remain fully functional.
 
 ### Recommended: ACE-Step Dynamic Music
 - **Why PanelFlow needs it**: Dynamically scores background music rooted in D-Minor crystal techno-magic.

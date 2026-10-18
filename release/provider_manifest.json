@@ -1,0 +1,19 @@
+{
+  "version": "1.0.0-beta.2",
+  "generated_at": "2026-10-17T17:51:35+05:30",
+  "backend_strategy": "USER_INSTALLED_PYTHON_RUNTIME",
+  "python_runtime": {
+    "version": "3.12.3",
+    "required": true,
+    "install_command": "winget install Python.Python.3.12"
+  },
+  "story_provider": "Ollama Local LLM (qwen3.5:9b)",
+  "tts_provider": "F5-TTS Neural Voice (1.35GB Base Model on CUDA)",
+  "tts_mode": "NEURAL",
+  "music_provider": "ACE-Step 1.5 (acestep-v15-turbo on CUDA port 8001)",
+  "music_mode": "NEURAL",
+  "render_provider": "FFmpeg 9.0-full_build (libx264/aac)",
+  "first_video_classification": "NEURAL_FULL",
+  "app_data_path": "%LOCALAPPDATA%\\PanelFlow Studio",
+  "project_data_policy": "USER_SELECTED_DIRECTORY"
+}
