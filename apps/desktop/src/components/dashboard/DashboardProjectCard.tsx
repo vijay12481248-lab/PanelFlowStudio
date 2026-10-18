@@ -20,6 +20,7 @@ interface DashboardProjectCardProps {
   coverUrl?: string;
   onToggleFavorite: (projectId: string) => void;
   onOpenStoryEditor: (project: Project) => void;
+  onOpenProject?: (project: Project) => void;
   onOpenOCR: (project: Project) => void;
   onOpenPanels: (project: Project) => void;
   onOpenFolder: (projectId: string) => void;
@@ -33,6 +34,7 @@ export const DashboardProjectCard: React.FC<DashboardProjectCardProps> = ({
   coverUrl,
   onToggleFavorite,
   onOpenStoryEditor,
+  onOpenProject,
   onOpenOCR,
   onOpenPanels,
   onOpenFolder,
@@ -41,6 +43,14 @@ export const DashboardProjectCard: React.FC<DashboardProjectCardProps> = ({
 }) => {
   const [showMenu, setShowMenu] = useState(false);
   const [imgError, setImgError] = useState(false);
+
+  const handleOpen = () => {
+    if (onOpenProject) {
+      onOpenProject(project);
+    } else {
+      onOpenStoryEditor(project);
+    }
+  };
 
   // Formatted date
   const formattedDate = (() => {
@@ -149,7 +159,7 @@ export const DashboardProjectCard: React.FC<DashboardProjectCardProps> = ({
 
     return (
       <div
-        onClick={() => onOpenStoryEditor(project)}
+        onClick={handleOpen}
         className={`${dimensions} rounded-lg bg-[#0e1220] border border-[#232b45] flex items-center justify-center flex-shrink-0 relative overflow-hidden group-hover:border-indigo-500/60 shadow-md cursor-pointer transition-all`}
       >
         {hasRealCover ? (
@@ -190,7 +200,7 @@ export const DashboardProjectCard: React.FC<DashboardProjectCardProps> = ({
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <h3
-                onClick={() => onOpenStoryEditor(project)}
+                onClick={handleOpen}
                 className="font-bold text-sm text-white group-hover:text-indigo-400 transition-colors truncate cursor-pointer tracking-tight"
                 title={project.title}
               >
@@ -278,7 +288,7 @@ export const DashboardProjectCard: React.FC<DashboardProjectCardProps> = ({
             {/* Title Row + Star + Menu */}
             <div className="flex items-start justify-between gap-1">
               <h3
-                onClick={() => onOpenStoryEditor(project)}
+                onClick={handleOpen}
                 className="font-bold text-xs sm:text-sm text-white group-hover:text-indigo-400 transition-colors line-clamp-1 cursor-pointer tracking-tight"
                 title={project.title}
               >

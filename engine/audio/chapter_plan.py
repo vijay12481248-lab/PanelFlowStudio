@@ -17,9 +17,6 @@ def plan_chapter_audio(workspace, settings, segments, timeline):
         warnings.append("Selected music file is missing; narration-only export is available.")
     if not music_path and settings.get("auto_music"):
         try:
-            from engine.audio.synthesis import local_adapter
-            # Initialize the installed adapter import path and offline policy.
-            local_adapter(settings.get("tts_provider", "chatterbox_turbo"))
             from lumina_audio_director.adapters.ace_step_adapter import ACEStepAdapter
             from lumina_audio_director.core.brief import AudioBrief, AudioType, MusicalParameters
             summary = " ".join(s.text for s in segments)[:3000]

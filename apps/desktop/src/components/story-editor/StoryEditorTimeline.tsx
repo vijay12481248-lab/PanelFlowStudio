@@ -349,7 +349,30 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
       }
 
       setIsScrubbing(true);
-      const initialSec = getTimeFromClientX(e.clientX, snappingEnabled && !e.shiftKey);
+      const rulerRect = rulerRef.current?.getBoundingClientRect();
+      const rulerLeft = rulerRect?.left || 0;
+
+      const calcSec = (clientX: number, snap: boolean) => {
+        const clickX = clientX - rulerLeft;
+        let targetSec = Math.max(0, Math.min(totalDurationSec, clickX / pxPerSec));
+        if (snap) {
+          let cumulative = 0;
+          for (const scene of state.scenes) {
+            if (Math.abs(targetSec - cumulative) < 0.12) {
+              targetSec = cumulative;
+              break;
+            }
+            cumulative += scene.duration_sec;
+            if (Math.abs(targetSec - cumulative) < 0.12) {
+              targetSec = cumulative;
+              break;
+            }
+          }
+        }
+        return Math.round(targetSec * 1000) / 1000;
+      };
+
+      const initialSec = calcSec(e.clientX, snappingEnabled && !e.shiftKey);
       lastScrubSecRef.current = initialSec;
       onUpdateState((s) => ({ ...s, playhead_sec: initialSec }));
 
@@ -357,7 +380,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
         ev.preventDefault();
         if (scrubRafRef.current) cancelAnimationFrame(scrubRafRef.current);
         scrubRafRef.current = requestAnimationFrame(() => {
-          const sec = getTimeFromClientX(ev.clientX, snappingEnabled && !ev.shiftKey);
+          const sec = calcSec(ev.clientX, snappingEnabled && !ev.shiftKey);
           lastScrubSecRef.current = sec;
           onUpdateState((s) => ({ ...s, playhead_sec: sec }));
         });
@@ -378,10 +401,10 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
         }));
       };
 
-      window.addEventListener("pointermove", handlePointerMove);
+      window.addEventListener("pointermove", handlePointerMove, { passive: false });
       window.addEventListener("pointerup", handlePointerUp);
     },
-    [state.is_playing, getTimeFromClientX, snappingEnabled, onUpdateState]
+    [state.is_playing, totalDurationSec, pxPerSec, state.scenes, snappingEnabled, onUpdateState]
   );
 
   // Reorder scenes state update

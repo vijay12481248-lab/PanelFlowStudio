@@ -48,7 +48,14 @@ export const ScriptReviewScreen: React.FC<ScriptReviewScreenProps> = ({
   const [segmentText, setSegmentText] = useState<string>("");
   const [segmentEmotion, setSegmentEmotion] = useState<string>("NEUTRAL");
   const [segmentIntensity, setSegmentIntensity] = useState<number>(0.5);
+  const [filterUnsupportedOnly, setFilterUnsupportedOnly] = useState<boolean>(false);
 
+  const getUnsupportedIssue = (segId: string) => {
+    if (!validationReport?.issues) return null;
+    return validationReport.issues.find(
+      (iss) => iss.segment_id === segId && (iss.status === "UNSUPPORTED" || (iss.reasons && iss.reasons.length > 0))
+    );
+  };
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -63,6 +70,9 @@ export const ScriptReviewScreen: React.FC<ScriptReviewScreenProps> = ({
       if (sb) setStoryboard(sb);
       if (s) {
         setSelectedProfile(s.adaptation_profile);
+        api.validateScript(project.id, s.script_id)
+          .then((val) => setValidationReport(val))
+          .catch((err) => console.warn("Auto-validation skipped:", err));
       }
     } catch (err: any) {
       console.error("Failed to load script:", err);
@@ -95,6 +105,11 @@ export const ScriptReviewScreen: React.FC<ScriptReviewScreenProps> = ({
           ...storyboard,
           segments: storyboard.segments.map(s => s.segment_id === segmentId ? updated : s),
         });
+      }
+      if (script) {
+        api.validateScript(project.id, script.script_id)
+          .then((val) => setValidationReport(val))
+          .catch(() => {});
       }
     } catch (err: any) {
       alert(`Update failed: ${err.message}`);
@@ -185,6 +200,12 @@ export const ScriptReviewScreen: React.FC<ScriptReviewScreenProps> = ({
       alert(res.message || "Script approved successfully! Project advanced to SCRIPT_APPROVED.");
       onScriptApproved(updated);
     } catch (err: any) {
+      try {
+        const val = await api.validateScript(project.id, script.script_id);
+        setValidationReport(val);
+      } catch (valErr) {
+        console.warn("Validation fetch on approve failure:", valErr);
+      }
       alert(`Approval Gate Blocked: ${err.message}`);
     } finally {
       setApproving(false);
@@ -339,6 +360,98 @@ export const ScriptReviewScreen: React.FC<ScriptReviewScreenProps> = ({
         </div>
       </div>
 
+      {/* Unsupported Claims Attention Banner */}
+      {validationReport && validationReport.unsupported_segments > 0 && script && (
+        <Card className="p-4 bg-rose-950/30 border-rose-800/80 text-rose-200 space-y-3 shadow-lg shadow-rose-950/20">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-rose-900/40 pb-2.5">
+            <div className="flex items-center gap-2">
+              <Icons.AlertTriangle className="w-5 h-5 text-rose-400 flex-shrink-0" />
+              <h3 className="font-bold text-sm text-rose-100">
+                Approval Gate Blocked: {validationReport.unsupported_segments} Unsupported Statement{validationReport.unsupported_segments > 1 ? "s" : ""}
+              </h3>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant={filterUnsupportedOnly ? "primary" : "secondary"}
+                size="sm"
+                onClick={() => setFilterUnsupportedOnly(!filterUnsupportedOnly)}
+                className={`text-xs ${filterUnsupportedOnly ? "bg-rose-600 hover:bg-rose-500 text-white" : "border-rose-700/60 text-rose-300 hover:bg-rose-900/40"}`}
+              >
+                {filterUnsupportedOnly ? "Show All Lines" : "Filter: Show Unsupported Only"}
+              </Button>
+            </div>
+          </div>
+          <p className="text-xs text-rose-300/90 leading-relaxed">
+            The faithfulness validator detected statements lacking sufficient grounding evidence in source panels, OCR text, or registered characters. Review and fix the flagged lines below to satisfy the milestone gate:
+          </p>
+          <div className="space-y-2 pt-1">
+            {validationReport.issues
+              .filter((iss) => iss.status === "UNSUPPORTED" || (iss.reasons && iss.reasons.length > 0))
+              .map((iss, idx) => {
+                const segMatch = script.segments.find((s) => s.segment_id === iss.segment_id);
+                const segSeq = segMatch ? segMatch.sequence : idx + 1;
+                const reasons = iss.reasons || iss.issues || [
+                  "Line makes claims with negligible lexical or semantic grounding in source panels, text, or events.",
+                ];
+
+                return (
+                  <div
+                    key={iss.segment_id || idx}
+                    className="bg-zinc-950/80 border border-rose-900/60 rounded-lg p-3 text-xs space-y-2"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold font-mono text-rose-400">
+                          Statement #{segSeq}
+                        </span>
+                        <span className="text-[10px] uppercase font-bold bg-zinc-800 text-zinc-300 px-1.5 py-0.5 rounded">
+                          {segMatch?.type || "LINE"}
+                        </span>
+                        <span className="text-xs text-zinc-300">
+                          {segMatch?.speaker_character_id || "SPEAKER"}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (iss.segment_id) {
+                            setEditingSegmentId(iss.segment_id);
+                            if (segMatch) {
+                              setSegmentText(segMatch.text);
+                              setSegmentEmotion(segMatch.emotion || "NEUTRAL");
+                              setSegmentIntensity(segMatch.intensity || 0.5);
+                              setSegmentDuration(segMatch.estimated_duration || 2.0);
+                            }
+                            const el = document.getElementById(`seg-${iss.segment_id}`);
+                            if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+                          }
+                        }}
+                        className="text-[11px] font-medium bg-rose-900/60 hover:bg-rose-800 text-rose-200 px-2.5 py-1 rounded transition-colors"
+                      >
+                        Edit This Line
+                      </button>
+                    </div>
+
+                    <p className="font-mono text-zinc-100 bg-zinc-900/80 p-2 rounded border border-zinc-800">
+                      "{iss.text || segMatch?.text}"
+                    </p>
+
+                    <div className="space-y-1 text-[11px] text-rose-300/80">
+                      <span className="font-semibold text-rose-400">Failure Reason:</span>
+                      {reasons.map((r, rIdx) => (
+                        <div key={rIdx} className="flex items-start gap-1.5 pl-1">
+                          <span className="text-rose-400">•</span>
+                          <span>{r}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+        </Card>
+      )}
+
       {generating && <p role="status" className="text-sm text-indigo-300">{jobMessage || "Updating narration…"}</p>}
       {/* View Mode Toggle & Storyboard Actions */}
       {script && (
@@ -399,12 +512,24 @@ export const ScriptReviewScreen: React.FC<ScriptReviewScreenProps> = ({
       ) : viewMode === "storyboard" && storyboard && storyboard.segments.length > 0 ? (
         /* Two-Pane Visual Storyboard View */
         <div className="space-y-4">
-          {storyboard.segments.map((sbSeg) => {
+          {(filterUnsupportedOnly
+            ? storyboard.segments.filter((s) => Boolean(getUnsupportedIssue(s.segment_id)))
+            : storyboard.segments
+          ).map((sbSeg) => {
             const isEditing = editingSegmentId === sbSeg.segment_id;
+            const issue = getUnsupportedIssue(sbSeg.segment_id);
+            const isUnsupported = Boolean(issue);
             return (
               <Card
                 key={sbSeg.segment_id}
-                className="p-4 bg-zinc-950 border border-zinc-800 hover:border-zinc-700 transition-colors"
+                id={`seg-${sbSeg.segment_id}`}
+                className={`p-4 transition-colors ${
+                  isUnsupported
+                    ? "bg-rose-950/20 border-rose-600/80 shadow-lg shadow-rose-950/30"
+                    : isEditing
+                    ? "bg-zinc-950 border-indigo-600"
+                    : "bg-zinc-950 border border-zinc-800 hover:border-zinc-700"
+                }`}
               >
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-5">
                   {/* Left Column: Manga Visuals (5 cols) */}
@@ -490,6 +615,11 @@ export const ScriptReviewScreen: React.FC<ScriptReviewScreenProps> = ({
                           <Badge variant={sbSeg.emotion === "TENSE" || sbSeg.emotion === "ANGRY" ? "danger" : "neutral"} className="text-[10px]">
                             {sbSeg.emotion} ({Math.round(sbSeg.intensity * 100)}%)
                           </Badge>
+                          {isUnsupported && (
+                            <Badge variant="danger" className="text-[9px] font-bold">
+                              ⚠️ UNSUPPORTED CLAIM
+                            </Badge>
+                          )}
                           {sbSeg.manual_override && (
                             <span className="text-[9px] bg-amber-950/60 border border-amber-800 text-amber-300 px-1.5 py-0.5 rounded font-mono font-bold">
                               LOCKED OVERRIDE
@@ -563,6 +693,22 @@ export const ScriptReviewScreen: React.FC<ScriptReviewScreenProps> = ({
                           "{sbSeg.text}"
                         </p>
                       )}
+
+                      {isUnsupported && (
+                        <div className="p-2.5 rounded-lg bg-rose-950/50 border border-rose-900/60 text-xs text-rose-200 space-y-1">
+                          <span className="font-semibold text-rose-300 flex items-center gap-1.5">
+                            <Icons.AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
+                            Why this claim is blocked:
+                          </span>
+                          {(issue?.reasons || issue?.issues || [
+                            "Negligible lexical or semantic grounding in source panels, text, or events.",
+                          ]).map((r, rIdx) => (
+                            <p key={rIdx} className="text-[11px] text-rose-300/90 pl-5">
+                              • {r}
+                            </p>
+                          ))}
+                        </div>
+                      )}
                     </div>
 
                     {/* Audio & Ducking Directives */}
@@ -598,8 +744,15 @@ export const ScriptReviewScreen: React.FC<ScriptReviewScreenProps> = ({
       ) : (
         /* Original Spoken Script List */
         <div className="space-y-3">
-          {script.segments.map((seg) => {
+          {(filterUnsupportedOnly
+            ? script.segments.filter(
+                (s) => Boolean(getUnsupportedIssue(s.segment_id)) || s.faithfulness_status === "UNSUPPORTED"
+              )
+            : script.segments
+          ).map((seg) => {
             const isEditing = editingSegmentId === seg.segment_id;
+            const issue = getUnsupportedIssue(seg.segment_id);
+            const isUnsupported = Boolean(issue) || seg.faithfulness_status === "UNSUPPORTED";
             const speakerName =
               seg.type === "NARRATOR"
                 ? "NARRATOR"
@@ -610,8 +763,11 @@ export const ScriptReviewScreen: React.FC<ScriptReviewScreenProps> = ({
             return (
               <Card
                 key={seg.segment_id}
+                id={`seg-${seg.segment_id}`}
                 className={`p-4 border transition-all ${
-                  isEditing
+                  isUnsupported
+                    ? "bg-rose-950/20 border-rose-600/80 shadow-lg shadow-rose-950/30"
+                    : isEditing
                     ? "bg-zinc-900 border-indigo-600 shadow-lg shadow-indigo-950/30"
                     : "bg-zinc-900 border-zinc-800 hover:border-zinc-700"
                 }`}
@@ -730,6 +886,22 @@ export const ScriptReviewScreen: React.FC<ScriptReviewScreenProps> = ({
                       <p className="text-xs text-zinc-200 font-medium leading-relaxed">
                         "{seg.text}"
                       </p>
+                    )}
+
+                    {isUnsupported && (
+                      <div className="p-2.5 rounded-lg bg-rose-950/50 border border-rose-900/60 text-xs text-rose-200 space-y-1">
+                        <span className="font-semibold text-rose-300 flex items-center gap-1.5">
+                          <Icons.AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
+                          Why this claim is blocked:
+                        </span>
+                        {(issue?.reasons || issue?.issues || [
+                          "Negligible lexical or semantic grounding in source panels, text, or events.",
+                        ]).map((r, rIdx) => (
+                          <p key={rIdx} className="text-[11px] text-rose-300/90 pl-5">
+                            • {r}
+                          </p>
+                        ))}
+                      </div>
                     )}
 
                     <div className="flex flex-wrap gap-1" aria-label="Narration editing actions">

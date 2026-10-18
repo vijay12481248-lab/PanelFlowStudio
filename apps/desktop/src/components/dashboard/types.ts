@@ -26,5 +26,6 @@ export interface DashboardShellProps {
   onOpenPanels: (project: Project) => void;
   onOpenOCR: (project: Project) => void;
   onOpenStoryEditor: (project: Project) => void;
+  onOpenProject?: (project: Project) => void;
   onOpenLibrary?: () => void;
 }

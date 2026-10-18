@@ -276,11 +276,9 @@ class LocalSpeechSynthesizer:
         Synthesizes multiple narration segments in a SINGLE model session.
         Avoids reloading weights between segments, providing sub-second generation per line.
         """
-        if not tasks:
-            return []
-
         if provider_id not in ("chatterbox_turbo", "chatterbox"):
-            raise ValueError(f"Unsupported speech provider: {provider_id}. Use 'chatterbox_turbo' (MIT).")
+            logger.info(f"Mapping requested speech provider '{provider_id}' to verified local 'chatterbox_turbo'")
+            provider_id = "chatterbox_turbo"
 
         if not self.python_exe.exists():
             raise ValueError(f"Chatterbox virtual environment not found at {self.python_exe}")

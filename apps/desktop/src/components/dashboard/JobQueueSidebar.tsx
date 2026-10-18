@@ -8,9 +8,11 @@ import {
   ChevronUp,
   RotateCcw,
   Sparkles,
+  Eye,
 } from "lucide-react";
 import type { Job, Project } from "@panelflow/shared-types";
 import { api } from "@panelflow/api-client";
+import { useError } from "../../context/ErrorContext";
 
 interface JobQueueSidebarProps {
   jobs: Job[];
@@ -29,6 +31,7 @@ export const JobQueueSidebar: React.FC<JobQueueSidebarProps> = ({
   onCancelJob,
   onNavigateProject,
 }) => {
+  const { inspectError } = useError();
   const [collapsed, setCollapsed] = useState({
     running: false,
     queued: false,
@@ -270,9 +273,34 @@ export const JobQueueSidebar: React.FC<JobQueueSidebarProps> = ({
                         </div>
                       </div>
 
-                      <div className="text-[10px] text-zinc-500 italic pt-0.5">
-                        {job.message || "Waiting for GPU slot..."}
-                      </div>
+                      {job.error ? (
+                        <div className="flex items-center justify-between text-[10px] text-amber-300 pt-0.5">
+                          <span className="truncate">⚠️ {job.error}</span>
+                          <button
+                            onClick={() =>
+                              inspectError({
+                                id: `err_job_${job.job_id}`,
+                                title: `Job Alert: ${formatJobTitle(job.job_type)} Retrying`,
+                                message: `${job.error} (${job.message || "Backoff retry in progress"})`,
+                                severity: "warning",
+                                source: "job",
+                                jobId: job.job_id,
+                                projectId: job.project_id,
+                                jobType: job.job_type,
+                                timestamp: job.created_at || new Date().toISOString(),
+                                rawDetails: job,
+                              })
+                            }
+                            className="text-cyan-400 hover:underline flex-shrink-0 ml-1 font-semibold"
+                          >
+                            Inspect
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="text-[10px] text-zinc-500 italic pt-0.5">
+                          {job.message || "Waiting for GPU slot..."}
+                        </div>
+                      )}
                     </div>
                   );
                 })
@@ -331,15 +359,38 @@ export const JobQueueSidebar: React.FC<JobQueueSidebarProps> = ({
                       <p className="text-[10px] text-rose-300 line-clamp-2">
                         {job.error || job.message || "Execution encountered an error."}
                       </p>
-                      {onRetryJob && (
+                      <div className="flex items-center gap-1.5 pt-1">
                         <button
-                          onClick={() => onRetryJob(job.job_id)}
-                          className="w-full py-1 bg-rose-900/40 hover:bg-rose-900/60 border border-rose-800 text-rose-200 text-xs rounded-lg flex items-center justify-center gap-1.5 transition-colors"
+                          onClick={() =>
+                            inspectError({
+                              id: `err_job_${job.job_id}`,
+                              title: `Job Failed: ${formatJobTitle(job.job_type)}`,
+                              message: job.error || job.message || "Execution encountered an error.",
+                              severity: "error",
+                              source: "job",
+                              jobId: job.job_id,
+                              projectId: job.project_id,
+                              jobType: job.job_type,
+                              timestamp: job.finished_at || job.created_at || new Date().toISOString(),
+                              rawDetails: job,
+                            })
+                          }
+                          className="flex-1 py-1 px-2 bg-[#1b172a] hover:bg-[#26203a] border border-rose-900/60 text-cyan-300 hover:text-cyan-200 text-[11px] rounded-lg flex items-center justify-center gap-1 transition-colors"
+                          title="Open full error diagnostics and logs"
                         >
-                          <RotateCcw className="w-3 h-3" />
-                          Retry Job
+                          <Eye className="w-3 h-3 text-cyan-400" />
+                          <span>View Details</span>
                         </button>
-                      )}
+                        {onRetryJob && (
+                          <button
+                            onClick={() => onRetryJob(job.job_id)}
+                            className="py-1 px-2.5 bg-rose-900/40 hover:bg-rose-900/60 border border-rose-800 text-rose-200 text-[11px] rounded-lg flex items-center justify-center gap-1 transition-colors"
+                          >
+                            <RotateCcw className="w-3 h-3" />
+                            <span>Retry</span>
+                          </button>
+                        )}
+                      </div>
                     </div>
                   );
                 })

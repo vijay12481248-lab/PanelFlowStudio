@@ -133,27 +133,68 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
     return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}.${ms}`;
   };
 
+  const [cropModalOpen, setCropModalOpen] = useState<boolean>(false);
+
   // Determine active selected layer
   const selectedLayerId = state.selected_object?.type === "layer" ? state.selected_object.id : null;
 
-  // Handle Layer Drag on Canvas
-  const handleLayerMouseDown = (e: React.MouseEvent, layer: VisualLayer) => {
+  // Rock-solid whole layer dragging with window pointer listeners
+  const handleLayerPointerDown = (e: React.PointerEvent, layer: VisualLayer) => {
     e.stopPropagation();
     if (!activeScene) return;
 
     onSelectLayer(layer.id, activeScene.id);
-    setIsDraggingLayer(true);
-    setDragStartPos({
-      mouseX: e.clientX,
-      mouseY: e.clientY,
-      initialX: layer.transform.x,
-      initialY: layer.transform.y,
-    });
+
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const initialLayerX = layer.transform.x || 0;
+    const initialLayerY = layer.transform.y || 0;
+    const container = containerRef.current;
+    const containerRect = container ? container.getBoundingClientRect() : { width: 1000, height: 600 };
+
+    const handlePointerMove = (ev: PointerEvent) => {
+      ev.preventDefault();
+      const deltaX = ev.clientX - startX;
+      const deltaY = ev.clientY - startY;
+      const percentX = (deltaX / containerRect.width) * 100;
+      const percentY = (deltaY / containerRect.height) * 100;
+      const newX = Math.round((initialLayerX + percentX) * 10) / 10;
+      const newY = Math.round((initialLayerY + percentY) * 10) / 10;
+
+      onUpdateState((prev) => ({
+        ...prev,
+        scenes: prev.scenes.map((sc) => {
+          if (sc.id !== activeScene?.id) return sc;
+          return {
+            ...sc,
+            layers: sc.layers.map((ly) => {
+              if (ly.id !== layer.id) return ly;
+              return {
+                ...ly,
+                transform: {
+                  ...ly.transform,
+                  x: newX,
+                  y: newY,
+                },
+              };
+            }),
+          };
+        }),
+      }));
+    };
+
+    const handlePointerUp = () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+    };
+
+    window.addEventListener("pointermove", handlePointerMove, { passive: false });
+    window.addEventListener("pointerup", handlePointerUp);
   };
 
-  // Handle Bounding Box Handle Drag (Corners, Midpoints, and Center)
-  const handleHandleMouseDown = (
-    e: React.MouseEvent,
+  // Rock-solid bounding handle dragging (corner scales, edge midpoints, and center anchor)
+  const handleHandlePointerDown = (
+    e: React.PointerEvent,
     handle: ResizeHandle,
     layer: VisualLayer
   ) => {
@@ -172,37 +213,24 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
     };
     const centerX = rect.left + rect.width / 2;
     const centerY = rect.top + rect.height / 2;
-    const initialDist = Math.hypot(e.clientX - centerX, e.clientY - centerY);
+    const initialDist = Math.max(15, Math.hypot(e.clientX - centerX, e.clientY - centerY));
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const initialScale = layer.transform.scale || 1.0;
+    const initialLayerX = layer.transform.x || 0;
+    const initialLayerY = layer.transform.y || 0;
+    const container = containerRef.current;
+    const containerRect = container ? container.getBoundingClientRect() : { width: 1000, height: 600 };
 
-    setActiveHandleDrag({
-      handle,
-      layerId: layer.id,
-      startMouseX: e.clientX,
-      startMouseY: e.clientY,
-      initialScale: layer.transform.scale || 1.0,
-      initialX: layer.transform.x || 0,
-      initialY: layer.transform.y || 0,
-      centerX,
-      centerY,
-      initialDist: Math.max(15, initialDist),
-    });
-  };
-
-  const handleMouseMove = (e: React.MouseEvent) => {
-    // 1. Handle Active Bounding Box Handles (Corners, Midpoints, Center)
-    if (activeHandleDrag && selectedLayerId && activeScene) {
-      const container = containerRef.current;
-      if (!container) return;
-      const rect = container.getBoundingClientRect();
-
-      if (activeHandleDrag.handle === "center") {
-        const deltaX = e.clientX - activeHandleDrag.startMouseX;
-        const deltaY = e.clientY - activeHandleDrag.startMouseY;
-        const percentX = (deltaX / rect.width) * 100;
-        const percentY = (deltaY / rect.height) * 100;
-
-        const newX = Math.round((activeHandleDrag.initialX + percentX) * 10) / 10;
-        const newY = Math.round((activeHandleDrag.initialY + percentY) * 10) / 10;
+    const handlePointerMove = (ev: PointerEvent) => {
+      ev.preventDefault();
+      if (handle === "center") {
+        const deltaX = ev.clientX - startX;
+        const deltaY = ev.clientY - startY;
+        const percentX = (deltaX / containerRect.width) * 100;
+        const percentY = (deltaY / containerRect.height) * 100;
+        const newX = Math.round((initialLayerX + percentX) * 10) / 10;
+        const newY = Math.round((initialLayerY + percentY) * 10) / 10;
 
         onUpdateState((prev) => ({
           ...prev,
@@ -211,7 +239,7 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
             return {
               ...sc,
               layers: sc.layers.map((ly) => {
-                if (ly.id !== selectedLayerId) return ly;
+                if (ly.id !== layer.id) return ly;
                 return {
                   ...ly,
                   transform: { ...ly.transform, x: newX, y: newY },
@@ -221,13 +249,9 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
           }),
         }));
       } else {
-        // Corner and edge scaling
-        const currentDist = Math.hypot(
-          e.clientX - activeHandleDrag.centerX,
-          e.clientY - activeHandleDrag.centerY
-        );
-        const scaleFactor = currentDist / activeHandleDrag.initialDist;
-        const targetScale = Math.max(0.15, Math.min(5.0, activeHandleDrag.initialScale * scaleFactor));
+        const currentDist = Math.hypot(ev.clientX - centerX, ev.clientY - centerY);
+        const scaleFactor = currentDist / initialDist;
+        const targetScale = Math.max(0.15, Math.min(5.0, initialScale * scaleFactor));
         const newScale = Math.round(targetScale * 100) / 100;
 
         onUpdateState((prev) => ({
@@ -237,7 +261,7 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
             return {
               ...sc,
               layers: sc.layers.map((ly) => {
-                if (ly.id !== selectedLayerId) return ly;
+                if (ly.id !== layer.id) return ly;
                 return {
                   ...ly,
                   transform: { ...ly.transform, scale: newScale },
@@ -247,24 +271,24 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
           }),
         }));
       }
-      return;
-    }
+    };
 
-    // 2. Handle Whole-Layer Direct Drag
-    if (!isDraggingLayer || !dragStartPos || !selectedLayerId || !activeScene) return;
-    const deltaX = e.clientX - dragStartPos.mouseX;
-    const deltaY = e.clientY - dragStartPos.mouseY;
+    const handlePointerUp = () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+    };
 
-    // Convert pixel delta to percentage of viewport
-    const container = containerRef.current;
-    if (!container) return;
-    const rect = container.getBoundingClientRect();
-    const percentX = (deltaX / rect.width) * 100;
-    const percentY = (deltaY / rect.height) * 100;
+    window.addEventListener("pointermove", handlePointerMove, { passive: false });
+    window.addEventListener("pointerup", handlePointerUp);
+  };
 
-    const newX = Math.round((dragStartPos.initialX + percentX) * 10) / 10;
-    const newY = Math.round((dragStartPos.initialY + percentY) * 10) / 10;
-
+  // Crop application handler for box, polygon, and pen cuts
+  const handleApplyCropType = (
+    layerId: string,
+    cropType: "rect" | "polygon" | "pen",
+    clipPath?: string
+  ) => {
+    if (!activeScene) return;
     onUpdateState((prev) => ({
       ...prev,
       scenes: prev.scenes.map((sc) => {
@@ -272,14 +296,11 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
         return {
           ...sc,
           layers: sc.layers.map((ly) => {
-            if (ly.id !== selectedLayerId) return ly;
+            if (ly.id !== layerId) return ly;
             return {
               ...ly,
-              transform: {
-                ...ly.transform,
-                x: newX,
-                y: newY,
-              },
+              crop_type: cropType,
+              clip_path: clipPath || (cropType === "rect" ? undefined : ly.clip_path),
             };
           }),
         };
@@ -287,10 +308,31 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
     }));
   };
 
-  const handleMouseUp = () => {
-    setIsDraggingLayer(false);
-    setDragStartPos(null);
-    setActiveHandleDrag(null);
+  // Create dedicated new scene from cropped layer
+  const handleCreateSceneFromCrop = () => {
+    if (!activeScene || !selectedLayerObj) return;
+    const newSceneId = `scene_${Date.now()}`;
+    const newLayerId = `layer_${Date.now()}`;
+    const newLayer: VisualLayer = {
+      ...selectedLayerObj,
+      id: newLayerId,
+    };
+    const newScene: VideoScene = {
+      id: newSceneId,
+      sequence: state.scenes.length + 1,
+      title: `${selectedLayerObj.name || "Cropped Panel"} Scene`,
+      duration_sec: 3.5,
+      start_time_sec: totalDurationSec,
+      layers: [newLayer],
+      transition_in: "fade",
+    };
+
+    onUpdateState((prev) => ({
+      ...prev,
+      scenes: [...prev.scenes, newScene],
+      selected_object: { type: "scene", id: newSceneId },
+      playhead_sec: newScene.start_time_sec,
+    }));
   };
 
   // Chapter 3: Handle panel drop directly onto composition canvas
@@ -351,12 +393,7 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
   const transition = activeScene ? evaluateSceneTransition(activeScene, state.playhead_sec) : null;
 
   return (
-    <div
-      className="flex-1 flex flex-col bg-zinc-950 relative overflow-hidden select-none"
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseUp}
-    >
+    <div className="flex-1 flex flex-col bg-zinc-950 relative overflow-hidden select-none">
       {/* 16:9 Central Composition Area */}
       <div className="flex-1 flex items-center justify-center p-6 relative">
         <div
@@ -412,7 +449,7 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
                   return (
                     <div
                       key={layer.id}
-                      onMouseDown={(e) => handleLayerMouseDown(e, layer)}
+                      onPointerDown={(e) => handleLayerPointerDown(e, layer)}
                       className={`absolute cursor-move select-none transition-shadow ${
                         isSelected ? "ring-2 ring-indigo-500 shadow-xl" : "hover:ring-1 hover:ring-white/40"
                       }`}
@@ -457,53 +494,128 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
                             )}
                           </div>
 
+                          {/* Floating Crop & Cut Toolbar */}
+                          <div className="absolute -top-16 left-1/2 -translate-x-1/2 bg-zinc-900/95 border border-cyan-400/80 rounded-lg shadow-2xl p-1 flex items-center gap-1 pointer-events-auto backdrop-blur-md z-30">
+                            {/* Box Crop (Rect) */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                handleApplyCropType(layer.id, "rect", undefined);
+                              }}
+                              className={`px-2 py-0.5 rounded text-[10px] font-semibold flex items-center gap-1 transition-colors ${
+                                !layer.crop_type || layer.crop_type === "rect"
+                                  ? "bg-cyan-600 text-white shadow-sm"
+                                  : "text-zinc-300 hover:text-white hover:bg-zinc-800"
+                              }`}
+                              title="Standard Rectangle Box Crop"
+                            >
+                              <span>🔲</span>
+                              <span>Box</span>
+                            </button>
+
+                            {/* Polygon Crop */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                handleApplyCropType(
+                                  layer.id,
+                                  "polygon",
+                                  "polygon(5% 0%, 95% 0%, 100% 90%, 85% 100%, 0% 95%)"
+                                );
+                              }}
+                              className={`px-2 py-0.5 rounded text-[10px] font-semibold flex items-center gap-1 transition-colors ${
+                                layer.crop_type === "polygon"
+                                  ? "bg-cyan-600 text-white shadow-sm"
+                                  : "text-zinc-300 hover:text-white hover:bg-zinc-800"
+                              }`}
+                              title="Multi-Point Polygon Crop"
+                            >
+                              <span>🔷</span>
+                              <span>Polygon</span>
+                            </button>
+
+                            {/* Pen Cut */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                handleApplyCropType(
+                                  layer.id,
+                                  "pen",
+                                  "polygon(10% 5%, 85% 2%, 98% 70%, 90% 95%, 15% 98%, 2% 65%)"
+                                );
+                              }}
+                              className={`px-2 py-0.5 rounded text-[10px] font-semibold flex items-center gap-1 transition-colors ${
+                                layer.crop_type === "pen"
+                                  ? "bg-cyan-600 text-white shadow-sm"
+                                  : "text-zinc-300 hover:text-white hover:bg-zinc-800"
+                              }`}
+                              title="Organic Pen / Contour Cut"
+                            >
+                              <span>✒️</span>
+                              <span>Pen Cut</span>
+                            </button>
+
+                            <div className="w-px h-3.5 bg-zinc-700 mx-0.5" />
+
+                            {/* Add to Timeline Button */}
+                            <button
+                              type="button"
+                              onClick={() => setCropModalOpen(true)}
+                              className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-600 hover:bg-emerald-500 text-white flex items-center gap-1 shadow-sm transition-all active:scale-95"
+                              title="Add this cropped layer to the timeline"
+                            >
+                              <span>➕</span>
+                              <span>Add to Timeline</span>
+                            </button>
+                          </div>
+
                           {/* 4 Corner Round Handles (nw, ne, sw, se) */}
                           <div
-                            onMouseDown={(e) => handleHandleMouseDown(e, "nw", layer)}
+                            onPointerDown={(e) => handleHandlePointerDown(e, "nw", layer)}
                             className="absolute -top-2 -left-2 w-4 h-4 bg-white border-2 border-cyan-400 rounded-full shadow hover:scale-125 cursor-nwse-resize pointer-events-auto transition-transform"
                             title="Resize Corner (NW)"
                           />
                           <div
-                            onMouseDown={(e) => handleHandleMouseDown(e, "ne", layer)}
+                            onPointerDown={(e) => handleHandlePointerDown(e, "ne", layer)}
                             className="absolute -top-2 -right-2 w-4 h-4 bg-white border-2 border-cyan-400 rounded-full shadow hover:scale-125 cursor-nesw-resize pointer-events-auto transition-transform"
                             title="Resize Corner (NE)"
                           />
                           <div
-                            onMouseDown={(e) => handleHandleMouseDown(e, "sw", layer)}
+                            onPointerDown={(e) => handleHandlePointerDown(e, "sw", layer)}
                             className="absolute -bottom-2 -left-2 w-4 h-4 bg-white border-2 border-cyan-400 rounded-full shadow hover:scale-125 cursor-nesw-resize pointer-events-auto transition-transform"
                             title="Resize Corner (SW)"
                           />
                           <div
-                            onMouseDown={(e) => handleHandleMouseDown(e, "se", layer)}
+                            onPointerDown={(e) => handleHandlePointerDown(e, "se", layer)}
                             className="absolute -bottom-2 -right-2 w-4 h-4 bg-white border-2 border-cyan-400 rounded-full shadow hover:scale-125 cursor-nwse-resize pointer-events-auto transition-transform"
                             title="Resize Corner (SE)"
                           />
 
                           {/* 4 Edge Midpoint Square Handles (n, s, w, e) */}
                           <div
-                            onMouseDown={(e) => handleHandleMouseDown(e, "n", layer)}
+                            onPointerDown={(e) => handleHandlePointerDown(e, "n", layer)}
                             className="absolute -top-2 left-1/2 -translate-x-1/2 w-3.5 h-3.5 bg-white border-2 border-cyan-400 rounded-sm shadow hover:scale-125 cursor-ns-resize pointer-events-auto transition-transform"
                             title="Adjust Height (Top)"
                           />
                           <div
-                            onMouseDown={(e) => handleHandleMouseDown(e, "s", layer)}
+                            onPointerDown={(e) => handleHandlePointerDown(e, "s", layer)}
                             className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-3.5 h-3.5 bg-white border-2 border-cyan-400 rounded-sm shadow hover:scale-125 cursor-ns-resize pointer-events-auto transition-transform"
                             title="Adjust Height (Bottom)"
                           />
                           <div
-                            onMouseDown={(e) => handleHandleMouseDown(e, "w", layer)}
+                            onPointerDown={(e) => handleHandlePointerDown(e, "w", layer)}
                             className="absolute top-1/2 -left-2 -translate-y-1/2 w-3.5 h-3.5 bg-white border-2 border-cyan-400 rounded-sm shadow hover:scale-125 cursor-ew-resize pointer-events-auto transition-transform"
                             title="Adjust Width (Left)"
                           />
                           <div
-                            onMouseDown={(e) => handleHandleMouseDown(e, "e", layer)}
+                            onPointerDown={(e) => handleHandlePointerDown(e, "e", layer)}
                             className="absolute top-1/2 -right-2 -translate-y-1/2 w-3.5 h-3.5 bg-white border-2 border-cyan-400 rounded-sm shadow hover:scale-125 cursor-ew-resize pointer-events-auto transition-transform"
                             title="Adjust Width (Right)"
                           />
 
                           {/* Center Square Handle for Positioning */}
                           <div
-                            onMouseDown={(e) => handleHandleMouseDown(e, "center", layer)}
+                            onPointerDown={(e) => handleHandlePointerDown(e, "center", layer)}
                             className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-5 h-5 bg-white border-2 border-cyan-500 rounded-sm shadow-md hover:scale-115 cursor-move pointer-events-auto transition-transform flex items-center justify-center group"
                             title="Drag to Reposition (Center Anchor)"
                           >
@@ -739,6 +851,81 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
           </div>
         </div>
       </div>
+
+      {/* "May I add this crop to the timeline?" Confirmation Modal */}
+      {cropModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+              <h3 className="text-sm font-bold text-zinc-100 flex items-center gap-2">
+                <span>✂️</span>
+                <span>Add Crop to Timeline</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setCropModalOpen(false)}
+                className="text-zinc-400 hover:text-zinc-200"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-xs text-zinc-300 leading-relaxed">
+              May I add this crop to the timeline? You can create a new scene for this cropped element or keep the crop adjustments on the current scene layer.
+            </p>
+
+            <div className="space-y-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setCropModalOpen(false);
+                  handleCreateSceneFromCrop();
+                }}
+                className="w-full text-left p-3.5 rounded-lg bg-zinc-950 hover:bg-indigo-950/50 border border-zinc-800 hover:border-indigo-500/60 transition-colors group flex items-start gap-3"
+              >
+                <span className="text-xl mt-0.5">🎬</span>
+                <div>
+                  <div className="text-xs font-bold text-zinc-100 group-hover:text-indigo-300">
+                    Create New Scene from Crop
+                  </div>
+                  <div className="text-[11px] text-zinc-400 mt-0.5 leading-normal">
+                    Adds a new scene containing this cropped panel element on the timeline with dedicated motion pacing.
+                  </div>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setCropModalOpen(false);
+                }}
+                className="w-full text-left p-3.5 rounded-lg bg-zinc-950 hover:bg-cyan-950/50 border border-zinc-800 hover:border-cyan-500/60 transition-colors group flex items-start gap-3"
+              >
+                <span className="text-xl mt-0.5">🔄</span>
+                <div>
+                  <div className="text-xs font-bold text-zinc-100 group-hover:text-cyan-300">
+                    Keep on Current Scene Layer
+                  </div>
+                  <div className="text-[11px] text-zinc-400 mt-0.5 leading-normal">
+                    Saves the crop adjustments directly onto the active scene layer.
+                  </div>
+                </div>
+              </button>
+            </div>
+
+            <div className="flex justify-end pt-3 border-t border-zinc-800">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setCropModalOpen(false)}
+                className="text-xs h-8 px-3"
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

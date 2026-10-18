@@ -16,7 +16,11 @@ export type NarrationEmotion =
   | "Whispering"
   | "Serious"
   | "Mysterious"
-  | "Determined";
+  | "Determined"
+  | "Dramatic"
+  | "Intense"
+  | "Calm"
+  | "Emotional";
 
 export type ReviewStatus = "DRAFT" | "NEEDS_REVIEW" | "APPROVED";
 
@@ -60,8 +64,9 @@ export interface MangaSourceContext {
   page_id: string;
   page_number: number;
   panel_ids: string[];
-  panel_labels: string[]; // e.g. ["Panel 1", "Panel 2"]
+  panel_labels?: string[]; // e.g. ["Panel 1", "Panel 2"]
   panel_preview_url?: string;
+  image_url?: string;
   svg_thumbnail?: string; // Rich inline SVG demonstration representation
   raw_ocr_dialogue: string;
   visual_description: string;
@@ -247,8 +252,13 @@ export interface NarrationToTimelineContract {
 export interface NarrationStudioProps {
   initialChapter?: NarrationChapter;
   initialSegmentId?: string;
+  projectId?: string;
+  scenes?: any[];
+  pages?: any[];
+  panels?: any[];
   onChapterSave?: (chapter: NarrationChapter) => void;
   onSegmentApproved?: (segment: NarrationSegment) => void;
   onExportTimelineContract?: (contract: NarrationToTimelineContract) => void;
+  onAddToTimeline?: (mode: "all" | "selected", segmentId?: string) => void;
   onClose?: () => void;
 }

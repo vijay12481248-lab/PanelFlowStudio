@@ -17,6 +17,7 @@ interface ProjectsWorkspaceProps {
   onToggleFavorite: (projectId: string) => void;
   onNewProject: () => void;
   onOpenStoryEditor: (project: Project) => void;
+  onOpenProject?: (project: Project) => void;
   onOpenOCR: (project: Project) => void;
   onOpenPanels: (project: Project) => void;
   onOpenFolder: (projectId: string) => void;
@@ -30,6 +31,7 @@ export const ProjectsWorkspace: React.FC<ProjectsWorkspaceProps> = ({
   onToggleFavorite,
   onNewProject,
   onOpenStoryEditor,
+  onOpenProject,
   onOpenOCR,
   onOpenPanels,
   onOpenFolder,
@@ -216,6 +218,7 @@ export const ProjectsWorkspace: React.FC<ProjectsWorkspaceProps> = ({
               isFavorite={!!favorites[proj.id]}
               onToggleFavorite={onToggleFavorite}
               onOpenStoryEditor={onOpenStoryEditor}
+              onOpenProject={onOpenProject}
               onOpenOCR={onOpenOCR}
               onOpenPanels={onOpenPanels}
               onOpenFolder={onOpenFolder}

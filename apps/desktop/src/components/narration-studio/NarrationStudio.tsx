@@ -17,14 +17,20 @@ import { NarrationReviewPanel } from "./NarrationReviewPanel";
 import { EmotionDeliveryControls } from "./EmotionDeliveryControls";
 import { CharacterVoiceManager } from "./CharacterVoiceManager";
 import { AudioPreviewPlayer } from "./AudioPreviewPlayer";
+import { api } from "@panelflow/api-client";
 import { NarrationJobQueue } from "./NarrationJobQueue";
 
 export const NarrationStudio: React.FC<NarrationStudioProps> = ({
   initialChapter,
   initialSegmentId,
+  projectId = "",
+  scenes = [],
+  pages = [],
+  panels = [],
   onChapterSave,
   onSegmentApproved,
   onExportTimelineContract,
+  onAddToTimeline,
   onClose,
 }) => {
   // Main Chapter State initialized with prop or rich mock chapter
@@ -69,7 +75,43 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
   // Modals & Panels
   const [showVoiceManagerModal, setShowVoiceManagerModal] = useState<boolean>(false);
   const [showExportModal, setShowExportModal] = useState<boolean>(false);
+  const [timelineModalOpen, setTimelineModalOpen] = useState<boolean>(false);
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "unsaved">("saved");
+
+  // Ollama Live Model Discovery & Generation States
+  const [ollamaModels, setOllamaModels] = useState<string[]>([]);
+  const [selectedOllamaModel, setSelectedOllamaModel] = useState<string>("qwen3.5:9b");
+  const [isOllamaOnline, setIsOllamaOnline] = useState<boolean>(true);
+  const [isDraftingNarration, setIsDraftingNarration] = useState<boolean>(false);
+  const [isSynthesizingAll, setIsSynthesizingAll] = useState<boolean>(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchOllama = async () => {
+      try {
+        const res = await api.getOllamaModels();
+        if (isMounted) {
+          const modelList = res.models?.map((m: any) => m.name || m) || [];
+          setOllamaModels(modelList);
+          setIsOllamaOnline(res.healthy !== false && modelList.length > 0);
+          if (modelList.length > 0 && !modelList.includes(selectedOllamaModel)) {
+            const preferred =
+              modelList.find(
+                (m: string) =>
+                  m.includes("qwen3.5") || m.includes("gemma4") || m.includes("qwen3.6")
+              ) || modelList[0];
+            setSelectedOllamaModel(preferred);
+          }
+        }
+      } catch (err) {
+        if (isMounted) setIsOllamaOnline(false);
+      }
+    };
+    fetchOllama();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // Undo / Redo History Stacks
   const [history, setHistory] = useState<NarrationChapter[]>([]);
@@ -504,6 +546,155 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
     };
   }, [chapter]);
 
+  // Single-Click AI Narration Generation using Real Ollama Model
+  const handleGenerateAiNarration = async () => {
+    if (!projectId) return;
+    setIsDraftingNarration(true);
+    try {
+      const scenesPayload = (scenes && scenes.length > 0 ? scenes : chapter.segments).map(
+        (s: any, idx: number) => ({
+          id: s.id || `scene_${idx + 1}`,
+          sequence: s.sequence || idx + 1,
+          title: s.title || `Scene ${idx + 1}`,
+          visual_description:
+            s.layers?.[0]?.name || s.visual_description || `Scene ${idx + 1} manga visual framing`,
+          ocr_text: s.source_context?.raw_ocr_dialogue || s.ocr_text || "",
+          panel_ids:
+            s.layers?.map((l: any) => l.source_panel_id).filter(Boolean) ||
+            s.source_context?.panel_ids ||
+            [],
+          characters: ["Narrator"],
+        })
+      );
+
+      const draftResult = await api.draftNarration(
+        projectId,
+        scenesPayload,
+        "ollama",
+        selectedOllamaModel
+      );
+
+      if (draftResult?.beats && draftResult.beats.length > 0) {
+        const updatedSegments: NarrationSegment[] = draftResult.beats.map(
+          (beat: any, bIdx: number) => {
+            const matchingScene = scenes.find((sc) => sc.id === beat.scene_id) || scenes[bIdx];
+            const primaryLayer = matchingScene?.layers?.[0];
+            const text = beat.proposed_narration_text || "";
+            const emotion = beat.recommended_emotion || "Neutral";
+            const speed = beat.recommended_speed || 1.0;
+            return {
+              id: `narr_${beat.scene_id || bIdx + 1}`,
+              sequence: bIdx + 1,
+              scene_id: matchingScene?.id || beat.scene_id,
+              scene_title: matchingScene?.title || `Scene ${bIdx + 1}`,
+              linked_to_scene: !!matchingScene,
+              scene_offset_sec: 0.0,
+              speaker_id: "char_narrator",
+              speaker_name: beat.speaker || "The Narrator",
+              speaker_type: beat.speaker_type || "NARRATOR",
+              voice_profile_id: "voice_aria_female_narrator",
+              narration_text: text,
+              text_revision: 1,
+              content_hash: computeContentHash(text, emotion, speed, "short"),
+              source_context: {
+                page_id: primaryLayer?.source_page_id || `page_${bIdx + 1}`,
+                page_number: primaryLayer?.page_sequence || bIdx + 1,
+                panel_ids: beat.panel_ids?.length
+                  ? beat.panel_ids
+                  : primaryLayer?.source_panel_id
+                  ? [primaryLayer.source_panel_id]
+                  : [],
+                panel_labels: [primaryLayer?.name || `Panel #${bIdx + 1}`],
+                panel_preview_url: primaryLayer?.image_url,
+                image_url: primaryLayer?.image_url,
+                raw_ocr_dialogue: beat.observed_ocr_dialogue || "",
+                visual_description:
+                  beat.observed_visual_evidence || primaryLayer?.name || `Scene ${bIdx + 1}`,
+                story_context: beat.inferred_subtext || `Story beat ${bIdx + 1}`,
+              },
+              delivery: {
+                emotion: emotion as any,
+                intensity: 0.6,
+                speech_speed: speed,
+                pause: { preset: "short", duration_ms: 300, placement: "after_first_sentence" },
+                performance_notes: "Emotionally grounded manga narration.",
+                pronunciation_guide: [],
+              },
+              review_status: "DRAFT",
+              generation_status: "UNQUEUED",
+              generation_progress: 0,
+              audio_asset_uri: null,
+              previous_audio_asset_uri: null,
+              generated_audio_revision: null,
+              estimated_duration_sec: Math.max(2.0, Math.round(text.split(" ").length / 2.5)),
+              measured_duration_sec: null,
+              updated_at: new Date().toISOString(),
+            };
+          }
+        );
+
+        const nextChapter = {
+          ...chapter,
+          segments: updatedSegments,
+          updated_at: new Date().toISOString(),
+        };
+        setChapter(nextChapter);
+        onChapterSave?.(nextChapter);
+        setSelectedSegmentId(updatedSegments[0]?.id || "");
+      }
+    } catch (err: any) {
+      console.error("AI Narration generation failed:", err);
+      alert(`Narration Generation: ${err.message || "Failed to generate narration"}`);
+    } finally {
+      setIsDraftingNarration(false);
+    }
+  };
+
+  // Single-Click Voices Synthesis via Chatterbox Turbo (MIT)
+  const handleSynthesizeAllVoices = async () => {
+    if (!projectId) return;
+    setIsSynthesizingAll(true);
+    try {
+      const updatedSegments = [...chapter.segments];
+      for (let i = 0; i < updatedSegments.length; i++) {
+        const seg = updatedSegments[i];
+        try {
+          const res = await api.synthesizeNarrationSegment(projectId, {
+            segment_id: seg.id,
+            text: seg.narration_text,
+            voice: seg.speaker_name,
+            emotion: seg.delivery.emotion,
+            intensity: seg.delivery.intensity,
+            speed: seg.delivery.speech_speed,
+            text_revision: seg.text_revision,
+            content_hash: seg.content_hash,
+            force: true,
+          });
+          if (res) {
+            updatedSegments[i] = {
+              ...seg,
+              audio_asset_uri: res.audio_url,
+              measured_duration_sec: res.measured_duration_sec,
+              generation_status: "READY",
+              generated_audio_revision: seg.text_revision,
+            };
+          }
+        } catch (sErr) {
+          console.warn(`Segment ${seg.id} synthesis skipped:`, sErr);
+        }
+      }
+      const nextChapter = {
+        ...chapter,
+        segments: updatedSegments,
+        updated_at: new Date().toISOString(),
+      };
+      setChapter(nextChapter);
+      onChapterSave?.(nextChapter);
+    } finally {
+      setIsSynthesizingAll(false);
+    }
+  };
+
   return (
     <div className="flex flex-col h-screen w-screen bg-zinc-950 text-zinc-100 font-sans antialiased overflow-hidden select-none">
       {/* Top Header Bar */}
@@ -535,11 +726,11 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
               <div className="font-extrabold text-sm text-white tracking-tight leading-none flex items-center gap-1.5">
                 <h1 className="text-sm font-extrabold text-white">Narration Studio</h1>
                 <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.2 rounded bg-indigo-950 text-indigo-400 border border-indigo-800">
-                  Chapter 5
+                  AI Storyteller
                 </span>
               </div>
               <span className="text-[10px] text-zinc-400 font-medium leading-none block mt-0.5">
-                AI Narration & Storytelling Workspace
+                Grounded Manga Narration & Emotional Voice Engine
               </span>
             </div>
           </div>
@@ -554,8 +745,8 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
           </div>
         </div>
 
-        {/* Center / Right: Auto-save, Undo/Redo, View Toggles & Export */}
-        <div className="flex items-center gap-3">
+        {/* Center / Right: Live Ollama Selector & High-Utility Action Buttons */}
+        <div className="flex items-center gap-2.5">
           {/* Save Status */}
           <div className="flex items-center gap-1 text-xs font-medium mr-1">
             {saveStatus === "saving" ? (
@@ -600,67 +791,88 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
 
           <div className="h-4 w-px bg-zinc-800" />
 
-          {/* Mode Switch: Editor vs Quality Matrix */}
-          <div className="flex items-center bg-zinc-900 border border-zinc-800 rounded p-0.5 text-xs">
-            <button
-              type="button"
-              onClick={() => setCenterMode("editor")}
-              className={`px-2.5 py-0.5 rounded text-[11px] font-semibold transition-colors ${
-                centerMode === "editor"
-                  ? "bg-indigo-600 text-white shadow-sm"
-                  : "text-zinc-400 hover:text-zinc-200"
-              }`}
+          {/* Real-time Ollama Model Discovery & Selector */}
+          <div className="flex items-center gap-1.5 bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1">
+            <span
+              className={`w-2 h-2 rounded-full ${isOllamaOnline ? "bg-emerald-400 shadow-sm shadow-emerald-400/50" : "bg-rose-500"}`}
+              title={isOllamaOnline ? "Ollama Online" : "Ollama Offline"}
+            />
+            <span className="text-[11px] font-semibold text-zinc-400">Model:</span>
+            <select
+              value={selectedOllamaModel}
+              onChange={(e) => setSelectedOllamaModel(e.target.value)}
+              className="bg-transparent text-xs text-zinc-200 font-mono focus:outline-none cursor-pointer"
             >
-              Script Editor
-            </button>
-            <button
-              type="button"
-              onClick={() => setCenterMode("quality_review")}
-              className={`px-2.5 py-0.5 rounded text-[11px] font-semibold transition-colors ${
-                centerMode === "quality_review"
-                  ? "bg-indigo-600 text-white shadow-sm"
-                  : "text-zinc-400 hover:text-zinc-200"
-              }`}
-            >
-              Quality Matrix
-            </button>
+              {ollamaModels.length > 0 ? (
+                ollamaModels.map((m) => (
+                  <option key={m} value={m} className="bg-zinc-900 text-zinc-200">
+                    {m}
+                  </option>
+                ))
+              ) : (
+                <option value="qwen3.5:9b" className="bg-zinc-900 text-zinc-200">
+                  qwen3.5:9b
+                </option>
+              )}
+            </select>
           </div>
 
-          <div className="h-4 w-px bg-zinc-800" />
-
-          {/* Character Voice Casting Modal Launcher */}
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => setShowVoiceManagerModal(true)}
-            className="text-xs h-8 px-3 border border-zinc-700 hover:border-zinc-500"
-          >
-            👥 Character Casting
-          </Button>
-
-          {/* Export Timeline Contract Button */}
+          {/* Single-Click AI Narration Generation */}
           <Button
             variant="primary"
             size="sm"
-            onClick={() => {
-              setShowExportModal(true);
-              onExportTimelineContract?.(timelineContract);
-            }}
-            className="text-xs h-8 px-3.5 bg-indigo-600 hover:bg-indigo-500 font-bold shadow-md shadow-indigo-600/30"
+            onClick={handleGenerateAiNarration}
+            disabled={isDraftingNarration}
+            className="text-xs h-8 px-3 bg-indigo-600 hover:bg-indigo-500 font-bold shadow-md shadow-indigo-600/30 flex items-center gap-1.5"
+            title="Generate AI narration grounded in source manga panels"
           >
-            Export Contract
+            {isDraftingNarration ? (
+              <>
+                <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                <span>Drafting...</span>
+              </>
+            ) : (
+              <>
+                <span>⚡</span>
+                <span>Generate AI Narration</span>
+              </>
+            )}
           </Button>
 
-          {onClose && (
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={onClose}
-              className="text-xs h-8 px-3 border border-zinc-700 hover:border-zinc-500 text-zinc-300 hover:text-white"
-            >
-              Back to Story Editor
-            </Button>
-          )}
+          {/* Single-Click Voices Generation via Chatterbox Turbo */}
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={handleSynthesizeAllVoices}
+            disabled={isSynthesizingAll || chapter.segments.length === 0}
+            className="text-xs h-8 px-3 bg-zinc-900 border border-zinc-700 hover:bg-zinc-800 text-zinc-200 font-semibold flex items-center gap-1.5"
+            title="Synthesize audio for all segments via Chatterbox Turbo (MIT)"
+          >
+            {isSynthesizingAll ? (
+              <>
+                <span className="w-3 h-3 border-2 border-cyan-400/30 border-t-cyan-400 rounded-full animate-spin" />
+                <span>Synthesizing...</span>
+              </>
+            ) : (
+              <>
+                <span>🎙️</span>
+                <span>Generate Voices</span>
+              </>
+            )}
+          </Button>
+
+          {/* Confirmation Modal Launcher: Add to Timeline */}
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => setTimelineModalOpen(true)}
+            disabled={chapter.segments.length === 0}
+            className="text-xs h-8 px-3 bg-emerald-600 hover:bg-emerald-500 font-bold shadow-md shadow-emerald-600/30 flex items-center gap-1.5"
+            title="Confirm adding narration to video timeline"
+          >
+            <span>➕</span>
+            <span>Add to Timeline</span>
+          </Button>
 
           {onClose && (
             <button
@@ -692,28 +904,50 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
           />
         </div>
 
-        {/* Center Column: Story Script Editor & Quality Review (6 cols / ~50%) */}
+        {/* Center Column: Story Script Editor (6 cols / ~50%) */}
         <div className="col-span-12 md:col-span-6 min-h-0 h-full overflow-y-auto flex flex-col border-r border-zinc-800/90 bg-zinc-950">
           <NarrationSegmentEditor
             segment={selectedSegment}
             previousSegment={previousSegment}
             nextSegment={nextSegment}
             characters={chapter.characters}
+            projectId={projectId}
             onUpdateSegment={handleUpdateSegment}
             onDuplicateSegment={handleDuplicateSegment}
             onDeleteSegment={handleDeleteSegment}
             onSplitSegment={handleSplitSegment}
+            onSynthesizeSceneVoice={async (seg) => {
+              if (!projectId) return;
+              try {
+                const res = await api.synthesizeNarrationSegment(projectId, {
+                  segment_id: seg.id,
+                  text: seg.narration_text,
+                  voice: seg.speaker_name,
+                  emotion: seg.delivery.emotion,
+                  intensity: seg.delivery.intensity,
+                  speed: seg.delivery.speech_speed,
+                  text_revision: seg.text_revision,
+                  content_hash: seg.content_hash,
+                  force: true,
+                });
+                if (res) {
+                  handleUpdateSegment({
+                    audio_asset_uri: res.audio_url,
+                    measured_duration_sec: res.measured_duration_sec,
+                    generation_status: "READY",
+                    generated_audio_revision: seg.text_revision,
+                  });
+                }
+              } catch (err: any) {
+                console.error("Synthesize segment failed:", err);
+                alert(`Voice Synthesis: ${err.message || "Failed"}`);
+              }
+            }}
+            onAddToTimeline={(seg: NarrationSegment) => {
+              onAddToTimeline?.("selected", seg.id);
+            }}
             className="flex-1"
           />
-
-          {/* If Quality Review Matrix is toggled, display the 4-layer comparison */}
-          {selectedSegment && centerMode === "quality_review" && (
-            <NarrationReviewPanel
-              segment={selectedSegment}
-              characters={chapter.characters}
-              onUpdateSegment={handleUpdateSegment}
-            />
-          )}
         </div>
 
         {/* Right Column: Voice & Delivery Inspector (3 cols / ~25%) */}
@@ -916,6 +1150,82 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
                   Done
                 </Button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* "May I add this narration to the timeline?" Confirmation Modal */}
+      {timelineModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+              <h3 className="text-sm font-bold text-zinc-100 flex items-center gap-2">
+                <span>➕</span>
+                <span>Add Narration to Timeline</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setTimelineModalOpen(false)}
+                className="text-zinc-400 hover:text-zinc-200"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-xs text-zinc-300 leading-relaxed">
+              May I add this narration to the timeline? Choose whether you would like to synchronize all narration segments to their matching scenes or insert the selected scene at the current playhead.
+            </p>
+
+            <div className="space-y-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setTimelineModalOpen(false);
+                  onAddToTimeline?.("all");
+                }}
+                className="w-full text-left p-3.5 rounded-lg bg-zinc-950 hover:bg-indigo-950/50 border border-zinc-800 hover:border-indigo-500/60 transition-colors group flex items-start gap-3"
+              >
+                <span className="text-xl mt-0.5">⚡</span>
+                <div>
+                  <div className="text-xs font-bold text-zinc-100 group-hover:text-indigo-300">
+                    Auto-Sync All Segments to Scenes
+                  </div>
+                  <div className="text-[11px] text-zinc-400 mt-0.5 leading-normal">
+                    Synchronizes all {chapter.segments.length} narration clips directly into corresponding scenes across the timeline.
+                  </div>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setTimelineModalOpen(false);
+                  onAddToTimeline?.("selected", selectedSegmentId);
+                }}
+                className="w-full text-left p-3.5 rounded-lg bg-zinc-950 hover:bg-cyan-950/50 border border-zinc-800 hover:border-cyan-500/60 transition-colors group flex items-start gap-3"
+              >
+                <span className="text-xl mt-0.5">🎯</span>
+                <div>
+                  <div className="text-xs font-bold text-zinc-100 group-hover:text-cyan-300">
+                    Insert Selected Segment at Playhead
+                  </div>
+                  <div className="text-[11px] text-zinc-400 mt-0.5 leading-normal">
+                    Places segment #{selectedSegment?.sequence || 1} (&ldquo;{selectedSegment?.scene_title || "Scene"}&rdquo;) at the current timeline playhead position.
+                  </div>
+                </div>
+              </button>
+            </div>
+
+            <div className="flex justify-end pt-3 border-t border-zinc-800">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setTimelineModalOpen(false)}
+                className="text-xs h-8 px-3"
+              >
+                Cancel
+              </Button>
             </div>
           </div>
         </div>

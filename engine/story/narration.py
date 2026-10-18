@@ -82,6 +82,8 @@ def build_story_prompt(scenes_data: List[Dict[str, Any]]) -> str:
     return prompt
 
 
+from pathlib import Path
+
 class StoryNarrationService:
     """
     Drafts and structures narration segments for PanelFlow Studio.
@@ -92,17 +94,49 @@ class StoryNarrationService:
         project_id: str,
         scenes_data: List[Dict[str, Any]],
         provider_id: Optional[str] = None,
+        model_name: Optional[str] = None,
+        workspace_path: Optional[Path] = None,
     ) -> NarrationDraftPlan:
         beats: List[StructuredStoryBeat] = []
 
         # Try generating via local LLM if available
         llm_succeeded = False
         try:
-            prov = await llm_registry.get_provider(provider_id) if provider_id else await llm_registry.get_active_provider()
+            prov = llm_registry.get_ollama_provider()
+            if not await prov.health_check():
+                prov = await llm_registry.get_active_provider(provider_id)
+
             if prov and await prov.health_check():
+                model_to_use = model_name or getattr(prov, "narration_model", "qwen3.5:9b")
+
+                # If workspace_path is provided, inspect real images to enhance scene visual framing
+                if workspace_path and getattr(prov, "supports_vision", True):
+                    panels_dir = workspace_path / "panels"
+                    for sc in scenes_data:
+                        if not sc.get("visual_description") or sc.get("visual_description") == "No visual description":
+                            panel_ids = sc.get("panel_ids", [])
+                            for pid in panel_ids:
+                                candidates = list(panels_dir.glob(f"{pid}*")) if panels_dir.exists() else []
+                                if candidates and candidates[0].is_file():
+                                    try:
+                                        vis_summary = await prov.analyze_vision(
+                                            image=candidates[0],
+                                            prompt="In one short sentence, describe the character action and mood in this manga panel.",
+                                            model=model_to_use,
+                                        )
+                                        if vis_summary:
+                                            sc["visual_description"] = vis_summary.strip()
+                                        break
+                                    except Exception as img_err:
+                                        logger.debug(f"Vision pre-analysis skipped: {img_err}")
+
                 prompt = build_story_prompt(scenes_data)
-                resp = await prov.generate(prompt=prompt, system_instruction="You are an expert manga story adapter.")
-                raw_text = resp.raw_response.strip()
+                raw_text = await prov.generate_text(
+                    prompt=prompt,
+                    system_prompt="You are an expert cinematic manga narrator and storytelling director.",
+                    model=model_to_use,
+                )
+                raw_text = raw_text.strip()
                 # Parse JSON array from response
                 start_idx = raw_text.find("[")
                 end_idx = raw_text.rfind("]")

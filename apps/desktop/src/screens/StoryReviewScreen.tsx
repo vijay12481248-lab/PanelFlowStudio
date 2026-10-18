@@ -12,6 +12,8 @@ import type {
   LLMProviderInfo,
 } from "@panelflow/shared-types";
 import { Button, Card, Badge, ProgressBar, Icons } from "@panelflow/ui";
+import { useError } from "../context/ErrorContext";
+import type { AppError } from "../types/error";
 
 interface StoryReviewScreenProps {
   project: Project;
@@ -31,6 +33,9 @@ export const StoryReviewScreen: React.FC<StoryReviewScreenProps> = ({
   const [scenes, setScenes] = useState<SceneEntity[]>([]);
   const [providers, setProviders] = useState<LLMProviderInfo[]>([]);
   const [selectedProvider, setSelectedProvider] = useState<string>(project.settings?.visual_storytelling ? "ollama" : "mock");
+
+  const { reportError, inspectError } = useError();
+  const [analysisError, setAnalysisError] = useState<AppError | null>(null);
 
   const [loading, setLoading] = useState<boolean>(true);
   const [analyzing, setAnalyzing] = useState<boolean>(false);
@@ -89,17 +94,21 @@ export const StoryReviewScreen: React.FC<StoryReviewScreenProps> = ({
 
   const handleStartAnalysis = async () => {
     setAnalyzing(true);
+    setAnalysisError(null);
     setProgress(0.1);
     setProgressMsg("Queuing story analysis...");
 
     try {
       const res = await api.analyzeStory(project.id, selectedProvider);
       const jobId = res.job_id;
+      let consecutiveErrors = 0;
 
       // Poll job
       const pollInterval = setInterval(async () => {
         try {
           const j = await api.getJob(jobId);
+          consecutiveErrors = 0;
+
           if (j.status === "RUNNING") {
             setProgress(j.progress);
             setProgressMsg(j.message || "Analyzing comic narrative...");
@@ -108,19 +117,87 @@ export const StoryReviewScreen: React.FC<StoryReviewScreenProps> = ({
             setAnalyzing(false);
             setProgress(1.0);
             setProgressMsg("Story analysis completed!");
+            setAnalysisError(null);
             await loadData();
-          } else if (j.status === "FAILED") {
+          } else if (
+            j.status === "FAILED" ||
+            j.status === "CANCELLED" ||
+            (j.status as string) === "INTERRUPTED"
+          ) {
             clearInterval(pollInterval);
             setAnalyzing(false);
-            alert(`Story analysis failed: ${j.error || "Unknown error"}`);
+            const errObj: AppError = {
+              id: `err_story_${jobId}`,
+              title: "Story Understanding Failed",
+              message:
+                j.error ||
+                j.message ||
+                "Story analysis encountered an error during narrative reconstruction.",
+              severity: "error",
+              source: "job",
+              jobId: jobId,
+              projectId: project.id,
+              jobType: "STORY_ANALYSIS",
+              timestamp: new Date().toISOString(),
+              rawDetails: j,
+              suggestions: [
+                "Verify Ollama is running on http://127.0.0.1:11434 ('ollama serve').",
+                "Ensure model 'qwen2.5:9b' is installed ('ollama pull qwen2.5:9b').",
+                "For chapters with 15+ pages, LLM context generation takes 8–10 minutes. Ensure adequate VRAM.",
+                "Check %LOCALAPPDATA%\\PanelFlow Studio\\logs\\engine.log for full diagnostic trace.",
+              ],
+            };
+            setAnalysisError(errObj);
+            reportError(errObj);
+          } else if (j.status === "QUEUED" && j.error) {
+            setProgressMsg(`Retrying story analysis: ${j.error}`);
           }
-        } catch {
-          // ignore transient poll error
+        } catch (pollErr: any) {
+          consecutiveErrors++;
+          if (consecutiveErrors >= 8) {
+            clearInterval(pollInterval);
+            setAnalyzing(false);
+            const netErr: AppError = {
+              id: `err_poll_${Date.now()}`,
+              title: "Story Analysis Connection Lost",
+              message:
+                "Engine service stopped responding while checking story analysis progress.",
+              severity: "error",
+              source: "network",
+              jobId: jobId,
+              projectId: project.id,
+              jobType: "STORY_ANALYSIS",
+              timestamp: new Date().toISOString(),
+              rawDetails: pollErr,
+              suggestions: [
+                "Check that the local engine server is running on http://127.0.0.1:8765.",
+                "Click 'Retry Engine Connection' in the dashboard header.",
+              ],
+            };
+            setAnalysisError(netErr);
+            reportError(netErr);
+          }
         }
       }, 1000);
     } catch (err: any) {
       setAnalyzing(false);
-      alert(`Failed to start story analysis: ${err.message}`);
+      const startErr: AppError = {
+        id: `err_start_${Date.now()}`,
+        title: "Failed to Start Story Analysis",
+        message: err.message || "Failed to trigger story analysis.",
+        severity: "error",
+        source: "engine",
+        projectId: project.id,
+        jobType: "STORY_ANALYSIS",
+        timestamp: new Date().toISOString(),
+        rawDetails: err,
+        suggestions: [
+          "Check engine connection status in header.",
+          "Inspect local engine console output or logs.",
+        ],
+      };
+      setAnalysisError(startErr);
+      reportError(startErr);
     }
   };
 
@@ -280,6 +357,50 @@ export const StoryReviewScreen: React.FC<StoryReviewScreenProps> = ({
           </div>
           <ProgressBar progress={progress} />
         </Card>
+      )}
+
+      {/* Inline Analysis Error Diagnostic Card */}
+      {analysisError && (
+        <div className="p-4 rounded-xl bg-rose-950/30 border border-rose-800/80 text-rose-100 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-lg shadow-rose-950/40">
+          <div className="flex items-start gap-3">
+            <Icons.AlertTriangle className="w-5 h-5 text-rose-400 flex-shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <h4 className="text-sm font-bold text-rose-200">
+                  {analysisError.title}
+                </h4>
+                <span className="text-[10px] bg-rose-900/60 text-rose-300 border border-rose-700 px-1.5 py-0.2 rounded font-bold uppercase">
+                  ERROR
+                </span>
+              </div>
+              <p className="text-xs text-rose-300 font-mono line-clamp-2">
+                {analysisError.message}
+              </p>
+              <p className="text-[11px] text-zinc-400">
+                Click "View Error Details" to see the full diagnostic stack, job metadata, and actionable recovery steps.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => inspectError(analysisError)}
+              className="text-xs border-rose-700/80 text-rose-200 hover:bg-rose-900/50"
+            >
+              <Icons.Eye className="w-3.5 h-3.5 mr-1 text-cyan-400" />
+              View Error Details
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setAnalysisError(null)}
+              className="text-xs text-zinc-400 hover:text-zinc-200"
+            >
+              Dismiss
+            </Button>
+          </div>
+        </div>
       )}
 
       {/* Continuity Warnings Banner */}

@@ -282,10 +282,14 @@ class OllamaProvider(LLMProvider):
             "model": model_to_use,
             "prompt": prompt,
             "stream": False,
+            "think": False,
+            "thinking": False,
             "options": {
                 "temperature": temperature,
                 "num_predict": max_tokens,
-                "num_ctx": self.num_ctx,
+                "num_ctx": kwargs.get("num_ctx", min(self.num_ctx, 8192)),
+                "think": False,
+                "thinking": False,
             },
         }
         if system_prompt:

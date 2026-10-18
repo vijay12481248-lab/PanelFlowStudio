@@ -184,3 +184,70 @@ def test_reading_order_sorting():
         (50, 550),
         (550, 550),
     ]
+
+def test_delete_panel(test_db_session, tmp_path: Path):
+    from engine.database.models import TextRegionRecord, OCRRecord
+    service = ProjectService()
+    ws = tmp_path / "workspace_delete"
+    ws.mkdir()
+    (ws / "panels").mkdir()
+    (ws / "source").mkdir()
+
+    img = Image.new("RGB", (1000, 1000), (255, 255, 255))
+    img.save(ws / "source" / "p1.jpg")
+
+    proj = ProjectRecord(
+        id="proj-del",
+        title="Delete Test",
+        source_type="LOCAL_FOLDER",
+        source_url=str(ws),
+        workspace_path=str(ws),
+        rights_status="PUBLIC_DOMAIN",
+        current_stage="NORMALIZED",
+    )
+    test_db_session.add(proj)
+
+    page = PageRecord(
+        id="page-del",
+        project_id="proj-del",
+        sequence=1,
+        filename="p1.jpg",
+        width=1000,
+        height=1000,
+        sha256="fake_sha",
+        status="READY",
+    )
+    test_db_session.add(page)
+    test_db_session.commit()
+
+    p1 = service.add_panel(test_db_session, "proj-del", "page-del", x=10, y=10, width=200, height=200)
+    p2 = service.add_panel(test_db_session, "proj-del", "page-del", x=10, y=250, width=200, height=200)
+    assert p1.sequence == 1
+    assert p2.sequence == 2
+
+    # Add text region to p1
+    tr = TextRegionRecord(
+        id="tr-1",
+        project_id="proj-del",
+        page_id="page-del",
+        panel_id=p1.id,
+        x=20, y=20, width=50, height=30,
+        raw_text="Hello",
+        corrected_text="Hello",
+    )
+    test_db_session.add(tr)
+    test_db_session.commit()
+
+    # Delete p1
+    service.delete_panel(test_db_session, "proj-del", p1.id)
+
+    # p1 should be deleted, p2 resequenced to 1
+    remaining = test_db_session.query(PanelRecord).filter(PanelRecord.project_id == "proj-del").all()
+    assert len(remaining) == 1
+    assert remaining[0].id == p2.id
+    assert remaining[0].sequence == 1
+
+    # Text region should also be cleaned up
+    tr_check = test_db_session.query(TextRegionRecord).filter(TextRegionRecord.id == "tr-1").first()
+    assert tr_check is None
+

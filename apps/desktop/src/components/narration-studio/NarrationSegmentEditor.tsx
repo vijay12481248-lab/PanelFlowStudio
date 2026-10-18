@@ -170,7 +170,7 @@ export const NarrationSegmentEditor: React.FC<NarrationSegmentEditorProps> = ({
                 <span>{segment.scene_title || `Scene ${segment.sequence}`}</span>
                 <span className="text-zinc-600">•</span>
                 <span className="text-zinc-400 font-normal">
-                  {segment.source_context.panel_labels.join(", ") || `Page ${segment.source_context.page_number}`}
+                  {segment.source_context.panel_labels?.join(", ") || `Page ${segment.source_context.page_number}`}
                 </span>
               </span>
               <span className="text-[11px] text-zinc-400">

@@ -145,6 +145,7 @@ class SynthesizeBatchRequest(BaseModel):
 class DraftNarrationRequest(BaseModel):
     scenes: list[Dict[str, Any]]
     provider_id: Optional[str] = None
+    model_name: Optional[str] = None
 
 
 @router.get("/audio/providers")
@@ -231,6 +232,8 @@ async def draft_narration_plan(
             project_id=project_id,
             scenes_data=req.scenes,
             provider_id=req.provider_id,
+            model_name=req.model_name,
+            workspace_path=Path(proj.workspace_path) if proj.workspace_path else None,
         )
         return plan.model_dump()
     except Exception as e:

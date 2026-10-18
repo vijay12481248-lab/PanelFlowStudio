@@ -183,38 +183,37 @@ def get_providers_status():
         "details": f"Local story comprehension, speaker attribution, and scriptwriting ({', '.join(ollama_models[:3]) if ollama_models else 'no models'}).",
     })
 
-    # 4. F5-TTS
-    f5_hf_base = Path.home() / ".cache" / "huggingface" / "hub" / "models--SWivid--F5-TTS"
-    f5_weights = list(f5_hf_base.glob("**/model_*.safetensors")) if f5_hf_base.exists() else []
-    f5_venv = Path(r"C:\Tools\F5-TTS\.venv\Scripts\python.exe")
-    f5_pool = Path(r"C:\Tools\generated_audio\marcus_male_deep")
-    f5_files = list(f5_pool.glob("*.wav")) if f5_pool.exists() else []
+    # 4. Chatterbox Turbo Neural Voice (MIT Permissive Commercial)
+    chatterbox_venv = Path(r"C:\Tools\Chatterbox\.venv\Scripts\python.exe")
+    chatterbox_hf = Path.home() / ".cache" / "huggingface" / "hub" / "models--ResembleAI--chatterbox-turbo"
+    voice_refs = Path(r"C:\Tools\voice_references")
+    has_voices = voice_refs.exists() and len(list(voice_refs.glob("*.wav"))) > 0
 
-    if f5_weights and (f5_venv.exists() or len(f5_files) > 0):
-        f5_status = "READY"
-        f5_version = f"F5-TTS v1 Base (1.35GB Neural Weights on CUDA, {len(f5_files)} cached takes)"
-        f5_path = str(f5_weights[0])
-        f5_details = "Zero-shot neural dialogue synthesis with natural breathiness and emotional inflections."
-    elif len(f5_files) > 0:
-        f5_status = "DEGRADED"
-        f5_version = f"Procedural Voice Fallback ({len(f5_files)} cached takes)"
-        f5_path = str(f5_pool)
-        f5_details = "Pre-generated reference assets active. Full neural inference requires model weights in C:\\Tools\\F5-TTS."
+    if chatterbox_venv.exists() and chatterbox_hf.exists():
+        cb_status = "HEALTHY"
+        cb_version = "Chatterbox Turbo (MIT Commercial, Resemble AI on CUDA)"
+        cb_path = str(chatterbox_venv)
+        cb_details = f"Commercial-ready zero-shot neural voice cloning with {len(list(voice_refs.glob('*.wav')))} voice profiles."
+    elif chatterbox_venv.exists():
+        cb_status = "READY"
+        cb_version = "Chatterbox Turbo Runtime"
+        cb_path = str(chatterbox_venv)
+        cb_details = "Local PyTorch inference runtime ready for commercial voice synthesis."
     else:
-        f5_status = "MISSING"
-        f5_version = "Model & Runtime Missing"
-        f5_path = ""
-        f5_details = "Voice synthesis engine not configured. Procedural synthesis fallback active."
+        cb_status = "MISSING"
+        cb_version = "Missing"
+        cb_path = ""
+        cb_details = "Chatterbox Turbo runtime not found in C:\\Tools\\Chatterbox."
 
     results.append({
-        "id": "f5_tts",
-        "name": "F5-TTS Neural Voice",
+        "id": "chatterbox_turbo",
+        "name": "Chatterbox Turbo Neural Voice (MIT)",
         "category": "audio_engine",
-        "status": f5_status,
-        "version": f5_version,
-        "path": f5_path,
+        "status": cb_status,
+        "version": cb_version,
+        "path": cb_path,
         "required": True,
-        "details": f5_details,
+        "details": cb_details,
     })
 
     # 5. ACE-Step

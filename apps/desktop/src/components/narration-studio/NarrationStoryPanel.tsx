@@ -336,16 +336,39 @@ export const NarrationStoryPanel: React.FC<NarrationStoryPanelProps> = ({
 
                 {/* Manga Source Context Preview Box */}
                 <div className="flex items-center gap-2 mb-2 p-1.5 rounded-lg bg-zinc-950/80 border border-zinc-800/60">
-                  {/* Thumbnail / Manga Panel SVG Preview with fallback */}
+                  {/* Thumbnail / Manga Panel Preview with real image & SVG fallback */}
                   <div className="w-14 h-9 rounded overflow-hidden shrink-0 bg-zinc-900 border border-zinc-800 flex items-center justify-center relative">
-                    {seg.source_context.svg_thumbnail ? (
-                      <div
-                        className="w-full h-full object-cover"
-                        dangerouslySetInnerHTML={{ __html: seg.source_context.svg_thumbnail }}
-                      />
-                    ) : (
-                      <span className="text-zinc-600 text-xs">🖼️</span>
-                    )}
+                    {(() => {
+                      const imgUrl = seg.source_context.panel_preview_url || seg.source_context.image_url;
+                      if (imgUrl) {
+                        const resolvedUrl = imgUrl.startsWith("http") || imgUrl.startsWith("data:")
+                          ? imgUrl
+                          : `http://127.0.0.1:8765${imgUrl.startsWith("/") ? "" : "/"}${imgUrl}`;
+                        return (
+                          <img
+                            src={resolvedUrl}
+                            alt={seg.source_context.panel_labels?.[0] || "Panel"}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              (e.target as HTMLElement).style.display = "none";
+                            }}
+                          />
+                        );
+                      }
+                      if (seg.source_context.svg_thumbnail) {
+                        return (
+                          <div
+                            className="w-full h-full object-cover"
+                            dangerouslySetInnerHTML={{ __html: seg.source_context.svg_thumbnail }}
+                          />
+                        );
+                      }
+                      return (
+                        <div className="text-[10px] font-mono text-zinc-500 font-bold flex flex-col items-center">
+                          <span>P#{seg.source_context.page_number}</span>
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   {/* Panel References Label */}
@@ -353,7 +376,7 @@ export const NarrationStoryPanel: React.FC<NarrationStoryPanelProps> = ({
                     <div className="text-[10px] font-semibold text-zinc-400 flex items-center gap-1 truncate">
                       <Icons.Layers className="w-3 h-3 text-indigo-400 shrink-0" />
                       <span className="truncate">
-                        {seg.source_context.panel_labels[0] || `Page ${seg.source_context.page_number}`}
+                        {seg.source_context.panel_labels?.[0] || `Page ${seg.source_context.page_number}`}
                       </span>
                     </div>
                     {seg.source_context.raw_ocr_dialogue && (

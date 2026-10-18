@@ -46,6 +46,13 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
   const [progressMsg, setProgressMsg] = useState<string>("");
   const [cacheBuster, setCacheBuster] = useState<number>(Date.now());
 
+  // Vertical Panel Navigation & Deletion State
+  const [isVerticalPanelsOpen, setIsVerticalPanelsOpen] = useState<boolean>(true);
+  const [panelSearchQuery, setPanelSearchQuery] = useState<string>("");
+  const [deletingPanel, setDeletingPanel] = useState<boolean>(false);
+  const [deleteConfirmPanel, setDeleteConfirmPanel] = useState<Panel | null>(null);
+  const panelItemRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
   // Undo / Redo history stack for Text Regions
   const [undoStack, setUndoStack] = useState<TextRegion[][]>([]);
   const [redoStack, setRedoStack] = useState<TextRegion[][]>([]);
@@ -365,6 +372,100 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
     }
   };
 
+  const handleNavigatePanel = useCallback(
+    (newIndex: number) => {
+      if (newIndex < 0 || newIndex >= panels.length) return;
+      setSelectedPanelIndex(newIndex);
+      const targetPanel = panels[newIndex];
+      if (targetPanel) {
+        const firstInPanel = textRegions.find((tr) => tr.panel_id === targetPanel.id);
+        if (firstInPanel) {
+          setSelectedRegionId(firstInPanel.id);
+        }
+      }
+    },
+    [panels, textRegions]
+  );
+
+  const handleDeletePanel = async (panelId: string) => {
+    setDeletingPanel(true);
+    try {
+      await api.deletePanel(project.id, panelId);
+
+      // Re-fetch canonical panels and text regions from backend
+      const [updatedPanels, updatedRegions] = await Promise.all([
+        api.listPanels(project.id),
+        api.listTextRegions(project.id),
+      ]);
+
+      setPanels(updatedPanels);
+      setTextRegions(updatedRegions);
+      setCacheBuster(Date.now());
+
+      // If we deleted the active panel or last panel, adjust selectedPanelIndex
+      setSelectedPanelIndex((prevIdx) => {
+        if (updatedPanels.length === 0) return 0;
+        return Math.min(prevIdx, updatedPanels.length - 1);
+      });
+
+      // Update selectedRegionId to first region of the newly active panel
+      const targetIdx = Math.min(selectedPanelIndex, Math.max(0, updatedPanels.length - 1));
+      const newActivePanel = updatedPanels[targetIdx];
+      if (newActivePanel) {
+        const firstRegion = updatedRegions.find((tr) => tr.panel_id === newActivePanel.id);
+        setSelectedRegionId(firstRegion ? firstRegion.id : null);
+      } else {
+        setSelectedRegionId(null);
+      }
+
+      setDeleteConfirmPanel(null);
+    } catch (err: any) {
+      alert(`Failed to delete panel: ${err.message}`);
+    } finally {
+      setDeletingPanel(false);
+    }
+  };
+
+  // Auto-scroll active panel into view in vertical strip
+  useEffect(() => {
+    if (activePanel && panelItemRefs.current[activePanel.id]) {
+      panelItemRefs.current[activePanel.id]?.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+      });
+    }
+  }, [selectedPanelIndex, activePanel?.id]);
+
+  // Global keyboard shortcuts (Left/Right arrow keys navigate panels when not typing)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (
+        target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.isContentEditable ||
+        deleteConfirmPanel
+      ) {
+        return;
+      }
+
+      if (e.key === "ArrowLeft") {
+        if (selectedPanelIndex > 0) {
+          e.preventDefault();
+          handleNavigatePanel(selectedPanelIndex - 1);
+        }
+      } else if (e.key === "ArrowRight") {
+        if (selectedPanelIndex < panels.length - 1) {
+          e.preventDefault();
+          handleNavigatePanel(selectedPanelIndex + 1);
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [selectedPanelIndex, panels.length, deleteConfirmPanel, handleNavigatePanel]);
+
   const getRegionBorderColor = (type: string, status: string) => {
     if (status === "NEEDS_REVIEW") return "#f59e0b"; // Amber warning
     if (status === "REJECTED") return "#71717a"; // Muted gray
@@ -660,57 +761,193 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
         </Card>
       )}
 
-      {/* Panel Navigation Strip */}
+      {/* Top Review Toolbar / Status Bar */}
       {panels.length > 0 && (
-        <div className="flex items-center gap-2 overflow-x-auto pb-2 border-b border-zinc-900">
-          <span className="text-xs font-semibold uppercase tracking-wider text-zinc-400 mr-2 flex-shrink-0">
-            Panels:
-          </span>
-          {panels.map((p, idx) => {
-            const count = textRegions.filter((tr) => tr.panel_id === p.id).length;
-            const hasNeedsReview = textRegions.some(
-              (tr) => tr.panel_id === p.id && tr.status === "NEEDS_REVIEW"
-            );
-            const isSelected = idx === selectedPanelIndex;
-            return (
-              <button
-                key={p.id}
-                onClick={() => {
-                  setSelectedPanelIndex(idx);
-                  const firstInPanel = textRegions.find((tr) => tr.panel_id === p.id);
-                  if (firstInPanel) setSelectedRegionId(firstInPanel.id);
-                }}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 flex-shrink-0 transition-all ${
-                  isSelected
-                    ? "bg-indigo-600 text-white shadow-sm"
-                    : "bg-zinc-900 text-zinc-300 hover:bg-zinc-800 border border-zinc-800"
-                }`}
-              >
-                <span>Panel #{p.sequence}</span>
-                <span
-                  className={`text-[9px] px-1.5 py-0.2 rounded-full ${
-                    hasNeedsReview
-                      ? "bg-amber-900 text-amber-200"
-                      : count > 0
-                      ? "bg-emerald-900/80 text-emerald-300"
-                      : "bg-zinc-800 text-zinc-400"
-                  }`}
-                >
-                  {count} regions {hasNeedsReview ? "⚠️" : ""}
+        <div className="flex flex-wrap items-center justify-between gap-3 px-3 py-2 bg-zinc-900/60 border border-zinc-800/80 rounded-xl">
+          <div className="flex items-center gap-3">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsVerticalPanelsOpen((v) => !v)}
+              className="text-xs flex items-center gap-1.5 text-zinc-300 border-zinc-700 hover:bg-zinc-800"
+              title={isVerticalPanelsOpen ? "Hide vertical panel list" : "Show vertical panel list"}
+            >
+              <Icons.Layout className="w-4 h-4 text-indigo-400" />
+              <span>{isVerticalPanelsOpen ? "Hide Panel List" : `Show Panels (${panels.length})`}</span>
+            </Button>
+
+            {activePanel && (
+              <div className="flex items-center gap-2 text-xs">
+                <span className="font-semibold text-zinc-200">
+                  Panel #{activePanel.sequence}
                 </span>
-              </button>
-            );
-          })}
+                <span className="text-zinc-500">
+                  ({selectedPanelIndex + 1} of {panels.length})
+                </span>
+                <span className="text-zinc-600 hidden sm:inline">·</span>
+                <span className="text-zinc-400 text-[11px] hidden sm:inline">
+                  {activePanel.width} × {activePanel.height}px
+                </span>
+                <span className="text-zinc-600 hidden sm:inline">·</span>
+                <span className="text-zinc-400 text-[11px] hidden sm:inline">
+                  {panelRegions.length} text {panelRegions.length === 1 ? "region" : "regions"}
+                </span>
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] text-zinc-500 hidden md:inline">
+              Use <kbd className="px-1.5 py-0.5 bg-zinc-800 border border-zinc-700 rounded text-zinc-300 font-mono">←</kbd> / <kbd className="px-1.5 py-0.5 bg-zinc-800 border border-zinc-700 rounded text-zinc-300 font-mono">→</kbd> keys or preview edge arrows to navigate
+            </span>
+
+            {activePanel && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setDeleteConfirmPanel(activePanel)}
+                disabled={deletingPanel}
+                className="text-rose-400 hover:text-rose-200 hover:bg-rose-950/60 border border-rose-900/50 text-xs flex items-center gap-1.5 transition-colors"
+                title={`Delete Panel #${activePanel.sequence}`}
+              >
+                <Icons.Trash className="w-3.5 h-3.5" />
+                <span>Delete Panel #{activePanel.sequence}</span>
+              </Button>
+            )}
+          </div>
         </div>
       )}
 
       {/* Main Review Workspace Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* Left (7 cols): Visual Panel Crop with SVG TextRegion Overlays */}
-        <div className="lg:col-span-7 space-y-3">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+        {/* Column 1: Vertical Panels Strip (When Open) */}
+        {isVerticalPanelsOpen && panels.length > 0 && (
+          <div className="lg:col-span-3 xl:col-span-2 space-y-2.5">
+            <Card className="p-3 bg-zinc-950 border-zinc-800 flex flex-col max-h-[82vh]">
+              {/* Vertical Header */}
+              <div className="flex items-center justify-between pb-2 border-b border-zinc-800/80 mb-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-zinc-300 flex items-center gap-1.5">
+                  <Icons.Film className="w-4 h-4 text-indigo-400" />
+                  Panels ({panels.length})
+                </span>
+                <Badge variant="neutral" className="text-[10px]">
+                  {needsReviewCount > 0 ? `${needsReviewCount} flagged` : "All clear"}
+                </Badge>
+              </div>
+
+              {/* Jump to panel input */}
+              <div className="mb-2">
+                <input
+                  type="text"
+                  placeholder="Filter or jump #..."
+                  value={panelSearchQuery}
+                  onChange={(e) => setPanelSearchQuery(e.target.value)}
+                  className="w-full px-2.5 py-1.5 bg-zinc-900 border border-zinc-800 rounded text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              {/* Scrollable vertical panel list */}
+              <div className="overflow-y-auto space-y-2 pr-1 flex-1 custom-scrollbar">
+                {panels
+                  .filter((p) => {
+                    if (!panelSearchQuery.trim()) return true;
+                    const q = panelSearchQuery.trim().toLowerCase();
+                    if (q === "flagged" || q === "review") {
+                      return textRegions.some((tr) => tr.panel_id === p.id && tr.status === "NEEDS_REVIEW");
+                    }
+                    return String(p.sequence).includes(q) || p.id.toLowerCase().includes(q);
+                  })
+                  .map((p) => {
+                    const idx = panels.findIndex((item) => item.id === p.id);
+                    const count = textRegions.filter((tr) => tr.panel_id === p.id).length;
+                    const hasNeedsReview = textRegions.some(
+                      (tr) => tr.panel_id === p.id && tr.status === "NEEDS_REVIEW"
+                    );
+                    const isSelected = idx === selectedPanelIndex;
+
+                    return (
+                      <div
+                        key={p.id}
+                        ref={(el) => {
+                          panelItemRefs.current[p.id] = el;
+                        }}
+                        onClick={() => handleNavigatePanel(idx)}
+                        className={`group relative p-2 rounded-lg border text-left cursor-pointer transition-all ${
+                          isSelected
+                            ? "bg-indigo-950/50 border-indigo-500 ring-1 ring-indigo-500 shadow-md"
+                            : "bg-zinc-900/70 hover:bg-zinc-800/80 border-zinc-800/90 hover:border-zinc-700"
+                        }`}
+                      >
+                        {/* Panel Top Row: Sequence + Delete Button */}
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span
+                            className={`text-xs font-semibold ${
+                              isSelected ? "text-indigo-200 font-bold" : "text-zinc-300"
+                            }`}
+                          >
+                            Panel #{p.sequence}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDeleteConfirmPanel(p);
+                            }}
+                            className="p-1 rounded text-zinc-500 hover:text-rose-400 hover:bg-rose-950/60 opacity-0 group-hover:opacity-100 transition-opacity"
+                            title={`Delete Panel #${p.sequence}`}
+                            aria-label={`Delete Panel #${p.sequence}`}
+                          >
+                            <Icons.Trash className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+
+                        {/* Panel Thumbnail */}
+                        <div className="relative w-full h-24 rounded overflow-hidden bg-zinc-950 border border-zinc-800/80 mb-1.5 flex items-center justify-center">
+                          <img
+                            src={`${api.getPanelImageUrl(project.id, p.id)}?t=${cacheBuster}`}
+                            alt={`Panel ${p.sequence}`}
+                            className="w-full h-full object-contain"
+                            loading="lazy"
+                          />
+                          {hasNeedsReview && (
+                            <span className="absolute top-1 right-1 px-1.5 py-0.5 rounded bg-amber-900/90 text-amber-200 text-[9px] font-bold border border-amber-700 flex items-center gap-0.5 shadow">
+                              ⚠️
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Panel Footer: Region Count & Status */}
+                        <div className="flex items-center justify-between text-[10px]">
+                          <span className="text-zinc-400 font-mono">
+                            {count} {count === 1 ? "region" : "regions"}
+                          </span>
+                          {hasNeedsReview ? (
+                            <span className="text-amber-400 font-medium">Needs Review</span>
+                          ) : count > 0 ? (
+                            <span className="text-emerald-400 font-medium">✓ Ready</span>
+                          ) : (
+                            <span className="text-zinc-500 italic">No text</span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            </Card>
+          </div>
+        )}
+
+        {/* Column 2: Visual Panel Crop with SVG TextRegion Overlays & In-Preview Edge Nav */}
+        <div
+          className={`${
+            isVerticalPanelsOpen && panels.length > 0
+              ? "lg:col-span-5 xl:col-span-6"
+              : "lg:col-span-7"
+          } space-y-3`}
+        >
           <Card className="p-4 bg-zinc-950 flex flex-col items-center justify-center min-h-[500px]">
             {activePanel ? (
-              <div className="relative inline-block max-w-full overflow-hidden rounded-lg shadow-xl border border-zinc-800">
+              <div className="relative inline-block max-w-full overflow-hidden rounded-lg shadow-2xl border border-zinc-800 group/preview select-none">
                 <img
                   src={`${api.getPanelImageUrl(project.id, activePanel.id)}?t=${cacheBuster}`}
                   alt={`Panel ${activePanel.sequence}`}
@@ -771,15 +1008,101 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                     );
                   })}
                 </svg>
+
+                {/* Left Edge Navigation Button: Previous Panel (Vertically Centered) */}
+                {selectedPanelIndex > 0 ? (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleNavigatePanel(selectedPanelIndex - 1);
+                    }}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 z-30 flex items-center justify-center w-11 h-11 rounded-full bg-zinc-950/85 hover:bg-indigo-600 text-zinc-100 hover:text-white border border-zinc-700 hover:border-indigo-400 shadow-2xl backdrop-blur-md transition-all duration-150 transform hover:scale-110 active:scale-95 focus:outline-none focus:ring-2 focus:ring-indigo-400 cursor-pointer group"
+                    title={`Previous Panel (Panel #${panels[selectedPanelIndex - 1]?.sequence}) — Left Arrow key`}
+                    aria-label="Previous Panel"
+                  >
+                    <Icons.ArrowLeft className="w-5 h-5 transition-transform group-hover:-translate-x-0.5" />
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled
+                    className="absolute left-3 top-1/2 -translate-y-1/2 z-30 flex items-center justify-center w-11 h-11 rounded-full bg-zinc-950/35 text-zinc-600 border border-zinc-800/50 shadow opacity-30 cursor-not-allowed"
+                    title="First panel"
+                    aria-label="First panel"
+                  >
+                    <Icons.ArrowLeft className="w-5 h-5" />
+                  </button>
+                )}
+
+                {/* Right Edge Navigation Button: Next Panel (Vertically Centered) */}
+                {selectedPanelIndex < panels.length - 1 ? (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleNavigatePanel(selectedPanelIndex + 1);
+                    }}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 z-30 flex items-center justify-center w-11 h-11 rounded-full bg-zinc-950/85 hover:bg-indigo-600 text-zinc-100 hover:text-white border border-zinc-700 hover:border-indigo-400 shadow-2xl backdrop-blur-md transition-all duration-150 transform hover:scale-110 active:scale-95 focus:outline-none focus:ring-2 focus:ring-indigo-400 cursor-pointer group"
+                    title={`Next Panel (Panel #${panels[selectedPanelIndex + 1]?.sequence}) — Right Arrow key`}
+                    aria-label="Next Panel"
+                  >
+                    <Icons.ArrowRight className="w-5 h-5 transition-transform group-hover:translate-x-0.5" />
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled
+                    className="absolute right-3 top-1/2 -translate-y-1/2 z-30 flex items-center justify-center w-11 h-11 rounded-full bg-zinc-950/35 text-zinc-600 border border-zinc-800/50 shadow opacity-30 cursor-not-allowed"
+                    title="Last panel"
+                    aria-label="Last panel"
+                  >
+                    <Icons.ArrowRight className="w-5 h-5" />
+                  </button>
+                )}
+
+                {/* In-Preview Floating Header Overlay: Indicator & Direct Delete Option */}
+                <div className="absolute top-3 inset-x-3 z-20 flex items-center justify-between pointer-events-none">
+                  <div className="px-2.5 py-1 rounded-md bg-zinc-950/85 border border-zinc-700/80 backdrop-blur-md text-xs font-semibold text-zinc-200 shadow-lg pointer-events-auto flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></span>
+                    <span>Panel #{activePanel.sequence}</span>
+                    <span className="text-zinc-500 text-[11px]">
+                      ({selectedPanelIndex + 1} / {panels.length})
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDeleteConfirmPanel(activePanel);
+                    }}
+                    disabled={deletingPanel}
+                    className="px-2.5 py-1 rounded-md bg-rose-950/85 hover:bg-rose-900 border border-rose-800/80 text-xs font-medium text-rose-200 hover:text-white shadow-lg backdrop-blur-md pointer-events-auto flex items-center gap-1.5 transition-all hover:scale-105 active:scale-95 cursor-pointer"
+                    title={`Delete Panel #${activePanel.sequence}`}
+                  >
+                    <Icons.Trash className="w-3.5 h-3.5" />
+                    <span>Delete</span>
+                  </button>
+                </div>
               </div>
             ) : (
-              <div className="text-zinc-500 text-sm">No panel selected</div>
+              <div className="text-zinc-500 text-sm py-16 flex flex-col items-center gap-2">
+                <Icons.AlertTriangle className="w-8 h-8 text-zinc-600" />
+                <span>No panels available in this project.</span>
+              </div>
             )}
           </Card>
         </div>
 
         {/* Right (5 cols): 3-Layer Region Editor & Region List */}
-        <div className="lg:col-span-5 space-y-4">
+        <div
+          className={`${
+            isVerticalPanelsOpen && panels.length > 0
+              ? "lg:col-span-4 xl:col-span-4"
+              : "lg:col-span-5"
+          } space-y-4`}
+        >
           {selectedRegion ? (
             <Card className="p-4 space-y-4 bg-zinc-900 border-zinc-800">
               {/* Region Header */}
@@ -1018,6 +1341,55 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Delete Panel Confirmation Modal */}
+      {deleteConfirmPanel && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fadeIn">
+          <Card className="max-w-md w-full p-6 bg-zinc-900 border-zinc-700 shadow-2xl space-y-4">
+            <div className="flex items-start gap-3.5">
+              <div className="p-3 rounded-full bg-rose-950 border border-rose-800 text-rose-400 flex-shrink-0">
+                <Icons.Trash className="w-6 h-6" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base font-semibold text-zinc-100">
+                  Delete Panel #{deleteConfirmPanel.sequence}?
+                </h3>
+                <p className="text-xs text-zinc-400 leading-relaxed">
+                  Are you sure you want to delete this panel crop from the project? This operation cannot be undone.
+                </p>
+                {textRegions.filter((tr) => tr.panel_id === deleteConfirmPanel.id).length > 0 && (
+                  <div className="mt-2.5 p-2.5 rounded bg-amber-950/40 border border-amber-800/60 text-xs text-amber-300 flex items-center gap-2">
+                    <Icons.AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                    <span>
+                      <strong>Warning:</strong> {textRegions.filter((tr) => tr.panel_id === deleteConfirmPanel.id).length} detected text region(s) inside this panel will also be removed.
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2.5 pt-3 border-t border-zinc-800">
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={deletingPanel}
+                onClick={() => setDeleteConfirmPanel(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                loading={deletingPanel}
+                onClick={() => handleDeletePanel(deleteConfirmPanel.id)}
+                className="bg-rose-600 hover:bg-rose-500 text-white"
+              >
+                Yes, Delete Panel
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
     </div>
   );
 };

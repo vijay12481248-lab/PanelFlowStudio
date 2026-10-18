@@ -955,7 +955,66 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
                 ? editorState.narration_clips.find((c) => c.scene_id === editorState.selected_object?.id)?.id
                 : undefined
             }
+            projectId={project.id}
+            scenes={editorState.scenes}
+            pages={pages}
+            panels={panels}
             onClose={() => setShowNarrationStudio(false)}
+            onAddToTimeline={(mode: "all" | "selected", segmentId?: string) => {
+              if (mode === "all") {
+                updateEditorState((prev) => {
+                  const ch =
+                    prev.narration_chapter ||
+                    buildInitialNarrationChapter(project.id, project.title, prev.scenes);
+                  const syncedClips = syncChapterToTimelineClips(
+                    ch,
+                    prev.scenes,
+                    prev.narration_clips
+                  );
+                  return {
+                    ...prev,
+                    narration_clips: syncedClips,
+                  };
+                });
+                setShowNarrationStudio(false);
+              } else if (mode === "selected" && segmentId) {
+                updateEditorState((prev) => {
+                  const ch =
+                    prev.narration_chapter ||
+                    buildInitialNarrationChapter(project.id, project.title, prev.scenes);
+                  const seg = ch.segments.find((s: any) => s.id === segmentId);
+                  if (!seg) return prev;
+                  const newClipId = `clip_${Date.now()}`;
+                  const matchingScene =
+                    prev.scenes.find((s) => s.id === seg.scene_id) || prev.scenes[0];
+                  const newClip: NarrationClip = {
+                    id: newClipId,
+                    narration_segment_id: seg.id,
+                    scene_id: matchingScene?.id,
+                    linked_to_scene: true,
+                    scene_offset_sec: 0,
+                    start_time_sec: prev.playhead_sec,
+                    duration_sec: seg.measured_duration_sec || seg.estimated_duration_sec || 3.0,
+                    speaker: seg.speaker_name,
+                    speaker_id: seg.speaker_id,
+                    text: seg.narration_text,
+                    emotion: seg.performance_notes || "Neutral",
+                    speed: 1.0,
+                    audio_url: seg.audio_asset_uri || undefined,
+                    status: seg.audio_asset_uri ? "READY" : "UNQUEUED",
+                  };
+                  return {
+                    ...prev,
+                    narration_clips: [
+                      ...prev.narration_clips.filter((c) => c.narration_segment_id !== seg.id),
+                      newClip,
+                    ],
+                    selected_object: { type: "narration" as const, id: newClipId },
+                  };
+                });
+                setShowNarrationStudio(false);
+              }
+            }}
             onChapterSave={(updatedChapter) => {
               updateEditorState((prev) => {
                 const syncedClips = syncChapterToTimelineClips(

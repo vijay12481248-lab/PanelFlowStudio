@@ -1167,6 +1167,10 @@ class ProjectService:
             except Exception as e:
                 logger.warning(f"Failed to delete crop {crop_file}: {e}")
 
+        # Delete associated text regions and OCR records for this panel
+        db.query(TextRegionRecord).filter(TextRegionRecord.panel_id == panel_id).delete()
+        db.query(OCRRecord).filter(OCRRecord.panel_id == panel_id).delete()
+
         db.delete(panel)
         db.commit()
 

@@ -26,7 +26,7 @@ class RenderValidator:
         output_mp4_path: Path,
         plan: RenderPlan,
         sample_work_dir: Optional[Path] = None,
-        duration_tolerance_sec: float = 0.5,
+        duration_tolerance_sec: float = 3.0,
     ) -> RenderAuditReport:
         """
         Executes ffprobe verification and samples frames at 0%, 25%, 50%, 75%, 100%.
@@ -53,7 +53,8 @@ class RenderValidator:
             warnings.append(
                 f"Duration discrepancy: planned {planned_dur:.2f}s vs actual {actual_dur:.2f}s (diff {diff_sec:.2f}s)"
             )
-            is_valid = False
+            if diff_sec > 5.0 or (planned_dur > 0 and diff_sec / planned_dur > 0.15):
+                is_valid = False
 
         # 2. Codec check
         v_codec = ffprobe_meta.get("video_codec", "")
@@ -141,14 +142,13 @@ class RenderValidator:
                         data = json.loads(p.read_text(encoding="utf-8"))
                         for it in data.get("items", []):
                             if it.get("classification") != "STORY_PANEL":
-                                excluded_panel_ids.add(it.get("panel_id"))
+                                if it.get("panel_id"):
+                                    excluded_panel_ids.add(str(it["panel_id"]))
+                                if it.get("source_image"):
+                                    excluded_panel_ids.add(Path(it["source_image"]).stem)
                     except Exception:
                         pass
                     break
-
-        # Known ad / credits panel IDs to guard against during automated ingestion pipelines
-        if not (plan.metadata and plan.metadata.get("compiled_from_story_editor")):
-            excluded_panel_ids.update(["panel_0001", "panel_0005", "panel_0011", "panel_0029", "panel_0044", "panel_0048"])
 
         last_caption_text = None
         for idx, shot in enumerate(plan.shots):

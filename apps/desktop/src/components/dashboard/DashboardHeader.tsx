@@ -1,5 +1,6 @@
 import React from "react";
 import { Box, Wrench } from "lucide-react";
+import { ErrorNotificationBell } from "../error";
 
 interface DashboardHeaderProps {
   engineConnected: boolean;
@@ -36,8 +37,10 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
         </div>
       </div>
 
-      {/* Right: Tools & Models + Engine Status */}
+      {/* Right: Alerts Bell + Tools & Models + Engine Status */}
       <div className="flex items-center gap-3">
+        <ErrorNotificationBell />
+
         <button
           onClick={onOpenToolsModels}
           className="bg-[#151928] hover:bg-[#1d2338] border border-[#242c44] text-indigo-300 hover:text-indigo-200 text-xs font-medium rounded-lg px-3 py-1.5 flex items-center gap-1.5 transition-colors shadow-sm"

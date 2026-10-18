@@ -701,11 +701,12 @@ export class PanelFlowApiClient {
   async draftNarration(
     projectId: string,
     scenes: any[],
-    providerId?: string
+    providerId?: string,
+    modelName?: string
   ): Promise<any> {
     return this.request<any>(`/api/projects/${projectId}/narration/draft`, {
       method: "POST",
-      body: JSON.stringify({ scenes, provider_id: providerId }),
+      body: JSON.stringify({ scenes, provider_id: providerId, model_name: modelName }),
     });
   }
 
@@ -994,6 +995,10 @@ export class PanelFlowApiClient {
     if (projectId) params.append("project_id", projectId);
     params.append("limit", limit.toString());
     return this.request<Job[]>(`/api/jobs?${params.toString()}`);
+  }
+
+  async listJobs(status?: string, projectId?: string, limit: number = 50): Promise<Job[]> {
+    return this.listAllJobs(status, projectId, limit);
   }
 
   async retryJob(jobId: string): Promise<any> {

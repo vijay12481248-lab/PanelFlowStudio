@@ -137,6 +137,12 @@ def run():
                     time.sleep(2)
                     continue
 
+                status_el = page.locator("p[role='status']")
+                if status_el.count() > 0 and status_el.first.is_visible():
+                    print(f"  Audio generation progress: {status_el.first.inner_text().strip()}", flush=True)
+                    time.sleep(5)
+                    continue
+
                 gen_audio = page.locator("button:has-text('Generate Master Audio'), button:has-text('Regenerate All Audio')")
                 if gen_audio.count() > 0 and gen_audio.first.is_visible() and not gen_audio.first.is_disabled():
                     print(f"  Clicking '{gen_audio.first.inner_text()}'...", flush=True)
@@ -313,9 +319,9 @@ def run():
                 continue
 
             # -------------------------------------------------------------
-            # Stage: Projects List (Home)
+            # Stage: Projects List (Home) or Fallback
             # -------------------------------------------------------------
-            else:
+            elif page.locator("text=Your Projects").count() > 0:
                 existing_proj = page.locator("h3:has-text('Magic Emperor'), h3:has-text('Demon Magic Emperor')")
                 if existing_proj.count() > 0:
                     if last_state != "Home":
@@ -341,6 +347,18 @@ def run():
 
                 page.locator("button:has-text('Create & Proceed to Acquisition')").click()
                 time.sleep(2)
+                continue
+
+            else:
+                # If on an unrecognized screen or story editor, return to home
+                back_btn = page.locator("button:has-text('Back'), div[title*='Return to Projects']")
+                if back_btn.count() > 0 and back_btn.first.is_visible():
+                    print("  Unrecognized screen or editor. Returning to Projects dashboard...", flush=True)
+                    back_btn.first.click()
+                else:
+                    print("  Navigating back to http://localhost:5173...", flush=True)
+                    page.goto("http://localhost:5173", timeout=10000)
+                time.sleep(3)
                 continue
 
         browser.close()

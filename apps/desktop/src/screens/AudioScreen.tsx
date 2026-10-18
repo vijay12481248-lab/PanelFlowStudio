@@ -2,6 +2,8 @@ import React, { useEffect, useState, useCallback } from "react";
 import { api } from "@panelflow/api-client";
 import type { Project, AudioTimelineResponse, AudioInterval } from "@panelflow/shared-types";
 import { Button, Card, Badge, Icons } from "@panelflow/ui";
+import { useError } from "../context/ErrorContext";
+import type { AppError } from "../types/error";
 
 export interface AudioScreenProps {
   project: Project;
@@ -16,6 +18,9 @@ export const AudioScreen: React.FC<AudioScreenProps> = ({
   onAudioApproved,
   onProceedToMotion,
 }) => {
+  const { reportError, inspectError } = useError();
+  const [audioError, setAudioError] = useState<AppError | null>(null);
+
   const [timelineData, setTimelineData] = useState<AudioTimelineResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [jobMessage, setJobMessage] = useState("");
@@ -41,13 +46,31 @@ export const AudioScreen: React.FC<AudioScreenProps> = ({
 
   const handleGenerateAudio = async () => {
     setGenerating(true);
+    setAudioError(null);
     try {
       const { job_id } = await api.generateAudioJob(project.id);
       await api.waitForWorkflowJob(job_id, job => setJobMessage(`${Math.round(job.progress * 100)}% · ${job.message}`));
       const result = await api.getAudioTimeline(project.id);
       setTimelineData(result);
     } catch (err: any) {
-      alert(`Audio generation failed: ${err.message}`);
+      const errObj: AppError = {
+        id: `err_audio_${Date.now()}`,
+        title: "Audio Generation Failed",
+        message: err.message || "Failed to generate audio timeline.",
+        severity: "error",
+        source: "job",
+        projectId: project.id,
+        jobType: "AUDIO_GENERATION",
+        timestamp: new Date().toISOString(),
+        rawDetails: err,
+        suggestions: [
+          "Change primary Speech Provider to 'Chatterbox Turbo' in Tools & Models.",
+          "Verify the local Chatterbox environment at C:\\Tools\\Chatterbox.",
+          "Check %LOCALAPPDATA%\\PanelFlow Studio\\logs\\engine.log for Python error output.",
+        ],
+      };
+      setAudioError(errObj);
+      reportError(errObj);
     } finally {
       setGenerating(false);
     }
@@ -106,7 +129,7 @@ export const AudioScreen: React.FC<AudioScreenProps> = ({
             </Badge>
           </div>
           <p className="text-xs text-zinc-400">
-            F5-TTS neural dialogue synthesis with measured speech durations and ACE-Step dynamic background score.
+            Chatterbox Turbo neural dialogue synthesis with measured speech durations and optional dynamic background score.
           </p>
         </div>
 
@@ -147,6 +170,50 @@ export const AudioScreen: React.FC<AudioScreenProps> = ({
           )}
         </div>
       </div>
+
+      {/* Inline Audio Error Diagnostic Card */}
+      {audioError && (
+        <div className="p-4 rounded-xl bg-rose-950/30 border border-rose-800/80 text-rose-100 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-lg shadow-rose-950/40">
+          <div className="flex items-start gap-3">
+            <Icons.AlertTriangle className="w-5 h-5 text-rose-400 flex-shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <h4 className="text-sm font-bold text-rose-200">
+                  {audioError.title}
+                </h4>
+                <span className="text-[10px] bg-rose-900/60 text-rose-300 border border-rose-700 px-1.5 py-0.2 rounded font-bold uppercase">
+                  ERROR
+                </span>
+              </div>
+              <p className="text-xs text-rose-300 font-mono line-clamp-2">
+                {audioError.message}
+              </p>
+              <p className="text-[11px] text-zinc-400">
+                Click "View Error Details" for the full stack trace, provider configuration, and recovery options.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => inspectError(audioError)}
+              className="text-xs border-rose-700/80 text-rose-200 hover:bg-rose-900/50"
+            >
+              <Icons.Eye className="w-3.5 h-3.5 mr-1 text-cyan-400" />
+              View Error Details
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setAudioError(null)}
+              className="text-xs text-zinc-400 hover:text-zinc-200"
+            >
+              Dismiss
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Stats Cards */}
       {timelineData && (

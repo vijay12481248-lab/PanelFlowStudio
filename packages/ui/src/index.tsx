@@ -281,8 +281,8 @@ export const Button: React.FC<ButtonProps> = ({
 };
 
 // Card Component
-export const Card: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className = "" }) => (
-  <div className={`bg-zinc-900 border border-zinc-800 rounded-xl p-5 shadow-sm ${className}`}>
+export const Card: React.FC<{ children: React.ReactNode; className?: string; id?: string }> = ({ children, className = "", id }) => (
+  <div id={id} className={`bg-zinc-900 border border-zinc-800 rounded-xl p-5 shadow-sm ${className}`}>
     {children}
   </div>
 );

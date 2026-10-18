@@ -18,6 +18,12 @@ import { StoryEditorScreen } from "./screens/StoryEditorScreen";
 import { PipelineNavbar } from "./components/PipelineNavbar";
 import { ProviderHealthModal } from "./components/ProviderHealthModal";
 import { DashboardShell } from "./components/dashboard";
+import { ErrorProvider, useError } from "./context/ErrorContext";
+import {
+  ErrorAlertBanner,
+  ErrorDetailsModal,
+  ErrorNotificationBell,
+} from "./components/error";
 
 type ScreenMode =
   | "projects"
@@ -33,7 +39,8 @@ type ScreenMode =
   | "motion"
   | "render";
 
-export const App: React.FC = () => {
+const DesktopAppContent: React.FC = () => {
+  const { selectedError, closeInspector, dismissError, retryJob } = useError();
   const [currentScreen, setCurrentScreen] = useState<ScreenMode>("projects");
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [engineConnected, setEngineConnected] = useState<boolean>(false);
@@ -82,6 +89,28 @@ export const App: React.FC = () => {
     }
   };
 
+  const handleOpenProject = (proj: Project) => {
+    setSelectedProject(proj);
+    const stage = proj.current_stage;
+    if (stage === "NEW" || stage === "RIGHTS_APPROVED") {
+      setCurrentScreen("acquisition");
+    } else if (stage === "ACQUIRED") {
+      setCurrentScreen("review");
+    } else if (stage === "NORMALIZED" || stage === "PANELS_DETECTED") {
+      setCurrentScreen(proj.settings?.visual_storytelling ? "story" : "ocr");
+    } else if (stage === "OCR_COMPLETE" || stage === "OCR_APPROVED") {
+      setCurrentScreen("story");
+    } else if (stage === "STORY_ANALYZED" || stage === "STORY_APPROVED") {
+      setCurrentScreen("script");
+    } else if (stage === "SCRIPT_GENERATED" || stage === "SCRIPT_APPROVED") {
+      setCurrentScreen("audio");
+    } else if (stage === "VOICE_GENERATED" || stage === "AUDIO_APPROVED" || stage === "SHOT_PLAN_GENERATED") {
+      setCurrentScreen("motion");
+    } else {
+      setCurrentScreen("render");
+    }
+  };
+
   useEffect(() => {
     checkEngine();
     const intervalTime = engineConnected ? 8000 : 1500;
@@ -92,16 +121,25 @@ export const App: React.FC = () => {
   // Dedicated Video-First Story Editor View
   if (selectedProject && currentScreen === "story_editor") {
     return (
-      <StoryEditorScreen
-        project={selectedProject}
-        onBack={() => {
-          setCurrentScreen("projects");
-          setSelectedProject(null);
-        }}
-        onExport={() => {
-          // Handled via built-in ExportVideoModal
-        }}
-      />
+      <>
+        <ErrorAlertBanner />
+        <StoryEditorScreen
+          project={selectedProject}
+          onBack={() => {
+            setCurrentScreen("projects");
+            setSelectedProject(null);
+          }}
+          onExport={() => {
+            // Handled via built-in ExportVideoModal
+          }}
+        />
+        <ErrorDetailsModal
+          error={selectedError}
+          onClose={closeInspector}
+          onDismissAlert={dismissError}
+          onRetryJob={retryJob}
+        />
+      </>
     );
   }
 
@@ -109,6 +147,7 @@ export const App: React.FC = () => {
   if (currentScreen === "projects") {
     return (
       <>
+        <ErrorAlertBanner />
         <DashboardShell
           engineConnected={engineConnected}
           engineVersion={engineVersion}
@@ -136,6 +175,7 @@ export const App: React.FC = () => {
             setSelectedProject(proj);
             setCurrentScreen("story_editor");
           }}
+          onOpenProject={handleOpenProject}
           onOpenLibrary={() => {
             setHealthModalOpen(true);
           }}
@@ -145,12 +185,21 @@ export const App: React.FC = () => {
           open={healthModalOpen}
           onClose={() => setHealthModalOpen(false)}
         />
+
+        <ErrorDetailsModal
+          error={selectedError}
+          onClose={closeInspector}
+          onDismissAlert={dismissError}
+          onRetryJob={retryJob}
+        />
       </>
     );
   }
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col">
+      <ErrorAlertBanner />
+
       {/* Top Application Bar */}
       <header className="h-14 border-b border-zinc-800 bg-zinc-900/50 backdrop-blur-md px-6 flex items-center justify-between sticky top-0 z-40">
         <div className="flex items-center gap-3">
@@ -175,6 +224,8 @@ export const App: React.FC = () => {
 
         {/* Engine Status & Tools */}
         <div className="flex items-center gap-3">
+          <ErrorNotificationBell />
+
           <Button
             variant="ghost"
             size="sm"
@@ -399,6 +450,14 @@ export const App: React.FC = () => {
         onClose={() => setHealthModalOpen(false)}
       />
 
+      {/* Error Details Modal */}
+      <ErrorDetailsModal
+        error={selectedError}
+        onClose={closeInspector}
+        onDismissAlert={dismissError}
+        onRetryJob={retryJob}
+      />
+
       {/* Footer */}
       <footer className="border-t border-zinc-900 py-3 px-6 text-center text-xs text-zinc-500">
         PanelFlow Studio v{appVersion} • Local-First Architecture • Fully Integrated Pipeline
@@ -406,4 +465,11 @@ export const App: React.FC = () => {
     </div>
   );
 };
+
+export const App: React.FC = () => (
+  <ErrorProvider>
+    <DesktopAppContent />
+  </ErrorProvider>
+);
+
 export default App;

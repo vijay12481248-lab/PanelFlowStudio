@@ -11,6 +11,7 @@ import { ProjectsWorkspace } from "./ProjectsWorkspace";
 import { QuickActionsPanel } from "./QuickActionsPanel";
 import { RecentActivityPanel } from "./RecentActivityPanel";
 import { DashboardPromoCard } from "./DashboardPromoCard";
+import { useError } from "../../context/ErrorContext";
 
 export const DashboardShell: React.FC<DashboardShellProps> = ({
   engineConnected,
@@ -24,8 +25,10 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
   onOpenPanels,
   onOpenOCR,
   onOpenStoryEditor,
+  onOpenProject,
   onOpenLibrary,
 }) => {
+  const { reportError } = useError();
   // Navigation & view states
   const [activeNavTab, setActiveNavTab] = useState<NavTabId>("home");
   const [rightSidebarOpen, setRightSidebarOpen] = useState(true);
@@ -126,7 +129,14 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
     try {
       await api.openProjectFolder(projectId);
     } catch (err: any) {
-      alert(`Could not open folder: ${err.message}`);
+      reportError({
+        title: "Could Not Open Folder",
+        message: err.message || "Failed to launch native file explorer for project folder.",
+        severity: "warning",
+        source: "ui",
+        projectId,
+        rawDetails: err,
+      });
     }
   };
 
@@ -138,7 +148,14 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
       await api.deleteProject(projectId);
       setProjects((prev) => prev.filter((p) => p.id !== projectId));
     } catch (err: any) {
-      alert(`Delete failed: ${err.message}`);
+      reportError({
+        title: "Delete Project Failed",
+        message: err.message || "Failed to remove project from catalog.",
+        severity: "error",
+        source: "engine",
+        projectId,
+        rawDetails: err,
+      });
     }
   };
 
@@ -147,7 +164,14 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
       await api.retryJob(jobId);
       await loadData();
     } catch (err: any) {
-      alert(`Retry failed: ${err.message}`);
+      reportError({
+        title: "Retry Job Failed",
+        message: err.message || "Could not re-queue job on engine.",
+        severity: "error",
+        source: "job",
+        jobId,
+        rawDetails: err,
+      });
     }
   };
 
@@ -156,7 +180,14 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
       await api.cancelJob(jobId);
       await loadData();
     } catch (err: any) {
-      alert(`Cancel failed: ${err.message}`);
+      reportError({
+        title: "Cancel Job Failed",
+        message: err.message || "Could not cancel active job.",
+        severity: "warning",
+        source: "job",
+        jobId,
+        rawDetails: err,
+      });
     }
   };
 
@@ -218,6 +249,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
             onToggleFavorite={handleToggleFavorite}
             onNewProject={onNewProject}
             onOpenStoryEditor={onOpenStoryEditor}
+            onOpenProject={onOpenProject}
             onOpenOCR={onOpenOCR}
             onOpenPanels={onOpenPanels}
             onOpenFolder={handleOpenFolder}

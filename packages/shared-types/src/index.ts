@@ -539,6 +539,8 @@ export interface ScriptValidationReport {
     segment_id?: string;
     sequence?: number;
     text?: string;
+    status?: string;
+    reasons?: string[];
     issues?: string[];
     grounding_score?: number;
   }>;
@@ -1141,6 +1143,7 @@ export interface NarrationClip {
   audio_url?: string;
   linked_to_scene?: boolean; // Chapter 3 & 5: linked narration shifts when scene is moved/trimmed
   // Chapter 5B Narration Studio Integration fields:
+  narration_segment_id?: string;
   speaker_id?: string;
   voice_profile_id?: string;
   speaker_type?: "NARRATOR" | "CHARACTER";
