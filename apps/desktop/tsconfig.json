@@ -21,5 +21,6 @@
       "@panelflow/ui": ["../../packages/ui/src/index.tsx"]
     }
   },
-  "include": ["src"]
+  "include": ["src"],
+  "exclude": ["src/**/__tests__/*"]
 }
