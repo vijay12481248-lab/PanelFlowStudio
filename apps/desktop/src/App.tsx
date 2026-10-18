@@ -289,7 +289,7 @@ export const App: React.FC = () => {
                 }}
                 onProceedToOCR={(proj) => {
                   setSelectedProject(proj);
-                  setCurrentScreen("ocr");
+                  setCurrentScreen(proj.settings?.visual_storytelling ? "story" : "ocr");
                 }}
                 onOpenStoryEditor={(proj) => {
                   setSelectedProject(proj);

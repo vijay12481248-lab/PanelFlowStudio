@@ -250,7 +250,9 @@ export const AcquisitionScreen: React.FC<AcquisitionScreenProps> = ({
 
         {pages.length === 0 ? (
           <Card className="text-center py-12 text-zinc-500 text-sm border-dashed">
-            No pages acquired yet. Click &quot;Start Acquisition&quot; to begin downloading and validating assets.
+            {isJobActive
+              ? "Acquisition is in progress. Page previews will appear when downloading and validation finish."
+              : 'No pages acquired yet. Click "Start Acquisition" to begin downloading and validating assets.'}
           </Card>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">

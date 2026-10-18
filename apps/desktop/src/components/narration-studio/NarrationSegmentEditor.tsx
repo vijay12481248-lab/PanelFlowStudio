@@ -13,10 +13,14 @@ interface NarrationSegmentEditorProps {
   previousSegment: NarrationSegment | null;
   nextSegment: NarrationSegment | null;
   characters: CharacterProfile[];
+  projectId?: string;
   onUpdateSegment: (updates: Partial<NarrationSegment>) => void;
   onDuplicateSegment: (segmentId: string) => void;
   onDeleteSegment: (segmentId: string) => void;
   onSplitSegment: (segmentId: string, splitIndex: number) => void;
+  onSynthesizeSceneVoice?: (segment: NarrationSegment) => void;
+  onAddToTimeline?: (segment: NarrationSegment) => void;
+  isSynthesizing?: boolean;
   className?: string;
 }
 
@@ -25,10 +29,14 @@ export const NarrationSegmentEditor: React.FC<NarrationSegmentEditorProps> = ({
   previousSegment,
   nextSegment,
   characters,
+  projectId = "",
   onUpdateSegment,
   onDuplicateSegment,
   onDeleteSegment,
   onSplitSegment,
+  onSynthesizeSceneVoice,
+  onAddToTimeline,
+  isSynthesizing = false,
   className = "",
 }) => {
   // Typography presentation settings
