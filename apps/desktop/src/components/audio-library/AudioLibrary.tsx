@@ -18,6 +18,7 @@ export const AudioLibrary: React.FC<AudioLibraryProps> = ({
   initialAssets,
   selectedAssetId: externalSelectedAssetId,
   initialType,
+  projectId = "68711176-90f5-4a68-8520-78d6e183bf65",
   onSelectAsset: externalOnSelectAsset,
   onSendToTimeline,
   onClose,
@@ -363,6 +364,7 @@ export const AudioLibrary: React.FC<AudioLibraryProps> = ({
       {/* Workspace Body */}
       {activeWorkspace === "ai_generator" ? (
         <AIMusicStudio
+          projectId={projectId}
           onSendToTimeline={onSendToTimeline}
           onSaveToLibrary={(newAsset) => setAssets((prev) => [newAsset, ...prev])}
         />

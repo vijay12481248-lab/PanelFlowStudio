@@ -131,6 +131,7 @@ export interface AudioLibraryProps {
   initialAssets?: AudioAsset[];
   selectedAssetId?: string | null;
   initialType?: "all" | "music" | "sfx";
+  projectId?: string;
   onSelectAsset?: (asset: AudioAsset) => void;
   onSendToTimeline?: (contract: AudioToTimelineContract) => void;
   onClose?: () => void;

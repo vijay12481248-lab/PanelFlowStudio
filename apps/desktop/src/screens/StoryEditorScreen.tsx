@@ -915,6 +915,7 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
       {showAudioLibrary && (
         <div className="fixed inset-0 z-50 bg-zinc-950 flex flex-col">
           <AudioLibrary
+            projectId={project?.id}
             initialType={audioLibraryInitialType}
             onClose={() => setShowAudioLibrary(false)}
             onSendToTimeline={(contract: AudioToTimelineContract) => {

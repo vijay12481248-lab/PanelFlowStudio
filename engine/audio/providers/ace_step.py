@@ -92,12 +92,15 @@ class ACEStepProvider:
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
-            # Poll up to 15 seconds for startup
-            for _ in range(15):
+            # Poll up to 60 seconds for startup and model initialization
+            for _ in range(60):
                 time.sleep(1.0)
-                if self.check_health(timeout=1.0)["available"]:
-                    logger.info("ACE-Step daemon launched successfully.")
+                h = self.check_health(timeout=1.0)
+                if h["available"] and h.get("models_initialized", False):
+                    logger.info("ACE-Step daemon launched and models initialized successfully.")
                     return True
+                elif h["available"]:
+                    logger.debug("ACE-Step API responding, waiting for neural checkpoints to load...")
         except Exception as e:
             logger.error(f"Failed to start ACE-Step daemon: {e}")
 
