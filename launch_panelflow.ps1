@@ -47,7 +47,7 @@ if ($viteConn) {
 
 # 4. Native Desktop Window (Tauri)
 Write-Host "[4/4] Launching PanelFlow Studio Desktop Window..." -ForegroundColor Yellow
-$existingProcess = Get-Process -Name "panelflow-desktop" -ErrorAction SilentlyContinue
+$existingProcess = Get-Process -Name "panelflow-desktop" -ErrorAction SilentlyContinue | Select-Object -First 1
 if ($existingProcess) {
     Write-Host "  -> PanelFlow Studio desktop window is already open and running (PID $($existingProcess.Id))." -ForegroundColor Green
 } else {
@@ -56,7 +56,7 @@ if ($existingProcess) {
         Write-Host "  -> Opening native desktop application window (latest code)..." -ForegroundColor Green
         Start-Process -FilePath $debugApp -WorkingDirectory (Split-Path $debugApp)
     } else {
-        Write-Host "  -> Compiling and launching desktop window via Tauri CLI..." -ForegroundColor Cyan
+        Write-Host "  -> Launching desktop window via Tauri CLI..." -ForegroundColor Cyan
         Start-Process -FilePath "npm.cmd" -ArgumentList "--workspace=@panelflow/desktop", "run", "tauri", "dev" -WorkingDirectory $rootDir
     }
 }
