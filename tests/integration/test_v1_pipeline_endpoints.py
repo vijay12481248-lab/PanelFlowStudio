@@ -28,6 +28,17 @@ def setup_api_env(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(settings, "workspace_root", test_ws)
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
+    # API lifecycle tests use explicit fixture audio; production synthesis is
+    # tested independently and must never depend on local GPU/model availability.
+    from engine.audio.service import audio_service
+    import numpy as np
+    import soundfile as sf
+    def fixture_speech(directory, text, voice, **kwargs):
+        output = Path(directory) / "fixture_voice.wav"
+        output.parent.mkdir(parents=True, exist_ok=True)
+        sf.write(str(output), np.zeros(48000), 48000)
+        return output
+    monkeypatch.setattr(audio_service.synthesizer, "synthesize", fixture_speech)
 
 
 def test_system_provider_and_open_path(tmp_path: Path):

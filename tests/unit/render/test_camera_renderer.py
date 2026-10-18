@@ -13,6 +13,21 @@ from engine.render.models.render_plan import RenderShotPlan
 from engine.render.models.enums import ScalePolicy, BackgroundFillPolicy
 
 
+def test_subpixel_camera_motion_does_not_snap_to_integer_crops():
+    pattern = np.zeros((64, 64, 3), dtype=np.uint8)
+    pattern[:, ::2] = 255
+    source = Image.fromarray(pattern)
+    shot = RenderShotPlan(shot_id="smooth", scene_id="scene", sequence_global=1,
+                          source_asset_path="fixture", start_frame=0, end_frame=30, total_frames=30,
+                          start_time=0, end_time=1, duration=1, scale_policy=ScalePolicy.CONTAIN,
+                          camera_start=CameraState(center_x=0.5, center_y=0.5, zoom=1.2),
+                          camera_end=CameraState(center_x=0.501, center_y=0.5, zoom=1.2))
+    renderer = CameraRenderer()
+    start = np.asarray(renderer.render_camera_view(source, shot, 0, 256, 256))
+    end = np.asarray(renderer.render_camera_view(source, shot, 1, 256, 256))
+    assert not np.array_equal(start, end)
+
+
 @pytest.fixture
 def test_portrait_image():
     """Create a 1000x1500 portrait test pattern image."""
