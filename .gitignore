@@ -47,6 +47,20 @@ dist_engine/
 build_engine/
 panelflow-engine.spec
 
+# Release packages, standalone installers & frozen runtimes
+release/*.exe
+release/*.msi
+release/*.zip
+release/engine_runtime/
+
+# Tauri bundled engine runtime
+apps/desktop/src-tauri/resources/engine_runtime/
+
+# Binary executables and libraries
+*.dll
+*.exe
+*.msi
+
 # Playwright MCP cache
 .playwright-mcp/
 
