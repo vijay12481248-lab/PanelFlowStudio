@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from "react";
 import { api } from "@panelflow/api-client";
 import type { Project, Job, Page } from "@panelflow/shared-types";
 import { Button, Card, ProgressBar, Badge, Icons } from "@panelflow/ui";
+import { useError } from "../context/ErrorContext";
 
 interface AcquisitionScreenProps {
   project: Project;
@@ -14,6 +15,7 @@ export const AcquisitionScreen: React.FC<AcquisitionScreenProps> = ({
   onBack,
   onReviewPages,
 }) => {
+  const { reportError, inspectError } = useError();
   const [activeJob, setActiveJob] = useState<Job | null>(null);
   const [pages, setPages] = useState<Page[]>([]);
   const [isStarting, setIsStarting] = useState<boolean>(false);
@@ -61,7 +63,15 @@ export const AcquisitionScreen: React.FC<AcquisitionScreenProps> = ({
       const updated = await api.getJob(activeJob.job_id);
       setActiveJob(updated);
     } catch (err: any) {
-      alert(`Could not cancel job: ${err.message}`);
+      reportError({
+        title: "Cancel Job Failed",
+        message: err.message || "Failed to cancel acquisition job.",
+        severity: "warning",
+        source: "pipeline",
+        projectId: project.id,
+        jobId: activeJob.job_id,
+        rawDetails: err,
+      });
     } finally {
       setCancelling(false);
     }
@@ -75,7 +85,17 @@ export const AcquisitionScreen: React.FC<AcquisitionScreenProps> = ({
       const job = await api.getJob(res.job_id);
       setActiveJob(job);
     } catch (err: any) {
-      setErrorMsg(err.message || "Failed to retry pages.");
+      const msg = err.message || "Failed to retry pages.";
+      setErrorMsg(msg);
+      reportError({
+        title: "Page Download Retry Failed",
+        message: msg,
+        severity: "error",
+        source: "pipeline",
+        projectId: project.id,
+        jobType: "ACQUISITION",
+        rawDetails: err,
+      });
     } finally {
       setRetrying(false);
     }
@@ -85,7 +105,14 @@ export const AcquisitionScreen: React.FC<AcquisitionScreenProps> = ({
     try {
       await api.openProjectFolder(project.id);
     } catch (err: any) {
-      alert(`Could not open folder: ${err.message}`);
+      reportError({
+        title: "Could Not Open Folder",
+        message: err.message || "Failed to open project directory.",
+        severity: "warning",
+        source: "system",
+        projectId: project.id,
+        rawDetails: err,
+      });
     }
   };
 

@@ -78,6 +78,7 @@ class RenderPlan(BaseModel):
     audio_tracks: List[RenderAudioTrack] = Field(default_factory=list)
     music_policy: MusicDurationPolicy = MusicDurationPolicy.LOOP
     hash: str = ""
+    subtitle_enabled: bool = False
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
     def find_shot_at_frame(self, frame_index: int) -> Optional[RenderShotPlan]:

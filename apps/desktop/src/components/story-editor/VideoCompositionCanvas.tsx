@@ -22,7 +22,7 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const [showSafeZones, setShowSafeZones] = useState<boolean>(false);
   const [playbackSpeed, setPlaybackSpeed] = useState<number>(1.0);
-  type ResizeHandle = "nw" | "ne" | "se" | "sw" | "n" | "s" | "e" | "w" | "center";
+  type ResizeHandle = "nw" | "ne" | "se" | "sw" | "n" | "s" | "e" | "w" | "center" | "rotate";
 
   const [activeHandleDrag, setActiveHandleDrag] = useState<{
     handle: ResizeHandle;
@@ -219,6 +219,8 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
     const initialScale = layer.transform.scale || 1.0;
     const initialLayerX = layer.transform.x || 0;
     const initialLayerY = layer.transform.y || 0;
+    const initialRotation = layer.transform.rotation || 0;
+    const startPointerAngle = Math.atan2(startY - centerY, startX - centerX) * (180 / Math.PI);
     const container = containerRef.current;
     const containerRect = container ? container.getBoundingClientRect() : { width: 1000, height: 600 };
 
@@ -243,6 +245,31 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
                 return {
                   ...ly,
                   transform: { ...ly.transform, x: newX, y: newY },
+                };
+              }),
+            };
+          }),
+        }));
+      } else if (handle === "rotate") {
+        const currentPointerAngle = Math.atan2(ev.clientY - centerY, ev.clientX - centerX) * (180 / Math.PI);
+        let deltaAngle = currentPointerAngle - startPointerAngle;
+        let newRot = Math.round((initialRotation + deltaAngle) % 360);
+        if (newRot < 0) newRot += 360;
+        if (ev.shiftKey) {
+          newRot = Math.round(newRot / 15) * 15;
+        }
+
+        onUpdateState((prev) => ({
+          ...prev,
+          scenes: prev.scenes.map((sc) => {
+            if (sc.id !== activeScene?.id) return sc;
+            return {
+              ...sc,
+              layers: sc.layers.map((ly) => {
+                if (ly.id !== layer.id) return ly;
+                return {
+                  ...ly,
+                  transform: { ...ly.transform, rotation: newRot },
                 };
               }),
             };
@@ -479,37 +506,50 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
                         draggable={false}
                       />
 
-                      {/* On-Canvas Draggable Bounding Handles matching user description */}
+                      {/* On-Canvas Draggable Bounding Handles & Precision Studio Controls */}
                       {isSelected && !state.is_playing && (
-                        <div className="absolute inset-0 pointer-events-none border-2 border-cyan-400 shadow-lg">
-                          {/* Live Dimensions & Scale Readout HUD */}
-                          <div className="absolute -top-7 left-1/2 -translate-x-1/2 bg-zinc-950/95 border border-cyan-400 text-cyan-300 font-mono text-[10px] font-bold px-2 py-0.5 rounded shadow-xl whitespace-nowrap pointer-events-none flex items-center gap-1.5">
-                            <span>Scale: {Math.round((layer.transform.scale || 1.0) * 100)}%</span>
+                        <div className="absolute inset-0 pointer-events-none border-2 border-indigo-500/90 shadow-[0_0_20px_rgba(99,102,241,0.25)] ring-1 ring-cyan-400/30">
+                          {/* Live Dimensions, Position & Rotation HUD Pill */}
+                          <div className="absolute -top-7 left-1/2 -translate-x-1/2 bg-zinc-950/90 backdrop-blur-md border border-zinc-700/80 text-zinc-200 font-mono text-[10px] font-semibold px-2.5 py-0.5 rounded-full shadow-2xl whitespace-nowrap pointer-events-none flex items-center gap-1.5 z-30 ring-1 ring-white/10">
+                            <span className="text-indigo-400 font-bold">{Math.round((layer.transform.scale || 1.0) * 100)}%</span>
                             <span className="text-zinc-600">|</span>
-                            <span>Pos: {layer.transform.x}%, {layer.transform.y}%</span>
-                            {layer.crop_type && (
-                              <span className="text-[9px] text-amber-400 uppercase bg-amber-950/70 px-1 rounded">
-                                {layer.crop_type}
-                              </span>
+                            <span>{layer.transform.x}%, {layer.transform.y}%</span>
+                            {(layer.transform.rotation || 0) !== 0 && (
+                              <>
+                                <span className="text-zinc-600">|</span>
+                                <span className="text-amber-400 font-bold">{Math.round(layer.transform.rotation || 0)}°</span>
+                              </>
+                            )}
+                            {layer.crop_type && layer.crop_type !== "rect" && (
+                              <>
+                                <span className="text-zinc-600">|</span>
+                                <span className="text-[9px] text-cyan-400 uppercase font-bold tracking-wider bg-cyan-950/70 border border-cyan-800/80 px-1.5 py-0.2 rounded-full">
+                                  {layer.crop_type}
+                                </span>
+                              </>
                             )}
                           </div>
 
-                          {/* Floating Crop & Cut Toolbar */}
-                          <div className="absolute -top-16 left-1/2 -translate-x-1/2 bg-zinc-900/95 border border-cyan-400/80 rounded-lg shadow-2xl p-1 flex items-center gap-1 pointer-events-auto backdrop-blur-md z-30">
+                          {/* Floating Precision Crop & Cut Toolbar */}
+                          <div
+                            className={`absolute ${
+                              (layer.transform.y || 0) < -22 ? "top-[calc(100%+14px)]" : "-top-17"
+                            } left-1/2 -translate-x-1/2 bg-zinc-950/90 border border-zinc-700/80 rounded-xl shadow-2xl p-1 flex items-center gap-1 pointer-events-auto backdrop-blur-md z-30 ring-1 ring-white/10`}
+                          >
                             {/* Box Crop (Rect) */}
                             <button
                               type="button"
-                              onClick={() => {
-                                handleApplyCropType(layer.id, "rect", undefined);
-                              }}
-                              className={`px-2 py-0.5 rounded text-[10px] font-semibold flex items-center gap-1 transition-colors ${
+                              onClick={() => handleApplyCropType(layer.id, "rect", undefined)}
+                              className={`px-2 py-1 rounded-lg text-[10px] font-semibold flex items-center gap-1.5 transition-all ${
                                 !layer.crop_type || layer.crop_type === "rect"
-                                  ? "bg-cyan-600 text-white shadow-sm"
-                                  : "text-zinc-300 hover:text-white hover:bg-zinc-800"
+                                  ? "bg-indigo-600 text-white shadow-sm"
+                                  : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/80"
                               }`}
-                              title="Standard Rectangle Box Crop"
+                              title="Standard Rectangle Box Frame"
                             >
-                              <span>🔲</span>
+                              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <rect x="3" y="3" width="18" height="18" rx="2" strokeDasharray="3 3" />
+                              </svg>
                               <span>Box</span>
                             </button>
 
@@ -523,14 +563,16 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
                                   "polygon(5% 0%, 95% 0%, 100% 90%, 85% 100%, 0% 95%)"
                                 );
                               }}
-                              className={`px-2 py-0.5 rounded text-[10px] font-semibold flex items-center gap-1 transition-colors ${
+                              className={`px-2 py-1 rounded-lg text-[10px] font-semibold flex items-center gap-1.5 transition-all ${
                                 layer.crop_type === "polygon"
-                                  ? "bg-cyan-600 text-white shadow-sm"
-                                  : "text-zinc-300 hover:text-white hover:bg-zinc-800"
+                                  ? "bg-indigo-600 text-white shadow-sm"
+                                  : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/80"
                               }`}
-                              title="Multi-Point Polygon Crop"
+                              title="Multi-Point Geometric Polygon Crop"
                             >
-                              <span>🔷</span>
+                              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <polygon points="12,2 22,8.5 18,21 6,21 2,8.5" />
+                              </svg>
                               <span>Polygon</span>
                             </button>
 
@@ -544,82 +586,107 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
                                   "polygon(10% 5%, 85% 2%, 98% 70%, 90% 95%, 15% 98%, 2% 65%)"
                                 );
                               }}
-                              className={`px-2 py-0.5 rounded text-[10px] font-semibold flex items-center gap-1 transition-colors ${
+                              className={`px-2 py-1 rounded-lg text-[10px] font-semibold flex items-center gap-1.5 transition-all ${
                                 layer.crop_type === "pen"
-                                  ? "bg-cyan-600 text-white shadow-sm"
-                                  : "text-zinc-300 hover:text-white hover:bg-zinc-800"
+                                  ? "bg-indigo-600 text-white shadow-sm"
+                                  : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/80"
                               }`}
-                              title="Organic Pen / Contour Cut"
+                              title="Organic Contour Pen Cut"
                             >
-                              <span>✒️</span>
+                              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 19l7-7 3 3-7 7-3-3z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" />
+                              </svg>
                               <span>Pen Cut</span>
                             </button>
 
-                            <div className="w-px h-3.5 bg-zinc-700 mx-0.5" />
+                            <div className="w-px h-4 bg-zinc-800 mx-0.5" />
 
                             {/* Add to Timeline Button */}
                             <button
                               type="button"
                               onClick={() => setCropModalOpen(true)}
-                              className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-600 hover:bg-emerald-500 text-white flex items-center gap-1 shadow-sm transition-all active:scale-95"
+                              className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-emerald-600 hover:bg-emerald-500 text-white flex items-center gap-1 shadow-md shadow-emerald-950 transition-all active:scale-95"
                               title="Add this cropped layer to the timeline"
                             >
-                              <span>➕</span>
+                              <Icons.Plus className="w-3 h-3" />
                               <span>Add to Timeline</span>
                             </button>
+                          </div>
+
+                          {/* Rotate Handle Stalk & Knob */}
+                          <div className="absolute -top-7 left-1/2 -translate-x-1/2 w-0.5 h-7 bg-indigo-500/80 pointer-events-none" />
+                          <div
+                            onPointerDown={(e) => handleHandlePointerDown(e, "rotate", layer)}
+                            className="absolute -top-10 left-1/2 -translate-x-1/2 w-5 h-5 bg-zinc-950 border-2 border-indigo-500 rounded-full shadow-lg flex items-center justify-center cursor-grab active:cursor-grabbing hover:scale-125 transition-transform pointer-events-auto group"
+                            title="Drag to Rotate (Hold Shift to snap 15°)"
+                          >
+                            <svg className="w-3 h-3 text-indigo-400 group-hover:text-indigo-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
                           </div>
 
                           {/* 4 Corner Round Handles (nw, ne, sw, se) */}
                           <div
                             onPointerDown={(e) => handleHandlePointerDown(e, "nw", layer)}
-                            className="absolute -top-2 -left-2 w-4 h-4 bg-white border-2 border-cyan-400 rounded-full shadow hover:scale-125 cursor-nwse-resize pointer-events-auto transition-transform"
+                            className="absolute -top-2 -left-2 w-4 h-4 bg-white border-2 border-indigo-500 rounded-full shadow-md hover:scale-125 cursor-nwse-resize pointer-events-auto transition-transform flex items-center justify-center"
                             title="Resize Corner (NW)"
-                          />
+                          >
+                            <span className="w-1 h-1 bg-indigo-600 rounded-full" />
+                          </div>
                           <div
                             onPointerDown={(e) => handleHandlePointerDown(e, "ne", layer)}
-                            className="absolute -top-2 -right-2 w-4 h-4 bg-white border-2 border-cyan-400 rounded-full shadow hover:scale-125 cursor-nesw-resize pointer-events-auto transition-transform"
+                            className="absolute -top-2 -right-2 w-4 h-4 bg-white border-2 border-indigo-500 rounded-full shadow-md hover:scale-125 cursor-nesw-resize pointer-events-auto transition-transform flex items-center justify-center"
                             title="Resize Corner (NE)"
-                          />
+                          >
+                            <span className="w-1 h-1 bg-indigo-600 rounded-full" />
+                          </div>
                           <div
                             onPointerDown={(e) => handleHandlePointerDown(e, "sw", layer)}
-                            className="absolute -bottom-2 -left-2 w-4 h-4 bg-white border-2 border-cyan-400 rounded-full shadow hover:scale-125 cursor-nesw-resize pointer-events-auto transition-transform"
+                            className="absolute -bottom-2 -left-2 w-4 h-4 bg-white border-2 border-indigo-500 rounded-full shadow-md hover:scale-125 cursor-nesw-resize pointer-events-auto transition-transform flex items-center justify-center"
                             title="Resize Corner (SW)"
-                          />
+                          >
+                            <span className="w-1 h-1 bg-indigo-600 rounded-full" />
+                          </div>
                           <div
                             onPointerDown={(e) => handleHandlePointerDown(e, "se", layer)}
-                            className="absolute -bottom-2 -right-2 w-4 h-4 bg-white border-2 border-cyan-400 rounded-full shadow hover:scale-125 cursor-nwse-resize pointer-events-auto transition-transform"
+                            className="absolute -bottom-2 -right-2 w-4 h-4 bg-white border-2 border-indigo-500 rounded-full shadow-md hover:scale-125 cursor-nwse-resize pointer-events-auto transition-transform flex items-center justify-center"
                             title="Resize Corner (SE)"
-                          />
+                          >
+                            <span className="w-1 h-1 bg-indigo-600 rounded-full" />
+                          </div>
 
-                          {/* 4 Edge Midpoint Square Handles (n, s, w, e) */}
+                          {/* 4 Edge Midpoint Pill Handles (n, s, w, e) */}
                           <div
                             onPointerDown={(e) => handleHandlePointerDown(e, "n", layer)}
-                            className="absolute -top-2 left-1/2 -translate-x-1/2 w-3.5 h-3.5 bg-white border-2 border-cyan-400 rounded-sm shadow hover:scale-125 cursor-ns-resize pointer-events-auto transition-transform"
+                            className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-5 h-2 bg-white border border-indigo-500 rounded-full shadow-sm hover:scale-125 cursor-ns-resize pointer-events-auto transition-transform"
                             title="Adjust Height (Top)"
                           />
                           <div
                             onPointerDown={(e) => handleHandlePointerDown(e, "s", layer)}
-                            className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-3.5 h-3.5 bg-white border-2 border-cyan-400 rounded-sm shadow hover:scale-125 cursor-ns-resize pointer-events-auto transition-transform"
+                            className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-5 h-2 bg-white border border-indigo-500 rounded-full shadow-sm hover:scale-125 cursor-ns-resize pointer-events-auto transition-transform"
                             title="Adjust Height (Bottom)"
                           />
                           <div
                             onPointerDown={(e) => handleHandlePointerDown(e, "w", layer)}
-                            className="absolute top-1/2 -left-2 -translate-y-1/2 w-3.5 h-3.5 bg-white border-2 border-cyan-400 rounded-sm shadow hover:scale-125 cursor-ew-resize pointer-events-auto transition-transform"
+                            className="absolute top-1/2 -left-1.5 -translate-y-1/2 w-2 h-5 bg-white border border-indigo-500 rounded-full shadow-sm hover:scale-125 cursor-ew-resize pointer-events-auto transition-transform"
                             title="Adjust Width (Left)"
                           />
                           <div
                             onPointerDown={(e) => handleHandlePointerDown(e, "e", layer)}
-                            className="absolute top-1/2 -right-2 -translate-y-1/2 w-3.5 h-3.5 bg-white border-2 border-cyan-400 rounded-sm shadow hover:scale-125 cursor-ew-resize pointer-events-auto transition-transform"
+                            className="absolute top-1/2 -right-1.5 -translate-y-1/2 w-2 h-5 bg-white border border-indigo-500 rounded-full shadow-sm hover:scale-125 cursor-ew-resize pointer-events-auto transition-transform"
                             title="Adjust Width (Right)"
                           />
 
-                          {/* Center Square Handle for Positioning */}
+                          {/* Center Target Handle for Repositioning */}
                           <div
                             onPointerDown={(e) => handleHandlePointerDown(e, "center", layer)}
-                            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-5 h-5 bg-white border-2 border-cyan-500 rounded-sm shadow-md hover:scale-115 cursor-move pointer-events-auto transition-transform flex items-center justify-center group"
+                            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-5 h-5 bg-zinc-950 border-2 border-cyan-400 rounded-md shadow-lg hover:scale-115 cursor-move pointer-events-auto transition-transform flex items-center justify-center group"
                             title="Drag to Reposition (Center Anchor)"
                           >
-                            <span className="w-1.5 h-1.5 bg-cyan-500 rounded-full group-hover:bg-cyan-600" />
+                            <div className="w-2 h-2 rounded-full border border-cyan-400 flex items-center justify-center">
+                              <span className="w-1 h-1 bg-cyan-400 rounded-full group-hover:bg-cyan-300" />
+                            </div>
                           </div>
                         </div>
                       )}
@@ -854,42 +921,55 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
 
       {/* "May I add this crop to the timeline?" Confirmation Modal */}
       {cropModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn">
+          <div className="bg-zinc-900 border border-zinc-750 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl ring-1 ring-white/10">
             <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
-              <h3 className="text-sm font-bold text-zinc-100 flex items-center gap-2">
-                <span>✂️</span>
-                <span>Add Crop to Timeline</span>
-              </h3>
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-indigo-950/80 border border-indigo-700/60 flex items-center justify-center text-indigo-400 shadow-inner">
+                  <Icons.Scissors className="w-4 h-4 text-indigo-400" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-zinc-100 leading-tight">
+                    Add Crop to Timeline
+                  </h3>
+                  <span className="text-[11px] text-zinc-400">
+                    May I add this crop to the timeline?
+                  </span>
+                </div>
+              </div>
               <button
                 type="button"
                 onClick={() => setCropModalOpen(false)}
-                className="text-zinc-400 hover:text-zinc-200"
+                className="text-zinc-400 hover:text-zinc-200 p-1 rounded-lg hover:bg-zinc-800 transition-colors"
+                title="Close (Esc)"
               >
                 ✕
               </button>
             </div>
 
             <p className="text-xs text-zinc-300 leading-relaxed">
-              May I add this crop to the timeline? You can create a new scene for this cropped element or keep the crop adjustments on the current scene layer.
+              Choose how you would like to position this cropped panel element inside your animated video story:
             </p>
 
-            <div className="space-y-2.5 pt-2">
+            <div className="space-y-2.5 pt-1">
               <button
                 type="button"
                 onClick={() => {
                   setCropModalOpen(false);
                   handleCreateSceneFromCrop();
                 }}
-                className="w-full text-left p-3.5 rounded-lg bg-zinc-950 hover:bg-indigo-950/50 border border-zinc-800 hover:border-indigo-500/60 transition-colors group flex items-start gap-3"
+                className="w-full text-left p-3.5 rounded-xl bg-zinc-950 hover:bg-indigo-950/50 border border-zinc-800 hover:border-indigo-500/80 transition-all group flex items-start gap-3.5 shadow-sm"
               >
-                <span className="text-xl mt-0.5">🎬</span>
-                <div>
-                  <div className="text-xs font-bold text-zinc-100 group-hover:text-indigo-300">
-                    Create New Scene from Crop
+                <div className="w-9 h-9 rounded-lg bg-indigo-600/20 border border-indigo-500/40 flex items-center justify-center text-indigo-400 shrink-0 mt-0.5 group-hover:scale-110 transition-transform">
+                  <Icons.Film className="w-4 h-4 text-indigo-400" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs font-bold text-zinc-100 group-hover:text-indigo-300 flex items-center justify-between">
+                    <span>Create New Scene from Crop</span>
+                    <span className="text-[10px] text-zinc-500 font-mono font-normal">Enter ↵</span>
                   </div>
                   <div className="text-[11px] text-zinc-400 mt-0.5 leading-normal">
-                    Adds a new scene containing this cropped panel element on the timeline with dedicated motion pacing.
+                    Appends a new scene on the timeline dedicated to this cropped element with smooth cinematic timing.
                   </div>
                 </div>
               </button>
@@ -899,26 +979,28 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
                 onClick={() => {
                   setCropModalOpen(false);
                 }}
-                className="w-full text-left p-3.5 rounded-lg bg-zinc-950 hover:bg-cyan-950/50 border border-zinc-800 hover:border-cyan-500/60 transition-colors group flex items-start gap-3"
+                className="w-full text-left p-3.5 rounded-xl bg-zinc-950 hover:bg-cyan-950/50 border border-zinc-800 hover:border-cyan-500/80 transition-all group flex items-start gap-3.5 shadow-sm"
               >
-                <span className="text-xl mt-0.5">🔄</span>
-                <div>
+                <div className="w-9 h-9 rounded-lg bg-cyan-600/20 border border-cyan-500/40 flex items-center justify-center text-cyan-400 shrink-0 mt-0.5 group-hover:scale-110 transition-transform">
+                  <Icons.Layers className="w-4 h-4 text-cyan-400" />
+                </div>
+                <div className="flex-1 min-w-0">
                   <div className="text-xs font-bold text-zinc-100 group-hover:text-cyan-300">
                     Keep on Current Scene Layer
                   </div>
                   <div className="text-[11px] text-zinc-400 mt-0.5 leading-normal">
-                    Saves the crop adjustments directly onto the active scene layer.
+                    Preserves the crop boundary directly on the active scene layer without altering timeline duration.
                   </div>
                 </div>
               </button>
             </div>
 
-            <div className="flex justify-end pt-3 border-t border-zinc-800">
+            <div className="flex justify-end pt-3 border-t border-zinc-800/80">
               <Button
                 variant="secondary"
                 size="sm"
                 onClick={() => setCropModalOpen(false)}
-                className="text-xs h-8 px-3"
+                className="text-xs h-8 px-4 font-semibold"
               >
                 Cancel
               </Button>

@@ -40,7 +40,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
 }) => {
   // Profiles
   const [selectedProfile, setSelectedProfile] = useState<string>("standard_1080p");
-  const [subtitleEnabled, setSubtitleEnabled] = useState<boolean>(true);
+  const [subtitleEnabled, setSubtitleEnabled] = useState<boolean>(false);
   const [bgmVolumeDb, setBgmVolumeDb] = useState<number>(-10.0);
   const [dialogueGainDb, setDialogueGainDb] = useState<number>(0.0);
 
@@ -240,7 +240,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
               className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
               title="Close Export Dialog"
             >
-              ✕
+              <Icons.X className="w-4 h-4" />
             </button>
           )}
         </div>
@@ -299,19 +299,39 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
               <div className="grid grid-cols-3 gap-4 pt-2 border-t border-zinc-800/60">
                 {/* Subtitles */}
                 <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-xl p-3 flex flex-col justify-between">
-                  <div>
-                    <span className="font-semibold text-zinc-200 block text-xs mb-1">Burn-In Subtitles</span>
-                    <span className="text-[11px] text-zinc-400 block">Render dialogue captions directly into the video stream</span>
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <span className="font-semibold text-zinc-200 block text-xs mb-1">Burn-In Subtitles</span>
+                      <span className="text-[11px] text-zinc-400 block">Render dialogue captions directly into the video stream</span>
+                    </div>
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider shrink-0 ${subtitleEnabled ? "bg-indigo-950 text-indigo-400 border border-indigo-800/60" : "bg-zinc-800 text-zinc-400"}`}>
+                      {subtitleEnabled ? "ON" : "OFF"}
+                    </span>
                   </div>
-                  <label className="inline-flex items-center gap-2 mt-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={subtitleEnabled}
-                      onChange={(e) => setSubtitleEnabled(e.target.checked)}
-                      className="rounded border-zinc-700 bg-zinc-800 text-indigo-600 focus:ring-0"
-                    />
-                    <span className="text-xs text-zinc-300 font-medium">Enable Subtitles</span>
-                  </label>
+                  <div className="flex items-center gap-2.5 mt-3">
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={subtitleEnabled}
+                      onClick={() => setSubtitleEnabled(!subtitleEnabled)}
+                      className={`relative inline-flex h-5 w-10 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                        subtitleEnabled ? "bg-indigo-600" : "bg-zinc-700"
+                      }`}
+                    >
+                      <span
+                        aria-hidden="true"
+                        className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                          subtitleEnabled ? "translate-x-5" : "translate-x-0"
+                        }`}
+                      />
+                    </button>
+                    <span
+                      onClick={() => setSubtitleEnabled(!subtitleEnabled)}
+                      className="text-xs text-zinc-300 font-medium select-none cursor-pointer hover:text-white"
+                    >
+                      Enable Subtitles (Default: Off)
+                    </span>
+                  </div>
                 </div>
 
                 {/* BGM Volume */}
@@ -414,13 +434,14 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
                       <button
                         type="button"
                         onClick={() => setIgnoreOutdatedWarning(true)}
-                        className={`text-[11px] px-2.5 py-1 rounded font-medium transition-colors ${
+                        className={`text-[11px] px-2.5 py-1 rounded font-medium transition-colors flex items-center gap-1.5 ${
                           ignoreOutdatedWarning
                             ? "bg-amber-600 text-white font-bold"
                             : "bg-amber-950/80 text-amber-300 hover:bg-amber-900 border border-amber-800/60"
                         }`}
                       >
-                        ✓ Render With Existing Audio
+                        <Icons.Check className="w-3.5 h-3.5" />
+                        <span>Render With Existing Audio</span>
                       </button>
                       {onOpenNarrationStudio && (
                         <button
@@ -552,9 +573,16 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
                   </span>
                   <button
                     onClick={handleCopyPath}
-                    className="px-2.5 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-sans transition-colors shrink-0"
+                    className="px-2.5 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-sans transition-colors shrink-0 flex items-center gap-1.5"
                   >
-                    {copiedPath ? "✓ Copied" : "Copy Path"}
+                    {copiedPath ? (
+                      <>
+                        <Icons.Check className="w-3.5 h-3.5 text-emerald-400" />
+                        <span className="text-emerald-400 font-medium">Copied</span>
+                      </>
+                    ) : (
+                      "Copy Path"
+                    )}
                   </button>
                 </div>
               )}

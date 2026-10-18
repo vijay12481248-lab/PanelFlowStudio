@@ -47,7 +47,7 @@ export const StoryEditorLeftRail: React.FC<StoryEditorLeftRailProps> = ({
 
   return (
     <aside className="w-16 bg-zinc-950 border-r border-zinc-800 flex flex-col items-center py-3 select-none z-30 shrink-0">
-      <div className="flex flex-col gap-1 w-full px-2">
+      <div className="flex flex-col gap-1.5 w-full px-2">
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id;
           return (
@@ -55,13 +55,16 @@ export const StoryEditorLeftRail: React.FC<StoryEditorLeftRailProps> = ({
               key={tab.id}
               type="button"
               onClick={() => onSelectTab(tab.id)}
-              className={`flex flex-col items-center justify-center py-2.5 px-1 rounded-xl transition-all duration-150 ${
+              className={`relative flex flex-col items-center justify-center py-2.5 px-1 rounded-xl transition-all duration-150 group ${
                 isActive
                   ? "bg-indigo-600/15 text-indigo-400 font-semibold border border-indigo-500/30 shadow-sm"
                   : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60"
               }`}
               title={tab.label}
             >
+              {isActive && (
+                <span className="absolute -left-2 top-1/2 -translate-y-1/2 w-1 h-5 bg-indigo-500 rounded-r-full shadow-sm shadow-indigo-500/50" />
+              )}
               <div className="transition-transform duration-150 group-hover:scale-110">
                 {tab.icon}
               </div>

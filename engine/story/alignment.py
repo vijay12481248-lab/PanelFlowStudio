@@ -267,7 +267,7 @@ class NarrationFrameAlignmentService:
                     sub_duration_sec=sub_dur,
                     camera_motion=motion,
                     crop_filename=p.crop_filename,
-                    image_url=f"/api/projects/{project_id}/panels/{p.id}/image",
+                    image_url=f"/api/projects/{project_id}/panels/{p.id}/file",
                 ))
 
             # Compose music/sfx intents

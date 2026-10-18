@@ -151,77 +151,101 @@ export const StoryEditorTopBar: React.FC<StoryEditorTopBarProps> = ({
         <div className="h-4 w-px bg-zinc-800" />
 
         {/* Aspect Ratio Selector */}
-        <div className="flex items-center bg-zinc-900 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-200">
+        <div className="flex items-center bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1 text-xs text-zinc-200 gap-1.5 shadow-inner">
+          <svg className="w-3.5 h-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            {state.aspect_ratio === "9:16" ? (
+              <rect x="7" y="2" width="10" height="20" rx="2" />
+            ) : state.aspect_ratio === "1:1" ? (
+              <rect x="4" y="4" width="16" height="16" rx="2" />
+            ) : (
+              <rect x="2" y="5" width="20" height="14" rx="2" />
+            )}
+          </svg>
           <select
             value={state.aspect_ratio}
             onChange={(e) =>
               onUpdateState((s) => ({ ...s, aspect_ratio: e.target.value as any }))
             }
-            className="bg-transparent font-medium focus:outline-none cursor-pointer"
+            className="bg-transparent font-medium focus:outline-none cursor-pointer text-[11px]"
           >
-            <option value="16:9">16:9 (Landscape)</option>
-            <option value="9:16">9:16 (Vertical)</option>
-            <option value="1:1">1:1 (Square)</option>
+            <option value="16:9" className="bg-zinc-900 text-zinc-100">16:9 Landscape</option>
+            <option value="9:16" className="bg-zinc-900 text-zinc-100">9:16 Vertical</option>
+            <option value="1:1" className="bg-zinc-900 text-zinc-100">1:1 Square</option>
           </select>
         </div>
 
         {/* Narration Studio Workspace Launcher */}
         {onOpenNarrationStudio && (
-          <Button
-            variant="secondary"
-            size="sm"
+          <button
+            type="button"
             onClick={onOpenNarrationStudio}
-            className="text-xs h-8 px-3 border border-emerald-700/70 bg-emerald-950/40 text-emerald-300 hover:bg-emerald-900/60 hover:text-emerald-100 flex items-center gap-1.5 font-semibold"
+            className="text-xs h-8 px-3 rounded-lg border border-emerald-600/60 bg-emerald-950/40 text-emerald-300 hover:bg-emerald-900/60 hover:text-emerald-100 flex items-center gap-1.5 font-semibold transition-all shadow-sm shadow-emerald-950 active:scale-95"
             title="Open AI Narration & Storytelling Studio"
           >
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
             <Icons.Mic className="w-3.5 h-3.5 text-emerald-400" />
-            Narration Studio
-          </Button>
+            <span>Narration Studio</span>
+          </button>
         )}
 
         {/* Audio Library Workspace Launcher */}
         {onOpenAudioLibrary && (
-          <Button
-            variant="secondary"
-            size="sm"
+          <button
+            type="button"
             onClick={onOpenAudioLibrary}
-            className="text-xs h-8 px-3 border border-amber-700/70 bg-amber-950/40 text-amber-300 hover:bg-amber-900/60 hover:text-amber-100 flex items-center gap-1.5 font-semibold"
+            className="text-xs h-8 px-3 rounded-lg border border-amber-600/60 bg-amber-950/40 text-amber-300 hover:bg-amber-900/60 hover:text-amber-100 flex items-center gap-1.5 font-semibold transition-all shadow-sm shadow-amber-950 active:scale-95"
             title="Open Music & Sound Effects Library"
           >
             <Icons.Music className="w-3.5 h-3.5 text-amber-400" />
-            Audio Library
-          </Button>
+            <span>Audio Library</span>
+          </button>
         )}
 
         {/* Preview Button */}
-        <Button
-          variant="secondary"
-          size="sm"
+        <button
+          type="button"
           onClick={() =>
             onUpdateState((s) => ({ ...s, is_playing: !s.is_playing }))
           }
-          className="text-xs h-8 px-3 border border-zinc-700 hover:border-zinc-500"
+          className={`text-xs h-8 px-3 rounded-lg border font-semibold flex items-center gap-1.5 transition-all active:scale-95 ${
+            state.is_playing
+              ? "bg-amber-600 text-white border-amber-500 shadow-md shadow-amber-950 ring-1 ring-amber-400/50"
+              : "bg-zinc-900 border-zinc-700 hover:border-zinc-500 text-zinc-200"
+          }`}
         >
-          <Icons.Play className="w-3.5 h-3.5 mr-1 text-indigo-400" />
-          Preview
-        </Button>
+          {state.is_playing ? (
+            <>
+              <Icons.Pause className="w-3.5 h-3.5 fill-current" />
+              <span>Playing</span>
+            </>
+          ) : (
+            <>
+              <Icons.Play className="w-3.5 h-3.5 text-indigo-400" />
+              <span>Preview</span>
+            </>
+          )}
+        </button>
 
         {/* Primary Purple Export Button */}
-        <Button
-          variant="primary"
-          size="sm"
+        <button
+          type="button"
           onClick={onExportClick}
-          className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold h-8 px-4 rounded-lg shadow-md shadow-indigo-600/30"
+          className="bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-bold h-8 px-4 rounded-lg shadow-md shadow-indigo-600/30 flex items-center gap-1.5 transition-all active:scale-95"
         >
-          <Icons.Film className="w-3.5 h-3.5 mr-1.5" />
-          Export
-        </Button>
+          <Icons.Film className="w-3.5 h-3.5" />
+          <span>Export</span>
+        </button>
 
-        {/* Window controls mimic */}
-        <div className="flex items-center gap-1.5 text-zinc-500 ml-2">
-          <button className="hover:text-zinc-300 p-1" title="Minimize Window">_</button>
-          <button className="hover:text-zinc-300 p-1" title="Maximize Window">□</button>
-          <button onClick={onBackToDashboard} className="hover:text-rose-400 p-1" title="Close">✕</button>
+        {/* Clean Window Navigation Controls */}
+        <div className="flex items-center gap-1 text-zinc-500 ml-1 border-l border-zinc-800 pl-2">
+          <button
+            type="button"
+            onClick={onBackToDashboard}
+            className="hover:text-zinc-200 p-1.5 rounded-lg hover:bg-zinc-800/80 transition-colors"
+            title="Return to Projects Dashboard"
+          >
+            <Icons.ArrowLeft className="w-3.5 h-3.5" />
+          </button>
         </div>
       </div>
     </header>

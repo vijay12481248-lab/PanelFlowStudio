@@ -21,7 +21,7 @@ router = APIRouter(prefix="/api", tags=["render"])
 class CreateRenderRequest(BaseModel):
     profile_name: str = "standard_1080p"
     custom_output_path: Optional[str] = None
-    subtitle_enabled: bool = True
+    subtitle_enabled: bool = False
     bgm_volume_db: float = -10.0
     dialogue_gain_db: float = 0.0
     is_draft: bool = False
@@ -126,6 +126,7 @@ def create_render_job(
 
 
 @router.get("/projects/{project_id}/render/jobs")
+@router.get("/projects/{project_id}/renders")
 def list_project_renders(project_id: str, db: Session = Depends(get_db)):
     return render_service.list_project_renders(db, project_id)
 
@@ -169,6 +170,34 @@ def get_render_contact_sheet(project_id: str, render_id: str, db: Session = Depe
 
     p = Path(sheet_p).resolve()
     return FileResponse(path=str(p), media_type="image/jpeg", filename=p.name)
+
+
+@router.get("/projects/{project_id}/render/jobs/{render_id}/samples/{sample_index}")
+def get_render_audit_sample(
+    project_id: str,
+    render_id: str,
+    sample_index: int,
+    db: Session = Depends(get_db),
+):
+    """Serves the exact JPEG audit sample captured during video validation."""
+    job = render_service.get_render_job(db, render_id)
+    if not job:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Render job not found")
+
+    report = job.get("validation_report")
+    if not report:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Validation report not found")
+
+    samples = report.get("frame_samples", [])
+    if sample_index < 0 or sample_index >= len(samples):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Sample index out of range")
+
+    sample = samples[sample_index]
+    sample_p = Path(sample.get("sample_image_path", "")).resolve()
+    if not sample_p.exists() or not sample_p.is_file():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Audit sample image not found on disk")
+
+    return FileResponse(path=str(sample_p), media_type="image/jpeg", filename=sample_p.name)
 
 
 @router.get("/projects/{project_id}/render/jobs/{render_id}/validation")

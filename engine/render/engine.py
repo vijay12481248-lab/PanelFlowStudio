@@ -52,6 +52,7 @@ class RenderEngine:
         sfx_tracks: Optional[List[RenderAudioTrack]] = None,
         profile: Optional[RenderProfile] = None,
         music_policy: MusicDurationPolicy = MusicDurationPolicy.LOOP,
+        subtitle_enabled: bool = False,
     ) -> RenderPlan:
         """
         Translates a VisualTimeline and MasterAudioTimeline into an inspectable, frame-accurate RenderPlan.
@@ -94,7 +95,7 @@ class RenderEngine:
                     effects=shot.effect_instructions,
                     transition_in=shot.transition_in,
                     transition_out=shot.transition_out,
-                    captions=shot.caption_cues,
+                    captions=shot.caption_cues if subtitle_enabled else [],
                 )
             )
 
@@ -154,6 +155,7 @@ class RenderEngine:
             shots=shot_plans,
             audio_tracks=audio_tracks,
             music_policy=music_policy,
+            subtitle_enabled=subtitle_enabled,
             hash=plan_hash,
         )
 

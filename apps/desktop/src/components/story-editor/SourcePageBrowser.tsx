@@ -1137,7 +1137,8 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
             }`}
             title="Toggle: automatically add completed crops directly to timeline"
           >
-            <span>⚡ Auto-Add: {autoAddToTimeline ? "ON" : "OFF"}</span>
+            <Icons.Zap className="w-3 h-3" />
+            <span>Auto-Add: {autoAddToTimeline ? "ON" : "OFF"}</span>
           </button>
         </div>
 

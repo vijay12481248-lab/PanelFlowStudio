@@ -15,6 +15,12 @@ from engine.api.schemas import (
     PanelMergeRequest,
     PanelReorderRequest,
     PanelResponse,
+    BlurRegionRequest,
+    BlurTextRequest,
+    BlurPanelRequest,
+    BlurStatusResponse,
+    BatchBlurRequest,
+    BatchResetRequest,
 )
 
 router = APIRouter(prefix="/api/projects/{project_id}", tags=["panels"])
@@ -213,6 +219,7 @@ def confirm_panels(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 @router.get("/panels/{panel_id}/file")
+@router.get("/panels/{panel_id}/image")
 def get_panel_crop_file(
     project_id: str,
     panel_id: str,
@@ -255,3 +262,155 @@ def get_normalized_page_file(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Page image not found on disk")
 
     return FileResponse(norm_path, media_type="image/jpeg")
+
+
+@router.post("/panels/{panel_id}/blur-region")
+def blur_panel_region(
+    project_id: str,
+    panel_id: str,
+    req: BlurRegionRequest,
+    db: Session = Depends(get_db),
+):
+    try:
+        res = project_service.blur_panel_box(
+            db=db,
+            project_id=project_id,
+            panel_id=panel_id,
+            x=req.x,
+            y=req.y,
+            width=req.width,
+            height=req.height,
+            blur_radius=req.blur_radius,
+            feather=req.feather,
+        )
+        return res
+    except KeyError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.post("/panels/{panel_id}/blur-text")
+def blur_panel_text(
+    project_id: str,
+    panel_id: str,
+    req: BlurTextRequest = BlurTextRequest(),
+    db: Session = Depends(get_db),
+):
+    try:
+        res = project_service.blur_panel_text(
+            db=db,
+            project_id=project_id,
+            panel_id=panel_id,
+            region_ids=req.region_ids,
+            blur_radius=req.blur_radius,
+            feather=req.feather,
+        )
+        return res
+    except KeyError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.post("/panels/{panel_id}/blur-panel")
+def blur_entire_panel(
+    project_id: str,
+    panel_id: str,
+    req: BlurPanelRequest = BlurPanelRequest(),
+    db: Session = Depends(get_db),
+):
+    try:
+        res = project_service.blur_entire_panel(
+            db=db,
+            project_id=project_id,
+            panel_id=panel_id,
+            blur_radius=req.blur_radius,
+        )
+        return res
+    except KeyError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.post("/panels/{panel_id}/reset-image")
+def reset_panel_image(
+    project_id: str,
+    panel_id: str,
+    db: Session = Depends(get_db),
+):
+    try:
+        res = project_service.reset_panel_image(
+            db=db,
+            project_id=project_id,
+            panel_id=panel_id,
+        )
+        return res
+    except KeyError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.get("/panels/{panel_id}/blur-status", response_model=BlurStatusResponse)
+def get_panel_blur_status(
+    project_id: str,
+    panel_id: str,
+    db: Session = Depends(get_db),
+):
+    try:
+        res = project_service.get_panel_blur_status(
+            db=db,
+            project_id=project_id,
+            panel_id=panel_id,
+        )
+        return res
+    except KeyError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.post("/panels/batch-blur")
+def batch_blur_panels(
+    project_id: str,
+    payload: BatchBlurRequest,
+    db: Session = Depends(get_db),
+):
+    try:
+        res = project_service.batch_blur_panels(
+            db=db,
+            project_id=project_id,
+            preset=payload.preset,
+            height_px=payload.height_px,
+            blur_radius=payload.blur_radius,
+            feather=payload.feather,
+            panel_ids=payload.panel_ids,
+        )
+        return res
+    except KeyError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.post("/panels/batch-reset")
+def batch_reset_panels(
+    project_id: str,
+    payload: BatchResetRequest,
+    db: Session = Depends(get_db),
+):
+    try:
+        res = project_service.batch_reset_panels(
+            db=db,
+            project_id=project_id,
+            panel_ids=payload.panel_ids,
+        )
+        return res
+    except KeyError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+

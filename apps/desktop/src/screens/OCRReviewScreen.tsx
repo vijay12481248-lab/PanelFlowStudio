@@ -10,6 +10,7 @@ import type {
   TextRegionStatus,
 } from "@panelflow/shared-types";
 import { Button, Card, Badge, ProgressBar, Icons } from "@panelflow/ui";
+import { useError } from "../context/ErrorContext";
 
 interface OCRReviewScreenProps {
   project: Project;
@@ -26,6 +27,7 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
   onProceedToStory,
   onOpenStoryEditor,
 }) => {
+  const { reportError, inspectError } = useError();
   const [panels, setPanels] = useState<Panel[]>([]);
   const [selectedPanelIndex, setSelectedPanelIndex] = useState<number>(0);
   const [ocrRecords, setOcrRecords] = useState<Record<string, OCRRecord>>({});
@@ -49,13 +51,47 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
   // Vertical Panel Navigation & Deletion State
   const [isVerticalPanelsOpen, setIsVerticalPanelsOpen] = useState<boolean>(true);
   const [panelSearchQuery, setPanelSearchQuery] = useState<string>("");
+  const [panelFilter, setPanelFilter] = useState<"all" | "flagged" | "ready" | "empty">("all");
   const [deletingPanel, setDeletingPanel] = useState<boolean>(false);
   const [deleteConfirmPanel, setDeleteConfirmPanel] = useState<Panel | null>(null);
   const panelItemRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
+  // In-Preview Zoom & Pan Controls
+  const [zoomLevel, setZoomLevel] = useState<number>(1.0);
+  const [panOffset, setPanOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState<boolean>(false);
+  const panStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [copiedRawText, setCopiedRawText] = useState<boolean>(false);
+
+  // Non-blocking Inline Toast Notifications
+  const [toastMessage, setToastMessage] = useState<{ text: string; type?: "info" | "success" | "warn" } | null>(null);
+  const toastTimeoutRef = useRef<any>(null);
+
+  const showToast = useCallback((text: string, type: "info" | "success" | "warn" = "info") => {
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    setToastMessage({ text, type });
+    toastTimeoutRef.current = setTimeout(() => {
+      setToastMessage(null);
+    }, 2800);
+  }, []);
+
   // Undo / Redo history stack for Text Regions
   const [undoStack, setUndoStack] = useState<TextRegion[][]>([]);
   const [redoStack, setRedoStack] = useState<TextRegion[][]>([]);
+
+  // Blur & Redaction State
+  const [blurringRegion, setBlurringRegion] = useState<boolean>(false);
+  const [blurringPanel, setBlurringPanel] = useState<boolean>(false);
+  const [resettingPanel, setResettingPanel] = useState<boolean>(false);
+  const [panelBlurStatus, setPanelBlurStatus] = useState<{ is_blurred: boolean; has_backup: boolean; blurred_regions_count: number } | null>(null);
+  const [isCustomBlurOpen, setIsCustomBlurOpen] = useState<boolean>(false);
+  const [customBlurBox, setCustomBlurBox] = useState<{ x: number; y: number; width: number; height: number; blur_radius: number }>({
+    x: 0,
+    y: 0,
+    width: 250,
+    height: 100,
+    blur_radius: 24,
+  });
 
   // Selected Region Form State
   const [editForm, setEditForm] = useState<{
@@ -138,7 +174,14 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
         setSelectedRegionId(regionsList[0].id);
       }
     } catch (err: any) {
-      alert(`Failed to load OCR data: ${err.message}`);
+      reportError({
+        title: "Failed to Load OCR Data",
+        message: err.message || "Failed to load OCR data from project workspace.",
+        severity: "error",
+        source: "pipeline",
+        projectId: project.id,
+        rawDetails: err,
+      });
     } finally {
       setLoading(false);
     }
@@ -159,7 +202,18 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
         status: selectedRegion.status || "CONFIRMED",
       });
     }
-  }, [selectedRegion?.id]);
+  }, [selectedRegion]);
+
+  // Sync active panel blur status
+  useEffect(() => {
+    if (activePanel) {
+      api.getPanelBlurStatus(project.id, activePanel.id)
+        .then(setPanelBlurStatus)
+        .catch(() => setPanelBlurStatus(null));
+    } else {
+      setPanelBlurStatus(null);
+    }
+  }, [activePanel?.id, project.id, cacheBuster]);
 
   // Keyboard navigation & Shortcuts (Ctrl+Z / Ctrl+Shift+Z / Bracket navigation)
   useEffect(() => {
@@ -209,9 +263,16 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
         setSelectedRegionId(created[0].id);
       }
       setCacheBuster(Date.now());
-      alert(`Detected ${created.length} text regions across all panels.`);
     } catch (err: any) {
-      alert(`Text region detection failed: ${err.message}`);
+      reportError({
+        title: "Text Region Detection Failed",
+        message: err.message || "Could not detect speech/narration text bubbles.",
+        severity: "error",
+        source: "pipeline",
+        projectId: project.id,
+        jobType: "OCR_EXTRACTION",
+        rawDetails: err,
+      });
     } finally {
       setDetectingRegions(false);
     }
@@ -220,7 +281,14 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
   const handleRunProjectOCR = async () => {
     const activeEng = engines.find((e) => e.engine_id === selectedEngine);
     if (activeEng && !activeEng.is_available) {
-      alert(`Cannot run OCR with ${activeEng.display_name}: ${activeEng.diagnostic_message || "Configuration required."}`);
+      reportError({
+        title: "OCR Engine Unavailable",
+        message: `Cannot run OCR with ${activeEng.display_name}: ${activeEng.diagnostic_message || "Configuration required."}`,
+        severity: "warning",
+        source: "system",
+        projectId: project.id,
+        rawDetails: activeEng,
+      });
       return;
     }
 
@@ -248,9 +316,16 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
 
       await loadData();
       setCacheBuster(Date.now());
-      alert("Project OCR extraction complete!");
     } catch (err: any) {
-      alert(`OCR failed: ${err.message}`);
+      reportError({
+        title: "OCR Extraction Failed",
+        message: err.message || "Text extraction across panels failed.",
+        severity: "error",
+        source: "pipeline",
+        projectId: project.id,
+        jobType: "OCR_EXTRACTION",
+        rawDetails: err,
+      });
     } finally {
       setExtracting(false);
       setOcrProgress(0);
@@ -337,6 +412,105 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
     }
   };
 
+  const handleBlurRegion = async (regionId: string) => {
+    setBlurringRegion(true);
+    try {
+      pushUndo(textRegions);
+      const updated = await api.blurTextRegion(project.id, regionId);
+      setTextRegions((prev) => prev.map((tr) => (tr.id === regionId ? updated : tr)));
+      setEditForm((prev) => ({
+        ...prev,
+        corrected_text: updated.corrected_text || "",
+        region_type: updated.region_type,
+        status: updated.status,
+      }));
+      setCacheBuster(Date.now());
+      if (activePanel) {
+        const st = await api.getPanelBlurStatus(project.id, activePanel.id);
+        setPanelBlurStatus(st);
+      }
+    } catch (err: any) {
+      alert(`Failed to blur text region: ${err.message}`);
+    } finally {
+      setBlurringRegion(false);
+    }
+  };
+
+  const handleBlurAllPanelText = async () => {
+    if (!activePanel) return;
+    setBlurringPanel(true);
+    try {
+      pushUndo(textRegions);
+      const res = await api.blurPanelText(project.id, activePanel.id);
+      const updated = await api.listTextRegions(project.id);
+      setTextRegions(updated);
+      setCacheBuster(Date.now());
+      const st = await api.getPanelBlurStatus(project.id, activePanel.id);
+      setPanelBlurStatus(st);
+      alert(`Blurred ${res.blurred_count} text region(s) on Panel #${activePanel.sequence}.`);
+    } catch (err: any) {
+      alert(`Failed to blur panel text: ${err.message}`);
+    } finally {
+      setBlurringPanel(false);
+    }
+  };
+
+  const handleBlurEntirePanel = async () => {
+    if (!activePanel) return;
+    if (!confirm(`Are you sure you want to blur the entire visual content of Panel #${activePanel.sequence}? (Recommended for ad/credit/splash panels)`)) return;
+    setBlurringPanel(true);
+    try {
+      pushUndo(textRegions);
+      await api.blurEntirePanel(project.id, activePanel.id);
+      const updated = await api.listTextRegions(project.id);
+      setTextRegions(updated);
+      setCacheBuster(Date.now());
+      const st = await api.getPanelBlurStatus(project.id, activePanel.id);
+      setPanelBlurStatus(st);
+      alert(`Entire Panel #${activePanel.sequence} has been blurred.`);
+    } catch (err: any) {
+      alert(`Failed to blur panel: ${err.message}`);
+    } finally {
+      setBlurringPanel(false);
+    }
+  };
+
+  const handleBlurCustomBox = async () => {
+    if (!activePanel) return;
+    setBlurringPanel(true);
+    try {
+      await api.blurPanelRegion(project.id, activePanel.id, customBlurBox);
+      setCacheBuster(Date.now());
+      setIsCustomBlurOpen(false);
+      const st = await api.getPanelBlurStatus(project.id, activePanel.id);
+      setPanelBlurStatus(st);
+    } catch (err: any) {
+      alert(`Failed to blur custom area: ${err.message}`);
+    } finally {
+      setBlurringPanel(false);
+    }
+  };
+
+  const handleResetPanelImage = async () => {
+    if (!activePanel) return;
+    if (!confirm(`Restore original unblurred image for Panel #${activePanel.sequence}?`)) return;
+    setResettingPanel(true);
+    try {
+      pushUndo(textRegions);
+      await api.resetPanelImage(project.id, activePanel.id);
+      const updated = await api.listTextRegions(project.id);
+      setTextRegions(updated);
+      setCacheBuster(Date.now());
+      const st = await api.getPanelBlurStatus(project.id, activePanel.id);
+      setPanelBlurStatus(st);
+      alert(`Restored original unblurred panel image.`);
+    } catch (err: any) {
+      alert(`Failed to reset panel image: ${err.message}`);
+    } finally {
+      setResettingPanel(false);
+    }
+  };
+
   const handleConfirmAllPending = async () => {
     setConfirming(true);
     try {
@@ -350,9 +524,15 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
         )
       );
       await loadData();
-      alert(`All ${pending.length} pending text regions confirmed!`);
     } catch (err: any) {
-      alert(`Failed to confirm pending regions: ${err.message}`);
+      reportError({
+        title: "Failed to Confirm Regions",
+        message: err.message || "Error bulk-confirming text regions.",
+        severity: "warning",
+        source: "pipeline",
+        projectId: project.id,
+        rawDetails: err,
+      });
     } finally {
       setConfirming(false);
     }
@@ -363,10 +543,16 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
     try {
       await api.confirmOCR(project.id);
       const updatedProj = await api.getProject(project.id);
-      alert("OCR approval successful! Project advanced to OCR_APPROVED.");
       onOCRApproved(updatedProj);
     } catch (err: any) {
-      alert(`Strict Approval Gate Blocked: ${err.message}`);
+      reportError({
+        title: "Strict Approval Gate Blocked",
+        message: err.message || "OCR approval gate conditions were not satisfied.",
+        severity: "error",
+        source: "pipeline",
+        projectId: project.id,
+        rawDetails: err,
+      });
     } finally {
       setConfirming(false);
     }
@@ -376,6 +562,7 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
     (newIndex: number) => {
       if (newIndex < 0 || newIndex >= panels.length) return;
       setSelectedPanelIndex(newIndex);
+      setPanOffset({ x: 0, y: 0 }); // Reset pan position on panel navigation
       const targetPanel = panels[newIndex];
       if (targetPanel) {
         const firstInPanel = textRegions.find((tr) => tr.panel_id === targetPanel.id);
@@ -386,6 +573,80 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
     },
     [panels, textRegions]
   );
+
+  const handleZoomIn = () => setZoomLevel((z) => Math.min(3.0, +(z + 0.25).toFixed(2)));
+  const handleZoomOut = () => setZoomLevel((z) => Math.max(0.5, +(z - 0.25).toFixed(2)));
+  const handleZoomReset = () => {
+    setZoomLevel(1.0);
+    setPanOffset({ x: 0, y: 0 });
+  };
+
+  const handleWheel = (e: React.WheelEvent) => {
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      const delta = e.deltaY < 0 ? 0.15 : -0.15;
+      setZoomLevel((z) => Math.min(3.0, Math.max(0.5, +(z + delta).toFixed(2))));
+    }
+  };
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (zoomLevel > 1.0 && (e.button === 0 || e.button === 1)) {
+      setIsPanning(true);
+      panStartRef.current = { x: e.clientX - panOffset.x, y: e.clientY - panOffset.y };
+    }
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (isPanning) {
+      setPanOffset({
+        x: e.clientX - panStartRef.current.x,
+        y: e.clientY - panStartRef.current.y,
+      });
+    }
+  };
+
+  const handleMouseUp = () => {
+    setIsPanning(false);
+  };
+
+  const handleSaveAndNextRegion = async () => {
+    if (!selectedRegion) return;
+    setSavingRegion(true);
+    try {
+      pushUndo(textRegions);
+      const updated = await api.updateTextRegion(project.id, selectedRegion.id, {
+        region_type: editForm.region_type,
+        status: "CONFIRMED",
+        corrected_text: editForm.corrected_text,
+        corrected_by: "HUMAN",
+        correction_status: "EDITED",
+        speaker_character_id: editForm.speaker_character_id.trim() || undefined,
+        speaker_assignment_method: editForm.speaker_assignment_method,
+      });
+
+      setTextRegions((prev) => prev.map((tr) => (tr.id === updated.id ? updated : tr)));
+      showToast(`Region #${selectedRegion.sequence_in_panel} confirmed!`, "success");
+
+      // Auto-advance to next region in panel or next panel
+      const currentIdx = panelRegions.findIndex((r) => r.id === selectedRegion.id);
+      if (currentIdx >= 0 && currentIdx < panelRegions.length - 1) {
+        setSelectedRegionId(panelRegions[currentIdx + 1].id);
+      } else if (selectedPanelIndex < panels.length - 1) {
+        handleNavigatePanel(selectedPanelIndex + 1);
+      }
+    } catch (err: any) {
+      reportError({
+        title: "Failed to Save Region",
+        message: err.message || "Error saving text region updates.",
+        severity: "error",
+        source: "pipeline",
+        projectId: project.id,
+        rawDetails: err,
+      });
+    } finally {
+      setSavingRegion(false);
+    }
+  };
 
   const handleDeletePanel = async (panelId: string) => {
     setDeletingPanel(true);
@@ -419,6 +680,7 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
       }
 
       setDeleteConfirmPanel(null);
+      showToast("Panel deleted successfully", "success");
     } catch (err: any) {
       alert(`Failed to delete panel: ${err.message}`);
     } finally {
@@ -467,6 +729,7 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
   }, [selectedPanelIndex, panels.length, deleteConfirmPanel, handleNavigatePanel]);
 
   const getRegionBorderColor = (type: string, status: string) => {
+    if (status === "BLURRED" || type === "REDACTED") return "#f97316"; // Orange for blurred/redacted
     if (status === "NEEDS_REVIEW") return "#f59e0b"; // Amber warning
     if (status === "REJECTED") return "#71717a"; // Muted gray
     switch (type) {
@@ -826,35 +1089,105 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
             <Card className="p-3 bg-zinc-950 border-zinc-800 flex flex-col max-h-[82vh]">
               {/* Vertical Header */}
               <div className="flex items-center justify-between pb-2 border-b border-zinc-800/80 mb-2">
-                <span className="text-xs font-bold uppercase tracking-wider text-zinc-300 flex items-center gap-1.5">
+                <span className="text-xs font-bold uppercase tracking-wider text-zinc-200 flex items-center gap-1.5">
                   <Icons.Film className="w-4 h-4 text-indigo-400" />
                   Panels ({panels.length})
                 </span>
-                <Badge variant="neutral" className="text-[10px]">
+                <Badge variant={needsReviewCount > 0 ? "warning" : "success"} className="text-[10px]">
                   {needsReviewCount > 0 ? `${needsReviewCount} flagged` : "All clear"}
                 </Badge>
               </div>
 
-              {/* Jump to panel input */}
-              <div className="mb-2">
+              {/* Category Filter Pills */}
+              <div className="grid grid-cols-4 gap-1 p-0.5 bg-zinc-900 border border-zinc-800/80 rounded-lg text-[10px] font-medium mb-2">
+                <button
+                  type="button"
+                  onClick={() => setPanelFilter("all")}
+                  className={`py-1 rounded text-center transition-colors ${
+                    panelFilter === "all"
+                      ? "bg-zinc-800 text-zinc-100 font-semibold shadow-sm"
+                      : "text-zinc-400 hover:text-zinc-200"
+                  }`}
+                >
+                  All ({panels.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPanelFilter("flagged")}
+                  className={`py-1 rounded text-center transition-colors ${
+                    panelFilter === "flagged"
+                      ? "bg-amber-950/80 text-amber-200 font-semibold border border-amber-800"
+                      : "text-zinc-400 hover:text-amber-300"
+                  }`}
+                  title="Panels with flagged regions needing review"
+                >
+                  ⚠️ Flagged ({panels.filter((p) => textRegions.some((tr) => tr.panel_id === p.id && tr.status === "NEEDS_REVIEW")).length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPanelFilter("ready")}
+                  className={`py-1 rounded text-center transition-colors ${
+                    panelFilter === "ready"
+                      ? "bg-emerald-950/80 text-emerald-200 font-semibold border border-emerald-800"
+                      : "text-zinc-400 hover:text-emerald-300"
+                  }`}
+                  title="Panels with all text regions confirmed"
+                >
+                  ✓ Ready
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPanelFilter("empty")}
+                  className={`py-1 rounded text-center transition-colors ${
+                    panelFilter === "empty"
+                      ? "bg-zinc-800 text-zinc-200 font-semibold"
+                      : "text-zinc-400 hover:text-zinc-200"
+                  }`}
+                  title="Panels with no detected text regions"
+                >
+                  No Text
+                </button>
+              </div>
+
+              {/* Jump to panel input with clear button */}
+              <div className="relative mb-2">
                 <input
                   type="text"
                   placeholder="Filter or jump #..."
                   value={panelSearchQuery}
                   onChange={(e) => setPanelSearchQuery(e.target.value)}
-                  className="w-full px-2.5 py-1.5 bg-zinc-900 border border-zinc-800 rounded text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-indigo-500"
+                  className="w-full px-2.5 py-1.5 pr-6 bg-zinc-900 border border-zinc-800 rounded text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-indigo-500"
                 />
+                {panelSearchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setPanelSearchQuery("")}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-200 text-xs"
+                    title="Clear filter"
+                  >
+                    ✕
+                  </button>
+                )}
               </div>
 
               {/* Scrollable vertical panel list */}
               <div className="overflow-y-auto space-y-2 pr-1 flex-1 custom-scrollbar">
                 {panels
                   .filter((p) => {
+                    const count = textRegions.filter((tr) => tr.panel_id === p.id).length;
+                    const hasNeedsReview = textRegions.some(
+                      (tr) => tr.panel_id === p.id && tr.status === "NEEDS_REVIEW"
+                    );
+
+                    // Category filter
+                    if (panelFilter === "flagged" && !hasNeedsReview) return false;
+                    if (panelFilter === "ready" && (count === 0 || hasNeedsReview)) return false;
+                    if (panelFilter === "empty" && count > 0) return false;
+
+                    // Query search
                     if (!panelSearchQuery.trim()) return true;
                     const q = panelSearchQuery.trim().toLowerCase();
-                    if (q === "flagged" || q === "review") {
-                      return textRegions.some((tr) => tr.panel_id === p.id && tr.status === "NEEDS_REVIEW");
-                    }
+                    if (q === "flagged" || q === "review") return hasNeedsReview;
                     return String(p.sequence).includes(q) || p.id.toLowerCase().includes(q);
                   })
                   .map((p) => {
@@ -874,15 +1207,15 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                         onClick={() => handleNavigatePanel(idx)}
                         className={`group relative p-2 rounded-lg border text-left cursor-pointer transition-all ${
                           isSelected
-                            ? "bg-indigo-950/50 border-indigo-500 ring-1 ring-indigo-500 shadow-md"
+                            ? "bg-gradient-to-r from-indigo-950/80 via-zinc-900/90 to-zinc-900 border-indigo-500 border-l-4 shadow-xl ring-1 ring-indigo-500/40"
                             : "bg-zinc-900/70 hover:bg-zinc-800/80 border-zinc-800/90 hover:border-zinc-700"
                         }`}
                       >
                         {/* Panel Top Row: Sequence + Delete Button */}
                         <div className="flex items-center justify-between mb-1.5">
                           <span
-                            className={`text-xs font-semibold ${
-                              isSelected ? "text-indigo-200 font-bold" : "text-zinc-300"
+                            className={`text-xs ${
+                              isSelected ? "text-indigo-200 font-bold" : "text-zinc-300 font-medium"
                             }`}
                           >
                             Panel #{p.sequence}
@@ -945,69 +1278,89 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
               : "lg:col-span-7"
           } space-y-3`}
         >
-          <Card className="p-4 bg-zinc-950 flex flex-col items-center justify-center min-h-[500px]">
+          <Card className="p-4 bg-zinc-950 flex flex-col items-center justify-center min-h-[520px]">
             {activePanel ? (
-              <div className="relative inline-block max-w-full overflow-hidden rounded-lg shadow-2xl border border-zinc-800 group/preview select-none">
-                <img
-                  src={`${api.getPanelImageUrl(project.id, activePanel.id)}?t=${cacheBuster}`}
-                  alt={`Panel ${activePanel.sequence}`}
-                  className="max-h-[68vh] w-auto object-contain block"
-                />
-
-                {/* SVG Overlay of detected Text Regions */}
-                <svg
-                  className="absolute inset-0 w-full h-full pointer-events-auto"
-                  viewBox={`0 0 ${activePanel.width} ${activePanel.height}`}
-                  preserveAspectRatio="none"
+              <div
+                onWheel={handleWheel}
+                onMouseDown={handleMouseDown}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={handleMouseUp}
+                className={`relative inline-block max-w-full overflow-hidden rounded-lg shadow-2xl border border-zinc-800 group/preview select-none ${
+                  zoomLevel > 1.0 ? (isPanning ? "cursor-grabbing" : "cursor-grab") : "cursor-default"
+                }`}
+              >
+                {/* Scaled/Panned Content (Image and SVG Overlays in perfect sync) */}
+                <div
+                  style={{
+                    transform: `scale(${zoomLevel}) translate(${panOffset.x / zoomLevel}px, ${panOffset.y / zoomLevel}px)`,
+                    transformOrigin: "center center",
+                    transition: isPanning ? "none" : "transform 0.12s ease-out",
+                  }}
+                  className="relative inline-block max-w-full"
                 >
-                  {panelRegions.map((tr) => {
-                    const isSelected = tr.id === selectedRegionId;
-                    const stroke = getRegionBorderColor(tr.region_type, tr.status);
+                  <img
+                    src={`${api.getPanelImageUrl(project.id, activePanel.id)}?t=${cacheBuster}`}
+                    alt={`Panel ${activePanel.sequence}`}
+                    className="max-h-[68vh] w-auto object-contain block pointer-events-none"
+                    draggable={false}
+                  />
 
-                    return (
-                      <g
-                        key={tr.id}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedRegionId(tr.id);
-                        }}
-                        className="cursor-pointer group"
-                      >
-                        <rect
-                          x={tr.x}
-                          y={tr.y}
-                          width={tr.width}
-                          height={tr.height}
-                          fill={isSelected ? "rgba(99, 102, 241, 0.28)" : "rgba(15, 23, 42, 0.22)"}
-                          stroke={isSelected ? "#818cf8" : stroke}
-                          strokeWidth={isSelected ? 3 : 2}
-                          strokeDasharray={tr.status === "NEEDS_REVIEW" ? "6,3" : undefined}
-                          rx={4}
-                        />
+                  {/* SVG Overlay of detected Text Regions */}
+                  <svg
+                    className="absolute inset-0 w-full h-full pointer-events-auto"
+                    viewBox={`0 0 ${activePanel.width} ${activePanel.height}`}
+                    preserveAspectRatio="none"
+                  >
+                    {panelRegions.map((tr) => {
+                      const isSelected = tr.id === selectedRegionId;
+                      const stroke = getRegionBorderColor(tr.region_type, tr.status);
 
-                        {/* Region Order & Type Label */}
-                        <rect
-                          x={tr.x}
-                          y={Math.max(0, tr.y - 18)}
-                          width={85}
-                          height={16}
-                          fill={stroke}
-                          rx={3}
-                        />
-                        <text
-                          x={tr.x + 4}
-                          y={Math.max(0, tr.y - 6)}
-                          fill="#ffffff"
-                          fontSize="10"
-                          fontWeight="bold"
-                          fontFamily="sans-serif"
+                      return (
+                        <g
+                          key={tr.id}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedRegionId(tr.id);
+                          }}
+                          className="cursor-pointer group"
                         >
-                          #{tr.sequence_in_panel} {tr.region_type}
-                        </text>
-                      </g>
-                    );
-                  })}
-                </svg>
+                          <rect
+                            x={tr.x}
+                            y={tr.y}
+                            width={tr.width}
+                            height={tr.height}
+                            fill={isSelected ? "rgba(99, 102, 241, 0.28)" : "rgba(15, 23, 42, 0.22)"}
+                            stroke={isSelected ? "#818cf8" : stroke}
+                            strokeWidth={isSelected ? 3 : 2}
+                            strokeDasharray={tr.status === "NEEDS_REVIEW" ? "6,3" : undefined}
+                            rx={4}
+                          />
+
+                          {/* Region Order & Type Label */}
+                          <rect
+                            x={tr.x}
+                            y={Math.max(0, tr.y - 18)}
+                            width={85}
+                            height={16}
+                            fill={stroke}
+                            rx={3}
+                          />
+                          <text
+                            x={tr.x + 4}
+                            y={Math.max(0, tr.y - 6)}
+                            fill="#ffffff"
+                            fontSize="10"
+                            fontWeight="bold"
+                            fontFamily="sans-serif"
+                          >
+                            #{tr.sequence_in_panel} {tr.region_type}
+                          </text>
+                        </g>
+                      );
+                    })}
+                  </svg>
+                </div>
 
                 {/* Left Edge Navigation Button: Previous Panel (Vertically Centered) */}
                 {selectedPanelIndex > 0 ? (
@@ -1061,29 +1414,132 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                   </button>
                 )}
 
-                {/* In-Preview Floating Header Overlay: Indicator & Direct Delete Option */}
-                <div className="absolute top-3 inset-x-3 z-20 flex items-center justify-between pointer-events-none">
+                {/* In-Preview Floating Header Overlay: Indicator & Direct Panel Actions */}
+                <div className="absolute top-3 inset-x-3 z-20 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
                   <div className="px-2.5 py-1 rounded-md bg-zinc-950/85 border border-zinc-700/80 backdrop-blur-md text-xs font-semibold text-zinc-200 shadow-lg pointer-events-auto flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></span>
                     <span>Panel #{activePanel.sequence}</span>
                     <span className="text-zinc-500 text-[11px]">
                       ({selectedPanelIndex + 1} / {panels.length})
                     </span>
+                    {panelBlurStatus?.is_blurred && (
+                      <span className="ml-1 px-1.5 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-800 text-[10px] font-bold">
+                        BLURRED
+                      </span>
+                    )}
                   </div>
 
+                  <div className="flex flex-wrap items-center gap-1.5 pointer-events-auto">
+                    {panelBlurStatus?.has_backup && (
+                      <button
+                        type="button"
+                        onClick={handleResetPanelImage}
+                        disabled={resettingPanel}
+                        className="px-2.5 py-1 rounded-md bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-700/80 text-xs font-medium text-zinc-300 hover:text-white shadow-lg backdrop-blur-md flex items-center gap-1 transition-all cursor-pointer"
+                        title="Restore original unblurred image for this panel"
+                      >
+                        <Icons.Rotate className="w-3.5 h-3.5 text-zinc-400" />
+                        <span>Reset Blur</span>
+                      </button>
+                    )}
+
+                    {panelRegions.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleBlurAllPanelText}
+                        disabled={blurringPanel}
+                        className="px-2.5 py-1 rounded-md bg-amber-950/85 hover:bg-amber-900 border border-amber-800/80 text-xs font-medium text-amber-300 hover:text-amber-100 shadow-lg backdrop-blur-md flex items-center gap-1 transition-all cursor-pointer"
+                        title="Blur all detected text regions/watermarks on this panel and in video"
+                      >
+                        <Icons.EyeOff className="w-3.5 h-3.5" />
+                        <span>Blur All Text</span>
+                      </button>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (activePanel) {
+                          setCustomBlurBox({
+                            x: 0,
+                            y: 0,
+                            width: Math.min(activePanel.width, 300),
+                            height: Math.min(activePanel.height, 100),
+                            blur_radius: 24,
+                          });
+                        }
+                        setIsCustomBlurOpen(true);
+                      }}
+                      className="px-2.5 py-1 rounded-md bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-700/80 text-xs font-medium text-zinc-300 hover:text-white shadow-lg backdrop-blur-md flex items-center gap-1 transition-all cursor-pointer"
+                      title="Blur a custom area, banner, or watermark box"
+                    >
+                      <span>Blur Box...</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleBlurEntirePanel}
+                      disabled={blurringPanel}
+                      className="px-2.5 py-1 rounded-md bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-700/80 text-xs font-medium text-zinc-300 hover:text-white shadow-lg backdrop-blur-md flex items-center gap-1 transition-all cursor-pointer"
+                      title="Blur entire panel image (recommended for ad/recommendation panels)"
+                    >
+                      <span>Blur Panel</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDeleteConfirmPanel(activePanel);
+                      }}
+                      disabled={deletingPanel}
+                      className="px-2.5 py-1 rounded-md bg-rose-950/85 hover:bg-rose-900 border border-rose-800/80 text-xs font-medium text-rose-200 hover:text-white shadow-lg backdrop-blur-md flex items-center gap-1 transition-all hover:scale-105 active:scale-95 cursor-pointer"
+                      title={`Delete Panel #${activePanel.sequence}`}
+                    >
+                      <Icons.Trash className="w-3.5 h-3.5" />
+                      <span>Delete</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Floating Zoom & Pan Controls (Bottom Right) */}
+                <div className="absolute bottom-3 right-3 z-30 flex items-center gap-1 bg-zinc-950/90 backdrop-blur-md border border-zinc-700/80 rounded-lg p-1 shadow-2xl text-zinc-300">
                   <button
                     type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setDeleteConfirmPanel(activePanel);
-                    }}
-                    disabled={deletingPanel}
-                    className="px-2.5 py-1 rounded-md bg-rose-950/85 hover:bg-rose-900 border border-rose-800/80 text-xs font-medium text-rose-200 hover:text-white shadow-lg backdrop-blur-md pointer-events-auto flex items-center gap-1.5 transition-all hover:scale-105 active:scale-95 cursor-pointer"
-                    title={`Delete Panel #${activePanel.sequence}`}
+                    onClick={handleZoomOut}
+                    disabled={zoomLevel <= 0.5}
+                    className="p-1.5 hover:bg-zinc-800 disabled:opacity-40 rounded text-zinc-300 hover:text-white transition-colors"
+                    title="Zoom Out (or Ctrl + Wheel Down)"
                   >
-                    <Icons.Trash className="w-3.5 h-3.5" />
-                    <span>Delete</span>
+                    <Icons.ZoomOut className="w-4 h-4" />
                   </button>
+                  <button
+                    type="button"
+                    onClick={handleZoomReset}
+                    className="px-2 py-1 hover:bg-zinc-800 rounded font-mono text-[11px] font-semibold text-zinc-200 hover:text-white transition-colors min-w-[3.5rem] text-center"
+                    title="Reset Zoom to 100%"
+                  >
+                    {Math.round(zoomLevel * 100)}%
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleZoomIn}
+                    disabled={zoomLevel >= 3.0}
+                    className="p-1.5 hover:bg-zinc-800 disabled:opacity-40 rounded text-zinc-300 hover:text-white transition-colors"
+                    title="Zoom In (or Ctrl + Wheel Up)"
+                  >
+                    <Icons.ZoomIn className="w-4 h-4" />
+                  </button>
+                  {zoomLevel !== 1.0 && (
+                    <button
+                      type="button"
+                      onClick={handleZoomReset}
+                      className="p-1.5 hover:bg-zinc-800 rounded text-indigo-400 hover:text-indigo-300 transition-colors border-l border-zinc-800 ml-0.5"
+                      title="Reset Pan & Zoom"
+                    >
+                      <Icons.Rotate className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
               </div>
             ) : (
@@ -1093,6 +1549,74 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
               </div>
             )}
           </Card>
+
+          {/* Panel Quick Scrubber & Navigation Track */}
+          {panels.length > 0 && (
+            <div className="flex items-center justify-between gap-3 px-4 py-2 bg-zinc-900/60 border border-zinc-800/80 rounded-xl text-xs">
+              <div className="flex items-center gap-2 text-zinc-400 font-medium flex-shrink-0">
+                <Icons.Film className="w-3.5 h-3.5 text-indigo-400" />
+                <span className="text-zinc-200 font-mono font-bold">
+                  Panel {selectedPanelIndex + 1}
+                </span>
+                <span className="text-zinc-500 font-mono">/ {panels.length}</span>
+              </div>
+
+              <div className="flex-1 max-w-md mx-2 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleNavigatePanel(selectedPanelIndex - 1)}
+                  disabled={selectedPanelIndex <= 0}
+                  className="p-1 hover:bg-zinc-800 disabled:opacity-30 rounded text-zinc-400 hover:text-white transition-colors"
+                  title="Previous Panel (←)"
+                >
+                  <Icons.ArrowLeft className="w-3.5 h-3.5" />
+                </button>
+                <input
+                  type="range"
+                  min={0}
+                  max={Math.max(0, panels.length - 1)}
+                  value={selectedPanelIndex}
+                  onChange={(e) => handleNavigatePanel(Number(e.target.value))}
+                  className="w-full accent-indigo-500 cursor-pointer h-1.5 bg-zinc-800 rounded-lg appearance-none"
+                  title="Scrub across panels"
+                />
+                <button
+                  type="button"
+                  onClick={() => handleNavigatePanel(selectedPanelIndex + 1)}
+                  disabled={selectedPanelIndex >= panels.length - 1}
+                  className="p-1 hover:bg-zinc-800 disabled:opacity-30 rounded text-zinc-400 hover:text-white transition-colors"
+                  title="Next Panel (→)"
+                >
+                  <Icons.ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {needsReviewCount > 0 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      const firstFlagged = textRegions.find((tr) => tr.status === "NEEDS_REVIEW");
+                      if (firstFlagged) {
+                        const targetIdx = panels.findIndex((p) => p.id === firstFlagged.panel_id);
+                        if (targetIdx >= 0) handleNavigatePanel(targetIdx);
+                        setSelectedRegionId(firstFlagged.id);
+                        showToast(`Jumped to flagged region in Panel #${panels[targetIdx]?.sequence}`, "warn");
+                      }
+                    }}
+                    className="text-[11px] h-7 text-amber-300 hover:bg-amber-950/60 border border-amber-800/60 flex items-center gap-1.5"
+                  >
+                    <Icons.AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Next Flagged</span>
+                    <span className="px-1.5 py-0.2 rounded-full bg-amber-900 text-[10px] font-bold text-amber-200">
+                      {needsReviewCount}
+                    </span>
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Right (5 cols): 3-Layer Region Editor & Region List */}
@@ -1126,6 +1650,21 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
 
                 <div className="flex items-center gap-1.5">
                   <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => handleBlurRegion(selectedRegion.id)}
+                    loading={blurringRegion}
+                    className={`text-xs ${
+                      selectedRegion.status === "BLURRED" || selectedRegion.region_type === "REDACTED"
+                        ? "bg-amber-950/70 text-amber-300 border-amber-800"
+                        : "text-amber-400 hover:text-amber-300 hover:bg-amber-950/40 border-amber-800/60"
+                    }`}
+                    title="Blur this text directly on the panel crop and in the video (redacts watermarks, site credits, subscribe notes)"
+                  >
+                    <Icons.EyeOff className="w-3.5 h-3.5 mr-1" />
+                    {selectedRegion.status === "BLURRED" || selectedRegion.region_type === "REDACTED" ? "Re-blur" : "Blur Text"}
+                  </Button>
+                  <Button
                     variant="ghost"
                     size="sm"
                     onClick={() => handleOCRRegion(selectedRegion.id)}
@@ -1152,17 +1691,53 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">
-                    Layer 1: Immutable Machine OCR
+                    Layer 1: Machine OCR
                   </span>
-                  <span className="text-[10px] font-mono text-zinc-500">
-                    Confidence:{" "}
-                    {selectedRegion.raw_confidence != null
-                      ? `${(selectedRegion.raw_confidence * 100).toFixed(0)}%`
-                      : "Unextracted"}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
+                        (selectedRegion.raw_confidence || 0) >= 0.85
+                          ? "bg-emerald-950/80 text-emerald-300 border-emerald-800"
+                          : (selectedRegion.raw_confidence || 0) >= 0.6
+                          ? "bg-amber-950/80 text-amber-300 border-amber-800"
+                          : "bg-rose-950/80 text-rose-300 border-rose-800"
+                      }`}
+                    >
+                      Confidence:{" "}
+                      {selectedRegion.raw_confidence != null
+                        ? `${(selectedRegion.raw_confidence * 100).toFixed(0)}%`
+                        : "Unextracted"}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (selectedRegion.raw_text) {
+                          navigator.clipboard?.writeText(selectedRegion.raw_text);
+                          setCopiedRawText(true);
+                          setTimeout(() => setCopiedRawText(false), 1500);
+                          showToast("Raw machine text copied to clipboard", "success");
+                        }
+                      }}
+                      disabled={!selectedRegion.raw_text}
+                      className="px-2 py-0.5 rounded bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 hover:text-white border border-zinc-700 text-[10px] flex items-center gap-1 transition-colors disabled:opacity-40"
+                      title="Copy raw machine OCR text"
+                    >
+                      {copiedRawText ? (
+                        <>
+                          <Icons.Check className="w-3 h-3 text-emerald-400" />
+                          <span className="text-emerald-400">Copied</span>
+                        </>
+                      ) : (
+                        <>
+                          <Icons.Copy className="w-3 h-3" />
+                          <span>Copy</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
                 <div className="bg-zinc-950 p-2.5 rounded border border-zinc-800/80">
-                  <p className="text-xs font-mono text-zinc-300 select-all min-h-[2.5rem]">
+                  <p className="text-xs font-mono text-zinc-300 select-all min-h-[2.5rem] leading-relaxed">
                     {selectedRegion.raw_text || (
                       <span className="text-zinc-600 italic">No machine text extracted yet.</span>
                     )}
@@ -1181,51 +1756,151 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                   </span>
                 </div>
                 <textarea
-                  rows={3}
+                  rows={4}
                   value={editForm.corrected_text}
                   onChange={(e) => setEditForm({ ...editForm, corrected_text: e.target.value })}
+                  onKeyDown={(e) => {
+                    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+                      e.preventDefault();
+                      handleSaveAndNextRegion();
+                    }
+                  }}
                   disabled={extracting}
-                  placeholder="Enter or correct dialogue text..."
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1.5 text-xs text-zinc-100 focus:outline-none focus:border-indigo-500 resize-none font-sans"
+                  placeholder="Enter or correct dialogue text... (Press Ctrl + Enter to confirm and advance)"
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-xs text-zinc-100 focus:outline-none focus:border-indigo-500 resize-none font-sans leading-relaxed"
                 />
+
+                {/* Quick Formatting Chips */}
+                <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const trimmed = editForm.corrected_text.replace(/\s+/g, " ").trim();
+                      setEditForm((prev) => ({ ...prev, corrected_text: trimmed }));
+                      showToast("Trimmed whitespace", "info");
+                    }}
+                    className="px-2 py-0.5 rounded bg-zinc-800/90 hover:bg-zinc-700 border border-zinc-700/60 text-[10px] text-zinc-300 transition-colors"
+                    title="Collapse repeated whitespace into single space and trim edges"
+                  >
+                    Trim Spaces
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const cleaned = editForm.corrected_text
+                        .replace(/[「『]/g, '"')
+                        .replace(/[」』]/g, '"')
+                        .replace(/[""]/g, '"')
+                        .replace(/['']/g, "'");
+                      setEditForm((prev) => ({ ...prev, corrected_text: cleaned }));
+                      showToast("Standardized quotes", "info");
+                    }}
+                    className="px-2 py-0.5 rounded bg-zinc-800/90 hover:bg-zinc-700 border border-zinc-700/60 text-[10px] text-zinc-300 transition-colors"
+                    title="Convert Japanese brackets 「」 and curved quotes to standard quotes"
+                  >
+                    Fix Quotes
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const sentence = editForm.corrected_text.replace(
+                        /(^\s*\w|[.!?]\s*\w)/g,
+                        (c) => c.toUpperCase()
+                      );
+                      setEditForm((prev) => ({ ...prev, corrected_text: sentence }));
+                      showToast("Sentence capitalized", "info");
+                    }}
+                    className="px-2 py-0.5 rounded bg-zinc-800/90 hover:bg-zinc-700 border border-zinc-700/60 text-[10px] text-zinc-300 transition-colors"
+                    title="Capitalize first letter of each sentence"
+                  >
+                    Sentence Case
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditForm((prev) => ({ ...prev, corrected_text: "" }));
+                      showToast("Text cleared", "warn");
+                    }}
+                    className="px-2 py-0.5 rounded bg-zinc-800/90 hover:bg-zinc-700 border border-zinc-700/60 text-[10px] text-zinc-400 hover:text-zinc-200 transition-colors ml-auto"
+                    title="Clear text"
+                  >
+                    Clear
+                  </button>
+                </div>
               </div>
 
               {/* Classification & Status Controls */}
-              <div className="grid grid-cols-2 gap-2.5">
-                <div>
-                  <label className="text-[10px] text-zinc-400 font-medium block mb-1">
-                    Region Type:
-                  </label>
-                  <select
-                    value={editForm.region_type}
-                    onChange={(e) => setEditForm({ ...editForm, region_type: e.target.value })}
-                    disabled={extracting}
-                    className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500"
-                  >
-                    <option value="SPEECH">Speech Bubble</option>
-                    <option value="NARRATION">Narration Box</option>
-                    <option value="THOUGHT">Thought Bubble</option>
-                    <option value="SFX">Sound Effect (SFX)</option>
-                    <option value="CAPTION">Caption</option>
-                    <option value="UNKNOWN">Unknown / Ambiguous</option>
-                  </select>
+              <div className="space-y-2 pt-1 border-t border-zinc-800/80">
+                <label className="text-[10px] text-zinc-400 font-semibold uppercase tracking-wider block">
+                  Region Classification:
+                </label>
+                <div className="grid grid-cols-5 gap-1.5">
+                  {[
+                    { id: "SPEECH", label: "Speech", color: "#0ea5e9" },
+                    { id: "NARRATION", label: "Narration", color: "#eab308" },
+                    { id: "THOUGHT", label: "Thought", color: "#a855f7" },
+                    { id: "SFX", label: "SFX", color: "#ec4899" },
+                    { id: "CAPTION", label: "Caption", color: "#14b8a6" },
+                  ].map((cat) => {
+                    const isSelected = editForm.region_type === cat.id;
+                    return (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        onClick={() => setEditForm((prev) => ({ ...prev, region_type: cat.id }))}
+                        disabled={extracting}
+                        className={`py-1 rounded text-center text-[10px] font-semibold transition-all border ${
+                          isSelected
+                            ? "bg-zinc-950 text-white shadow-md ring-2"
+                            : "bg-zinc-950/60 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 border-zinc-800"
+                        }`}
+                        style={{
+                          borderColor: isSelected ? cat.color : undefined,
+                          boxShadow: isSelected ? `0 0 10px ${cat.color}33` : undefined,
+                        }}
+                      >
+                        {cat.label}
+                      </button>
+                    );
+                  })}
                 </div>
 
-                <div>
-                  <label className="text-[10px] text-zinc-400 font-medium block mb-1">
-                    Review Status:
-                  </label>
-                  <select
-                    value={editForm.status}
-                    onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
-                    disabled={extracting}
-                    className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500"
-                  >
-                    <option value="DETECTED">DETECTED (Not reviewed)</option>
-                    <option value="CONFIRMED">CONFIRMED (Approved)</option>
-                    <option value="NEEDS_REVIEW">NEEDS_REVIEW (Flagged)</option>
-                    <option value="REJECTED">REJECTED (Ignore)</option>
-                  </select>
+                <div className="grid grid-cols-2 gap-2.5 pt-1">
+                  <div>
+                    <label className="text-[10px] text-zinc-400 font-medium block mb-1">
+                      More Types:
+                    </label>
+                    <select
+                      value={editForm.region_type}
+                      onChange={(e) => setEditForm({ ...editForm, region_type: e.target.value })}
+                      disabled={extracting}
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500"
+                    >
+                      <option value="SPEECH">Speech Bubble</option>
+                      <option value="NARRATION">Narration Box</option>
+                      <option value="THOUGHT">Thought Bubble</option>
+                      <option value="SFX">Sound Effect (SFX)</option>
+                      <option value="CAPTION">Caption</option>
+                      <option value="UNKNOWN">Unknown / Ambiguous</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] text-zinc-400 font-medium block mb-1">
+                      Review Status:
+                    </label>
+                    <select
+                      value={editForm.status}
+                      onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
+                      disabled={extracting}
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500"
+                    >
+                      <option value="DETECTED">DETECTED (Not reviewed)</option>
+                      <option value="CONFIRMED">CONFIRMED (Approved)</option>
+                      <option value="NEEDS_REVIEW">NEEDS_REVIEW (Flagged)</option>
+                      <option value="REJECTED">REJECTED (Ignore)</option>
+                    </select>
+                  </div>
                 </div>
               </div>
 
@@ -1269,28 +1944,42 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
               </div>
 
               {/* Save & Approve Actions */}
-              <div className="flex items-center justify-between pt-2">
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-zinc-800">
                 <Button
                   variant="secondary"
                   size="sm"
                   onClick={() => handleApproveRegion(selectedRegion.id)}
                   disabled={extracting || savingRegion}
-                  className="text-xs bg-emerald-950/40 text-emerald-300 border-emerald-800/80"
+                  className="text-xs bg-emerald-950/40 text-emerald-300 border-emerald-800/80 hover:bg-emerald-900/60"
                 >
                   <Icons.Check className="w-3.5 h-3.5 mr-1" />
                   Mark Confirmed
                 </Button>
 
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={handleSaveRegion}
-                  disabled={extracting}
-                  loading={savingRegion}
-                  className="text-xs"
-                >
-                  Save Region Changes
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleSaveRegion}
+                    disabled={extracting}
+                    loading={savingRegion}
+                    className="text-xs text-zinc-300 hover:text-white"
+                  >
+                    Save
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={handleSaveAndNextRegion}
+                    disabled={extracting}
+                    loading={savingRegion}
+                    className="text-xs bg-indigo-600 hover:bg-indigo-500 text-white font-semibold flex items-center gap-1 shadow-lg shadow-indigo-950/50"
+                    title="Confirm this region and auto-advance to next (Ctrl + Enter)"
+                  >
+                    <span>Approve & Next</span>
+                    <span className="text-[10px] opacity-75 font-mono">↵</span>
+                  </Button>
+                </div>
               </div>
             </Card>
           ) : (
@@ -1388,6 +2077,163 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
               </Button>
             </div>
           </Card>
+        </div>
+      )}
+
+      {/* Custom Blur Area Modal */}
+      {isCustomBlurOpen && activePanel && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <Card className="max-w-md w-full p-5 bg-zinc-900 border-zinc-800 space-y-4 shadow-2xl">
+            <div className="flex items-start justify-between border-b border-zinc-800 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-lg bg-amber-950 border border-amber-800 text-amber-400">
+                  <Icons.EyeOff className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-zinc-100">
+                    Blur Custom Area on Panel #{activePanel.sequence}
+                  </h3>
+                  <p className="text-xs text-zinc-400">
+                    Blur site names, recommendations, subscribe notes, or logos.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsCustomBlurOpen(false)}
+                className="text-zinc-500 hover:text-zinc-300"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Quick Presets */}
+            <div className="space-y-1.5">
+              <span className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">
+                Quick Placement Presets
+              </span>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    setCustomBlurBox({
+                      x: 0,
+                      y: 0,
+                      width: activePanel.width,
+                      height: Math.min(activePanel.height, 90),
+                      blur_radius: 24,
+                    })
+                  }
+                  className="text-xs text-zinc-300 border-zinc-700 hover:bg-zinc-800"
+                >
+                  Top Watermark Banner
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    setCustomBlurBox({
+                      x: 0,
+                      y: Math.max(0, activePanel.height - 110),
+                      width: activePanel.width,
+                      height: 110,
+                      blur_radius: 24,
+                    })
+                  }
+                  className="text-xs text-zinc-300 border-zinc-700 hover:bg-zinc-800"
+                >
+                  Bottom Subscribe Note
+                </Button>
+              </div>
+            </div>
+
+            {/* Coordinate inputs */}
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              <div>
+                <label className="text-[10px] text-zinc-400 block mb-1">X Offset (px):</label>
+                <input
+                  type="number"
+                  value={customBlurBox.x}
+                  min={0}
+                  max={activePanel.width}
+                  onChange={(e) =>
+                    setCustomBlurBox({ ...customBlurBox, x: parseInt(e.target.value) || 0 })
+                  }
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1.5 text-zinc-100 font-mono"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] text-zinc-400 block mb-1">Y Offset (px):</label>
+                <input
+                  type="number"
+                  value={customBlurBox.y}
+                  min={0}
+                  max={activePanel.height}
+                  onChange={(e) =>
+                    setCustomBlurBox({ ...customBlurBox, y: parseInt(e.target.value) || 0 })
+                  }
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1.5 text-zinc-100 font-mono"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] text-zinc-400 block mb-1">Width (px):</label>
+                <input
+                  type="number"
+                  value={customBlurBox.width}
+                  min={10}
+                  max={activePanel.width}
+                  onChange={(e) =>
+                    setCustomBlurBox({ ...customBlurBox, width: parseInt(e.target.value) || 10 })
+                  }
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1.5 text-zinc-100 font-mono"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] text-zinc-400 block mb-1">Height (px):</label>
+                <input
+                  type="number"
+                  value={customBlurBox.height}
+                  min={10}
+                  max={activePanel.height}
+                  onChange={(e) =>
+                    setCustomBlurBox({ ...customBlurBox, height: parseInt(e.target.value) || 10 })
+                  }
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1.5 text-zinc-100 font-mono"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2.5 pt-3 border-t border-zinc-800">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setIsCustomBlurOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                loading={blurringPanel}
+                onClick={handleBlurCustomBox}
+                className="bg-amber-600 hover:bg-amber-500 text-white font-medium"
+              >
+                <Icons.EyeOff className="w-4 h-4 mr-1.5" />
+                Apply Blur
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* Non-blocking Floating Toast Notification */}
+      {toastMessage && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-4 py-2 bg-zinc-900/95 border border-zinc-700 text-zinc-100 rounded-full shadow-2xl flex items-center gap-2 text-xs backdrop-blur-md pointer-events-none transition-all animate-fadeIn">
+          {toastMessage.type === "success" && <Icons.CheckCircle className="w-4 h-4 text-emerald-400" />}
+          {toastMessage.type === "warn" && <Icons.AlertTriangle className="w-4 h-4 text-amber-400" />}
+          {toastMessage.type === "info" && <Icons.Info className="w-4 h-4 text-indigo-400" />}
+          <span className="font-medium">{toastMessage.text}</span>
         </div>
       )}
     </div>

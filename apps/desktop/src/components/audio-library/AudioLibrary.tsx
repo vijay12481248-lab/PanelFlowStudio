@@ -10,6 +10,7 @@ import { MOCK_AUDIO_ASSETS } from "./AudioLibrary.mock.ts";
 import { AudioCategoryNav } from "./AudioCategoryNav.tsx";
 import { AudioAssetBrowser } from "./AudioAssetBrowser.tsx";
 import { AudioInspector } from "./AudioInspector.tsx";
+import { Icons } from "@panelflow/ui";
 import { AIMusicStudio } from "./AIMusicStudio.tsx";
 
 const FAVORITES_STORAGE_KEY = "panelflow_audio_favorites";
@@ -306,7 +307,7 @@ export const AudioLibrary: React.FC<AudioLibraryProps> = ({
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-lg bg-indigo-600/20 text-indigo-400 border border-indigo-500/40 flex items-center justify-center font-bold text-sm shadow-sm">
-              🎧
+              <Icons.Headphones className="w-4 h-4" />
             </div>
             <h1 className="text-sm font-bold tracking-tight text-white flex items-center gap-2">
               <span>PanelFlow Audio Studio</span>
@@ -335,8 +336,9 @@ export const AudioLibrary: React.FC<AudioLibraryProps> = ({
                   : "text-zinc-400 hover:text-zinc-200"
               }`}
             >
-              <span>✨ Story-Aware AI Music</span>
-              <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-indigo-950 text-indigo-200 border border-indigo-800">
+              <Icons.Sparkles className="w-3.5 h-3.5" />
+              <span>Story-Aware AI Music</span>
+              <span className="text-[9px] font-mono px-1 py-0.5 rounded bg-indigo-950 text-indigo-200 border border-indigo-800">
                 Ch 9
               </span>
             </button>
@@ -355,7 +357,7 @@ export const AudioLibrary: React.FC<AudioLibraryProps> = ({
               className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-zinc-100 transition-colors"
               title="Close Audio Library"
             >
-              ✕
+              <Icons.X className="w-4 h-4" />
             </button>
           )}
         </div>

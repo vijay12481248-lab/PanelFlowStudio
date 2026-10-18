@@ -152,6 +152,10 @@ class FFmpegEncoder:
 
                     # 1. Compose frame
                     frame_img = composer.compose_frame(frame_idx, plan)
+                    if frame_img.mode != "RGB":
+                        frame_img = frame_img.convert("RGB")
+                    if frame_img.size != (w, h):
+                        frame_img = frame_img.resize((w, h), Image.Resampling.LANCZOS)
 
                     # 2. Write raw RGB bytes to FFmpeg stdin
                     try:

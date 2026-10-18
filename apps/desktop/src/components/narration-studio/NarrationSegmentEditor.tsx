@@ -147,7 +147,9 @@ export const NarrationSegmentEditor: React.FC<NarrationSegmentEditorProps> = ({
   if (!segment) {
     return (
       <div className={`flex flex-col items-center justify-center p-12 text-zinc-500 h-full ${className}`}>
-        <span className="text-4xl mb-3">🎙️</span>
+        <div className="w-12 h-12 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-400 mb-3 shadow-inner">
+          <Icons.Mic className="w-6 h-6" />
+        </div>
         <h3 className="text-base font-semibold text-zinc-300">No Story Segment Selected</h3>
         <p className="text-xs text-zinc-400 mt-1 max-w-sm text-center">
           Select a story segment from the left panel to review its manga context, edit the narration script, and direct emotional delivery.
@@ -189,7 +191,7 @@ export const NarrationSegmentEditor: React.FC<NarrationSegmentEditorProps> = ({
                   key={status}
                   type="button"
                   onClick={() => onUpdateSegment({ review_status: status })}
-                  className={`px-3 py-1 rounded text-xs font-semibold transition-all ${
+                  className={`px-3 py-1 rounded text-xs font-semibold transition-all flex items-center gap-1.5 ${
                     isActive
                       ? status === "APPROVED"
                         ? "bg-emerald-600 text-white shadow-sm"
@@ -199,11 +201,19 @@ export const NarrationSegmentEditor: React.FC<NarrationSegmentEditorProps> = ({
                       : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900"
                   }`}
                 >
-                  {status === "APPROVED"
-                    ? "✓ Approved"
-                    : status === "NEEDS_REVIEW"
-                    ? "⚠ Needs Review"
-                    : "Draft"}
+                  {status === "APPROVED" ? (
+                    <>
+                      <Icons.Check className="w-3.5 h-3.5" />
+                      <span>Approved</span>
+                    </>
+                  ) : status === "NEEDS_REVIEW" ? (
+                    <>
+                      <Icons.AlertTriangle className="w-3.5 h-3.5" />
+                      <span>Needs Review</span>
+                    </>
+                  ) : (
+                    "Draft"
+                  )}
                 </button>
               );
             })}
@@ -219,14 +229,24 @@ export const NarrationSegmentEditor: React.FC<NarrationSegmentEditorProps> = ({
             <button
               type="button"
               onClick={() => onUpdateSegment({ linked_to_scene: !segment.linked_to_scene })}
-              className={`px-2 py-0.5 rounded text-[11px] font-semibold border transition-colors ${
+              className={`px-2.5 py-1 rounded text-[11px] font-semibold border transition-colors flex items-center gap-1.5 ${
                 segment.linked_to_scene
                   ? "bg-indigo-950 text-indigo-300 border-indigo-800 shadow-sm"
                   : "bg-zinc-900 text-zinc-400 border-zinc-700"
               }`}
               title="Toggle between anchored to scene start vs unlinked floating narration"
             >
-              {segment.linked_to_scene ? "🔗 Linked to Scene Start" : "🔓 Unlinked (Floating)"}
+              {segment.linked_to_scene ? (
+                <>
+                  <Icons.Link className="w-3 h-3 text-indigo-400" />
+                  <span>Linked to Scene Start</span>
+                </>
+              ) : (
+                <>
+                  <Icons.Unlink className="w-3 h-3 text-zinc-400" />
+                  <span>Unlinked (Floating)</span>
+                </>
+              )}
             </button>
           </div>
 
@@ -255,14 +275,19 @@ export const NarrationSegmentEditor: React.FC<NarrationSegmentEditorProps> = ({
             }`}
           >
             <div className="flex items-start gap-2">
-              <span className="text-sm mt-0.5">
-                {continuityAlert.severity === "warning" ? "⚠️" : "💡"}
+              <span className="shrink-0 mt-0.5">
+                {continuityAlert.severity === "warning" ? (
+                  <Icons.AlertTriangle className="w-4 h-4 text-amber-400" />
+                ) : (
+                  <Icons.Sparkles className="w-4 h-4 text-indigo-400" />
+                )}
               </span>
               <div>
                 <p className="font-semibold">{continuityAlert.message}</p>
                 {continuityAlert.suggested_action && (
                   <p className="text-[11px] opacity-80 mt-0.5">
                     Suggestion: {continuityAlert.suggested_action}
+
                   </p>
                 )}
               </div>

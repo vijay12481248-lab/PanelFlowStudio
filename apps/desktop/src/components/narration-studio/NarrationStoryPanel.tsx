@@ -184,20 +184,21 @@ export const NarrationStoryPanel: React.FC<NarrationStoryPanelProps> = ({
             placeholder="Search dialogue, OCR or notes..."
             value={filter.search_query}
             onChange={(e) => onFilterChange({ search_query: e.target.value })}
-            className="w-full pl-7 pr-7 py-1.5 bg-zinc-900 border border-zinc-800 rounded-lg text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-indigo-500/80 transition-colors"
+            className="w-full pl-8 pr-7 py-1.5 bg-zinc-900 border border-zinc-800 rounded-lg text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-indigo-500/80 transition-colors"
           />
-          <span className="absolute left-2.5 top-2 text-zinc-500 text-xs">🔍</span>
+          <Icons.Search className="absolute left-2.5 top-2.5 text-zinc-500 w-3.5 h-3.5 pointer-events-none" />
           {filter.search_query && (
             <button
               type="button"
               onClick={() => onFilterChange({ search_query: "" })}
-              className="absolute right-2 top-2 text-zinc-500 hover:text-zinc-300 text-xs"
+              className="absolute right-2 top-2 text-zinc-500 hover:text-zinc-300 p-0.5"
               title="Clear search"
             >
-              ✕
+              <Icons.X className="w-3.5 h-3.5" />
             </button>
           )}
         </div>
+
 
         {/* Character / Speaker Filter Dropdown */}
         <div className="flex items-center gap-1.5">
@@ -266,7 +267,9 @@ export const NarrationStoryPanel: React.FC<NarrationStoryPanelProps> = ({
       <div className="flex-1 overflow-y-auto p-2 space-y-2 focus:outline-none" tabIndex={0}>
         {filteredSegments.length === 0 ? (
           <div className="p-8 text-center text-zinc-500 text-xs space-y-2">
-            <span className="text-2xl block">📖</span>
+            <div className="w-10 h-10 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-400 mx-auto mb-2 shadow-inner">
+              <Icons.BookOpen className="w-5 h-5" />
+            </div>
             <p className="font-semibold text-zinc-400">No story segments found</p>
             <p className="text-[11px]">Try adjusting your search query or status filter.</p>
           </div>
@@ -396,12 +399,20 @@ export const NarrationStoryPanel: React.FC<NarrationStoryPanelProps> = ({
                 <div className="flex items-center justify-between text-[10px] text-zinc-400 border-t border-zinc-800/60 pt-1.5">
                   <div className="flex items-center gap-1.5">
                     {/* Emotion Tag */}
-                    <span className="px-1.5 py-0.5 rounded bg-zinc-800/80 text-zinc-300 font-medium">
+                    <span className="px-1.5 py-0.5 rounded bg-zinc-800/80 text-zinc-300 font-medium text-[9px]">
                       {seg.delivery.emotion}
                     </span>
-                    <span className="font-mono text-zinc-500">
+                    <span className="font-mono text-zinc-500 text-[9px]">
                       ~{seg.estimated_duration_sec}s
                     </span>
+
+                    {/* Voice Audio Ready Indicator */}
+                    {seg.audio_asset_uri && (
+                      <span className="px-1.5 py-0.5 rounded bg-emerald-950/70 border border-emerald-800/80 text-emerald-300 font-mono text-[9px] flex items-center gap-1 font-semibold" title="Neural voice synthesis ready">
+                        <Icons.Volume className="w-2.5 h-2.5 text-emerald-400" />
+                        <span>{seg.measured_duration_sec ? `${seg.measured_duration_sec.toFixed(1)}s` : "Voice"}</span>
+                      </span>
+                    )}
                   </div>
 
                   {/* Segment Management Actions: Reorder & Duplicate */}
@@ -413,10 +424,10 @@ export const NarrationStoryPanel: React.FC<NarrationStoryPanelProps> = ({
                         onReorderSegment(seg.id, "up");
                       }}
                       disabled={idx === 0}
-                      className="p-1 rounded text-zinc-400 hover:text-white hover:bg-zinc-800 disabled:opacity-20"
+                      className="p-1 rounded text-zinc-400 hover:text-white hover:bg-zinc-800 disabled:opacity-20 transition-colors"
                       title="Move Segment Up in Story Order"
                     >
-                      ▲
+                      <Icons.ChevronDown className="w-3 h-3 rotate-180" />
                     </button>
                     <button
                       type="button"
@@ -425,10 +436,10 @@ export const NarrationStoryPanel: React.FC<NarrationStoryPanelProps> = ({
                         onReorderSegment(seg.id, "down");
                       }}
                       disabled={idx === filteredSegments.length - 1}
-                      className="p-1 rounded text-zinc-400 hover:text-white hover:bg-zinc-800 disabled:opacity-20"
+                      className="p-1 rounded text-zinc-400 hover:text-white hover:bg-zinc-800 disabled:opacity-20 transition-colors"
                       title="Move Segment Down in Story Order"
                     >
-                      ▼
+                      <Icons.ChevronDown className="w-3 h-3" />
                     </button>
                     <button
                       type="button"
@@ -436,7 +447,7 @@ export const NarrationStoryPanel: React.FC<NarrationStoryPanelProps> = ({
                         e.stopPropagation();
                         onDuplicateSegment(seg.id);
                       }}
-                      className="p-1 rounded text-zinc-400 hover:text-white hover:bg-zinc-800"
+                      className="p-1 rounded text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
                       title="Duplicate Segment"
                     >
                       <Icons.Copy className="w-3 h-3" />

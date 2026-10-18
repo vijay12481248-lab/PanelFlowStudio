@@ -14,23 +14,24 @@ interface EmotionDeliveryControlsProps {
 
 const EMOTION_OPTIONS: Array<{
   name: NarrationEmotion;
-  icon: string;
+  icon: React.FC<{ className?: string }>;
   color: string;
   activeBg: string;
   description: string;
 }> = [
-  { name: "Neutral", icon: "⚖️", color: "text-zinc-300", activeBg: "bg-zinc-700/80 border-zinc-500", description: "Even, balanced, matter-of-fact" },
-  { name: "Happy", icon: "✨", color: "text-amber-300", activeBg: "bg-amber-950/80 border-amber-500", description: "Warm, light, optimistic tone" },
-  { name: "Sad", icon: "🌧️", color: "text-blue-300", activeBg: "bg-blue-950/80 border-blue-500", description: "Melancholic, subdued, heavy" },
-  { name: "Angry", icon: "🔥", color: "text-rose-400", activeBg: "bg-rose-950/80 border-rose-500", description: "Sharp, aggressive, commanding" },
-  { name: "Fearful", icon: "⚡", color: "text-yellow-400", activeBg: "bg-yellow-950/80 border-yellow-500", description: "Trembling, anxious, panicked" },
-  { name: "Suspenseful", icon: "👁️", color: "text-purple-300", activeBg: "bg-purple-950/80 border-purple-500", description: "Tense, hushed, building anticipation" },
-  { name: "Excited", icon: "💥", color: "text-orange-300", activeBg: "bg-orange-950/80 border-orange-500", description: "High energy, breathless, fast" },
-  { name: "Whispering", icon: "🤫", color: "text-teal-300", activeBg: "bg-teal-950/80 border-teal-500", description: "Intimate, breathy, secretive" },
-  { name: "Serious", icon: "🛡️", color: "text-indigo-300", activeBg: "bg-indigo-950/80 border-indigo-500", description: "Grounded, grave, authoritative" },
-  { name: "Mysterious", icon: "🔮", color: "text-violet-400", activeBg: "bg-violet-950/80 border-violet-500", description: "Ethereal, veiled, enigmatic" },
-  { name: "Determined", icon: "⚔️", color: "text-emerald-300", activeBg: "bg-emerald-950/80 border-emerald-500", description: "Resolute, steely, unwavering" },
+  { name: "Neutral", icon: Icons.Sliders, color: "text-zinc-300", activeBg: "bg-zinc-700/80 border-zinc-500", description: "Even, balanced, matter-of-fact" },
+  { name: "Happy", icon: Icons.Sparkles, color: "text-amber-300", activeBg: "bg-amber-950/80 border-amber-500", description: "Warm, light, optimistic tone" },
+  { name: "Sad", icon: Icons.ChevronDown, color: "text-blue-300", activeBg: "bg-blue-950/80 border-blue-500", description: "Melancholic, subdued, heavy" },
+  { name: "Angry", icon: Icons.AlertTriangle, color: "text-rose-400", activeBg: "bg-rose-950/80 border-rose-500", description: "Sharp, aggressive, commanding" },
+  { name: "Fearful", icon: Icons.Zap, color: "text-yellow-400", activeBg: "bg-yellow-950/80 border-yellow-500", description: "Trembling, anxious, panicked" },
+  { name: "Suspenseful", icon: Icons.Eye, color: "text-purple-300", activeBg: "bg-purple-950/80 border-purple-500", description: "Tense, hushed, building anticipation" },
+  { name: "Excited", icon: Icons.Sparkles, color: "text-orange-300", activeBg: "bg-orange-950/80 border-orange-500", description: "High energy, breathless, fast" },
+  { name: "Whispering", icon: Icons.Mic, color: "text-teal-300", activeBg: "bg-teal-950/80 border-teal-500", description: "Intimate, breathy, secretive" },
+  { name: "Serious", icon: Icons.ShieldCheck, color: "text-indigo-300", activeBg: "bg-indigo-950/80 border-indigo-500", description: "Grounded, grave, authoritative" },
+  { name: "Mysterious", icon: Icons.Globe, color: "text-violet-400", activeBg: "bg-violet-950/80 border-violet-500", description: "Ethereal, veiled, enigmatic" },
+  { name: "Determined", icon: Icons.CheckCircle, color: "text-emerald-300", activeBg: "bg-emerald-950/80 border-emerald-500", description: "Resolute, steely, unwavering" },
 ];
+
 
 export const EmotionDeliveryControls: React.FC<EmotionDeliveryControlsProps> = ({
   delivery,
@@ -118,7 +119,7 @@ export const EmotionDeliveryControls: React.FC<EmotionDeliveryControlsProps> = (
                   : "bg-zinc-900/60 border-zinc-800 hover:border-zinc-700 hover:bg-zinc-900"
               }`}
             >
-              <span className="text-sm shrink-0">{opt.icon}</span>
+              <opt.icon className={`w-3.5 h-3.5 shrink-0 ${isSelected ? "text-white" : opt.color}`} />
               <span className={`text-[11px] font-semibold truncate ${isSelected ? "text-white" : opt.color}`}>
                 {opt.name}
               </span>

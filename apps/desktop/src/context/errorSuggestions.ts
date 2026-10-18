@@ -26,11 +26,27 @@ export function generateSuggestions(
     suggestions.push(
       "For large chapters (15+ pages), LLM reconstruction at 80% can take 5–10 minutes on consumer hardware."
     );
+  } else if (text.includes("ocr") || text.includes("windows_media") || text.includes("tesseract")) {
+    suggestions.push("Ensure Windows Media OCR language pack (e.g. English US) is installed in Windows Settings.");
+    suggestions.push("If Windows Media is unavailable, switch to Tesseract or RapidOCR in Tools & Models.");
+    suggestions.push("Confirm that all panels have been detected and confirmed before running OCR.");
+  } else if (text.includes("contamination") || text.includes("non-story") || text.includes("semantic_qa")) {
+    suggestions.push("A non-story asset or credit page was assigned to a story scene shot.");
+    suggestions.push("Open Story Review or Story Editor to verify panel assignments and remove credits/promo panels.");
+    suggestions.push("Re-run validation or render draft to verify gate clearance.");
+  } else if (text.includes("panel") || text.includes("bounding box") || text.includes("detection")) {
+    suggestions.push("Verify that raw chapter pages are fully acquired and not corrupted in workspace.");
+    suggestions.push("Adjust reading direction (LTR / RTL / Webtoon vertical) in Panel Review settings.");
+    suggestions.push("Try running page normalization before re-triggering panel detection.");
+  } else if (text.includes("approval gate") || text.includes("gate blocked") || text.includes("strict")) {
+    suggestions.push("Review all items in the current stage to ensure no required fields are blank or unconfirmed.");
+    suggestions.push("Inspect the gate failure message in the diagnostic modal for the specific blocking criterion.");
   } else if (text.includes("ffmpeg") || text.includes("ffprobe") || jobType?.includes("RENDER")) {
     suggestions.push(
       "Ensure FFmpeg is installed and added to system PATH ('winget install Gyan.FFmpeg')."
     );
     suggestions.push("Check that the target output directory is writable and has free disk space.");
+    suggestions.push("Verify that dialogue audio stems and background music tracks exist on disk.");
   } else if (text.includes("event loop") || text.includes("500") || text.includes("asgi")) {
     suggestions.push("Restart the local Python processing engine service ('npm run engine').");
     suggestions.push("Inspect %LOCALAPPDATA%\\PanelFlow Studio\\logs\\engine.log for full stack trace.");

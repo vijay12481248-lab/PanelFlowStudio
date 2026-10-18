@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from "react";
 import { api } from "@panelflow/api-client";
 import type { Project, MotionTimelineResponse, MotionStylePreset, Shot } from "@panelflow/shared-types";
 import { Button, Card, Badge, Icons } from "@panelflow/ui";
+import { useError } from "../context/ErrorContext";
 
 export interface MotionScreenProps {
   project: Project;
@@ -16,6 +17,7 @@ export const MotionScreen: React.FC<MotionScreenProps> = ({
   onMotionApproved,
   onProceedToRender,
 }) => {
+  const { reportError, inspectError } = useError();
   const [motionData, setMotionData] = useState<MotionTimelineResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [planning, setPlanning] = useState<boolean>(false);
@@ -47,7 +49,14 @@ export const MotionScreen: React.FC<MotionScreenProps> = ({
       const result = await api.planMotion(project.id, selectedPreset);
       setMotionData(result);
     } catch (err: any) {
-      alert(`Motion planning failed: ${err.message}`);
+      reportError({
+        title: "Motion Planning Failed",
+        message: err.message || "Failed to generate camera keyframes and motion plan.",
+        severity: "error",
+        source: "pipeline",
+        projectId: project.id,
+        rawDetails: err,
+      });
     } finally {
       setPlanning(false);
     }
@@ -61,7 +70,14 @@ export const MotionScreen: React.FC<MotionScreenProps> = ({
       setMotionData((prev) => (prev ? { ...prev, status: "APPROVED" } : null));
       onMotionApproved(updated);
     } catch (err: any) {
-      alert(`Motion approval failed: ${err.message}`);
+      reportError({
+        title: "Motion Approval Gate Blocked",
+        message: err.message || "Motion timeline gate conditions were not satisfied.",
+        severity: "error",
+        source: "pipeline",
+        projectId: project.id,
+        rawDetails: err,
+      });
     } finally {
       setApproving(false);
     }

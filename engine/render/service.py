@@ -74,6 +74,13 @@ class RenderService:
 
         # Overlay real-time in-memory progress if currently active
         live = self._active_progress.get(render_id, {})
+        val_rep = job.validation_report
+        if isinstance(val_rep, str):
+            try:
+                val_rep = json.loads(val_rep)
+            except Exception:
+                pass
+
         return {
             "render_id": job.id,
             "project_id": job.project_id,
@@ -88,7 +95,7 @@ class RenderService:
             "error_code": job.error_code,
             "error_message": job.error_message,
             "validation_status": job.validation_status,
-            "validation_report": job.validation_report,
+            "validation_report": val_rep,
             "render_plan_hash": job.render_plan_hash,
             "visual_timeline_hash": job.visual_timeline_hash,
             "master_audio_timeline_hash": job.master_audio_timeline_hash,
@@ -107,6 +114,13 @@ class RenderService:
         )
         res = []
         for j in jobs:
+            val_rep = j.validation_report
+            if isinstance(val_rep, str):
+                try:
+                    val_rep = json.loads(val_rep)
+                except Exception:
+                    pass
+
             item = {
                 "render_id": j.id,
                 "project_id": j.project_id,
@@ -117,7 +131,10 @@ class RenderService:
                 "frames_total": j.frames_total,
                 "output_profile": j.output_profile,
                 "output_path": j.output_path,
+                "error_code": j.error_code,
+                "error_message": j.error_message,
                 "validation_status": j.validation_status,
+                "validation_report": val_rep,
                 "contact_sheet_path": j.contact_sheet_path,
                 "created_at": j.created_at.isoformat() if j.created_at else None,
                 "completed_at": j.completed_at.isoformat() if j.completed_at else None,
@@ -147,7 +164,7 @@ class RenderService:
         project_id: str,
         profile_name: str = "standard_1080p",
         custom_output_path: Optional[str] = None,
-        subtitle_enabled: bool = True,
+        subtitle_enabled: bool = False,
         bgm_volume_db: float = -10.0,
         dialogue_gain_db: float = 0.0,
         is_draft: bool = False,
@@ -272,9 +289,51 @@ class RenderService:
                 img_p = next((c for c in candidates if c.exists()), candidates[-1])
                 assets_map[f"page_{p.sequence:02d}"] = str(img_p)
 
-            if (proj.settings or {}).get("visual_storytelling"):
-                for panel in db.query(PanelRecord).filter(PanelRecord.project_id == project_id).all():
-                    assets_map[panel.id] = str(workspace / "panels" / panel.crop_filename)
+            for panel in db.query(PanelRecord).filter(PanelRecord.project_id == project_id).all():
+                if panel.crop_filename:
+                    crop_path = workspace / "panels" / panel.crop_filename
+                    if crop_path.exists():
+                        assets_map[panel.id] = str(crop_path)
+                        assets_map[f"panel_{panel.sequence:04d}"] = str(crop_path)
+                        assets_map[f"panel_{panel.sequence}"] = str(crop_path)
+
+            # If any panel file was removed/missing, fallback to first available story panel
+            available_panels = sorted(list((workspace / "panels").glob("panel_*.jpg")))
+            default_panel = str(available_panels[0].resolve()) if available_panels else ""
+
+            storyboard_p = workspace / "story" / "storyboard.json"
+            if storyboard_p.exists():
+                try:
+                    sb_data = json.loads(storyboard_p.read_text(encoding="utf-8"))
+                    for seg in sb_data.get("segments", []):
+                        for sp in seg.get("supporting_panels", []):
+                            pid = sp.get("panel_id")
+                            cf = sp.get("crop_filename")
+                            if pid:
+                                cp = workspace / "panels" / cf if cf else None
+                                assets_map[pid] = str(cp) if (cp and cp.exists()) else default_panel
+                except Exception:
+                    pass
+
+            coverage_p = workspace / "story" / "panels_coverage_report.json"
+            if coverage_p.exists():
+                try:
+                    cov_data = json.loads(coverage_p.read_text(encoding="utf-8"))
+                    for item in cov_data.get("items", []):
+                        pid = item.get("panel_id")
+                        img_name = item.get("source_image") or item.get("crop_filename")
+                        if pid and pid not in assets_map:
+                            cp = workspace / "panels" / img_name if img_name else None
+                            assets_map[pid] = str(cp) if (cp and cp.exists()) else default_panel
+                except Exception:
+                    pass
+
+            # Ensure every shot in visual timeline resolves to a valid file
+            for s in vt.all_shots():
+                cur_target = assets_map.get(s.source_asset_id)
+                if not cur_target or not Path(cur_target).exists():
+                    if default_panel:
+                        assets_map[s.source_asset_id] = default_panel
 
             # 5. Resolve background music
             bgm_path = Path(__file__).resolve().parent.parent.parent.parent / "assets" / "cinematics" / "intro" / "audio" / "someone_stayed_ace_master.ogg"
@@ -308,6 +367,7 @@ class RenderService:
                 profile=profile,
                 music_policy=MusicDurationPolicy.LOOP,
                 sfx_tracks=sfx_tracks,
+                subtitle_enabled=subtitle_enabled,
             )
             vt_hash = vt.hash or vt.timeline_id
             mat_hash = mat.timeline_id
@@ -389,6 +449,8 @@ class RenderService:
     ):
         """Worker thread executing frame piping, audio mixing, and post-render validation."""
         start_time = time.time()
+        if hasattr(self.render_engine, "composer") and hasattr(self.render_engine.composer, "clear_cache"):
+            self.render_engine.composer.clear_cache()
 
         def cancel_check() -> bool:
             return cancel_evt.is_set()

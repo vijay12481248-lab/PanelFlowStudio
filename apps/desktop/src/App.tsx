@@ -47,12 +47,18 @@ const DesktopAppContent: React.FC = () => {
   const [engineVersion, setEngineVersion] = useState<string>("");
   const [healthModalOpen, setHealthModalOpen] = useState<boolean>(false);
   const [retrying, setRetrying] = useState<boolean>(false);
+  const [startupGracePeriod, setStartupGracePeriod] = useState<boolean>(true);
 
   const checkEngine = async () => {
     try {
       const h = await api.checkHealth();
-      setEngineConnected(h.status === "healthy");
-      setEngineVersion(h.version);
+      if (h.status === "healthy") {
+        setEngineConnected(true);
+        setEngineVersion(h.version);
+        setStartupGracePeriod(false);
+      } else {
+        setEngineConnected(false);
+      }
     } catch {
       setEngineConnected(false);
     }
@@ -113,9 +119,25 @@ const DesktopAppContent: React.FC = () => {
 
   useEffect(() => {
     checkEngine();
+
+    // Auto-invoke start_engine_cmd on application launch in Tauri desktop
+    if (typeof window !== "undefined" && ("__TAURI_INTERNALS__" in window || "__TAURI__" in window)) {
+      import("@tauri-apps/api/core")
+        .then(({ invoke }) => invoke("start_engine_cmd"))
+        .catch((e) => console.warn("[PanelFlow] Auto-start notice:", e));
+    }
+
+    const graceTimer = setTimeout(() => {
+      setStartupGracePeriod(false);
+    }, 7000);
+
     const intervalTime = engineConnected ? 8000 : 1500;
     const timer = setInterval(checkEngine, intervalTime);
-    return () => clearInterval(timer);
+
+    return () => {
+      clearTimeout(graceTimer);
+      clearInterval(timer);
+    };
   }, [engineConnected]);
 
   // Dedicated Video-First Story Editor View
@@ -257,29 +279,46 @@ const DesktopAppContent: React.FC = () => {
       {/* Main Screen Content */}
       <main className="flex-1 p-6 md:p-8 max-w-7xl mx-auto w-full">
         {!engineConnected ? (
-          <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-5">
-            <div className="w-16 h-16 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 shadow-lg shadow-rose-950/40">
-              <Icons.AlertTriangle className="w-8 h-8 text-rose-400" />
+          startupGracePeriod ? (
+            <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-5">
+              <div className="w-16 h-16 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center text-indigo-400 shadow-lg shadow-indigo-950/40">
+                <Icons.Rotate className="w-8 h-8 text-indigo-400 animate-spin" />
+              </div>
+              <div className="space-y-2">
+                <h2 className="text-2xl font-bold text-zinc-100">Connecting to PanelFlow Processing Engine</h2>
+                <p className="text-sm text-zinc-400 max-w-md mx-auto">
+                  Initializing local AI pipeline, database tables, and hardware acceleration on <code className="text-zinc-200 bg-zinc-800 px-1.5 py-0.5 rounded text-xs font-mono">127.0.0.1:8765</code>...
+                </p>
+                <p className="text-xs text-zinc-500 max-w-md mx-auto">
+                  Standalone runtime is starting up automatically in the background.
+                </p>
+              </div>
             </div>
-            <div className="space-y-2">
-              <h2 className="text-2xl font-bold text-zinc-100">Processing engine unavailable</h2>
-              <p className="text-sm text-zinc-400 max-w-md mx-auto">
-                The local Python processing engine on <code className="text-zinc-200 bg-zinc-800 px-1.5 py-0.5 rounded text-xs font-mono">127.0.0.1:8765</code> is not responding. Please ensure the local service is running or retry connection.
-              </p>
-              <p className="text-xs text-zinc-500 max-w-md mx-auto">
-                If running in development mode, start the engine from your terminal using: <code className="text-zinc-300 bg-zinc-800 px-1 py-0.5 rounded font-mono">npm run engine</code>
-              </p>
+          ) : (
+            <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-5">
+              <div className="w-16 h-16 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 shadow-lg shadow-rose-950/40">
+                <Icons.AlertTriangle className="w-8 h-8 text-rose-400" />
+              </div>
+              <div className="space-y-2">
+                <h2 className="text-2xl font-bold text-zinc-100">Processing engine unavailable</h2>
+                <p className="text-sm text-zinc-400 max-w-md mx-auto">
+                  The local Python processing engine on <code className="text-zinc-200 bg-zinc-800 px-1.5 py-0.5 rounded text-xs font-mono">127.0.0.1:8765</code> is not responding.
+                </p>
+                <p className="text-xs text-zinc-500 max-w-md mx-auto">
+                  Click below to launch or reconnect the backend service.
+                </p>
+              </div>
+              <Button
+                variant="primary"
+                onClick={handleRetryEngine}
+                disabled={retrying}
+                className="mt-2"
+              >
+                <Icons.Rotate className={`w-4 h-4 mr-2 ${retrying ? "animate-spin" : ""}`} />
+                {retrying ? "Starting Engine..." : "Start Engine / Retry Connection"}
+              </Button>
             </div>
-            <Button
-              variant="primary"
-              onClick={handleRetryEngine}
-              disabled={retrying}
-              className="mt-2"
-            >
-              <Icons.Rotate className={`w-4 h-4 mr-2 ${retrying ? "animate-spin" : ""}`} />
-              {retrying ? "Starting Engine..." : "Retry Engine Connection"}
-            </Button>
-          </div>
+          )
         ) : (
           <>
             {/* Top Interactive Pipeline Progression Navbar */}
@@ -340,7 +379,7 @@ const DesktopAppContent: React.FC = () => {
                 }}
                 onProceedToOCR={(proj) => {
                   setSelectedProject(proj);
-                  setCurrentScreen(proj.settings?.visual_storytelling ? "story" : "ocr");
+                  setCurrentScreen("ocr");
                 }}
                 onOpenStoryEditor={(proj) => {
                   setSelectedProject(proj);

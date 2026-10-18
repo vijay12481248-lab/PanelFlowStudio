@@ -818,12 +818,11 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
           </div>
 
           {/* Single-Click AI Narration Generation */}
-          <Button
-            variant="primary"
-            size="sm"
+          <button
+            type="button"
             onClick={handleGenerateAiNarration}
             disabled={isDraftingNarration}
-            className="text-xs h-8 px-3 bg-indigo-600 hover:bg-indigo-500 font-bold shadow-md shadow-indigo-600/30 flex items-center gap-1.5"
+            className="text-xs h-8 px-3.5 rounded-lg bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-bold shadow-md shadow-indigo-600/30 flex items-center gap-1.5 transition-all active:scale-95 disabled:opacity-50"
             title="Generate AI narration grounded in source manga panels"
           >
             {isDraftingNarration ? (
@@ -833,19 +832,18 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
               </>
             ) : (
               <>
-                <span>⚡</span>
+                <Icons.Sparkles className="w-3.5 h-3.5 text-indigo-200" />
                 <span>Generate AI Narration</span>
               </>
             )}
-          </Button>
+          </button>
 
           {/* Single-Click Voices Generation via Chatterbox Turbo */}
-          <Button
-            variant="secondary"
-            size="sm"
+          <button
+            type="button"
             onClick={handleSynthesizeAllVoices}
             disabled={isSynthesizingAll || chapter.segments.length === 0}
-            className="text-xs h-8 px-3 bg-zinc-900 border border-zinc-700 hover:bg-zinc-800 text-zinc-200 font-semibold flex items-center gap-1.5"
+            className="text-xs h-8 px-3.5 rounded-lg bg-zinc-900 border border-zinc-700/80 hover:border-cyan-500/50 hover:bg-zinc-800 text-zinc-100 font-semibold shadow-sm flex items-center gap-1.5 transition-all active:scale-95 disabled:opacity-50"
             title="Synthesize audio for all segments via Chatterbox Turbo (MIT)"
           >
             {isSynthesizingAll ? (
@@ -855,37 +853,37 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
               </>
             ) : (
               <>
-                <span>🎙️</span>
+                <Icons.Mic className="w-3.5 h-3.5 text-cyan-400" />
                 <span>Generate Voices</span>
               </>
             )}
-          </Button>
+          </button>
 
           {/* Confirmation Modal Launcher: Add to Timeline */}
-          <Button
-            variant="primary"
-            size="sm"
+          <button
+            type="button"
             onClick={() => setTimelineModalOpen(true)}
             disabled={chapter.segments.length === 0}
-            className="text-xs h-8 px-3 bg-emerald-600 hover:bg-emerald-500 font-bold shadow-md shadow-emerald-600/30 flex items-center gap-1.5"
+            className="text-xs h-8 px-3.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold shadow-md shadow-emerald-600/30 flex items-center gap-1.5 transition-all active:scale-95 disabled:opacity-50"
             title="Confirm adding narration to video timeline"
           >
-            <span>➕</span>
+            <Icons.Plus className="w-3.5 h-3.5" />
             <span>Add to Timeline</span>
-          </Button>
+          </button>
 
           {onClose && (
             <button
               type="button"
               onClick={onClose}
-              className="hover:text-rose-400 p-1 text-zinc-500 ml-1"
+              className="hover:text-rose-400 p-1 text-zinc-500 hover:bg-zinc-800 rounded-lg transition-colors ml-1"
               title="Close Workspace"
             >
-              ✕
+              <Icons.X className="w-4 h-4" />
             </button>
           )}
         </div>
       </header>
+
 
       {/* Main Professional 3-Column Narration Workspace */}
       <div className="flex-1 grid grid-cols-12 min-h-0 overflow-hidden">
@@ -1110,10 +1108,11 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
               <button
                 type="button"
                 onClick={() => setShowExportModal(false)}
-                className="text-zinc-400 hover:text-zinc-200"
+                className="text-zinc-400 hover:text-zinc-200 p-1 rounded-lg hover:bg-zinc-800 transition-colors"
               >
-                ✕
+                <Icons.X className="w-4 h-4" />
               </button>
+
             </div>
 
             <div className="space-y-2">
@@ -1157,42 +1156,56 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
 
       {/* "May I add this narration to the timeline?" Confirmation Modal */}
       {timelineModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn">
+          <div className="bg-zinc-900 border border-zinc-750 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl ring-1 ring-white/10">
             <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
-              <h3 className="text-sm font-bold text-zinc-100 flex items-center gap-2">
-                <span>➕</span>
-                <span>Add Narration to Timeline</span>
-              </h3>
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-emerald-950/80 border border-emerald-700/60 flex items-center justify-center text-emerald-400 shadow-inner">
+                  <Icons.Mic className="w-4 h-4 text-emerald-400" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-zinc-100 leading-tight">
+                    Add Narration to Timeline
+                  </h3>
+                  <span className="text-[11px] text-zinc-400">
+                    May I add this narration to the timeline?
+                  </span>
+                </div>
+              </div>
               <button
                 type="button"
                 onClick={() => setTimelineModalOpen(false)}
-                className="text-zinc-400 hover:text-zinc-200"
+                className="text-zinc-400 hover:text-zinc-200 p-1 rounded-lg hover:bg-zinc-800 transition-colors"
+                title="Close (Esc)"
               >
-                ✕
+                <Icons.X className="w-4 h-4" />
               </button>
+
             </div>
 
             <p className="text-xs text-zinc-300 leading-relaxed">
-              May I add this narration to the timeline? Choose whether you would like to synchronize all narration segments to their matching scenes or insert the selected scene at the current playhead.
+              Choose how you would like to synchronize your narrative voice takes into the active video project:
             </p>
 
-            <div className="space-y-2.5 pt-2">
+            <div className="space-y-2.5 pt-1">
               <button
                 type="button"
                 onClick={() => {
                   setTimelineModalOpen(false);
                   onAddToTimeline?.("all");
                 }}
-                className="w-full text-left p-3.5 rounded-lg bg-zinc-950 hover:bg-indigo-950/50 border border-zinc-800 hover:border-indigo-500/60 transition-colors group flex items-start gap-3"
+                className="w-full text-left p-3.5 rounded-xl bg-zinc-950 hover:bg-indigo-950/50 border border-zinc-800 hover:border-indigo-500/80 transition-all group flex items-start gap-3.5 shadow-sm"
               >
-                <span className="text-xl mt-0.5">⚡</span>
-                <div>
-                  <div className="text-xs font-bold text-zinc-100 group-hover:text-indigo-300">
-                    Auto-Sync All Segments to Scenes
+                <div className="w-9 h-9 rounded-lg bg-indigo-600/20 border border-indigo-500/40 flex items-center justify-center text-indigo-400 shrink-0 mt-0.5 group-hover:scale-110 transition-transform">
+                  <Icons.Sparkles className="w-4 h-4 text-indigo-400" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs font-bold text-zinc-100 group-hover:text-indigo-300 flex items-center justify-between">
+                    <span>Auto-Sync All Segments to Scenes</span>
+                    <span className="text-[10px] text-zinc-500 font-mono font-normal">Enter ↵</span>
                   </div>
                   <div className="text-[11px] text-zinc-400 mt-0.5 leading-normal">
-                    Synchronizes all {chapter.segments.length} narration clips directly into corresponding scenes across the timeline.
+                    Synchronizes all {chapter.segments.length} narration clips directly into corresponding scenes across the timeline with ripple timing.
                   </div>
                 </div>
               </button>
@@ -1203,26 +1216,28 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
                   setTimelineModalOpen(false);
                   onAddToTimeline?.("selected", selectedSegmentId);
                 }}
-                className="w-full text-left p-3.5 rounded-lg bg-zinc-950 hover:bg-cyan-950/50 border border-zinc-800 hover:border-cyan-500/60 transition-colors group flex items-start gap-3"
+                className="w-full text-left p-3.5 rounded-xl bg-zinc-950 hover:bg-cyan-950/50 border border-zinc-800 hover:border-cyan-500/80 transition-all group flex items-start gap-3.5 shadow-sm"
               >
-                <span className="text-xl mt-0.5">🎯</span>
-                <div>
+                <div className="w-9 h-9 rounded-lg bg-cyan-600/20 border border-cyan-500/40 flex items-center justify-center text-cyan-400 shrink-0 mt-0.5 group-hover:scale-110 transition-transform">
+                  <Icons.Play className="w-4 h-4 text-cyan-400" />
+                </div>
+                <div className="flex-1 min-w-0">
                   <div className="text-xs font-bold text-zinc-100 group-hover:text-cyan-300">
                     Insert Selected Segment at Playhead
                   </div>
                   <div className="text-[11px] text-zinc-400 mt-0.5 leading-normal">
-                    Places segment #{selectedSegment?.sequence || 1} (&ldquo;{selectedSegment?.scene_title || "Scene"}&rdquo;) at the current timeline playhead position.
+                    Places segment #{selectedSegment?.sequence || 1} (&ldquo;{selectedSegment?.scene_title || "Scene"}&rdquo;) at the current timeline playhead cursor.
                   </div>
                 </div>
               </button>
             </div>
 
-            <div className="flex justify-end pt-3 border-t border-zinc-800">
+            <div className="flex justify-end pt-3 border-t border-zinc-800/80">
               <Button
                 variant="secondary"
                 size="sm"
                 onClick={() => setTimelineModalOpen(false)}
-                className="text-xs h-8 px-3"
+                className="text-xs h-8 px-4 font-semibold"
               >
                 Cancel
               </Button>

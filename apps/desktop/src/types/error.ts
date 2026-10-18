@@ -1,5 +1,5 @@
 export type ErrorSeverity = "error" | "warning" | "info";
-export type ErrorSource = "job" | "network" | "engine" | "validation" | "ui" | "system";
+export type ErrorSource = "job" | "network" | "engine" | "validation" | "ui" | "system" | "pipeline" | "user";
 
 export interface AppError {
   id: string;

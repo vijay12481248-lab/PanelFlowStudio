@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { api } from "@panelflow/api-client";
 import type { Project, Page, AcquisitionManifest } from "@panelflow/shared-types";
 import { Button, Card, Badge, Modal, Icons } from "@panelflow/ui";
+import { useError } from "../context/ErrorContext";
 
 interface PageReviewScreenProps {
   project: Project;
@@ -16,6 +17,7 @@ export const PageReviewScreen: React.FC<PageReviewScreenProps> = ({
   onAcquisitionConfirmed,
   onProceedToPanels,
 }) => {
+  const { reportError, inspectError } = useError();
   const [pages, setPages] = useState<Page[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [confirming, setConfirming] = useState<boolean>(false);
@@ -30,7 +32,14 @@ export const PageReviewScreen: React.FC<PageReviewScreenProps> = ({
       const data = await api.listPages(project.id);
       setPages(data);
     } catch (err: any) {
-      alert(`Failed to load pages: ${err.message}`);
+      reportError({
+        title: "Failed to Load Pages",
+        message: err.message || "Failed to load project pages.",
+        severity: "error",
+        source: "pipeline",
+        projectId: project.id,
+        rawDetails: err,
+      });
     } finally {
       setLoading(false);
     }
@@ -56,7 +65,14 @@ export const PageReviewScreen: React.FC<PageReviewScreenProps> = ({
       const updated = await api.reorderPages(project.id, pageIds);
       setPages(updated);
     } catch (err: any) {
-      alert(`Reordering failed: ${err.message}`);
+      reportError({
+        title: "Page Reorder Failed",
+        message: err.message || "Failed to save reordered pages.",
+        severity: "warning",
+        source: "pipeline",
+        projectId: project.id,
+        rawDetails: err,
+      });
       loadPages();
     }
   };
@@ -72,7 +88,14 @@ export const PageReviewScreen: React.FC<PageReviewScreenProps> = ({
       }
       setCacheBuster(Date.now());
     } catch (err: any) {
-      alert(`Rotate failed: ${err.message}`);
+      reportError({
+        title: "Page Rotation Failed",
+        message: err.message || `Failed to rotate page ${page.sequence}.`,
+        severity: "warning",
+        source: "pipeline",
+        projectId: project.id,
+        rawDetails: { pageId: page.id, error: err },
+      });
     }
   };
 
@@ -160,7 +183,15 @@ export const PageReviewScreen: React.FC<PageReviewScreenProps> = ({
       await loadPages();
       setCacheBuster(Date.now());
     } catch (err: any) {
-      alert(`Retry failed: ${err.message}`);
+      reportError({
+        title: "Page Download Retry Failed",
+        message: err.message || "Failed to retry downloading failed pages.",
+        severity: "error",
+        source: "pipeline",
+        projectId: project.id,
+        jobType: "ACQUISITION",
+        rawDetails: err,
+      });
     } finally {
       setRetrying(false);
     }
@@ -170,10 +201,16 @@ export const PageReviewScreen: React.FC<PageReviewScreenProps> = ({
     setConfirming(true);
     try {
       const updated = await api.confirmAcquisition(project.id);
-      alert("Acquisition confirmed! Canonical manifest written and stage set to ACQUIRED.");
       onAcquisitionConfirmed(updated);
     } catch (err: any) {
-      alert(`Confirmation failed: ${err.message}`);
+      reportError({
+        title: "Acquisition Confirmation Failed",
+        message: err.message || "Could not confirm page acquisition manifest.",
+        severity: "error",
+        source: "pipeline",
+        projectId: project.id,
+        rawDetails: err,
+      });
     } finally {
       setConfirming(false);
     }
@@ -185,7 +222,14 @@ export const PageReviewScreen: React.FC<PageReviewScreenProps> = ({
       setManifest(m);
       setShowManifestModal(true);
     } catch (err: any) {
-      alert(`Could not fetch manifest: ${err.message}`);
+      reportError({
+        title: "Could Not Fetch Manifest",
+        message: err.message || "Failed to load acquisition manifest.",
+        severity: "warning",
+        source: "pipeline",
+        projectId: project.id,
+        rawDetails: err,
+      });
     }
   };
 

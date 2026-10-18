@@ -115,3 +115,50 @@ test("Error System: Diagnostic Report serialization produces complete markdown b
   assert.ok(diagnosticReport.includes("Chatterbox Turbo"));
   assert.ok(diagnosticReport.includes("Unsupported speech provider: f5_tts"));
 });
+
+test("Error System: Suggestion generator identifies OCR engine configuration issues", () => {
+  const suggestions = generateSuggestions(
+    "OCR Engine Unavailable",
+    "Cannot run OCR with windows_media: Configuration required",
+    "OCR_EXTRACTION"
+  );
+
+  assert.ok(
+    suggestions.some((s) => s.includes("Windows Media OCR language pack")),
+    "Should suggest installing language pack"
+  );
+  assert.ok(
+    suggestions.some((s) => s.includes("Tesseract")),
+    "Should suggest switching to Tesseract or RapidOCR"
+  );
+});
+
+test("Error System: Suggestion generator identifies non-story semantic QA contamination", () => {
+  const suggestions = generateSuggestions(
+    "Render Gate Blocked",
+    "FAILED_SEMANTIC_QA: Non-story asset 'panel_0001' contaminated shot 'shot_123'",
+    "VIDEO_RENDER"
+  );
+
+  assert.ok(
+    suggestions.some((s) => s.includes("credit page")),
+    "Should explain that a non-story asset or credit page was assigned"
+  );
+  assert.ok(
+    suggestions.some((s) => s.includes("Story Review or Story Editor")),
+    "Should suggest opening Story Review or Story Editor"
+  );
+});
+
+test("Error System: Suggestion generator identifies strict approval gate blocks", () => {
+  const suggestions = generateSuggestions(
+    "Strict Approval Gate Blocked",
+    "Validation check failed: at least one dialogue line is unconfirmed",
+    "PIPELINE_GATE"
+  );
+
+  assert.ok(
+    suggestions.some((s) => s.includes("Review all items in the current stage")),
+    "Should suggest checking unconfirmed items in the stage"
+  );
+});

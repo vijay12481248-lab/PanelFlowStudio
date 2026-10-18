@@ -218,6 +218,29 @@ def ocr_single_region(
         return format_text_region_response(updated)
     except KeyError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+
+@router.post("/projects/{project_id}/text-regions/{region_id}/blur", response_model=TextRegionResponse)
+def blur_text_region_endpoint(
+    project_id: str,
+    region_id: str,
+    blur_radius: int = Query(24, ge=4, le=100),
+    feather: int = Query(4, ge=0, le=50),
+    db: Session = Depends(get_db),
+):
+    try:
+        updated = project_service.blur_text_region(
+            db=db,
+            project_id=project_id,
+            region_id=region_id,
+            blur_radius=blur_radius,
+            feather=feather,
+        )
+        return format_text_region_response(updated)
+    except KeyError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 

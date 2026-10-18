@@ -166,7 +166,11 @@ export const NarrationReviewPanel: React.FC<NarrationReviewPanelProps> = ({
               className="text-[10px] text-zinc-400 hover:text-indigo-400 font-semibold self-start flex items-center gap-1 hover:underline disabled:opacity-30"
             >
               <span>Apply verbatim to script</span>
-              {copiedTier === "OCR" && <span className="text-emerald-400 font-bold">✓ Copied</span>}
+              {copiedTier === "OCR" && (
+                <span className="text-emerald-400 font-bold flex items-center gap-1">
+                  <Icons.Check className="w-3 h-3" /> Copied
+                </span>
+              )}
             </button>
           </div>
 
@@ -192,7 +196,11 @@ export const NarrationReviewPanel: React.FC<NarrationReviewPanelProps> = ({
               className="text-[10px] text-zinc-400 hover:text-indigo-400 font-semibold self-start flex items-center gap-1 hover:underline"
             >
               <span>Convert visual description to narration</span>
-              {copiedTier === "Visual" && <span className="text-emerald-400 font-bold">✓ Copied</span>}
+              {copiedTier === "Visual" && (
+                <span className="text-emerald-400 font-bold flex items-center gap-1">
+                  <Icons.Check className="w-3 h-3" /> Copied
+                </span>
+              )}
             </button>
           </div>
 
@@ -218,9 +226,14 @@ export const NarrationReviewPanel: React.FC<NarrationReviewPanelProps> = ({
               className="text-[10px] text-zinc-400 hover:text-indigo-400 font-semibold self-start flex items-center gap-1 hover:underline"
             >
               <span>Use story context as narration</span>
-              {copiedTier === "Context" && <span className="text-emerald-400 font-bold">✓ Copied</span>}
+              {copiedTier === "Context" && (
+                <span className="text-emerald-400 font-bold flex items-center gap-1">
+                  <Icons.Check className="w-3 h-3" /> Copied
+                </span>
+              )}
             </button>
           </div>
+
 
           {/* Tier 4: Final Spoken Narration Script */}
           <div className="p-3 rounded-xl bg-indigo-950/30 border border-indigo-800/60 flex flex-col justify-between space-y-2">
@@ -279,8 +292,9 @@ export const NarrationReviewPanel: React.FC<NarrationReviewPanelProps> = ({
                     className="text-zinc-500 hover:text-rose-400 p-1"
                     title="Remove Rule"
                   >
-                    ✕
+                    <Icons.X className="w-3.5 h-3.5" />
                   </button>
+
                 </div>
               ))
             )}

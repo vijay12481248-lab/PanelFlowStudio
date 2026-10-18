@@ -205,10 +205,16 @@ export const StoryReviewScreen: React.FC<StoryReviewScreenProps> = ({
     try {
       const res = await api.confirmStory(project.id);
       const updated = await api.getProject(project.id);
-      alert(res.message || "Story Narrative IR approved successfully!");
       onStoryApproved(updated);
     } catch (err: any) {
-      alert(`Approval Gate Blocked: ${err.message}`);
+      reportError({
+        title: "Story Approval Gate Blocked",
+        message: err.message || "Strict story narrative gate verification failed.",
+        severity: "error",
+        source: "pipeline",
+        projectId: project.id,
+        rawDetails: err,
+      });
     }
   };
 
@@ -232,13 +238,26 @@ export const StoryReviewScreen: React.FC<StoryReviewScreenProps> = ({
       setEditingCharacter(null);
       await loadData();
     } catch (err: any) {
-      alert(`Failed to update character: ${err.message}`);
+      reportError({
+        title: "Failed to Update Character",
+        message: err.message || "Could not save character changes.",
+        severity: "error",
+        source: "pipeline",
+        projectId: project.id,
+        rawDetails: err,
+      });
     }
   };
 
   const handleMergeCharacters = async () => {
     if (!mergeSourceId || !mergeTargetId || mergeSourceId === mergeTargetId) {
-      alert("Please select distinct source and target characters.");
+      reportError({
+        title: "Invalid Character Selection",
+        message: "Please select distinct source and target characters to merge.",
+        severity: "warning",
+        source: "user",
+        projectId: project.id,
+      });
       return;
     }
     try {
@@ -248,13 +267,26 @@ export const StoryReviewScreen: React.FC<StoryReviewScreenProps> = ({
       setMergeTargetId("");
       await loadData();
     } catch (err: any) {
-      alert(`Failed to merge characters: ${err.message}`);
+      reportError({
+        title: "Failed to Merge Characters",
+        message: err.message || "Character merge failed.",
+        severity: "error",
+        source: "pipeline",
+        projectId: project.id,
+        rawDetails: err,
+      });
     }
   };
 
   const handleSplitCharacter = async () => {
     if (!splitCharId || !splitNewName.trim()) {
-      alert("Please select a character and enter a new identity name.");
+      reportError({
+        title: "Incomplete Character Split",
+        message: "Please select a character and enter a new identity name.",
+        severity: "warning",
+        source: "user",
+        projectId: project.id,
+      });
       return;
     }
     const panelArray = splitPanelIds
@@ -270,7 +302,14 @@ export const StoryReviewScreen: React.FC<StoryReviewScreenProps> = ({
       setSplitPanelIds("");
       await loadData();
     } catch (err: any) {
-      alert(`Failed to split character identity: ${err.message}`);
+      reportError({
+        title: "Failed to Split Character",
+        message: err.message || "Character split failed.",
+        severity: "error",
+        source: "pipeline",
+        projectId: project.id,
+        rawDetails: err,
+      });
     }
   };
 
@@ -661,7 +700,14 @@ export const StoryReviewScreen: React.FC<StoryReviewScreenProps> = ({
                         });
                         await loadData();
                       } catch (err: any) {
-                        alert(`Failed to update speaker: ${err.message}`);
+                        reportError({
+                          title: "Failed to Update Speaker",
+                          message: err.message || "Could not update utterance speaker.",
+                          severity: "warning",
+                          source: "pipeline",
+                          projectId: project.id,
+                          rawDetails: err,
+                        });
                       }
                     }}
                     className="bg-zinc-950 border border-zinc-700 text-xs text-zinc-200 rounded px-2 py-1 font-mono"

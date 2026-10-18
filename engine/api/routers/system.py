@@ -216,6 +216,22 @@ def get_providers_status():
         "details": cb_details,
     })
 
+    # 4b. F5-TTS Neural Voice
+    f5_pool = Path(r"C:\Tools\generated_audio\marcus_male_deep")
+    f5_files = list(f5_pool.glob("*.wav")) if f5_pool.exists() else []
+    f5_status = "HEALTHY" if (f5_pool.exists() and len(f5_files) > 0) else "DEGRADED"
+
+    results.append({
+        "id": "f5_tts",
+        "name": "F5-TTS Neural Voice",
+        "category": "audio_engine",
+        "status": f5_status,
+        "version": f"{len(f5_files)} cached takes" if f5_files else "Procedural fallback",
+        "path": str(f5_pool),
+        "required": False,
+        "details": "High-fidelity neural dialogue synthesis with zero-shot emotion and natural breathiness.",
+    })
+
     # 5. ACE-Step
     ace_api_url = "http://127.0.0.1:8001"
     ace_status = "STOPPED"

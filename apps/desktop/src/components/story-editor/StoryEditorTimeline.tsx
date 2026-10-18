@@ -1052,30 +1052,39 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
               <div
                 className={`w-0.5 h-full ${
                   isScrubbing
-                    ? "bg-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.9)]"
-                    : "bg-indigo-500 shadow-md"
+                    ? "bg-cyan-400 shadow-[0_0_12px_rgba(34,211,238,1)]"
+                    : "bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.5)]"
                 }`}
               />
 
               {/* Invisible wider grab handle along vertical line */}
               <div
                 onPointerDown={handleStartScrub}
-                className="absolute top-0 bottom-0 -left-2.5 w-5 cursor-ew-resize"
+                className="absolute top-0 bottom-0 -left-3 w-6 cursor-ew-resize"
                 title="Drag Scrubber"
               />
 
-              {/* Diamond Playhead Handle */}
+              {/* Sculpted Studio Playhead Cap */}
               <div
                 onPointerDown={handleStartScrub}
-                className={`absolute -left-[7px] -top-1.5 w-4 h-4 rounded-sm rotate-45 cursor-ew-resize shadow-lg transition-transform ${
-                  isScrubbing
-                    ? "bg-cyan-400 scale-125 ring-2 ring-cyan-200"
-                    : "bg-indigo-500 hover:scale-115 hover:bg-indigo-400"
-                }`}
+                className="absolute -left-2.5 -top-1 cursor-ew-resize pointer-events-auto group z-40"
               >
-                {/* Live time tooltip while scrubbing */}
+                <svg
+                  className={`w-5 h-6 drop-shadow-md transition-transform ${
+                    isScrubbing
+                      ? "scale-115 text-cyan-400 fill-cyan-400 stroke-cyan-200"
+                      : "text-indigo-500 fill-indigo-500 stroke-indigo-300 group-hover:scale-110 group-hover:text-indigo-400"
+                  }`}
+                  viewBox="0 0 20 24"
+                  fill="currentColor"
+                  strokeWidth={1}
+                >
+                  <path d="M2 3a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-.586 1.414l-6 6a2 2 0 0 1-2.828 0l-6-6A2 2 0 0 1 2 15V3z" />
+                </svg>
+
+                {/* Floating live timecode tooltip badge */}
                 {isScrubbing && (
-                  <div className="absolute -top-7 left-1/2 -translate-x-1/2 -rotate-45 bg-zinc-950 border border-cyan-400 text-cyan-300 font-mono text-[10px] font-bold px-1.5 py-0.5 rounded shadow-xl whitespace-nowrap pointer-events-none">
+                  <div className="absolute -top-7 left-1/2 -translate-x-1/2 bg-zinc-950/95 border border-cyan-400 text-cyan-300 font-mono text-[10px] font-bold px-2 py-0.5 rounded shadow-2xl whitespace-nowrap pointer-events-none ring-1 ring-cyan-400/40 animate-fadeIn">
                     {formatRulerTime(state.playhead_sec)}
                   </div>
                 )}
@@ -1149,31 +1158,29 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                       </span>
                       {/* Review Status Badge */}
                       {narration.review_status === "APPROVED" ? (
-                        <span className="px-1 py-0.2 rounded bg-emerald-950 text-emerald-400 text-[8px] font-bold border border-emerald-700/60" title="Review: Approved">
-                          ✓
+                        <span className="px-1 py-0.5 rounded bg-emerald-950 text-emerald-400 text-[8px] font-bold border border-emerald-700/60 flex items-center justify-center" title="Review: Approved">
+                          <Icons.Check className="w-2.5 h-2.5" />
                         </span>
                       ) : narration.review_status === "NEEDS_REVIEW" ? (
-                        <span className="px-1 py-0.2 rounded bg-amber-950 text-amber-400 text-[8px] font-bold border border-amber-700/60" title="Review: Needs Review">
-                          ?
+                        <span className="px-1 py-0.5 rounded bg-amber-950 text-amber-400 text-[8px] font-bold border border-amber-700/60 flex items-center justify-center" title="Review: Needs Review">
+                          <Icons.AlertTriangle className="w-2.5 h-2.5" />
                         </span>
                       ) : (
-                        <span className="px-1 py-0.2 rounded bg-zinc-900 text-zinc-400 text-[8px] font-mono border border-zinc-800" title="Review: Draft">
+                        <span className="px-1 py-0.5 rounded bg-zinc-900 text-zinc-400 text-[8px] font-mono border border-zinc-800" title="Review: Draft">
                           D
                         </span>
                       )}
 
                       {/* Audio Generation Status */}
                       {narration.status === "OUTDATED" ? (
-                        <span className="px-1 py-0.2 rounded bg-amber-900 text-amber-200 font-bold border border-amber-500 text-[8px] animate-pulse" title="Audio Take Outdated">
-                          ⚠
+                        <span className="px-1 py-0.5 rounded bg-amber-900 text-amber-200 font-bold border border-amber-500 text-[8px] animate-pulse flex items-center justify-center" title="Audio Take Outdated">
+                          <Icons.AlertTriangle className="w-2.5 h-2.5 text-amber-300" />
                         </span>
                       ) : narration.status === "READY" ? (
-                        <span className="text-emerald-400 text-[9px] font-bold" title="Audio Take Ready">
-                          ●
-                        </span>
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block shadow-[0_0_6px_rgba(52,211,153,0.8)]" title="Audio Take Ready" />
                       ) : narration.status === "PROCESSING" ? (
-                        <span className="text-blue-400 text-[9px] animate-spin font-bold" title="Audio Generating">
-                          ⏳
+                        <span className="text-blue-400 flex items-center" title="Audio Generating">
+                          <Icons.Rotate className="w-2.5 h-2.5 animate-spin" />
                         </span>
                       ) : (
                         <span className="text-purple-400 text-[8px] font-mono" title={narration.status}>
@@ -1188,14 +1195,18 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                           e.stopPropagation();
                           handleToggleNarrationLink(narration.id);
                         }}
-                        className={`px-1 py-0.2 rounded text-[8px] font-bold border transition-colors ${
+                        className={`p-1 rounded text-[8px] font-bold border transition-colors flex items-center justify-center ${
                           isLinked
                             ? "bg-emerald-800/60 border-emerald-600 text-emerald-200"
                             : "bg-zinc-800 border-zinc-700 text-zinc-400 hover:text-white"
                         }`}
                         title={isLinked ? "Linked to scene (shifts with scene)" : "Unlinked (independent time)"}
                       >
-                        {isLinked ? "🔗" : "🔓"}
+                        {isLinked ? (
+                          <Icons.Link className="w-2.5 h-2.5 text-emerald-300" />
+                        ) : (
+                          <Icons.Unlink className="w-2.5 h-2.5 text-zinc-400" />
+                        )}
                       </button>
 
                       {/* Mini Waveform graphic */}
@@ -1748,8 +1759,8 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                         {bgm.title}
                       </span>
                       {bgm.loop && (
-                        <span className="text-[8px] text-amber-400 bg-amber-900/60 px-1 rounded shrink-0">
-                          🔁
+                        <span className="text-[8px] text-amber-400 bg-amber-900/60 p-0.5 rounded shrink-0 flex items-center" title="Looping">
+                          <Icons.Rotate className="w-2.5 h-2.5" />
                         </span>
                       )}
                       <span className="text-[8px] text-amber-400/80 font-mono shrink-0">
@@ -1771,8 +1782,8 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                           ))}
                         </div>
                       ) : (
-                        <span className="text-[9px] text-amber-500/70 pointer-events-none" title="Real waveform unmeasured">
-                          ♫
+                        <span className="text-amber-500/70 pointer-events-none flex items-center" title="Real waveform unmeasured">
+                          <Icons.Music className="w-2.5 h-2.5" />
                         </span>
                       )}
 
@@ -1784,10 +1795,10 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                             e.stopPropagation();
                             onUpdateState((prev) => duplicateAudioClip(prev, bgm.id, "bgm"));
                           }}
-                          className="hover:text-white text-amber-400/80 p-0.5 text-[9px]"
+                          className="hover:text-white text-amber-400/80 p-0.5"
                           title="Duplicate BGM Clip"
                         >
-                          ⎘
+                          <Icons.Copy className="w-2.5 h-2.5" />
                         </button>
                       )}
 
@@ -1799,10 +1810,10 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                             e.stopPropagation();
                             onUpdateState((prev) => deleteAudioClip(prev, bgm.id, "bgm"));
                           }}
-                          className="hover:text-rose-300 text-rose-400/80 p-0.5 text-[9px]"
+                          className="hover:text-rose-300 text-rose-400/80 p-0.5"
                           title="Delete BGM Clip"
                         >
-                          ✕
+                          <Icons.Trash className="w-2.5 h-2.5" />
                         </button>
                       )}
                     </div>
@@ -1935,10 +1946,10 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                             e.stopPropagation();
                             onUpdateState((prev) => duplicateAudioClip(prev, sfx.id, "sfx"));
                           }}
-                          className="hover:text-white text-cyan-400/80 p-0.5 text-[9px]"
+                          className="hover:text-white text-cyan-400/80 p-0.5"
                           title="Duplicate SFX Clip"
                         >
-                          ⎘
+                          <Icons.Copy className="w-2.5 h-2.5" />
                         </button>
                       )}
 
@@ -1949,10 +1960,10 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                             e.stopPropagation();
                             onUpdateState((prev) => deleteAudioClip(prev, sfx.id, "sfx"));
                           }}
-                          className="hover:text-rose-300 text-rose-400/80 p-0.5 text-[9px]"
+                          className="hover:text-rose-300 text-rose-400/80 p-0.5"
                           title="Delete SFX Clip"
                         >
-                          ✕
+                          <Icons.Trash className="w-2.5 h-2.5" />
                         </button>
                       )}
                     </div>

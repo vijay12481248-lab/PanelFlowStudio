@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef, useCallback } from "react";
 import { api } from "@panelflow/api-client";
 import type { Project, Page, Panel } from "@panelflow/shared-types";
 import { Button, Card, Badge, Modal, Input, Icons } from "@panelflow/ui";
+import { useError } from "../context/ErrorContext";
 
 interface PanelReviewScreenProps {
   project: Project;
@@ -21,6 +22,7 @@ export const PanelReviewScreen: React.FC<PanelReviewScreenProps> = ({
   onProceedToOCR,
   onOpenStoryEditor,
 }) => {
+  const { reportError, inspectError } = useError();
   const [pages, setPages] = useState<Page[]>([]);
   const [selectedPageIndex, setSelectedPageIndex] = useState<number>(0);
   const [panels, setPanels] = useState<Panel[]>([]);
@@ -61,6 +63,17 @@ export const PanelReviewScreen: React.FC<PanelReviewScreenProps> = ({
   const [initialBox, setInitialBox] = useState<{ x: number; y: number; w: number; h: number }>({ x: 0, y: 0, w: 0, h: 0 });
   const [drawCurrent, setDrawCurrent] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
 
+  // Redaction / Blur state
+  const [blurringPanel, setBlurringPanel] = useState<boolean>(false);
+  const [resettingPanel, setResettingPanel] = useState<boolean>(false);
+  const [panelBlurStatus, setPanelBlurStatus] = useState<{ is_blurred: boolean; has_backup: boolean; blurred_regions_count: number } | null>(null);
+
+  // Batch Watermarks / Blur state
+  const [isBatchBlurModalOpen, setIsBatchBlurModalOpen] = useState<boolean>(false);
+  const [batchBlurLoading, setBatchBlurLoading] = useState<boolean>(false);
+  const [batchPreset, setBatchPreset] = useState<"TOP_WATERMARK" | "BOTTOM_SUBSCRIBE" | "ALL_TEXT_REGIONS" | "ENTIRE_PANEL">("TOP_WATERMARK");
+  const [batchHeight, setBatchHeight] = useState<number>(80);
+
   const activePage = pages[selectedPageIndex] || null;
   const canvasWidth = loadedImage && activePage && loadedImage.pageId === activePage.id ? loadedImage.width : activePage?.width || 1200;
   const canvasHeight = loadedImage && activePage && loadedImage.pageId === activePage.id ? loadedImage.height : activePage?.height || 1800;
@@ -100,7 +113,14 @@ export const PanelReviewScreen: React.FC<PanelReviewScreenProps> = ({
       const allPanels = await api.listPanels(project.id);
       setPanels(allPanels);
     } catch (err: any) {
-      alert(`Failed to load project data: ${err.message}`);
+      reportError({
+        title: "Failed to Load Panels",
+        message: err.message || "Failed to load project page and panel data.",
+        severity: "error",
+        source: "pipeline",
+        projectId: project.id,
+        rawDetails: err,
+      });
     } finally {
       setLoading(false);
     }
@@ -109,6 +129,17 @@ export const PanelReviewScreen: React.FC<PanelReviewScreenProps> = ({
   useEffect(() => {
     loadData();
   }, [project.id]);
+
+  // Fetch Panel Blur Status
+  useEffect(() => {
+    if (!selectedPanelId) {
+      setPanelBlurStatus(null);
+      return;
+    }
+    api.getPanelBlurStatus(project.id, selectedPanelId)
+      .then(setPanelBlurStatus)
+      .catch(() => setPanelBlurStatus(null));
+  }, [project.id, selectedPanelId, cacheBuster]);
 
   // Keyboard Navigation
   useEffect(() => {
@@ -173,9 +204,16 @@ export const PanelReviewScreen: React.FC<PanelReviewScreenProps> = ({
         if (job.status === "SUCCEEDED" || job.status === "FAILED") break;
       }
       setCacheBuster(Date.now());
-      alert("Page normalization completed successfully!");
     } catch (err: any) {
-      alert(`Normalization failed: ${err.message}`);
+      reportError({
+        title: "Page Normalization Failed",
+        message: err.message || "Failed to normalize chapter page dimensions.",
+        severity: "error",
+        source: "pipeline",
+        projectId: project.id,
+        jobType: "PANEL_DETECTION",
+        rawDetails: err,
+      });
     } finally {
       setNormalizing(false);
     }
@@ -195,7 +233,15 @@ export const PanelReviewScreen: React.FC<PanelReviewScreenProps> = ({
       setPanels(updatedPanels);
       setCacheBuster(Date.now());
     } catch (err: any) {
-      alert(`Panel detection failed: ${err.message}`);
+      reportError({
+        title: "Panel Detection Failed",
+        message: err.message || "Error running automatic panel extraction.",
+        severity: "error",
+        source: "pipeline",
+        projectId: project.id,
+        jobType: "PANEL_DETECTION",
+        rawDetails: err,
+      });
     } finally {
       setDetecting(false);
     }
@@ -216,7 +262,15 @@ export const PanelReviewScreen: React.FC<PanelReviewScreenProps> = ({
       setPanels([...otherPanels, ...updatedPagePanels]);
       setCacheBuster(Date.now());
     } catch (err: any) {
-      alert(`Page detection failed: ${err.message}`);
+      reportError({
+        title: "Page Panel Detection Failed",
+        message: err.message || `Failed to detect panels on page ${activePage.sequence}.`,
+        severity: "error",
+        source: "pipeline",
+        projectId: project.id,
+        jobType: "PANEL_DETECTION",
+        rawDetails: err,
+      });
     } finally {
       setDetecting(false);
     }
@@ -308,6 +362,68 @@ export const PanelReviewScreen: React.FC<PanelReviewScreenProps> = ({
     }
   };
 
+  const handleBlurEntirePanel = async () => {
+    if (!selectedPanelId) return;
+    try {
+      setBlurringPanel(true);
+      await api.blurEntirePanel(project.id, selectedPanelId, 32);
+      setCacheBuster(Date.now());
+      const status = await api.getPanelBlurStatus(project.id, selectedPanelId);
+      setPanelBlurStatus(status);
+    } catch (err: any) {
+      alert(`Failed to blur panel: ${err.message}`);
+    } finally {
+      setBlurringPanel(false);
+    }
+  };
+
+  const handleResetPanelImage = async () => {
+    if (!selectedPanelId) return;
+    try {
+      setResettingPanel(true);
+      await api.resetPanelImage(project.id, selectedPanelId);
+      setCacheBuster(Date.now());
+      const status = await api.getPanelBlurStatus(project.id, selectedPanelId);
+      setPanelBlurStatus(status);
+    } catch (err: any) {
+      alert(`Failed to reset panel image: ${err.message}`);
+    } finally {
+      setResettingPanel(false);
+    }
+  };
+
+  const handleRunBatchBlur = async () => {
+    try {
+      setBatchBlurLoading(true);
+      const res = await api.batchBlurPanels(project.id, {
+        preset: batchPreset,
+        height_px: Number(batchHeight),
+      });
+      alert(`Batch blur completed! Blurred ${res.blurred_panels_count} of ${res.total_panels} panels.`);
+      setCacheBuster(Date.now());
+      setIsBatchBlurModalOpen(false);
+    } catch (err: any) {
+      alert(`Batch blur failed: ${err.message}`);
+    } finally {
+      setBatchBlurLoading(false);
+    }
+  };
+
+  const handleRunBatchReset = async () => {
+    if (!confirm("Are you sure you want to reset all panels in this project back to their original unblurred images?")) return;
+    try {
+      setBatchBlurLoading(true);
+      const res = await api.batchResetPanels(project.id);
+      alert(`Batch reset completed! Restored ${res.restored_panels_count} of ${res.total_panels} panels.`);
+      setCacheBuster(Date.now());
+      setIsBatchBlurModalOpen(false);
+    } catch (err: any) {
+      alert(`Batch reset failed: ${err.message}`);
+    } finally {
+      setBatchBlurLoading(false);
+    }
+  };
+
   const handleReorder = async (index: number, direction: "up" | "down") => {
     const target = direction === "up" ? index - 1 : index + 1;
     if (target < 0 || target >= pagePanels.length) return;
@@ -326,24 +442,43 @@ export const PanelReviewScreen: React.FC<PanelReviewScreenProps> = ({
       const updated = await api.reorderPanels(project.id, combined.map((p) => p.id));
       setPanels(updated);
     } catch (err: any) {
-      alert(`Reordering failed: ${err.message}`);
+      reportError({
+        title: "Panel Reordering Failed",
+        message: err.message || "Failed to reorder panels.",
+        severity: "warning",
+        source: "pipeline",
+        projectId: project.id,
+        rawDetails: err,
+      });
       loadData();
     }
   };
 
   const handleConfirm = async () => {
     if (panels.length === 0) {
-      alert("Please detect or add at least one panel before confirming.");
+      reportError({
+        title: "No Panels Detected",
+        message: "Please detect or add at least one panel before confirming stage.",
+        severity: "warning",
+        source: "user",
+        projectId: project.id,
+      });
       return;
     }
     setConfirming(true);
     try {
       await api.confirmPanels(project.id);
       const updatedProj = await api.getProject(project.id);
-      alert("Panels confirmed successfully! Project stage transitioned to PANELS_DETECTED.");
       onPanelsApproved(updatedProj);
     } catch (err: any) {
-      alert(`Confirmation failed: ${err.message}`);
+      reportError({
+        title: "Panel Confirmation Failed",
+        message: err.message || "Could not confirm detected panels.",
+        severity: "error",
+        source: "pipeline",
+        projectId: project.id,
+        rawDetails: err,
+      });
     } finally {
       setConfirming(false);
     }
@@ -571,6 +706,17 @@ export const PanelReviewScreen: React.FC<PanelReviewScreenProps> = ({
           </Button>
 
           <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsBatchBlurModalOpen(true)}
+            className="border-amber-600/50 text-amber-300 hover:bg-amber-950/40"
+            title="Batch blur site watermark banners, headers, or subscribe notes across all panels"
+          >
+            <Icons.EyeOff className="w-3.5 h-3.5 mr-1 text-amber-400" />
+            Batch Watermarks...
+          </Button>
+
+          <Button
             variant="secondary"
             size="sm"
             onClick={handleConfirm}
@@ -588,8 +734,22 @@ export const PanelReviewScreen: React.FC<PanelReviewScreenProps> = ({
               size="sm"
               onClick={() => onProceedToOCR(project)}
               disabled={panels.length === 0}
+              title="Review OCR text regions, speech bubbles, and blur individual watermarks"
             >
-              {project.settings?.visual_storytelling ? "Analyze chapter story →" : "Proceed to OCR →"}
+              OCR & Text Review →
+            </Button>
+          )}
+
+          {project.settings?.visual_storytelling && onOpenStoryEditor && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => onOpenStoryEditor(project)}
+              disabled={panels.length === 0}
+              className="border-indigo-800 text-indigo-300 hover:bg-indigo-950/40"
+              title="Analyze chapter story and narrative beats"
+            >
+              Analyze Story →
             </Button>
           )}
 
@@ -899,9 +1059,14 @@ export const PanelReviewScreen: React.FC<PanelReviewScreenProps> = ({
                     Global sequence: #{selectedPanel.sequence}
                   </span>
                 </div>
-                <Badge variant={selectedPanel.status === "MANUAL" ? "accent" : "success"}>
-                  {selectedPanel.status}
-                </Badge>
+                <div className="flex items-center gap-1.5">
+                  {panelBlurStatus?.is_blurred && (
+                    <Badge variant="warning">BLURRED</Badge>
+                  )}
+                  <Badge variant={selectedPanel.status === "MANUAL" ? "accent" : "success"}>
+                    {selectedPanel.status}
+                  </Badge>
+                </div>
               </div>
 
               {/* Crop Preview */}
@@ -945,6 +1110,46 @@ export const PanelReviewScreen: React.FC<PanelReviewScreenProps> = ({
                     Merge Selected ({selectedForMerge.length})
                   </Button>
                 )}
+                {/* Redaction / Blur Actions */}
+                <div className="pt-2 border-t border-zinc-800 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
+                      Redaction & Blur
+                    </span>
+                    {panelBlurStatus?.has_backup && (
+                      <span className="text-[10px] text-emerald-400 flex items-center gap-1 font-mono">
+                        <Icons.CheckCircle className="w-3 h-3 text-emerald-400" />
+                        Backup saved
+                      </span>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleBlurEntirePanel}
+                      loading={blurringPanel}
+                      disabled={blurringPanel || resettingPanel}
+                      title="Blur entire panel (ideal for promotional panels, ads, translator credits)"
+                      className="border-amber-600/40 hover:bg-amber-500/10 text-amber-300"
+                    >
+                      <Icons.EyeOff className="w-3.5 h-3.5 mr-1 text-amber-400" />
+                      Blur Panel
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleResetPanelImage}
+                      loading={resettingPanel}
+                      disabled={!panelBlurStatus?.has_backup || resettingPanel || blurringPanel}
+                      title="Restore original pristine panel crop"
+                      className="text-zinc-300 hover:text-white"
+                    >
+                      <Icons.Refresh className="w-3.5 h-3.5 mr-1 text-zinc-400" />
+                      Reset Blur
+                    </Button>
+                  </div>
+                </div>
               </div>
 
               {/* Delete Button */}
@@ -1086,6 +1291,165 @@ export const PanelReviewScreen: React.FC<PanelReviewScreenProps> = ({
               </Button>
             </div>
           </form>
+        </Modal>
+      )}
+
+      {/* Batch Watermarks / Blur Modal */}
+      {isBatchBlurModalOpen && (
+        <Modal
+          isOpen={isBatchBlurModalOpen}
+          onClose={() => setIsBatchBlurModalOpen(false)}
+          title="Batch Watermark & Banner Redaction"
+        >
+          <div className="space-y-4">
+            <p className="text-xs text-zinc-400 leading-relaxed">
+              Automatically blur website banners (e.g. <code className="text-amber-300">manhuaplus.com</code>), translator notes, or credit watermarks across all {panels.length} panels in this chapter. Pristine originals are safely backed up before modification.
+            </p>
+
+            <div className="space-y-2">
+              <label className="text-xs font-semibold uppercase tracking-wider text-zinc-300 block">
+                Redaction Preset
+              </label>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBatchPreset("TOP_WATERMARK");
+                    setBatchHeight(80);
+                  }}
+                  className={`p-3 rounded-lg border text-left transition-all ${
+                    batchPreset === "TOP_WATERMARK"
+                      ? "bg-amber-950/60 border-amber-500 text-amber-200"
+                      : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200"
+                  }`}
+                >
+                  <div className="font-bold flex items-center gap-1.5 mb-1">
+                    <Icons.EyeOff className="w-4 h-4 text-amber-400" />
+                    <span>Top Watermark Banner</span>
+                  </div>
+                  <span className="text-[11px] opacity-80 block">
+                    Blurs header domain names & website URLs (top 80px)
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBatchPreset("BOTTOM_SUBSCRIBE");
+                    setBatchHeight(100);
+                  }}
+                  className={`p-3 rounded-lg border text-left transition-all ${
+                    batchPreset === "BOTTOM_SUBSCRIBE"
+                      ? "bg-amber-950/60 border-amber-500 text-amber-200"
+                      : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200"
+                  }`}
+                >
+                  <div className="font-bold flex items-center gap-1.5 mb-1">
+                    <Icons.EyeOff className="w-4 h-4 text-amber-400" />
+                    <span>Bottom Subscribe Note</span>
+                  </div>
+                  <span className="text-[11px] opacity-80 block">
+                    Blurs translator credits & subscribe banners (bottom 100px)
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setBatchPreset("ALL_TEXT_REGIONS")}
+                  className={`p-3 rounded-lg border text-left transition-all ${
+                    batchPreset === "ALL_TEXT_REGIONS"
+                      ? "bg-amber-950/60 border-amber-500 text-amber-200"
+                      : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200"
+                  }`}
+                >
+                  <div className="font-bold flex items-center gap-1.5 mb-1">
+                    <Icons.Layers className="w-4 h-4 text-indigo-400" />
+                    <span>All Detected Text</span>
+                  </div>
+                  <span className="text-[11px] opacity-80 block">
+                    Blurs all detected speech bubbles & OCR regions
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setBatchPreset("ENTIRE_PANEL")}
+                  className={`p-3 rounded-lg border text-left transition-all ${
+                    batchPreset === "ENTIRE_PANEL"
+                      ? "bg-amber-950/60 border-amber-500 text-amber-200"
+                      : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200"
+                  }`}
+                >
+                  <div className="font-bold flex items-center gap-1.5 mb-1">
+                    <Icons.EyeOff className="w-4 h-4 text-rose-400" />
+                    <span>Entire Panels</span>
+                  </div>
+                  <span className="text-[11px] opacity-80 block">
+                    Blurs 100% of the panel area (full promo/credit pages)
+                  </span>
+                </button>
+              </div>
+            </div>
+
+            {(batchPreset === "TOP_WATERMARK" || batchPreset === "BOTTOM_SUBSCRIBE") && (
+              <div className="bg-zinc-900/60 p-3 rounded-lg border border-zinc-800 space-y-1.5">
+                <label className="text-xs text-zinc-300 font-medium block">
+                  Banner Height (pixels from {batchPreset === "TOP_WATERMARK" ? "top" : "bottom"}):
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="range"
+                    min={40}
+                    max={250}
+                    step={10}
+                    value={batchHeight}
+                    onChange={(e) => setBatchHeight(Number(e.target.value))}
+                    className="flex-1 accent-amber-500"
+                  />
+                  <span className="text-xs font-mono text-amber-300 font-bold w-14 text-right">
+                    {batchHeight}px
+                  </span>
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-center justify-between pt-3 border-t border-zinc-800">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={handleRunBatchReset}
+                disabled={batchBlurLoading}
+                className="text-zinc-400 hover:text-rose-300 text-xs"
+                title="Restore all panels back to pristine originals"
+              >
+                <Icons.Refresh className="w-3.5 h-3.5 mr-1" />
+                Reset All Panels
+              </Button>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setIsBatchBlurModalOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  variant="primary"
+                  size="sm"
+                  loading={batchBlurLoading}
+                  onClick={handleRunBatchBlur}
+                  className="bg-amber-600 hover:bg-amber-500 text-white font-medium"
+                >
+                  <Icons.EyeOff className="w-4 h-4 mr-1.5" />
+                  Apply Batch Blur ({panels.length} Panels)
+                </Button>
+              </div>
+            </div>
+          </div>
         </Modal>
       )}
     </div>

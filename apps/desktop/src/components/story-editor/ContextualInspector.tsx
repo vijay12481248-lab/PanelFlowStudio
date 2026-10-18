@@ -632,7 +632,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                   <div>
                     <div className="text-xs font-bold text-zinc-100 flex items-center gap-1.5">
                       {selectedNarration.speaker || "The Narrator"}
-                      <span className="text-[9px] px-1 py-0.2 rounded bg-zinc-800 text-zinc-400 font-mono">
+                      <span className="text-[9px] px-1 py-0.5 rounded bg-zinc-800 text-zinc-400 font-mono">
                         {selectedNarration.speaker_type || "NARRATOR"}
                       </span>
                     </div>
@@ -684,9 +684,9 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                         : "text-zinc-400 border-zinc-700"
                     }`}
                   >
-                    <option value="APPROVED">✓ Approved</option>
-                    <option value="NEEDS_REVIEW">? Needs Review</option>
-                    <option value="DRAFT">○ Draft</option>
+                    <option value="APPROVED">Approved</option>
+                    <option value="NEEDS_REVIEW">Needs Review</option>
+                    <option value="DRAFT">Draft</option>
                   </select>
                 </div>
 
@@ -695,15 +695,18 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                   <span className="text-[10px] text-zinc-400">Audio:</span>
                   {selectedNarration.status === "OUTDATED" ? (
                     <span className="px-1.5 py-0.5 rounded bg-amber-950/80 text-amber-300 text-[10px] font-bold border border-amber-500 flex items-center gap-1 animate-pulse">
-                      ⚠ Take Outdated
+                      <Icons.AlertTriangle className="w-3 h-3 text-amber-400" />
+                      <span>Take Outdated</span>
                     </span>
                   ) : selectedNarration.status === "READY" ? (
-                    <span className="px-1.5 py-0.5 rounded bg-emerald-950/80 text-emerald-300 text-[10px] font-bold border border-emerald-700 flex items-center gap-1">
-                      ● Ready
+                    <span className="px-1.5 py-0.5 rounded bg-emerald-950/80 text-emerald-300 text-[10px] font-bold border border-emerald-700 flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]" />
+                      <span>Ready</span>
                     </span>
                   ) : selectedNarration.status === "PROCESSING" ? (
-                    <span className="px-1.5 py-0.5 rounded bg-blue-950/80 text-blue-300 text-[10px] font-bold border border-blue-700 flex items-center gap-1">
-                      ⏳ Processing
+                    <span className="px-1.5 py-0.5 rounded bg-blue-950/80 text-blue-300 text-[10px] font-bold border border-blue-700 flex items-center gap-1.5">
+                      <Icons.Rotate className="w-3 h-3 animate-spin text-blue-400" />
+                      <span>Processing</span>
                     </span>
                   ) : (
                     <span className="px-1.5 py-0.5 rounded bg-purple-950/80 text-purple-300 text-[10px] font-bold border border-purple-700 flex items-center gap-1">
@@ -713,6 +716,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                 </div>
               </div>
             </div>
+
 
             {/* 2. Script Editor & Audio Regeneration Policy */}
             <div className="space-y-2">
@@ -1924,13 +1928,14 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                       </h4>
                       <div className="grid grid-cols-4 gap-1">
                         {[
-                          { dir: "left" as const, label: "←", title: "Move Left" },
-                          { dir: "right" as const, label: "→", title: "Move Right" },
-                          { dir: "up" as const, label: "↑", title: "Move Up" },
-                          { dir: "down" as const, label: "↓", title: "Move Down" },
+                          { dir: "left" as const, icon: Icons.ArrowLeft, title: "Move Left" },
+                          { dir: "right" as const, icon: Icons.ArrowRight, title: "Move Right" },
+                          { dir: "up" as const, icon: Icons.ChevronUp, title: "Move Up" },
+                          { dir: "down" as const, icon: Icons.ChevronDown, title: "Move Down" },
                         ].map((item) => {
                           const isCurrent =
                             (selectedLayer.motion_direction || "right") === item.dir;
+                          const IconComp = item.icon;
                           return (
                             <button
                               key={item.dir}
@@ -1939,18 +1944,19 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                                 updateSelectedLayer({ motion_direction: item.dir });
                                 updateLayerAnimationConfig((cfg) => ({ ...cfg, direction: item.dir }));
                               }}
-                              className={`py-1.5 rounded border text-sm font-bold transition-all ${
+                              className={`py-1.5 rounded border text-sm font-bold transition-all flex items-center justify-center ${
                                 isCurrent
                                   ? "bg-indigo-600 border-indigo-500 text-white shadow-sm"
                                   : "bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-white"
                               }`}
                               title={item.title}
                             >
-                              {item.label}
+                              <IconComp className="w-4 h-4" />
                             </button>
                           );
                         })}
                       </div>
+
                     </div>
 
                     {/* Duration Slider */}

@@ -245,7 +245,7 @@ class TimelineCompiler:
         project_id: str,
         workspace_path: Path,
         profile: Optional[RenderProfile] = None,
-        subtitle_enabled: bool = True,
+        subtitle_enabled: bool = False,
         bgm_volume_db: float = -10.0,
         dialogue_gain_db: float = 0.0,
     ) -> RenderPlan:
@@ -471,6 +471,7 @@ class TimelineCompiler:
             shots=shot_plans,
             audio_tracks=audio_tracks,
             music_policy=MusicDurationPolicy.LOOP,
+            subtitle_enabled=subtitle_enabled,
             hash=plan_hash,
             metadata={
                 "aspect_ratio": state.get("aspect_ratio", "16:9"),

@@ -128,3 +128,70 @@ def test_effect_vignette():
     center_lum = arr[540, 960, 0]
     corner_lum = arr[10, 10, 0]
     assert corner_lum < center_lum
+
+
+def test_composer_respects_subtitle_toggle_and_enforces_rgb(tmp_path):
+    from engine.render.composer import FrameComposer
+    from engine.render.models.render_plan import RenderPlan, RenderShotPlan
+    from engine.render.models.profiles import RenderProfile
+
+    # Create an RGBA source asset
+    rgba_asset = tmp_path / "rgba_panel.png"
+    Image.new("RGBA", (800, 600), color=(120, 140, 160, 200)).save(rgba_asset)
+
+    caption = CaptionCue(
+        cue_id="cap_sub_test",
+        text="Dialogue subtitles should obey the toggle switch.",
+        start_time=0.0,
+        end_time=3.0,
+    )
+
+    shot = RenderShotPlan(
+        shot_id="shot_test",
+        scene_id="scene_test",
+        sequence_global=1,
+        source_asset_path=str(rgba_asset),
+        start_frame=0,
+        end_frame=60,
+        total_frames=60,
+        start_time=0.0,
+        end_time=2.0,
+        duration=2.0,
+        captions=[caption],
+    )
+
+    # 1. When subtitle_enabled is False (Default)
+    plan_off = RenderPlan(
+        project_id="test_sub_off",
+        total_duration_sec=2.0,
+        total_frames=60,
+        profile=RenderProfile(width=1080, height=1920, fps=30),
+        shots=[shot],
+        subtitle_enabled=False,
+    )
+    composer = FrameComposer()
+    frame_off = composer.compose_frame(30, plan_off)
+
+    assert frame_off.mode == "RGB"
+    assert frame_off.size == (1080, 1920)
+
+    # 2. When subtitle_enabled is True
+    plan_on = RenderPlan(
+        project_id="test_sub_on",
+        total_duration_sec=2.0,
+        total_frames=60,
+        profile=RenderProfile(width=1080, height=1920, fps=30),
+        shots=[shot],
+        subtitle_enabled=True,
+    )
+    frame_on = composer.compose_frame(30, plan_on)
+
+    assert frame_on.mode == "RGB"
+    assert frame_on.size == (1080, 1920)
+
+    # Comparing frames: frame_on should have subtitle pill drawn at bottom, frame_off should not
+    arr_off = np.array(frame_off)
+    arr_on = np.array(frame_on)
+    # The frames should not be identical because one has subtitles drawn
+    assert not np.array_equal(arr_off, arr_on)
+

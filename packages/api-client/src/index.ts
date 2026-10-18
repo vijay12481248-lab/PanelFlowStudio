@@ -294,6 +294,101 @@ export class PanelFlowApiClient {
     return `${this.baseUrl}/api/projects/${projectId}/panels/${panelId}/file`;
   }
 
+  async blurPanelRegion(
+    projectId: string,
+    panelId: string,
+    box: { x: number; y: number; width: number; height: number; blur_radius?: number; feather?: number }
+  ): Promise<{ success: boolean; panel_id: string; has_backup: boolean }> {
+    return this.request<{ success: boolean; panel_id: string; has_backup: boolean }>(
+      `/api/projects/${projectId}/panels/${panelId}/blur-region`,
+      {
+        method: "POST",
+        body: JSON.stringify(box),
+      }
+    );
+  }
+
+  async blurPanelText(
+    projectId: string,
+    panelId: string,
+    params?: { region_ids?: string[]; blur_radius?: number; feather?: number }
+  ): Promise<{ success: boolean; panel_id: string; blurred_count: number }> {
+    return this.request<{ success: boolean; panel_id: string; blurred_count: number }>(
+      `/api/projects/${projectId}/panels/${panelId}/blur-text`,
+      {
+        method: "POST",
+        body: JSON.stringify(params || {}),
+      }
+    );
+  }
+
+  async blurEntirePanel(
+    projectId: string,
+    panelId: string,
+    blurRadius: number = 32
+  ): Promise<{ success: boolean; panel_id: string }> {
+    return this.request<{ success: boolean; panel_id: string }>(
+      `/api/projects/${projectId}/panels/${panelId}/blur-panel`,
+      {
+        method: "POST",
+        body: JSON.stringify({ blur_radius: blurRadius }),
+      }
+    );
+  }
+
+  async resetPanelImage(
+    projectId: string,
+    panelId: string
+  ): Promise<{ success: boolean; panel_id: string }> {
+    return this.request<{ success: boolean; panel_id: string }>(
+      `/api/projects/${projectId}/panels/${panelId}/reset-image`,
+      {
+        method: "POST",
+      }
+    );
+  }
+
+  async getPanelBlurStatus(
+    projectId: string,
+    panelId: string
+  ): Promise<{ is_blurred: boolean; has_backup: boolean; blurred_regions_count: number }> {
+    return this.request<{ is_blurred: boolean; has_backup: boolean; blurred_regions_count: number }>(
+      `/api/projects/${projectId}/panels/${panelId}/blur-status`
+    );
+  }
+
+  async batchBlurPanels(
+    projectId: string,
+    params?: {
+      preset?: "TOP_WATERMARK" | "BOTTOM_SUBSCRIBE" | "ENTIRE_PANEL" | "ALL_TEXT_REGIONS";
+      height_px?: number;
+      blur_radius?: number;
+      feather?: number;
+      panel_ids?: string[];
+    }
+  ): Promise<{ success: boolean; project_id: string; preset: string; blurred_panels_count: number; total_panels: number }> {
+    return this.request(
+      `/api/projects/${projectId}/panels/batch-blur`,
+      {
+        method: "POST",
+        body: JSON.stringify(params || {}),
+      }
+    );
+  }
+
+  async batchResetPanels(
+    projectId: string,
+    panelIds?: string[]
+  ): Promise<{ success: boolean; project_id: string; restored_panels_count: number; total_panels: number }> {
+    return this.request(
+      `/api/projects/${projectId}/panels/batch-reset`,
+      {
+        method: "POST",
+        body: JSON.stringify({ panel_ids: panelIds }),
+      }
+    );
+  }
+
   // OCR
   async listOCREngines(): Promise<OCREngineInfo[]> {
     return this.request<OCREngineInfo[]>("/api/ocr/engines");
@@ -425,6 +520,20 @@ export class PanelFlowApiClient {
     return this.request<TextRegion>(`/api/projects/${projectId}/text-regions/${regionId}/ocr`, {
       method: "POST",
       body: JSON.stringify({ engine_id: engineId, language }),
+    });
+  }
+
+  async blurTextRegion(
+    projectId: string,
+    regionId: string,
+    params?: { blur_radius?: number; feather?: number }
+  ): Promise<TextRegion> {
+    const query = new URLSearchParams();
+    if (params?.blur_radius) query.append("blur_radius", String(params.blur_radius));
+    if (params?.feather != null) query.append("feather", String(params.feather));
+    const qs = query.toString() ? `?${query.toString()}` : "";
+    return this.request<TextRegion>(`/api/projects/${projectId}/text-regions/${regionId}/blur${qs}`, {
+      method: "POST",
     });
   }
 
@@ -827,7 +936,7 @@ export class PanelFlowApiClient {
       body: JSON.stringify({
         profile_name: options.profileName || "standard_1080p",
         custom_output_path: options.customOutputPath,
-        subtitle_enabled: options.subtitleEnabled ?? true,
+        subtitle_enabled: options.subtitleEnabled ?? false,
         bgm_volume_db: options.bgmVolumeDb ?? -10.0,
         dialogue_gain_db: options.dialogueGainDb ?? 0.0,
         is_draft: options.isDraft ?? false,
@@ -867,6 +976,10 @@ export class PanelFlowApiClient {
 
   getRenderContactSheetUrl(projectId: string, renderId: string): string {
     return `${this.baseUrl}/api/projects/${projectId}/render/jobs/${renderId}/contact-sheet`;
+  }
+
+  getRenderAuditSampleUrl(projectId: string, renderId: string, sampleIndex: number): string {
+    return `${this.baseUrl}/api/projects/${projectId}/render/jobs/${renderId}/samples/${sampleIndex}`;
   }
 
   async getRenderValidation(projectId: string, renderId: string): Promise<RenderValidationReport> {

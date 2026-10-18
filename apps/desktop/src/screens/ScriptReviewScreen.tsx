@@ -12,6 +12,7 @@ import type {
   StoryboardPanelRef,
 } from "@panelflow/shared-types";
 import { Button, Card, Badge, ProgressBar, Icons } from "@panelflow/ui";
+import { useError } from "../context/ErrorContext";
 
 interface ScriptReviewScreenProps {
   project: Project;
@@ -28,6 +29,7 @@ export const ScriptReviewScreen: React.FC<ScriptReviewScreenProps> = ({
   onProceedToAudio,
   onProjectUpdated,
 }) => {
+  const { reportError, inspectError } = useError();
   const [viewMode, setViewMode] = useState<"storyboard" | "script">("storyboard");
   const [script, setScript] = useState<VideoScript | null>(null);
   const [storyboard, setStoryboard] = useState<StoryboardDocument | null>(null);
@@ -91,7 +93,14 @@ export const ScriptReviewScreen: React.FC<ScriptReviewScreenProps> = ({
       const sb = await api.realignStoryboard(project.id);
       setStoryboard(sb);
     } catch (err: any) {
-      alert(`Realign failed: ${err.message}`);
+      reportError({
+        title: "Storyboard Realignment Failed",
+        message: err.message || "Failed to realign storyboard segments.",
+        severity: "error",
+        source: "pipeline",
+        projectId: project.id,
+        rawDetails: err,
+      });
     } finally {
       setRealigning(false);
     }
@@ -112,7 +121,14 @@ export const ScriptReviewScreen: React.FC<ScriptReviewScreenProps> = ({
           .catch(() => {});
       }
     } catch (err: any) {
-      alert(`Update failed: ${err.message}`);
+      reportError({
+        title: "Storyboard Update Failed",
+        message: err.message || "Could not update storyboard segment.",
+        severity: "warning",
+        source: "pipeline",
+        projectId: project.id,
+        rawDetails: { segmentId, patch, error: err },
+      });
     }
   };
 
@@ -125,7 +141,14 @@ export const ScriptReviewScreen: React.FC<ScriptReviewScreenProps> = ({
       const sb = await api.getStoryboard(project.id).catch(() => null);
       if (sb) setStoryboard(sb);
     } catch (err: any) {
-      alert(err.message || "Script edit failed");
+      reportError({
+        title: "Script Action Failed",
+        message: err.message || "Script action execution failed.",
+        severity: "error",
+        source: "pipeline",
+        projectId: project.id,
+        rawDetails: { segmentId, action, error: err },
+      });
     } finally {
       setGenerating(false);
     }
@@ -143,7 +166,15 @@ export const ScriptReviewScreen: React.FC<ScriptReviewScreenProps> = ({
       const sb = await api.getStoryboard(project.id).catch(() => null);
       if (sb) setStoryboard(sb);
     } catch (err: any) {
-      alert(`Failed to adapt script: ${err.message}`);
+      reportError({
+        title: "Script Adaptation Failed",
+        message: err.message || "Failed to adapt and generate video script.",
+        severity: "error",
+        source: "pipeline",
+        projectId: project.id,
+        jobType: "SCRIPT_GENERATION",
+        rawDetails: err,
+      });
     } finally {
       setGenerating(false);
     }
@@ -157,7 +188,14 @@ export const ScriptReviewScreen: React.FC<ScriptReviewScreenProps> = ({
       const report = await api.validateScript(project.id, script.script_id);
       setValidationReport(report);
     } catch (err: any) {
-      alert(`Validation failed: ${err.message}`);
+      reportError({
+        title: "Script Validation Failed",
+        message: err.message || "Validation checks encountered an unexpected error.",
+        severity: "warning",
+        source: "pipeline",
+        projectId: project.id,
+        rawDetails: err,
+      });
     } finally {
       setValidating(false);
     }
@@ -187,7 +225,14 @@ export const ScriptReviewScreen: React.FC<ScriptReviewScreenProps> = ({
         onProjectUpdated(updatedProj);
       }
     } catch (err: any) {
-      alert(`Failed to save script segment: ${err.message}`);
+      reportError({
+        title: "Failed to Save Script Segment",
+        message: err.message || "Could not save segment changes to disk.",
+        severity: "error",
+        source: "pipeline",
+        projectId: project.id,
+        rawDetails: { segId, error: err },
+      });
     }
   };
 
@@ -197,7 +242,6 @@ export const ScriptReviewScreen: React.FC<ScriptReviewScreenProps> = ({
     try {
       const res = await api.approveScript(project.id, script.script_id);
       const updated = await api.getProject(project.id);
-      alert(res.message || "Script approved successfully! Project advanced to SCRIPT_APPROVED.");
       onScriptApproved(updated);
     } catch (err: any) {
       try {
@@ -206,7 +250,14 @@ export const ScriptReviewScreen: React.FC<ScriptReviewScreenProps> = ({
       } catch (valErr) {
         console.warn("Validation fetch on approve failure:", valErr);
       }
-      alert(`Approval Gate Blocked: ${err.message}`);
+      reportError({
+        title: "Approval Gate Blocked",
+        message: err.message || "Strict script approval conditions were not satisfied.",
+        severity: "error",
+        source: "pipeline",
+        projectId: project.id,
+        rawDetails: { scriptId: script.script_id, error: err },
+      });
     } finally {
       setApproving(false);
     }

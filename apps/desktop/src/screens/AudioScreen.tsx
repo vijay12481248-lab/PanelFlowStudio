@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { api } from "@panelflow/api-client";
 import type { Project, AudioTimelineResponse, AudioInterval } from "@panelflow/shared-types";
-import { Button, Card, Badge, Icons } from "@panelflow/ui";
+import { Button, Card, Badge, Icons, SvgAudioEqualizer } from "@panelflow/ui";
 import { useError } from "../context/ErrorContext";
 import type { AppError } from "../types/error";
 
@@ -27,6 +27,7 @@ export const AudioScreen: React.FC<AudioScreenProps> = ({
   const [generating, setGenerating] = useState<boolean>(false);
   const [approving, setApproving] = useState<boolean>(false);
   const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
+  const [playingIndex, setPlayingIndex] = useState<number | null>(null);
 
   const loadTimeline = useCallback(async () => {
     setLoading(true);
@@ -82,7 +83,15 @@ export const AudioScreen: React.FC<AudioScreenProps> = ({
       await api.regenerateAudioSegment(project.id, segmentId);
       await loadTimeline();
     } catch (err: any) {
-      alert(`Selective regeneration failed: ${err.message}`);
+      reportError({
+        title: "Audio Segment Regeneration Failed",
+        message: err.message || "Could not regenerate dialogue voice line.",
+        severity: "error",
+        source: "pipeline",
+        projectId: project.id,
+        jobType: "AUDIO_GENERATION",
+        rawDetails: { segmentId, error: err },
+      });
     } finally {
       setRegeneratingId(null);
     }
@@ -96,7 +105,14 @@ export const AudioScreen: React.FC<AudioScreenProps> = ({
       setTimelineData((prev) => (prev ? { ...prev, status: "APPROVED" } : null));
       onAudioApproved(updated);
     } catch (err: any) {
-      alert(`Audio approval failed: ${err.message}`);
+      reportError({
+        title: "Audio Approval Gate Blocked",
+        message: err.message || "Audio timeline verification failed.",
+        severity: "error",
+        source: "pipeline",
+        projectId: project.id,
+        rawDetails: err,
+      });
     } finally {
       setApproving(false);
     }
@@ -352,10 +368,18 @@ export const AudioScreen: React.FC<AudioScreenProps> = ({
 
                   {/* Right: Audio Player & Regenerate */}
                   <div className="flex items-center gap-3 flex-shrink-0">
+                    <SvgAudioEqualizer
+                      isPlaying={playingIndex === idx}
+                      theme={playingIndex === idx ? "cyan" : "indigo"}
+                      className="transition-opacity duration-300"
+                    />
                     <audio
                       controls
                       src={audioSrc}
                       preload="none"
+                      onPlay={() => setPlayingIndex(idx)}
+                      onPause={() => setPlayingIndex(null)}
+                      onEnded={() => setPlayingIndex(null)}
                       className="h-8 max-w-[240px] rounded"
                     />
 

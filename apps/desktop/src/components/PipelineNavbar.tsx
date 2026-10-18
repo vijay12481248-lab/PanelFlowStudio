@@ -1,6 +1,6 @@
 import React from "react";
 import type { PipelineStage } from "@panelflow/shared-types";
-import { Badge, Icons } from "@panelflow/ui";
+import { Badge, Icons, SvgPipelineConnector } from "@panelflow/ui";
 
 interface PipelineNavbarProps {
   currentStage: PipelineStage;
@@ -96,10 +96,9 @@ export const PipelineNavbar: React.FC<PipelineNavbarProps> = ({ currentStage, on
         return (
           <React.Fragment key={entry.id}>
             {idx > 0 && (
-              <div
-                className={`w-4 h-px flex-shrink-0 ${
-                  status === "COMPLETE" ? "bg-emerald-600/50" : status === "STALE" ? "bg-amber-600/50" : "bg-zinc-800"
-                }`}
+              <SvgPipelineConnector
+                fromStatus={getStageStatus(PIPELINE_STAGES[idx - 1], currentStage, staleStages)}
+                toStatus={status}
               />
             )}
             <button
@@ -125,8 +124,8 @@ export const PipelineNavbar: React.FC<PipelineNavbarProps> = ({ currentStage, on
         title="Open unified Video-First Story Editor (Chapters 5-9)"
       >
         <Icons.Film className="w-4 h-4 text-white" />
-        <span>🎬 Video Story Editor</span>
-        <span className="text-[10px] bg-indigo-800 text-indigo-100 px-1.5 py-0.2 rounded font-mono uppercase tracking-wide">
+        <span>Video Story Editor</span>
+        <span className="text-[10px] bg-indigo-800 text-indigo-100 px-1.5 py-0.5 rounded font-mono uppercase tracking-wide">
           Unified UI
         </span>
       </button>

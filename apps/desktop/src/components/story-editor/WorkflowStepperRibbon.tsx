@@ -121,7 +121,7 @@ export const WorkflowStepperRibbon: React.FC<WorkflowStepperRibbonProps> = ({
           title="Show all workflow steps"
         >
           <span>Show Steps</span>
-          <span className="text-xs">▲</span>
+          <Icons.ChevronDown className="w-3.5 h-3.5 rotate-180" />
         </button>
       </div>
     );
@@ -157,9 +157,7 @@ export const WorkflowStepperRibbon: React.FC<WorkflowStepperRibbonProps> = ({
               </button>
 
               {idx < steps.length - 1 && (
-                <span className="text-zinc-700 font-mono text-xs px-0.5 shrink-0">
-                  →
-                </span>
+                <Icons.ChevronDown className="w-3 h-3 -rotate-90 text-zinc-700 shrink-0" />
               )}
             </React.Fragment>
           );
@@ -169,10 +167,10 @@ export const WorkflowStepperRibbon: React.FC<WorkflowStepperRibbonProps> = ({
       <button
         type="button"
         onClick={toggleCollapse}
-        className="p-1 rounded text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900 transition-colors shrink-0 ml-1"
+        className="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900 transition-colors shrink-0 ml-1"
         title="Hide workflow steps"
       >
-        <span className="text-xs">▼</span>
+        <Icons.ChevronDown className="w-3.5 h-3.5" />
       </button>
     </div>
   );

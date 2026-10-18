@@ -4,6 +4,7 @@ import uuid
 import shutil
 from pathlib import Path
 from datetime import datetime, timezone
+from typing import Optional, List, Dict, Any
 from sqlalchemy.orm import Session
 
 from engine.config.settings import settings
@@ -1998,6 +1999,359 @@ class ProjectService:
         temp_file.replace(ocr_json_file)
 
         return data
+
+    def blur_panel_box(
+        self,
+        db: Session,
+        project_id: str,
+        panel_id: str,
+        x: int,
+        y: int,
+        width: int,
+        height: int,
+        blur_radius: int = 24,
+        feather: int = 4,
+    ) -> dict:
+        record = self.get_project(db, project_id)
+        if not record:
+            raise KeyError(f"Project not found: {project_id}")
+
+        panel = db.query(PanelRecord).filter(PanelRecord.id == panel_id, PanelRecord.project_id == project_id).first()
+        if not panel:
+            raise KeyError(f"Panel not found: {panel_id}")
+
+        crop_path = Path(record.workspace_path) / "panels" / panel.crop_filename
+        if not crop_path.exists():
+            raise FileNotFoundError(f"Panel crop file missing: {crop_path}")
+
+        from engine.imaging.redaction import blur_image_box
+        success = blur_image_box(crop_path, x, y, width, height, blur_radius=blur_radius, feather=feather, backup=True)
+        if success:
+            panel.manually_modified = True
+            panel.updated_at = utc_now()
+            db.commit()
+
+        return {"success": success, "panel_id": panel_id, "has_backup": True}
+
+    def blur_text_region(
+        self,
+        db: Session,
+        project_id: str,
+        region_id: str,
+        blur_radius: int = 24,
+        feather: int = 4,
+    ) -> TextRegionRecord:
+        record = self.get_project(db, project_id)
+        if not record:
+            raise KeyError(f"Project not found: {project_id}")
+
+        tr = db.query(TextRegionRecord).filter(TextRegionRecord.id == region_id, TextRegionRecord.project_id == project_id).first()
+        if not tr:
+            raise KeyError(f"Text region not found: {region_id}")
+
+        panel = db.query(PanelRecord).filter(PanelRecord.id == tr.panel_id, PanelRecord.project_id == project_id).first()
+        if not panel:
+            raise KeyError(f"Panel not found: {tr.panel_id}")
+
+        crop_path = Path(record.workspace_path) / "panels" / panel.crop_filename
+        if not crop_path.exists():
+            raise FileNotFoundError(f"Panel crop file missing: {crop_path}")
+
+        from engine.imaging.redaction import blur_image_box
+        blur_image_box(crop_path, tr.x, tr.y, tr.width, tr.height, blur_radius=blur_radius, feather=feather, backup=True)
+
+        # If region crop thumbnail exists, blur it too
+        if tr.crop_filename:
+            reg_thumb = Path(record.workspace_path) / "text_regions" / tr.crop_filename
+            if reg_thumb.exists():
+                from engine.imaging.redaction import blur_entire_image
+                blur_entire_image(reg_thumb, blur_radius=blur_radius, backup=True)
+
+        tr.status = "BLURRED"
+        tr.region_type = "REDACTED"
+        tr.corrected_text = "[BLURRED / REDACTED]"
+        tr.correction_status = "VERIFIED"
+        tr.updated_at = utc_now()
+
+        panel.manually_modified = True
+        panel.updated_at = utc_now()
+        db.commit()
+        db.refresh(tr)
+        return tr
+
+    def blur_panel_text(
+        self,
+        db: Session,
+        project_id: str,
+        panel_id: str,
+        region_ids: list[str] | None = None,
+        blur_radius: int = 24,
+        feather: int = 4,
+    ) -> dict:
+        record = self.get_project(db, project_id)
+        if not record:
+            raise KeyError(f"Project not found: {project_id}")
+
+        panel = db.query(PanelRecord).filter(PanelRecord.id == panel_id, PanelRecord.project_id == project_id).first()
+        if not panel:
+            raise KeyError(f"Panel not found: {panel_id}")
+
+        crop_path = Path(record.workspace_path) / "panels" / panel.crop_filename
+        if not crop_path.exists():
+            raise FileNotFoundError(f"Panel crop file missing: {crop_path}")
+
+        query = db.query(TextRegionRecord).filter(TextRegionRecord.panel_id == panel_id, TextRegionRecord.project_id == project_id)
+        if region_ids:
+            query = query.filter(TextRegionRecord.id.in_(region_ids))
+        regions = query.all()
+
+        from engine.imaging.redaction import blur_image_box, blur_entire_image
+        count = 0
+        for tr in regions:
+            blur_image_box(crop_path, tr.x, tr.y, tr.width, tr.height, blur_radius=blur_radius, feather=feather, backup=True)
+            if tr.crop_filename:
+                reg_thumb = Path(record.workspace_path) / "text_regions" / tr.crop_filename
+                if reg_thumb.exists():
+                    blur_entire_image(reg_thumb, blur_radius=blur_radius, backup=True)
+
+            tr.status = "BLURRED"
+            tr.region_type = "REDACTED"
+            tr.corrected_text = "[BLURRED / REDACTED]"
+            tr.correction_status = "VERIFIED"
+            tr.updated_at = utc_now()
+            count += 1
+
+        panel.manually_modified = True
+        panel.updated_at = utc_now()
+        db.commit()
+
+        return {"success": True, "panel_id": panel_id, "blurred_count": count}
+
+    def blur_entire_panel(
+        self,
+        db: Session,
+        project_id: str,
+        panel_id: str,
+        blur_radius: int = 32,
+    ) -> dict:
+        record = self.get_project(db, project_id)
+        if not record:
+            raise KeyError(f"Project not found: {project_id}")
+
+        panel = db.query(PanelRecord).filter(PanelRecord.id == panel_id, PanelRecord.project_id == project_id).first()
+        if not panel:
+            raise KeyError(f"Panel not found: {panel_id}")
+
+        crop_path = Path(record.workspace_path) / "panels" / panel.crop_filename
+        if not crop_path.exists():
+            raise FileNotFoundError(f"Panel crop file missing: {crop_path}")
+
+        from engine.imaging.redaction import blur_entire_image
+        success = blur_entire_image(crop_path, blur_radius=blur_radius, backup=True)
+
+        # Mark all regions in this panel as blurred/redacted
+        regions = db.query(TextRegionRecord).filter(TextRegionRecord.panel_id == panel_id, TextRegionRecord.project_id == project_id).all()
+        for tr in regions:
+            tr.status = "BLURRED"
+            tr.region_type = "REDACTED"
+            tr.corrected_text = "[BLURRED / REDACTED]"
+            tr.correction_status = "VERIFIED"
+            tr.updated_at = utc_now()
+
+        panel.manually_modified = True
+        panel.updated_at = utc_now()
+        db.commit()
+
+        return {"success": success, "panel_id": panel_id}
+
+    def reset_panel_image(
+        self,
+        db: Session,
+        project_id: str,
+        panel_id: str,
+    ) -> dict:
+        record = self.get_project(db, project_id)
+        if not record:
+            raise KeyError(f"Project not found: {project_id}")
+
+        panel = db.query(PanelRecord).filter(PanelRecord.id == panel_id, PanelRecord.project_id == project_id).first()
+        if not panel:
+            raise KeyError(f"Panel not found: {panel_id}")
+
+        crop_path = Path(record.workspace_path) / "panels" / panel.crop_filename
+        from engine.imaging.redaction import restore_image_backup
+        restored = restore_image_backup(crop_path)
+
+        # Reset any blurred text regions in this panel back to CONFIRMED / SPEECH
+        regions = db.query(TextRegionRecord).filter(
+            TextRegionRecord.panel_id == panel_id,
+            TextRegionRecord.project_id == project_id,
+            TextRegionRecord.status == "BLURRED",
+        ).all()
+        for tr in regions:
+            tr.status = "CONFIRMED"
+            tr.region_type = "SPEECH"
+            tr.corrected_text = tr.raw_text or ""
+            tr.correction_status = "UNEDITED"
+            tr.updated_at = utc_now()
+
+            # Restore region thumbnail if backup exists
+            if tr.crop_filename:
+                reg_thumb = Path(record.workspace_path) / "text_regions" / tr.crop_filename
+                restore_image_backup(reg_thumb)
+
+        db.commit()
+        return {"success": restored, "panel_id": panel_id}
+
+    def get_panel_blur_status(
+        self,
+        db: Session,
+        project_id: str,
+        panel_id: str,
+    ) -> dict:
+        record = self.get_project(db, project_id)
+        if not record:
+            raise KeyError(f"Project not found: {project_id}")
+
+        panel = db.query(PanelRecord).filter(PanelRecord.id == panel_id, PanelRecord.project_id == project_id).first()
+        if not panel:
+            raise KeyError(f"Panel not found: {panel_id}")
+
+        crop_path = Path(record.workspace_path) / "panels" / panel.crop_filename
+        from engine.imaging.redaction import has_image_backup
+        has_backup = has_image_backup(crop_path)
+
+        blurred_count = db.query(TextRegionRecord).filter(
+            TextRegionRecord.panel_id == panel_id,
+            TextRegionRecord.project_id == project_id,
+            TextRegionRecord.status == "BLURRED",
+        ).count()
+
+        return {
+            "is_blurred": has_backup or (blurred_count > 0),
+            "has_backup": has_backup,
+            "blurred_regions_count": blurred_count,
+        }
+
+    def batch_blur_panels(
+        self,
+        db: Session,
+        project_id: str,
+        preset: str = "TOP_WATERMARK",
+        height_px: int = 80,
+        blur_radius: int = 24,
+        feather: int = 6,
+        panel_ids: Optional[List[str]] = None,
+    ) -> dict:
+        record = self.get_project(db, project_id)
+        if not record:
+            raise KeyError(f"Project not found: {project_id}")
+
+        query = db.query(PanelRecord).filter(PanelRecord.project_id == project_id)
+        if panel_ids:
+            query = query.filter(PanelRecord.id.in_(panel_ids))
+        panels = query.all()
+
+        from engine.imaging.redaction import blur_image_box, blur_entire_image
+        workspace = Path(record.workspace_path)
+        panels_dir = workspace / "panels"
+
+        blurred_panels_count = 0
+        for panel in panels:
+            if not panel.crop_filename:
+                continue
+            crop_path = panels_dir / panel.crop_filename
+            if not crop_path.exists():
+                continue
+
+            pw = panel.width or 1200
+            ph = panel.height or 800
+
+            if preset == "TOP_WATERMARK":
+                h = min(height_px, max(20, int(ph * 0.25)))
+                if blur_image_box(crop_path, 0, 0, pw, h, blur_radius=blur_radius, feather=feather, backup=True):
+                    blurred_panels_count += 1
+            elif preset == "BOTTOM_SUBSCRIBE":
+                h = min(height_px, max(20, int(ph * 0.25)))
+                y = max(0, ph - h)
+                if blur_image_box(crop_path, 0, y, pw, h, blur_radius=blur_radius, feather=feather, backup=True):
+                    blurred_panels_count += 1
+            elif preset == "ENTIRE_PANEL":
+                if blur_entire_image(crop_path, blur_radius=blur_radius, backup=True):
+                    blurred_panels_count += 1
+            elif preset == "ALL_TEXT_REGIONS":
+                regions = db.query(TextRegionRecord).filter(
+                    TextRegionRecord.panel_id == panel.id,
+                    TextRegionRecord.project_id == project_id,
+                ).all()
+                blurred_any = False
+                for tr in regions:
+                    if blur_image_box(crop_path, tr.x, tr.y, tr.width, tr.height, blur_radius=blur_radius, feather=feather, backup=True):
+                        blurred_any = True
+                        tr.status = "BLURRED"
+                        tr.region_type = "REDACTED"
+                        tr.corrected_text = "[BLURRED / REDACTED]"
+                        tr.correction_status = "VERIFIED"
+                        tr.updated_at = utc_now()
+                if blurred_any:
+                    blurred_panels_count += 1
+
+        db.commit()
+        return {
+            "success": True,
+            "project_id": project_id,
+            "preset": preset,
+            "blurred_panels_count": blurred_panels_count,
+            "total_panels": len(panels),
+        }
+
+    def batch_reset_panels(
+        self,
+        db: Session,
+        project_id: str,
+        panel_ids: Optional[List[str]] = None,
+    ) -> dict:
+        record = self.get_project(db, project_id)
+        if not record:
+            raise KeyError(f"Project not found: {project_id}")
+
+        query = db.query(PanelRecord).filter(PanelRecord.project_id == project_id)
+        if panel_ids:
+            query = query.filter(PanelRecord.id.in_(panel_ids))
+        panels = query.all()
+
+        from engine.imaging.redaction import restore_image_backup
+        workspace = Path(record.workspace_path)
+        panels_dir = workspace / "panels"
+
+        restored_count = 0
+        for panel in panels:
+            if not panel.crop_filename:
+                continue
+            crop_path = panels_dir / panel.crop_filename
+            if restore_image_backup(crop_path, delete_backup=True):
+                restored_count += 1
+
+        target_panel_ids = [p.id for p in panels]
+        regions = db.query(TextRegionRecord).filter(
+            TextRegionRecord.project_id == project_id,
+            TextRegionRecord.panel_id.in_(target_panel_ids),
+            TextRegionRecord.status == "BLURRED",
+        ).all()
+        for tr in regions:
+            tr.status = "CONFIRMED"
+            tr.region_type = "SPEECH"
+            tr.corrected_text = tr.raw_text or ""
+            tr.correction_status = "UNEDITED"
+            tr.updated_at = utc_now()
+
+        db.commit()
+        return {
+            "success": True,
+            "project_id": project_id,
+            "restored_panels_count": restored_count,
+            "total_panels": len(panels),
+        }
 
 
 project_service = ProjectService()

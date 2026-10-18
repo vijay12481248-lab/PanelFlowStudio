@@ -75,6 +75,8 @@ class CameraRenderer:
         if shot_plan.scale_policy == ScalePolicy.COVER:
             # Scale to fill entire target canvas cleanly
             fitted = source_img.resize((target_w, target_h), Image.Resampling.LANCZOS, box=source_box)
+            if fitted.mode != "RGB":
+                fitted = fitted.convert("RGB")
             return fitted
 
         elif shot_plan.scale_policy == ScalePolicy.CONTAIN:
@@ -96,10 +98,15 @@ class CameraRenderer:
             paste_x = (target_w - scaled_w) // 2
             paste_y = (target_h - scaled_h) // 2
             canvas.paste(scaled_img, (paste_x, paste_y))
+            if canvas.mode != "RGB":
+                canvas = canvas.convert("RGB")
             return canvas
 
         else:  # SMART_CROP
-            return source_img.resize((target_w, target_h), Image.Resampling.LANCZOS, box=source_box)
+            fitted = source_img.resize((target_w, target_h), Image.Resampling.LANCZOS, box=source_box)
+            if fitted.mode != "RGB":
+                fitted = fitted.convert("RGB")
+            return fitted
 
     def _create_background_fill(
         self,
@@ -571,6 +578,12 @@ class FrameComposer:
         self._image_cache[file_path] = img
         return img
 
+    def clear_cache(self, file_path: Optional[str] = None) -> None:
+        if file_path:
+            self._image_cache.pop(file_path, None)
+        else:
+            self._image_cache.clear()
+
     def compose_frame(
         self,
         frame_index: int,
@@ -600,8 +613,8 @@ class FrameComposer:
         else:
             canvas = self._compose_legacy_camera_shot(shot, frame_index, timestamp_sec, target_w, target_h, plan)
 
-        # Apply Captions / Subtitles if present
-        if shot.captions:
+        # Apply Captions / Subtitles if present and enabled
+        if shot.captions and getattr(plan, "subtitle_enabled", False):
             canvas = self.caption_renderer.render_captions(
                 canvas=canvas,
                 captions=shot.captions,
@@ -609,6 +622,11 @@ class FrameComposer:
                 target_w=target_w,
                 target_h=target_h,
             )
+
+        if canvas.mode != "RGB":
+            canvas = canvas.convert("RGB")
+        if canvas.size != (target_w, target_h):
+            canvas = canvas.resize((target_w, target_h), Image.Resampling.LANCZOS)
 
         return canvas
 
@@ -742,7 +760,11 @@ class FrameComposer:
                     overlay = Image.new("RGBA", (target_w, target_h), (255, 255, 255, alpha))
                     canvas.alpha_composite(overlay)
 
-        return canvas.convert("RGB")
+        if canvas.mode != "RGB":
+            canvas = canvas.convert("RGB")
+        if canvas.size != (target_w, target_h):
+            canvas = canvas.resize((target_w, target_h), Image.Resampling.LANCZOS)
+        return canvas
 
     def _compose_legacy_camera_shot(
         self,
@@ -796,5 +818,10 @@ class FrameComposer:
                 target_w=target_w,
                 target_h=target_h,
             )
+
+        if canvas.mode != "RGB":
+            canvas = canvas.convert("RGB")
+        if canvas.size != (target_w, target_h):
+            canvas = canvas.resize((target_w, target_h), Image.Resampling.LANCZOS)
 
         return canvas

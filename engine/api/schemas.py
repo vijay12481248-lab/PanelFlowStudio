@@ -264,3 +264,42 @@ class TextRegionResponse(BaseModel):
     speaker_confidence: float | None = None
     speaker_assignment_method: str | None = None
     image_url: str = ""
+
+
+class BlurRegionRequest(BaseModel):
+    x: int = Field(ge=0)
+    y: int = Field(ge=0)
+    width: int = Field(gt=0)
+    height: int = Field(gt=0)
+    blur_radius: int = 24
+    feather: int = 4
+
+
+class BlurTextRequest(BaseModel):
+    region_ids: list[str] | None = None
+    blur_radius: int = 24
+    feather: int = 4
+
+
+class BlurPanelRequest(BaseModel):
+    blur_radius: int = 32
+
+
+class BlurStatusResponse(BaseModel):
+    is_blurred: bool
+    has_backup: bool
+    blurred_regions_count: int
+
+
+class BatchBlurRequest(BaseModel):
+    preset: str = "TOP_WATERMARK"
+    height_px: int = 80
+    blur_radius: int = 24
+    feather: int = 6
+    panel_ids: list[str] | None = None
+
+
+class BatchResetRequest(BaseModel):
+    panel_ids: list[str] | None = None
+
+
