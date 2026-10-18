@@ -8,6 +8,7 @@ interface PanelReviewScreenProps {
   onBack: () => void;
   onPanelsApproved: (updatedProject: Project) => void;
   onProceedToOCR?: (project: Project) => void;
+  onOpenStoryEditor?: (project: Project) => void;
 }
 
 type DragMode = "none" | "move" | "resize" | "draw";
@@ -18,6 +19,7 @@ export const PanelReviewScreen: React.FC<PanelReviewScreenProps> = ({
   onBack,
   onPanelsApproved,
   onProceedToOCR,
+  onOpenStoryEditor,
 }) => {
   const [pages, setPages] = useState<Page[]>([]);
   const [selectedPageIndex, setSelectedPageIndex] = useState<number>(0);
@@ -582,12 +584,25 @@ export const PanelReviewScreen: React.FC<PanelReviewScreenProps> = ({
 
           {onProceedToOCR && (
             <Button
-              variant="primary"
+              variant="secondary"
               size="sm"
               onClick={() => onProceedToOCR(project)}
               disabled={panels.length === 0}
             >
               {project.settings?.visual_storytelling ? "Analyze chapter story →" : "Proceed to OCR →"}
+            </Button>
+          )}
+
+          {onOpenStoryEditor && (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => onOpenStoryEditor(project)}
+              className="bg-indigo-600 hover:bg-indigo-500 text-white font-medium shadow-md shadow-indigo-600/30"
+              title="Open the unified Video-First Story Editor"
+            >
+              <Icons.Film className="w-3.5 h-3.5 mr-1 text-white" />
+              Open in Story Editor →
             </Button>
           )}
         </div>

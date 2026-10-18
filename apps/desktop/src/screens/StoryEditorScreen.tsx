@@ -34,27 +34,35 @@ interface StoryEditorScreenProps {
   project: Project;
   onBack: () => void;
   onExport: () => void;
+  initialTab?: LeftRailTab;
+  initialWorkflowStep?: WorkflowStepId;
+  initialOpenModal?: "narration" | "audio" | "export";
 }
 
 export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
   project,
   onBack,
   onExport,
+  initialTab,
+  initialWorkflowStep,
+  initialOpenModal,
 }) => {
   const [pages, setPages] = useState<Page[]>([]);
   const [panels, setPanels] = useState<Panel[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
-  const [activeLeftTab, setActiveLeftTab] = useState<LeftRailTab>("story");
-  const [workflowStep, setWorkflowStep] = useState<WorkflowStepId>(3);
+  const [activeLeftTab, setActiveLeftTab] = useState<LeftRailTab>(initialTab ?? "story");
+  const [workflowStep, setWorkflowStep] = useState<WorkflowStepId>(initialWorkflowStep ?? 3);
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>("image");
   const [sourceSubTab, setSourceSubTab] = useState<"pages" | "panels">("pages");
   const [selectedPageId, setSelectedPageId] = useState<string | null>(null);
   const [selectedPanelId, setSelectedPanelId] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "unsaved">("saved");
-  const [showNarrationStudio, setShowNarrationStudio] = useState<boolean>(false);
-  const [showAudioLibrary, setShowAudioLibrary] = useState<boolean>(false);
-  const [audioLibraryInitialType, setAudioLibraryInitialType] = useState<"music" | "sfx" | undefined>(undefined);
-  const [showExportModal, setShowExportModal] = useState<boolean>(false);
+  const [showNarrationStudio, setShowNarrationStudio] = useState<boolean>(initialOpenModal === "narration");
+  const [showAudioLibrary, setShowAudioLibrary] = useState<boolean>(initialOpenModal === "audio");
+  const [audioLibraryInitialType, setAudioLibraryInitialType] = useState<"music" | "sfx" | undefined>(
+    initialOpenModal === "audio" ? "music" : undefined
+  );
+  const [showExportModal, setShowExportModal] = useState<boolean>(initialOpenModal === "export");
 
   // Main Editor State
   const [editorState, setEditorState] = useState<StoryEditorState>({

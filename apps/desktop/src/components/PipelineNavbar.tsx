@@ -121,11 +121,14 @@ export const PipelineNavbar: React.FC<PipelineNavbarProps> = ({ currentStage, on
 
       <button
         onClick={() => onNavigate("story_editor")}
-        className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-indigo-500/50 bg-indigo-600/25 hover:bg-indigo-600/40 text-indigo-200 text-[11px] font-semibold transition-all whitespace-nowrap shadow-sm shadow-indigo-600/20 flex-shrink-0"
-        title="Open unified video-first story editor"
+        className="ml-auto flex items-center gap-2 px-3.5 py-1.5 rounded-lg border border-indigo-400/80 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-all whitespace-nowrap shadow-md shadow-indigo-600/40 flex-shrink-0"
+        title="Open unified Video-First Story Editor (Chapters 5-9)"
       >
-        <Icons.Film className="w-3.5 h-3.5 text-indigo-400" />
-        Story Editor
+        <Icons.Film className="w-4 h-4 text-white" />
+        <span>🎬 Video Story Editor</span>
+        <span className="text-[10px] bg-indigo-800 text-indigo-100 px-1.5 py-0.2 rounded font-mono uppercase tracking-wide">
+          Unified UI
+        </span>
       </button>
     </div>
   );

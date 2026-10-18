@@ -16,6 +16,7 @@ interface OCRReviewScreenProps {
   onBack: () => void;
   onOCRApproved: (updatedProject: Project) => void;
   onProceedToStory?: (project: Project) => void;
+  onOpenStoryEditor?: (project: Project) => void;
 }
 
 export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
@@ -23,6 +24,7 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
   onBack,
   onOCRApproved,
   onProceedToStory,
+  onOpenStoryEditor,
 }) => {
   const [panels, setPanels] = useState<Panel[]>([]);
   const [selectedPanelIndex, setSelectedPanelIndex] = useState<number>(0);
@@ -469,12 +471,25 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
 
           {onProceedToStory && (
             <Button
-              variant="primary"
+              variant="secondary"
               size="sm"
               onClick={() => onProceedToStory(project)}
               disabled={needsReviewCount > 0 && project.current_stage !== "OCR_APPROVED"}
             >
               Proceed to Story →
+            </Button>
+          )}
+
+          {onOpenStoryEditor && (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => onOpenStoryEditor(project)}
+              className="bg-indigo-600 hover:bg-indigo-500 text-white font-medium shadow-md shadow-indigo-600/30"
+              title="Open the unified Video-First Story Editor"
+            >
+              <Icons.Film className="w-3.5 h-3.5 mr-1 text-white" />
+              Open in Story Editor →
             </Button>
           )}
         </div>
@@ -638,6 +653,9 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
             <span className="text-indigo-300 font-medium">{progressMsg}</span>
             <span className="text-indigo-400 font-mono">{(ocrProgress * 100).toFixed(0)}%</span>
           </div>
+          <p className="text-[11px] text-indigo-300/80">
+            Region edits are locked until OCR finishes so the completion refresh cannot overwrite unsaved changes.
+          </p>
           <ProgressBar progress={ocrProgress * 100} />
         </Card>
       )}
@@ -843,6 +861,7 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                   rows={3}
                   value={editForm.corrected_text}
                   onChange={(e) => setEditForm({ ...editForm, corrected_text: e.target.value })}
+                  disabled={extracting}
                   placeholder="Enter or correct dialogue text..."
                   className="w-full bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1.5 text-xs text-zinc-100 focus:outline-none focus:border-indigo-500 resize-none font-sans"
                 />
@@ -857,6 +876,7 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                   <select
                     value={editForm.region_type}
                     onChange={(e) => setEditForm({ ...editForm, region_type: e.target.value })}
+                    disabled={extracting}
                     className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500"
                   >
                     <option value="SPEECH">Speech Bubble</option>
@@ -875,6 +895,7 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                   <select
                     value={editForm.status}
                     onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
+                    disabled={extracting}
                     className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500"
                   >
                     <option value="DETECTED">DETECTED (Not reviewed)</option>
@@ -900,6 +921,7 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                       onChange={(e) =>
                         setEditForm({ ...editForm, speaker_character_id: e.target.value })
                       }
+                      disabled={extracting}
                       className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500"
                     />
                   </div>
@@ -911,6 +933,7 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                       onChange={(e) =>
                         setEditForm({ ...editForm, speaker_assignment_method: e.target.value })
                       }
+                      disabled={extracting}
                       className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500"
                     >
                       <option value="MANUAL">Manual Review</option>
@@ -928,6 +951,7 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                   variant="secondary"
                   size="sm"
                   onClick={() => handleApproveRegion(selectedRegion.id)}
+                  disabled={extracting || savingRegion}
                   className="text-xs bg-emerald-950/40 text-emerald-300 border-emerald-800/80"
                 >
                   <Icons.Check className="w-3.5 h-3.5 mr-1" />
@@ -938,6 +962,7 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                   variant="primary"
                   size="sm"
                   onClick={handleSaveRegion}
+                  disabled={extracting}
                   loading={savingRegion}
                   className="text-xs"
                 >

@@ -38,13 +38,13 @@ if %ERRORLEVEL% equ 0 (
 ) else (
     echo   - Starting frontend dev server with latest code...
     powershell -NoProfile -Command "Start-Process -FilePath 'cmd.exe' -ArgumentList '/c npm run dev --workspace=@panelflow/desktop' -WorkingDirectory '%ROOT_DIR%' -WindowStyle Hidden"
-    timeout /t 3 /nobreak >nul
+    ping -n 3 127.0.0.1 >nul
 )
 
 :: 4. Launch Desktop Application Window with Latest Code
 echo [4/4] Launching PanelFlow Studio Desktop Window...
 if exist "%ROOT_DIR%apps\desktop\src-tauri\target\debug\panelflow-desktop.exe" (
-    echo   - Opening native desktop application window (connected to live code)...
+    echo   - Opening native desktop application window with latest code...
     start "" "%ROOT_DIR%apps\desktop\src-tauri\target\debug\panelflow-desktop.exe"
 ) else (
     echo   - Launching desktop window via Tauri CLI...
@@ -53,6 +53,6 @@ if exist "%ROOT_DIR%apps\desktop\src-tauri\target\debug\panelflow-desktop.exe" (
 
 echo.
 echo PanelFlow Studio Desktop is running with the latest code!
-echo (You can close this command window at any time.)
-timeout /t 3 /nobreak >nul
+echo You can close this command window at any time.
+ping -n 3 127.0.0.1 >nul
 exit /b 0

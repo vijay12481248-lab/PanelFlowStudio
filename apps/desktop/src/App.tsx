@@ -15,6 +15,8 @@ import { AudioScreen } from "./screens/AudioScreen";
 import { MotionScreen } from "./screens/MotionScreen";
 import { RenderScreen } from "./screens/RenderScreen";
 import { StoryEditorScreen } from "./screens/StoryEditorScreen";
+import type { LeftRailTab } from "./components/story-editor/StoryEditorLeftRail";
+import type { WorkflowStepId } from "./components/story-editor/WorkflowStepperRibbon";
 import { PipelineNavbar } from "./components/PipelineNavbar";
 import { ProviderHealthModal } from "./components/ProviderHealthModal";
 
@@ -89,16 +91,52 @@ export const App: React.FC = () => {
   }, [engineConnected]);
 
   // Dedicated Video-First Story Editor View
-  if (currentScreen === "story_editor" && selectedProject) {
+  // Seamlessly routes unified workflows (Story, Script, Audio, Motion, Render, and Story Editor)
+  // directly into the modern Video-First Story Editor with the relevant tool pre-selected.
+  if (
+    selectedProject &&
+    (currentScreen === "story_editor" ||
+      currentScreen === "audio" ||
+      currentScreen === "motion" ||
+      currentScreen === "render" ||
+      currentScreen === "script" ||
+      currentScreen === "story")
+  ) {
+    let initialTab: LeftRailTab | undefined = undefined;
+    let initialWorkflowStep: WorkflowStepId | undefined = undefined;
+    let initialOpenModal: "narration" | "audio" | "export" | undefined = undefined;
+
+    if (currentScreen === "audio") {
+      initialTab = "audio";
+      initialWorkflowStep = 6;
+      initialOpenModal = "audio";
+    } else if (currentScreen === "motion") {
+      initialTab = "motion";
+      initialWorkflowStep = 4;
+    } else if (currentScreen === "render") {
+      initialWorkflowStep = 7;
+      initialOpenModal = "export";
+    } else if (currentScreen === "script") {
+      initialTab = "narration";
+      initialWorkflowStep = 5;
+      initialOpenModal = "narration";
+    } else if (currentScreen === "story") {
+      initialTab = "story";
+      initialWorkflowStep = 3;
+    }
+
     return (
       <StoryEditorScreen
         project={selectedProject}
+        initialTab={initialTab}
+        initialWorkflowStep={initialWorkflowStep}
+        initialOpenModal={initialOpenModal}
         onBack={() => {
           setCurrentScreen("projects");
           setSelectedProject(null);
         }}
         onExport={() => {
-          setCurrentScreen("render");
+          // Handled via built-in ExportVideoModal
         }}
       />
     );
@@ -286,11 +324,15 @@ export const App: React.FC = () => {
                 onBack={() => setCurrentScreen("review")}
                 onPanelsApproved={(updated) => {
                   setSelectedProject(updated);
-                  setCurrentScreen("ocr");
+                  setCurrentScreen("story_editor");
                 }}
                 onProceedToOCR={(proj) => {
                   setSelectedProject(proj);
-                  setCurrentScreen("ocr");
+                  setCurrentScreen("story_editor");
+                }}
+                onOpenStoryEditor={(proj) => {
+                  setSelectedProject(proj);
+                  setCurrentScreen("story_editor");
                 }}
               />
             )}
@@ -301,11 +343,15 @@ export const App: React.FC = () => {
                 onBack={() => setCurrentScreen("panels")}
                 onOCRApproved={(updated) => {
                   setSelectedProject(updated);
-                  setCurrentScreen("story");
+                  setCurrentScreen("story_editor");
                 }}
                 onProceedToStory={(proj) => {
                   setSelectedProject(proj);
-                  setCurrentScreen("story");
+                  setCurrentScreen("story_editor");
+                }}
+                onOpenStoryEditor={(proj) => {
+                  setSelectedProject(proj);
+                  setCurrentScreen("story_editor");
                 }}
               />
             )}
