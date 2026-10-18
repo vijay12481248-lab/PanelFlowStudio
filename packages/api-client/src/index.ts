@@ -30,7 +30,14 @@ import type {
   SystemProvidersResponse,
   HardwareDiagnostics,
   SanitizedDiagnostics,
+  OllamaConfig,
+  OllamaModelsResponse,
+  SystemResourcesResponse,
+  StoryboardDocument,
+  StoryboardSegment,
+  StoryboardSegmentUpdate,
 } from "@panelflow/shared-types";
+
 
 export interface CreateProjectParams {
   title: string;
@@ -551,6 +558,26 @@ export class PanelFlowApiClient {
   }
 
   // Script Adaptation (Milestone 4 - Layer C)
+  async waitForWorkflowJob(jobId: string, onProgress?: (job: Job) => void): Promise<Job> {
+    for (;;) {
+      const job = await this.getJob(jobId);
+      onProgress?.(job);
+      if (job.status === "SUCCEEDED") return job;
+      if (job.status === "FAILED" || job.status === "CANCELLED") throw new Error(job.error || job.message);
+      await new Promise(resolve => setTimeout(resolve, 1500));
+    }
+  }
+
+  async generateScriptJob(projectId: string, adaptationProfile: string): Promise<{job_id: string}> {
+    return this.request(`/api/projects/${projectId}/scripts/generate-job`, {
+      method: "POST", body: JSON.stringify({ adaptation_profile: adaptationProfile }),
+    });
+  }
+
+  async generateAudioJob(projectId: string): Promise<{job_id: string}> {
+    return this.request(`/api/projects/${projectId}/audio/generate-job`, { method: "POST", body: "{}" });
+  }
+
   async generateScript(projectId: string, adaptationProfile: AdaptationProfile | string = "FAITHFUL"): Promise<VideoScript> {
     return this.request<VideoScript>(`/api/projects/${projectId}/scripts/generate`, {
       method: "POST",
@@ -573,11 +600,18 @@ export class PanelFlowApiClient {
       speaker_character_id?: string;
       emotion?: string;
       intensity?: number;
+      estimated_duration?: number;
     }
   ): Promise<any> {
     return this.request<any>(`/api/projects/${projectId}/scripts/${scriptId}/segments/${segmentId}`, {
       method: "PUT",
       body: JSON.stringify(updates),
+    });
+  }
+
+  async editScriptSegment(projectId: string, scriptId: string, segmentId: string, action: string): Promise<VideoScript> {
+    return this.request<VideoScript>(`/api/projects/${projectId}/scripts/${scriptId}/segments/${segmentId}/action`, {
+      method: "POST", body: JSON.stringify({ action }),
     });
   }
 
@@ -679,6 +713,7 @@ export class PanelFlowApiClient {
       bgmVolumeDb?: number;
       dialogueGainDb?: number;
       isDraft?: boolean;
+      timelineData?: any;
     } = {}
   ): Promise<RenderJob> {
     return this.request<RenderJob>(`/api/projects/${projectId}/render/jobs`, {
@@ -690,8 +725,20 @@ export class PanelFlowApiClient {
         bgm_volume_db: options.bgmVolumeDb ?? -10.0,
         dialogue_gain_db: options.dialogueGainDb ?? 0.0,
         is_draft: options.isDraft ?? false,
+        timeline_data: options.timelineData,
       }),
     });
+  }
+
+  async preflightTimelineRender(projectId: string, timelineData?: any): Promise<any> {
+    return this.request<any>(`/api/projects/${projectId}/render/preflight`, {
+      method: "POST",
+      body: JSON.stringify({ timeline_data: timelineData }),
+    });
+  }
+
+  async getRenderProfiles(): Promise<{ profiles: any[] }> {
+    return this.request<{ profiles: any[] }>(`/api/render/profiles`);
   }
 
   async listRenders(projectId: string): Promise<RenderJob[]> {
@@ -762,6 +809,94 @@ export class PanelFlowApiClient {
       body: JSON.stringify({ path, select_file: selectFile }),
     });
   }
+
+  // ---------------------------------------------------------------------------
+  // Ollama Configuration & Capabilities
+  // ---------------------------------------------------------------------------
+  async getOllamaConfig(): Promise<OllamaConfig> {
+    return this.request<OllamaConfig>("/api/system/ollama/config");
+  }
+
+  async saveOllamaConfig(config: Partial<OllamaConfig> & { auth_token?: string }): Promise<OllamaConfig> {
+    return this.request<OllamaConfig>("/api/system/ollama/config", {
+      method: "POST",
+      body: JSON.stringify(config),
+    });
+  }
+
+  async getOllamaModels(): Promise<OllamaModelsResponse> {
+    return this.request<OllamaModelsResponse>("/api/system/ollama/models");
+  }
+
+  async testOllamaConnection(params: { endpoint_url?: string; is_remote?: boolean; auth_token?: string } = {}): Promise<any> {
+    return this.request<any>("/api/system/ollama/test", {
+      method: "POST",
+      body: JSON.stringify(params),
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // System Resource Telemetry & Concurrency
+  // ---------------------------------------------------------------------------
+  async getSystemResources(): Promise<SystemResourcesResponse> {
+    return this.request<SystemResourcesResponse>("/api/system/resources");
+  }
+
+  async setConcurrencySettings(params: { concurrency_mode: string; max_gpu_concurrency: number }): Promise<any> {
+    return this.request<any>("/api/system/concurrency", {
+      method: "POST",
+      body: JSON.stringify(params),
+    });
+  }
+
+  async runConcurrencyBenchmark(model?: string): Promise<any> {
+    return this.request<any>("/api/system/benchmark", {
+      method: "POST",
+      body: JSON.stringify({ model }),
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Visual Storyboard & Alignment
+  // ---------------------------------------------------------------------------
+  async getStoryboard(projectId: string): Promise<StoryboardDocument> {
+    return this.request<StoryboardDocument>(`/api/projects/${projectId}/storyboard`);
+  }
+
+  async updateStoryboardSegment(
+    projectId: string,
+    segmentId: string,
+    update: StoryboardSegmentUpdate
+  ): Promise<StoryboardSegment> {
+    return this.request<StoryboardSegment>(`/api/projects/${projectId}/storyboard/segments/${segmentId}`, {
+      method: "PUT",
+      body: JSON.stringify(update),
+    });
+  }
+
+  async realignStoryboard(projectId: string): Promise<StoryboardDocument> {
+    return this.request<StoryboardDocument>(`/api/projects/${projectId}/storyboard/realign`, {
+      method: "POST",
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Multi-Project Job Queue
+  // ---------------------------------------------------------------------------
+  async listAllJobs(status?: string, projectId?: string, limit: number = 50): Promise<Job[]> {
+    const params = new URLSearchParams();
+    if (status) params.append("status", status);
+    if (projectId) params.append("project_id", projectId);
+    params.append("limit", limit.toString());
+    return this.request<Job[]>(`/api/jobs?${params.toString()}`);
+  }
+
+  async retryJob(jobId: string): Promise<any> {
+    return this.request<any>(`/api/jobs/${jobId}/retry`, {
+      method: "POST",
+    });
+  }
 }
 
 export const api = new PanelFlowApiClient();
+

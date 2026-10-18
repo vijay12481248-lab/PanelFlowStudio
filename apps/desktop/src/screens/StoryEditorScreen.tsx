@@ -28,6 +28,7 @@ import { AudioLibrary } from "../components/audio-library";
 import type { AudioToTimelineContract } from "../components/audio-library/AudioLibrary.types";
 import { useTimelineAudioPlayback } from "../components/story-editor/useTimelineAudioPlayback";
 import { applyAudioContractToState } from "../components/story-editor/audioAdapter";
+import { ExportVideoModal } from "../components/story-editor/ExportVideoModal";
 
 interface StoryEditorScreenProps {
   project: Project;
@@ -53,6 +54,7 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
   const [showNarrationStudio, setShowNarrationStudio] = useState<boolean>(false);
   const [showAudioLibrary, setShowAudioLibrary] = useState<boolean>(false);
   const [audioLibraryInitialType, setAudioLibraryInitialType] = useState<"music" | "sfx" | undefined>(undefined);
+  const [showExportModal, setShowExportModal] = useState<boolean>(false);
 
   // Main Editor State
   const [editorState, setEditorState] = useState<StoryEditorState>({
@@ -182,7 +184,7 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
         handleOpenAudioLibrary();
         break;
       case 7: // Preview & Export
-        onExport();
+        setShowExportModal(true);
         break;
     }
   };
@@ -744,7 +746,7 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
         onUndo={handleUndo}
         onRedo={handleRedo}
         onBackToDashboard={onBack}
-        onExportClick={onExport}
+        onExportClick={() => setShowExportModal(true)}
         saveStatus={saveStatus}
         onOpenNarrationStudio={() => setShowNarrationStudio(true)}
         onOpenAudioLibrary={() => handleOpenAudioLibrary()}
@@ -922,6 +924,15 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
           />
         </div>
       )}
+
+      {/* 7. Full Production Video Export Modal (Chapter 8) */}
+      <ExportVideoModal
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        project={project}
+        editorState={editorState}
+        onOpenNarrationStudio={() => setShowNarrationStudio(true)}
+      />
     </div>
   );
 };

@@ -25,6 +25,77 @@ class CreateRenderRequest(BaseModel):
     bgm_volume_db: float = -10.0
     dialogue_gain_db: float = 0.0
     is_draft: bool = False
+    timeline_data: Optional[Dict[str, Any]] = None
+
+
+@router.get("/render/profiles")
+def get_render_profiles():
+    """Returns available production and draft render profile presets."""
+    return {
+        "profiles": [
+            {
+                "id": "standard_1080p",
+                "name": "Full HD 1080p (Landscape 16:9)",
+                "width": 1920,
+                "height": 1080,
+                "fps": 30,
+                "aspect_ratio": "16:9",
+                "video_codec": "H.264 (yuv420p)",
+                "audio_codec": "AAC 48kHz Stereo",
+                "description": "Recommended for YouTube, Desktop, and Television viewing."
+            },
+            {
+                "id": "vertical_shorts",
+                "name": "Vertical 1080p (Portrait 9:16)",
+                "width": 1080,
+                "height": 1920,
+                "fps": 30,
+                "aspect_ratio": "9:16",
+                "video_codec": "H.264 (yuv420p)",
+                "audio_codec": "AAC 48kHz Stereo",
+                "description": "Optimized for TikTok, Instagram Reels, and YouTube Shorts."
+            },
+            {
+                "id": "square_feed",
+                "name": "Square 1080p (Feed 1:1)",
+                "width": 1080,
+                "height": 1080,
+                "fps": 30,
+                "aspect_ratio": "1:1",
+                "video_codec": "H.264 (yuv420p)",
+                "audio_codec": "AAC 48kHz Stereo",
+                "description": "Optimized for Instagram and square social feeds."
+            },
+            {
+                "id": "draft_720p",
+                "name": "Fast Draft 720p (Ultra Fast)",
+                "width": 1280,
+                "height": 720,
+                "fps": 30,
+                "aspect_ratio": "16:9",
+                "video_codec": "H.264 (yuv420p)",
+                "audio_codec": "AAC 48kHz Stereo",
+                "description": "Rapid rendering for quick proofing and timing checks."
+            }
+        ]
+    }
+
+
+@router.post("/projects/{project_id}/render/preflight")
+def preflight_check_render(
+    project_id: str,
+    req: CreateRenderRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Validates timeline assets, narration approval state, and audio readiness before rendering.
+    """
+    try:
+        if req.timeline_data:
+            return render_service.preflight_check_timeline(db, project_id, req.timeline_data)
+        return {"valid": True, "warnings": [], "blockers": [], "stats": {}}
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 @router.post("/projects/{project_id}/render/jobs")
@@ -43,6 +114,7 @@ def create_render_job(
             bgm_volume_db=req.bgm_volume_db,
             dialogue_gain_db=req.dialogue_gain_db,
             is_draft=req.is_draft,
+            timeline_data=req.timeline_data,
         )
         return job
     except ValueError as e:

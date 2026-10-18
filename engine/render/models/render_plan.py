@@ -22,7 +22,7 @@ class RenderShotPlan(BaseModel):
     shot_id: str
     scene_id: str
     sequence_global: int
-    source_asset_path: str
+    source_asset_path: str = ""
     start_frame: int = Field(..., ge=0)
     end_frame: int = Field(..., ge=0)
     total_frames: int = Field(..., gt=0)
@@ -30,8 +30,8 @@ class RenderShotPlan(BaseModel):
     end_time: float = Field(..., ge=0.0)
     duration: float = Field(..., gt=0.0)
 
-    camera_start: CameraState
-    camera_end: CameraState
+    camera_start: CameraState = Field(default_factory=CameraState)
+    camera_end: CameraState = Field(default_factory=CameraState)
     easing: EasingFunction = EasingFunction.EASE_IN_OUT
     motion_type: MotionType = MotionType.STATIC_HOLD
     frame_region: NormalizedRect = Field(default_factory=lambda: NormalizedRect(x=0.0, y=0.0, width=1.0, height=1.0))
@@ -40,6 +40,9 @@ class RenderShotPlan(BaseModel):
     fill_policy: BackgroundFillPolicy = BackgroundFillPolicy.BLACK
 
     layers: List[LayerInstruction] = Field(default_factory=list)
+    scene_layers: List[Dict[str, Any]] = Field(default_factory=list)
+    camera_config: Optional[Dict[str, Any]] = None
+    transition_config: Optional[Dict[str, Any]] = None
     effects: List[EffectInstruction] = Field(default_factory=list)
     transition_in: TransitionInstruction = Field(default_factory=TransitionInstruction.hard_cut)
     transition_out: TransitionInstruction = Field(default_factory=TransitionInstruction.hard_cut)
@@ -83,6 +86,9 @@ class RenderPlan(BaseModel):
         for shot in self.shots:
             if shot.start_frame <= frame_index < shot.end_frame:
                 return shot
-        if self.shots and frame_index >= self.shots[-1].start_frame:
-            return self.shots[-1]
+        if self.shots:
+            if frame_index < self.shots[0].start_frame:
+                return self.shots[0]
+            if frame_index >= self.shots[-1].start_frame:
+                return self.shots[-1]
         return None

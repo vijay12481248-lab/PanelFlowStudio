@@ -20,6 +20,7 @@ from engine.database.models import (
     AudioTimelineRecord,
     RenderJobRecord,
     PageRecord,
+    PanelRecord,
 )
 from engine.acquisition.models.models import PipelineStage
 from engine.motion.models.timeline import VisualTimeline
@@ -45,6 +46,26 @@ class RenderService:
         self._active_cancels: Dict[str, threading.Event] = {}
         self._active_progress: Dict[str, Dict[str, Any]] = {}
         self._subscribers: List[asyncio.Queue] = []
+        self._cleanup_orphaned_jobs()
+
+    def _cleanup_orphaned_jobs(self):
+        try:
+            with SessionLocal() as db:
+                orphans = (
+                    db.query(RenderJobRecord)
+                    .filter(RenderJobRecord.status.in_([RenderStatus.QUEUED.value, RenderStatus.RUNNING.value]))
+                    .all()
+                )
+                for o in orphans:
+                    o.status = RenderStatus.FAILED.value
+                    o.current_stage = "FAILED"
+                    o.error_code = "ORPHANED_JOB"
+                    o.error_message = "Engine process was restarted while render was in progress"
+                    o.completed_at = utc_now()
+                if orphans:
+                    db.commit()
+        except Exception:
+            pass
 
     def get_render_job(self, db: Session, render_id: str) -> Optional[Dict[str, Any]]:
         job = db.query(RenderJobRecord).filter(RenderJobRecord.id == render_id).first()
@@ -84,8 +105,9 @@ class RenderService:
             .order_by(RenderJobRecord.created_at.desc())
             .all()
         )
-        return [
-            {
+        res = []
+        for j in jobs:
+            item = {
                 "render_id": j.id,
                 "project_id": j.project_id,
                 "status": j.status,
@@ -100,8 +122,24 @@ class RenderService:
                 "created_at": j.created_at.isoformat() if j.created_at else None,
                 "completed_at": j.completed_at.isoformat() if j.completed_at else None,
             }
-            for j in jobs
-        ]
+            if j.id in self._active_progress:
+                live = self._active_progress[j.id]
+                item["status"] = live.get("status", item["status"])
+                item["current_stage"] = live.get("current_stage", item["current_stage"])
+                item["progress"] = live.get("progress", item["progress"])
+                item["frames_done"] = live.get("frames_done", item["frames_done"])
+                item["frames_total"] = live.get("frames_total", item["frames_total"])
+                item["elapsed_sec"] = live.get("elapsed_sec")
+            res.append(item)
+        return res
+
+    def preflight_check_timeline(self, db: Session, project_id: str, timeline_data: Dict[str, Any]) -> Dict[str, Any]:
+        proj = db.query(ProjectRecord).filter(ProjectRecord.id == project_id).first()
+        if not proj:
+            raise ValueError(f"Project not found: {project_id}")
+        workspace = Path(proj.workspace_path)
+        from engine.render.compiler import timeline_compiler
+        return timeline_compiler.preflight_validate(timeline_data, project_id, workspace)
 
     def create_and_start_render_job(
         self,
@@ -113,82 +151,172 @@ class RenderService:
         bgm_volume_db: float = -10.0,
         dialogue_gain_db: float = 0.0,
         is_draft: bool = False,
+        timeline_data: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         Creates a new RenderJobRecord and kicks off background rendering.
+        Supports both direct StoryEditorState (Schema v2) and legacy database timeline records.
         """
         proj = db.query(ProjectRecord).filter(ProjectRecord.id == project_id).first()
         if not proj:
             raise ValueError(f"Project not found: {project_id}")
 
-        # 1. Load active Visual Timeline
-        vt_rec = (
-            db.query(VisualTimelineRecord)
-            .filter(VisualTimelineRecord.project_id == project_id)
-            .order_by(VisualTimelineRecord.created_at.desc())
+        # Check if an active render job is already running for this project
+        active = (
+            db.query(RenderJobRecord)
+            .filter(
+                RenderJobRecord.project_id == project_id,
+                RenderJobRecord.status.in_([RenderStatus.QUEUED.value, RenderStatus.RUNNING.value]),
+            )
             .first()
         )
-        if not vt_rec:
-            raise ValueError("No VisualTimeline found. Complete motion planning first.")
+        if active:
+            if active.id in self._active_progress and self._active_progress[active.id].get("status") == "RUNNING":
+                return self.get_render_job(db, active.id)
+            else:
+                active.status = RenderStatus.FAILED.value
+                active.current_stage = "FAILED"
+                active.error_code = "ORPHANED_JOB"
+                active.error_message = "Engine process was restarted while render was in progress"
+                active.completed_at = utc_now()
+                db.commit()
 
-        vt = VisualTimeline.model_validate(vt_rec.timeline_json)
-
-        # 2. Load active Audio Timeline
-        at_rec = (
-            db.query(AudioTimelineRecord)
-            .filter(AudioTimelineRecord.project_id == project_id)
-            .order_by(AudioTimelineRecord.created_at.desc())
-            .first()
-        )
-        if not at_rec:
-            raise ValueError("No MasterAudioTimeline found. Complete audio generation first.")
-
-        mat = MasterAudioTimeline.model_validate(at_rec.timeline_json)
-
-        # 3. Resolve profile & output path
         workspace = Path(proj.workspace_path)
         renders_dir = workspace / "renders"
         renders_dir.mkdir(parents=True, exist_ok=True)
-
         render_id = str(uuid.uuid4())
+
+        # Resolve aspect ratio and profile
+        aspect = "16:9"
+        if timeline_data:
+            aspect = timeline_data.get("aspect_ratio", "16:9")
+
         chosen_profile_name = "draft_720p" if is_draft else profile_name
-        profile_factory = {
-            "standard_1080p": RenderProfile.standard_1080p,
-            "vertical_shorts": RenderProfile.vertical_shorts,
-            "square_feed": RenderProfile.square_feed,
-            "draft_720p": RenderProfile.draft_720p,
-            "preview_1080p": RenderProfile.preview_1080p,
-        }.get(chosen_profile_name, RenderProfile.standard_1080p)
-        profile = profile_factory()
+
+        if aspect == "9:16":
+            profile = RenderProfile.vertical_shorts()
+            if is_draft:
+                profile.width = 720
+                profile.height = 1280
+                profile.crf = 26
+                profile.preset = "ultrafast"
+        elif aspect == "1:1":
+            profile = RenderProfile.square_feed()
+            if is_draft:
+                profile.width = 720
+                profile.height = 720
+                profile.crf = 26
+                profile.preset = "ultrafast"
+        else:
+            profile_factory = {
+                "standard_1080p": RenderProfile.standard_1080p,
+                "vertical_shorts": RenderProfile.vertical_shorts,
+                "square_feed": RenderProfile.square_feed,
+                "draft_720p": RenderProfile.draft_720p,
+                "preview_1080p": RenderProfile.preview_1080p,
+            }.get(chosen_profile_name, RenderProfile.standard_1080p)
+            profile = profile_factory()
 
         if custom_output_path:
             out_file = Path(custom_output_path)
         else:
             out_file = renders_dir / f"{proj.title.replace(' ', '_').lower()}_{chosen_profile_name}_{render_id[:8]}.mp4"
 
-        # 4. Resolve source visual paths map
-        assets_map = {}
-        pages = db.query(PageRecord).filter(PageRecord.project_id == project_id).order_by(PageRecord.sequence).all()
-        for p in pages:
-            img_p = workspace / "pages" / p.filename
-            if not img_p.exists():
-                img_p = workspace / p.filename
-            assets_map[f"page_{p.sequence:02d}"] = str(img_p)
+        # Check if timeline_data is passed directly from Video-First Story Editor
+        if timeline_data and timeline_data.get("scenes"):
+            from engine.render.compiler import timeline_compiler
+            plan = timeline_compiler.compile(
+                state=timeline_data,
+                project_id=project_id,
+                workspace_path=workspace,
+                profile=profile,
+                subtitle_enabled=subtitle_enabled,
+                bgm_volume_db=bgm_volume_db,
+                dialogue_gain_db=dialogue_gain_db,
+            )
+            vt_hash = f"story_editor_v2_{render_id[:8]}"
+            mat_hash = f"audio_story_editor_{render_id[:8]}"
+        else:
+            # 1. Load active Visual Timeline from DB
+            vt_rec = (
+                db.query(VisualTimelineRecord)
+                .filter(VisualTimelineRecord.project_id == project_id)
+                .order_by(VisualTimelineRecord.created_at.desc())
+                .first()
+            )
+            if not vt_rec:
+                raise ValueError("No VisualTimeline found. Supply editor timeline or complete motion planning first.")
+            if vt_rec.status != "APPROVED":
+                raise ValueError("Approve the current motion timeline before rendering.")
 
-        # 5. Resolve background music
-        bgm_path = Path(__file__).resolve().parent.parent.parent.parent / "assets" / "cinematics" / "intro" / "audio" / "someone_stayed_ace_master.ogg"
-        if not bgm_path.exists():
-            bgm_path = Path(__file__).resolve().parent.parent.parent.parent / "assets" / "cinematics" / "intro" / "audio" / "someone_stayed_chamber.wav"
+            vt = VisualTimeline.model_validate(vt_rec.timeline_json)
 
-        # Compile RenderPlan
-        plan = self.render_engine.compile_render_plan(
-            timeline=vt,
-            master_audio=mat,
-            source_assets_map=assets_map,
-            bgm_path=str(bgm_path) if bgm_path.exists() else None,
-            profile=profile,
-            music_policy=MusicDurationPolicy.LOOP,
-        )
+            # 2. Load active Audio Timeline from DB
+            at_rec = (
+                db.query(AudioTimelineRecord)
+                .filter(AudioTimelineRecord.project_id == project_id)
+                .order_by(AudioTimelineRecord.created_at.desc())
+                .first()
+            )
+            if not at_rec:
+                raise ValueError("No MasterAudioTimeline found. Complete audio generation first.")
+            if at_rec.status != "APPROVED":
+                raise ValueError("Approve the current audio timeline before rendering.")
+
+            mat = MasterAudioTimeline.model_validate(at_rec.timeline_json)
+
+            # 4. Resolve source visual paths map
+            assets_map = {}
+            pages = db.query(PageRecord).filter(PageRecord.project_id == project_id).order_by(PageRecord.sequence).all()
+            for p in pages:
+                candidates = [
+                    workspace / "normalized" / p.filename,
+                    workspace / "source" / p.filename,
+                    workspace / "pages" / p.filename,
+                    workspace / p.filename,
+                ]
+                img_p = next((c for c in candidates if c.exists()), candidates[-1])
+                assets_map[f"page_{p.sequence:02d}"] = str(img_p)
+
+            if (proj.settings or {}).get("visual_storytelling"):
+                for panel in db.query(PanelRecord).filter(PanelRecord.project_id == project_id).all():
+                    assets_map[panel.id] = str(workspace / "panels" / panel.crop_filename)
+
+            # 5. Resolve background music
+            bgm_path = Path(__file__).resolve().parent.parent.parent.parent / "assets" / "cinematics" / "intro" / "audio" / "someone_stayed_ace_master.ogg"
+            if not bgm_path.exists():
+                bgm_path = Path(__file__).resolve().parent.parent.parent.parent / "assets" / "cinematics" / "intro" / "audio" / "someone_stayed_chamber.wav"
+
+            if (proj.settings or {}).get("visual_storytelling"):
+                bgm_path = Path((proj.settings or {}).get("chapter_music_path") or workspace / "audio" / "chapter_music.wav")
+            sfx_tracks = []
+            audio_plan_path = workspace / "audio" / "chapter_audio_plan.json"
+            if (proj.settings or {}).get("visual_storytelling") and audio_plan_path.exists():
+                import soundfile as sf
+                audio_plan = json.loads(audio_plan_path.read_text(encoding="utf-8"))
+                if audio_plan.get("music", {}).get("path"):
+                    bgm_path = Path(audio_plan["music"]["path"])
+                for cue in audio_plan.get("sfx", []):
+                    cue_path = Path(cue["path"])
+                    if cue_path.is_file():
+                        sfx_tracks.append(RenderAudioTrack(
+                            track_type="sfx", file_path=str(cue_path), start_time=cue["time"],
+                            end_time=min(mat.total_duration_sec, cue["time"] + sf.info(str(cue_path)).duration),
+                            gain_db=cue.get("gain_db", -12.0),
+                        ))
+
+            # Compile RenderPlan
+            plan = self.render_engine.compile_render_plan(
+                timeline=vt,
+                master_audio=mat,
+                source_assets_map=assets_map,
+                bgm_path=str(bgm_path) if bgm_path.exists() else None,
+                profile=profile,
+                music_policy=MusicDurationPolicy.LOOP,
+                sfx_tracks=sfx_tracks,
+            )
+            vt_hash = vt.hash or vt.timeline_id
+            mat_hash = mat.timeline_id
 
         # Preflight verification
         ready, issues = self.render_engine.preflight_check(plan)
@@ -207,8 +335,8 @@ class RenderService:
             output_profile=chosen_profile_name,
             output_path=str(out_file),
             render_plan_hash=plan.hash,
-            visual_timeline_hash=vt.hash or vt.timeline_id,
-            master_audio_timeline_hash=mat.timeline_id,
+            visual_timeline_hash=vt_hash,
+            master_audio_timeline_hash=mat_hash,
         )
         db.add(record)
         db.commit()
@@ -325,7 +453,14 @@ class RenderService:
                         job.frames_done = plan.total_frames
                         job.completed_at = utc_now()
                         job.validation_status = "VALID"
-                        job.validation_report = audit_report.model_dump()
+                        rep_dict = audit_report.model_dump()
+                        qf = rep_dict.get("quality_flags", {})
+                        rep_dict["duration_sec"] = audit_report.actual_duration_sec
+                        rep_dict["black_frames_count"] = qf.get("black_frames", 0)
+                        rep_dict["timeline_gaps_count"] = qf.get("timeline_gaps", 0)
+                        rep_dict["clipping_samples_count"] = qf.get("audio_clipping_events", 0)
+                        rep_dict["sync_valid"] = qf.get("av_sync_offset_ms", 0) == 0
+                        job.validation_report = rep_dict
                         job.contact_sheet_path = audit_report.contact_sheet_path
                         job.metrics = {
                             "file_size_bytes": audit_report.file_size_bytes,
