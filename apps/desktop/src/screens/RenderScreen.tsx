@@ -288,7 +288,7 @@ export const RenderScreen: React.FC<RenderScreenProps> = ({
 
           <ProgressBar
             progress={activeJob.progress}
-            label={`Overall Progress (${Math.round(activeJob.progress * 100)}%)`}
+            label="Overall Progress"
           />
 
           <div className="flex justify-between text-xs text-zinc-400 font-mono pt-1">
@@ -347,40 +347,48 @@ export const RenderScreen: React.FC<RenderScreenProps> = ({
               Validation Audit
             </h3>
 
-            {activeJob.validation_report ? (
-              <div className="space-y-3 text-xs">
-                <div className="flex justify-between py-1.5 border-b border-zinc-800">
-                  <span className="text-zinc-400">Duration</span>
-                  <span className="font-mono font-bold text-zinc-200">
-                    {activeJob.validation_report.duration_sec.toFixed(2)}s
-                  </span>
+            {activeJob.validation_report ? (() => {
+              const report = activeJob.validation_report as any;
+              const duration = report.duration_sec ?? report.actual_duration_sec ?? 0;
+              const blackFrames = report.black_frames_count ?? report.quality_flags?.black_frames ?? 0;
+              const timelineGaps = report.timeline_gaps_count ?? report.quality_flags?.timeline_gaps ?? 0;
+              const clipping = report.clipping_samples_count ?? report.quality_flags?.audio_clipping_events ?? 0;
+              const syncValid = report.sync_valid ?? (report.quality_flags?.av_sync_offset_ms === 0 || report.is_valid);
+              return (
+                <div className="space-y-3 text-xs">
+                  <div className="flex justify-between py-1.5 border-b border-zinc-800">
+                    <span className="text-zinc-400">Duration</span>
+                    <span className="font-mono font-bold text-zinc-200">
+                      {duration.toFixed(2)}s
+                    </span>
+                  </div>
+                  <div className="flex justify-between py-1.5 border-b border-zinc-800">
+                    <span className="text-zinc-400">Black Frame Failures</span>
+                    <span className="font-mono font-bold text-emerald-400">
+                      {blackFrames} frames
+                    </span>
+                  </div>
+                  <div className="flex justify-between py-1.5 border-b border-zinc-800">
+                    <span className="text-zinc-400">Timeline Gaps</span>
+                    <span className="font-mono font-bold text-emerald-400">
+                      {timelineGaps} gaps
+                    </span>
+                  </div>
+                  <div className="flex justify-between py-1.5 border-b border-zinc-800">
+                    <span className="text-zinc-400">Audio Clipping</span>
+                    <span className="font-mono font-bold text-emerald-400">
+                      {clipping} samples
+                    </span>
+                  </div>
+                  <div className="flex justify-between py-1.5 border-b border-zinc-800">
+                    <span className="text-zinc-400">A/V Sync Status</span>
+                    <span className="font-mono font-bold text-emerald-400">
+                      {syncValid ? "SYNCHRONIZED" : "DESYNC"}
+                    </span>
+                  </div>
                 </div>
-                <div className="flex justify-between py-1.5 border-b border-zinc-800">
-                  <span className="text-zinc-400">Black Frame Failures</span>
-                  <span className="font-mono font-bold text-emerald-400">
-                    {activeJob.validation_report.black_frames_count} frames
-                  </span>
-                </div>
-                <div className="flex justify-between py-1.5 border-b border-zinc-800">
-                  <span className="text-zinc-400">Timeline Gaps</span>
-                  <span className="font-mono font-bold text-emerald-400">
-                    {activeJob.validation_report.timeline_gaps_count} gaps
-                  </span>
-                </div>
-                <div className="flex justify-between py-1.5 border-b border-zinc-800">
-                  <span className="text-zinc-400">Audio Clipping</span>
-                  <span className="font-mono font-bold text-emerald-400">
-                    {activeJob.validation_report.clipping_samples_count} samples
-                  </span>
-                </div>
-                <div className="flex justify-between py-1.5 border-b border-zinc-800">
-                  <span className="text-zinc-400">A/V Sync Status</span>
-                  <span className="font-mono font-bold text-emerald-400">
-                    {activeJob.validation_report.sync_valid ? "SYNCHRONIZED" : "DESYNC"}
-                  </span>
-                </div>
-              </div>
-            ) : (
+              );
+            })() : (
               <p className="text-xs text-zinc-500">Validation report ready upon encode completion.</p>
             )}
           </Card>
@@ -428,7 +436,7 @@ export const RenderScreen: React.FC<RenderScreenProps> = ({
                       {r.output_profile}
                     </td>
                     <td className="py-2.5 px-3 font-mono text-zinc-400">
-                      {Math.round(r.progress * 100)}%
+                      {Math.round(r.progress > 1 ? r.progress : r.progress * 100)}%
                     </td>
                     <td className="py-2.5 px-3 text-zinc-500 font-mono">
                       {r.created_at ? new Date(r.created_at).toLocaleTimeString() : "-"}

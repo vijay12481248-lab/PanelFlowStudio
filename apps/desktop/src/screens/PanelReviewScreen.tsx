@@ -36,6 +36,7 @@ export const PanelReviewScreen: React.FC<PanelReviewScreenProps> = ({
 
   // Canvas View Controls
   const [zoomLevel, setZoomLevel] = useState<number>(100);
+  const [loadedImage, setLoadedImage] = useState<{ pageId: string; width: number; height: number } | null>(null);
   const [showBoxes, setShowBoxes] = useState<boolean>(true);
   const [isDrawMode, setIsDrawMode] = useState<boolean>(false);
 
@@ -59,6 +60,8 @@ export const PanelReviewScreen: React.FC<PanelReviewScreenProps> = ({
   const [drawCurrent, setDrawCurrent] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
 
   const activePage = pages[selectedPageIndex] || null;
+  const canvasWidth = loadedImage && activePage && loadedImage.pageId === activePage.id ? loadedImage.width : activePage?.width || 1200;
+  const canvasHeight = loadedImage && activePage && loadedImage.pageId === activePage.id ? loadedImage.height : activePage?.height || 1800;
   const pagePanels = activePage
     ? panels.filter((p) => p.page_id === activePage.id).sort((a, b) => a.page_sequence - b.page_sequence)
     : [];
@@ -291,8 +294,8 @@ export const PanelReviewScreen: React.FC<PanelReviewScreenProps> = ({
         selectedPanel.id,
         0,
         0,
-        activePage.width || 1200,
-        activePage.height || 1800,
+        canvasWidth,
+        canvasHeight,
         "CONFIRMED",
         "FULL_PAGE"
       );
@@ -584,7 +587,7 @@ export const PanelReviewScreen: React.FC<PanelReviewScreenProps> = ({
               onClick={() => onProceedToOCR(project)}
               disabled={panels.length === 0}
             >
-              Proceed to OCR →
+              {project.settings?.visual_storytelling ? "Analyze chapter story →" : "Proceed to OCR →"}
             </Button>
           )}
         </div>
@@ -685,16 +688,21 @@ export const PanelReviewScreen: React.FC<PanelReviewScreenProps> = ({
           </div>
 
           {/* Canvas Viewport */}
-          <Card className="p-4 bg-zinc-950 flex flex-col items-center justify-center min-h-[520px] overflow-auto">
+          <Card className="p-4 bg-zinc-950 h-[75vh] overflow-auto">
             {activePage ? (
               <div
-                className="relative inline-block max-w-full overflow-hidden rounded-lg shadow-2xl border border-zinc-800 transition-transform duration-150"
-                style={{ transform: `scale(${zoomLevel / 100})`, transformOrigin: "top center" }}
+                className="relative overflow-hidden rounded-lg shadow-2xl border border-zinc-800"
+                style={{ width: `${zoomLevel}%` }}
               >
                 <img
                   src={`${api.getNormalizedPageImageUrl(project.id, activePage.id)}?t=${cacheBuster}`}
                   alt={`Page ${activePage.sequence}`}
-                  className="max-h-[75vh] w-auto object-contain block pointer-events-none"
+                  className="w-full h-auto block pointer-events-none"
+                  onLoad={(event) => setLoadedImage({
+                    pageId: activePage.id,
+                    width: event.currentTarget.naturalWidth,
+                    height: event.currentTarget.naturalHeight,
+                  })}
                 />
 
                 {/* SVG Overlay of detected panel bounding boxes */}
@@ -704,7 +712,7 @@ export const PanelReviewScreen: React.FC<PanelReviewScreenProps> = ({
                     className={`absolute inset-0 w-full h-full ${
                       isDrawMode ? "cursor-crosshair" : "cursor-default"
                     }`}
-                    viewBox={`0 0 ${activePage.width || 1200} ${activePage.height || 1800}`}
+                    viewBox={`0 0 ${canvasWidth} ${canvasHeight}`}
                     preserveAspectRatio="none"
                     onMouseDown={handleSvgMouseDown}
                     onMouseMove={handleSvgMouseMove}

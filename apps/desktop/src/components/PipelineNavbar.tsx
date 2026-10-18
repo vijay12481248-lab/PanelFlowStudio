@@ -6,6 +6,7 @@ interface PipelineNavbarProps {
   currentStage: PipelineStage;
   onNavigate: (stage: string) => void;
   staleStages?: string[];
+  currentScreen?: string;
 }
 
 interface StageEntry {
@@ -84,12 +85,13 @@ const statusDotStyles: Record<StageStatus, string> = {
   NOT_STARTED: "bg-zinc-700",
 };
 
-export const PipelineNavbar: React.FC<PipelineNavbarProps> = ({ currentStage, onNavigate, staleStages }) => {
+export const PipelineNavbar: React.FC<PipelineNavbarProps> = ({ currentStage, onNavigate, staleStages, currentScreen }) => {
   return (
     <div className="flex items-center gap-1.5 overflow-x-auto py-2 px-1 scrollbar-thin scrollbar-thumb-zinc-700">
       {PIPELINE_STAGES.map((entry, idx) => {
         const status = getStageStatus(entry, currentStage, staleStages);
-        const isClickable = status !== "NOT_STARTED";
+        const isCurrentView = currentScreen === entry.screenKey;
+        const isClickable = status !== "NOT_STARTED" || isCurrentView;
 
         return (
           <React.Fragment key={entry.id}>
@@ -104,14 +106,27 @@ export const PipelineNavbar: React.FC<PipelineNavbarProps> = ({ currentStage, on
               onClick={() => isClickable && onNavigate(entry.screenKey)}
               disabled={!isClickable}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[11px] font-semibold
-                transition-all whitespace-nowrap flex-shrink-0 ${statusStyles[status]}`}
+                transition-all whitespace-nowrap flex-shrink-0 ${statusStyles[status]} ${
+                isCurrentView ? "ring-2 ring-indigo-400 border-indigo-400 bg-indigo-500/20 text-white shadow-md shadow-indigo-500/20" : ""
+              }`}
             >
-              <span className={`w-1.5 h-1.5 rounded-full ${statusDotStyles[status]}`} />
+              <span className={`w-1.5 h-1.5 rounded-full ${isCurrentView ? "bg-indigo-300 ring-2 ring-indigo-400/50" : statusDotStyles[status]}`} />
               {entry.label}{status === "STALE" ? " (STALE)" : ""}
             </button>
           </React.Fragment>
         );
       })}
+
+      <div className="w-px h-5 bg-zinc-800 mx-1 flex-shrink-0" />
+
+      <button
+        onClick={() => onNavigate("story_editor")}
+        className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-indigo-500/50 bg-indigo-600/25 hover:bg-indigo-600/40 text-indigo-200 text-[11px] font-semibold transition-all whitespace-nowrap shadow-sm shadow-indigo-600/20 flex-shrink-0"
+        title="Open unified video-first story editor"
+      >
+        <Icons.Film className="w-3.5 h-3.5 text-indigo-400" />
+        Story Editor
+      </button>
     </div>
   );
 };

@@ -29,6 +29,7 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
   const [ocrRecords, setOcrRecords] = useState<Record<string, OCRRecord>>({});
   const [textRegions, setTextRegions] = useState<TextRegion[]>([]);
   const [selectedRegionId, setSelectedRegionId] = useState<string | null>(null);
+  const [reviewFlagged, setReviewFlagged] = useState(false);
 
   const [engines, setEngines] = useState<OCREngineInfo[]>([]);
   const [selectedEngine, setSelectedEngine] = useState<string>("mock_ocr");
@@ -304,6 +305,15 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
     }
   };
 
+  const handleRejectRegion = async (regionId: string) => {
+    try {
+      const updated = await api.updateTextRegion(project.id, regionId, { status: "REJECTED" });
+      setTextRegions((prev) => prev.map((tr) => tr.id === updated.id ? updated : tr));
+    } catch (err: any) {
+      alert(`Could not ignore region: ${err.message}`);
+    }
+  };
+
   const handleDeleteRegion = async (regionId: string) => {
     if (!confirm("Are you sure you want to delete this text region?")) return;
     try {
@@ -315,6 +325,27 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
       }
     } catch (err: any) {
       alert(`Failed to delete region: ${err.message}`);
+    }
+  };
+
+  const handleConfirmAllPending = async () => {
+    setConfirming(true);
+    try {
+      const pending = textRegions.filter((tr) => tr.status === "NEEDS_REVIEW");
+      await Promise.all(
+        pending.map((tr) =>
+          api.updateTextRegion(project.id, tr.id, {
+            status: "CONFIRMED",
+            corrected_text: tr.corrected_text || tr.raw_text || "...",
+          })
+        )
+      );
+      await loadData();
+      alert(`All ${pending.length} pending text regions confirmed!`);
+    } catch (err: any) {
+      alert(`Failed to confirm pending regions: ${err.message}`);
+    } finally {
+      setConfirming(false);
     }
   };
 
@@ -407,6 +438,20 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
             OCR All Panels
           </Button>
 
+          {needsReviewCount > 0 && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleConfirmAllPending}
+              loading={confirming}
+              className="bg-amber-600/20 text-amber-300 border-amber-800 hover:bg-amber-600/30"
+              title="Confirm all pending text regions for gate approval"
+            >
+              <Icons.Check className="w-4 h-4 mr-1" />
+              Confirm All ({needsReviewCount})
+            </Button>
+          )}
+
           <Button
             variant="secondary"
             size="sm"
@@ -418,11 +463,71 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                 : "bg-emerald-600/20 text-emerald-300 border-emerald-800 hover:bg-emerald-600/30"
             }`}
           >
-            <Icons.CheckCircle className="w-4 h-4" />
+            <Icons.CheckCircle className="w-4 h-4 mr-1" />
             Approve OCR ({needsReviewCount > 0 ? `${needsReviewCount} Pending` : "Ready"})
           </Button>
+
+          {onProceedToStory && (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => onProceedToStory(project)}
+              disabled={needsReviewCount > 0 && project.current_stage !== "OCR_APPROVED"}
+            >
+              Proceed to Story →
+            </Button>
+          )}
         </div>
       </div>
+
+      <Button variant="secondary" size="sm" onClick={() => setReviewFlagged(!reviewFlagged)}>
+        {reviewFlagged ? "Return to panel editor" : `Review flagged crops (${needsReviewCount})`}
+      </Button>
+      {!reviewFlagged && panelRegions.length > 0 && (
+        <Button variant="ghost" size="sm" loading={savingRegion} onClick={async () => {
+          const reviewed = [...panelRegions];
+          setSavingRegion(true);
+          try { for (const tr of reviewed) await handleRejectRegion(tr.id); }
+          finally { setSavingRegion(false); }
+        }}>Exclude text in panel #{activePanel?.sequence}</Button>
+      )}
+      {reviewFlagged && (
+        <section className="space-y-3" aria-label="Flagged OCR crops">
+          <p className="text-sm text-zinc-300">Inspect each crop. Ignore artwork without text; open unreadable dialogue in the editor to correct it.</p>
+          <Button size="sm" variant="secondary" loading={savingRegion}
+            disabled={textRegions.filter((tr) => tr.status === "NEEDS_REVIEW").slice(0, 6).some((tr) => !!(tr.corrected_text || tr.raw_text || "").trim())}
+            onClick={async () => {
+              const reviewed = textRegions.filter((tr) => tr.status === "NEEDS_REVIEW").slice(0, 6);
+              if (reviewed.some((tr) => !!(tr.corrected_text || tr.raw_text || "").trim())) return;
+              setSavingRegion(true);
+              try { for (const tr of reviewed) await handleRejectRegion(tr.id); }
+              finally { setSavingRegion(false); }
+            }}>
+            Ignore shown empty artwork
+          </Button>
+          <p className="text-xs text-zinc-500">Use only after checking every displayed crop contains no text.</p>
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+            {textRegions.filter((tr) => tr.status === "NEEDS_REVIEW").slice(0, 6).map((tr) => (
+              <Card key={tr.id} className="space-y-2">
+                <p className="text-xs text-zinc-400">Panel #{panels.find((p) => p.id === tr.panel_id)?.sequence} · Region #{tr.sequence_in_panel}</p>
+                <div className="h-48 overflow-auto bg-white rounded">
+                  <img src={api.getTextRegionImageUrl(project.id, tr.id)} alt={`Flagged region ${tr.sequence_global}`} className="w-full h-full object-contain" loading="lazy" />
+                </div>
+                <p className="text-xs text-zinc-300 break-words">{tr.corrected_text || tr.raw_text || "No text recognized"}</p>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="secondary" onClick={() => handleRejectRegion(tr.id)}>Ignore artwork</Button>
+                  <Button size="sm" variant="primary" onClick={() => {
+                    setSelectedPanelIndex(panels.findIndex((p) => p.id === tr.panel_id));
+                    setSelectedRegionId(tr.id);
+                    setReviewFlagged(false);
+                    window.scrollTo({ top: 0 });
+                  }}>Open in editor</Button>
+                </div>
+              </Card>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Engine Status Diagnostic Banner */}
       {(() => {
@@ -772,6 +877,7 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                     onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
                     className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500"
                   >
+                    <option value="DETECTED">DETECTED (Not reviewed)</option>
                     <option value="CONFIRMED">CONFIRMED (Approved)</option>
                     <option value="NEEDS_REVIEW">NEEDS_REVIEW (Flagged)</option>
                     <option value="REJECTED">REJECTED (Ignore)</option>

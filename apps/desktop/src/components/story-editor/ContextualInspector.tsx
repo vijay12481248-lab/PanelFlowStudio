@@ -118,41 +118,169 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
     };
   };
 
-  const handleRegenerateNarrationTake = (clipId: string) => {
+  const handleRegenerateNarrationTake = async (clipId: string) => {
+    const targetClip = state.narration_clips.find((c) => c.id === clipId);
+    if (!targetClip) return;
+
+    const targetRevision = targetClip.text_revision || 1;
+    const targetHash = targetClip.content_hash || "";
+    const activeProjectId = state.project_id;
+
     setIsGeneratingTake(true);
-    setTimeout(() => {
-      onUpdateState((prev) => {
-        const nextClips = prev.narration_clips.map((c) => {
-          if (c.id !== clipId) return c;
-          return {
-            ...c,
-            status: "READY" as const,
-            generated_audio_revision: c.text_revision || 1,
-            audio_url: "/assets/demo/aria_narration_sample.mp3",
-          };
-        });
-        const nextChapter = prev.narration_chapter
+
+    // Set state to PROCESSING immediately for visual feedback
+    onUpdateState((prev) => ({
+      ...prev,
+      narration_clips: prev.narration_clips.map((c) =>
+        c.id === clipId
           ? {
-              ...prev.narration_chapter,
-              segments: prev.narration_chapter.segments.map((seg: any) => {
-                if (seg.id !== clipId) return seg;
-                return {
-                  ...seg,
-                  generation_status: "READY",
-                  generated_audio_revision: seg.text_revision || 1,
-                  audio_asset_uri: "/assets/demo/aria_narration_sample.mp3",
-                };
-              }),
+              ...c,
+              status: "PROCESSING" as const,
+              previous_audio_asset_uri: c.audio_url || c.previous_audio_asset_uri,
             }
-          : prev.narration_chapter;
+          : c
+      ),
+      narration_chapter: prev.narration_chapter
+        ? {
+            ...prev.narration_chapter,
+            segments: prev.narration_chapter.segments.map((seg: any) =>
+              seg.id === clipId
+                ? {
+                    ...seg,
+                    generation_status: "PROCESSING",
+                    generation_progress: 25,
+                    previous_audio_asset_uri: seg.audio_asset_uri || seg.previous_audio_asset_uri,
+                    updated_at: new Date().toISOString(),
+                  }
+                : seg
+            ),
+          }
+        : prev.narration_chapter,
+    }));
+
+    try {
+      const resp = await fetch(
+        `http://localhost:8765/api/projects/${activeProjectId}/narration/synthesize-segment`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            segment_id: targetClip.id,
+            text: targetClip.text,
+            voice: targetClip.speaker,
+            emotion: targetClip.emotion,
+            intensity: targetClip.delivery_intensity ?? 0.5,
+            speed: targetClip.speed ?? 1.0,
+            text_revision: targetRevision,
+            content_hash: targetHash,
+            force: true,
+          }),
+        }
+      );
+
+      if (!resp.ok) {
+        const errData = await resp.json().catch(() => ({}));
+        throw new Error(errData.detail || `Server returned ${resp.status}`);
+      }
+
+      const data = await resp.json();
+      const fullUrl = data.audio_url?.startsWith("http")
+        ? data.audio_url
+        : `http://localhost:8765${data.audio_url}`;
+      const measuredDuration = data.measured_duration_sec || targetClip.duration_sec;
+
+      onUpdateState((prev) => {
+        const currentClip = prev.narration_clips.find((c) => c.id === clipId);
+        // Stale revision protection: discard if text changed during generation
+        if (!currentClip || currentClip.text_revision !== targetRevision) {
+          console.warn("Stale synthesis discarded in inspector:", {
+            currentRevision: currentClip?.text_revision,
+            targetRevision,
+          });
+          return {
+            ...prev,
+            narration_clips: prev.narration_clips.map((c) =>
+              c.id === clipId
+                ? { ...c, status: "OUTDATED" as const }
+                : c
+            ),
+            narration_chapter: prev.narration_chapter
+              ? {
+                  ...prev.narration_chapter,
+                  segments: prev.narration_chapter.segments.map((seg: any) =>
+                    seg.id === clipId
+                      ? {
+                          ...seg,
+                          generation_status: "OUTDATED",
+                          generation_error: "Stale synthesis rejected: Text modified during generation.",
+                        }
+                      : seg
+                  ),
+                }
+              : prev.narration_chapter,
+          };
+        }
+
         return {
           ...prev,
-          narration_clips: nextClips,
-          narration_chapter: nextChapter,
+          narration_clips: prev.narration_clips.map((c) => {
+            if (c.id !== clipId) return c;
+            return {
+              ...c,
+              status: "READY" as const,
+              duration_sec: measuredDuration,
+              generated_audio_revision: targetRevision,
+              previous_audio_asset_uri: c.audio_url || c.previous_audio_asset_uri,
+              audio_url: fullUrl,
+            };
+          }),
+          narration_chapter: prev.narration_chapter
+            ? {
+                ...prev.narration_chapter,
+                segments: prev.narration_chapter.segments.map((seg: any) => {
+                  if (seg.id !== clipId) return seg;
+                  return {
+                    ...seg,
+                    generation_status: "READY",
+                    generation_progress: 100,
+                    measured_duration_sec: measuredDuration,
+                    generated_audio_revision: targetRevision,
+                    previous_audio_asset_uri: seg.audio_asset_uri || seg.previous_audio_asset_uri,
+                    audio_asset_uri: fullUrl,
+                    generation_error: null,
+                    updated_at: new Date().toISOString(),
+                  };
+                }),
+              }
+            : prev.narration_chapter,
         };
       });
+    } catch (err: any) {
+      console.error("ContextualInspector narration synthesis failed:", err);
+      onUpdateState((prev) => ({
+        ...prev,
+        narration_clips: prev.narration_clips.map((c) =>
+          c.id === clipId ? { ...c, status: "FAILED" as const } : c
+        ),
+        narration_chapter: prev.narration_chapter
+          ? {
+              ...prev.narration_chapter,
+              segments: prev.narration_chapter.segments.map((seg: any) =>
+                seg.id === clipId
+                  ? {
+                      ...seg,
+                      generation_status: "FAILED",
+                      generation_error: err?.message || "Synthesis error",
+                      updated_at: new Date().toISOString(),
+                    }
+                  : seg
+              ),
+            }
+          : prev.narration_chapter,
+      }));
+    } finally {
       setIsGeneratingTake(false);
-    }, 500);
+    }
   };
 
   // Helper to update selected layer properties
@@ -661,19 +789,22 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                 <div className="flex items-center gap-2 min-w-0">
                   <button
                     type="button"
-                    onClick={() => handlePlayTake(selectedNarration.audio_url || "/assets/demo/aria_narration_sample.mp3", "current")}
+                    onClick={() => handlePlayTake(selectedNarration.audio_url, "current")}
+                    disabled={!selectedNarration.audio_url}
                     className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 transition-colors ${
-                      playingTake === "current"
+                      !selectedNarration.audio_url
+                        ? "bg-zinc-800 text-zinc-600 cursor-not-allowed"
+                        : playingTake === "current"
                         ? "bg-emerald-600 text-white animate-pulse"
                         : "bg-emerald-950 text-emerald-300 hover:bg-emerald-900 border border-emerald-700/80"
                     }`}
-                    title={playingTake === "current" ? "Pause" : "Play Current Take"}
+                    title={!selectedNarration.audio_url ? "No audio synthesized yet" : playingTake === "current" ? "Pause" : "Play Current Take"}
                   >
                     {playingTake === "current" ? <Icons.Pause className="w-3.5 h-3.5" /> : <Icons.Play className="w-3.5 h-3.5 ml-0.5" />}
                   </button>
                   <div className="min-w-0">
                     <div className="text-[11px] font-medium text-zinc-200 truncate">
-                      {selectedNarration.status === "OUTDATED" ? "Prior Take (Active)" : "Active Take"}
+                      {selectedNarration.status === "OUTDATED" ? "Prior Take (Active)" : selectedNarration.audio_url ? "Active Take" : "No Audio Take"}
                     </div>
                     <div className="text-[9px] text-zinc-400 font-mono truncate">
                       {selectedNarration.duration_sec}s • {selectedNarration.speed || 1.0}x

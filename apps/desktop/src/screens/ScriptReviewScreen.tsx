@@ -7,6 +7,9 @@ import type {
   ScriptValidationReport,
   AdaptationProfile,
   CharacterEntity,
+  StoryboardDocument,
+  StoryboardSegment,
+  StoryboardPanelRef,
 } from "@panelflow/shared-types";
 import { Button, Card, Badge, ProgressBar, Icons } from "@panelflow/ui";
 
@@ -25,31 +28,39 @@ export const ScriptReviewScreen: React.FC<ScriptReviewScreenProps> = ({
   onProceedToAudio,
   onProjectUpdated,
 }) => {
+  const [viewMode, setViewMode] = useState<"storyboard" | "script">("storyboard");
   const [script, setScript] = useState<VideoScript | null>(null);
+  const [storyboard, setStoryboard] = useState<StoryboardDocument | null>(null);
   const [characters, setCharacters] = useState<CharacterEntity[]>([]);
   const [validationReport, setValidationReport] = useState<ScriptValidationReport | null>(null);
-  const [selectedProfile, setSelectedProfile] = useState<AdaptationProfile>("FAITHFUL");
+  const [selectedProfile, setSelectedProfile] = useState<AdaptationProfile>(project.settings?.visual_storytelling ? "DRAMATIC_NARRATION" : "FAITHFUL");
 
   const [loading, setLoading] = useState<boolean>(true);
+  const [jobMessage, setJobMessage] = useState("");
   const [generating, setGenerating] = useState<boolean>(false);
   const [validating, setValidating] = useState<boolean>(false);
   const [approving, setApproving] = useState<boolean>(false);
+  const [realigning, setRealigning] = useState<boolean>(false);
 
   // Active segment for inline editing
   const [editingSegmentId, setEditingSegmentId] = useState<string | null>(null);
+  const [segmentDuration, setSegmentDuration] = useState(2);
   const [segmentText, setSegmentText] = useState<string>("");
   const [segmentEmotion, setSegmentEmotion] = useState<string>("NEUTRAL");
   const [segmentIntensity, setSegmentIntensity] = useState<number>(0.5);
 
+
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [s, chars] = await Promise.all([
+      const [s, chars, sb] = await Promise.all([
         api.getScript(project.id).catch(() => null),
         api.listCharacters(project.id).catch(() => []),
+        api.getStoryboard(project.id).catch(() => null),
       ]);
       setScript(s);
       setCharacters(chars);
+      if (sb) setStoryboard(sb);
       if (s) {
         setSelectedProfile(s.adaptation_profile);
       }
@@ -64,19 +75,65 @@ export const ScriptReviewScreen: React.FC<ScriptReviewScreenProps> = ({
     loadData();
   }, [loadData]);
 
+  const handleRealignStoryboard = async () => {
+    setRealigning(true);
+    try {
+      const sb = await api.realignStoryboard(project.id);
+      setStoryboard(sb);
+    } catch (err: any) {
+      alert(`Realign failed: ${err.message}`);
+    } finally {
+      setRealigning(false);
+    }
+  };
+
+  const handleUpdateStoryboardSegment = async (segmentId: string, patch: any) => {
+    try {
+      const updated = await api.updateStoryboardSegment(project.id, segmentId, patch);
+      if (storyboard) {
+        setStoryboard({
+          ...storyboard,
+          segments: storyboard.segments.map(s => s.segment_id === segmentId ? updated : s),
+        });
+      }
+    } catch (err: any) {
+      alert(`Update failed: ${err.message}`);
+    }
+  };
+
+  const handleSegmentAction = async (segmentId: string, action: string) => {
+    if (!script) return;
+    setGenerating(true);
+    try {
+      setScript(await api.editScriptSegment(project.id, script.script_id, segmentId, action));
+      setValidationReport(null);
+      const sb = await api.getStoryboard(project.id).catch(() => null);
+      if (sb) setStoryboard(sb);
+    } catch (err: any) {
+      alert(err.message || "Script edit failed");
+    } finally {
+      setGenerating(false);
+    }
+  };
+
   const handleGenerateScript = async () => {
     setGenerating(true);
     try {
-      const newScript = await api.generateScript(project.id, selectedProfile);
+      const { job_id } = await api.generateScriptJob(project.id, selectedProfile);
+      await api.waitForWorkflowJob(job_id, job => setJobMessage(`${Math.round(job.progress * 100)}% · ${job.message}`));
+      const newScript = await api.getScript(project.id);
       setScript(newScript);
       const val = await api.validateScript(project.id, newScript.script_id);
       setValidationReport(val);
+      const sb = await api.getStoryboard(project.id).catch(() => null);
+      if (sb) setStoryboard(sb);
     } catch (err: any) {
       alert(`Failed to adapt script: ${err.message}`);
     } finally {
       setGenerating(false);
     }
   };
+
 
   const handleValidateScript = async () => {
     if (!script) return;
@@ -98,6 +155,7 @@ export const ScriptReviewScreen: React.FC<ScriptReviewScreenProps> = ({
         text: segmentText,
         emotion: segmentEmotion,
         intensity: segmentIntensity,
+        estimated_duration: segmentDuration,
       });
       setEditingSegmentId(null);
       await loadData();
@@ -281,7 +339,50 @@ export const ScriptReviewScreen: React.FC<ScriptReviewScreenProps> = ({
         </div>
       </div>
 
-      {/* Script Segments List */}
+      {generating && <p role="status" className="text-sm text-indigo-300">{jobMessage || "Updating narration…"}</p>}
+      {/* View Mode Toggle & Storyboard Actions */}
+      {script && (
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800 pb-3">
+          <div className="flex items-center gap-2">
+            <Button
+              variant={viewMode === "storyboard" ? "primary" : "secondary"}
+              size="sm"
+              onClick={() => setViewMode("storyboard")}
+            >
+              <Icons.Layout className="w-3.5 h-3.5 mr-1.5" />
+              Visual Storyboard (Two-Pane)
+            </Button>
+            <Button
+              variant={viewMode === "script" ? "primary" : "secondary"}
+              size="sm"
+              onClick={() => setViewMode("script")}
+            >
+              <Icons.FileText className="w-3.5 h-3.5 mr-1.5" />
+              Spoken Script List
+            </Button>
+          </div>
+
+          {viewMode === "storyboard" && (
+            <div className="flex items-center gap-3">
+              <span className="text-[11px] text-zinc-400 font-mono">
+                Duration: <strong>{storyboard?.total_duration_sec ?? script.estimated_duration}s</strong>
+              </span>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleRealignStoryboard}
+                disabled={realigning || generating}
+                title="Recalculates frame alignment while strictly preserving manual edits"
+              >
+                <Icons.Rotate className={`w-3.5 h-3.5 mr-1.5 ${realigning ? "animate-spin" : ""}`} />
+                {realigning ? "Realigning..." : "Realign Frames"}
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Script / Storyboard Content */}
       {!script ? (
         <Card className="p-12 text-center bg-zinc-900 border-zinc-800 space-y-4">
           <Icons.FileText className="w-10 h-10 text-zinc-600 mx-auto" />
@@ -295,7 +396,207 @@ export const ScriptReviewScreen: React.FC<ScriptReviewScreenProps> = ({
             Generate Script
           </Button>
         </Card>
+      ) : viewMode === "storyboard" && storyboard && storyboard.segments.length > 0 ? (
+        /* Two-Pane Visual Storyboard View */
+        <div className="space-y-4">
+          {storyboard.segments.map((sbSeg) => {
+            const isEditing = editingSegmentId === sbSeg.segment_id;
+            return (
+              <Card
+                key={sbSeg.segment_id}
+                className="p-4 bg-zinc-950 border border-zinc-800 hover:border-zinc-700 transition-colors"
+              >
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-5">
+                  {/* Left Column: Manga Visuals (5 cols) */}
+                  <div className="md:col-span-5 space-y-2.5 border-b md:border-b-0 md:border-r border-zinc-800/80 pb-4 md:pb-0 md:pr-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-indigo-400 font-mono">
+                        Beat #{sbSeg.sequence} · Scene {sbSeg.scene_id.slice(-6)}
+                      </span>
+                      <Badge variant="accent" className="text-[9px] uppercase font-bold">
+                        {sbSeg.supporting_panels.length} {sbSeg.supporting_panels.length === 1 ? "Frame" : "Frames"}
+                      </Badge>
+                    </div>
+
+                    {/* Supporting Panel Crops */}
+                    <div className="space-y-3">
+                      {sbSeg.supporting_panels.map((pRef, pIdx) => (
+                        <div key={`${pRef.panel_id}-${pIdx}`} className="space-y-1.5">
+                          <div className="relative group rounded-lg overflow-hidden border border-zinc-800 bg-zinc-900 aspect-video flex items-center justify-center">
+                            <img
+                              src={pRef.image_url || api.getPanelImageUrl(project.id, pRef.panel_id)}
+                              alt={`Manga panel ${pRef.panel_id}`}
+                              className="w-full h-full object-contain"
+                              loading="lazy"
+                            />
+                            <div className="absolute top-2 left-2 flex items-center gap-1.5">
+                              <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-black/75 text-zinc-200">
+                                #{pRef.reading_order}
+                              </span>
+                              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-indigo-950/80 border border-indigo-700 text-indigo-300">
+                                {pRef.role}
+                              </span>
+                            </div>
+                            <div className="absolute bottom-2 right-2">
+                              <span className="px-1.5 py-0.5 rounded text-[9px] font-mono bg-black/80 text-emerald-400">
+                                {pRef.sub_duration_sec}s
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-between text-[10px] text-zinc-400 font-mono px-1">
+                            <span>Camera Motion:</span>
+                            <select
+                              value={pRef.camera_motion?.type || "SLOW_PUSH"}
+                              onChange={(e) => {
+                                const newPanels = sbSeg.supporting_panels.map((p, idx) =>
+                                  idx === pIdx
+                                    ? {
+                                        ...p,
+                                        camera_motion: {
+                                          ...p.camera_motion,
+                                          type: e.target.value,
+                                        },
+                                      }
+                                    : p
+                                );
+                                handleUpdateStoryboardSegment(sbSeg.segment_id, {
+                                  supporting_panels: newPanels,
+                                });
+                              }}
+                              className="bg-zinc-900 border border-zinc-700 rounded px-1.5 py-0.5 text-zinc-200 text-[10px]"
+                            >
+                              <option value="SLOW_PUSH">SLOW_PUSH (Pan/Zoom)</option>
+                              <option value="CHARACTER_FOCUS">CHARACTER_FOCUS</option>
+                              <option value="REACTION_CLOSEUP">REACTION_CLOSEUP</option>
+                              <option value="IMPACT">IMPACT (Combat Shake)</option>
+                              <option value="PAN">PAN (Horizontal/Vertical)</option>
+                              <option value="STATIC">STATIC</option>
+                            </select>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Right Column: Spoken Narration & Audio Lock (7 cols) */}
+                  <div className="md:col-span-7 space-y-3 flex flex-col justify-between">
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="neutral" className="text-[10px] uppercase font-bold">
+                            NARRATOR
+                          </Badge>
+                          <Badge variant={sbSeg.emotion === "TENSE" || sbSeg.emotion === "ANGRY" ? "danger" : "neutral"} className="text-[10px]">
+                            {sbSeg.emotion} ({Math.round(sbSeg.intensity * 100)}%)
+                          </Badge>
+                          {sbSeg.manual_override && (
+                            <span className="text-[9px] bg-amber-950/60 border border-amber-800 text-amber-300 px-1.5 py-0.5 rounded font-mono font-bold">
+                              LOCKED OVERRIDE
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <span className="text-[11px] font-mono text-zinc-300 font-bold">
+                            {sbSeg.measured_duration_sec}s
+                          </span>
+                          <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded font-bold ${
+                            sbSeg.audio_clip_path
+                              ? "bg-emerald-950/60 border border-emerald-800 text-emerald-300"
+                              : "bg-zinc-800 text-zinc-400"
+                          }`}>
+                            {sbSeg.audio_clip_path ? "🔊 TTS LOCKED" : "⏱️ ESTIMATED"}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Narration Text Content / Editing */}
+                      {isEditing ? (
+                        <div className="space-y-2 pt-1">
+                          <textarea
+                            value={segmentText}
+                            onChange={(e) => setSegmentText(e.target.value)}
+                            rows={3}
+                            className="w-full bg-zinc-900 border border-indigo-600 rounded-lg p-2.5 text-xs text-zinc-100 font-mono focus:outline-none"
+                          />
+                          <div className="flex items-center justify-between text-xs">
+                            <div className="flex items-center gap-3">
+                              <label className="text-zinc-400">Emotion:</label>
+                              <select
+                                value={segmentEmotion}
+                                onChange={(e) => setSegmentEmotion(e.target.value)}
+                                className="bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-zinc-200 text-xs font-mono"
+                              >
+                                <option value="NEUTRAL">NEUTRAL</option>
+                                <option value="TENSE">TENSE</option>
+                                <option value="CALM">CALM</option>
+                                <option value="DETERMINED">DETERMINED</option>
+                                <option value="SURPRISED">SURPRISED</option>
+                                <option value="ANGRY">ANGRY</option>
+                                <option value="SAD">SAD</option>
+                              </select>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Button variant="ghost" size="sm" onClick={() => setEditingSegmentId(null)}>
+                                Cancel
+                              </Button>
+                              <Button
+                                variant="primary"
+                                size="sm"
+                                onClick={async () => {
+                                  await handleUpdateStoryboardSegment(sbSeg.segment_id, {
+                                    text: segmentText,
+                                    emotion: segmentEmotion,
+                                    intensity: segmentIntensity,
+                                  });
+                                  setEditingSegmentId(null);
+                                }}
+                              >
+                                Save Beat
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-zinc-200 font-medium leading-relaxed bg-zinc-900/60 p-3 rounded-lg border border-zinc-800/80">
+                          "{sbSeg.text}"
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Audio & Ducking Directives */}
+                    <div className="pt-2 border-t border-zinc-800/80 flex items-center justify-between text-[11px] text-zinc-400 font-mono">
+                      <div className="flex items-center gap-3">
+                        <span>🎵 Music: <strong className="text-zinc-300">{sbSeg.music_cue?.intent || "CALM"}</strong></span>
+                        <span>Ducking: <strong className="text-amber-400">{sbSeg.music_cue?.ducking_gain_db ?? -14.0} dB</strong></span>
+                        <span>SFX: <strong className="text-zinc-300">{sbSeg.sfx_cue?.type || "NONE"}</strong></span>
+                      </div>
+
+                      {!isEditing && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setEditingSegmentId(sbSeg.segment_id);
+                            setSegmentText(sbSeg.text);
+                            setSegmentEmotion(sbSeg.emotion);
+                            setSegmentIntensity(sbSeg.intensity);
+                          }}
+                          className="text-xs text-zinc-400 hover:text-zinc-200"
+                        >
+                          Edit Line
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </Card>
+            );
+          })}
+        </div>
       ) : (
+        /* Original Spoken Script List */
         <div className="space-y-3">
           {script.segments.map((seg) => {
             const isEditing = editingSegmentId === seg.segment_id;
@@ -358,6 +659,15 @@ export const ScriptReviewScreen: React.FC<ScriptReviewScreenProps> = ({
                       )}
                     </div>
 
+                    {seg.source_evidence.panel_ids.length > 0 && (
+                      <div className="flex gap-2 overflow-x-auto py-2" aria-label="Narration source panels">
+                        {seg.source_evidence.panel_ids.map(panelId => (
+                          <a key={panelId} href={api.getPanelImageUrl(project.id, panelId)} target="_blank" rel="noreferrer" title="Open source panel">
+                            <img src={api.getPanelImageUrl(project.id, panelId)} alt={`Source panel ${panelId}`} className="h-48 max-w-60 object-contain rounded bg-zinc-950" loading="lazy" />
+                          </a>
+                        ))}
+                      </div>
+                    )}
                     {isEditing ? (
                       <div className="space-y-3 pt-2">
                         <textarea
@@ -404,6 +714,9 @@ export const ScriptReviewScreen: React.FC<ScriptReviewScreenProps> = ({
                           </div>
                         </div>
 
+                        <label className="flex items-center gap-2 text-xs text-zinc-400">Estimated seconds
+                          <input type="number" min="0.1" step="0.1" value={segmentDuration} onChange={e => setSegmentDuration(Number(e.target.value))} className="w-24 rounded bg-zinc-950 border border-zinc-700 p-1" />
+                        </label>
                         <div className="flex justify-end gap-2 pt-2">
                           <Button variant="ghost" size="sm" onClick={() => setEditingSegmentId(null)}>
                             Cancel
@@ -419,6 +732,11 @@ export const ScriptReviewScreen: React.FC<ScriptReviewScreenProps> = ({
                       </p>
                     )}
 
+                    <div className="flex flex-wrap gap-1" aria-label="Narration editing actions">
+                      {[["regenerate", "Regenerate"], ["shorten", "Shorten"], ["expand", "Expand"], ["more_drama", "More drama"], ["less_drama", "Less drama"], ["split", "Split"], ["merge_next", "Merge next"], ["move_up", "Move up"], ["move_down", "Move down"], ["remove", "Remove"]].map(([action, label]) => (
+                        <Button key={action} variant="ghost" size="sm" disabled={generating} onClick={() => handleSegmentAction(seg.segment_id, action)}>{label}</Button>
+                      ))}
+                    </div>
                     {/* Metadata tags */}
                     <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px] text-zinc-400">
                       <span>Emotion: <strong className="text-zinc-300">{seg.emotion} ({Math.round(seg.intensity * 100)}%)</strong></span>
@@ -451,6 +769,7 @@ export const ScriptReviewScreen: React.FC<ScriptReviewScreenProps> = ({
                       onClick={() => {
                         setEditingSegmentId(seg.segment_id);
                         setSegmentText(seg.text);
+                        setSegmentDuration(seg.estimated_duration);
                         setSegmentEmotion(seg.emotion);
                         setSegmentIntensity(seg.intensity);
                       }}
@@ -465,6 +784,7 @@ export const ScriptReviewScreen: React.FC<ScriptReviewScreenProps> = ({
           })}
         </div>
       )}
+
     </div>
   );
 };

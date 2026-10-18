@@ -67,11 +67,68 @@ export const PageReviewScreen: React.FC<PageReviewScreenProps> = ({
       setPages((prev) =>
         prev.map((p) => (p.id === page.id ? updated : p))
       );
+      if (inspectPage && inspectPage.id === page.id) {
+        setInspectPage(updated);
+      }
       setCacheBuster(Date.now());
     } catch (err: any) {
       alert(`Rotate failed: ${err.message}`);
     }
   };
+
+  const [viewMode, setViewMode] = useState<"fit-width" | "fit-page" | "original">("fit-width");
+  const [zoomScale, setZoomScale] = useState<number>(100);
+
+  const openInspectModal = (page: Page) => {
+    setInspectPage(page);
+    if (page.height > page.width * 1.8) {
+      setViewMode("fit-width");
+    } else {
+      setViewMode("fit-page");
+    }
+    setZoomScale(100);
+  };
+
+  const currentInspectIndex = inspectPage ? pages.findIndex((p) => p.id === inspectPage.id) : -1;
+
+  const handlePrevInspect = () => {
+    if (currentInspectIndex > 0) {
+      const prev = pages[currentInspectIndex - 1];
+      setInspectPage(prev);
+      if (prev.height > prev.width * 1.8) {
+        setViewMode("fit-width");
+      } else {
+        setViewMode("fit-page");
+      }
+      setZoomScale(100);
+    }
+  };
+
+  const handleNextInspect = () => {
+    if (currentInspectIndex >= 0 && currentInspectIndex < pages.length - 1) {
+      const next = pages[currentInspectIndex + 1];
+      setInspectPage(next);
+      if (next.height > next.width * 1.8) {
+        setViewMode("fit-width");
+      } else {
+        setViewMode("fit-page");
+      }
+      setZoomScale(100);
+    }
+  };
+
+  useEffect(() => {
+    if (!inspectPage) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "ArrowLeft") {
+        handlePrevInspect();
+      } else if (e.key === "ArrowRight") {
+        handleNextInspect();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [inspectPage, currentInspectIndex, pages]);
 
   const handleDelete = async (page: Page) => {
     if (!window.confirm(`Delete page #${page.sequence}? This will resequence remaining pages.`)) {
@@ -82,6 +139,30 @@ export const PageReviewScreen: React.FC<PageReviewScreenProps> = ({
       await loadPages();
     } catch (err: any) {
       alert(`Delete failed: ${err.message}`);
+    }
+  };
+
+  const [retrying, setRetrying] = useState<boolean>(false);
+
+  const handleRetryFailed = async () => {
+    setRetrying(true);
+    try {
+      const res = await api.retryFailedPages(project.id);
+      if (res.job_id) {
+        for (let i = 0; i < 45; i++) {
+          await new Promise((r) => setTimeout(r, 1000));
+          const job = await api.getJob(res.job_id);
+          if (job.status === "SUCCEEDED" || job.status === "FAILED") {
+            break;
+          }
+        }
+      }
+      await loadPages();
+      setCacheBuster(Date.now());
+    } catch (err: any) {
+      alert(`Retry failed: ${err.message}`);
+    } finally {
+      setRetrying(false);
     }
   };
 
@@ -128,6 +209,17 @@ export const PageReviewScreen: React.FC<PageReviewScreenProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
+          {pages.some((p) => p.status === "FAILED") && (
+            <Button
+              variant="destructive"
+              size="md"
+              onClick={handleRetryFailed}
+              loading={retrying}
+            >
+              <Icons.Refresh className={`w-4 h-4 mr-1 ${retrying ? "animate-spin" : ""}`} />
+              Retry Failed Pages ({pages.filter((p) => p.status === "FAILED").length})
+            </Button>
+          )}
           <Button variant="secondary" size="sm" onClick={handleViewManifest}>
             Inspect Manifest
           </Button>
@@ -178,25 +270,48 @@ export const PageReviewScreen: React.FC<PageReviewScreenProps> = ({
                 {/* Image Container */}
                 <div
                   className="aspect-[3/4] w-full bg-zinc-950 rounded-lg overflow-hidden relative cursor-pointer group flex items-center justify-center"
-                  onClick={() => !isFailed && setInspectPage(p)}
+                  onClick={() => !isFailed && openInspectModal(p)}
                 >
                   {isFailed ? (
                     <div className="p-4 text-center space-y-2">
                       <Icons.AlertTriangle className="w-8 h-8 text-rose-500 mx-auto" />
                       <p className="text-xs text-rose-300 font-semibold">Image Failed</p>
                       <p className="text-[10px] text-zinc-400 line-clamp-3">{p.error_message}</p>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRetryFailed();
+                        }}
+                        loading={retrying}
+                        className="mt-2 text-xs"
+                      >
+                        <Icons.Refresh className={`w-3 h-3 mr-1 ${retrying ? "animate-spin" : ""}`} />
+                        Retry
+                      </Button>
                     </div>
                   ) : (
                     <>
                       <img
                         src={`${api.getPageImageUrl(project.id, p.id)}?t=${cacheBuster}`}
                         alt={`Page ${p.sequence}`}
-                        className="w-full h-full object-contain"
+                        className={`w-full h-full ${
+                          p.height > p.width * 2 ? "object-cover object-top" : "object-contain"
+                        }`}
                         loading="lazy"
                       />
+                      {p.height > p.width * 2 && (
+                        <>
+                          <div className="absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-black/80 to-transparent pointer-events-none" />
+                          <span className="absolute top-2 right-2 bg-indigo-950/80 text-indigo-300 border border-indigo-700/60 px-1.5 py-0.5 rounded text-[10px] font-semibold">
+                            Strip
+                          </span>
+                        </>
+                      )}
                       <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                         <span className="text-xs bg-zinc-900/90 text-zinc-200 px-3 py-1.5 rounded-full border border-zinc-700">
-                          Click to inspect
+                          {p.height > p.width * 2 ? "Click to view full strip" : "Click to inspect"}
                         </span>
                       </div>
                     </>
@@ -277,28 +392,199 @@ export const PageReviewScreen: React.FC<PageReviewScreenProps> = ({
         <Modal
           isOpen={!!inspectPage}
           onClose={() => setInspectPage(null)}
-          title={`Page #${inspectPage.sequence} Details`}
+          title={`Page #${inspectPage.sequence} of ${pages.length} — Inspection`}
+          size="5xl"
         >
-          <div className="space-y-4">
-            <div className="max-h-[60vh] bg-zinc-950 rounded-lg overflow-auto flex items-center justify-center p-2 border border-zinc-800">
-              <img
-                src={`${api.getPageImageUrl(project.id, inspectPage.id)}?t=${cacheBuster}`}
-                alt={`Page ${inspectPage.sequence}`}
-                className="max-h-[55vh] object-contain"
-              />
+          <div className="space-y-3">
+            {/* Toolbar */}
+            <div className="flex flex-wrap items-center justify-between gap-3 bg-zinc-950/80 p-2.5 rounded-lg border border-zinc-800 text-xs">
+              {/* Navigation */}
+              <div className="flex items-center gap-1.5">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handlePrevInspect}
+                  disabled={currentInspectIndex <= 0}
+                  title="Previous Page (Left Arrow)"
+                >
+                  <Icons.ArrowLeft className="w-3.5 h-3.5 mr-1" />
+                  Prev
+                </Button>
+                <span className="px-2 font-mono font-medium text-zinc-300">
+                  {currentInspectIndex + 1} / {pages.length}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleNextInspect}
+                  disabled={currentInspectIndex >= pages.length - 1}
+                  title="Next Page (Right Arrow)"
+                >
+                  Next
+                  <Icons.ArrowRight className="w-3.5 h-3.5 ml-1" />
+                </Button>
+              </div>
+
+              {/* View Mode Switcher */}
+              <div className="flex items-center bg-zinc-900 rounded-lg p-0.5 border border-zinc-800">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setViewMode("fit-width");
+                    setZoomScale(100);
+                  }}
+                  className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
+                    viewMode === "fit-width"
+                      ? "bg-indigo-600 text-white shadow-sm"
+                      : "text-zinc-400 hover:text-zinc-200"
+                  }`}
+                  title="Fit Width — scroll vertically through full strip"
+                >
+                  Fit Width
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setViewMode("fit-page");
+                    setZoomScale(100);
+                  }}
+                  className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
+                    viewMode === "fit-page"
+                      ? "bg-indigo-600 text-white shadow-sm"
+                      : "text-zinc-400 hover:text-zinc-200"
+                  }`}
+                  title="Fit Height — view entire sheet in window"
+                >
+                  Fit Height
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setViewMode("original");
+                    setZoomScale(100);
+                  }}
+                  className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
+                    viewMode === "original"
+                      ? "bg-indigo-600 text-white shadow-sm"
+                      : "text-zinc-400 hover:text-zinc-200"
+                  }`}
+                  title="1:1 Native Resolution"
+                >
+                  100%
+                </button>
+              </div>
+
+              {/* Zoom & Action Controls */}
+              <div className="flex items-center gap-1.5">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setZoomScale((s) => Math.max(25, s - 25))}
+                  title="Zoom Out"
+                >
+                  <Icons.ZoomOut className="w-3.5 h-3.5" />
+                </Button>
+                <button
+                  type="button"
+                  onClick={() => setZoomScale(100)}
+                  className="px-2 font-mono text-zinc-300 hover:text-white transition-colors text-xs"
+                  title="Reset to 100%"
+                >
+                  {zoomScale}%
+                </button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setZoomScale((s) => Math.min(300, s + 25))}
+                  title="Zoom In"
+                >
+                  <Icons.ZoomIn className="w-3.5 h-3.5" />
+                </Button>
+
+                <div className="h-4 w-px bg-zinc-800 mx-1" />
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleRotate(inspectPage)}
+                  title="Rotate 90 degrees clockwise"
+                >
+                  <Icons.Rotate className="w-3.5 h-3.5 mr-1" />
+                  Rotate
+                </Button>
+              </div>
             </div>
-            <div className="grid grid-cols-2 gap-3 text-xs font-mono bg-zinc-950 p-3 rounded-lg border border-zinc-800">
+
+            {/* Scrollable Canvas Viewport */}
+            <div className="h-[65vh] bg-zinc-950 rounded-lg overflow-auto border border-zinc-800 p-4 relative flex justify-center items-start">
+              {viewMode === "fit-width" ? (
+                <div
+                  className="transition-all duration-150 mx-auto"
+                  style={{ width: `${zoomScale}%`, maxWidth: "none" }}
+                >
+                  <img
+                    src={`${api.getPageImageUrl(project.id, inspectPage.id)}?t=${cacheBuster}`}
+                    alt={`Page ${inspectPage.sequence}`}
+                    className="w-full h-auto block rounded shadow-2xl"
+                  />
+                </div>
+              ) : viewMode === "fit-page" ? (
+                <div className="flex items-center justify-center min-h-full w-full">
+                  <img
+                    src={`${api.getPageImageUrl(project.id, inspectPage.id)}?t=${cacheBuster}`}
+                    alt={`Page ${inspectPage.sequence}`}
+                    style={{
+                      maxHeight: `${Math.round(58 * (zoomScale / 100))}vh`,
+                      maxWidth: `${zoomScale}%`,
+                    }}
+                    className="w-auto h-auto object-contain block rounded shadow-2xl"
+                  />
+                </div>
+              ) : (
+                <div
+                  className="transition-all duration-150 mx-auto"
+                  style={{
+                    width: `${Math.round(inspectPage.width * (zoomScale / 100))}px`,
+                    maxWidth: "none",
+                  }}
+                >
+                  <img
+                    src={`${api.getPageImageUrl(project.id, inspectPage.id)}?t=${cacheBuster}`}
+                    alt={`Page ${inspectPage.sequence}`}
+                    className="w-full h-auto block rounded shadow-2xl"
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Metadata Footer */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-mono bg-zinc-950/80 p-3 rounded-lg border border-zinc-800">
               <div>
-                <span className="text-zinc-500 block">Filename:</span>
-                <span className="text-zinc-200">{inspectPage.filename}</span>
+                <span className="text-zinc-500 block text-[10px]">Filename:</span>
+                <span className="text-zinc-200 truncate block" title={inspectPage.filename}>
+                  {inspectPage.filename}
+                </span>
               </div>
               <div>
-                <span className="text-zinc-500 block">Resolution:</span>
-                <span className="text-zinc-200">{inspectPage.width} x {inspectPage.height}</span>
+                <span className="text-zinc-500 block text-[10px]">Resolution:</span>
+                <span className="text-zinc-200">
+                  {inspectPage.width} × {inspectPage.height} px
+                </span>
               </div>
-              <div className="col-span-2">
-                <span className="text-zinc-500 block">SHA-256 Digest:</span>
-                <span className="text-zinc-200 text-[10px] break-all">{inspectPage.sha256}</span>
+              <div>
+                <span className="text-zinc-500 block text-[10px]">Aspect Ratio:</span>
+                <span className="text-zinc-200">
+                  1:{(inspectPage.height / (inspectPage.width || 1)).toFixed(1)}{" "}
+                  <span className="text-zinc-400 font-sans text-[10px]">
+                    {inspectPage.height > inspectPage.width * 2 ? "(Webtoon Strip)" : "(Standard)"}
+                  </span>
+                </span>
+              </div>
+              <div>
+                <span className="text-zinc-500 block text-[10px]">File Size:</span>
+                <span className="text-zinc-200">
+                  {(inspectPage.byte_size / (1024 * 1024)).toFixed(2)} MB
+                </span>
               </div>
             </div>
           </div>

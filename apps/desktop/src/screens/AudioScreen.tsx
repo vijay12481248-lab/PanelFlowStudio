@@ -18,6 +18,7 @@ export const AudioScreen: React.FC<AudioScreenProps> = ({
 }) => {
   const [timelineData, setTimelineData] = useState<AudioTimelineResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const [jobMessage, setJobMessage] = useState("");
   const [generating, setGenerating] = useState<boolean>(false);
   const [approving, setApproving] = useState<boolean>(false);
   const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
@@ -41,7 +42,9 @@ export const AudioScreen: React.FC<AudioScreenProps> = ({
   const handleGenerateAudio = async () => {
     setGenerating(true);
     try {
-      const result = await api.generateAudio(project.id);
+      const { job_id } = await api.generateAudioJob(project.id);
+      await api.waitForWorkflowJob(job_id, job => setJobMessage(`${Math.round(job.progress * 100)}% · ${job.message}`));
+      const result = await api.getAudioTimeline(project.id);
       setTimelineData(result);
     } catch (err: any) {
       alert(`Audio generation failed: ${err.message}`);
@@ -86,6 +89,8 @@ export const AudioScreen: React.FC<AudioScreenProps> = ({
 
   return (
     <div className="space-y-6">
+      {generating && <p role="status" className="text-sm text-indigo-300">{jobMessage || "Preparing speech generation…"}</p>}
+      {timelineData?.warnings?.map((warning, i) => <p key={i} className="text-xs text-amber-300">{warning}</p>)}
       {/* Header Bar */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-zinc-800 pb-5">
         <div className="space-y-1">

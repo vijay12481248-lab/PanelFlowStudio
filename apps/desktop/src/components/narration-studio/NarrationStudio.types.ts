@@ -246,6 +246,7 @@ export interface NarrationToTimelineContract {
 
 export interface NarrationStudioProps {
   initialChapter?: NarrationChapter;
+  initialSegmentId?: string;
   onChapterSave?: (chapter: NarrationChapter) => void;
   onSegmentApproved?: (segment: NarrationSegment) => void;
   onExportTimelineContract?: (contract: NarrationToTimelineContract) => void;

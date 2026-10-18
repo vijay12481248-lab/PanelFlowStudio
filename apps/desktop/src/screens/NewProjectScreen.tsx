@@ -12,9 +12,18 @@ export const NewProjectScreen: React.FC<NewProjectScreenProps> = ({
   onBack,
   onProjectCreated,
 }) => {
+  const [storyStyle, setStoryStyle] = useState("Cinematic");
+  const [narrationLength, setNarrationLength] = useState("Medium");
+  const [language, setLanguage] = useState("en");
+  const [autoMusic, setAutoMusic] = useState(false);
+  const [autoSfx, setAutoSfx] = useState(false);
+  const [musicPath, setMusicPath] = useState("");
+  const [sfxPath, setSfxPath] = useState("");
+  const [ttsProvider, setTtsProvider] = useState("f5_tts");
   const [title, setTitle] = useState<string>("");
   const [sourceType, setSourceType] = useState<SourceType>("LOCAL_FOLDER");
   const [sourcePath, setSourcePath] = useState<string>("");
+  const [destinationPath, setDestinationPath] = useState<string>("");
   const [rightsStatus, setRightsStatus] = useState<RightsStatus | "">("");
   const [licenseNotes, setLicenseNotes] = useState<string>("");
 
@@ -33,6 +42,7 @@ export const NewProjectScreen: React.FC<NewProjectScreenProps> = ({
     try {
       const res = await api.inspectSource(sourcePath.trim());
       setInspection(res);
+      if (res.is_valid) setSourceType(res.source_type);
       if (res.title_suggestion && !title.trim()) {
         setTitle(res.title_suggestion);
       }
@@ -69,10 +79,18 @@ export const NewProjectScreen: React.FC<NewProjectScreenProps> = ({
     try {
       const proj = await api.createProject({
         title: title.trim(),
-        source_type: sourceType,
+        source_type: inspection?.is_valid ? inspection.source_type : sourceType,
         source_url: sourcePath.trim(),
         rights_status: rightsStatus as RightsStatus,
         license_info: licenseNotes.trim(),
+        settings: {
+          ...(destinationPath.trim() ? { project_path: destinationPath.trim() } : {}),
+          ...(sourceType === "AUTHORIZED_WEB" ? {
+            visual_storytelling: true, story_style: storyStyle,
+            narration_length: narrationLength, language, tts_provider: ttsProvider,
+            auto_music: autoMusic, auto_sfx: autoSfx, chapter_music_path: musicPath, sfx_library_path: sfxPath,
+          } : {}),
+        },
       });
       onProjectCreated(proj);
     } catch (err: any) {
@@ -85,11 +103,11 @@ export const NewProjectScreen: React.FC<NewProjectScreenProps> = ({
   const getSourcePlaceholder = () => {
     switch (sourceType) {
       case "LOCAL_FOLDER":
-        return "e.g. C:\\Comics\\Volume_01 or /home/user/manga/ch1";
+        return "e.g. C:\\Comics\\Volume_01 or D:\\Comics\\Issue_1";
       case "ZIP_ARCHIVE":
-        return "e.g. C:\\Comics\\chapter_01.cbz or /path/to/archive.zip";
+        return "e.g. C:\\Comics\\chapter_01.cbz or D:\\Comics\\volume_01.zip";
       case "AUTHORIZED_WEB":
-        return "e.g. https://authorized-archive.org/public_domain/issue1.json";
+        return "https://manhuaplus.com/manga/demon-magic-emperor01/chapter-923/";
     }
   };
 
@@ -121,7 +139,7 @@ export const NewProjectScreen: React.FC<NewProjectScreenProps> = ({
             {[
               { type: "LOCAL_FOLDER", label: "Local Folder", icon: Icons.Folder, desc: "Folder of image files" },
               { type: "ZIP_ARCHIVE", label: "ZIP / CBZ Archive", icon: Icons.Archive, desc: ".zip or .cbz comic book" },
-              { type: "AUTHORIZED_WEB", label: "Authorized URL", icon: Icons.Globe, desc: "Public domain or open URL" },
+              { type: "AUTHORIZED_WEB", label: "Manga Chapter URL", icon: Icons.Globe, desc: "Visual chapter storytelling" },
             ].map((s) => {
               const IconComp = s.icon;
               const isSelected = sourceType === s.type;
@@ -198,10 +216,34 @@ export const NewProjectScreen: React.FC<NewProjectScreenProps> = ({
           )}
         </Card>
 
+        {sourceType === "AUTHORIZED_WEB" && (
+          <Card className="space-y-4">
+            <h3 className="text-sm font-semibold text-zinc-200">Chapter storytelling</h3>
+            <p className="text-xs text-zinc-400">Analyze source panels with a vision model, review the chapter story, then approve original narration before voice generation.</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Select label="Story style" value={storyStyle} onChange={e => setStoryStyle(e.target.value)}>
+                {["Cinematic", "Dramatic", "Neutral recap", "Emotional", "Fast YouTube recap", "Detailed storyteller"].map(style => <option key={style}>{style}</option>)}
+              </Select>
+              <Select label="Narration length" value={narrationLength} onChange={e => setNarrationLength(e.target.value)}>
+                {["Short", "Medium", "Detailed"].map(length => <option key={length}>{length}</option>)}
+              </Select>
+              <Input label="Narration language" value={language} onChange={e => setLanguage(e.target.value)} placeholder="en, hi, ja…" />
+              <Input label="Chapter music file (optional)" value={musicPath} onChange={e => setMusicPath(e.target.value)} placeholder="Path to a local music track" />
+              <Input label="SFX library folder (optional)" value={sfxPath} onChange={e => setSfxPath(e.target.value)} placeholder="Folder containing sword_draw.wav, wind.wav…" />
+              <label className="text-xs text-zinc-300 flex items-center gap-2"><input type="checkbox" checked={autoMusic} onChange={e => setAutoMusic(e.target.checked)} />Generate chapter music with local Lumina / ACE-Step</label>
+              <label className="text-xs text-zinc-300 flex items-center gap-2"><input type="checkbox" checked={autoSfx} onChange={e => setAutoSfx(e.target.checked)} />Select sparse effects from the local SFX library</label>
+              <Select label="Installed speech adapter" value={ttsProvider} onChange={e => setTtsProvider(e.target.value)}>
+                <option value="chatterbox_turbo">Chatterbox Turbo</option>
+                <option value="f5_tts">F5-TTS</option>
+              </Select>
+            </div>
+          </Card>
+        )}
+
         {/* Project Information */}
         <Card className="space-y-4">
           <h3 className="text-sm font-semibold uppercase tracking-wider text-zinc-300">
-            2. Project Information
+            2. Project Information & Storage
           </h3>
 
           <Input
@@ -210,6 +252,13 @@ export const NewProjectScreen: React.FC<NewProjectScreenProps> = ({
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             required
+          />
+
+          <Input
+            label="Project Destination Directory (Optional)"
+            placeholder="e.g. C:\My PanelFlow Projects\Captain Freedom (defaults to Windows user workspace)"
+            value={destinationPath}
+            onChange={(e) => setDestinationPath(e.target.value)}
           />
         </Card>
 

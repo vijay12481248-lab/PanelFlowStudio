@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { api } from "@panelflow/api-client";
 import type { Project } from "@panelflow/shared-types";
 import { Button, Card, Badge, Icons } from "@panelflow/ui";
+import { MultiProjectQueueDashboard } from "../components/MultiProjectQueueDashboard";
 
 interface ProjectsScreenProps {
   onNewProject: () => void;
@@ -14,6 +15,7 @@ interface ProjectsScreenProps {
   onOpenAudio?: (project: Project) => void;
   onOpenMotion?: (project: Project) => void;
   onOpenRender?: (project: Project) => void;
+  onOpenStoryEditor?: (project: Project) => void;
 }
 
 export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({
@@ -27,6 +29,7 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({
   onOpenAudio,
   onOpenMotion,
   onOpenRender,
+  onOpenStoryEditor,
 }) => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -108,6 +111,10 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({
   };
 
   const handleCardClick = (proj: Project) => {
+    if (onOpenStoryEditor && proj.current_stage !== "NEW" && proj.current_stage !== "RIGHTS_APPROVED") {
+      onOpenStoryEditor(proj);
+      return;
+    }
     if (proj.current_stage === "RENDERED" || proj.current_stage === "QA_APPROVED" || proj.current_stage === "EXPORTED") {
       if (onOpenRender) onOpenRender(proj);
       else if (onOpenMotion) onOpenMotion(proj);
@@ -156,6 +163,12 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({
           </Button>
         </div>
       </div>
+
+      {/* Multi-Project Queue Scheduler Dashboard */}
+      <MultiProjectQueueDashboard
+        projects={projects}
+        onNavigateProject={handleCardClick}
+      />
 
       {/* Error state */}
       {error && (
@@ -268,52 +281,39 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({
                     <Icons.Trash className="w-3.5 h-3.5" />
                   </Button>
 
+                  {onOpenStoryEditor && proj.current_stage !== "NEW" && proj.current_stage !== "RIGHTS_APPROVED" && (
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onClick={() => onOpenStoryEditor(proj)}
+                      className="bg-indigo-600 hover:bg-indigo-500 text-white font-medium shadow-md shadow-indigo-600/20"
+                    >
+                      <Icons.Film className="w-3.5 h-3.5 mr-1" />
+                      Story Editor
+                    </Button>
+                  )}
+
                   {proj.current_stage === "SCRIPT_GENERATED" || proj.current_stage === "SCRIPT_APPROVED" ? (
                     <div className="flex items-center gap-1.5">
-                      <Button variant="secondary" size="sm" onClick={() => onOpenStory && onOpenStory(proj)}>
-                        Story
-                      </Button>
-                      <Button variant="primary" size="sm" onClick={() => onOpenScript && onOpenScript(proj)}>
+                      <Button variant="secondary" size="sm" onClick={() => onOpenScript && onOpenScript(proj)}>
                         Script
                       </Button>
                     </div>
                   ) : proj.current_stage === "STORY_ANALYZED" || proj.current_stage === "STORY_APPROVED" ? (
                     <div className="flex items-center gap-1.5">
-                      <Button variant="secondary" size="sm" onClick={() => onOpenOCR && onOpenOCR(proj)}>
-                        OCR
-                      </Button>
-                      <Button variant="primary" size="sm" onClick={() => onOpenStory && onOpenStory(proj)}>
+                      <Button variant="secondary" size="sm" onClick={() => onOpenStory && onOpenStory(proj)}>
                         Story
                       </Button>
                     </div>
-                  ) : proj.current_stage === "OCR_APPROVED" ? (
+                  ) : proj.current_stage === "OCR_APPROVED" || proj.current_stage === "OCR_COMPLETE" ? (
                     <div className="flex items-center gap-1.5">
                       <Button variant="secondary" size="sm" onClick={() => (onOpenOCR ? onOpenOCR(proj) : onOpenPanels(proj))}>
-                        OCR
-                      </Button>
-                      <Button variant="primary" size="sm" onClick={() => onOpenStory && onOpenStory(proj)}>
-                        Story
-                      </Button>
-                    </div>
-                  ) : proj.current_stage === "OCR_COMPLETE" ? (
-                    <div className="flex items-center gap-1.5">
-                      <Button variant="secondary" size="sm" onClick={() => onOpenPanels(proj)}>
-                        Panels
-                      </Button>
-                      <Button
-                        variant="primary"
-                        size="sm"
-                        onClick={() => (onOpenOCR ? onOpenOCR(proj) : onOpenPanels(proj))}
-                      >
                         OCR
                       </Button>
                     </div>
                   ) : proj.current_stage === "PANELS_DETECTED" ? (
                     <div className="flex items-center gap-1.5">
-                      <Button variant="secondary" size="sm" onClick={() => onOpenReview(proj)}>
-                        Pages
-                      </Button>
-                      <Button variant="primary" size="sm" onClick={() => onOpenPanels(proj)}>
+                      <Button variant="secondary" size="sm" onClick={() => onOpenPanels(proj)}>
                         Panels
                       </Button>
                     </div>
@@ -321,9 +321,6 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({
                     <div className="flex items-center gap-1.5">
                       <Button variant="secondary" size="sm" onClick={() => onOpenReview(proj)}>
                         Pages
-                      </Button>
-                      <Button variant="primary" size="sm" onClick={() => onOpenPanels(proj)}>
-                        Panels
                       </Button>
                     </div>
                   ) : (

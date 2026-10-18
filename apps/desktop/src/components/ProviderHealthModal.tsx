@@ -10,17 +10,29 @@ interface ProviderHealthModalProps {
 
 const statusColor: Record<string, string> = {
   HEALTHY: "bg-emerald-500",
+  READY: "bg-emerald-500",
   DEGRADED: "bg-amber-500",
   OFFLINE: "bg-rose-500",
+  STOPPED: "bg-rose-500",
   NOT_RUNNING: "bg-rose-500",
   MISSING: "bg-zinc-600",
+  UNSUPPORTED: "bg-rose-600",
+  ERROR: "bg-rose-600",
   BROWSER_RUNTIME_MISSING: "bg-amber-600",
 };
 
 const statusBadgeVariant = (status: string): "success" | "warning" | "danger" | "neutral" => {
-  if (status === "HEALTHY") return "success";
+  if (status === "HEALTHY" || status === "READY") return "success";
   if (status === "DEGRADED" || status === "BROWSER_RUNTIME_MISSING") return "warning";
-  if (status === "MISSING" || status === "OFFLINE" || status === "NOT_RUNNING") return "danger";
+  if (
+    status === "MISSING" ||
+    status === "OFFLINE" ||
+    status === "NOT_RUNNING" ||
+    status === "STOPPED" ||
+    status === "UNSUPPORTED" ||
+    status === "ERROR"
+  )
+    return "danger";
   return "neutral";
 };
 
@@ -39,19 +51,33 @@ const categoryLabels: Record<string, string> = {
 };
 
 const providerGuidance: Record<string, string> = {
+  python_runtime: "Required: Python 3.12+ (64-bit). Install via 'winget install Python.Python.3.12' or from python.org.",
   ffmpeg: "Required: Install via 'winget install Gyan.FFmpeg' or download from gyan.dev and add to PATH.",
   ffprobe: "Required: Included automatically with standard FFmpeg full distribution.",
   ollama: "Optional: Start Ollama app or run 'ollama serve'. Rule-based adaptation used if offline.",
-  f5_tts: "Recommended: Place custom voice WAVs in C:\\Tools\\generated_audio. Procedural voice fallback used if missing.",
-  ace_step: "Recommended: Adaptive crystal score master track. Procedural audio used if missing.",
+  f5_tts: "Recommended: Zero-shot neural voice cloning with natural breathiness. Procedural voice fallback used if offline.",
+  ace_step: "Recommended: Real-time neural soundtrack server on port 8001. Procedural crystal synthesizer used if offline.",
   playwright: "Optional: Run 'playwright install chromium' to crawl SPA reader websites.",
 };
 
 export const ProviderHealthModal: React.FC<ProviderHealthModalProps> = ({ open, onClose }) => {
+  const [activeTab, setActiveTab] = useState<"system" | "ollama">("system");
   const [data, setData] = useState<SystemProvidersResponse | null>(null);
   const [hardware, setHardware] = useState<HardwareDiagnostics | null>(null);
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
+
+  // Ollama & Resources State
+  const [ollamaConfig, setOllamaConfig] = useState<any>(null);
+  const [ollamaModels, setOllamaModels] = useState<any[]>([]);
+  const [ollamaRecommendations, setOllamaRecommendations] = useState<any>({});
+  const [resources, setResources] = useState<any>(null);
+  const [testingConnection, setTestingConnection] = useState(false);
+  const [testResult, setTestResult] = useState<any>(null);
+  const [savingConfig, setSavingConfig] = useState(false);
+  const [authTokenInput, setAuthTokenInput] = useState("");
+  const [benchmarking, setBenchmarking] = useState(false);
+  const [benchmarkResult, setBenchmarkResult] = useState<any>(null);
 
   const loadHealth = async () => {
     setLoading(true);
@@ -66,6 +92,78 @@ export const ProviderHealthModal: React.FC<ProviderHealthModalProps> = ({ open, 
       console.error("Failed to load provider health:", err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadOllamaAndResources = async () => {
+    try {
+      const [cfg, modelsRes, res] = await Promise.all([
+        api.getOllamaConfig().catch(() => null),
+        api.getOllamaModels().catch(() => null),
+        api.getSystemResources().catch(() => null),
+      ]);
+      if (cfg) setOllamaConfig(cfg);
+      if (modelsRes) {
+        setOllamaModels(modelsRes.models || []);
+        setOllamaRecommendations(modelsRes.recommendations || {});
+      }
+      if (res) setResources(res);
+    } catch (err) {
+      console.error("Failed to load Ollama telemetry:", err);
+    }
+  };
+
+  const handleTestConnection = async () => {
+    if (!ollamaConfig) return;
+    setTestingConnection(true);
+    setTestResult(null);
+    try {
+      const res = await api.testOllamaConnection({
+        endpoint_url: ollamaConfig.endpoint_url,
+        is_remote: ollamaConfig.is_remote,
+        auth_token: authTokenInput.trim() ? authTokenInput.trim() : undefined,
+      });
+      setTestResult(res);
+      if (res.connected) {
+        await loadOllamaAndResources();
+      }
+    } catch (err: any) {
+      setTestResult({ connected: false, error: err.message });
+    } finally {
+      setTestingConnection(false);
+    }
+  };
+
+  const handleSaveOllamaConfig = async () => {
+    if (!ollamaConfig) return;
+    setSavingConfig(true);
+    try {
+      const payload: any = { ...ollamaConfig };
+      if (authTokenInput.trim()) {
+        payload.auth_token = authTokenInput.trim();
+      }
+      const saved = await api.saveOllamaConfig(payload);
+      setOllamaConfig(saved);
+      setAuthTokenInput("");
+      await loadOllamaAndResources();
+      alert("Ollama configuration and GPU concurrency saved successfully.");
+    } catch (err: any) {
+      alert(`Failed to save config: ${err.message}`);
+    } finally {
+      setSavingConfig(false);
+    }
+  };
+
+  const handleRunBenchmark = async () => {
+    setBenchmarking(true);
+    setBenchmarkResult(null);
+    try {
+      const res = await api.runConcurrencyBenchmark(ollamaConfig?.narration_model);
+      setBenchmarkResult(res);
+    } catch (err: any) {
+      alert(`Benchmark failed: ${err.message}`);
+    } finally {
+      setBenchmarking(false);
     }
   };
 
@@ -92,6 +190,7 @@ export const ProviderHealthModal: React.FC<ProviderHealthModalProps> = ({ open, 
   useEffect(() => {
     if (open) {
       loadHealth();
+      loadOllamaAndResources();
     }
   }, [open]);
 
@@ -99,7 +198,7 @@ export const ProviderHealthModal: React.FC<ProviderHealthModalProps> = ({ open, 
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="bg-zinc-900 border border-zinc-700 rounded-2xl shadow-2xl shadow-black/50 max-w-2xl w-full mx-4 max-h-[85vh] overflow-hidden flex flex-col">
+      <div className="bg-zinc-900 border border-zinc-700 rounded-2xl shadow-2xl shadow-black/50 max-w-3xl w-full mx-4 max-h-[88vh] overflow-hidden flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800">
           <div className="flex items-center gap-3">
@@ -107,122 +206,451 @@ export const ProviderHealthModal: React.FC<ProviderHealthModalProps> = ({ open, 
               <Icons.ShieldCheck className="w-4 h-4 text-indigo-400" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-zinc-100">System & Provider Diagnostics</h2>
-              <p className="text-[11px] text-zinc-400">Dependency verification & hardware suitability for beta testing</p>
+              <h2 className="text-lg font-bold text-zinc-100">System Diagnostics & Ollama Orchestration</h2>
+              <p className="text-[11px] text-zinc-400">Hardware telemetry, model capability discovery & multi-project admission control</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
-            {data && (
-              <Badge variant={data.system_ready ? "success" : "danger"} className="text-[10px] uppercase font-bold">
-                {data.system_ready ? "SYSTEM READY" : "SYSTEM DEGRADED"}
-              </Badge>
-            )}
             <Button variant="ghost" size="sm" onClick={onClose}>
               <span className="text-zinc-400 text-sm font-bold">✕</span>
             </Button>
           </div>
         </div>
 
+        {/* Navigation Tabs */}
+        <div className="flex border-b border-zinc-800 px-6 bg-zinc-950/60">
+          <button
+            onClick={() => setActiveTab("system")}
+            className={`py-2.5 px-4 text-xs font-bold border-b-2 transition-colors ${
+              activeTab === "system"
+                ? "border-indigo-500 text-indigo-300"
+                : "border-transparent text-zinc-400 hover:text-zinc-200"
+            }`}
+          >
+            System Dependencies & Hardware
+          </button>
+          <button
+            onClick={() => setActiveTab("ollama")}
+            className={`py-2.5 px-4 text-xs font-bold border-b-2 transition-colors ${
+              activeTab === "ollama"
+                ? "border-indigo-500 text-indigo-300"
+                : "border-transparent text-zinc-400 hover:text-zinc-200"
+            }`}
+          >
+            Ollama Models & GPU Admission
+          </button>
+        </div>
+
         {/* Body */}
         <div className="flex-1 overflow-y-auto p-6 space-y-4">
-          {/* Hardware Diagnostics Card */}
-          {hardware && (
-            <Card className="p-4 bg-zinc-950 border-zinc-800">
-              <div className="flex items-center justify-between border-b border-zinc-800/80 pb-3 mb-3">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold uppercase tracking-wider text-zinc-300">
-                    Hardware Environment
-                  </span>
-                  <Badge variant={tierVariant(hardware.neural_performance_tier)} className="text-[10px] uppercase font-mono font-bold">
-                    Tier: {hardware.neural_performance_tier}
-                  </Badge>
-                </div>
-                <span className="text-[11px] text-zinc-400 font-mono">
-                  {hardware.os_name} {hardware.os_release} ({hardware.architecture})
-                </span>
-              </div>
+          {activeTab === "system" ? (
+            <>
+              {/* Hardware Diagnostics Card */}
+              {hardware && (
+                <Card className="p-4 bg-zinc-950 border-zinc-800">
+                  <div className="flex items-center justify-between border-b border-zinc-800/80 pb-3 mb-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold uppercase tracking-wider text-zinc-300">
+                        Hardware Environment
+                      </span>
+                      <Badge variant={tierVariant(hardware.neural_performance_tier)} className="text-[10px] uppercase font-mono font-bold">
+                        Tier: {hardware.neural_performance_tier}
+                      </Badge>
+                    </div>
+                    <span className="text-[11px] text-zinc-400 font-mono">
+                      {hardware.os_name} {hardware.os_release} ({hardware.architecture})
+                    </span>
+                  </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                <div className="space-y-0.5">
-                  <span className="text-[10px] text-zinc-500 uppercase font-semibold">Memory</span>
-                  <p className="font-mono text-zinc-200">{hardware.total_ram_gb} GB ({hardware.available_ram_gb} GB free)</p>
-                </div>
-                <div className="space-y-0.5">
-                  <span className="text-[10px] text-zinc-500 uppercase font-semibold">Disk Storage</span>
-                  <p className="font-mono text-zinc-200">{hardware.free_disk_gb} GB free</p>
-                </div>
-                <div className="space-y-0.5 sm:col-span-2">
-                  <span className="text-[10px] text-zinc-500 uppercase font-semibold">Graphics & VRAM</span>
-                  <p className="font-mono text-zinc-200 truncate" title={hardware.gpu_name}>
-                    {hardware.gpu_name} {hardware.vram_mb > 0 ? `(${Math.round(hardware.vram_mb / 1024)} GB)` : ""}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                    <div className="space-y-0.5">
+                      <span className="text-[10px] text-zinc-500 uppercase font-semibold">Memory</span>
+                      <p className="font-mono text-zinc-200">{hardware.total_ram_gb} GB ({hardware.available_ram_gb} GB free)</p>
+                    </div>
+                    <div className="space-y-0.5">
+                      <span className="text-[10px] text-zinc-500 uppercase font-semibold">Disk Storage</span>
+                      <p className="font-mono text-zinc-200">{hardware.free_disk_gb} GB free</p>
+                    </div>
+                    <div className="space-y-0.5 sm:col-span-2">
+                      <span className="text-[10px] text-zinc-500 uppercase font-semibold">Graphics & VRAM</span>
+                      <p className="font-mono text-zinc-200 truncate" title={hardware.gpu_name}>
+                        {hardware.gpu_name} {hardware.vram_mb > 0 ? `(${Math.round(hardware.vram_mb / 1024)} GB)` : ""}
+                      </p>
+                    </div>
+                  </div>
+
+                  <p className="text-[11px] text-zinc-400 mt-3 pt-2.5 border-t border-zinc-800/60 leading-relaxed">
+                    {hardware.recommendations}
                   </p>
-                </div>
-              </div>
+                </Card>
+              )}
 
-              <p className="text-[11px] text-zinc-400 mt-3 pt-2.5 border-t border-zinc-800/60 leading-relaxed">
-                {hardware.recommendations}
-              </p>
-            </Card>
-          )}
-
-          {/* Providers List */}
-          <div className="space-y-2.5">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400 px-0.5">
-              Local Tools & Model Engines
-            </h3>
-            {loading ? (
-              <div className="flex items-center justify-center py-10 text-zinc-400">
-                <Icons.Rotate className="w-5 h-5 animate-spin mr-2" />
-                Probing engine dependencies...
-              </div>
-            ) : data ? (
-              data.providers.map((p) => {
-                const isIssue = p.status !== "HEALTHY";
-                return (
-                  <Card key={p.id} className="p-3.5 bg-zinc-950 border-zinc-800 hover:border-zinc-700 transition-colors">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex items-start gap-3 min-w-0">
-                        <div
-                          className={`w-2.5 h-2.5 rounded-full mt-1.5 flex-shrink-0 ${
-                            statusColor[p.status] || "bg-zinc-600"
-                          }`}
-                        />
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-sm font-bold text-zinc-100">{p.name}</span>
-                            <Badge variant={statusBadgeVariant(p.status)} className="text-[9px] uppercase font-bold">
-                              {p.status}
-                            </Badge>
-                            {p.required ? (
-                              <span className="text-[9px] text-amber-500/80 font-mono uppercase font-semibold">Required</span>
-                            ) : (
-                              <span className="text-[9px] text-zinc-500 font-mono uppercase">Optional</span>
-                            )}
-                          </div>
-                          <p className="text-[11px] text-zinc-400 mt-0.5">{p.details}</p>
-                          {isIssue && providerGuidance[p.id] && (
-                            <p className="text-[11px] text-amber-400/90 mt-1.5 bg-amber-950/20 border border-amber-900/40 rounded px-2 py-1">
-                              💡 {providerGuidance[p.id]}
-                            </p>
-                          )}
-                          <div className="flex items-center gap-3 mt-1.5 text-[10px] text-zinc-500 font-mono">
-                            <span>{categoryLabels[p.category] || p.category}</span>
-                            <span>•</span>
-                            <span className="truncate max-w-[280px]">{p.version}</span>
+              {/* Providers List */}
+              <div className="space-y-2.5">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400 px-0.5">
+                  Local Tools & Model Engines
+                </h3>
+                {loading ? (
+                  <div className="flex items-center justify-center py-10 text-zinc-400">
+                    <Icons.Rotate className="w-5 h-5 animate-spin mr-2" />
+                    Probing engine dependencies...
+                  </div>
+                ) : data ? (
+                  data.providers.map((p) => {
+                    const isIssue = p.status !== "HEALTHY" && p.status !== "READY";
+                    return (
+                      <Card key={p.id} className="p-3.5 bg-zinc-950 border-zinc-800 hover:border-zinc-700 transition-colors">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex items-start gap-3 min-w-0">
+                            <div
+                              className={`w-2.5 h-2.5 rounded-full mt-1.5 flex-shrink-0 ${
+                                statusColor[p.status] || "bg-zinc-600"
+                              }`}
+                            />
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-sm font-bold text-zinc-100">{p.name}</span>
+                                <Badge variant={statusBadgeVariant(p.status)} className="text-[9px] uppercase font-bold">
+                                  {p.status}
+                                </Badge>
+                                {p.required ? (
+                                  <span className="text-[9px] text-amber-500/80 font-mono uppercase font-semibold">Required</span>
+                                ) : (
+                                  <span className="text-[9px] text-zinc-500 font-mono uppercase">Optional</span>
+                                )}
+                              </div>
+                              <p className="text-[11px] text-zinc-400 mt-0.5">{p.details}</p>
+                              {isIssue && providerGuidance[p.id] && (
+                                <p className="text-[11px] text-amber-400/90 mt-1.5 bg-amber-950/20 border border-amber-900/40 rounded px-2 py-1">
+                                  💡 {providerGuidance[p.id]}
+                                </p>
+                              )}
+                              <div className="flex items-center gap-3 mt-1.5 text-[10px] text-zinc-500 font-mono">
+                                <span>{categoryLabels[p.category] || p.category}</span>
+                                <span>•</span>
+                                <span className="truncate max-w-[280px]">{p.version}</span>
+                              </div>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </div>
-                  </Card>
-                );
-              })
-            ) : (
-              <div className="text-center text-zinc-500 py-10">
-                Failed to load provider status.
+                      </Card>
+                    );
+                  })
+                ) : (
+                  <div className="text-center text-zinc-500 py-10">
+                    Failed to load provider status.
+                  </div>
+                )}
               </div>
-            )}
-          </div>
+            </>
+          ) : (
+            /* Ollama & Hardware Telemetry Tab */
+            <div className="space-y-4">
+              {/* Endpoint Configuration Card */}
+              <Card className="p-4 bg-zinc-950 border-zinc-800 space-y-3">
+                <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold uppercase tracking-wider text-zinc-200">
+                      Ollama Connection Settings
+                    </span>
+                    <Badge variant={ollamaConfig?.is_remote ? "accent" : "neutral"} className="text-[9px] uppercase">
+                      {ollamaConfig?.is_remote ? "Remote Server" : "Local Host"}
+                    </Badge>
+                  </div>
+                  <Button variant="ghost" size="sm" onClick={handleTestConnection} disabled={testingConnection}>
+                    <Icons.Rotate className={`w-3.5 h-3.5 mr-1 ${testingConnection ? "animate-spin" : ""}`} />
+                    Test Connection
+                  </Button>
+                </div>
+
+                {testResult && (
+                  <div
+                    className={`p-2.5 rounded-lg text-xs font-mono flex items-center justify-between ${
+                      testResult.connected
+                        ? "bg-emerald-950/40 border border-emerald-800 text-emerald-300"
+                        : "bg-rose-950/40 border border-rose-800 text-rose-300"
+                    }`}
+                  >
+                    <span>
+                      {testResult.connected
+                        ? `Connected (${testResult.latency_ms}ms) — ${testResult.models_count} models discovered`
+                        : `Connection Failed: ${testResult.error || "Cannot reach server"}`}
+                    </span>
+                    <Badge variant={testResult.connected ? "success" : "danger"} className="text-[9px]">
+                      {testResult.status}
+                    </Badge>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                  <div className="space-y-1">
+                    <label className="text-zinc-400 font-semibold">Endpoint URL</label>
+                    <input
+                      type="text"
+                      value={ollamaConfig?.endpoint_url || ""}
+                      onChange={(e) =>
+                        setOllamaConfig({ ...ollamaConfig, endpoint_url: e.target.value })
+                      }
+                      className="w-full bg-zinc-900 border border-zinc-700 rounded px-2.5 py-1.5 font-mono text-zinc-200 text-xs focus:outline-none focus:border-indigo-500"
+                      placeholder="http://127.0.0.1:11434"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-zinc-400 font-semibold flex items-center justify-between">
+                      <span>Auth Bearer Token / API Key</span>
+                      {ollamaConfig?.has_auth_token && (
+                        <span className="text-[10px] text-emerald-400 font-mono">Active in Keychain</span>
+                      )}
+                    </label>
+                    <input
+                      type="password"
+                      value={authTokenInput}
+                      onChange={(e) => setAuthTokenInput(e.target.value)}
+                      className="w-full bg-zinc-900 border border-zinc-700 rounded px-2.5 py-1.5 font-mono text-zinc-200 text-xs focus:outline-none focus:border-indigo-500"
+                      placeholder={ollamaConfig?.has_auth_token ? "•••••••• (Leave blank to keep current)" : "Optional Bearer Token"}
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-1">
+                  <label className="flex items-center gap-2 text-xs text-zinc-300 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={ollamaConfig?.is_remote || false}
+                      onChange={(e) =>
+                        setOllamaConfig({ ...ollamaConfig, is_remote: e.target.checked })
+                      }
+                      className="rounded accent-indigo-500"
+                    />
+                    <span>Private Remote Server / Cloud Endpoint (Enforces strict SSRF filtering)</span>
+                  </label>
+                  <Button variant="secondary" size="sm" onClick={handleSaveOllamaConfig} disabled={savingConfig}>
+                    Save Settings
+                  </Button>
+                </div>
+              </Card>
+
+              {/* Multi-Role Model Selectors */}
+              <Card className="p-4 bg-zinc-950 border-zinc-800 space-y-3">
+                <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
+                  <span className="text-xs font-bold uppercase tracking-wider text-zinc-200">
+                    Multi-Role Model Assignment
+                  </span>
+                  <Button variant="ghost" size="sm" onClick={loadOllamaAndResources}>
+                    <Icons.Rotate className="w-3.5 h-3.5 mr-1" />
+                    Refresh Models
+                  </Button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                  {/* Vision Role */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <label className="text-zinc-300 font-semibold">Vision Model</label>
+                      <span className="text-[10px] text-emerald-400 font-mono">Multimodal VLM</span>
+                    </div>
+                    <select
+                      value={ollamaConfig?.vision_model || ""}
+                      onChange={(e) =>
+                        setOllamaConfig({ ...ollamaConfig, vision_model: e.target.value })
+                      }
+                      className="w-full bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 font-mono text-zinc-200 text-xs focus:outline-none focus:border-indigo-500"
+                    >
+                      {ollamaModels.map((m) => (
+                        <option key={`vis-${m.name}`} value={m.name}>
+                          {m.name} {m.supports_vision ? "👁️ (Vision)" : ""} {m.name === ollamaRecommendations?.vision_model ? "★ Recommended" : ""}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-[10px] text-zinc-500">Visual panel description & character detection</p>
+                  </div>
+
+                  {/* Story Reasoning Role */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <label className="text-zinc-300 font-semibold">Story Reasoning</label>
+                      <span className="text-[10px] text-indigo-400 font-mono">Narrative Logic</span>
+                    </div>
+                    <select
+                      value={ollamaConfig?.reasoning_model || ""}
+                      onChange={(e) =>
+                        setOllamaConfig({ ...ollamaConfig, reasoning_model: e.target.value })
+                      }
+                      className="w-full bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 font-mono text-zinc-200 text-xs focus:outline-none focus:border-indigo-500"
+                    >
+                      {ollamaModels.map((m) => (
+                        <option key={`reas-${m.name}`} value={m.name}>
+                          {m.name} {m.name === ollamaRecommendations?.reasoning_model ? "★ Recommended" : ""}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-[10px] text-zinc-500">Chapter-wide plot, continuity & scene synthesis</p>
+                  </div>
+
+                  {/* Narration Role */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <label className="text-zinc-300 font-semibold">Narration Model</label>
+                      <span className="text-[10px] text-amber-400 font-mono">Voice Script</span>
+                    </div>
+                    <select
+                      value={ollamaConfig?.narration_model || ""}
+                      onChange={(e) =>
+                        setOllamaConfig({ ...ollamaConfig, narration_model: e.target.value })
+                      }
+                      className="w-full bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 font-mono text-zinc-200 text-xs focus:outline-none focus:border-indigo-500"
+                    >
+                      {ollamaModels.map((m) => (
+                        <option key={`narr-${m.name}`} value={m.name}>
+                          {m.name} {m.name === ollamaRecommendations?.narration_model ? "★ Recommended" : ""}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-[10px] text-zinc-500">Emotional storyteller recap & cadence adaptation</p>
+                  </div>
+                </div>
+              </Card>
+
+              {/* Discovered Models & Capability Badges */}
+              <Card className="p-4 bg-zinc-950 border-zinc-800 space-y-3">
+                <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
+                  <span className="text-xs font-bold uppercase tracking-wider text-zinc-200">
+                    Installed Ollama Inventory ({ollamaModels.length} models)
+                  </span>
+                  <span className="text-[10px] text-zinc-500 font-mono">Capabilities verified via POST /api/show</span>
+                </div>
+
+                <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                  {ollamaModels.length === 0 ? (
+                    <p className="text-xs text-zinc-500 text-center py-4">No models detected. Ensure Ollama is running.</p>
+                  ) : (
+                    ollamaModels.map((m) => (
+                      <div
+                        key={m.name}
+                        className="flex items-center justify-between p-2 rounded bg-zinc-900/60 border border-zinc-800/80 text-xs"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-bold text-zinc-100">{m.name}</span>
+                          <span className="text-[10px] text-zinc-500 font-mono">({m.parameter_size}, {m.quantization_level})</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          {m.supports_vision && (
+                            <Badge variant="success" className="text-[9px]">Vision</Badge>
+                          )}
+                          {m.supports_tools && (
+                            <Badge variant="accent" className="text-[9px]">Tools</Badge>
+                          )}
+                          {m.supports_thinking && (
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-950/60 border border-purple-800 text-purple-300">
+                              Thinking
+                            </span>
+                          )}
+                          <span className="text-[10px] text-zinc-400 font-mono pl-1">{m.family}</span>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </Card>
+
+              {/* Hardware Telemetry & Concurrency Admission Controller */}
+              <Card className="p-4 bg-zinc-950 border-zinc-800 space-y-3">
+                <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold uppercase tracking-wider text-zinc-200">
+                      GPU Admission & Memory Telemetry
+                    </span>
+                    <Badge variant={resources?.scheduler?.active_count > 0 ? "accent" : "success"} className="text-[9px]">
+                      {resources?.scheduler?.active_count || 0} / {resources?.scheduler?.effective_limit || 1} Active Slots
+                    </Badge>
+                  </div>
+                  <Button variant="ghost" size="sm" onClick={handleRunBenchmark} disabled={benchmarking}>
+                    <Icons.Rotate className={`w-3.5 h-3.5 mr-1 ${benchmarking ? "animate-spin" : ""}`} />
+                    Run Concurrency Benchmark
+                  </Button>
+                </div>
+
+                {benchmarkResult && (
+                  <div className="p-2.5 rounded-lg bg-zinc-900 border border-indigo-900/40 text-xs font-mono space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-indigo-300">Benchmark: {benchmarkResult.model_tested}</span>
+                      <span className="text-emerald-400 font-bold">{benchmarkResult.speedup_ratio}x Throughput</span>
+                    </div>
+                    <p className="text-[11px] text-zinc-300">
+                      Sequential: {benchmarkResult.sequential_duration_sec}s | Concurrent: {benchmarkResult.concurrent_duration_sec}s
+                    </p>
+                    <p className="text-[11px] text-zinc-400 italic">{benchmarkResult.recommendation}</p>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                  <div className="p-2.5 rounded bg-zinc-900/50 border border-zinc-800">
+                    <span className="text-[10px] text-zinc-500 uppercase font-semibold">Host RAM</span>
+                    <p className="font-mono text-zinc-100 font-bold mt-0.5">
+                      {resources?.ram?.available_gb ?? hardware?.available_ram_gb ?? 0} GB Free
+                    </p>
+                    <p className="text-[10px] text-zinc-500 font-mono">
+                      {resources?.ram?.total_gb ?? hardware?.total_ram_gb ?? 0} GB Total ({resources?.ram?.used_percent ?? 0}%)
+                    </p>
+                  </div>
+
+                  <div className="p-2.5 rounded bg-zinc-900/50 border border-zinc-800">
+                    <span className="text-[10px] text-zinc-500 uppercase font-semibold">GPU Dedicated VRAM</span>
+                    <p className="font-mono text-zinc-100 font-bold mt-0.5">
+                      {resources?.gpu?.free_mb ? Math.round(resources.gpu.free_mb) : hardware?.vram_mb ?? 0} MB Free
+                    </p>
+                    <p className="text-[10px] text-zinc-500 font-mono truncate" title={resources?.gpu?.device_name}>
+                      {resources?.gpu?.device_name || hardware?.gpu_name}
+                    </p>
+                  </div>
+
+                  <div className="p-2.5 rounded bg-zinc-900/50 border border-zinc-800">
+                    <span className="text-[10px] text-zinc-500 uppercase font-semibold">Active Ollama VRAM</span>
+                    <p className="font-mono text-zinc-100 font-bold mt-0.5">
+                      {resources?.ollama?.total_ollama_vram_mb ?? 0} MB
+                    </p>
+                    <p className="text-[10px] text-zinc-500 font-mono">
+                      {resources?.ollama?.loaded_models_count ?? 0} active models in memory
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs pt-1">
+                  <div className="space-y-1">
+                    <label className="text-zinc-400 font-semibold">Admission Mode</label>
+                    <select
+                      value={ollamaConfig?.concurrency_mode || "MANUAL"}
+                      onChange={(e) =>
+                        setOllamaConfig({ ...ollamaConfig, concurrency_mode: e.target.value })
+                      }
+                      className="w-full bg-zinc-900 border border-zinc-700 rounded px-2.5 py-1.5 font-mono text-zinc-200 text-xs focus:outline-none focus:border-indigo-500"
+                    >
+                      <option value="MANUAL">MANUAL (Fixed slot limit)</option>
+                      <option value="AUTO">AUTO (Dynamic headroom scaling)</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-zinc-400 font-semibold">Max Concurrent GPU Tasks</label>
+                    <select
+                      value={ollamaConfig?.max_gpu_concurrency || 1}
+                      onChange={(e) =>
+                        setOllamaConfig({ ...ollamaConfig, max_gpu_concurrency: parseInt(e.target.value, 10) })
+                      }
+                      className="w-full bg-zinc-900 border border-zinc-700 rounded px-2.5 py-1.5 font-mono text-zinc-200 text-xs focus:outline-none focus:border-indigo-500"
+                    >
+                      <option value={1}>1 Task (Recommended for Single GPU / Safe Headroom)</option>
+                      <option value={2}>2 Tasks (High VRAM &gt;= 16GB)</option>
+                      <option value={4}>4 Tasks (Multi-GPU / High Throughput)</option>
+                    </select>
+                  </div>
+                </div>
+              </Card>
+            </div>
+          )}
         </div>
+
 
         {/* Footer */}
         <div className="px-6 py-3 border-t border-zinc-800 flex items-center justify-between gap-3 bg-zinc-950/50">

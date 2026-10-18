@@ -30,7 +30,7 @@ export const StoryReviewScreen: React.FC<StoryReviewScreenProps> = ({
   const [characters, setCharacters] = useState<CharacterEntity[]>([]);
   const [scenes, setScenes] = useState<SceneEntity[]>([]);
   const [providers, setProviders] = useState<LLMProviderInfo[]>([]);
-  const [selectedProvider, setSelectedProvider] = useState<string>("mock");
+  const [selectedProvider, setSelectedProvider] = useState<string>(project.settings?.visual_storytelling ? "ollama" : "mock");
 
   const [loading, setLoading] = useState<boolean>(true);
   const [analyzing, setAnalyzing] = useState<boolean>(false);
@@ -230,7 +230,7 @@ export const StoryReviewScreen: React.FC<StoryReviewScreenProps> = ({
             disabled={analyzing}
             className="bg-zinc-900 border border-zinc-700 text-xs text-zinc-200 rounded-lg px-3 py-1.5 focus:outline-none focus:border-indigo-500 font-mono"
           >
-            {providers.map((p) => (
+            {providers.filter(p => !project.settings?.visual_storytelling || p.provider_id !== "mock_llm").map((p) => (
               <option key={p.provider_id} value={p.provider_id}>
                 {p.provider_name} {p.is_local ? "(Local)" : ""} {p.is_healthy ? "✓" : "✗"}
               </option>
@@ -365,8 +365,8 @@ export const StoryReviewScreen: React.FC<StoryReviewScreenProps> = ({
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {characters.map((char) => (
-              <Card key={char.character_id} className="p-4 bg-zinc-900 border-zinc-800 space-y-3">
+            {characters.map((char, index) => (
+              <Card key={char.character_id ? `${char.character_id}-${index}` : `char-${index}`} className="p-4 bg-zinc-900 border-zinc-800 space-y-3">
                 <div className="flex items-start justify-between">
                   <div>
                     <h3 className="font-bold text-zinc-100 text-sm flex items-center gap-2">

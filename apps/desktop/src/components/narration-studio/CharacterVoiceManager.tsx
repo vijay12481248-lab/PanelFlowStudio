@@ -122,7 +122,8 @@ export const CharacterVoiceManager: React.FC<CharacterVoiceManagerProps> = ({
             type="button"
             onClick={onClose}
             className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
-            title="Close"
+            title="Close Character Manager"
+            aria-label="Close Character Voice Manager"
           >
             ✕
           </button>

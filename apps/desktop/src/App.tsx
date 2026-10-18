@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { version as appVersion } from "../package.json";
 import { api } from "@panelflow/api-client";
 import type { Project } from "@panelflow/shared-types";
 import { Badge, Button, Icons } from "@panelflow/ui";
@@ -13,12 +14,14 @@ import { ScriptReviewScreen } from "./screens/ScriptReviewScreen";
 import { AudioScreen } from "./screens/AudioScreen";
 import { MotionScreen } from "./screens/MotionScreen";
 import { RenderScreen } from "./screens/RenderScreen";
+import { StoryEditorScreen } from "./screens/StoryEditorScreen";
 import { PipelineNavbar } from "./components/PipelineNavbar";
 import { ProviderHealthModal } from "./components/ProviderHealthModal";
 
 type ScreenMode =
   | "projects"
   | "new_project"
+  | "story_editor"
   | "acquisition"
   | "review"
   | "panels"
@@ -35,6 +38,7 @@ export const App: React.FC = () => {
   const [engineConnected, setEngineConnected] = useState<boolean>(false);
   const [engineVersion, setEngineVersion] = useState<string>("");
   const [healthModalOpen, setHealthModalOpen] = useState<boolean>(false);
+  const [retrying, setRetrying] = useState<boolean>(false);
 
   const checkEngine = async () => {
     try {
@@ -46,11 +50,59 @@ export const App: React.FC = () => {
     }
   };
 
+  const handleRetryEngine = async () => {
+    setRetrying(true);
+    try {
+      if (typeof window !== "undefined" && ("__TAURI_INTERNALS__" in window || "__TAURI__" in window)) {
+        try {
+          const { invoke } = await import("@tauri-apps/api/core");
+          await invoke("start_engine_cmd");
+        } catch (e) {
+          console.warn("[PanelFlow] Tauri start_engine_cmd notice:", e);
+        }
+      }
+      for (let i = 0; i < 6; i++) {
+        await new Promise((r) => setTimeout(r, 600));
+        try {
+          const h = await api.checkHealth();
+          if (h.status === "healthy") {
+            setEngineConnected(true);
+            setEngineVersion(h.version);
+            setRetrying(false);
+            return;
+          }
+        } catch {
+          // continue polling
+        }
+      }
+    } finally {
+      await checkEngine();
+      setRetrying(false);
+    }
+  };
+
   useEffect(() => {
     checkEngine();
-    const timer = setInterval(checkEngine, 5000);
+    const intervalTime = engineConnected ? 8000 : 1500;
+    const timer = setInterval(checkEngine, intervalTime);
     return () => clearInterval(timer);
-  }, []);
+  }, [engineConnected]);
+
+  // Dedicated Video-First Story Editor View
+  if (currentScreen === "story_editor" && selectedProject) {
+    return (
+      <StoryEditorScreen
+        project={selectedProject}
+        onBack={() => {
+          setCurrentScreen("projects");
+          setSelectedProject(null);
+        }}
+        onExport={() => {
+          setCurrentScreen("render");
+        }}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col">
@@ -118,14 +170,18 @@ export const App: React.FC = () => {
               <p className="text-sm text-zinc-400 max-w-md mx-auto">
                 The local Python processing engine on <code className="text-zinc-200 bg-zinc-800 px-1.5 py-0.5 rounded text-xs font-mono">127.0.0.1:8765</code> is not responding. Please ensure the local service is running or retry connection.
               </p>
+              <p className="text-xs text-zinc-500 max-w-md mx-auto">
+                If running in development mode, start the engine from your terminal using: <code className="text-zinc-300 bg-zinc-800 px-1 py-0.5 rounded font-mono">npm run engine</code>
+              </p>
             </div>
             <Button
               variant="primary"
-              onClick={checkEngine}
+              onClick={handleRetryEngine}
+              disabled={retrying}
               className="mt-2"
             >
-              <Icons.Rotate className="w-4 h-4 mr-2" />
-              Retry Engine Connection
+              <Icons.Rotate className={`w-4 h-4 mr-2 ${retrying ? "animate-spin" : ""}`} />
+              {retrying ? "Starting Engine..." : "Retry Engine Connection"}
             </Button>
           </div>
         ) : (
@@ -135,6 +191,7 @@ export const App: React.FC = () => {
               <div className="mb-6 bg-zinc-900/60 border border-zinc-800 rounded-xl p-2.5">
                 <PipelineNavbar
                   currentStage={selectedProject.current_stage}
+                  currentScreen={currentScreen}
                   onNavigate={(stageKey) => setCurrentScreen(stageKey as ScreenMode)}
                   staleStages={selectedProject.stale_stages}
                 />
@@ -180,6 +237,10 @@ export const App: React.FC = () => {
                   setSelectedProject(proj);
                   setCurrentScreen("render");
                 }}
+                onOpenStoryEditor={(proj) => {
+                  setSelectedProject(proj);
+                  setCurrentScreen("story_editor");
+                }}
               />
             )}
 
@@ -210,7 +271,7 @@ export const App: React.FC = () => {
                 onBack={() => setCurrentScreen("acquisition")}
                 onAcquisitionConfirmed={(updated) => {
                   setSelectedProject(updated);
-                  setCurrentScreen("projects");
+                  setCurrentScreen("panels");
                 }}
                 onProceedToPanels={(proj) => {
                   setSelectedProject(proj);
@@ -225,7 +286,7 @@ export const App: React.FC = () => {
                 onBack={() => setCurrentScreen("review")}
                 onPanelsApproved={(updated) => {
                   setSelectedProject(updated);
-                  setCurrentScreen("projects");
+                  setCurrentScreen("ocr");
                 }}
                 onProceedToOCR={(proj) => {
                   setSelectedProject(proj);
@@ -240,7 +301,7 @@ export const App: React.FC = () => {
                 onBack={() => setCurrentScreen("panels")}
                 onOCRApproved={(updated) => {
                   setSelectedProject(updated);
-                  setCurrentScreen("projects");
+                  setCurrentScreen("story");
                 }}
                 onProceedToStory={(proj) => {
                   setSelectedProject(proj);
@@ -252,9 +313,10 @@ export const App: React.FC = () => {
             {currentScreen === "story" && selectedProject && (
               <StoryReviewScreen
                 project={selectedProject}
-                onBack={() => setCurrentScreen("projects")}
+                onBack={() => setCurrentScreen("ocr")}
                 onStoryApproved={(updated) => {
                   setSelectedProject(updated);
+                  setCurrentScreen("script");
                 }}
                 onProceedToScript={(proj) => {
                   setSelectedProject(proj);
@@ -269,7 +331,7 @@ export const App: React.FC = () => {
                 onBack={() => setCurrentScreen("story")}
                 onScriptApproved={(updated) => {
                   setSelectedProject(updated);
-                  setCurrentScreen("projects");
+                  setCurrentScreen("audio");
                 }}
                 onProceedToAudio={(proj) => {
                   setSelectedProject(proj);
@@ -287,6 +349,7 @@ export const App: React.FC = () => {
                 onBack={() => setCurrentScreen("script")}
                 onAudioApproved={(updated) => {
                   setSelectedProject(updated);
+                  setCurrentScreen("motion");
                 }}
                 onProceedToMotion={(proj) => {
                   setSelectedProject(proj);
@@ -301,6 +364,7 @@ export const App: React.FC = () => {
                 onBack={() => setCurrentScreen("audio")}
                 onMotionApproved={(updated) => {
                   setSelectedProject(updated);
+                  setCurrentScreen("render");
                 }}
                 onProceedToRender={(proj) => {
                   setSelectedProject(proj);
@@ -330,7 +394,7 @@ export const App: React.FC = () => {
 
       {/* Footer */}
       <footer className="border-t border-zinc-900 py-3 px-6 text-center text-xs text-zinc-500">
-        PanelFlow Studio v1.0.0-beta.1 • Local-First Architecture • Fully Integrated Pipeline
+        PanelFlow Studio v{appVersion} • Local-First Architecture • Fully Integrated Pipeline
       </footer>
     </div>
   );

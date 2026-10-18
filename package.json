@@ -1,6 +1,6 @@
 {
   "name": "panelflow-root",
-  "version": "1.0.0-beta.1",
+  "version": "1.0.0-beta.2",
   "private": true,
   "workspaces": [
     "packages/*",
