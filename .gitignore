@@ -32,3 +32,26 @@ _render_work/
 .venv/
 venv/
 ENV/
+
+# Scratch / debug artifacts
+scratch/*.wav
+scratch/qa_screenshots/
+scratch/narration_test/
+scratch/tts_benchmark/
+scratch_*.py
+scratch_*.txt
+
+# Build artifacts
+dist_engine/
+build_engine/
+panelflow-engine.spec
+
+# Playwright MCP cache
+.playwright-mcp/
+
+# Graphify knowledge graph cache
+graphify-out/
+
+# Misc temporary
+initial_screen.png
+chapter-923-panels.txt
