@@ -47,6 +47,7 @@ powershell -NoProfile -Command "$p = Get-Process -Name 'panelflow-desktop' -Erro
 if %ERRORLEVEL% equ 0 (
     echo   - PanelFlow Studio desktop window is already open and running.
 ) else (
+    powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"name = 'msedgewebview2.exe'\" -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -like '*panelflow*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"
     if exist "%ROOT_DIR%apps\desktop\src-tauri\target\debug\panelflow-desktop.exe" (
         echo   - Opening native desktop application window with latest code...
         start "" "%ROOT_DIR%apps\desktop\src-tauri\target\debug\panelflow-desktop.exe"

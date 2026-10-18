@@ -51,6 +51,7 @@ $existingProcess = Get-Process -Name "panelflow-desktop" -ErrorAction SilentlyCo
 if ($existingProcess) {
     Write-Host "  -> PanelFlow Studio desktop window is already open and running (PID $($existingProcess.Id))." -ForegroundColor Green
 } else {
+    Get-CimInstance Win32_Process -Filter "name = 'msedgewebview2.exe'" -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -like "*panelflow*" } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
     $debugApp = "$rootDir\apps\desktop\src-tauri\target\debug\panelflow-desktop.exe"
     if (Test-Path $debugApp) {
         Write-Host "  -> Opening native desktop application window (latest code)..." -ForegroundColor Green
