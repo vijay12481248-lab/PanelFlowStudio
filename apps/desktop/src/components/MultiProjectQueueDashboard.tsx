@@ -228,6 +228,12 @@ export const MultiProjectQueueDashboard: React.FC<MultiProjectQueueDashboardProp
         </div>
       )}
 
+      {queuedJobs.length > 0 && resources?.scheduler.concurrency_mode === "MANUAL" && (
+        <div className="mt-3 rounded-lg border border-amber-800/70 bg-amber-950/30 px-3 py-2 text-xs text-amber-200">
+          GPU jobs are waiting for manual admission. Keep this queue open while a worker becomes available, or switch the scheduler to automatic admission in Tools &amp; Models.
+        </div>
+      )}
+
       {/* Collapsed mini-progress indicator */}
       {!isExpanded && runningJobs.length > 0 && (
         <div className="mt-3 pt-3 border-t border-zinc-800/80">

@@ -43,12 +43,17 @@ if %ERRORLEVEL% equ 0 (
 
 :: 4. Launch Desktop Application Window with Latest Code
 echo [4/4] Launching PanelFlow Studio Desktop Window...
-if exist "%ROOT_DIR%apps\desktop\src-tauri\target\debug\panelflow-desktop.exe" (
-    echo   - Opening native desktop application window with latest code...
-    start "" "%ROOT_DIR%apps\desktop\src-tauri\target\debug\panelflow-desktop.exe"
+powershell -NoProfile -Command "$p = Get-Process -Name 'panelflow-desktop' -ErrorAction SilentlyContinue; if ($p) { exit 0 } else { exit 1 }"
+if %ERRORLEVEL% equ 0 (
+    echo   - PanelFlow Studio desktop window is already open and running.
 ) else (
-    echo   - Launching desktop window via Tauri CLI...
-    call npm --workspace=@panelflow/desktop run tauri dev
+    if exist "%ROOT_DIR%apps\desktop\src-tauri\target\debug\panelflow-desktop.exe" (
+        echo   - Opening native desktop application window with latest code...
+        start "" "%ROOT_DIR%apps\desktop\src-tauri\target\debug\panelflow-desktop.exe"
+    ) else (
+        echo   - Launching desktop window via Tauri CLI...
+        call npm --workspace=@panelflow/desktop run tauri dev
+    )
 )
 
 echo.
