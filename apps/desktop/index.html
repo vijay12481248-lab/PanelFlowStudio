@@ -6,7 +6,15 @@
     <title>PanelFlow Studio</title>
   </head>
   <body class="bg-zinc-950 text-zinc-100 antialiased selection:bg-indigo-500 selection:text-white">
-    <div id="root"></div>
+    <div id="root">
+      <div id="bootstrap-status" role="status" style="min-height:100vh;display:grid;place-items:center;background:#09090b;color:#a1a1aa;font:13px system-ui,sans-serif;letter-spacing:.01em">
+        <div style="text-align:center">
+          <div style="color:#f4f4f5;font-weight:600;font-size:16px;margin-bottom:8px">PanelFlow Studio</div>
+          <div>Starting the local workspace…</div>
+          <noscript>JavaScript is required to run PanelFlow Studio.</noscript>
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
