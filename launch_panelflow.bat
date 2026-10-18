@@ -1,73 +1,58 @@
 @echo off
 setlocal enabledelayedexpansion
-title PanelFlow Studio Launcher
+title PanelFlow Studio - Desktop Application Launcher
 
 echo =======================================================
-echo          PanelFlow Studio - Unified Launcher          
+echo          PanelFlow Studio - Desktop Application         
 echo =======================================================
 echo.
 
 set "ROOT_DIR=%~dp0"
 cd /d "%ROOT_DIR%"
 
-:: 1. Check if backend engine is already listening on 8765
-echo [1/3] Checking backend engine status on port 8765...
+:: 1. Check & start Backend Engine on port 8765
+echo [1/4] Checking Python backend engine on port 8765...
 powershell -NoProfile -Command "$c = Get-NetTCPConnection -LocalPort 8765 -ErrorAction SilentlyContinue | Where-Object { $_.State -eq 'Listen' }; if ($c) { exit 0 } else { exit 1 }"
 if %ERRORLEVEL% equ 0 (
     echo   - Backend engine is already running on http://127.0.0.1:8765.
-    goto :LAUNCH_APP
-)
-
-:: 2. Launch Backend Engine
-echo [2/3] Starting backend engine...
-if exist "%ROOT_DIR%release\engine_runtime\panelflow-engine.exe" (
-    echo   - Found standalone runtime: release\engine_runtime\panelflow-engine.exe
-    powershell -NoProfile -Command "Start-Process -FilePath '%ROOT_DIR%release\engine_runtime\panelflow-engine.exe' -WorkingDirectory '%ROOT_DIR%release\engine_runtime' -WindowStyle Hidden"
-) else if exist "%ROOT_DIR%apps\desktop\src-tauri\resources\engine_runtime\panelflow-engine.exe" (
-    echo   - Found resource runtime: apps\desktop\src-tauri\resources\engine_runtime\panelflow-engine.exe
-    powershell -NoProfile -Command "Start-Process -FilePath '%ROOT_DIR%apps\desktop\src-tauri\resources\engine_runtime\panelflow-engine.exe' -WorkingDirectory '%ROOT_DIR%apps\desktop\src-tauri\resources\engine_runtime' -WindowStyle Hidden"
 ) else (
-    echo   - Standalone binary not found. Launching via Python run_engine.py...
+    echo   - Starting backend engine via Python run_engine.py...
     powershell -NoProfile -Command "Start-Process -FilePath 'python.exe' -ArgumentList 'run_engine.py' -WorkingDirectory '%ROOT_DIR%' -WindowStyle Hidden"
 )
 
-:: 3. Wait for engine health check (HTTP 200)
-echo   - Waiting for engine to bind port 8765 and become healthy...
-set "HEALTHY=0"
-for /L %%i in (1,1,20) do (
-    if !HEALTHY! equ 0 (
-        ping -n 2 127.0.0.1 >nul
-        powershell -NoProfile -Command "try { $r = Invoke-RestMethod -Uri 'http://127.0.0.1:8765/api/system/health' -TimeoutSec 1; if ($r.status -eq 'healthy') { exit 0 } else { exit 1 } } catch { exit 1 }"
-        if !ERRORLEVEL! equ 0 (
-            set "HEALTHY=1"
-        )
-    )
+:: 2. Check & start ACE-Step Music Server on port 8001
+echo [2/4] Checking ACE-Step music engine on port 8001...
+powershell -NoProfile -Command "$c = Get-NetTCPConnection -LocalPort 8001 -ErrorAction SilentlyContinue | Where-Object { $_.State -eq 'Listen' }; if ($c) { exit 0 } else { exit 1 }"
+if %ERRORLEVEL% equ 0 (
+    echo   - ACE-Step server is already running on http://127.0.0.1:8001.
+) else (
+    echo   - Starting ACE-Step API server...
+    powershell -NoProfile -Command "Start-Process -FilePath 'C:\Tools\ACE-Step-1.5\.venv\Scripts\python.exe' -ArgumentList '-m acestep.api_server --host 127.0.0.1 --port 8001' -WorkingDirectory 'C:\Tools\ACE-Step-1.5' -WindowStyle Hidden"
 )
 
-if !HEALTHY! equ 1 (
-    echo   - Backend engine is HEALTHY and listening on http://127.0.0.1:8765!
+:: 3. Check & start Vite Frontend Dev Server on port 5173
+echo [3/4] Checking Vite dev server on port 5173...
+powershell -NoProfile -Command "$c = Get-NetTCPConnection -LocalPort 5173 -ErrorAction SilentlyContinue | Where-Object { $_.State -eq 'Listen' }; if ($c) { exit 0 } else { exit 1 }"
+if %ERRORLEVEL% equ 0 (
+    echo   - Frontend dev server is already running on http://localhost:5173.
 ) else (
-    echo   [WARNING] Backend engine did not report healthy within 20 seconds.
-    echo   Launching application anyway...
+    echo   - Starting frontend dev server with latest code...
+    powershell -NoProfile -Command "Start-Process -FilePath 'cmd.exe' -ArgumentList '/c npm run dev --workspace=@panelflow/desktop' -WorkingDirectory '%ROOT_DIR%' -WindowStyle Hidden"
+    timeout /t 3 /nobreak >nul
 )
 
-:LAUNCH_APP
-:: 4. Launch Desktop Application
-echo.
-echo [3/3] Launching PanelFlow Studio Desktop...
-if exist "release\PanelFlow-Studio-v1.0.0-beta.1-Portable.exe" (
-    echo   - Starting release\PanelFlow-Studio-v1.0.0-beta.1-Portable.exe
-    start "" "release\PanelFlow-Studio-v1.0.0-beta.1-Portable.exe"
-) else if exist "apps\desktop\src-tauri\target\release\panelflow-desktop.exe" (
-    echo   - Starting apps\desktop\src-tauri\target\release\panelflow-desktop.exe
-    start "" "apps\desktop\src-tauri\target\release\panelflow-desktop.exe"
+:: 4. Launch Desktop Application Window with Latest Code
+echo [4/4] Launching PanelFlow Studio Desktop Window...
+if exist "%ROOT_DIR%apps\desktop\src-tauri\target\debug\panelflow-desktop.exe" (
+    echo   - Opening native desktop application window (connected to live code)...
+    start "" "%ROOT_DIR%apps\desktop\src-tauri\target\debug\panelflow-desktop.exe"
 ) else (
-    echo   - Release executable not found. Launching dev desktop...
-    call npm run dev:desktop
+    echo   - Launching desktop window via Tauri CLI...
+    call npm --workspace=@panelflow/desktop run tauri dev
 )
 
 echo.
-echo PanelFlow Studio launched successfully!
+echo PanelFlow Studio Desktop is running with the latest code!
 echo (You can close this command window at any time.)
-ping -n 3 127.0.0.1 >nul
+timeout /t 3 /nobreak >nul
 exit /b 0
