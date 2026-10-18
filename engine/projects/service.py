@@ -68,10 +68,22 @@ class ProjectService:
         )
 
         project_id = str(uuid.uuid4())
-        workspace_path = self.workspace_root / project_id
+        
+        # User Project Location support: if specified in settings or metadata, write directly there
+        custom_path = None
+        if project_settings:
+            custom_path = project_settings.get("project_path") or project_settings.get("destination_path")
+        if not custom_path and source_metadata:
+            custom_path = source_metadata.get("project_path")
+
+        if custom_path:
+            workspace_path = Path(custom_path).resolve()
+        else:
+            workspace_path = self.workspace_root / project_id
+
         workspace_path.mkdir(parents=True, exist_ok=True)
-        (workspace_path / "source").mkdir(exist_ok=True)
-        (workspace_path / "logs").mkdir(exist_ok=True)
+        for sub in ("source", "normalized", "panels", "ocr", "story", "script", "audio", "motion", "renders", "logs"):
+            (workspace_path / sub).mkdir(exist_ok=True)
 
         initial_stage = (
             PipelineStage.RIGHTS_APPROVED
@@ -425,7 +437,20 @@ class ProjectService:
                             p_rec.status = "FAILED"
                             p_rec.error_message = r.error_message
 
+                # Check if we now have ready pages and can advance stage
+                if not cancel_token.is_cancelled:
+                    ready_count = inner_db.query(PageRecord).filter(
+                        PageRecord.project_id == project_id,
+                        PageRecord.status == "READY"
+                    ).count()
+                    proj = inner_db.query(ProjectRecord).filter(ProjectRecord.id == project_id).first()
+                    if proj and ready_count > 0 and proj.current_stage == PipelineStage.RIGHTS_APPROVED.value:
+                        proj.current_stage = PipelineStage.ACQUIRED.value
+                        proj.updated_at = utc_now()
+                        self._write_project_json(proj)
+
                 inner_db.commit()
+                self.sync_manifest_with_db(inner_db, project_id)
 
             return {
                 "retried": len(candidates),
@@ -1371,6 +1396,19 @@ class ProjectService:
 
                     worker_db.commit()
 
+                    # The review UI and canonical story export consume text regions,
+                    # not the legacy panel-level OCR record above.
+                    region_ids = [row.id for row in worker_db.query(TextRegionRecord).filter(
+                        TextRegionRecord.project_id == project_id,
+                        TextRegionRecord.panel_id == panel.id,
+                    ).all()]
+                    for region_id in region_ids:
+                        if cancel_token.is_cancelled:
+                            break
+                        self.extract_ocr_region(
+                            worker_db, project_id, region_id, ocr_engine.engine_id, language,
+                        )
+
                     progress = idx / total_panels
                     progress_cb(
                         progress,
@@ -1812,6 +1850,8 @@ class ProjectService:
             )
 
         # Layer 1: Machine OCR (strictly immutable provenance)
+        if not raw_text.strip():
+            raw_conf = 0.0
         tr.raw_text = raw_text
         tr.raw_confidence = raw_conf
         tr.ocr_engine = engine_id
@@ -1821,6 +1861,10 @@ class ProjectService:
         # If human text was never edited, initialize with raw text
         if tr.correction_status == "UNEDITED" or not tr.corrected_text:
             tr.corrected_text = raw_text
+
+        if not (tr.correction_status == "VERIFIED" and tr.corrected_text.strip()):
+            if not raw_text.strip() or raw_conf < 0.70:
+                tr.status = "NEEDS_REVIEW"
 
         tr.updated_at = utc_now()
         db.commit()
@@ -1834,7 +1878,10 @@ class ProjectService:
 
         pages = db.query(PageRecord).filter(PageRecord.project_id == project_id).order_by(PageRecord.sequence).all()
         panels = db.query(PanelRecord).filter(PanelRecord.project_id == project_id).order_by(PanelRecord.sequence).all()
-        text_regions = db.query(TextRegionRecord).filter(TextRegionRecord.project_id == project_id).order_by(TextRegionRecord.sequence_global).all()
+        text_regions = db.query(TextRegionRecord).filter(
+            TextRegionRecord.project_id == project_id,
+            TextRegionRecord.status != "REJECTED",
+        ).order_by(TextRegionRecord.sequence_global).all()
 
         return {
             "project_id": record.id,

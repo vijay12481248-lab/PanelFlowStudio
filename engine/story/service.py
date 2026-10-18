@@ -1,4 +1,5 @@
 import json
+import asyncio
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -94,13 +95,17 @@ class StoryService:
         if not project:
             raise KeyError(f"Project not found: {project_id}")
 
+        visual_mode = bool((project.settings or {}).get("visual_storytelling"))
+        previous_review = self.get_narrative(db, project_id) if visual_mode else None
         allowed_stages = (PipelineStage.OCR_APPROVED, PipelineStage.STORY_ANALYZED, PipelineStage.STORY_APPROVED)
+        if visual_mode:
+            allowed_stages += (PipelineStage.PANELS_DETECTED, PipelineStage.OCR_COMPLETE,)
         if project.current_stage not in allowed_stages:
             raise ValueError(f"Cannot analyze story: Project stage must be OCR_APPROVED or STORY_ANALYZED (current: {project.current_stage}).")
 
         panels = (
             db.query(PanelRecord)
-            .filter(PanelRecord.project_id == project_id)
+            .filter(PanelRecord.project_id == project_id, PanelRecord.status != "IGNORED")
             .order_by(PanelRecord.sequence.asc())
             .all()
         )
@@ -111,13 +116,19 @@ class StoryService:
             project_id=project_id,
             job_type=JobType.STORY_ANALYSIS,
             job_input={"total_panels": len(panels), "preferred_provider": preferred_provider_id},
+            priority=15,
+            requires_gpu=True,
+            gpu_vram_mb=4000,
         )
         job_id = job.job_id
+
 
         async def run_story_analysis(cancel_token: PipelineCancellationToken, progress_cb):
             from engine.database.session import SessionLocal
 
             provider = await llm_registry.get_active_provider(preferred_provider_id)
+            if visual_mode and provider.provider_id == "mock_llm":
+                raise ValueError("Vision analysis requires a real provider; select a configured vision model in Story review.")
             logger.info(f"Using LLM provider '{provider.provider_id}' for story analysis of {project_id}")
 
             progress_cb(0.1, "Initializing panel observations and balloon geometry...")
@@ -125,449 +136,472 @@ class StoryService:
             with SessionLocal() as inner_db:
                 inner_panels = (
                     inner_db.query(PanelRecord)
-                    .filter(PanelRecord.project_id == project_id)
+                    .filter(PanelRecord.project_id == project_id, PanelRecord.status != "IGNORED")
                     .order_by(PanelRecord.sequence.asc())
                     .all()
                 )
                 inner_regions = (
                     inner_db.query(TextRegionRecord)
-                    .filter(TextRegionRecord.project_id == project_id)
+                    .filter(
+                        TextRegionRecord.project_id == project_id,
+                        TextRegionRecord.status != "REJECTED",
+                    )
                     .order_by(TextRegionRecord.sequence_global.asc())
                     .all()
                 )
 
-            total_panels = len(inner_panels)
-            observations: List[PanelObservationEntity] = []
-            characters: List[CharacterEntity] = []
-            locations: List[LocationEntity] = []
-            attributions: List[SpeakerAttributionEntity] = []
-            utterances: List[UtteranceEntity] = []
-            events: List[EventEntity] = []
-            scenes: List[SceneEntity] = []
-            beats: List[StoryBeatEntity] = []
-
-            # 1. Level 1: Panel Observations
             ws_path = Path(project.workspace_path)
-            for idx, p in enumerate(inner_panels, start=1):
-                if cancel_token.is_cancelled:
-                    break
-
-                p_regions = [r for r in inner_regions if r.panel_id == p.id]
-                region_texts = [r.corrected_text or r.raw_text for r in p_regions if r.corrected_text or r.raw_text]
-                combined_text = " ".join(region_texts)
-
-                obs = PanelObservationEntity(
-                    panel_id=p.id,
-                    sequence_global=p.sequence,
-                    visible_character_candidates=["Figure 1", "Figure 2"] if len(p_regions) >= 2 else (["Figure 1"] if p_regions else []),
-                    visible_objects=["conduit", "structure", "relic"] if idx == 1 else ["chamber", "stone"],
-                    location_hints=["ruins", "cavern"] if idx <= 2 else ["corridor"],
-                    actions=["observing", "exploring"] if not region_texts else ["speaking", "reacting"],
-                    facial_emotions=["neutral", "focused"],
-                    visual_intensity=0.4 + (0.1 * (idx % 4)),
-                    visual_summary=f"Panel #{p.sequence}: {combined_text[:60] if combined_text else 'Visual exploration beat'}",
-                    evidence_confidence=0.92,
+            if visual_mode:
+                from engine.story.visual import VisualStoryEngine
+                narrative_doc = await VisualStoryEngine().analyze(
+                    project_id, ws_path, inner_panels, inner_regions, provider,
+                    progress=progress_cb, cancelled=lambda: cancel_token.is_cancelled,
+                    settings=project.settings or {},
                 )
-                observations.append(obs)
-                progress_cb(0.1 + (0.25 * (idx / max(1, total_panels))), f"Analyzed panel {idx}/{total_panels}")
+                if (previous_review and previous_review.analysis_metadata.get("source_context_digest")
+                        == narrative_doc.analysis_metadata.get("source_context_digest")):
+                    # Cached reanalysis must retain approved identity/scene corrections.
+                    narrative_doc.characters = previous_review.characters
+                    narrative_doc.locations = previous_review.locations
+                    narrative_doc.scenes = previous_review.scenes
+                    narrative_doc.beats = previous_review.beats
+                characters, locations = narrative_doc.characters, narrative_doc.locations
+                scenes, beats, events = narrative_doc.scenes, narrative_doc.beats, narrative_doc.events
+                observations = narrative_doc.observations
+                utterances, attributions = [], []
+            else:
+                total_panels = len(inner_panels)
+                observations: List[PanelObservationEntity] = []
+                characters: List[CharacterEntity] = []
+                locations: List[LocationEntity] = []
+                attributions: List[SpeakerAttributionEntity] = []
+                utterances: List[UtteranceEntity] = []
+                events: List[EventEntity] = []
+                scenes: List[SceneEntity] = []
+                beats: List[StoryBeatEntity] = []
 
-            # 2. Level 2: Character Discovery & Resolution
-            progress_cb(0.40, "Resolving characters and identities...")
-            location_main_id = f"loc_{uuid.uuid4().hex[:8]}"
-            panels_text = []
-            for p in inner_panels:
-                p_regs = [r for r in inner_regions if r.panel_id == p.id]
-                reg_summary = "; ".join(f"[{r.region_type}] '{r.corrected_text or r.raw_text}'" for r in p_regs)
-                panels_text.append(f"Panel {p.sequence} (ID: {p.id}): {reg_summary if reg_summary else 'Visual exploration beat'}")
+                # 1. Level 1: Panel Observations
+                ws_path = Path(project.workspace_path)
+                for idx, p in enumerate(inner_panels, start=1):
+                    if cancel_token.is_cancelled:
+                        break
 
-            if provider.provider_id != "mock_llm":
-                try:
-                    char_prompt = (
-                        "Analyze the following comic panels and extract all characters and locations.\n"
-                        "STRICT GUARDRAILS:\n"
-                        "1. Do NOT invent character names. Only use explicit names if directly spoken or introduced in narration.\n"
-                        "2. If a character name has not been introduced yet, use descriptive labels: 'Unknown Figure', 'Guard 1'.\n"
-                        "3. Return all discovered characters and locations conforming to schema.\n\n"
-                        "--- UNTRUSTED SOURCE CONTENT ---\n" +
-                        "\n".join(panels_text)
+                    p_regions = [r for r in inner_regions if r.panel_id == p.id]
+                    region_texts = [r.corrected_text or r.raw_text for r in p_regions if r.corrected_text or r.raw_text]
+                    combined_text = " ".join(region_texts)
+
+                    obs = PanelObservationEntity(
+                        panel_id=p.id,
+                        sequence_global=p.sequence,
+                        visible_character_candidates=["Figure 1", "Figure 2"] if len(p_regions) >= 2 else (["Figure 1"] if p_regions else []),
+                        visible_objects=["conduit", "structure", "relic"] if idx == 1 else ["chamber", "stone"],
+                        location_hints=["ruins", "cavern"] if idx <= 2 else ["corridor"],
+                        actions=["observing", "exploring"] if not region_texts else ["speaking", "reacting"],
+                        facial_emotions=["neutral", "focused"],
+                        visual_intensity=0.4 + (0.1 * (idx % 4)),
+                        visual_summary=f"Panel #{p.sequence}: {combined_text[:60] if combined_text else 'Visual exploration beat'}",
+                        evidence_confidence=0.92,
                     )
-                    char_res: CharacterDiscoveryResponse = await provider.generate_structured(
-                        prompt=char_prompt,
-                        response_model=CharacterDiscoveryResponse,
+                    observations.append(obs)
+                    progress_cb(0.1 + (0.25 * (idx / max(1, total_panels))), f"Analyzed panel {idx}/{total_panels}")
+
+                # 2. Level 2: Character Discovery & Resolution
+                progress_cb(0.40, "Resolving characters and identities...")
+                location_main_id = f"loc_{uuid.uuid4().hex[:8]}"
+                panels_text = []
+                for p in inner_panels:
+                    p_regs = [r for r in inner_regions if r.panel_id == p.id]
+                    reg_summary = "; ".join(f"[{r.region_type}] '{r.corrected_text or r.raw_text}'" for r in p_regs)
+                    panels_text.append(f"Panel {p.sequence} (ID: {p.id}): {reg_summary if reg_summary else 'Visual exploration beat'}")
+
+                if provider.provider_id != "mock_llm":
+                    try:
+                        char_prompt = (
+                            "Analyze the following comic panels and extract all characters and locations.\n"
+                            "STRICT GUARDRAILS:\n"
+                            "1. Do NOT invent character names. Only use explicit names if directly spoken or introduced in narration.\n"
+                            "2. If a character name has not been introduced yet, use descriptive labels: 'Unknown Figure', 'Guard 1'.\n"
+                            "3. Return all discovered characters and locations conforming to schema.\n\n"
+                            "--- UNTRUSTED SOURCE CONTENT ---\n" +
+                            "\n".join(panels_text)
+                        )
+                        char_res: CharacterDiscoveryResponse = await provider.generate_structured(
+                            prompt=char_prompt,
+                            response_model=CharacterDiscoveryResponse,
+                        )
+                        for c in char_res.characters:
+                            char_id = f"char_{uuid.uuid4().hex[:8]}"
+                            fp_id = c.first_panel_id if c.first_panel_id in [p.id for p in inner_panels] else inner_panels[0].id
+                            characters.append(CharacterEntity(
+                                character_id=char_id,
+                                project_id=project_id,
+                                display_name=c.name,
+                                canonical_name=c.canonical_name or c.name,
+                                aliases=c.aliases,
+                                description=c.description,
+                                role=c.role,
+                                first_panel_id=fp_id,
+                                reference_panel_ids=[fp_id],
+                                status=c.status,
+                            ))
+
+                        for loc in char_res.locations:
+                            loc_id = f"loc_{uuid.uuid4().hex[:8]}"
+                            p_ids = [pid for pid in loc.panel_ids if pid in [p.id for p in inner_panels]]
+                            if not p_ids:
+                                p_ids = [inner_panels[0].id]
+                            locations.append(LocationEntity(
+                                location_id=loc_id,
+                                project_id=project_id,
+                                name=loc.name,
+                                canonical_name=loc.name,
+                                description=loc.description,
+                                panel_ids=p_ids,
+                                status=CharacterStatus.CONFIRMED,
+                            ))
+                    except Exception as e:
+                        logger.warning(f"Real LLM character extraction failed: {e}. Falling back to baseline.")
+
+                # Fallback if mock or extraction returned empty
+                if not characters:
+                    protagonist_id = f"char_{uuid.uuid4().hex[:8]}"
+                    char_protagonist = CharacterEntity(
+                        character_id=protagonist_id,
+                        display_name="Explorer",
+                        canonical_name="Explorer",
+                        aliases=["The Traveler", "Scout"],
+                        description="Determined seeker exploring ancient crystalline ruins.",
+                        visual_traits=["ivory coat", "dark boots", "gauntlets"],
+                        role=CharacterRole.PROTAGONIST,
+                        first_panel_id=inner_panels[0].id if inner_panels else None,
+                        reference_panel_ids=[inner_panels[0].id] if inner_panels else [],
+                        status=CharacterStatus.CONFIRMED,
                     )
-                    for c in char_res.characters:
-                        char_id = f"char_{uuid.uuid4().hex[:8]}"
-                        fp_id = c.first_panel_id if c.first_panel_id in [p.id for p in inner_panels] else inner_panels[0].id
-                        characters.append(CharacterEntity(
-                            character_id=char_id,
-                            project_id=project_id,
-                            display_name=c.name,
-                            canonical_name=c.canonical_name or c.name,
-                            aliases=c.aliases,
-                            description=c.description,
-                            role=c.role,
-                            first_panel_id=fp_id,
-                            reference_panel_ids=[fp_id],
-                            status=c.status,
-                        ))
+                    characters.append(char_protagonist)
 
-                    for loc in char_res.locations:
-                        loc_id = f"loc_{uuid.uuid4().hex[:8]}"
-                        p_ids = [pid for pid in loc.panel_ids if pid in [p.id for p in inner_panels]]
-                        if not p_ids:
-                            p_ids = [inner_panels[0].id]
-                        locations.append(LocationEntity(
-                            location_id=loc_id,
-                            project_id=project_id,
-                            name=loc.name,
-                            canonical_name=loc.name,
-                            description=loc.description,
-                            panel_ids=p_ids,
-                            status=CharacterStatus.CONFIRMED,
-                        ))
-                except Exception as e:
-                    logger.warning(f"Real LLM character extraction failed: {e}. Falling back to baseline.")
-
-            # Fallback if mock or extraction returned empty
-            if not characters:
-                protagonist_id = f"char_{uuid.uuid4().hex[:8]}"
-                char_protagonist = CharacterEntity(
-                    character_id=protagonist_id,
-                    display_name="Explorer",
-                    canonical_name="Explorer",
-                    aliases=["The Traveler", "Scout"],
-                    description="Determined seeker exploring ancient crystalline ruins.",
-                    visual_traits=["ivory coat", "dark boots", "gauntlets"],
-                    role=CharacterRole.PROTAGONIST,
-                    first_panel_id=inner_panels[0].id if inner_panels else None,
-                    reference_panel_ids=[inner_panels[0].id] if inner_panels else [],
-                    status=CharacterStatus.CONFIRMED,
-                )
-                characters.append(char_protagonist)
-
-                secondary_id = None
-                if len(inner_regions) >= 3:
-                    secondary_id = f"char_{uuid.uuid4().hex[:8]}"
-                    char_secondary = CharacterEntity(
-                        character_id=secondary_id,
-                        display_name="Companion",
-                        canonical_name="Companion",
-                        aliases=["Guide"],
-                        description="Secondary traveler communicating over radio / comms.",
-                        visual_traits=["visor", "hood"],
-                        role=CharacterRole.SUPPORTING,
-                        first_panel_id=inner_panels[1].id if len(inner_panels) > 1 else None,
-                        reference_panel_ids=[inner_panels[1].id] if len(inner_panels) > 1 else [],
-                        status=CharacterStatus.LIKELY,
-                    )
-                    characters.append(char_secondary)
-
-            if not locations:
-                loc_main = LocationEntity(
-                    location_id=location_main_id,
-                    name="Ancient Subterranean Ruins",
-                    canonical_name="Crystalline Caverns",
-                    description="Deep underground stone chambers with dormant energy conduits.",
-                    visual_cues=["crystal pillars", "glowing stone", "water ripples"],
-                    panel_ids=[p.id for p in inner_panels],
-                    status=CharacterStatus.CONFIRMED,
-                )
-                locations.append(loc_main)
-
-            # Ensure any manually assigned character in text regions is registered in characters
-            existing_char_ids = {c.character_id for c in characters}
-            for tr in inner_regions:
-                if tr.speaker_assignment_method == "MANUAL" and tr.speaker_character_id:
-                    if tr.speaker_character_id not in ("NARRATOR", "SFX", "UNKNOWN") and tr.speaker_character_id not in existing_char_ids:
-                        characters.append(CharacterEntity(
-                            character_id=tr.speaker_character_id,
-                            project_id=project_id,
-                            display_name=tr.speaker_character_id,
-                            canonical_name=tr.speaker_character_id,
-                            description="Manually assigned speaker entity.",
+                    secondary_id = None
+                    if len(inner_regions) >= 3:
+                        secondary_id = f"char_{uuid.uuid4().hex[:8]}"
+                        char_secondary = CharacterEntity(
+                            character_id=secondary_id,
+                            display_name="Companion",
+                            canonical_name="Companion",
+                            aliases=["Guide"],
+                            description="Secondary traveler communicating over radio / comms.",
+                            visual_traits=["visor", "hood"],
                             role=CharacterRole.SUPPORTING,
-                            first_panel_id=inner_panels[0].id if inner_panels else None,
-                            reference_panel_ids=[inner_panels[0].id] if inner_panels else [],
-                            status=CharacterStatus.CONFIRMED,
-                            manual_override=True,
-                        ))
-                        existing_char_ids.add(tr.speaker_character_id)
-
-            # 3. Level 3: Speaker Resolution (Geometry first, then LLM)
-            progress_cb(0.55, "Attributing dialogue via spatial balloon geometry...")
-            last_speaker = None
-            for p in inner_panels:
-                p_regions = [r for r in inner_regions if r.panel_id == p.id]
-                if not p_regions:
-                    continue
-
-                panel_crop_path = ws_path / "panels" / p.crop_filename if p.crop_filename else None
-                geom_attributions = resolve_speaker_by_geometry(
-                    panel_id=p.id,
-                    text_regions=[{
-                        "id": r.id,
-                        "region_type": r.region_type,
-                        "x": r.x,
-                        "y": r.y,
-                        "width": r.width,
-                        "height": r.height,
-                    } for r in p_regions],
-                    characters_in_panel=characters,
-                    previous_speaker_id=last_speaker,
-                    panel_image_path=panel_crop_path,
-                )
-
-                for attr in geom_attributions:
-                    target_reg = next((r for r in p_regions if r.id == attr.text_region_id), None)
-                    if target_reg and target_reg.speaker_assignment_method == "MANUAL" and target_reg.speaker_character_id:
-                        attr = SpeakerAttributionEntity(
-                            text_region_id=target_reg.id,
-                            speaker_character_id=target_reg.speaker_character_id,
-                            confidence=1.0,
-                            method=SpeakerMethod.MANUAL,
-                            evidence_panel_ids=[p.id],
-                            reason_code="MANUAL_OPERATOR_OVERRIDE",
+                            first_panel_id=inner_panels[1].id if len(inner_panels) > 1 else None,
+                            reference_panel_ids=[inner_panels[1].id] if len(inner_panels) > 1 else [],
+                            status=CharacterStatus.LIKELY,
                         )
+                        characters.append(char_secondary)
 
-                    attributions.append(attr)
-                    if attr.speaker_character_id not in ("NARRATOR", "SFX", "UNKNOWN"):
-                        last_speaker = attr.speaker_character_id
-
-                    # Create Utterance
-                    if target_reg:
-                        u_type = (
-                            UtteranceType.NARRATION
-                            if target_reg.region_type.upper() in ("NARRATION", "CAPTION")
-                            else (UtteranceType.SFX if target_reg.region_type.upper() == "SFX" else UtteranceType.DIALOGUE)
-                        )
-                        u = UtteranceEntity(
-                            utterance_id=f"utt_{target_reg.id[:8]}",
-                            text_region_id=target_reg.id,
-                            panel_id=p.id,
-                            speaker_character_id=attr.speaker_character_id,
-                            source_text=target_reg.raw_text,
-                            corrected_text=target_reg.corrected_text or target_reg.raw_text,
-                            utterance_type=u_type,
-                            emotion=EmotionType.NEUTRAL if u_type == UtteranceType.NARRATION else EmotionType.DETERMINED,
-                            emotion_confidence=attr.confidence,
-                            intensity=0.5,
-                            sequence=target_reg.sequence_global,
-                            provenance=ProvenanceReference(
-                                panel_ids=[p.id],
-                                text_region_ids=[target_reg.id],
-                                confidence=attr.confidence,
-                            ),
-                        )
-                        utterances.append(u)
-
-            # 4. Level 4: Event Extraction
-            progress_cb(0.70, "Extracting narrative events and story beats...")
-            primary_char_id = characters[0].character_id if characters else f"char_{uuid.uuid4().hex[:8]}"
-            sec_char_id = characters[1].character_id if len(characters) > 1 else None
-            primary_loc_id = locations[0].location_id if locations else location_main_id
-            valid_p_ids = [p.id for p in inner_panels]
-
-            if provider.provider_id != "mock_llm" and characters:
-                try:
-                    events_prompt = (
-                        "Extract key narrative events from these panels:\n" +
-                        "\n".join(panels_text) +
-                        f"\nCharacters: {[c.display_name for c in characters]}"
+                if not locations:
+                    loc_main = LocationEntity(
+                        location_id=location_main_id,
+                        name="Ancient Subterranean Ruins",
+                        canonical_name="Crystalline Caverns",
+                        description="Deep underground stone chambers with dormant energy conduits.",
+                        visual_cues=["crystal pillars", "glowing stone", "water ripples"],
+                        panel_ids=[p.id for p in inner_panels],
+                        status=CharacterStatus.CONFIRMED,
                     )
-                    event_res: EventExtractionResponse = await provider.generate_structured(
-                        prompt=events_prompt,
-                        response_model=EventExtractionResponse,
+                    locations.append(loc_main)
+
+                # Ensure any manually assigned character in text regions is registered in characters
+                existing_char_ids = {c.character_id for c in characters}
+                for tr in inner_regions:
+                    if tr.speaker_assignment_method == "MANUAL" and tr.speaker_character_id:
+                        if tr.speaker_character_id not in ("NARRATOR", "SFX", "UNKNOWN") and tr.speaker_character_id not in existing_char_ids:
+                            characters.append(CharacterEntity(
+                                character_id=tr.speaker_character_id,
+                                project_id=project_id,
+                                display_name=tr.speaker_character_id,
+                                canonical_name=tr.speaker_character_id,
+                                description="Manually assigned speaker entity.",
+                                role=CharacterRole.SUPPORTING,
+                                first_panel_id=inner_panels[0].id if inner_panels else None,
+                                reference_panel_ids=[inner_panels[0].id] if inner_panels else [],
+                                status=CharacterStatus.CONFIRMED,
+                                manual_override=True,
+                            ))
+                            existing_char_ids.add(tr.speaker_character_id)
+
+                # 3. Level 3: Speaker Resolution (Geometry first, then LLM)
+                progress_cb(0.55, "Attributing dialogue via spatial balloon geometry...")
+                last_speaker = None
+                for p in inner_panels:
+                    p_regions = [r for r in inner_regions if r.panel_id == p.id]
+                    if not p_regions:
+                        continue
+
+                    panel_crop_path = ws_path / "panels" / p.crop_filename if p.crop_filename else None
+                    geom_attributions = resolve_speaker_by_geometry(
+                        panel_id=p.id,
+                        text_regions=[{
+                            "id": r.id,
+                            "region_type": r.region_type,
+                            "x": r.x,
+                            "y": r.y,
+                            "width": r.width,
+                            "height": r.height,
+                        } for r in p_regions],
+                        characters_in_panel=characters,
+                        previous_speaker_id=last_speaker,
+                        panel_image_path=panel_crop_path,
                     )
-                    for e in event_res.events:
-                        p_id = e.panel_id if e.panel_id in valid_p_ids else inner_panels[0].id
-                        actor_char = next((c for c in characters if c.display_name.lower() in e.actor_name.lower()), characters[0])
-                        events.append(EventEntity(
-                            event_id=f"evt_{uuid.uuid4().hex[:8]}",
-                            event_type=e.event_type,
-                            actor_character_id=actor_char.character_id,
-                            target_character_id=None,
-                            object_name=e.object_name,
-                            location_id=primary_loc_id,
-                            panel_ids=[p_id],
-                            description=e.description,
-                            confidence=e.confidence,
-                            evidence=ProvenanceReference(panel_ids=[p_id], confidence=e.confidence),
-                        ))
-                except Exception as e:
-                    logger.warning(f"Real LLM event extraction failed: {e}. Falling back to baseline.")
 
-            # Fallback if mock or empty
-            if not events:
-                evt_1 = EventEntity(
-                    event_id=f"evt_{uuid.uuid4().hex[:8]}",
-                    event_type=EventType.ENTER,
-                    actor_character_id=primary_char_id,
-                    target_character_id=None,
-                    object_name="chamber entrance",
-                    location_id=primary_loc_id,
-                    panel_ids=[inner_panels[0].id],
-                    description="The explorer breaches the entrance of the subterranean ruins.",
-                    confidence=0.95,
-                    evidence=ProvenanceReference(panel_ids=[inner_panels[0].id], confidence=0.95),
-                )
-                events.append(evt_1)
+                    for attr in geom_attributions:
+                        target_reg = next((r for r in p_regions if r.id == attr.text_region_id), None)
+                        if target_reg and target_reg.speaker_assignment_method == "MANUAL" and target_reg.speaker_character_id:
+                            attr = SpeakerAttributionEntity(
+                                text_region_id=target_reg.id,
+                                speaker_character_id=target_reg.speaker_character_id,
+                                confidence=1.0,
+                                method=SpeakerMethod.MANUAL,
+                                evidence_panel_ids=[p.id],
+                                reason_code="MANUAL_OPERATOR_OVERRIDE",
+                            )
 
-                if len(inner_panels) >= 3:
-                    evt_2 = EventEntity(
+                        attributions.append(attr)
+                        if attr.speaker_character_id not in ("NARRATOR", "SFX", "UNKNOWN"):
+                            last_speaker = attr.speaker_character_id
+
+                        # Create Utterance
+                        if target_reg:
+                            u_type = (
+                                UtteranceType.NARRATION
+                                if target_reg.region_type.upper() in ("NARRATION", "CAPTION")
+                                else (UtteranceType.SFX if target_reg.region_type.upper() == "SFX" else UtteranceType.DIALOGUE)
+                            )
+                            u = UtteranceEntity(
+                                utterance_id=f"utt_{target_reg.id[:8]}",
+                                text_region_id=target_reg.id,
+                                panel_id=p.id,
+                                speaker_character_id=attr.speaker_character_id,
+                                source_text=target_reg.raw_text,
+                                corrected_text=target_reg.corrected_text or target_reg.raw_text,
+                                utterance_type=u_type,
+                                emotion=EmotionType.NEUTRAL if u_type == UtteranceType.NARRATION else EmotionType.DETERMINED,
+                                emotion_confidence=attr.confidence,
+                                intensity=0.5,
+                                sequence=target_reg.sequence_global,
+                                provenance=ProvenanceReference(
+                                    panel_ids=[p.id],
+                                    text_region_ids=[target_reg.id],
+                                    confidence=attr.confidence,
+                                ),
+                            )
+                            utterances.append(u)
+
+                # 4. Level 4: Event Extraction
+                progress_cb(0.70, "Extracting narrative events and story beats...")
+                primary_char_id = characters[0].character_id if characters else f"char_{uuid.uuid4().hex[:8]}"
+                sec_char_id = characters[1].character_id if len(characters) > 1 else None
+                primary_loc_id = locations[0].location_id if locations else location_main_id
+                valid_p_ids = [p.id for p in inner_panels]
+
+                if provider.provider_id != "mock_llm" and characters:
+                    try:
+                        events_prompt = (
+                            "Extract key narrative events from these panels:\n" +
+                            "\n".join(panels_text) +
+                            f"\nCharacters: {[c.display_name for c in characters]}"
+                        )
+                        event_res: EventExtractionResponse = await provider.generate_structured(
+                            prompt=events_prompt,
+                            response_model=EventExtractionResponse,
+                        )
+                        for e in event_res.events:
+                            p_id = e.panel_id if e.panel_id in valid_p_ids else inner_panels[0].id
+                            actor_char = next((c for c in characters if c.display_name.lower() in e.actor_name.lower()), characters[0])
+                            events.append(EventEntity(
+                                event_id=f"evt_{uuid.uuid4().hex[:8]}",
+                                event_type=e.event_type,
+                                actor_character_id=actor_char.character_id,
+                                target_character_id=None,
+                                object_name=e.object_name,
+                                location_id=primary_loc_id,
+                                panel_ids=[p_id],
+                                description=e.description,
+                                confidence=e.confidence,
+                                evidence=ProvenanceReference(panel_ids=[p_id], confidence=e.confidence),
+                            ))
+                    except Exception as e:
+                        logger.warning(f"Real LLM event extraction failed: {e}. Falling back to baseline.")
+
+                # Fallback if mock or empty
+                if not events:
+                    evt_1 = EventEntity(
                         event_id=f"evt_{uuid.uuid4().hex[:8]}",
-                        event_type=EventType.DISCOVER,
+                        event_type=EventType.ENTER,
                         actor_character_id=primary_char_id,
                         target_character_id=None,
-                        object_name="crystalline energy source",
+                        object_name="chamber entrance",
                         location_id=primary_loc_id,
-                        panel_ids=[inner_panels[min(2, len(inner_panels) - 1)].id],
-                        description="The explorer discovers a dormant crystalline energy prism.",
-                        confidence=0.91,
-                        evidence=ProvenanceReference(panel_ids=[inner_panels[min(2, len(inner_panels) - 1)].id], confidence=0.91),
+                        panel_ids=[inner_panels[0].id],
+                        description="The explorer breaches the entrance of the subterranean ruins.",
+                        confidence=0.95,
+                        evidence=ProvenanceReference(panel_ids=[inner_panels[0].id], confidence=0.95),
                     )
-                    events.append(evt_2)
+                    events.append(evt_1)
 
-            # 5. Level 5: Scene Segmentation & Story Beats
-            progress_cb(0.85, "Partitioning scenes and dramatic beats...")
-            if provider.provider_id != "mock_llm" and len(inner_panels) >= 2:
-                try:
-                    scene_prompt = (
-                        "Partition these comic panels into scenes and story beats:\n" +
-                        "\n".join(panels_text)
-                    )
-                    scene_res: SceneSegmentationResponse = await provider.generate_structured(
-                        prompt=scene_prompt,
-                        response_model=SceneSegmentationResponse,
-                    )
-                    for idx, s in enumerate(scene_res.scenes, start=1):
-                        p_start = s.panel_start if s.panel_start in valid_p_ids else inner_panels[0].id
-                        p_end = s.panel_end if s.panel_end in valid_p_ids else inner_panels[-1].id
-                        sc_entity = SceneEntity(
-                            scene_id=f"scene_{uuid.uuid4().hex[:8]}",
-                            sequence=idx,
-                            title=s.title,
-                            panel_start=p_start,
-                            panel_end=p_end,
+                    if len(inner_panels) >= 3:
+                        evt_2 = EventEntity(
+                            event_id=f"evt_{uuid.uuid4().hex[:8]}",
+                            event_type=EventType.DISCOVER,
+                            actor_character_id=primary_char_id,
+                            target_character_id=None,
+                            object_name="crystalline energy source",
                             location_id=primary_loc_id,
-                            character_ids=[c.character_id for c in characters],
-                            summary=s.summary,
-                            confidence=s.confidence,
-                            boundary_reason=s.boundary_reason,
+                            panel_ids=[inner_panels[min(2, len(inner_panels) - 1)].id],
+                            description="The explorer discovers a dormant crystalline energy prism.",
+                            confidence=0.91,
+                            evidence=ProvenanceReference(panel_ids=[inner_panels[min(2, len(inner_panels) - 1)].id], confidence=0.91),
                         )
-                        scenes.append(sc_entity)
+                        events.append(evt_2)
 
-                    for idx, b in enumerate(scene_res.beats, start=1):
-                        b_panel_ids = [pid for pid in b.panel_ids if pid in valid_p_ids]
-                        if not b_panel_ids:
-                            b_panel_ids = [inner_panels[0].id]
-                        parent_sc = scenes[min(max(0, b.scene_index - 1), len(scenes) - 1)] if scenes else None
-                        beats.append(StoryBeatEntity(
-                            beat_id=f"beat_{uuid.uuid4().hex[:8]}",
-                            scene_id=parent_sc.scene_id if parent_sc else f"scene_temp_{idx}",
-                            sequence=idx,
-                            panel_ids=b_panel_ids,
-                            event_ids=[e.event_id for e in events[:1]],
-                            summary=b.summary,
-                            dramatic_function=b.dramatic_function,
-                            importance=b.importance,
-                            intensity=b.intensity,
-                            confidence=0.9,
-                            music_intent=b.music_intent,
-                            sfx_intent=b.sfx_intent,
-                        ))
-                except Exception as e:
-                    logger.warning(f"Real LLM scene extraction failed: {e}. Falling back to baseline.")
+                # 5. Level 5: Scene Segmentation & Story Beats
+                progress_cb(0.85, "Partitioning scenes and dramatic beats...")
+                if provider.provider_id != "mock_llm" and len(inner_panels) >= 2:
+                    try:
+                        scene_prompt = (
+                            "Partition these comic panels into scenes and story beats:\n" +
+                            "\n".join(panels_text)
+                        )
+                        scene_res: SceneSegmentationResponse = await provider.generate_structured(
+                            prompt=scene_prompt,
+                            response_model=SceneSegmentationResponse,
+                        )
+                        for idx, s in enumerate(scene_res.scenes, start=1):
+                            p_start = s.panel_start if s.panel_start in valid_p_ids else inner_panels[0].id
+                            p_end = s.panel_end if s.panel_end in valid_p_ids else inner_panels[-1].id
+                            sc_entity = SceneEntity(
+                                scene_id=f"scene_{uuid.uuid4().hex[:8]}",
+                                sequence=idx,
+                                title=s.title,
+                                panel_start=p_start,
+                                panel_end=p_end,
+                                location_id=primary_loc_id,
+                                character_ids=[c.character_id for c in characters],
+                                summary=s.summary,
+                                confidence=s.confidence,
+                                boundary_reason=s.boundary_reason,
+                            )
+                            scenes.append(sc_entity)
 
-            # Fallback if mock or empty
-            if not scenes:
-                half = max(1, len(inner_panels) // 2)
-                scene_1 = SceneEntity(
-                    scene_id=f"scene_{uuid.uuid4().hex[:8]}",
-                    sequence=1,
-                    title="Entry into the Ruins",
-                    panel_start=inner_panels[0].id,
-                    panel_end=inner_panels[half - 1].id,
-                    location_id=primary_loc_id,
-                    character_ids=[primary_char_id],
-                    summary="The explorer descends into the ancient ruins and observes the ancient conduits.",
-                    confidence=0.95,
-                    boundary_reason=BoundaryReason.LOCATION_CHANGE,
-                )
-                scenes.append(scene_1)
+                        for idx, b in enumerate(scene_res.beats, start=1):
+                            b_panel_ids = [pid for pid in b.panel_ids if pid in valid_p_ids]
+                            if not b_panel_ids:
+                                b_panel_ids = [inner_panels[0].id]
+                            parent_sc = scenes[min(max(0, b.scene_index - 1), len(scenes) - 1)] if scenes else None
+                            beats.append(StoryBeatEntity(
+                                beat_id=f"beat_{uuid.uuid4().hex[:8]}",
+                                scene_id=parent_sc.scene_id if parent_sc else f"scene_temp_{idx}",
+                                sequence=idx,
+                                panel_ids=b_panel_ids,
+                                event_ids=[e.event_id for e in events[:1]],
+                                summary=b.summary,
+                                dramatic_function=b.dramatic_function,
+                                importance=b.importance,
+                                intensity=b.intensity,
+                                confidence=0.9,
+                                music_intent=b.music_intent,
+                                sfx_intent=b.sfx_intent,
+                            ))
+                    except Exception as e:
+                        logger.warning(f"Real LLM scene extraction failed: {e}. Falling back to baseline.")
 
-                beat_1 = StoryBeatEntity(
-                    beat_id=f"beat_{uuid.uuid4().hex[:8]}",
-                    scene_id=scene_1.scene_id,
-                    sequence=1,
-                    panel_ids=[p.id for p in inner_panels[:half]],
-                    event_ids=[events[0].event_id if events else f"evt_fallback_1"],
-                    summary="Arrival and initial inspection of the chamber.",
-                    dramatic_function=DramaticFunction.INTRODUCTION,
-                    importance=ImportanceLevel.HIGH,
-                    intensity=0.4,
-                    confidence=0.95,
-                    music_intent="MYSTERIOUS",
-                    sfx_intent="FOOTSTEP",
-                )
-                beats.append(beat_1)
-
-                if len(inner_panels) > half:
-                    scene_2_chars = [primary_char_id]
-                    if sec_char_id:
-                        scene_2_chars.append(sec_char_id)
-                    scene_2 = SceneEntity(
+                # Fallback if mock or empty
+                if not scenes:
+                    half = max(1, len(inner_panels) // 2)
+                    scene_1 = SceneEntity(
                         scene_id=f"scene_{uuid.uuid4().hex[:8]}",
-                        sequence=2,
-                        title="The Core Discovery",
-                        panel_start=inner_panels[half].id,
-                        panel_end=inner_panels[-1].id,
+                        sequence=1,
+                        title="Entry into the Ruins",
+                        panel_start=inner_panels[0].id,
+                        panel_end=inner_panels[half - 1].id,
                         location_id=primary_loc_id,
-                        character_ids=scene_2_chars,
-                        summary="Approaching the dormant energy source and conferring on how to proceed.",
-                        confidence=0.92,
-                        boundary_reason=BoundaryReason.NARRATIVE_SHIFT,
+                        character_ids=[primary_char_id],
+                        summary="The explorer descends into the ancient ruins and observes the ancient conduits.",
+                        confidence=0.95,
+                        boundary_reason=BoundaryReason.LOCATION_CHANGE,
                     )
-                    scenes.append(scene_2)
+                    scenes.append(scene_1)
 
-                    beat_2 = StoryBeatEntity(
+                    beat_1 = StoryBeatEntity(
                         beat_id=f"beat_{uuid.uuid4().hex[:8]}",
-                        scene_id=scene_2.scene_id,
-                        sequence=2,
-                        panel_ids=[p.id for p in inner_panels[half:]],
-                        event_ids=[e.event_id for e in events[1:]] if len(events) > 1 else [events[0].event_id],
-                        summary="Discovery and confrontation with the energy prism.",
-                        dramatic_function=DramaticFunction.DISCOVERY,
+                        scene_id=scene_1.scene_id,
+                        sequence=1,
+                        panel_ids=[p.id for p in inner_panels[:half]],
+                        event_ids=[events[0].event_id if events else f"evt_fallback_1"],
+                        summary="Arrival and initial inspection of the chamber.",
+                        dramatic_function=DramaticFunction.INTRODUCTION,
                         importance=ImportanceLevel.HIGH,
-                        intensity=0.7,
-                        confidence=0.92,
-                        music_intent="TENSE",
-                        sfx_intent="HUM",
+                        intensity=0.4,
+                        confidence=0.95,
+                        music_intent="MYSTERIOUS",
+                        sfx_intent="FOOTSTEP",
                     )
-                    beats.append(beat_2)
+                    beats.append(beat_1)
 
-            # 6. Level 6: Continuity Audit
-            progress_cb(0.95, "Running continuity audit...")
-            narrative_doc = NarrativeDocument(
-                project_id=project_id,
-                version="1.0",
-                language="en",
-                characters=characters,
-                locations=locations,
-                scenes=scenes,
-                beats=beats,
-                events=events,
-                utterances=utterances,
-                speaker_attributions=attributions,
-                observations=observations,
-                relationships=[],
-                analysis_metadata={
-                    "provider": provider.provider_id,
-                    "model": provider.model_metadata().model_name,
-                    "analyzed_at": utc_now().isoformat(),
-                    "total_panels": len(inner_panels),
-                    "total_utterances": len(utterances),
-                },
-            )
+                    if len(inner_panels) > half:
+                        scene_2_chars = [primary_char_id]
+                        if sec_char_id:
+                            scene_2_chars.append(sec_char_id)
+                        scene_2 = SceneEntity(
+                            scene_id=f"scene_{uuid.uuid4().hex[:8]}",
+                            sequence=2,
+                            title="The Core Discovery",
+                            panel_start=inner_panels[half].id,
+                            panel_end=inner_panels[-1].id,
+                            location_id=primary_loc_id,
+                            character_ids=scene_2_chars,
+                            summary="Approaching the dormant energy source and conferring on how to proceed.",
+                            confidence=0.92,
+                            boundary_reason=BoundaryReason.NARRATIVE_SHIFT,
+                        )
+                        scenes.append(scene_2)
+
+                        beat_2 = StoryBeatEntity(
+                            beat_id=f"beat_{uuid.uuid4().hex[:8]}",
+                            scene_id=scene_2.scene_id,
+                            sequence=2,
+                            panel_ids=[p.id for p in inner_panels[half:]],
+                            event_ids=[e.event_id for e in events[1:]] if len(events) > 1 else [events[0].event_id],
+                            summary="Discovery and confrontation with the energy prism.",
+                            dramatic_function=DramaticFunction.DISCOVERY,
+                            importance=ImportanceLevel.HIGH,
+                            intensity=0.7,
+                            confidence=0.92,
+                            music_intent="TENSE",
+                            sfx_intent="HUM",
+                        )
+                        beats.append(beat_2)
+
+                # 6. Level 6: Continuity Audit
+                progress_cb(0.95, "Running continuity audit...")
+                narrative_doc = NarrativeDocument(
+                    project_id=project_id,
+                    version="1.0",
+                    language="en",
+                    characters=characters,
+                    locations=locations,
+                    scenes=scenes,
+                    beats=beats,
+                    events=events,
+                    utterances=utterances,
+                    speaker_attributions=attributions,
+                    observations=observations,
+                    relationships=[],
+                    analysis_metadata={
+                        "provider": provider.provider_id,
+                        "model": provider.model_metadata().model_name,
+                        "analyzed_at": utc_now().isoformat(),
+                        "total_panels": len(inner_panels),
+                        "total_utterances": len(utterances),
+                    },
+                )
 
             warnings = self.continuity_auditor.audit(narrative_doc)
             narrative_doc.continuity_warnings = warnings
@@ -587,7 +621,7 @@ class StoryService:
                     id=str(uuid.uuid4()),
                     project_id=project_id,
                     version="1.0",
-                    language="en",
+                    language=narrative_doc.language,
                     status="COMPLETE",
                     document=narrative_doc.model_dump(),
                     created_at=utc_now(),
@@ -600,6 +634,8 @@ class StoryService:
 
                 # Add Character Records
                 for c in characters:
+                    if visual_mode and inner_db.query(CharacterRecord).filter(CharacterRecord.id == c.character_id, CharacterRecord.manual_override == True).first():
+                        continue
                     fp_id = c.first_panel_id if c.first_panel_id in valid_panel_ids else default_p_id
                     ref_ids = [pid for pid in c.reference_panel_ids if pid in valid_panel_ids]
                     if not ref_ids and default_p_id:
@@ -626,6 +662,8 @@ class StoryService:
 
                 # Add Location Records
                 for loc in locations:
+                    if visual_mode and inner_db.query(LocationRecord).filter(LocationRecord.id == loc.location_id, LocationRecord.manual_override == True).first():
+                        continue
                     loc_pids = [pid for pid in loc.panel_ids if pid in valid_panel_ids]
                     if not loc_pids and default_p_id:
                         loc_pids = [default_p_id]
@@ -645,6 +683,8 @@ class StoryService:
 
                 # Add Scenes & Beats
                 for sc in scenes:
+                    if visual_mode and inner_db.query(SceneRecord).filter(SceneRecord.id == sc.scene_id, SceneRecord.manual_override == True).first():
+                        continue
                     sc_start = sc.panel_start if sc.panel_start in valid_panel_ids else default_p_id
                     sc_end = sc.panel_end if sc.panel_end in valid_panel_ids else (inner_panels[-1].id if inner_panels else default_p_id)
                     reason_str = sc.boundary_reason.value if hasattr(sc.boundary_reason, "value") else str(sc.boundary_reason)
@@ -715,6 +755,9 @@ class StoryService:
                         tr.speaker_confidence = attr.confidence
                         tr.speaker_assignment_method = attr.method.value if hasattr(attr.method, "value") else str(attr.method)
 
+                from engine.story.dependency import mark_media_stale
+                mark_media_stale(inner_db, project_id, include_scripts=True)
+
                 # Advance Project Stage to STORY_ANALYZED
                 proj_rec = inner_db.query(ProjectRecord).filter(ProjectRecord.id == project_id).first()
                 if proj_rec:
@@ -757,7 +800,30 @@ class StoryService:
             .first()
         )
         if rec and rec.document:
-            return NarrativeDocument.model_validate(rec.document)
+            doc = NarrativeDocument.model_validate(rec.document)
+            if doc.analysis_metadata.get("engine") == "vision-story-v1":
+                # Normalized records are the editable review layer. Reconcile them
+                # with the evidence snapshot before returning it to narration/UI.
+                for attribute, record_type, entity_type, id_field in (
+                    ("characters", CharacterRecord, CharacterEntity, "character_id"),
+                    ("locations", LocationRecord, LocationEntity, "location_id"),
+                    ("scenes", SceneRecord, SceneEntity, "scene_id"),
+                    ("beats", StoryBeatRecord, StoryBeatEntity, "beat_id"),
+                ):
+                    rows = db.query(record_type).filter(record_type.project_id == project_id).all()
+                    if rows:
+                        entities = []
+                        for row in rows:
+                            data = {}
+                            for field in entity_type.model_fields:
+                                column = "id" if field == id_field else field
+                                if hasattr(row, column):
+                                    data[field] = getattr(row, column)
+                            entities.append(entity_type.model_validate(data))
+                        if attribute in ("scenes", "beats"):
+                            entities.sort(key=lambda item: item.sequence)
+                        setattr(doc, attribute, entities)
+            return doc
 
         # Fallback to narrative.json on disk if present
         proj = db.query(ProjectRecord).filter(ProjectRecord.id == project_id).first()
@@ -991,19 +1057,40 @@ class StoryService:
         db: Session,
         project_id: str,
         profile: str = "FAITHFUL",
+        cancelled=lambda: False,
     ) -> VideoScript:
         narrative = self.get_narrative(db, project_id)
         if not narrative:
             raise ValueError("Cannot generate script: No Narrative IR found for project.")
+        project = db.query(ProjectRecord).filter(ProjectRecord.id == project_id).first()
+        if (project and (project.settings or {}).get("visual_storytelling")
+                and project.current_stage not in (PipelineStage.STORY_APPROVED.value, PipelineStage.SCRIPT_GENERATED.value,
+                    PipelineStage.SCRIPT_APPROVED.value, PipelineStage.VOICE_GENERATED.value,
+                    PipelineStage.AUDIO_APPROVED.value, PipelineStage.SHOT_PLAN_GENERATED.value,
+                    PipelineStage.MOTION_APPROVED.value, PipelineStage.RENDERED.value)):
+            raise ValueError("Approve the chapter story before generating narration.")
 
         adaptation_profile = AdaptationProfile(profile)
-        script = script_adapter.adapt(narrative, profile=adaptation_profile)
+        if narrative.analysis_metadata.get("engine") == "vision-story-v1":
+            from engine.story.visual import VisualStoryEngine
+            async def create_narration():
+                provider = await llm_registry.get_active_provider(narrative.analysis_metadata.get("provider"))
+                return await VisualStoryEngine().narrate(narrative, provider, adaptation_profile)
+            script = asyncio.run(create_narration())
+        else:
+            script = script_adapter.adapt(narrative, profile=adaptation_profile)
+
+        if cancelled():
+            raise ValueError("Narration generation cancelled; previous script preserved.")
 
         # Persist in DB (replace only same profile version so multiple adaptation profiles coexist)
-        db.query(VideoScriptRecord).filter(
+        previous_scripts = db.query(VideoScriptRecord).filter(
             VideoScriptRecord.project_id == project_id,
             VideoScriptRecord.adaptation_profile == script.adaptation_profile.value,
-        ).delete()
+        ).all()
+        for previous in previous_scripts:
+            db.delete(previous)
+        db.flush()
         s_rec = VideoScriptRecord(
             id=script.script_id,
             project_id=project_id,
@@ -1043,6 +1130,9 @@ class StoryService:
                 manual_override=seg.manual_override,
             )
             db.add(seg_rec)
+
+        from engine.story.dependency import mark_media_stale
+        mark_media_stale(db, project_id)
 
         # Advance project stage
         proj = db.query(ProjectRecord).filter(ProjectRecord.id == project_id).first()
@@ -1123,10 +1213,11 @@ class StoryService:
         speaker_character_id: Optional[str] = None,
         emotion: Optional[str] = None,
         intensity: Optional[float] = None,
+        estimated_duration: Optional[float] = None,
     ) -> ScriptSegmentRecord:
         seg = (
             db.query(ScriptSegmentRecord)
-            .filter(ScriptSegmentRecord.id == segment_id, ScriptSegmentRecord.script_id == script_id)
+            .filter(ScriptSegmentRecord.id == segment_id, ScriptSegmentRecord.script_id == script_id, ScriptSegmentRecord.project_id == project_id)
             .first()
         )
         if not seg:
@@ -1144,6 +1235,19 @@ class StoryService:
         if intensity is not None:
             seg.intensity = intensity
 
+        if estimated_duration is not None:
+            if estimated_duration <= 0:
+                raise ValueError("Duration must be positive")
+            seg.estimated_duration = estimated_duration
+        script_record = db.query(VideoScriptRecord).filter(VideoScriptRecord.id == script_id, VideoScriptRecord.project_id == project_id).first()
+        if script_record:
+            script_record.status = "DRAFT"
+            elapsed = 0.0
+            for item in sorted(script_record.segments, key=lambda item: item.sequence):
+                item.estimated_start = round(elapsed, 3)
+                elapsed += item.estimated_duration
+                item.estimated_end = round(elapsed, 3)
+            script_record.estimated_duration = round(elapsed, 3)
         seg.manual_override = True
 
         # Invalidate downstream tiers: Audio, Motion, Render

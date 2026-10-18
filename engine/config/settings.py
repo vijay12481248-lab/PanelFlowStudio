@@ -1,15 +1,28 @@
+import os
+import sys
 from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
-import os
+
+def _get_default_app_data() -> Path:
+    if sys.platform == "win32":
+        local_app_data = os.environ.get("LOCALAPPDATA")
+        if local_app_data:
+            return Path(local_app_data) / "PanelFlow Studio"
+    return Path.home() / ".panelflow"
 
 class Settings(BaseSettings):
     app_name: str = "PanelFlow Studio"
-    version: str = "1.0.0-beta.1"
+    version: str = "1.0.0-beta.2"
     
-    # Workspace & Database
+    # Application State Directory (database, logs, config, cache)
+    app_data_dir: Path = Field(
+        default_factory=lambda: Path(os.getenv("PANELFLOW_APP_DATA", str(_get_default_app_data())))
+    )
+    
+    # Default Workspace Root for projects (when not explicitly chosen by user)
     workspace_root: Path = Field(
-        default_factory=lambda: Path(os.getenv("PANELFLOW_WORKSPACE_ROOT", str(Path.home() / ".panelflow" / "workspaces")))
+        default_factory=lambda: Path(os.getenv("PANELFLOW_WORKSPACE_ROOT", str(_get_default_app_data() / "projects")))
     )
     database_url: str | None = None
     
@@ -25,6 +38,8 @@ class Settings(BaseSettings):
         "http://127.0.0.1:8765",
         "tauri://localhost",
         "https://tauri.localhost",
+        "http://tauri.localhost",
+        "https://localhost",
     ]
     
     # Acquisition & Safety Limits
@@ -50,13 +65,25 @@ class Settings(BaseSettings):
     )
     
     @property
+    def database_dir(self) -> Path:
+        d = self.app_data_dir / "database"
+        d.mkdir(parents=True, exist_ok=True)
+        return d
+
+    @property
+    def logs_dir(self) -> Path:
+        d = self.app_data_dir / "logs"
+        d.mkdir(parents=True, exist_ok=True)
+        return d
+
+    @property
     def db_file_path(self) -> Path:
-        return self.workspace_root / "panelflow.db"
+        return self.database_dir / "panelflow.db"
 
     def get_database_url(self) -> str:
         if self.database_url:
             return self.database_url
-        self.workspace_root.mkdir(parents=True, exist_ok=True)
+        self.database_dir.mkdir(parents=True, exist_ok=True)
         return f"sqlite:///{self.db_file_path.as_posix()}"
 
 

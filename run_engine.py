@@ -1,3 +1,4 @@
+import os
 import sys
 from pathlib import Path
 
@@ -15,6 +16,32 @@ if sys.platform == "win32":
             pass
     _ProactorBasePipeTransport._call_connection_lost = _safe_call_connection_lost
 
+    try:
+        # Ensure stdout and stderr handles exist when launched in background or no-window mode
+        local_app_data = os.environ.get("LOCALAPPDATA")
+        log_dir = Path(local_app_data) / "PanelFlow Studio" / "logs" if local_app_data else Path.home() / ".panelflow" / "logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_file = log_dir / "engine.log"
+
+        need_redirect = False
+        if sys.stdout is None or not hasattr(sys.stdout, "write"):
+            need_redirect = True
+        else:
+            try:
+                sys.stdout.flush()
+            except Exception:
+                need_redirect = True
+
+        if need_redirect:
+            f = open(log_file, "a", encoding="utf-8", buffering=1)
+            sys.stdout = f
+            sys.stderr = f
+    except Exception:
+        pass
+
+if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+    sys.path.insert(0, getattr(sys, "_MEIPASS"))
+
 import uvicorn
 from engine.config.settings import settings
 from engine.api.app import app
@@ -22,7 +49,7 @@ from engine.api.app import app
 if __name__ == "__main__":
     print(f"Starting {settings.app_name} Engine on http://{settings.api_host}:{settings.api_port}...")
     uvicorn.run(
-        "engine.api.app:app",
+        app,
         host=settings.api_host,
         port=settings.api_port,
         reload=False,

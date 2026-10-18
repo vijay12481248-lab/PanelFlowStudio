@@ -1,6 +1,6 @@
 from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from engine.database.session import get_db
@@ -62,6 +62,28 @@ class ScriptSegmentUpdateRequest(BaseModel):
     speaker_character_id: Optional[str] = None
     emotion: Optional[str] = None
     intensity: Optional[float] = None
+    estimated_duration: Optional[float] = Field(default=None, gt=0)
+
+
+class ScriptActionRequest(BaseModel):
+    action: str
+
+
+@router.post("/projects/{project_id}/scripts/generate-job")
+def generate_script_job(project_id: str, req: ScriptGenerateRequest, db: Session = Depends(get_db)):
+    from engine.database.models import ProjectRecord
+    from engine.jobs.workflow import enqueue_project_operation
+    if not db.query(ProjectRecord).filter(ProjectRecord.id == project_id).first():
+        raise HTTPException(status_code=404, detail="Project not found")
+    def operation(session, progress, cancelled):
+        progress(0.1, "Writing original chapter narration; waiting for language model...")
+        if cancelled():
+            raise ValueError("Narration generation cancelled")
+        script = story_service.generate_script(session, project_id, req.adaptation_profile, cancelled=cancelled)
+        progress(1.0, "Narration ready for review")
+        return {"script_id": script.script_id}
+    return {"job_id": enqueue_project_operation(project_id, "SCRIPT_GENERATION", operation, priority=12, requires_gpu=True, gpu_vram_mb=3000)}
+
 
 
 # ---------------------------------------------------------------------------
@@ -77,6 +99,9 @@ async def list_llm_providers():
         is_healthy = await prov.health_check()
         results.append({
             **p,
+            "provider_name": p["display_name"],
+            "is_local": p["provider_id"] != "mock_llm",
+            "is_multimodal": prov.model_metadata().supports_vision,
             "is_healthy": is_healthy,
         })
     return results
@@ -323,6 +348,7 @@ def update_script_segment(
             speaker_character_id=req.speaker_character_id,
             emotion=req.emotion,
             intensity=req.intensity,
+            estimated_duration=req.estimated_duration,
         )
         return {
             "id": seg.id,
@@ -332,6 +358,18 @@ def update_script_segment(
         }
     except KeyError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+
+@router.post("/projects/{project_id}/scripts/{script_id}/segments/{segment_id}/action", response_model=VideoScript)
+def edit_script_action(project_id: str, script_id: str, segment_id: str, req: ScriptActionRequest,
+                       db: Session = Depends(get_db)):
+    from engine.story.script.review import apply_script_action
+    try:
+        return apply_script_action(db, project_id, script_id, segment_id, req.action)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 @router.post("/projects/{project_id}/scripts/{script_id}/validate", response_model=ScriptValidationReport)
@@ -357,3 +395,61 @@ def approve_script(project_id: str, script_id: str, db: Session = Depends(get_db
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+# ---------------------------------------------------------------------------
+# Visual Storyboard & Narration-to-Frame Alignment Endpoints
+# ---------------------------------------------------------------------------
+
+@router.get("/projects/{project_id}/storyboard")
+def get_storyboard(project_id: str, db: Session = Depends(get_db)):
+    """
+    Returns the visual storyboard aligning narration sentences with selected manga panels.
+    Generates alignment automatically if not yet computed.
+    """
+    from engine.story.alignment import alignment_service
+    try:
+        doc = alignment_service.align_script_to_frames(db, project_id)
+        return doc.model_dump()
+    except KeyError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.put("/projects/{project_id}/storyboard/segments/{segment_id}")
+def update_storyboard_segment(
+    project_id: str,
+    segment_id: str,
+    req: Dict[str, Any],
+    db: Session = Depends(get_db),
+):
+    """
+    Updates an individual storyboard segment (narration, timing, camera motion, or panel references)
+    and locks it as a manual user override.
+    """
+    from engine.story.alignment import alignment_service, StoryboardSegmentUpdate
+    try:
+        update_data = StoryboardSegmentUpdate.model_validate(req)
+        updated_seg = alignment_service.update_segment(db, project_id, segment_id, update_data)
+        return updated_seg.model_dump()
+    except KeyError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.post("/projects/{project_id}/storyboard/realign")
+def realign_storyboard(project_id: str, db: Session = Depends(get_db)):
+    """
+    Forces realignment of narration to manga panels, preserving manual user overrides.
+    """
+    from engine.story.alignment import alignment_service
+    try:
+        doc = alignment_service.align_script_to_frames(db, project_id, force_realign=True)
+        return doc.model_dump()
+    except KeyError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+

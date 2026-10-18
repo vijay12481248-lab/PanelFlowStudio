@@ -80,9 +80,19 @@ class JobResponse(BaseModel):
     input: dict = Field(default_factory=dict)
     output: dict = Field(default_factory=dict)
     error: str | None = None
+    priority: int = 10
+    depends_on_job_id: str | None = None
+    requires_gpu: bool = False
+    gpu_vram_mb: int = 0
+    cpu_units: int = 1
+    worker_lease_id: str | None = None
+    lease_expires_at: str | None = None
+    retry_count: int = 0
+    max_retries: int = 3
     created_at: str | None = None
     started_at: str | None = None
     finished_at: str | None = None
+
 
 
 class NormalizeProjectRequest(BaseModel):

@@ -22,6 +22,8 @@ class ScriptFaithfulnessValidator:
         source_texts = [u.corrected_text.lower().strip() for u in narrative.utterances if u.corrected_text]
         beat_summaries = [b.summary.lower().strip() for b in narrative.beats if b.summary]
         event_descriptions = [e.description.lower().strip() for e in narrative.events if e.description]
+        visual_summaries = [o.visual_summary.lower().strip() for o in narrative.observations if o.visual_summary]
+        visual_summaries += [s.summary.lower().strip() for s in narrative.scenes if s.summary]
 
         supported_count = 0
         weakly_supported_count = 0
@@ -54,7 +56,7 @@ class ScriptFaithfulnessValidator:
             STOP_WORDS = {"this", "that", "with", "from", "they", "them", "then", "have", "were", "been", "will", "would", "could", "should", "your", "what", "when", "where", "into", "their", "about", "there"}
             seg_words = {w.strip(".,!?:;\"'") for w in seg_text_clean.split() if len(w) > 3 and w not in STOP_WORDS}
             all_known_words = {
-                w.strip(".,!?:;\"'") for text in (source_texts + beat_summaries + event_descriptions)
+                w.strip(".,!?:;\"'") for text in (source_texts + beat_summaries + event_descriptions + visual_summaries)
                 for w in text.split() if len(w) > 3 and w not in STOP_WORDS
             }
             word_overlap = len(seg_words & all_known_words) / max(1, len(seg_words))
@@ -67,7 +69,10 @@ class ScriptFaithfulnessValidator:
             )
 
             # Check if completely ungrounded (< 20% word overlap and no substring match)
-            if not is_dialogue_match and not is_narrative_match and word_overlap < 0.20:
+            if invalid_panels or invalid_regions or (seg.speaker_character_id and seg.speaker_character_id not in known_character_ids):
+                seg.faithfulness_status = "UNSUPPORTED"
+                unsupported_count += 1
+            elif not is_dialogue_match and not is_narrative_match and word_overlap < 0.20:
                 seg.faithfulness_status = "UNSUPPORTED"
                 unsupported_count += 1
                 seg_issues.append("Line makes claims with negligible lexical or semantic grounding in source panels, text, or events.")

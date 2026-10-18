@@ -4,6 +4,17 @@ import logging
 
 logger = logging.getLogger("panelflow.story.dependency")
 
+
+def mark_media_stale(db, project_id, include_audio=True, include_scripts=False):
+    """Persist invalidation so approvals cannot survive engine restarts."""
+    from engine.database.models import AudioTimelineRecord, VisualTimelineRecord, RenderJobRecord, VideoScriptRecord
+    if include_scripts:
+        db.query(VideoScriptRecord).filter(VideoScriptRecord.project_id == project_id).update({"status": "STALE"}, synchronize_session="fetch")
+    if include_audio:
+        db.query(AudioTimelineRecord).filter(AudioTimelineRecord.project_id == project_id).update({"status": "STALE"}, synchronize_session="fetch")
+    db.query(VisualTimelineRecord).filter(VisualTimelineRecord.project_id == project_id).update({"status": "STALE"}, synchronize_session="fetch")
+    db.query(RenderJobRecord).filter(RenderJobRecord.project_id == project_id, RenderJobRecord.status == "COMPLETE").update({"status": "STALE"}, synchronize_session="fetch")
+
 class PipelineEntityTier(str, Enum):
     PAGE = "PAGE"
     PANEL = "PANEL"

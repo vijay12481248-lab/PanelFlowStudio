@@ -134,6 +134,11 @@ class AudioMixer:
         # Build smooth ducking envelope (-8 dB attenuation during speech)
         duck_envelope = self._build_ducking_envelope(total_samples, speech_intervals, duck_db=-8.0)
         full_music *= duck_envelope[:, np.newaxis]
+        # Short ramps prevent clicks at chapter boundaries, including loop beds.
+        fade_samples = min(len(full_music) // 2, int(self.sample_rate * 0.8))
+        if fade_samples:
+            full_music[:fade_samples] *= np.linspace(0, 1, fade_samples)[:, np.newaxis]
+            full_music[-fade_samples:] *= np.linspace(1, 0, fade_samples)[:, np.newaxis]
 
         master_buffer += full_music
 

@@ -136,9 +136,16 @@ class FFmpegEncoder:
             try:
                 for frame_idx in range(total_frames):
                     if cancel_token and cancel_token():
-                        proc.kill()
-                        if output_mp4_path.exists():
-                            output_mp4_path.unlink()
+                        try:
+                            proc.kill()
+                            proc.wait(timeout=5)
+                        except Exception:
+                            pass
+                        try:
+                            if output_mp4_path.exists():
+                                output_mp4_path.unlink()
+                        except Exception:
+                            pass
                         if progress_cb:
                             progress_cb(RenderStage.CANCELLED, frame_idx, total_frames, 0.0)
                         return False
@@ -171,7 +178,14 @@ class FFmpegEncoder:
                 return True
 
             except Exception as e:
-                proc.kill()
-                if output_mp4_path.exists():
-                    output_mp4_path.unlink()
+                try:
+                    proc.kill()
+                    proc.wait(timeout=5)
+                except Exception:
+                    pass
+                try:
+                    if output_mp4_path.exists():
+                        output_mp4_path.unlink()
+                except Exception:
+                    pass
                 raise e

@@ -252,16 +252,27 @@ class ContourPanelDetector(BasePanelDetector):
         preventing arbitrary tile cuts from bifurcating illustrations.
         """
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        row_means = gray.mean(axis=1)
 
-        # Estimate background gutter intensity from extreme borders
-        edge_samples = np.concatenate([gray[0:20, :].flatten(), gray[-20:, :].flatten()])
-        bg_intensity = float(np.median(edge_samples))
+        # The gutter color can change along a strip (white, blue, or black).
+        # Estimate it locally from both side margins rather than page ends.
+        margin = max(2, round(page_w * 0.01))
+        row_background = np.median(
+            np.concatenate([gray[:, :margin], gray[:, -margin:]], axis=1),
+            axis=1,
+        )
 
-        if bg_intensity > 150:
-            is_gutter = row_means > (bg_intensity - 12)
-        else:
-            is_gutter = row_means < (bg_intensity + 12)
+        # Mean brightness mistakes white speech balloons for empty gutters.
+        # Keep even thin outlines/text as content, and bridge short blank runs
+        # so line spacing cannot split a single dialogue balloon into fragments.
+        deviation = np.abs(gray.astype(np.float32) - row_background[:, None])
+        is_content = (deviation > 12).mean(axis=1) >= 0.001
+        min_gutter = max(25, round(page_w * 0.02)) | 1
+        is_content = cv2.morphologyEx(
+            is_content.astype(np.uint8).reshape(-1, 1),
+            cv2.MORPH_CLOSE,
+            np.ones((min_gutter, 1), dtype=np.uint8),
+        ).reshape(-1).astype(bool)
+        is_gutter = ~is_content
 
         # Identify contiguous non-gutter vertical spans
         in_panel = False
@@ -282,13 +293,7 @@ class ContourPanelDetector(BasePanelDetector):
 
         candidates: list[tuple[int, int, int, int, float, str]] = []
         for y1, y2 in spans:
-            strip = gray[y1:y2, :]
-            col_means = strip.mean(axis=0)
-
-            if bg_intensity > 150:
-                content_cols = np.where(col_means < (bg_intensity - 8))[0]
-            else:
-                content_cols = np.where(col_means > (bg_intensity + 8))[0]
+            content_cols = np.where((deviation[y1:y2] > 12).any(axis=0))[0]
 
             if len(content_cols) > 0:
                 x1 = int(content_cols[0])

@@ -177,11 +177,24 @@ class JobRecord(Base):
     input = Column(JSON, default=dict, nullable=False)
     output = Column(JSON, default=dict, nullable=False)
     error = Column(Text, nullable=True)
+
+    # Multi-project resource-aware scheduler extensions
+    priority = Column(Integer, default=10, nullable=False, index=True)
+    depends_on_job_id = Column(String(36), nullable=True, index=True)
+    requires_gpu = Column(Boolean, default=False, nullable=False)
+    gpu_vram_mb = Column(Integer, default=0, nullable=False)
+    cpu_units = Column(Integer, default=1, nullable=False)
+    worker_lease_id = Column(String(64), nullable=True, index=True)
+    lease_expires_at = Column(DateTime, nullable=True, index=True)
+    retry_count = Column(Integer, default=0, nullable=False)
+    max_retries = Column(Integer, default=3, nullable=False)
+
     created_at = Column(DateTime, default=utc_now, nullable=False)
     started_at = Column(DateTime, nullable=True)
     finished_at = Column(DateTime, nullable=True)
 
     project = relationship("ProjectRecord", back_populates="jobs")
+
 
 
 class TextRegionRecord(Base):

@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Callable, Any
 from datetime import datetime, timezone
 import json
+import hashlib
 
 from engine.config.settings import settings
 from engine.acquisition.models import (
@@ -91,6 +92,21 @@ class DownloadPipeline:
                         source_uri=page.source_uri,
                         success=False,
                         error_message="Acquisition cancelled by user",
+                    )
+
+                cached = manifest_pages.get(page.sequence)
+                if (cached and cached.status == "READY" and cached.source_url == page.source_uri
+                        and cached.filename == target_filename and target_path.is_file()
+                        and target_path.stat().st_size == cached.bytes
+                        and hashlib.sha256(target_path.read_bytes()).hexdigest() == cached.sha256):
+                    completed_count += 1
+                    if progress_callback:
+                        progress_callback(completed_count / max(1, total), f"Reused verified page {page.sequence}/{total}")
+                    return DownloadedPageResult(
+                        sequence=page.sequence, source_uri=page.source_uri, target_path=target_path,
+                        filename=cached.filename, content_type=cached.content_type,
+                        width=cached.width, height=cached.height, byte_size=cached.bytes,
+                        sha256=cached.sha256, success=True,
                     )
 
                 # Check for simulated delay from candidate extra_metadata

@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import re
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse, urljoin
@@ -123,18 +124,33 @@ class GenericAuthorizedWebAdapter(BaseSourceAdapter):
             title_tag = soup.find("title")
             title_suggestion = title_tag.get_text(strip=True) if title_tag else parsed.netloc
 
-            img_tags = soup.find_all("img")
+            # Reuse the adaptive extractor's DOM discovery primitives rather than
+            # maintaining a second lazy-loading implementation here.
+            from engine.acquisition.web.discovery.container_detector import ContainerDetector
+            from engine.acquisition.web.discovery.candidate_collector import CandidateCollector
+            from engine.acquisition.web.validation.placeholder_detector import is_placeholder_candidate
+            reader = soup.select_one(".reading-content, .chapter-content, #chapter-content, #readerarea")
+            if reader is None:
+                reader, _, _ = ContainerDetector().detect_reader_container(soup)
+            scope = reader if reader is not None else soup
+            # Remove site chrome from this parsing tree only; downloaded sources are untouched.
+            for chrome in list(scope.select("header, footer, nav, aside, .advertisement, .related, .recommendations")):
+                chrome.decompose()
             valid_srcs = []
-            for img in img_tags:
-                src = img.get("src") or img.get("data-src") or img.get("data-original")
-                if not src:
+            for candidate in CandidateCollector().collect(soup, str(resp.url), container_tag=reader):
+                full_url = candidate.resolved_url
+                if not full_url or urlparse(full_url).scheme not in ("http", "https"):
                     continue
-                full_url = urljoin(url, src)
-                # Filter out trivial icons/logos if they don't match image extensions
-                p_url = urlparse(full_url)
-                ext = Path(p_url.path).suffix.lower()
-                if ext in settings.allowed_image_extensions or "image" in src.lower() or "page" in src.lower():
+                if re.search(r"(?:^|[-_/])(logo|avatar|banner|advertisement|thumbnail|recommended)(?:[-_./]|$)", urlparse(full_url).path, re.I):
+                    continue
+                placeholder, _ = is_placeholder_candidate(full_url, width=candidate.rendered_width, height=candidate.rendered_height)
+                if placeholder:
+                    continue
+                ext = Path(urlparse(full_url).path).suffix.lower()
+                if ext in settings.allowed_image_extensions or "image" in full_url.lower() or "page" in full_url.lower():
                     valid_srcs.append(full_url)
+            if not valid_srcs:
+                raise ValueError("No chapter images found in static reader content. This site may require browser extraction or a reader recipe.")
 
             # Deduplicate while preserving discovered order
             seen = set()
@@ -190,12 +206,15 @@ class GenericAuthorizedWebAdapter(BaseSourceAdapter):
         if manifest and "pages" in manifest:
             for idx, p_info in enumerate(manifest["pages"], start=1):
                 p_url = p_info if isinstance(p_info, str) else p_info.get("url", "")
+                extra = {"referer": chapter.source_uri}
+                if isinstance(p_info, dict):
+                    extra.update(p_info)
                 candidates.append(
                     PageCandidate(
                         sequence=idx,
                         source_uri=p_url,
                         suggested_filename=f"page_{idx:04d}.jpg",
-                        extra_metadata={"source_page_info": p_info},
+                        extra_metadata=extra,
                     )
                 )
         elif discovered:
@@ -207,6 +226,7 @@ class GenericAuthorizedWebAdapter(BaseSourceAdapter):
                         sequence=idx,
                         source_uri=p_url,
                         suggested_filename=clean_stem,
+                        extra_metadata={"referer": chapter.source_uri},
                     )
                 )
         else:
@@ -216,6 +236,7 @@ class GenericAuthorizedWebAdapter(BaseSourceAdapter):
                     sequence=1,
                     source_uri=chapter.source_uri,
                     suggested_filename=f"page_0001.jpg",
+                    extra_metadata={"referer": chapter.source_uri},
                 )
             )
 
@@ -227,6 +248,7 @@ class GenericAuthorizedWebAdapter(BaseSourceAdapter):
         target_path: Path,
         cancel_token: Any | None = None,
     ) -> DownloadedPageResult:
+        target_path = Path(target_path)
         if cancel_token and getattr(cancel_token, "is_cancelled", False):
             return DownloadedPageResult(
                 sequence=page.sequence,
@@ -254,11 +276,29 @@ class GenericAuthorizedWebAdapter(BaseSourceAdapter):
                 if settings.rate_limit_delay_seconds > 0:
                     await asyncio.sleep(settings.rate_limit_delay_seconds)
 
+                parsed_url = urlparse(url)
+                referer = None
+                if hasattr(page, "extra_metadata") and isinstance(page.extra_metadata, dict):
+                    referer = page.extra_metadata.get("referer")
+                if not referer and parsed_url.scheme and parsed_url.netloc:
+                    referer = f"{parsed_url.scheme}://{parsed_url.netloc}/"
+
+                headers = {
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                    "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+                    "Accept-Language": "en-US,en;q=0.9",
+                }
+                if referer:
+                    headers["Referer"] = str(referer)
+
+                # Guard against any None values in headers
+                headers = {str(k): str(v) for k, v in headers.items() if v is not None}
+
                 async with httpx.AsyncClient(
                     timeout=settings.download_timeout_seconds,
                     verify=True,
                     follow_redirects=True,
-                    headers={"User-Agent": "PanelFlowStudio/0.1.0 (Authorized Ingestion Engine)"}
+                    headers=headers
                 ) as client:
                     resp = await client.get(url)
                     resp.raise_for_status()

@@ -100,9 +100,23 @@ class ResumableChapterDownloader:
                                 _, b64_data = page.resolved_url.split(",", 1)
                                 data = base64.b64decode(b64_data)
                             else:
+                                parsed_page_url = urlparse(page.resolved_url)
+                                ref = (
+                                    manifest.canonical_url
+                                    or manifest.source_url
+                                    or (f"{parsed_page_url.scheme}://{parsed_page_url.netloc}/" if parsed_page_url.netloc else None)
+                                )
+                                req_headers = {
+                                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                                    "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+                                    "Accept-Language": "en-US,en;q=0.9",
+                                }
+                                if ref:
+                                    req_headers["Referer"] = str(ref)
+                                req_headers = {str(k): str(v) for k, v in req_headers.items() if v is not None}
                                 resp = await client.get(
                                     page.resolved_url,
-                                    headers={"User-Agent": "PanelFlowStudio/0.1.0"},
+                                    headers=req_headers,
                                 )
                                 # Fatal HTTP errors (401, 403, 404) -> do not retry
                                 if resp.status_code in (401, 403, 404):

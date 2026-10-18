@@ -335,6 +335,11 @@ class ScriptSegment(BaseModel):
     music_intent: Optional[str] = None
     sfx_intent: Optional[str] = None
     motion_intent: Optional[MotionIntent] = None
+    delivery_style: str = "CALM_NARRATION"  # CALM_NARRATION, SUSPENSE, WONDER, DANGER, CLIFFHANGER
+    vocal_energy: str = "medium"
+    target_pace: float = 1.30
+    trailing_pause: float = 0.35
+    evidence_summary: str = ""
     faithfulness_status: str = "SUPPORTED"  # SUPPORTED, WEAKLY_SUPPORTED, UNSUPPORTED
     manual_override: bool = False
 

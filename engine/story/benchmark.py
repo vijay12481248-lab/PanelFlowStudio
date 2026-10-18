@@ -344,7 +344,11 @@ def evaluate_test_case(case: StoryBenchmarkTestCase, provider_id: str = "mock") 
                 utterance_id=f"utt_{r['id']}",
                 text_region_id=r["id"],
                 panel_id=r["panel_id"],
-                speaker_character_id=resolved_speakers.get(r["id"], "UNKNOWN"),
+                # Evaluation labels are display names; the domain contract uses IDs.
+                speaker_character_id=next(
+                    (c.character_id for c in char_entities if c.display_name == resolved_speakers.get(r["id"])),
+                    resolved_speakers.get(r["id"], "UNKNOWN"),
+                ),
                 source_text=r["text"],
                 corrected_text=r["text"],
                 sequence=idx + 1,

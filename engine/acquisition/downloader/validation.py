@@ -81,36 +81,52 @@ def validate_image_bytes(data: bytes, original_filename: str = "") -> dict:
             f"File header does not match known image formats (JPEG, PNG, WebP, BMP)"
         )
 
-    # Pillow validation
+    # Ensure Pillow plugins are initialized and decompression bomb threshold allows webtoons
+    Image.MAX_IMAGE_PIXELS = 150_000_000
+    try:
+        Image.init()
+    except Exception:
+        pass
+
+    # Dual-Engine Image Validation: Pillow primary with OpenCV fallback
+    pil_width, pil_height, pil_format, pil_mode = 0, 0, None, None
+    pil_error = None
     try:
         with Image.open(io.BytesIO(data)) as img:
             img.verify()
-    except Exception as e:
-        raise ImageValidationError(f"Pillow verification failed: {e}")
-
-    # Re-open to read dimensions and format (verify() closes/invalidates the stream)
-    try:
         with Image.open(io.BytesIO(data)) as img:
-            width, height = img.size
-            img_format = (img.format or matched_type).upper()
-            mode = img.mode
-            if width <= 0 or height <= 0:
-                raise ImageValidationError(f"Invalid image dimensions: {width}x{height}")
-    except ImageValidationError:
-        raise
+            pil_width, pil_height = img.size
+            pil_format = (img.format or matched_type).upper()
+            pil_mode = img.mode
+            if pil_width <= 0 or pil_height <= 0:
+                pil_error = f"Invalid image dimensions: {pil_width}x{pil_height}"
     except Exception as e:
-        raise ImageValidationError(f"Failed to read image dimensions: {e}")
+        pil_error = str(e)
 
     # OpenCV raster decode check
+    cv_width, cv_height = 0, 0
+    cv_error = None
     try:
         np_arr = np.frombuffer(data, dtype=np.uint8)
         decoded = cv2.imdecode(np_arr, cv2.IMREAD_UNCHANGED)
         if decoded is None:
-            raise ImageValidationError("OpenCV failed to decode raster matrix from image bytes")
-    except ImageValidationError:
-        raise
+            cv_error = "OpenCV failed to decode raster matrix from image bytes"
+        else:
+            cv_height, cv_width = decoded.shape[:2]
+            if cv_width <= 0 or cv_height <= 0:
+                cv_error = f"Invalid decoded dimensions: {cv_width}x{cv_height}"
     except Exception as e:
-        raise ImageValidationError(f"OpenCV decode failed: {e}")
+        cv_error = str(e)
+
+    # If both Pillow and OpenCV failed, reject the payload
+    if pil_error and cv_error:
+        raise ImageValidationError(f"Pillow verification failed: {pil_error} (OpenCV: {cv_error})")
+
+    # Select valid dimensions and metadata
+    width = pil_width if pil_width > 0 else cv_width
+    height = pil_height if pil_height > 0 else cv_height
+    img_format = pil_format or (matched_type or "JPEG").upper()
+    mode = pil_mode or ("RGB" if decoded is not None and len(decoded.shape) == 3 else "L")
 
     mime_map = {
         "JPEG": "image/jpeg",

@@ -91,6 +91,8 @@ class MotionService:
         )
         if not audio_rec:
             raise ValueError("No audio timeline found. Complete audio generation first.")
+        if audio_rec.status != "APPROVED":
+            raise ValueError("Approve the current audio timeline before planning motion.")
 
         mat = MasterAudioTimeline.model_validate(audio_rec.timeline_json)
 
@@ -152,7 +154,34 @@ class MotionService:
 
         # Check pages / panels in DB
         pages = db.query(PageRecord).filter(PageRecord.project_id == project_id).order_by(PageRecord.sequence).all()
-        if pages:
+        visual_storytelling = bool((proj.settings or {}).get("visual_storytelling"))
+        if visual_storytelling:
+            # Discover non-story panel exclusions from coverage report or metadata
+            excluded_pids = set()
+            cov_path = workspace / "story" / "panels_coverage_report.json"
+            if cov_path.exists():
+                try:
+                    cdata = json.loads(cov_path.read_text(encoding="utf-8"))
+                    for it in cdata.get("items", []):
+                        if it.get("classification") != "STORY_PANEL":
+                            excluded_pids.add(it.get("panel_id"))
+                except Exception:
+                    pass
+            panels = db.query(PanelRecord).filter(PanelRecord.project_id == project_id, PanelRecord.status != "IGNORED").order_by(PanelRecord.sequence).all()
+            for panel in panels:
+                if panel.id in excluded_pids:
+                    continue
+                crop = workspace / "panels" / panel.crop_filename
+                if not crop.exists():
+                    raise ValueError(f"Panel crop missing: {panel.id}. Regenerate panel crops before motion planning.")
+                visual_sources.append(VisualSource(
+                    asset_id=panel.id, panel_id=panel.id, page_id=panel.page_id,
+                    sequence_global=panel.sequence, file_path=str(crop),
+                    width=panel.width, height=panel.height,
+                    panel_bounds=NormalizedRect(x=0, y=0, width=1, height=1),
+                    provenance={"source_page": panel.page_id, "bbox": [panel.x, panel.y, panel.width, panel.height]},
+                ))
+        elif pages:
             for p in pages:
                 page_img_path = workspace / "pages" / p.filename
                 if not page_img_path.exists():
@@ -222,6 +251,19 @@ class MotionService:
             )
         ]
 
+        beats = []
+        if visual_storytelling:
+            from engine.story.service import story_service
+            narrative = story_service.get_narrative(db, project_id)
+            if not narrative:
+                raise ValueError("Chapter story missing; analyze and approve story first.")
+            scenes, characters, beats = narrative.scenes, narrative.characters, narrative.beats
+            # Keep chapter movement restrained regardless of legacy cinematic presets.
+            style.max_zoom = min(style.max_zoom, 1.08)
+            style.max_pan_distance = min(style.max_pan_distance, 0.08)
+            style.effect_intensity = 0.0
+            style.parallax_strength = 0.0
+
         # 6. Apply Overrides if supplied
         manual_overrides = None
         if overrides:
@@ -233,6 +275,7 @@ class MotionService:
             visual_sources=visual_sources,
             master_audio_timeline=mat,
             scenes=scenes,
+            beats=beats,
             characters=characters,
             target_resolution=TargetResolution.standard_1080p(),
             style_profile=style,
@@ -286,6 +329,8 @@ class MotionService:
         )
         if not record:
             raise ValueError("No visual timeline found to approve.")
+        if record.status == "STALE":
+            raise ValueError("Motion is stale; regenerate it from the current approved audio.")
 
         record.status = "APPROVED"
         record.updated_at = utc_now()

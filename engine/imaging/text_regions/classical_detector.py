@@ -227,6 +227,12 @@ class ClassicalTextRegionDetector:
         """Verifies presence of text-like high-contrast dark strokes inside region."""
         if gray_roi.size == 0:
             return False
+        # A detected white wall/caption-shaped surface can have a dark outline
+        # without any text inside. Do not count that perimeter as lettering.
+        height, width = gray_roi.shape[:2]
+        padding = max(2, min(8, round(min(height, width) * 0.04)))
+        if height > 2 * padding and width > 2 * padding:
+            gray_roi = gray_roi[padding:-padding, padding:-padding]
         # Calculate contrast standard deviation and dark pixel fraction
         std = np.std(gray_roi)
         dark_pixels = np.count_nonzero(gray_roi < 160)

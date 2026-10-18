@@ -3,8 +3,9 @@ Core ShotPlanner for PanelFlow Motion Director.
 Transforms approved script segments, source visuals, and master audio intervals into
 a deterministic, render-ready VisualTimeline.
 """
-from typing import List, Dict, Optional, Tuple, Set
+import re
 import uuid
+from typing import List, Dict, Optional, Tuple, Set
 
 from engine.motion.models.timeline import VisualTimeline, MotionScene, Shot
 from engine.motion.models.camera import CameraState, NormalizedRect, TargetResolution
@@ -63,6 +64,41 @@ class ShotPlanner:
         pairs = self.audio_resolver.resolve_timeline_intervals(
             input_data.script, input_data.master_audio_timeline
         )
+        # A story beat can span several panels while remaining one continuous
+        # narration clip. Subdivide its visual clock and assign proportional
+        # subtitle text to each shot so that captions match spoken timing
+        # and do not duplicate entire paragraphs across consecutive frames.
+        storyboard_pairs = []
+        for segment, interval in pairs:
+            panel_ids = list(dict.fromkeys(segment.source_evidence.panel_ids))
+            if len(panel_ids) <= 1:
+                storyboard_pairs.append((segment, interval))
+                continue
+
+            raw_text = segment.text.strip()
+            sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", raw_text) if s.strip()]
+            words = raw_text.split()
+            n_panels = len(panel_ids)
+
+            for index, panel_id in enumerate(panel_ids):
+                part = segment.model_copy(deep=True)
+                part.source_evidence.panel_ids = [panel_id]
+
+                # Proportionally assign spoken text slice to this panel shot
+                if len(sentences) == n_panels:
+                    part.text = sentences[index]
+                elif len(words) > 0:
+                    w_start = int(len(words) * index / n_panels)
+                    w_end = int(len(words) * (index + 1) / n_panels) if index < n_panels - 1 else len(words)
+                    part.text = " ".join(words[w_start:w_end]).strip()
+                else:
+                    part.text = ""
+
+                timing = interval.model_copy(deep=True)
+                timing.start_time = interval.start_time + interval.duration * index / n_panels
+                timing.end_time = interval.start_time + interval.duration * (index + 1) / n_panels
+                storyboard_pairs.append((part, timing))
+        pairs = storyboard_pairs
 
         # 2. Build index of available visual sources
         visual_by_panel_id: Dict[str, VisualSource] = {}
@@ -153,6 +189,14 @@ class ShotPlanner:
                     target_aspect=target_aspect,
                 )
 
+                # Pacing & static-hold guard: long static holds (> 5.0s) cause viewer fatigue.
+                # Convert long holds to subtle breathing zoom (1.0 -> 1.05)
+                if m_type == MotionType.STATIC_HOLD and a_iv.duration > 5.0:
+                    c_start = CameraState(center_x=0.5, center_y=0.5, zoom=1.0)
+                    c_end = CameraState(center_x=0.5, center_y=0.5, zoom=min(profile.max_zoom, 1.05))
+                    m_type = MotionType.SLOW_ZOOM_IN
+                    easing = EasingFunction.SMOOTHSTEP
+
                 # D. Transitions
                 trans_in, trans_out = self._plan_transitions(
                     is_first_in_scene=is_first_in_scene,
@@ -162,15 +206,20 @@ class ShotPlanner:
                 )
 
                 # E. Effects (governed by EffectBudget)
-                effects = self._plan_effects(seg, sc_id, a_iv, effect_budget)
+                effects = self._plan_effects(seg, sc_id, a_iv, effect_budget) if profile.effect_intensity > 0 else []
 
-                # F. Caption cue
+                # F. Caption cue with human readability limits
                 captions = []
-                if seg.text.strip():
+                cap_text = seg.text.strip()
+                if cap_text:
+                    words = cap_text.split()
+                    max_readable_words = max(8, int(a_iv.duration * 3.6))
+                    if len(words) > max_readable_words:
+                        cap_text = " ".join(words[:max_readable_words]) + "..."
                     captions.append(
                         CaptionCue(
                             cue_id=f"cap_{shot_id}",
-                            text=seg.text.strip(),
+                            text=cap_text,
                             speaker=seg.speaker_character_id,
                             speaker_character_id=seg.speaker_character_id,
                             start_time=a_iv.start_time,
@@ -308,7 +357,11 @@ class ShotPlanner:
         easing = profile.camera_easing
 
         # A. Explicit motion intent from ScriptSegment or StoryBeat
-        if seg.motion_intent == MotionIntent.ESTABLISHING or is_first_in_scene:
+        if seg.motion_intent == MotionIntent.STATIC or seg.type == SegmentType.PAUSE:
+            c_start = CameraState(center_x=0.5, center_y=0.5, zoom=1.0)
+            c_end = c_start.model_copy(deep=True)
+            m_type = MotionType.STATIC_HOLD
+        elif seg.motion_intent == MotionIntent.ESTABLISHING or is_first_in_scene:
             # Wide establishing move: start full wide, gentle push
             c_start = CameraState(center_x=0.5, center_y=0.5, zoom=1.00)
             c_end = CameraState(center_x=0.5, center_y=0.5, zoom=min(profile.max_zoom, 1.08))
@@ -337,8 +390,9 @@ class ShotPlanner:
             m_type = MotionType.SLOW_ZOOM_IN
 
         elif seg.motion_intent == MotionIntent.PAN:
-            c_start = CameraState(center_x=0.35, center_y=0.5, zoom=1.12)
-            c_end = CameraState(center_x=0.65, center_y=0.5, zoom=1.12)
+            half_pan = min(0.15, profile.max_pan_distance / 2)
+            c_start = CameraState(center_x=0.5 - half_pan, center_y=0.5, zoom=min(profile.max_zoom, 1.12))
+            c_end = CameraState(center_x=0.5 + half_pan, center_y=0.5, zoom=min(profile.max_zoom, 1.12))
             m_type = MotionType.PAN_RIGHT
 
         elif seg.type == SegmentType.CHARACTER_DIALOGUE:

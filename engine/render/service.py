@@ -193,29 +193,23 @@ class RenderService:
 
         chosen_profile_name = "draft_720p" if is_draft else profile_name
 
-        if aspect == "9:16":
+        if chosen_profile_name == "vertical_shorts":
             profile = RenderProfile.vertical_shorts()
-            if is_draft:
-                profile.width = 720
-                profile.height = 1280
-                profile.crf = 26
-                profile.preset = "ultrafast"
+        elif chosen_profile_name == "square_feed":
+            profile = RenderProfile.square_feed()
+        elif chosen_profile_name == "draft_720p":
+            if aspect == "9:16":
+                profile = RenderProfile(width=720, height=1280, fps=30, crf=26, preset="ultrafast")
+            elif aspect == "1:1":
+                profile = RenderProfile(width=720, height=720, fps=30, crf=26, preset="ultrafast")
+            else:
+                profile = RenderProfile.draft_720p()
+        elif aspect == "9:16":
+            profile = RenderProfile.vertical_shorts()
         elif aspect == "1:1":
             profile = RenderProfile.square_feed()
-            if is_draft:
-                profile.width = 720
-                profile.height = 720
-                profile.crf = 26
-                profile.preset = "ultrafast"
         else:
-            profile_factory = {
-                "standard_1080p": RenderProfile.standard_1080p,
-                "vertical_shorts": RenderProfile.vertical_shorts,
-                "square_feed": RenderProfile.square_feed,
-                "draft_720p": RenderProfile.draft_720p,
-                "preview_1080p": RenderProfile.preview_1080p,
-            }.get(chosen_profile_name, RenderProfile.standard_1080p)
-            profile = profile_factory()
+            profile = RenderProfile.standard_1080p()
 
         if custom_output_path:
             out_file = Path(custom_output_path)

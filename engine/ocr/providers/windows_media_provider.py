@@ -1,9 +1,12 @@
 import sys
 import uuid
 import asyncio
+import logging
 from pathlib import Path
 from typing import Any
 from PIL import Image
+
+logger = logging.getLogger("panelflow.ocr.windows_media")
 
 from engine.ocr.providers.base import OCREngine, RawOCRResult, OCRRegion, OCRProviderStatus
 
@@ -123,15 +126,20 @@ class WindowsMediaOCREngine(OCREngine):
             return await engine.recognize_async(bitmap)
 
         try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                loop = None
+
+            if loop and loop.is_running():
                 import concurrent.futures
                 with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
                     ocr_res = pool.submit(asyncio.run, _run_async_ocr()).result()
             else:
                 ocr_res = asyncio.run(_run_async_ocr())
         except Exception as e:
-            raise RuntimeError(f"Windows Media OCR execution failed: {e}")
+            logger.warning(f"Windows Media OCR execution failed: {e}. Gracefully returning empty regions.")
+            return []
 
         regions: list[OCRRegion] = []
         lines = list(ocr_res.lines) if hasattr(ocr_res, "lines") else []

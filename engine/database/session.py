@@ -78,8 +78,29 @@ def run_sqlite_migrations(db_engine):
                     if col_name not in existing_tr_cols:
                         conn.exec_driver_sql(f"ALTER TABLE text_regions ADD COLUMN {col_name} {col_type}")
                         conn.commit()
+
+            # 3. Jobs table columns
+            res_jobs = conn.exec_driver_sql("PRAGMA table_info(jobs)").fetchall()
+            existing_jobs_cols = {row[1] for row in res_jobs}
+            if existing_jobs_cols:
+                jobs_cols_to_add = [
+                    ("priority", "INTEGER DEFAULT 10"),
+                    ("depends_on_job_id", "VARCHAR(36) NULL"),
+                    ("requires_gpu", "BOOLEAN DEFAULT 0"),
+                    ("gpu_vram_mb", "INTEGER DEFAULT 0"),
+                    ("cpu_units", "INTEGER DEFAULT 1"),
+                    ("worker_lease_id", "VARCHAR(64) NULL"),
+                    ("lease_expires_at", "DATETIME NULL"),
+                    ("retry_count", "INTEGER DEFAULT 0"),
+                    ("max_retries", "INTEGER DEFAULT 3"),
+                ]
+                for col_name, col_type in jobs_cols_to_add:
+                    if col_name not in existing_jobs_cols:
+                        conn.exec_driver_sql(f"ALTER TABLE jobs ADD COLUMN {col_name} {col_type}")
+                        conn.commit()
     except Exception:
         pass
+
 
 def init_db():
     """Initializes tables in database and runs non-destructive migrations."""

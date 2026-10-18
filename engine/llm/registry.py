@@ -50,6 +50,42 @@ class LLMRegistry:
         # Fallback to deterministic mock
         return self._providers.get("mock_llm", list(self._providers.values())[0])
 
+    def get_ollama_provider(self) -> OllamaProvider:
+        p = self._providers.get("ollama")
+        if isinstance(p, OllamaProvider):
+            return p
+        # Default fallback
+        provider = OllamaProvider()
+        self.register(provider)
+        return provider
+
+    def configure_ollama(
+        self,
+        endpoint_url: str = "http://127.0.0.1:11434",
+        is_remote: bool = False,
+        auth_token: str = "",
+        vision_model: str = "qwen3.5:9b",
+        reasoning_model: str = "qwen3.5:9b",
+        narration_model: str = "qwen3.5:9b",
+        num_ctx: int = 32768,
+        concurrency_mode: str = "MANUAL",
+        max_gpu_concurrency: int = 1,
+    ) -> OllamaProvider:
+        provider = OllamaProvider(
+            endpoint_url=endpoint_url,
+            is_remote=is_remote,
+            auth_token=auth_token,
+            text_model=narration_model,
+            vision_model=vision_model,
+            reasoning_model=reasoning_model,
+            narration_model=narration_model,
+            num_ctx=num_ctx,
+            concurrency_mode=concurrency_mode,
+            max_gpu_concurrency=max_gpu_concurrency,
+        )
+        self.register(provider)
+        return provider
+
 def get_default_llm_registry() -> LLMRegistry:
     registry = LLMRegistry()
     registry.register(MockLLMProvider())
@@ -57,7 +93,7 @@ def get_default_llm_registry() -> LLMRegistry:
     ollama_url = os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434")
     ollama_text = os.environ.get("OLLAMA_TEXT_MODEL", "qwen3.5:9b")
     ollama_vision = os.environ.get("OLLAMA_VISION_MODEL", "qwen3.5:9b")
-    ollama_ctx = int(os.environ.get("OLLAMA_NUM_CTX", "4096"))
+    ollama_ctx = int(os.environ.get("OLLAMA_NUM_CTX", "32768"))
     registry.register(OllamaProvider(endpoint_url=ollama_url, text_model=ollama_text, vision_model=ollama_vision, num_ctx=ollama_ctx))
 
     lmstudio_url = os.environ.get("LMSTUDIO_URL", "http://127.0.0.1:1234/v1")
@@ -69,3 +105,4 @@ def get_default_llm_registry() -> LLMRegistry:
     return registry
 
 llm_registry = get_default_llm_registry()
+
