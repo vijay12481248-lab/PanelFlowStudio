@@ -1,5 +1,6 @@
 import React, { useMemo } from "react";
 import { Icons, Badge } from "@panelflow/ui";
+import { api } from "@panelflow/api-client";
 import type {
   NarrationChapter,
   NarrationSegment,
@@ -338,22 +339,40 @@ export const NarrationStoryPanel: React.FC<NarrationStoryPanelProps> = ({
                 </div>
 
                 {/* Manga Source Context Preview Box */}
-                <div className="flex items-center gap-2 mb-2 p-1.5 rounded-lg bg-zinc-950/80 border border-zinc-800/60">
-                  {/* Thumbnail / Manga Panel Preview with real image & SVG fallback */}
-                  <div className="w-14 h-9 rounded overflow-hidden shrink-0 bg-zinc-900 border border-zinc-800 flex items-center justify-center relative">
+                <div className="flex items-center gap-2.5 mb-2 p-2 rounded-lg bg-zinc-950/90 border border-zinc-800/80 shadow-sm">
+                  {/* Thumbnail / Manga Panel Preview with real image & robust resolution */}
+                  <div className="w-20 h-14 rounded-md overflow-hidden shrink-0 bg-zinc-900 border border-zinc-800 flex items-center justify-center relative shadow-inner group-hover:border-zinc-700 transition-colors">
                     {(() => {
-                      const imgUrl = seg.source_context.panel_preview_url || seg.source_context.image_url;
-                      if (imgUrl) {
-                        const resolvedUrl = imgUrl.startsWith("http") || imgUrl.startsWith("data:")
-                          ? imgUrl
-                          : `http://127.0.0.1:8765${imgUrl.startsWith("/") ? "" : "/"}${imgUrl}`;
+                      const primaryPanelId = seg.source_context.panel_ids?.[0];
+                      const primaryPageId = seg.source_context.page_id;
+                      const rawUrl = seg.source_context.panel_preview_url || seg.source_context.image_url;
+
+                      let resolvedUrl = "";
+                      if (chapter.project_id && primaryPanelId) {
+                        resolvedUrl = api.getPanelImageUrl(chapter.project_id, primaryPanelId);
+                      } else if (rawUrl) {
+                        resolvedUrl = rawUrl.startsWith("http") || rawUrl.startsWith("data:")
+                          ? rawUrl
+                          : `http://127.0.0.1:8765${rawUrl.startsWith("/") ? "" : "/"}${rawUrl}`;
+                      } else if (chapter.project_id && primaryPageId) {
+                        resolvedUrl = api.getPageImageUrl(chapter.project_id, primaryPageId);
+                      }
+
+                      if (resolvedUrl) {
                         return (
                           <img
                             src={resolvedUrl}
                             alt={seg.source_context.panel_labels?.[0] || "Panel"}
-                            className="w-full h-full object-cover"
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                            loading="lazy"
                             onError={(e) => {
-                              (e.target as HTMLElement).style.display = "none";
+                              // If panel file fails, try page image fallback
+                              const target = e.target as HTMLImageElement;
+                              if (chapter.project_id && primaryPageId && !target.src.includes("/pages/")) {
+                                target.src = api.getPageImageUrl(chapter.project_id, primaryPageId);
+                              } else {
+                                target.style.display = "none";
+                              }
                             }}
                           />
                         );
@@ -368,23 +387,28 @@ export const NarrationStoryPanel: React.FC<NarrationStoryPanelProps> = ({
                       }
                       return (
                         <div className="text-[10px] font-mono text-zinc-500 font-bold flex flex-col items-center">
+                          <Icons.Image className="w-4 h-4 mb-0.5 text-zinc-600" />
                           <span>P#{seg.source_context.page_number}</span>
                         </div>
                       );
                     })()}
                   </div>
 
-                  {/* Panel References Label */}
+                  {/* Panel References Label & OCR Dialogue */}
                   <div className="flex-1 min-w-0">
-                    <div className="text-[10px] font-semibold text-zinc-400 flex items-center gap-1 truncate">
+                    <div className="text-[10.5px] font-semibold text-zinc-300 flex items-center gap-1 truncate mb-0.5">
                       <Icons.Layers className="w-3 h-3 text-indigo-400 shrink-0" />
                       <span className="truncate">
-                        {seg.source_context.panel_labels?.[0] || `Page ${seg.source_context.page_number}`}
+                        {seg.source_context.panel_labels?.[0] || `Scene #${seg.sequence}`}
                       </span>
                     </div>
-                    {seg.source_context.raw_ocr_dialogue && (
-                      <div className="text-[10px] text-zinc-500 italic truncate" title={seg.source_context.raw_ocr_dialogue}>
-                        OCR: &ldquo;{seg.source_context.raw_ocr_dialogue}&rdquo;
+                    {seg.source_context.raw_ocr_dialogue ? (
+                      <div className="text-[10px] text-zinc-400 italic line-clamp-2 leading-tight" title={seg.source_context.raw_ocr_dialogue}>
+                        &ldquo;{seg.source_context.raw_ocr_dialogue}&rdquo;
+                      </div>
+                    ) : (
+                      <div className="text-[10px] text-zinc-500 line-clamp-2 leading-tight">
+                        {seg.source_context.visual_description || "Action / silent framing"}
                       </div>
                     )}
                   </div>

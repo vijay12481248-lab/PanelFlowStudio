@@ -44,6 +44,43 @@ import type {
 } from "@panelflow/shared-types";
 
 
+export interface ComfyWorkflowInfo {
+  id: string;
+  purpose: string;
+  filename: string;
+  sha256: string;
+  verified_sha256?: string;
+  available: boolean;
+  error?: string;
+  node_count?: number;
+  model_files: string[];
+}
+
+export interface ComfyImageRequest {
+  workflow_id?: string;
+  prompt: string;
+  negative_prompt?: string;
+  width?: number;
+  height?: number;
+  seed?: number;
+  timeout_s?: number;
+}
+
+export interface GeneratedAsset {
+  id: string;
+  asset_type: string;
+  filename: string;
+  relative_path: string;
+  content_type: string;
+  width: number;
+  height: number;
+  byte_size: number;
+  sha256: string;
+  status: string;
+  provenance: Record<string, any>;
+  created_at: string | null;
+}
+
 export interface CreateProjectParams {
   title: string;
   source_type: SourceType;
@@ -56,9 +93,20 @@ export interface CreateProjectParams {
 
 export class PanelFlowApiClient {
   private baseUrl: string;
+  private engineToken?: string;
 
-  constructor(baseUrl: string = "http://127.0.0.1:8765") {
+  constructor(baseUrl: string = "http://127.0.0.1:8765", engineToken?: string) {
     this.baseUrl = baseUrl.replace(/\/$/, "");
+    this.engineToken = engineToken;
+  }
+
+  setEngineToken(engineToken: string): void {
+    this.engineToken = engineToken;
+  }
+
+  private resourceUrl(endpoint: string): string {
+    const suffix = this.engineToken ? `;pf-token=${encodeURIComponent(this.engineToken)}` : "";
+    return `${this.baseUrl}${endpoint}${suffix}`;
   }
 
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
@@ -67,6 +115,10 @@ export class PanelFlowApiClient {
       Accept: "application/json",
       ...(options.headers as Record<string, string> || {}),
     };
+
+    if (this.engineToken && endpoint !== "/api/system/health") {
+      headers["X-PanelFlow-Token"] = this.engineToken;
+    }
 
     if (options.body && typeof options.body === "string" && !headers["Content-Type"]) {
       headers["Content-Type"] = "application/json";
@@ -94,7 +146,11 @@ export class PanelFlowApiClient {
       return null as T;
     }
 
-    return response.json();
+    const data = await response.json();
+    if (options.method?.toUpperCase() === "POST" && data?.job_id && !endpoint.endsWith("/cancel") && typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("panelflow:job-submitted", { detail: { jobId: data.job_id } }));
+    }
+    return data;
   }
 
   // Projects
@@ -117,10 +173,10 @@ export class PanelFlowApiClient {
     return this.request<{ state: any | null }>(`/api/projects/${projectId}/story-editor`);
   }
 
-  async saveStoryEditorState(projectId: string, state: any): Promise<{ state: any; updated_at: string }> {
+  async saveStoryEditorState(projectId: string, state: any, alignPanels = false): Promise<{ state: any; updated_at: string }> {
     return this.request<{ state: any; updated_at: string }>(`/api/projects/${projectId}/story-editor`, {
       method: "PUT",
-      body: JSON.stringify({ state }),
+      body: JSON.stringify({ state, align_panels: alignPanels }),
     });
   }
 
@@ -178,11 +234,11 @@ export class PanelFlowApiClient {
   }
 
   getPageImageUrl(projectId: string, pageId: string): string {
-    return `${this.baseUrl}/api/projects/${projectId}/pages/${pageId}/file`;
+    return this.resourceUrl(`/api/projects/${projectId}/pages/${pageId}/file`);
   }
 
   getNormalizedPageImageUrl(projectId: string, pageId: string): string {
-    return `${this.baseUrl}/api/projects/${projectId}/pages/${pageId}/normalized-file`;
+    return this.resourceUrl(`/api/projects/${projectId}/pages/${pageId}/normalized-file`);
   }
 
   // Normalization & Panels
@@ -291,7 +347,19 @@ export class PanelFlowApiClient {
   }
 
   getPanelImageUrl(projectId: string, panelId: string): string {
-    return `${this.baseUrl}/api/projects/${projectId}/panels/${panelId}/file`;
+    return this.resourceUrl(`/api/projects/${projectId}/panels/${panelId}/file`);
+  }
+
+  async getPanelContentSuggestions(projectId: string): Promise<{
+    suggestions: Array<{ region_id: string; panel_id: string; page_id: string; text: string; bbox: number[]; reason: string }>;
+    regions_checked: number;
+    ocr_required: boolean;
+  }> {
+    return this.request(`/api/projects/${projectId}/panel-content-suggestions`);
+  }
+
+  getTextBlurPreviewUrl(projectId: string, panelId: string, regionId: string): string {
+    return this.resourceUrl(`/api/projects/${projectId}/panels/${panelId}/text-blur-preview?region_id=${encodeURIComponent(regionId)}`);
   }
 
   async blurPanelRegion(
@@ -538,7 +606,7 @@ export class PanelFlowApiClient {
   }
 
   getTextRegionImageUrl(projectId: string, regionId: string): string {
-    return `${this.baseUrl}/api/projects/${projectId}/text-regions/${regionId}/file`;
+    return this.resourceUrl(`/api/projects/${projectId}/text-regions/${regionId}/file`);
   }
 
   // Canonical M4 Export Contract (Part 12)
@@ -574,8 +642,15 @@ export class PanelFlowApiClient {
   }
 
   // System
-  async checkHealth(): Promise<{ status: string; app: string; version: string }> {
-    return this.request<{ status: string; app: string; version: string }>("/api/system/health");
+  async checkHealth(): Promise<{ status: string; app: string; version: string; instance_id?: string }> {
+    return this.request<{ status: string; app: string; version: string; instance_id?: string }>("/api/system/health", { signal: AbortSignal.timeout(3000) });
+  }
+
+  async restartEngine(): Promise<{ status: string; instance_id: string }> {
+    return this.request("/api/system/restart", {
+      method: "POST",
+      headers: { "X-PanelFlow-Control": "restart" },
+    });
   }
 
   async browseFilesystem(path?: string, showFiles: boolean = true, extensions?: string[]): Promise<{
@@ -699,8 +774,11 @@ export class PanelFlowApiClient {
     });
   }
 
-  async generateAudioJob(projectId: string): Promise<{job_id: string}> {
-    return this.request(`/api/projects/${projectId}/audio/generate-job`, { method: "POST", body: "{}" });
+  async generateAudioJob(projectId: string, voiceCasting?: Record<string, string>): Promise<{job_id: string}> {
+    return this.request(`/api/projects/${projectId}/audio/generate-job`, {
+      method: "POST",
+      body: JSON.stringify({ voice_casting: voiceCasting }),
+    });
   }
 
   async generateScript(projectId: string, adaptationProfile: AdaptationProfile | string = "FAITHFUL"): Promise<VideoScript> {
@@ -786,7 +864,7 @@ export class PanelFlowApiClient {
   }
 
   getAudioFileUrl(projectId: string, filePath: string): string {
-    return `${this.baseUrl}/api/projects/${projectId}/audio/file?path=${encodeURIComponent(filePath)}`;
+    return `${this.resourceUrl(`/api/projects/${projectId}/audio/file`)}?path=${encodeURIComponent(filePath)}`;
   }
 
   async getAudioProviders(): Promise<{
@@ -817,6 +895,19 @@ export class PanelFlowApiClient {
       method: "POST",
       body: JSON.stringify({ scenes, provider_id: providerId, model_name: modelName }),
     });
+  }
+
+  async analyzePanelVision(
+    projectId: string,
+    panelId: string,
+    modelName?: string
+  ): Promise<{ panel_id: string; visual_description: string; model_used: string }> {
+    return this.request<{ panel_id: string; visual_description: string; model_used: string }>(
+      `/api/projects/${projectId}/panels/${panelId}/analyze-vision${modelName ? `?model_name=${encodeURIComponent(modelName)}` : ""}`,
+      {
+        method: "POST",
+      }
+    );
   }
 
   async synthesizeNarrationSegment(
@@ -971,15 +1062,15 @@ export class PanelFlowApiClient {
   }
 
   getRenderVideoUrl(projectId: string, renderId: string): string {
-    return `${this.baseUrl}/api/projects/${projectId}/render/jobs/${renderId}/output`;
+    return this.resourceUrl(`/api/projects/${projectId}/render/jobs/${renderId}/output`);
   }
 
   getRenderContactSheetUrl(projectId: string, renderId: string): string {
-    return `${this.baseUrl}/api/projects/${projectId}/render/jobs/${renderId}/contact-sheet`;
+    return this.resourceUrl(`/api/projects/${projectId}/render/jobs/${renderId}/contact-sheet`);
   }
 
   getRenderAuditSampleUrl(projectId: string, renderId: string, sampleIndex: number): string {
-    return `${this.baseUrl}/api/projects/${projectId}/render/jobs/${renderId}/samples/${sampleIndex}`;
+    return this.resourceUrl(`/api/projects/${projectId}/render/jobs/${renderId}/samples/${sampleIndex}`);
   }
 
   async getRenderValidation(projectId: string, renderId: string): Promise<RenderValidationReport> {
@@ -990,7 +1081,7 @@ export class PanelFlowApiClient {
     onProgress: (event: any) => void,
     onError?: (error: any) => void
   ): () => void {
-    const eventSource = new EventSource(`${this.baseUrl}/api/render/events`);
+    const eventSource = new EventSource(this.resourceUrl("/api/render/events"));
     eventSource.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
@@ -1179,6 +1270,62 @@ export class PanelFlowApiClient {
       method: "POST",
       body: JSON.stringify(params),
     });
+  }
+
+  // ComfyUI image generation
+  async listApprovedComfyWorkflows(): Promise<{ workflows: ComfyWorkflowInfo[]; errors: string[] }> {
+    return this.request<{ workflows: ComfyWorkflowInfo[]; errors: string[] }>("/api/comfyui/workflow-registry");
+  }
+
+  async generateComfyImage(projectId: string, request: ComfyImageRequest): Promise<{ job_id: string; status: string; workflow_id: string }> {
+    return this.request<{ job_id: string; status: string; workflow_id: string }>(`/api/projects/${projectId}/comfyui/image`, {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
+  }
+
+  async listGeneratedAssets(projectId: string): Promise<{ assets: GeneratedAsset[] }> {
+    return this.request<{ assets: GeneratedAsset[] }>(`/api/projects/${projectId}/assets`);
+  }
+
+  getGeneratedAssetUrl(projectId: string, assetId: string): string {
+    return this.resourceUrl(`/api/projects/${projectId}/assets/${assetId}/file`);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Setup & Model Onboarding Engine
+  // ---------------------------------------------------------------------------
+  async locateFfmpeg(): Promise<{ found: boolean; ffmpeg_path: string | null; ffprobe_path: string | null; version: string | null; injected_into_path: boolean }> {
+    return this.request<{ found: boolean; ffmpeg_path: string | null; ffprobe_path: string | null; version: string | null; injected_into_path: boolean }>("/api/system/locate-ffmpeg", {
+      method: "POST",
+    });
+  }
+
+  async provisionVoices(): Promise<{ success: boolean; voice_directory: string; copied_count: number; total_profiles: number; profiles: any[] }> {
+    return this.request<{ success: boolean; voice_directory: string; copied_count: number; total_profiles: number; profiles: any[] }>("/api/system/provision-voices", {
+      method: "POST",
+    });
+  }
+
+  async installPlaywrightBrowsers(): Promise<{ status: string; message: string }> {
+    return this.request<{ status: string; message: string }>("/api/system/install-playwright", {
+      method: "POST",
+    });
+  }
+
+  async getPlaywrightInstallStatus(): Promise<{ status: string; log_lines: string[]; error_message: string | null; exit_code: number | null }> {
+    return this.request<{ status: string; log_lines: string[]; error_message: string | null; exit_code: number | null }>("/api/system/install-playwright/status");
+  }
+
+  async pullOllamaModel(model: string, endpointUrl?: string): Promise<{ status: string; model: string; message?: string }> {
+    return this.request<{ status: string; model: string; message?: string }>("/api/system/ollama/pull", {
+      method: "POST",
+      body: JSON.stringify({ model, endpoint_url: endpointUrl }),
+    });
+  }
+
+  async getOllamaPullStatus(): Promise<{ status: string; model_name: string; status_text: string; completed_bytes: number; total_bytes: number; percent: number; error_message: string | null }> {
+    return this.request<{ status: string; model_name: string; status_text: string; completed_bytes: number; total_bytes: number; percent: number; error_message: string | null }>("/api/system/ollama/pull/status");
   }
 }
 

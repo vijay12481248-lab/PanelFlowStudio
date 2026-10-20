@@ -51,6 +51,9 @@ class ProjectRecord(Base):
     motion_timelines = relationship("VisualTimelineRecord", back_populates="project", cascade="all, delete-orphan", order_by="desc(VisualTimelineRecord.created_at)")
     renders = relationship("RenderJobRecord", back_populates="project", cascade="all, delete-orphan", order_by="desc(RenderJobRecord.created_at)")
 
+    assets = relationship("AssetRecord", back_populates="project", cascade="all, delete-orphan")
+
+
 
 class PageRecord(Base):
     __tablename__ = "pages"
@@ -113,6 +116,10 @@ class PanelRecord(Base):
     normalized_y = Column(Float, default=0.0, nullable=False)
     normalized_width = Column(Float, default=0.0, nullable=False)
     normalized_height = Column(Float, default=0.0, nullable=False)
+    # Optional contour captured by panel detection for non-rectangular panels.
+    # Stored as JSON text for compatibility with the existing SQLite migration
+    # and API contract.
+    polygon_json = Column(Text, nullable=True)
     crop_filename = Column(String(255), nullable=False)
     reading_direction = Column(String(16), default="ltr", nullable=False)
     detection_method = Column(String(32), default="AUTO", nullable=False)
@@ -506,6 +513,25 @@ class RenderJobRecord(Base):
     completed_at = Column(DateTime, nullable=True)
 
     project = relationship("ProjectRecord", back_populates="renders")
+
+class AssetRecord(Base):
+    __tablename__ = "assets"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    project_id = Column(String(36), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    asset_type = Column(String(64), nullable=False)
+    filename = Column(String(255), nullable=False)
+    relative_path = Column(String(1024), nullable=False)
+    content_type = Column(String(128), default="application/octet-stream", nullable=False)
+    width = Column(Integer, default=0, nullable=False)
+    height = Column(Integer, default=0, nullable=False)
+    byte_size = Column(BigInteger, default=0, nullable=False)
+    sha256 = Column(String(64), default="", nullable=False, index=True)
+    status = Column(String(32), default="READY", nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+
+    project = relationship("ProjectRecord", back_populates="assets")
+
 
     @property
     def render_id(self) -> str:

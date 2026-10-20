@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PanelFlow Studio - Redesigned UI Preview</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background: #080b12;
+        }
+        h1, h2, h3 {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+        }
+        .glass {
+            background: rgba(12, 14, 23, 0.6);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .glass-strong {
+            background: rgba(12, 14, 23, 0.8);
+            backdrop-filter: blur(32px);
+            -webkit-backdrop-filter: blur(32px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+        }
+    </style>
+</head>
+<body class="min-h-screen text-zinc-100">
+    <!-- Header -->
+    <header class="sticky top-0 z-50 glass">
+        <div class="max-w-7xl mx-auto px-6 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-8">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+                            <span class="text-white font-black text-lg">P</span>
+                        </div>
+                        <div>
+                            <h1 class="text-xl font-bold text-zinc-100">PanelFlow</h1>
+                            <p class="text-xs text-zinc-500 -mt-0.5">Studio Pro</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex items-center gap-3">
+                    <button class="px-6 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 text-white font-medium text-sm hover:shadow-lg hover:shadow-indigo-500/20 transition-all">
+                        New Project
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-6 py-8 space-y-8">
+        <!-- Hero Section -->
+        <div class="relative">
+            <div class="absolute inset-0 bg-gradient-to-r from-indigo-500/10 via-violet-500/10 to-cyan-500/10 rounded-3xl blur-3xl" />
+            <div class="relative glass-strong rounded-3xl p-8">
+                <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
+                    <div>
+                        <h2 class="text-3xl font-bold text-zinc-100 mb-2">
+                            Welcome back, <span class="text-transparent bg-gradient-to-r from-indigo-400 to-violet-400 bg-clip-text">Creator</span>
+                        </h2>
+                        <p class="text-zinc-400">You have 3 active projects and 12 jobs processing</p>
+                    </div>
+                    <div class="flex gap-3">
+                        <button class="px-6 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-medium transition-colors">
+                            Quick Start
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- System Metrics -->
+        <div>
+            <div class="flex items-center justify-between mb-6">
+                <h3 class="text-xl font-bold text-zinc-100">System Overview</h3>
+                <button class="text-sm text-zinc-400 hover:text-zinc-200">View details →</button>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <!-- Metric Card 1 -->
+                <div class="group relative">
+                    <div class="absolute -inset-0.5 bg-gradient-to-r from-emerald-500/10 to-emerald-500/5 rounded-2xl blur opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <div class="relative glass rounded-2xl p-5 hover:border-zinc-700 transition-all">
+                        <div class="flex items-start justify-between mb-4">
+                            <div class="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
+                                <div class="w-5 h-5 text-emerald-400">⚡</div>
+                            </div>
+                            <span class="text-xs font-medium px-2 py-1 rounded-full bg-zinc-800 text-zinc-400">+12%</span>
+                        </div>
+                        <div class="space-y-1">
+                            <p class="text-xs font-semibold uppercase tracking-wider text-zinc-500">GPU Utilization</p>
+                            <p class="text-2xl font-bold text-zinc-100">68%</p>
+                            <p class="text-sm text-zinc-400">15.2 GB / 22 GB</p>
+                        </div>
+                        <div class="mt-4 h-1 bg-zinc-800 rounded-full overflow-hidden">
+                            <div class="h-full w-[68%] bg-gradient-to-r from-emerald-500 to-teal-500" />
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Metric Card 2 -->
+                <div class="group relative">
+                    <div class="absolute -inset-0.5 bg-gradient-to-r from-indigo-500/10 to-violet-500/5 rounded-2xl blur opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <div class="relative glass rounded-2xl p-5 hover:border-zinc-700 transition-all">
+                        <div class="flex items-start justify-between mb-4">
+                            <div class="p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/20">
+                                <div class="w-5 h-5 text-indigo-400">📊</div>
+                            </div>
+                            <span class="text-xs font-medium px-2 py-1 rounded-full bg-zinc-800 text-zinc-400">+4</span>
+                        </div>
+                        <div class="space-y-1">
+                            <p class="text-xs font-semibold uppercase tracking-wider text-zinc-500">Active Jobs</p>
+                            <p class="text-2xl font-bold text-zinc-100">12</p>
+                            <p class="text-sm text-zinc-400">3 running • 9 queued</p>
+                        </div>
+                        <div class="mt-4 h-1 bg-zinc-800 rounded-full overflow-hidden">
+                            <div class="h-full w-[60%] bg-gradient-to-r from-indigo-500 to-violet-500" />
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Metric Card 3 -->
+                <div class="group relative">
+                    <div class="absolute -inset-0.5 bg-gradient-to-r from-cyan-500/10 to-blue-500/5 rounded-2xl blur opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <div class="relative glass rounded-2xl p-5 hover:border-zinc-700 transition-all">
+                        <div class="flex items-start justify-between mb-4">
+                            <div class="p-3 rounded-xl bg-cyan-500/10 border border-cyan-500/20">
+                                <div class="w-5 h-5 text-cyan-400">📈</div>
+                            </div>
+                            <span class="text-xs font-medium px-2 py-1 rounded-full bg-zinc-800 text-zinc-400">+18%</span>
+                        </div>
+                        <div class="space-y-1">
+                            <p class="text-xs font-semibold uppercase tracking-wider text-zinc-500">Throughput</p>
+                            <p class="text-2xl font-bold text-zinc-100">2.4x</p>
+                            <p class="text-sm text-zinc-400">Pages per minute</p>
+                        </div>
+                        <div class="mt-4 h-1 bg-zinc-800 rounded-full overflow-hidden">
+                            <div class="h-full w-[75%] bg-gradient-to-r from-cyan-500 to-blue-500" />
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Metric Card 4 -->
+                <div class="group relative">
+                    <div class="absolute -inset-0.5 bg-gradient-to-r from-amber-500/10 to-orange-500/5 rounded-2xl blur opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <div class="relative glass rounded-2xl p-5 hover:border-zinc-700 transition-all">
+                        <div class="flex items-start justify-between mb-4">
+                            <div class="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20">
+                                <div class="w-5 h-5 text-amber-400">👥</div>
+                            </div>
+                            <span class="text-xs font-medium px-2 py-1 rounded-full bg-zinc-800 text-zinc-400">Stable</span>
+                        </div>
+                        <div class="space-y-1">
+                            <p class="text-xs font-semibold uppercase tracking-wider text-zinc-500">Team Active</p>
+                            <p class="text-2xl font-bold text-zinc-100">8</p>
+                            <p class="text-sm text-zinc-400">5 editing now</p>
+                        </div>
+                        <div class="mt-4 h-1 bg-zinc-800 rounded-full overflow-hidden">
+                            <div class="h-full w-[50%] bg-gradient-to-r from-amber-500 to-orange-500" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Projects -->
+        <div>
+            <div class="flex items-center justify-between mb-6">
+                <h3 class="text-xl font-bold text-zinc-100">Recent Projects</h3>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <!-- Project Card -->
+                <div class="group relative">
+                    <div class="absolute -inset-[1px] bg-gradient-to-r from-rose-500 to-pink-500 rounded-2xl opacity-0 group-hover:opacity-20 blur transition-opacity" />
+                    <div class="relative glass-strong rounded-2xl overflow-hidden hover:border-zinc-700 transition-all">
+                        <div class="relative h-48 bg-gradient-to-br from-rose-500/20 to-pink-500/20 overflow-hidden">
+                            <div class="absolute inset-0 bg-gradient-to-t from-zinc-900 via-zinc-900/50 to-transparent" />
+                            <div class="absolute top-4 left-4">
+                                <span class="px-3 py-1.5 rounded-full bg-zinc-900/80 backdrop-blur-md border border-zinc-700 text-xs font-bold uppercase tracking-wider">
+                                    <span class="text-transparent bg-gradient-to-r from-rose-400 to-pink-400 bg-clip-text">render</span>
+                                </span>
+                            </div>
+                            <div class="absolute top-4 right-4 w-12 h-12">
+                                <svg class="w-12 h-12 transform -rotate-90">
+                                    <circle cx="24" cy="24" r="20" stroke="rgba(39,39,42,0.5)" stroke-width="3" fill="none" />
+                                    <circle cx="24" cy="24" r="20" stroke="url(#grad)" stroke-width="3" fill="none" stroke-linecap="round" stroke-dasharray="109 125.6" />
+                                </svg>
+                                <div class="absolute inset-0 flex items-center justify-center">
+                                    <span class="text-xs font-bold text-zinc-100">87%</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="p-5 space-y-3">
+                            <div>
+                                <h4 class="text-lg font-bold text-zinc-100 group-hover:text-rose-400 transition-colors">Manga Series: Cyber Samurai</h4>
+                                <p class="text-sm text-zinc-400 line-clamp-2 mt-1">Futuristic cyberpunk manga with advanced motion effects and dynamic camera work</p>
+                            </div>
+                            <div class="flex flex-wrap gap-2">
+                                <span class="px-2.5 py-1 rounded-full bg-zinc-800 text-xs text-zinc-400 border border-zinc-700">Motion</span>
+                                <span class="px-2.5 py-1 rounded-full bg-zinc-800 text-xs text-zinc-400 border border-zinc-700">Cyberpunk</span>
+                                <span class="px-2.5 py-1 rounded-full bg-zinc-800 text-xs text-zinc-400 border border-zinc-700">Series</span>
+                            </div>
+                            <div class="flex items-center justify-between pt-3 border-t border-zinc-800 text-xs text-zinc-500">
+                                <span>2 hours ago • 4 active</span>
+                                <span>→</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Design System Preview -->
+        <div class="glass-strong rounded-2xl p-6">
+            <h3 class="text-lg font-bold text-zinc-100 mb-4">Design System Tokens</h3>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div>
+                    <p class="text-xs text-zinc-500 mb-2">Primary</p>
+                    <div class="h-12 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600"></div>
+                    <p class="text-xs text-zinc-400 mt-2">#6366f1 → #8b5cf6</p>
+                </div>
+                <div>
+                    <p class="text-xs text-zinc-500 mb-2">Success</p>
+                    <div class="h-12 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500"></div>
+                    <p class="text-xs text-zinc-400 mt-2">#10b981 → #14b8a6</p>
+                </div>
+                <div>
+                    <p class="text-xs text-zinc-500 mb-2">Background</p>
+                    <div class="h-12 rounded-xl bg-[#080b12] border border-zinc-800"></div>
+                    <p class="text-xs text-zinc-400 mt-2">#080b12</p>
+                </div>
+                <div>
+                    <p class="text-xs text-zinc-500 mb-2">Glass Effect</p>
+                    <div class="h-12 rounded-xl glass"></div>
+                    <p class="text-xs text-zinc-400 mt-2">Backdrop blur</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="max-w-7xl mx-auto px-6 py-8 text-center text-xs text-zinc-600">
+        PanelFlow Studio UI/UX Improvements • Generated with Google Stitch MCP • Dark Theme Optimized
+    </footer>
+</body>
+</html>

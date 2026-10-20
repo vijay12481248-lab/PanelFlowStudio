@@ -1,6 +1,7 @@
 from pathlib import Path
 from PIL import Image, ImageOps
 import hashlib
+import io
 import logging
 
 from engine.imaging.normalization.base import BasePageNormalizer, NormalizationConfig
@@ -23,19 +24,19 @@ class PageNormalizer(BasePageNormalizer):
             raise FileNotFoundError(f"Source image not found: {in_p}")
 
         # Compute source sha256
-        with open(in_p, "rb") as f:
-            src_bytes = f.read()
-            if len(src_bytes) == 0:
-                raise ValueError(f"Source file {in_p} is zero bytes.")
-            src_sha256 = hashlib.sha256(src_bytes).hexdigest()
+        from engine.security.paths import read_contained_bytes
+        src_bytes = read_contained_bytes(in_p.parent.parent, in_p)
+        if len(src_bytes) == 0:
+            raise ValueError(f"Source file {in_p} is zero bytes.")
+        src_sha256 = hashlib.sha256(src_bytes).hexdigest()
 
         try:
-            with Image.open(in_p) as img:
+            with Image.open(io.BytesIO(src_bytes)) as img:
                 img.verify()
         except Exception as e:
             raise ValueError(f"Corrupted or invalid image at {in_p}: {e}")
 
-        with Image.open(in_p) as img:
+        with Image.open(io.BytesIO(src_bytes)) as img:
             # 1. Correct EXIF orientation
             exif = img.getexif()
             orientation = int(exif.get(0x0112, 1)) if exif else 1
@@ -82,11 +83,14 @@ class PageNormalizer(BasePageNormalizer):
                 img = ImageOps.autocontrast(img, cutoff=0.5)
 
             # 6. Save derivative to normalized folder (source remains immutable!)
-            img.save(out_p, "JPEG", quality=95, optimize=True)
+            buffer = io.BytesIO()
+            img.save(buffer, "JPEG", quality=95, optimize=True)
 
-        with open(out_p, "rb") as f:
-            norm_bytes = f.read()
-            norm_sha256 = hashlib.sha256(norm_bytes).hexdigest()
+        norm_bytes = buffer.getvalue()
+        from engine.security.paths import open_contained_output
+        with open_contained_output(out_p.parent.parent, out_p) as output:
+            output.write(norm_bytes)
+        norm_sha256 = hashlib.sha256(norm_bytes).hexdigest()
 
         operations = {
             "orientation_corrected": orientation_corrected,

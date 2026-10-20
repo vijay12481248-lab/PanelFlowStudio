@@ -20,6 +20,7 @@ class MotionType(str, Enum):
     PARALLAX_PUSH = "PARALLAX_PUSH"
     CUT = "CUT"
     DISSOLVE = "DISSOLVE"
+    IMPACT = "IMPACT"
 
 
 class EasingFunction(str, Enum):

@@ -122,7 +122,7 @@ def test_crash_recovery():
         crashed_job = JobRecord(
             job_id="crashed-job-123",
             project_id="test-proj-jobs-2",
-            job_type="ACQUISITION",
+            job_type="UNSUPPORTED_RECOVERY",
             status=JobStatus.RUNNING.value,
             progress=0.45,
             message="Downloading page 10",

@@ -18,6 +18,8 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
   engineVersion,
   onRetryEngine,
   retryingEngine,
+  onRestartEngine,
+  restartingEngine,
   onOpenToolsModels,
   onNewProject,
   onOpenAcquisition,
@@ -197,7 +199,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
   const completedCount = jobs.filter((j) => j.status === "SUCCEEDED").length;
 
   return (
-    <div className="h-screen w-screen flex flex-col bg-[#090b10] text-zinc-100 overflow-hidden font-sans select-none">
+    <div className="h-screen w-screen flex flex-col bg-[#080b12] text-zinc-100 overflow-hidden font-sans select-none">
       {/* 1. TOP HEADER */}
       <DashboardHeader
         engineConnected={engineConnected}
@@ -205,6 +207,8 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
         onOpenToolsModels={onOpenToolsModels}
         onRetryEngine={onRetryEngine}
         retryingEngine={retryingEngine}
+        onRestartEngine={onRestartEngine}
+        restartingEngine={restartingEngine}
       />
 
       {/* 2. MAIN HORIZONTAL MULTI-COLUMN WORKSPACE */}
@@ -228,7 +232,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
         />
 
         {/* Central Workspace (Flex-1) */}
-        <main className="flex-1 min-w-0 flex flex-col overflow-y-auto p-3.5 sm:p-5 space-y-4 sm:space-y-5 bg-[#090b10] scrollbar-thin scrollbar-thumb-zinc-800">
+        <main className="flex-1 min-w-0 flex flex-col overflow-y-auto p-4 sm:p-6 space-y-5 bg-[radial-gradient(circle_at_top_left,_rgba(75,63,180,0.12),_transparent_30%),#080b12] scrollbar-thin scrollbar-thumb-zinc-800">
           {/* Top 4 System Telemetry Cards */}
           <SystemOverviewCards
             resources={resources}

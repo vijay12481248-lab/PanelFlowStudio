@@ -9,9 +9,21 @@ from typing import List, Dict, Any, Optional
 from pydantic import BaseModel, Field
 import json
 import logging
+import os
+import re
+from pathlib import Path
 from engine.llm.registry import llm_registry
+from engine.security.paths import resolve_contained_path
 
 logger = logging.getLogger("panelflow.story.narration")
+
+
+def resolve_contained_panel_file(candidate: Path, panels_root: Path) -> Path | None:
+    """Resolve a panel path and reject symlinks or escapes outside panels/."""
+    try:
+        return resolve_contained_path(panels_root, candidate, must_be_file=True)
+    except (FileNotFoundError, ValueError, OSError):
+        return None
 
 
 class StructuredStoryBeat(BaseModel):
@@ -112,23 +124,77 @@ class StoryNarrationService:
                 # If workspace_path is provided, inspect real images to enhance scene visual framing
                 if workspace_path and getattr(prov, "supports_vision", True):
                     panels_dir = workspace_path / "panels"
+                    panels_root = panels_dir
+                    vision_model = getattr(prov, "vision_model", "qwen3.5:9b")
                     for sc in scenes_data:
-                        if not sc.get("visual_description") or sc.get("visual_description") == "No visual description":
-                            panel_ids = sc.get("panel_ids", [])
-                            for pid in panel_ids:
-                                candidates = list(panels_dir.glob(f"{pid}*")) if panels_dir.exists() else []
-                                if candidates and candidates[0].is_file():
+                        panel_file_to_analyze = None
+                        # Try crop_filenames first, but never allow paths outside panels/.
+                        for cf in sc.get("crop_filenames", []):
+                            if not isinstance(cf, str) or not cf.strip():
+                                continue
+                            try:
+                                cand = resolve_contained_path(panels_root, cf, must_be_file=True)
+                            except (FileNotFoundError, ValueError, OSError):
+                                logger.warning("Skipping panel path outside workspace: %s", cf)
+                                continue
+                            panel_file_to_analyze = cand
+                            break
+                        # Try sequence matching panel_0001.jpg
+                        if not panel_file_to_analyze and panels_dir.exists():
+                            seq = sc.get("sequence", 1)
+                            for cand in [
+                                panels_dir / f"panel_{seq:04d}.jpg",
+                                panels_dir / f"panel_{seq:04d}.png",
+                                panels_dir / f"panel_{seq}.jpg",
+                            ]:
+                                try:
+                                    resolved_cand = resolve_contained_path(
+                                        panels_root,
+                                        cand.name,
+                                        must_be_file=True,
+                                    )
+                                except (FileNotFoundError, ValueError, OSError):
+                                    continue
+                                panel_file_to_analyze = resolved_cand
+                                break
+                        # Try panel_ids matching
+                        if not panel_file_to_analyze and panels_dir.exists():
+                            for pid in sc.get("panel_ids", []):
+                                if not isinstance(pid, str) or not pid or any(sep in pid for sep in ("/", "\\")):
+                                    continue
+                                candidates = list(panels_dir.glob(f"*{pid}*"))
+                                for candidate in candidates:
                                     try:
-                                        vis_summary = await prov.analyze_vision(
-                                            image=candidates[0],
-                                            prompt="In one short sentence, describe the character action and mood in this manga panel.",
-                                            model=model_to_use,
+                                        resolved_candidate = resolve_contained_path(
+                                            panels_root,
+                                            candidate.name,
+                                            must_be_file=True,
                                         )
-                                        if vis_summary:
-                                            sc["visual_description"] = vis_summary.strip()
+                                    except (FileNotFoundError, ValueError, OSError):
+                                        continue
+                                    if resolved_candidate.is_file():
+                                        panel_file_to_analyze = resolved_candidate
                                         break
-                                    except Exception as img_err:
-                                        logger.debug(f"Vision pre-analysis skipped: {img_err}")
+                                if panel_file_to_analyze:
+                                    break
+
+                        if panel_file_to_analyze:
+                            try:
+                                vis_summary = await prov.analyze_vision(
+                                    image=panel_file_to_analyze,
+                                    prompt="Describe in 1-2 concise, vivid sentences what characters, emotions, actions, and atmosphere are visible in this manga panel.",
+                                    model=vision_model,
+                                )
+                                existing_visual = str(sc.get("visual_description", "")).strip()
+                                is_placeholder = (
+                                    not existing_visual
+                                    or existing_visual.lower() in {"no visual description", "no visual", "visual unavailable"}
+                                    or bool(re.match(r"^(?:panel|scene|shot)\s*#?\d*\s*(?:visual composition|visual framing)", existing_visual, re.IGNORECASE))
+                                )
+                                if vis_summary and is_placeholder:
+                                    sc["visual_description"] = vis_summary.strip()
+                            except Exception as img_err:
+                                logger.debug(f"Vision pre-analysis skipped: {img_err}")
 
                 prompt = build_story_prompt(scenes_data)
                 raw_text = await prov.generate_text(
@@ -165,8 +231,12 @@ class StoryNarrationService:
         except Exception as e:
             logger.warning(f"Local LLM draft failed: {e}. Falling back to deterministic contextual analysis.")
 
-        # Deterministic fallback: construct grounded beats from source OCR and visual metadata
+        # Deterministic fallback is test-only. Production narration must fail closed
+        # instead of presenting generic text as source-grounded storytelling.
         if not llm_succeeded or len(beats) == 0:
+            allow_mock = os.environ.get("PANELFLOW_ALLOW_MOCK_LLM", "").lower() in ("1", "true", "yes")
+            if not allow_mock:
+                raise RuntimeError("Narration generation produced no validated LLM beats. Configure a healthy real provider or explicitly enable PANELFLOW_ALLOW_MOCK_LLM for tests.")
             beats = []
             for idx, sc in enumerate(scenes_data):
                 ocr = sc.get("ocr_text", "").strip()
@@ -181,7 +251,11 @@ class StoryNarrationService:
                 else:
                     intent = "EXPOSITION"
                     emotion = "Mysterious" if idx % 2 == 0 else "Suspenseful"
-                    text = f"Scene {sc.get('sequence', idx + 1)}: {vis or 'The scene unfolds with palpable quietude.'}"
+                    clean_vis = re.sub(r"^(?:Scene|Panel|Shot)\s*#?\d+\s*[-:—–.]\s*", "", vis, flags=re.IGNORECASE).strip()
+                    if clean_vis and not re.match(r"^(?:Scene|Panel|Visual\s+framing|No\s+visual)", clean_vis, flags=re.IGNORECASE):
+                        text = clean_vis
+                    else:
+                        text = "The scene unfolds with palpable quietude, the atmosphere taut with quiet anticipation."
 
                 beat = StructuredStoryBeat(
                     scene_id=sc.get("id", f"scene_{idx + 1}"),

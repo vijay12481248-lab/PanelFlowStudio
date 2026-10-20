@@ -9,7 +9,7 @@
   "scripts": {
     "dev:desktop": "npm --workspace=@panelflow/desktop run dev",
     "build": "npm run build --workspaces",
-    "engine": "python -m uvicorn engine.api.app:app --host 127.0.0.1 --port 8765 --reload",
+    "engine": "python -m uvicorn engine.api.app:app --host 127.0.0.1 --port 8765 --reload --no-access-log",
     "test:engine": "pytest tests -v"
   }
 }

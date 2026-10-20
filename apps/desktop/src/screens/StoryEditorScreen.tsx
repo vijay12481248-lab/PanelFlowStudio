@@ -8,6 +8,7 @@ import type {
   VideoScene,
   VisualLayer,
   NarrationClip,
+  TextRegion,
 } from "@panelflow/shared-types";
 import { StoryEditorTopBar } from "../components/story-editor/StoryEditorTopBar";
 import { StoryEditorLeftRail, LeftRailTab } from "../components/story-editor/StoryEditorLeftRail";
@@ -49,6 +50,7 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
 }) => {
   const [pages, setPages] = useState<Page[]>([]);
   const [panels, setPanels] = useState<Panel[]>([]);
+  const [textRegions, setTextRegions] = useState<TextRegion[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [activeLeftTab, setActiveLeftTab] = useState<LeftRailTab>(initialTab ?? "story");
   const [workflowStep, setWorkflowStep] = useState<WorkflowStepId>(initialWorkflowStep ?? 3);
@@ -63,6 +65,7 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
     initialOpenModal === "audio" ? "music" : undefined
   );
   const [showExportModal, setShowExportModal] = useState<boolean>(initialOpenModal === "export");
+  const [panelSyncAlert, setPanelSyncAlert] = useState<{ show: boolean; message: string; removedCount?: number }>({ show: false, message: "" });
 
   // Main Editor State
   const [editorState, setEditorState] = useState<StoryEditorState>({
@@ -292,17 +295,19 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
     const loadProjectData = async () => {
       try {
         setLoading(true);
-        const [loadedPages, loadedPanels, loadedScript, loadedStoryboard, loadedCharacters] = await Promise.all([
+        const [loadedPages, loadedPanels, loadedScript, loadedStoryboard, loadedCharacters, loadedTextRegions] = await Promise.all([
           api.listPages(project.id).catch(() => []),
           api.listPanels(project.id).catch(() => []),
           api.getScript(project.id).catch(() => null),
           api.getStoryboard(project.id).catch(() => null),
           api.listCharacters(project.id).catch(() => []),
+          api.listTextRegions(project.id).catch(() => []),
         ]);
 
         if (!mounted) return;
         setPages(loadedPages);
         setPanels(loadedPanels);
+        setTextRegions(loadedTextRegions);
 
         if (loadedPages.length > 0) {
           setSelectedPageId(loadedPages[0].id);
@@ -349,7 +354,7 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
 
               const restoredChapter = (parsed.narration_chapter && !hasMockArtifacts)
                 ? parsed.narration_chapter
-                : buildInitialNarrationChapter(project.id, project.title, migratedScenes, undefined, loadedScript, loadedStoryboard, loadedCharacters);
+                : buildInitialNarrationChapter(project.id, project.title, migratedScenes, undefined, loadedScript, loadedStoryboard, loadedCharacters, loadedTextRegions);
               const migratedNarration = (parsed.narration_clips && parsed.narration_clips.length > 0 && !hasMockArtifacts)
                 ? parsed.narration_clips.map((n) => ({
                     ...n,
@@ -366,6 +371,22 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
                 narration_chapter: restoredChapter,
                 narration_clips: migratedNarration,
               });
+              
+              // Check for panel sync issues
+              const panelSync = (parsed as any).panel_review_sync;
+              if (panelSync?.removed_layers_count > 0) {
+                setPanelSyncAlert({
+                  show: true,
+                  message: `${panelSync.removed_layers_count} source panel(s) were deleted or replaced. Their video layers are preserved; remove or replace those layers before exporting.`,
+                  removedCount: panelSync.removed_layers_count,
+                });
+              }
+              if (panelSync?.panels_stale && !panelSync?.removed_layers_count) {
+                setPanelSyncAlert({
+                  show: true,
+                  message: "Panels have been modified in Panel Review. Consider reviewing changes in Story Editor.",
+                });
+              }
               return;
             }
           } catch (e) {
@@ -445,7 +466,8 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
             undefined,
             loadedScript,
             loadedStoryboard,
-            loadedCharacters
+            loadedCharacters,
+            loadedTextRegions
           );
           const initialNarration = syncChapterToTimelineClips(initialChapter, initialScenes);
 
@@ -502,7 +524,8 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
             undefined,
             loadedScript,
             loadedStoryboard,
-            loadedCharacters
+            loadedCharacters,
+            loadedTextRegions
           );
           const initialNarration = syncChapterToTimelineClips(initialChapter, [initialScene]);
 
@@ -813,6 +836,34 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
 
   return (
     <div className="h-screen w-screen flex flex-col bg-zinc-950 text-zinc-100 overflow-hidden font-sans">
+      {/* Panel Sync Alert */}
+      {panelSyncAlert.show && (
+        <div className="absolute top-16 left-1/2 transform -translate-x-1/2 z-50 w-full max-w-2xl px-4">
+          <div className="bg-amber-950/90 border border-amber-600/50 rounded-lg p-3 flex items-center gap-3 shadow-xl backdrop-blur">
+            <span className="text-amber-400 text-lg">⚠️</span>
+            <div className="flex-1 text-sm text-amber-100">
+              {panelSyncAlert.message}
+            </div>
+            <button className="px-3 py-2 rounded bg-amber-700 text-white text-sm" onClick={async () => {
+              if (!window.confirm("Align single-panel scenes with Panel Review? This adds new panels, removes deleted-panel scenes, and follows panel order. Surviving scene edits are kept. Custom multi-layer scenes need manual review.")) return;
+              try {
+                const response = await api.saveStoryEditorState(project.id, editorState, true);
+                updateEditorState(() => response.state);
+                setPanelSyncAlert({ show: false, message: "" });
+              } catch (error: any) {
+                setPanelSyncAlert({ show: true, message: error.message || "Could not align panels." });
+              }
+            }}>Align panel scenes</button>
+            <button
+              onClick={() => setPanelSyncAlert({ show: false, message: "" })}
+              className="text-amber-300 hover:text-amber-100 text-lg leading-none"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
+      
       {/* 1. Top Bar */}
       <StoryEditorTopBar
         project={project}
@@ -946,7 +997,7 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
           <NarrationStudio
             initialChapter={
               editorState.narration_chapter ||
-              buildInitialNarrationChapter(project.id, project.title, editorState.scenes)
+              buildInitialNarrationChapter(project.id, project.title, editorState.scenes, undefined, undefined, undefined, undefined, textRegions)
             }
             initialSegmentId={
               editorState.selected_object?.type === "narration"
@@ -965,7 +1016,7 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
                 updateEditorState((prev) => {
                   const ch =
                     prev.narration_chapter ||
-                    buildInitialNarrationChapter(project.id, project.title, prev.scenes);
+                    buildInitialNarrationChapter(project.id, project.title, prev.scenes, undefined, undefined, undefined, undefined, textRegions);
                   const syncedClips = syncChapterToTimelineClips(
                     ch,
                     prev.scenes,
@@ -981,7 +1032,7 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
                 updateEditorState((prev) => {
                   const ch =
                     prev.narration_chapter ||
-                    buildInitialNarrationChapter(project.id, project.title, prev.scenes);
+                    buildInitialNarrationChapter(project.id, project.title, prev.scenes, undefined, undefined, undefined, undefined, textRegions);
                   const seg = ch.segments.find((s: any) => s.id === segmentId);
                   if (!seg) return prev;
                   const newClipId = `clip_${Date.now()}`;

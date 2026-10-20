@@ -80,10 +80,14 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
 
   // Ollama Live Model Discovery & Generation States
   const [ollamaModels, setOllamaModels] = useState<string[]>([]);
+  const [ollamaDetailedModels, setOllamaDetailedModels] = useState<any[]>([]);
   const [selectedOllamaModel, setSelectedOllamaModel] = useState<string>("qwen3.5:9b");
   const [isOllamaOnline, setIsOllamaOnline] = useState<boolean>(true);
   const [isDraftingNarration, setIsDraftingNarration] = useState<boolean>(false);
   const [isSynthesizingAll, setIsSynthesizingAll] = useState<boolean>(false);
+  const [showOllamaGuideModal, setShowOllamaGuideModal] = useState<boolean>(false);
+  const [postDraftPrompt, setPostDraftPrompt] = useState<boolean>(false);
+  const [targetSceneId, setTargetSceneId] = useState<string>(() => scenes?.[0]?.id || "");
 
   useEffect(() => {
     let isMounted = true;
@@ -93,6 +97,7 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
         if (isMounted) {
           const modelList = res.models?.map((m: any) => m.name || m) || [];
           setOllamaModels(modelList);
+          setOllamaDetailedModels(res.models || []);
           setIsOllamaOnline(res.healthy !== false && modelList.length > 0);
           if (modelList.length > 0 && !modelList.includes(selectedOllamaModel)) {
             const preferred =
@@ -101,6 +106,9 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
                   m.includes("qwen3.5") || m.includes("gemma4") || m.includes("qwen3.6")
               ) || modelList[0];
             setSelectedOllamaModel(preferred);
+          }
+          if (scenes && scenes.length > 0 && !targetSceneId) {
+            setTargetSceneId(scenes[0].id);
           }
         }
       } catch (err) {
@@ -111,7 +119,7 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [scenes, targetSceneId, selectedOllamaModel]);
 
   // Undo / Redo History Stacks
   const [history, setHistory] = useState<NarrationChapter[]>([]);
@@ -552,19 +560,31 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
     setIsDraftingNarration(true);
     try {
       const scenesPayload = (scenes && scenes.length > 0 ? scenes : chapter.segments).map(
-        (s: any, idx: number) => ({
-          id: s.id || `scene_${idx + 1}`,
-          sequence: s.sequence || idx + 1,
-          title: s.title || `Scene ${idx + 1}`,
-          visual_description:
-            s.layers?.[0]?.name || s.visual_description || `Scene ${idx + 1} manga visual framing`,
-          ocr_text: s.source_context?.raw_ocr_dialogue || s.ocr_text || "",
-          panel_ids:
+        (s: any, idx: number) => {
+          const matchingSegment = chapter.segments.find((seg) => seg.scene_id === s.id) || chapter.segments[idx];
+          const ocrText =
+            matchingSegment?.source_context?.raw_ocr_dialogue ||
+            s.ocr_text ||
+            matchingSegment?.narration_text ||
+            "";
+          const panelIds =
             s.layers?.map((l: any) => l.source_panel_id).filter(Boolean) ||
+            matchingSegment?.source_context?.panel_ids ||
             s.source_context?.panel_ids ||
-            [],
-          characters: ["Narrator"],
-        })
+            [];
+          const speakerName = matchingSegment?.speaker_name || s.speaker || "The Narrator";
+          return {
+            id: s.id || `scene_${idx + 1}`,
+            sequence: s.sequence || idx + 1,
+            title: s.title || `Scene ${idx + 1}`,
+            visual_description:
+              s.layers?.[0]?.name || s.visual_description || `Scene ${idx + 1} manga visual framing`,
+            ocr_text: ocrText,
+            panel_ids: panelIds,
+            speaker: speakerName,
+            characters: [speakerName],
+          };
+        }
       );
 
       const draftResult = await api.draftNarration(
@@ -605,8 +625,12 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
                   ? [primaryLayer.source_panel_id]
                   : [],
                 panel_labels: [primaryLayer?.name || `Panel #${bIdx + 1}`],
-                panel_preview_url: primaryLayer?.image_url,
-                image_url: primaryLayer?.image_url,
+                panel_preview_url: (projectId && (beat.panel_ids?.[0] || primaryLayer?.source_panel_id))
+                  ? api.getPanelImageUrl(projectId, beat.panel_ids?.[0] || primaryLayer?.source_panel_id)
+                  : primaryLayer?.image_url,
+                image_url: (projectId && (beat.panel_ids?.[0] || primaryLayer?.source_panel_id))
+                  ? api.getPanelImageUrl(projectId, beat.panel_ids?.[0] || primaryLayer?.source_panel_id)
+                  : primaryLayer?.image_url,
                 raw_ocr_dialogue: beat.observed_ocr_dialogue || "",
                 visual_description:
                   beat.observed_visual_evidence || primaryLayer?.name || `Scene ${bIdx + 1}`,
@@ -641,6 +665,7 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
         setChapter(nextChapter);
         onChapterSave?.(nextChapter);
         setSelectedSegmentId(updatedSegments[0]?.id || "");
+        setPostDraftPrompt(true);
       }
     } catch (err: any) {
       console.error("AI Narration generation failed:", err);
@@ -795,13 +820,13 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
           <div className="flex items-center gap-1.5 bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1">
             <span
               className={`w-2 h-2 rounded-full ${isOllamaOnline ? "bg-emerald-400 shadow-sm shadow-emerald-400/50" : "bg-rose-500"}`}
-              title={isOllamaOnline ? "Ollama Online" : "Ollama Offline"}
+              title={isOllamaOnline ? "Ollama Online (127.0.0.1:11434)" : "Ollama Offline"}
             />
             <span className="text-[11px] font-semibold text-zinc-400">Model:</span>
             <select
               value={selectedOllamaModel}
               onChange={(e) => setSelectedOllamaModel(e.target.value)}
-              className="bg-transparent text-xs text-zinc-200 font-mono focus:outline-none cursor-pointer"
+              className="bg-transparent text-xs text-zinc-200 font-mono focus:outline-none cursor-pointer max-w-[130px] truncate"
             >
               {ollamaModels.length > 0 ? (
                 ollamaModels.map((m) => (
@@ -815,6 +840,14 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
                 </option>
               )}
             </select>
+            <button
+              type="button"
+              onClick={() => setShowOllamaGuideModal(true)}
+              className="p-0.5 rounded text-zinc-400 hover:text-indigo-300 hover:bg-zinc-800 transition-colors ml-0.5"
+              title="Open Ollama Models Guide & Diagnostics"
+            >
+              <Icons.Info className="w-3.5 h-3.5" />
+            </button>
           </div>
 
           {/* Single-Click AI Narration Generation */}
@@ -884,6 +917,49 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
         </div>
       </header>
 
+      {/* Post-Draft Action Notification Banner */}
+      {postDraftPrompt && (
+        <div className="bg-gradient-to-r from-indigo-950/90 via-zinc-900 to-emerald-950/90 border-b border-indigo-700/60 px-4 py-2 flex items-center justify-between text-xs animate-fadeIn shrink-0">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="font-semibold text-zinc-100">
+              AI Narration Drafted ({chapter.segments.length} grounded beats via {selectedOllamaModel})
+            </span>
+            <span className="text-zinc-400 hidden sm:inline">• Ready for emotional voice synthesis and timeline integration.</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setPostDraftPrompt(false);
+                handleSynthesizeAllVoices();
+              }}
+              className="px-2.5 py-1 rounded bg-cyan-600 hover:bg-cyan-500 text-white font-bold flex items-center gap-1 shadow-sm transition-all"
+            >
+              <Icons.Mic className="w-3.5 h-3.5" />
+              <span>Generate Voices Now</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setPostDraftPrompt(false);
+                setTimelineModalOpen(true);
+              }}
+              className="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-bold flex items-center gap-1 shadow-sm transition-all"
+            >
+              <Icons.Plus className="w-3.5 h-3.5" />
+              <span>Add to Timeline</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setPostDraftPrompt(false)}
+              className="p-1 rounded text-zinc-400 hover:text-white"
+            >
+              <Icons.X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Main Professional 3-Column Narration Workspace */}
       <div className="flex-1 grid grid-cols-12 min-h-0 overflow-hidden">
@@ -1230,6 +1306,45 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
                   </div>
                 </div>
               </button>
+
+              {/* Option 3: Target Specific Timeline Scene */}
+              {scenes && scenes.length > 0 && (
+                <div className="p-3.5 rounded-xl bg-zinc-950 border border-zinc-800 space-y-2">
+                  <div className="flex items-center justify-between text-xs font-bold text-zinc-200">
+                    <span className="flex items-center gap-1.5">
+                      <Icons.Layers className="w-3.5 h-3.5 text-emerald-400" />
+                      Attach Selected to Specific Scene
+                    </span>
+                    <span className="text-[10px] text-zinc-500 font-mono font-normal">Direct Target</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={targetSceneId}
+                      onChange={(e) => setTargetSceneId(e.target.value)}
+                      className="flex-1 bg-zinc-900 border border-zinc-700 rounded-lg p-2 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500"
+                    >
+                      {scenes.map((sc, scIdx) => (
+                        <option key={sc.id} value={sc.id}>
+                          Scene #{sc.sequence || scIdx + 1}: {sc.title || `Scene ${scIdx + 1}`}
+                        </option>
+                      ))}
+                    </select>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onClick={() => {
+                        setTimelineModalOpen(false);
+                        // Also update segment's scene_id
+                        handleUpdateSegment({ scene_id: targetSceneId });
+                        onAddToTimeline?.("selected", selectedSegmentId);
+                      }}
+                      className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold h-8 px-3 shrink-0"
+                    >
+                      Attach
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="flex justify-end pt-3 border-t border-zinc-800/80">
@@ -1240,6 +1355,171 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
                 className="text-xs h-8 px-4 font-semibold"
               >
                 Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Ollama Real-Time Engine & Model Diagnostics Guide Modal */}
+      {showOllamaGuideModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fadeIn">
+          <div className="bg-zinc-900 border border-zinc-750 rounded-2xl max-w-2xl w-full p-6 space-y-4 shadow-2xl ring-1 ring-white/10 max-h-[85vh] flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-indigo-950/80 border border-indigo-700/60 flex items-center justify-center text-indigo-400 shadow-inner">
+                  <Icons.Cpu className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-zinc-100 flex items-center gap-2">
+                    <span>Ollama Real-Time Engine & Models</span>
+                    <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full ${isOllamaOnline ? "bg-emerald-950 text-emerald-300 border border-emerald-800" : "bg-rose-950 text-rose-300 border border-rose-800"}`}>
+                      {isOllamaOnline ? "127.0.0.1:11434 Connected" : "Ollama Offline"}
+                    </span>
+                  </h3>
+                  <span className="text-[11px] text-zinc-400">
+                    Multimodal vision understanding & cinematic storytelling model inventory
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowOllamaGuideModal(false)}
+                className="text-zinc-400 hover:text-zinc-200 p-1 rounded-lg hover:bg-zinc-800 transition-colors"
+                title="Close (Esc)"
+              >
+                <Icons.X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Guidance Explainer */}
+            <div className="p-3.5 rounded-xl bg-indigo-950/30 border border-indigo-800/50 text-xs text-zinc-300 space-y-1.5 leading-relaxed">
+              <h4 className="font-bold text-indigo-300 flex items-center gap-1.5 text-xs">
+                <Icons.Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                How PanelFlow Works With Ollama Models
+              </h4>
+              <p className="text-[11px]">
+                <strong>1. Multimodal Vision:</strong> Ollama vision models inspect manga panels directly to observe character presence, actions, and atmosphere.
+              </p>
+              <p className="text-[11px]">
+                <strong>2. Grounded Narration:</strong> Translates observed actions and OCR dialogue bubbles into emotionally paced cinematic motion comic narration.
+              </p>
+              <p className="text-[11px]">
+                <strong>3. Voice Generation:</strong> Generated lines are converted to natural audio via local Chatterbox Turbo (MIT) on your GPU.
+              </p>
+            </div>
+
+            {/* Installed Models Grid */}
+            <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+              <h4 className="text-xs font-bold text-zinc-200 uppercase tracking-wider">
+                Installed Models ({ollamaDetailedModels.length || ollamaModels.length})
+              </h4>
+
+              <div className="grid grid-cols-1 gap-2.5">
+                {(ollamaDetailedModels.length > 0
+                  ? ollamaDetailedModels
+                  : ollamaModels.map((m) => ({
+                      name: m,
+                      supports_vision:
+                        m.includes("qwen3.5") ||
+                        m.includes("gemma4") ||
+                        m.includes("qwen3.6") ||
+                        m.includes("vision"),
+                    }))
+                ).map((model: any) => {
+                  const name = model.name || model;
+                  const isSelected = selectedOllamaModel === name;
+                  const supportsVision =
+                    model.supports_vision ||
+                    name.includes("qwen3.5") ||
+                    name.includes("gemma4") ||
+                    name.includes("qwen3.6") ||
+                    name.includes("vision");
+                  const isCoder = name.includes("coder");
+
+                  return (
+                    <div
+                      key={name}
+                      className={`p-3 rounded-xl border flex items-center justify-between gap-3 transition-all ${
+                        isSelected
+                          ? "bg-zinc-850 border-indigo-500 shadow-md ring-1 ring-indigo-500/30"
+                          : "bg-zinc-950 border-zinc-800 hover:border-zinc-700"
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div
+                          className={`w-8 h-8 rounded-lg flex items-center justify-center font-mono font-bold text-xs shrink-0 ${
+                            isSelected ? "bg-indigo-600 text-white" : "bg-zinc-800 text-zinc-300"
+                          }`}
+                        >
+                          {name.slice(0, 2).toUpperCase()}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-xs font-bold text-zinc-100 truncate">
+                              {name}
+                            </span>
+                            {supportsVision && (
+                              <span className="text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-300 border border-emerald-800">
+                                Vision Capable
+                              </span>
+                            )}
+                            {!isCoder && (
+                              <span className="text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.2 rounded bg-indigo-950 text-indigo-300 border border-indigo-800">
+                                Narration
+                              </span>
+                            )}
+                            {isCoder && (
+                              <span className="text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.2 rounded bg-amber-950 text-amber-300 border border-amber-800">
+                                Code
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[10px] text-zinc-500 font-mono block mt-0.5">
+                            {model.details?.parameter_size ? `Params: ${model.details.parameter_size} • ` : ""}
+                            {model.details?.quantization_level ? `Quant: ${model.details.quantization_level} • ` : ""}
+                            {supportsVision ? "Supports vision panel inspection" : "Text & script generation"}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="shrink-0">
+                        {isSelected ? (
+                          <span className="px-2.5 py-1 rounded-lg bg-indigo-600 text-white font-bold text-xs flex items-center gap-1 shadow-sm">
+                            <Icons.Check className="w-3.5 h-3.5" />
+                            Active Model
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedOllamaModel(name);
+                            }}
+                            className="px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-semibold text-xs border border-zinc-700 transition-colors"
+                          >
+                            Select Model
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="border-t border-zinc-800 pt-3 flex items-center justify-between text-xs">
+              <span className="text-zinc-500 font-mono text-[11px]">
+                Install additional models: <code className="text-zinc-300">ollama run qwen3.5:9b</code>
+              </span>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setShowOllamaGuideModal(false)}
+                className="text-xs h-8 px-4 font-semibold"
+              >
+                Done
               </Button>
             </div>
           </div>

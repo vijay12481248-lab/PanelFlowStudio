@@ -6,11 +6,64 @@ use std::path::PathBuf;
 use std::process::{Child, Command};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+use rand::{rngs::OsRng, RngCore};
 use tauri::{RunEvent, State};
 
-#[derive(Clone, Default)]
+fn generate_engine_token() -> String {
+    let mut bytes = [0_u8; 32];
+    OsRng.fill_bytes(&mut bytes);
+    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+fn engine_token_file() -> Option<PathBuf> {
+    std::env::var("LOCALAPPDATA").ok().map(|root| {
+        PathBuf::from(root)
+            .join("PanelFlow Studio")
+            .join("engine.token")
+    })
+}
+
+fn loopback_engine_is_listening() -> bool {
+    "127.0.0.1:8765"
+        .parse()
+        .ok()
+        .and_then(|addr| TcpStream::connect_timeout(&addr, Duration::from_millis(250)).ok())
+        .is_some()
+}
+
+#[derive(Clone)]
 struct EngineManager {
     child: Arc<Mutex<Option<Child>>>,
+    token: Arc<String>,
+}
+
+impl Default for EngineManager {
+    fn default() -> Self {
+        let token = std::env::var("PANELFLOW_ENGINE_TOKEN")
+            .ok()
+            .filter(|value| value.len() >= 32)
+            .or_else(|| {
+                if loopback_engine_is_listening() {
+                    engine_token_file()
+                        .and_then(|path| std::fs::read_to_string(path).ok())
+                        .map(|value| value.trim().to_owned())
+                        .filter(|value| value.len() >= 32)
+                } else {
+                    None
+                }
+            })
+            .unwrap_or_else(generate_engine_token);
+        if let Some(path) = engine_token_file() {
+            if let Some(parent) = path.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            let _ = std::fs::write(path, token.as_bytes());
+        }
+        Self {
+            child: Arc::new(Mutex::new(None)),
+            token: Arc::new(token),
+        }
+    }
 }
 
 impl EngineManager {
@@ -282,6 +335,9 @@ impl EngineManager {
             let working_dir = engine_bin.parent().unwrap_or(&engine_bin);
             let mut cmd = Command::new(&engine_bin);
             cmd.current_dir(working_dir);
+            cmd.env("PANELFLOW_ENGINE_TOKEN", self.token.as_str());
+            #[cfg(debug_assertions)]
+            cmd.env("PANELFLOW_ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173");
 
             #[cfg(windows)]
             {
@@ -332,6 +388,9 @@ impl EngineManager {
         }
         cmd.arg(&script);
         cmd.current_dir(working_dir);
+        cmd.env("PANELFLOW_ENGINE_TOKEN", self.token.as_str());
+        #[cfg(debug_assertions)]
+        cmd.env("PANELFLOW_ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173");
 
         #[cfg(windows)]
         {
@@ -412,6 +471,11 @@ fn get_engine_status_cmd(mgr: State<EngineManager>) -> bool {
     mgr.is_port_active()
 }
 
+#[tauri::command]
+fn get_engine_token_cmd(mgr: State<EngineManager>) -> String {
+    mgr.token.as_str().to_owned()
+}
+
 fn main() {
     let engine_mgr = EngineManager::default();
 
@@ -428,7 +492,8 @@ fn main() {
             start_engine_cmd,
             stop_engine_cmd,
             restart_engine_cmd,
-            get_engine_status_cmd
+            get_engine_status_cmd,
+            get_engine_token_cmd
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
@@ -439,4 +504,18 @@ fn main() {
             let _ = engine_mgr.stop_engine();
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::generate_engine_token;
+    use std::collections::HashSet;
+
+    #[test]
+    fn engine_tokens_are_high_entropy_and_unique() {
+        let tokens: HashSet<String> = (0..100).map(|_| generate_engine_token()).collect();
+        assert_eq!(tokens.len(), 100);
+        assert!(tokens.iter().all(|token| token.len() >= 64));
+        assert!(tokens.iter().all(|token| token.chars().all(|c| c.is_ascii_hexdigit())));
+    }
 }

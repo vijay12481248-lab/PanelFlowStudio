@@ -1,0 +1,36 @@
+[
+  {
+    "id": "manga_image_generation",
+    "purpose": "text_to_image",
+    "filename": "manga_image_generation.api.json",
+    "sha256": "6c87dbc3cde2b4b2fe9cbf0985eab18f17f2dc277f6876d6d814188de557d9b4",
+    "requires_gpu": true,
+    "gpu_vram_mb": 0,
+    "model_files": [
+      "longcat_image_bf16_3.safetensors",
+      "qwen_2.5_vl_7b_fp8_scaled.safetensors",
+      "ae.safetensors"
+    ],
+    "required_nodes": [
+      "UNETLoader",
+      "CLIPLoader",
+      "VAELoader",
+      "FluxGuidance",
+      "CFGNorm",
+      "EmptySD3LatentImage",
+      "VAEDecodeTiled",
+      "KSampler",
+      "SaveImage",
+      "PrimitiveInt"
+    ],
+    "patch_slots": {
+      "prompt": {"node_id": "4", "input": "text", "class_type": "CLIPTextEncode"},
+      "negative_prompt": {"node_id": "5", "input": "text", "class_type": "CLIPTextEncode"},
+      "seed": {"node_id": "14", "input": "value", "class_type": "PrimitiveInt"},
+      "width": {"node_id": "6", "input": "width", "class_type": "EmptySD3LatentImage"},
+      "height": {"node_id": "6", "input": "height", "class_type": "EmptySD3LatentImage"},
+      "filename_prefix": {"node_id": "13", "input": "filename_prefix", "class_type": "SaveImage"}
+    },
+    "dimension_policy": {"mode": "exact", "min": 256, "max": 2048, "multiple_of": 8}
+  }
+]

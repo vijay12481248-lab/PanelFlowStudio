@@ -68,6 +68,23 @@ flowchart TD
     DownloadPipeline --> WorkspaceFS
 ```
 
+### Local API Threat Model
+
+The engine binds to loopback, but loopback alone is not an authorization boundary: a hostile website can issue browser requests to `127.0.0.1`, and DNS rebinding can target a local listener through an attacker-controlled `Host` value.
+
+Controls at the FastAPI boundary:
+
+- Every request except `GET /api/system/health` requires a launch-scoped 256-bit engine token. Normal API calls send it only in `X-PanelFlow-Token`; it is never placed in JSON payloads or application logs.
+- Browser requests with an `Origin` header are accepted only from the packaged Tauri origins. Debug Vite origins are added only by debug desktop launches or an explicit `PANELFLOW_ALLOWED_ORIGINS` setting.
+- `Host` must exactly identify the configured loopback listener (`127.0.0.1`, `localhost`, or `[::1]` with the configured port), blocking DNS-rebinding hostnames.
+- CORS preflight is the only non-health request that omits the token; it is accepted only for an approved origin and does not reach an endpoint handler.
+- Browser elements that cannot attach headers (`img`, `audio`, `video`, `EventSource`) use a token-bearing path capability on read-only resource routes. Middleware validates and strips the capability before routing, responses set `Referrer-Policy: no-referrer`, and engine access logging is disabled so the capability is not written to request logs.
+- The Tauri shell generates the token from the operating system CSPRNG, passes it to the child engine through its environment, and returns it to the trusted local webview through a Tauri command. A per-user token handoff file under the PanelFlow application-data directory lets a new desktop/launcher attach to an already-running engine without exposing the token over HTTP. The PowerShell launcher generates and passes the same form of token to both processes. The token is never printed.
+
+`PANELFLOW_ALLOW_INSECURE_LOCAL_API=1` is a narrow test/development escape hatch. Automated tests set it only for legacy domain/API suites; security regressions instantiate a protected application explicitly. It must not be set in packaged or normal desktop launches.
+
+Residual assumptions: compromise of the desktop webview can read the in-memory token; processes running as the same OS user can read the environment or application-data token handoff file; and read-only resource capability URLs exist briefly in the DOM. These are not remote-web authorization paths, but they remain reasons to add a restrictive Tauri CSP and OS-level process isolation in a future hardening pass.
+
 ---
 
 ## 2. Module Boundaries & Repository Layout
@@ -164,9 +181,10 @@ Long-running operations (such as acquiring 100 high-resolution pages, extracting
 
 ### Crash Recovery Mechanism
 When the local FastAPI engine starts up:
-1. It queries the `jobs` table for any jobs remaining in `RUNNING` or `QUEUED` state from an abnormal previous shutdown.
-2. It transitions orphaned jobs to `FAILED` with message `"Application interrupted or crashed while job was running"` and timestamps `finished_at`.
-3. Downstream assets already written to disk remain preserved. The user can inspect the partial manifest and trigger a retry without losing already verified pages.
+1. It finds orphaned `QUEUED` jobs and expired or lease-less `RUNNING` jobs. A live worker lease is left alone.
+2. Recoverable jobs are conditionally requeued from persisted operation inputs; unsupported or exhausted jobs are marked `FAILED`. Periodic recovery handles leases that expire after startup.
+3. Each claim has a unique lease token. Heartbeats, progress and terminal transitions are conditional on that token; operations cooperatively check cancellation and lease loss. These checks do not make an already-started external provider request or filesystem mutation atomic.
+4. Downstream assets already written to disk remain preserved. The user can inspect partial results and retry where the operation can be rehydrated.
 
 ---
 

@@ -4,6 +4,9 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 import uuid
 import logging
+import io
+import json
+from engine.security.paths import read_contained_bytes
 
 from engine.imaging.panels.base import (
     BasePanelDetector,
@@ -38,7 +41,8 @@ class ContourPanelDetector(BasePanelDetector):
         profile: str = "AUTO",
     ) -> list[PanelBox]:
         p_path = Path(page_image_path)
-        img = cv2.imread(str(p_path.resolve()))
+        encoded = np.frombuffer(read_contained_bytes(p_path.parent.parent, p_path), dtype=np.uint8)
+        img = cv2.imdecode(encoded, cv2.IMREAD_COLOR)
         if img is None:
             raise ValueError(f"Failed to load image for panel detection: {page_image_path}")
 
@@ -68,7 +72,7 @@ class ContourPanelDetector(BasePanelDetector):
         )
 
         # 1. Long webtoon tiled handling if needed
-        if effective_profile == DetectionProfile.WEBTOON.value and page_h > 4000:
+        if effective_profile == DetectionProfile.WEBTOON.value:
             candidates = self._detect_webtoon_tiled(img, page_w, page_h)
         else:
             candidates = self._detect_page_contours(img, page_w, page_h, effective_profile)
@@ -104,6 +108,7 @@ class ContourPanelDetector(BasePanelDetector):
         # 4. Construct candidate PanelBox objects
         candidate_boxes: list[PanelBox] = []
         for x, y, w, h, conf, p_type in filtered_boxes:
+            polygon_json = self._extract_polygon_from_box(img, int(x), int(y), int(w), int(h))
             candidate_boxes.append(
                 PanelBox(
                     id=str(uuid.uuid4()),
@@ -116,6 +121,7 @@ class ContourPanelDetector(BasePanelDetector):
                     normalized_y=round(float(y) / float(page_h), 4),
                     normalized_width=round(float(w) / float(page_w), 4),
                     normalized_height=round(float(h) / float(page_h), 4),
+                    polygon_json=polygon_json,
                     confidence=round(float(conf), 2),
                     panel_type=p_type,
                     status=PanelStatus.DETECTED.value,
@@ -145,7 +151,8 @@ class ContourPanelDetector(BasePanelDetector):
         total_page_area = page_w * page_h
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-        # Morphological gradient & edge detection
+        # Morphological gradient & edge detection. Masking every bright region
+        # destroys the synthetic white panel interiors and suppresses borders.
         blurred = cv2.GaussianBlur(gray, (3, 3), 0)
         edges = cv2.Canny(blurred, 30, 110)
 
@@ -161,7 +168,7 @@ class ContourPanelDetector(BasePanelDetector):
             cv2.CHAIN_APPROX_SIMPLE,
         )
 
-        candidates: list[tuple[int, int, int, int, float, str]] = []
+        candidates: list[tuple[int, int, int, int, float, str, str]] = []
         min_area = total_page_area * self.min_area_ratio
         max_area = total_page_area * self.max_area_ratio
 
@@ -183,9 +190,17 @@ class ContourPanelDetector(BasePanelDetector):
 
             cnt_area = cv2.contourArea(cnt)
             solidity = cnt_area / float(area) if area > 0 else 0.0
-            # Require high rectangular solidity to distinguish panels from artwork elements
+            # Slanted panel frames occupy less of their axis-aligned rectangle.
+            # Accept convex quadrilaterals only when they fill their rotated box;
+            # this keeps diagonal cuts without admitting arbitrary character outlines.
             if solidity < 0.88:
-                continue
+                approx = cv2.approxPolyDP(cnt, 0.02 * cv2.arcLength(cnt, True), True)
+                (_, _), (rw, rh), _ = cv2.minAreaRect(cnt)
+                rotated_area = rw * rh
+                if not (len(approx) == 4 and cv2.isContourConvex(approx)
+                        and solidity >= 0.55 and rotated_area > 0
+                        and cnt_area / rotated_area >= 0.80):
+                    continue
 
             # Determine panel type
             area_ratio = area / float(total_page_area)
@@ -399,7 +414,7 @@ class ContourPanelDetector(BasePanelDetector):
         t_path = Path(target_path)
         t_path.parent.mkdir(parents=True, exist_ok=True)
 
-        with Image.open(s_path) as img:
+        with Image.open(io.BytesIO(read_contained_bytes(s_path.parent.parent, s_path))) as img:
             img_w, img_h = img.size
             # Clamp coordinates safely
             x1 = max(0, min(panel_box.x, img_w - 1))
@@ -408,12 +423,32 @@ class ContourPanelDetector(BasePanelDetector):
             y2 = max(y1 + 1, min(panel_box.y + panel_box.height, img_h))
 
             crop = img.crop((x1, y1, x2, y2))
+            # If polygon is available, mask crop to exact panel shape
+            if panel_box.polygon_json:
+                try:
+                    import json
+                    import numpy as np
+                    import cv2
+                    pts = json.loads(panel_box.polygon_json)
+                    # Translate points from absolute image coords to crop-local coords
+                    pts_local = [(int(px - x1), int(py - y1)) for px, py in pts]
+                    mask = Image.new("L", crop.size, 0)
+                    mask_draw = ImageDraw.Draw(mask)
+                    mask_draw.polygon(pts_local, fill=255)
+                    crop = Image.composite(
+                        crop,
+                        Image.new("RGB", crop.size, (255,255,255)),
+                        mask
+                    )
+                except Exception:
+                    # Fallback to rectangular crop on any error
+                    pass
             if crop.mode not in ("RGB", "L"):
                 crop = crop.convert("RGB")
-            crop.save(t_path, "JPEG", quality=95, optimize=True)
+            from engine.security.paths import write_contained_image
+            write_contained_image(t_path.parent.parent, t_path, crop, "JPEG", quality=95, optimize=True)
 
-        with open(t_path, "rb") as f:
-            data = f.read()
+        data = read_contained_bytes(t_path.parent.parent, t_path)
 
         import hashlib
         return {
@@ -435,7 +470,7 @@ class ContourPanelDetector(BasePanelDetector):
         out_path = Path(output_path)
         out_path.parent.mkdir(parents=True, exist_ok=True)
 
-        with Image.open(p_path) as img:
+        with Image.open(io.BytesIO(read_contained_bytes(p_path.parent.parent, p_path))) as img:
             overlay = img.convert("RGBA")
             draw = ImageDraw.Draw(overlay)
 
@@ -463,9 +498,55 @@ class ContourPanelDetector(BasePanelDetector):
                 )
 
             final_img = overlay.convert("RGB")
-            final_img.save(out_path, "JPEG", quality=90)
+            from engine.security.paths import write_contained_image
+            write_contained_image(out_path.parent.parent, out_path, final_img, "JPEG", quality=90)
 
         return out_path
+
+    def _extract_polygon_from_box(self, img: np.ndarray, x: int, y: int, w: int, h: int) -> str | None:
+        """Extract polygon via Hough lines and approxPolyDP for slanted panels."""
+        try:
+            roi = img[y:y+h, x:x+w]
+            if roi.size == 0:
+                return None
+            gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+            blurred = cv2.GaussianBlur(gray, (5,5), 0)
+            edges = cv2.Canny(blurred, 50, 150)
+            lines = cv2.HoughLinesP(edges, 1, np.pi/180, threshold=80, minLineLength=max(20, w//4), maxLineGap=20)
+            if lines is None or len(lines) < 4:
+                # Fallback to contour approx on ROI
+                contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                if not contours:
+                    return None
+                cnt = max(contours, key=cv2.contourArea)
+                peri = cv2.arcLength(cnt, True)
+                approx = cv2.approxPolyDP(cnt, 0.02*peri, True)
+                if (4 <= len(approx) <= 8 and cv2.isContourConvex(approx)
+                        and cv2.contourArea(approx) >= 0.70 * w * h):
+                    pts = approx.reshape(-1, 2)
+                    # Normalize to absolute image coords
+                    pts_abs = [[int(x + pt[0]), int(y + pt[1])] for pt in pts]
+                    return json.dumps(pts_abs)
+                return None
+            # Build edge map from lines
+            mask = np.zeros_like(gray)
+            for line in lines:
+                x1, y1, x2, y2 = line[0]
+                cv2.line(mask, (x1, y1), (x2, y2), 255, 2)
+            contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            if not contours:
+                return None
+            cnt = max(contours, key=cv2.contourArea)
+            peri = cv2.arcLength(cnt, True)
+            approx = cv2.approxPolyDP(cnt, 0.02*peri, True)
+            if (not 4 <= len(approx) <= 8 or not cv2.isContourConvex(approx)
+                    or cv2.contourArea(approx) < 0.70 * w * h):
+                return None
+            pts = approx.reshape(-1, 2)
+            pts_abs = [[int(x + pt[0]), int(y + pt[1])] for pt in pts]
+            return json.dumps(pts_abs)
+        except Exception:
+            return None
 
 # Export both names for backwards compatibility and specification alignment
 ClassicalPanelDetector = ContourPanelDetector

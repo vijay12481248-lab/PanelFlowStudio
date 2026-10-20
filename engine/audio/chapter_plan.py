@@ -3,12 +3,13 @@ import hashlib
 import json
 import re
 from pathlib import Path
+from engine.security.paths import ensure_contained_directory, write_contained_json
 
 
 def plan_chapter_audio(workspace, settings, segments, timeline):
     workspace = Path(workspace)
     directory = workspace / "audio"
-    directory.mkdir(parents=True, exist_ok=True)
+    ensure_contained_directory(workspace, "audio")
     arc = list(dict.fromkeys(s.music_intent for s in segments if s.music_intent and s.music_intent != "NONE"))
     warnings = []
     selected = settings.get("chapter_music_path")
@@ -61,5 +62,5 @@ def plan_chapter_audio(workspace, settings, segments, timeline):
             else:
                 warnings.append(f"No local SFX asset for {cue}; cue omitted.")
     plan = {"music": {"path": music_path, "emotional_arc": arc, "gain_db": -16.0}, "sfx": sfx, "warnings": warnings}
-    (directory / "chapter_audio_plan.json").write_text(json.dumps(plan, indent=2, ensure_ascii=False), encoding="utf-8")
+    write_contained_json(workspace, Path("audio") / "chapter_audio_plan.json", plan, ensure_ascii=False)
     return plan

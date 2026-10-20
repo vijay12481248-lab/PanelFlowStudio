@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { Icons } from "@panelflow/ui";
 import { NarrationStudio } from "./NarrationStudio";
 import { MOCK_CHAPTER } from "./NarrationStudio.mock";
 import type { NarrationChapter, NarrationToTimelineContract } from "./NarrationStudio.types";
@@ -118,10 +119,12 @@ export const NarrationStudioPreview: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setShowLogDrawer(false)}
-                className="text-zinc-400 hover:text-zinc-200"
+                className="text-zinc-400 hover:text-zinc-200 p-0.5 rounded hover:bg-zinc-800 transition-colors"
+                title="Close Log"
               >
-                ✕
+                <Icons.X className="w-3.5 h-3.5" />
               </button>
+
             </div>
 
             <div className="flex-1 overflow-y-auto space-y-1 font-mono text-[10px]">

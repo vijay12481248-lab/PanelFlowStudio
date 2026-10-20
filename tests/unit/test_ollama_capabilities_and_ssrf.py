@@ -1,6 +1,7 @@
 import pytest
 from unittest.mock import patch, MagicMock
-from engine.llm.providers.ollama import OllamaProvider, validate_ollama_endpoint
+from engine.llm.providers import ollama
+from engine.llm.providers.ollama import OllamaEndpointAuthorization, OllamaProvider, validate_ollama_endpoint
 
 
 def test_validate_ollama_endpoint_localhost_valid():
@@ -21,17 +22,17 @@ def test_validate_ollama_endpoint_ssrf_rejections():
     # Cloud metadata service (169.254.x.x)
     valid, msg = validate_ollama_endpoint("http://169.254.169.254/latest/meta-data/", is_remote=True)
     assert valid is False
-    assert "link-local" in msg.lower() or "metadata" in msg.lower()
+    assert "non-public" in msg.lower()
 
     # Multicast
     valid, msg = validate_ollama_endpoint("http://224.0.0.1:11434", is_remote=True)
     assert valid is False
-    assert "multicast" in msg.lower()
+    assert "non-public" in msg.lower()
 
     # Loopback or unroutable when is_remote=True
     valid, msg = validate_ollama_endpoint("http://127.0.0.1:11434", is_remote=True)
     assert valid is False
-    assert "loopback" in msg.lower()
+    assert "non-public" in msg.lower()
 
     # Invalid scheme
     valid, msg = validate_ollama_endpoint("file:///etc/passwd")
@@ -44,17 +45,55 @@ def test_validate_ollama_endpoint_ssrf_rejections():
 
 
 def test_validate_ollama_endpoint_remote_flag():
-    """Remote non-loopback addresses must be rejected unless is_remote=True."""
-    # Remote rejected without is_remote
+    """Remote endpoints reject private and unapproved public addresses."""
     valid, msg = validate_ollama_endpoint("http://192.168.1.100:11434", is_remote=False)
     assert valid is False
     assert "local endpoint must be localhost" in msg.lower()
 
-    # Allowed when is_remote=True
-    valid, msg = validate_ollama_endpoint("http://192.168.1.100:11434", is_remote=True)
+    for endpoint in (
+        "http://10.0.0.1:11434",
+        "http://172.16.0.1:11434",
+        "http://192.168.1.100:11434",
+    ):
+        valid, msg = validate_ollama_endpoint(endpoint, is_remote=True)
+        assert valid is False
+        assert "non-public" in msg.lower()
+
+    valid, msg = validate_ollama_endpoint(
+        "http://8.8.8.8:11434",
+        is_remote=True,
+        authorization=OllamaEndpointAuthorization.create(set()),
+    )
+    assert valid is False
+    assert "approved" in msg.lower()
+
+
+def test_validate_ollama_endpoint_accepts_explicitly_approved_public_ip():
+    valid, msg = validate_ollama_endpoint(
+        "https://8.8.8.8:11434",
+        is_remote=True,
+        approved_remote_ips={"8.8.8.8"},
+    )
     assert valid is True
     assert msg == ""
 
+
+def test_remote_allowlist_persists_with_stable_immutable_identity(tmp_path, monkeypatch):
+    path = tmp_path / "ollama_remote_allowlist.json"
+    monkeypatch.setattr(ollama, "_authorization_path", lambda: path)
+    monkeypatch.delenv("PANELFLOW_OLLAMA_REMOTE_ALLOWLIST", raising=False)
+    authorization = OllamaEndpointAuthorization.create({"8.8.8.8", "1.1.1.1"})
+    ollama.persist_ollama_endpoint_authorization(authorization)
+    loaded = ollama.load_ollama_endpoint_authorization()
+    assert loaded == authorization
+    with pytest.raises(AttributeError):
+        getattr(loaded.approved_remote_ips, "add")("9.9.9.9")
+
+def test_validate_ollama_endpoint_rejects_remote_hostnames_to_prevent_dns_rebinding():
+    """Remote Ollama configuration requires a public IP literal."""
+    valid, msg = validate_ollama_endpoint("http://ollama.example.test:11434", is_remote=True)
+    assert valid is False
+    assert "dns rebinding" in msg.lower()
 
 def test_ollama_auth_headers():
     """Verify that bearer token is properly injected into HTTP headers."""
@@ -62,12 +101,29 @@ def test_ollama_auth_headers():
     assert "Authorization" not in provider_unauth._get_headers()
 
     provider_auth = OllamaProvider(
-        endpoint_url="https://ollama.mycorp.internal:11434",
+        endpoint_url="https://8.8.8.8:11434",
         auth_token="secret-ollama-token-12345",
         is_remote=True,
+        approved_remote_ips={"8.8.8.8"},
     )
     headers = provider_auth._get_headers()
     assert headers.get("Authorization") == "Bearer secret-ollama-token-12345"
+
+
+def test_ollama_constructor_rejects_unvalidated_remote_endpoint():
+    with pytest.raises(ValueError, match="DNS rebinding"):
+        OllamaProvider(endpoint_url="https://ollama.mycorp.internal:11434", is_remote=True)
+
+@pytest.mark.parametrize("url", [
+    "http://user:password@127.0.0.1:11434",
+    "http://127.0.0.1:11434#fragment",
+    "http://127.0.0.1:11434/api",
+    "http://127.0.0.1:11434?key=value",
+    "https://user:password@8.8.8.8:11434",
+])
+def test_ollama_constructor_rejects_non_origin_urls(url):
+    with pytest.raises(ValueError, match="Invalid Ollama endpoint"):
+        OllamaProvider(endpoint_url=url, is_remote="8.8.8.8" in url)
 
 
 @pytest.mark.asyncio

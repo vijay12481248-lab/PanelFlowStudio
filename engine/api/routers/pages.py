@@ -1,11 +1,10 @@
-from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from engine.database.session import get_db
-from engine.database.models import PageRecord, ProjectRecord
+from engine.database.models import PageRecord
 from engine.projects.service import project_service
+from engine.security.paths import contained_file_response, project_path
 from engine.api.schemas import (
     PageResponse,
     PageReorderRequest,
@@ -59,6 +58,8 @@ def delete_page(project_id: str, page_id: str, db: Session = Depends(get_db)):
         return None
     except KeyError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 @router.post("/{page_id}/rotate", response_model=PageResponse)
 def rotate_page(project_id: str, page_id: str, req: PageRotateRequest, db: Session = Depends(get_db)):
@@ -82,11 +83,11 @@ def get_page_image_file(project_id: str, page_id: str, db: Session = Depends(get
     if not page:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Page not found")
 
-    file_path = Path(project.workspace_path) / "source" / page.filename
-    if not file_path.exists():
+    try:
+        file_path = project_path(project.workspace_path, "source", page.filename)
+        return contained_file_response(project.workspace_path, file_path, media_type=page.content_type)
+    except (ValueError, FileNotFoundError, OSError):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Image file not found on disk")
-
-    return FileResponse(file_path, media_type=page.content_type)
 
 @router.get("/{page_id}/normalized-file")
 @router.get("/{page_id}/normalized")
@@ -100,13 +101,12 @@ def get_normalized_page_file(project_id: str, page_id: str, db: Session = Depend
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Page not found")
 
     # Serve from normalized/ if available, otherwise fallback to source/
-    norm_path = Path(project.workspace_path) / "normalized" / page.filename
-    if norm_path.exists():
-        return FileResponse(norm_path, media_type="image/jpeg")
-
-    source_path = Path(project.workspace_path) / "source" / page.filename
-    if not source_path.exists():
+    try:
+        norm_path = project_path(project.workspace_path, "normalized", page.filename)
+        if norm_path.is_file():
+            return contained_file_response(project.workspace_path, norm_path, media_type="image/jpeg")
+        source_path = project_path(project.workspace_path, "source", page.filename)
+        return contained_file_response(project.workspace_path, source_path, media_type=page.content_type)
+    except (ValueError, FileNotFoundError, OSError):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Image file not found on disk")
-
-    return FileResponse(source_path, media_type=page.content_type)
 

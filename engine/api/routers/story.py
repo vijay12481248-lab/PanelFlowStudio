@@ -72,17 +72,32 @@ class ScriptActionRequest(BaseModel):
 @router.post("/projects/{project_id}/scripts/generate-job")
 def generate_script_job(project_id: str, req: ScriptGenerateRequest, db: Session = Depends(get_db)):
     from engine.database.models import ProjectRecord
-    from engine.jobs.workflow import enqueue_project_operation
+    from engine.jobs.workflow import build_operation, enqueue_project_operation
     if not db.query(ProjectRecord).filter(ProjectRecord.id == project_id).first():
         raise HTTPException(status_code=404, detail="Project not found")
-    def operation(session, progress, cancelled):
-        progress(0.1, "Writing original chapter narration; waiting for language model...")
-        if cancelled():
-            raise ValueError("Narration generation cancelled")
-        script = story_service.generate_script(session, project_id, req.adaptation_profile, cancelled=cancelled)
-        progress(1.0, "Narration ready for review")
-        return {"script_id": script.script_id}
-    return {"job_id": enqueue_project_operation(project_id, "SCRIPT_GENERATION", operation, priority=12, requires_gpu=True, gpu_vram_mb=3000)}
+    narrative = story_service.get_narrative(db, project_id)
+    if narrative is None:
+        raise HTTPException(status_code=400, detail="Cannot generate script: No Narrative IR found for project.")
+    narrative_snapshot = NarrativeDocument.model_validate(narrative).model_dump(mode="json")
+    provider_id, model_name = story_service.resolve_script_provider_identity(narrative)
+    job_input = {
+        "adaptation_profile": req.adaptation_profile,
+        "narrative_snapshot": narrative_snapshot,
+        "provider_id": provider_id,
+        "model_name": model_name,
+    }
+    operation = build_operation("SCRIPT_GENERATION", project_id, job_input)
+    if operation is None:
+        raise HTTPException(status_code=500, detail="Script generation job factory is unavailable")
+    return {"job_id": enqueue_project_operation(
+        project_id,
+        "SCRIPT_GENERATION",
+        operation,
+        priority=12,
+        requires_gpu=True,
+        gpu_vram_mb=3000,
+        job_input=job_input,
+    )}
 
 
 

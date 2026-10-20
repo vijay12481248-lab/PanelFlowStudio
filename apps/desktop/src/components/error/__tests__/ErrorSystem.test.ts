@@ -34,8 +34,8 @@ test("Error System: Suggestion generator identifies Ollama and Story Understandi
     "Should suggest checking if ollama is serving"
   );
   assert.ok(
-    suggestions.some((s) => s.includes("qwen2.5:9b")),
-    "Should suggest pulling qwen2.5:9b model"
+    suggestions.some((s) => s.includes("selected model")),
+    "Should suggest verifying the configured model without assuming a specific provider model"
   );
 });
 

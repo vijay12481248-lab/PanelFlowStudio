@@ -155,6 +155,8 @@ class RenderService:
         if not proj:
             raise ValueError(f"Project not found: {project_id}")
         workspace = Path(proj.workspace_path)
+        from engine.projects.service import reconcile_story_editor_state_with_panels
+        timeline_data = reconcile_story_editor_state_with_panels(db, project_id, timeline_data)
         from engine.render.compiler import timeline_compiler
         return timeline_compiler.preflight_validate(timeline_data, project_id, workspace)
 
@@ -235,6 +237,8 @@ class RenderService:
 
         # Check if timeline_data is passed directly from Video-First Story Editor
         if timeline_data and timeline_data.get("scenes"):
+            from engine.projects.service import reconcile_story_editor_state_with_panels
+            timeline_data = reconcile_story_editor_state_with_panels(db, project_id, timeline_data)
             from engine.render.compiler import timeline_compiler
             plan = timeline_compiler.compile(
                 state=timeline_data,

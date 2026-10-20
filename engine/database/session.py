@@ -2,10 +2,17 @@ from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker, Session
 from engine.config.settings import settings
 from engine.database.models import Base
+import logging
+
+logger = logging.getLogger("panelflow.database")
+
+DATABASE_URL = settings.get_database_url()
+if not DATABASE_URL.lower().startswith("sqlite"):
+    raise RuntimeError("PanelFlow currently supports SQLite only; configure a sqlite database URL")
 
 # Create SQLite engine with WAL mode and foreign key constraints enabled
 engine = create_engine(
-    settings.get_database_url(),
+    DATABASE_URL,
     connect_args={"check_same_thread": False},
     echo=False,
 )
@@ -22,6 +29,8 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 def run_sqlite_migrations(db_engine):
     """Safely adds missing columns to existing SQLite tables without data loss."""
+    if db_engine.dialect.name != "sqlite":
+        raise RuntimeError("PanelFlow SQLite migrations require a SQLite engine")
     try:
         with db_engine.connect() as conn:
             # 1. Panel columns
@@ -33,6 +42,7 @@ def run_sqlite_migrations(db_engine):
                     ("normalized_y", "FLOAT DEFAULT 0.0"),
                     ("normalized_width", "FLOAT DEFAULT 0.0"),
                     ("normalized_height", "FLOAT DEFAULT 0.0"),
+                    ("polygon_json", "TEXT NULL"),
                     ("detection_method", "VARCHAR(32) DEFAULT 'AUTO'"),
                     ("panel_type", "VARCHAR(32) DEFAULT 'STANDARD'"),
                     ("manually_modified", "BOOLEAN DEFAULT 0"),
@@ -98,8 +108,9 @@ def run_sqlite_migrations(db_engine):
                     if col_name not in existing_jobs_cols:
                         conn.exec_driver_sql(f"ALTER TABLE jobs ADD COLUMN {col_name} {col_type}")
                         conn.commit()
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.exception("SQLite schema migration failed")
+        raise RuntimeError("PanelFlow SQLite schema migration failed") from exc
 
 
 def init_db():

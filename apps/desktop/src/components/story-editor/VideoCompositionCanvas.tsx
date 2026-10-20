@@ -798,75 +798,9 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
         </div>
       </div>
 
-      {/* Floating Canvas Playback Bar */}
-      <div className="bg-zinc-900/90 backdrop-blur-md border-t border-zinc-800/80 px-4 py-2 shrink-0 select-none flex flex-col gap-1.5">
-        {/* Scrubber Progress Bar */}
-        <div
-          onClick={(e) => {
-            const rect = e.currentTarget.getBoundingClientRect();
-            const clickPct = (e.clientX - rect.left) / rect.width;
-            onUpdateState((s) => ({
-              ...s,
-              playhead_sec: Math.max(0, Math.min(totalDurationSec, clickPct * totalDurationSec)),
-            }));
-          }}
-          className="w-full bg-zinc-800/80 h-1.5 rounded-full cursor-pointer relative overflow-hidden group"
-        >
-          <div
-            className="bg-indigo-500 h-full rounded-full relative group-hover:bg-indigo-400 transition-all"
-            style={{
-              width: `${totalDurationSec > 0 ? (state.playhead_sec / totalDurationSec) * 100 : 0}%`,
-            }}
-          />
-        </div>
-
-        <div className="flex items-center justify-between">
-          {/* Timecode Readout */}
-          <div className="font-mono text-xs flex items-center gap-1 text-zinc-400">
-            <span className="text-zinc-100 font-bold">{formatTime(state.playhead_sec)}</span>
-            <span className="text-zinc-600">/</span>
-            <span>{formatTime(totalDurationSec)}</span>
-          </div>
-
-          {/* Centered Transport Controls */}
-          <div className="flex items-center gap-3">
-            {/* Frame Step Back */}
-            <button
-              type="button"
-              onClick={() => onUpdateState((s) => ({ ...s, playhead_sec: Math.max(0, s.playhead_sec - 0.1) }))}
-              title="Previous Frame"
-              className="text-zinc-400 hover:text-white p-1"
-            >
-              <Icons.ChevronDown className="w-4 h-4 rotate-90" />
-            </button>
-
-            {/* Play / Pause Toggle */}
-            <button
-              type="button"
-              onClick={() => onUpdateState((s) => ({ ...s, is_playing: !s.is_playing }))}
-              className="w-8 h-8 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-600/30 flex items-center justify-center transition-transform active:scale-95"
-              title={state.is_playing ? "Pause (Space)" : "Play Video (Space)"}
-            >
-              {state.is_playing ? (
-                <Icons.Pause className="w-4 h-4 text-white" />
-              ) : (
-                <Icons.Play className="w-4 h-4 text-white ml-0.5" />
-              )}
-            </button>
-
-            {/* Frame Step Forward */}
-            <button
-              type="button"
-              onClick={() => onUpdateState((s) => ({ ...s, playhead_sec: Math.min(totalDurationSec, s.playhead_sec + 0.1) }))}
-              title="Next Frame"
-              className="text-zinc-400 hover:text-white p-1"
-            >
-              <Icons.ChevronDown className="w-4 h-4 -rotate-90" />
-            </button>
-          </div>
-
-          {/* Viewport & Quality Tools */}
-          <div className="flex items-center gap-2">
+      {/* Canvas-only tools. Playback and scrubbing live in the timeline below. */}
+      <div className="bg-zinc-900/90 backdrop-blur-md border-t border-zinc-800/80 px-4 py-1.5 shrink-0 select-none flex items-center justify-end">
+        <div className="flex items-center gap-2" aria-label="Canvas view tools">
             {/* Fit dropdown */}
             <select
               className="bg-zinc-950 border border-zinc-800 text-[11px] font-mono text-zinc-300 rounded px-2 py-1 focus:outline-none"
@@ -917,7 +851,6 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
             </button>
           </div>
         </div>
-      </div>
 
       {/* "May I add this crop to the timeline?" Confirmation Modal */}
       {cropModalOpen && (
@@ -943,8 +876,9 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
                 className="text-zinc-400 hover:text-zinc-200 p-1 rounded-lg hover:bg-zinc-800 transition-colors"
                 title="Close (Esc)"
               >
-                ✕
+                <Icons.X className="w-4 h-4" />
               </button>
+
             </div>
 
             <p className="text-xs text-zinc-300 leading-relaxed">

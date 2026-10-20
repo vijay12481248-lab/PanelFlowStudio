@@ -5,16 +5,25 @@ audio review playback, and audio approval gating.
 """
 from typing import Dict, Any, Optional
 from pathlib import Path
+import logging
 import urllib.parse
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from fastapi.responses import FileResponse
+
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from engine.database.session import get_db
 from engine.audio.service import audio_service
+from engine.security.paths import (
+    contained_file_response,
+    project_path,
+    read_contained_bytes,
+    resolve_contained_path,
+    write_contained_image,
+)
 
 router = APIRouter(prefix="/api", tags=["audio"])
+logger = logging.getLogger("panelflow.api.audio")
 
 
 class GenerateAudioRequest(BaseModel):
@@ -28,11 +37,27 @@ class RegenerateSegmentRequest(BaseModel):
 @router.post("/projects/{project_id}/audio/generate-job")
 def generate_audio_job(project_id: str, req: GenerateAudioRequest, db: Session = Depends(get_db)):
     from engine.database.models import ProjectRecord
-    from engine.jobs.workflow import enqueue_project_operation
+    from engine.jobs.workflow import audio_script_snapshot, build_operation, enqueue_project_operation
     if not db.query(ProjectRecord).filter(ProjectRecord.id == project_id).first():
         raise HTTPException(status_code=404, detail="Project not found")
-    job_id = enqueue_project_operation(project_id, "AUDIO_GENERATION", lambda session, progress, cancelled:
-        audio_service.generate_audio_timeline(session, project_id, req.voice_casting, progress, cancelled))
+    script_snapshot = audio_script_snapshot(db, project_id)
+    provider_id, model_name = audio_service.resolve_tts_provider_identity(db, project_id)
+    voice_casting = audio_service.resolve_voice_casting(req.voice_casting)
+    job_input = {
+        "script_snapshot": script_snapshot,
+        "tts_provider_id": provider_id,
+        "tts_model_name": model_name,
+        "voice_casting": voice_casting,
+    }
+    operation = build_operation("AUDIO_GENERATION", project_id, job_input)
+    if operation is None:
+        raise HTTPException(status_code=500, detail="Audio generation job factory is unavailable")
+    job_id = enqueue_project_operation(
+        project_id,
+        "AUDIO_GENERATION",
+        operation,
+        job_input=job_input,
+    )
     return {"job_id": job_id}
 
 
@@ -105,8 +130,15 @@ def stream_audio_file(
     """
     Streams an audio file for frontend HTML5 <audio> preview.
     """
-    p = Path(file_path).resolve()
-    if not p.exists() or not p.is_file():
+    from engine.database.models import ProjectRecord
+
+    project = db.query(ProjectRecord).filter(ProjectRecord.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+    workspace = Path(project.workspace_path)
+    try:
+        p = resolve_contained_path(workspace, file_path, must_be_file=True)
+    except (FileNotFoundError, ValueError, OSError):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Audio file not found")
 
     ext = p.suffix.lower()
@@ -118,7 +150,10 @@ def stream_audio_file(
     }
     media_type = media_types.get(ext, "application/octet-stream")
 
-    return FileResponse(path=str(p), media_type=media_type, filename=p.name)
+    try:
+        return contained_file_response(workspace, p, media_type=media_type, filename=p.name)
+    except (FileNotFoundError, ValueError, OSError):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Audio file not found")
 
 
 # ---------------------------------------------------------------------------
@@ -221,16 +256,79 @@ async def draft_narration_plan(
     Generates a structured intermediate story beat plan and contextually aware
     narration draft grounded in manga panels and observed OCR dialogue.
     """
-    from engine.database.models import ProjectRecord
+    from engine.database.models import ProjectRecord, TextRegionRecord, PanelRecord
     from engine.story.narration import story_narration_service
     proj = db.query(ProjectRecord).filter(ProjectRecord.id == project_id).first()
     if not proj:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
 
+    # Fetch ground-truth text regions and panels from database to ensure high fidelity
+    db_panels = (
+        db.query(PanelRecord)
+        .filter(PanelRecord.project_id == project_id, PanelRecord.status != "IGNORED")
+        .order_by(PanelRecord.sequence.asc())
+        .all()
+    )
+    db_regions = (
+        db.query(TextRegionRecord)
+        .filter(TextRegionRecord.project_id == project_id, TextRegionRecord.status != "REJECTED")
+        .order_by(TextRegionRecord.sequence_in_panel.asc())
+        .all()
+    )
+
+    panel_ocr_map: Dict[str, list[str]] = {}
+    panel_speaker_map: Dict[str, str] = {}
+    panel_crop_map: Dict[str, str] = {}
+    for p in db_panels:
+        if p.crop_filename:
+            panel_crop_map[p.id] = p.crop_filename
+
+    for r in db_regions:
+        text = (r.corrected_text or r.raw_text or "").strip()
+        if text:
+            panel_ocr_map.setdefault(r.panel_id, []).append(text)
+            if r.speaker_character_id and r.panel_id not in panel_speaker_map:
+                panel_speaker_map[r.panel_id] = r.speaker_character_id
+
+    # Enrich incoming scenes or construct from panels if empty
+    scenes_data = [dict(s) for s in (req.scenes or [])]
+    if not scenes_data and db_panels:
+        for idx, p in enumerate(db_panels, start=1):
+            ocr_lines = panel_ocr_map.get(p.id, [])
+            scenes_data.append({
+                "id": f"scene_{idx}",
+                "sequence": idx,
+                "title": f"Scene {idx}",
+                "visual_description": f"Panel #{p.sequence} visual composition",
+                "ocr_text": " ".join(ocr_lines),
+                "panel_ids": [p.id],
+                "crop_filenames": [p.crop_filename] if p.crop_filename else [],
+                "characters": [panel_speaker_map.get(p.id, "The Narrator")],
+            })
+    else:
+        for sc in scenes_data:
+            pids = sc.get("panel_ids", [])
+            crops = [panel_crop_map[pid] for pid in pids if pid in panel_crop_map]
+            if crops:
+                sc["crop_filenames"] = crops
+
+            if not sc.get("ocr_text"):
+                matched_ocr = []
+                for pid in pids:
+                    if pid in panel_ocr_map:
+                        matched_ocr.extend(panel_ocr_map[pid])
+                if matched_ocr:
+                    sc["ocr_text"] = " ".join(matched_ocr)
+            if not sc.get("speaker") or sc.get("speaker") == "Narrator":
+                for pid in pids:
+                    if pid in panel_speaker_map:
+                        sc["speaker"] = panel_speaker_map[pid]
+                        break
+
     try:
         plan = await story_narration_service.generate_narration_draft(
             project_id=project_id,
-            scenes_data=req.scenes,
+            scenes_data=scenes_data,
             provider_id=req.provider_id,
             model_name=req.model_name,
             workspace_path=Path(proj.workspace_path) if proj.workspace_path else None,
@@ -304,3 +402,81 @@ def synthesize_narration_batch_endpoint(
         return {"project_id": project_id, "results": batch_results}
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Batch synthesis failed: {e}")
+
+
+@router.post("/projects/{project_id}/panels/{panel_id}/analyze-vision")
+async def analyze_panel_vision_endpoint(
+    project_id: str,
+    panel_id: str,
+    model_name: Optional[str] = None,
+    db: Session = Depends(get_db),
+):
+    """
+    Directly runs local Ollama Vision on a specific manga panel crop to describe characters,
+    emotions, actions, and atmosphere in real time.
+    """
+    from engine.database.models import ProjectRecord, PanelRecord, PageRecord
+    from engine.llm.registry import llm_registry
+    proj = db.query(ProjectRecord).filter(ProjectRecord.id == project_id).first()
+    if not proj:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+
+    panel = db.query(PanelRecord).filter(PanelRecord.id == panel_id, PanelRecord.project_id == project_id).first()
+    if not panel:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Panel not found")
+
+    workspace = Path(str(proj.workspace_path))
+    crop_name = panel.crop_filename or f"panel_{panel.sequence:04d}.jpg"
+    try:
+        crop_path = project_path(workspace, "panels", str(crop_name))
+    except (ValueError, OSError):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Panel crop path is outside the project workspace")
+
+    if not crop_path.exists():
+        page = db.query(PageRecord).filter(PageRecord.id == panel.page_id).first()
+        if page:
+            try:
+                norm_path = resolve_contained_path(workspace, Path("normalized") / f"page_{page.sequence:04d}.jpg", must_be_file=True)
+            except (FileNotFoundError, ValueError, OSError):
+                try:
+                    norm_path = resolve_contained_path(workspace, Path("source") / str(page.filename), must_be_file=True)
+                except (FileNotFoundError, ValueError, OSError):
+                    norm_path = None
+            if norm_path is not None and norm_path.exists():
+                from PIL import Image
+                import io
+                try:
+                    with Image.open(io.BytesIO(read_contained_bytes(workspace, norm_path))) as im:
+                        crop_box = (
+                            max(0, int(panel.x)),
+                            max(0, int(panel.y)),
+                            min(im.width, int(panel.x + panel.width)),
+                            min(im.height, int(panel.y + panel.height)),
+                        )
+                        if crop_box[2] > crop_box[0] and crop_box[3] > crop_box[1]:
+                            cropped = im.crop(crop_box)
+                            write_contained_image(workspace, crop_path, cropped.convert("RGB"), "JPEG", quality=90)
+                except Exception as ex:
+                    logger.warning(f"On-the-fly crop failed: {ex}")
+
+    if not crop_path.exists():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Panel crop file not found")
+
+    prov = llm_registry.get_ollama_provider()
+    if not await prov.health_check():
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Ollama service is not reachable on 127.0.0.1:11434")
+
+    vision_model = model_name or getattr(prov, "vision_model", "qwen3.5:9b")
+    try:
+        vis_summary = await prov.analyze_vision(
+            image=crop_path,
+            prompt="Describe in 1-2 concise, vivid sentences what characters, emotions, actions, and atmosphere are visible in this manga panel.",
+            model=vision_model,
+        )
+        return {
+            "panel_id": panel_id,
+            "visual_description": vis_summary.strip(),
+            "model_used": vision_model,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Vision analysis failed: {e}")

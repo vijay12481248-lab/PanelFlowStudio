@@ -48,10 +48,24 @@ from engine.api.app import app
 
 if __name__ == "__main__":
     print(f"Starting {settings.app_name} Engine on http://{settings.api_host}:{settings.api_port}...")
-    uvicorn.run(
+    server = uvicorn.Server(uvicorn.Config(
         app,
         host=settings.api_host,
         port=settings.api_port,
         reload=False,
         log_level="info",
-    )
+        access_log=False,
+    ))
+    restart_requested = False
+
+    def request_restart():
+        global restart_requested
+        restart_requested = True
+        server.should_exit = True
+
+    app.state.request_restart = request_restart
+    server.run()
+    if restart_requested:
+        # Re-execute only after Uvicorn releases the listener and runs shutdown.
+        args = [sys.executable, *sys.argv[1:]] if getattr(sys, "frozen", False) else [sys.executable, str(Path(__file__).resolve())]
+        os.execv(sys.executable, args)

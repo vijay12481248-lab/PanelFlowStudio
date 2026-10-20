@@ -150,6 +150,7 @@ class PanelResponse(BaseModel):
     normalized_y: float = 0.0
     normalized_width: float = 0.0
     normalized_height: float = 0.0
+    polygon_json: str | None = None
     crop_filename: str
     reading_direction: str
     detection_method: str = "AUTO"

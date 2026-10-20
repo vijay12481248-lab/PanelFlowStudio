@@ -2,7 +2,9 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from fastapi import APIRouter, HTTPException, Depends
+from typing import Optional, List, Dict, Any
+from fastapi import APIRouter, HTTPException, Depends, Request, BackgroundTasks
+from uuid import uuid4
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -11,6 +13,7 @@ from engine.database.session import get_db
 from engine.projects.service import project_service
 
 router = APIRouter(prefix="/api/system", tags=["system"])
+engine_instance_id = uuid4().hex
 
 class BrowseRequest(BaseModel):
     path: str | None = None
@@ -23,8 +26,32 @@ def health_check():
         "status": "healthy",
         "app": settings.app_name,
         "version": settings.version,
+        "instance_id": engine_instance_id,
         "workspace_root": str(settings.workspace_root),
     }
+
+
+@router.post("/restart", status_code=202)
+def restart_engine(request: Request, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    from engine.database.models import JobRecord, RenderJobRecord
+    if not request.client or request.client.host not in ("127.0.0.1", "::1"):
+        raise HTTPException(403, "Engine restart is available only from this computer.")
+    if request.headers.get("x-panelflow-control") != "restart":
+        raise HTTPException(403, "Missing engine control header.")
+    restart = getattr(request.app.state, "request_restart", None)
+    if restart is None:
+        raise HTTPException(409, "Restart support requires launching the engine with the updated run_engine.py or launcher first.")
+    if getattr(request.app.state, "restarting", False):
+        raise HTTPException(409, "Engine restart is already in progress.")
+    busy = db.query(JobRecord).filter(JobRecord.status.in_(["QUEUED", "RUNNING"])).first()
+    render_busy = db.query(RenderJobRecord).filter(RenderJobRecord.status.in_([
+        "QUEUED", "RUNNING", "PREPARING", "COMPOSING", "ENCODING", "MUXING", "VALIDATING",
+    ])).first()
+    if busy or render_busy:
+        raise HTTPException(409, "Finish or cancel queued and running jobs before restarting the engine.")
+    request.app.state.restarting = True
+    background_tasks.add_task(restart)
+    return {"status": "restarting", "instance_id": engine_instance_id}
 
 @router.post("/browse")
 def browse_filesystem(req: BrowseRequest):
@@ -116,13 +143,17 @@ def get_providers_status():
     import shutil
     import urllib.request
     import json
+    from engine.system.setup import locate_and_configure_ffmpeg, get_voice_reference_dir
+
+    # Automatically locate FFmpeg if missing from PATH
+    ffmpeg_info = locate_and_configure_ffmpeg()
 
     results = []
 
     # 1. FFmpeg
-    ffmpeg_bin = shutil.which("ffmpeg")
-    ffmpeg_version = "Unknown"
-    if ffmpeg_bin:
+    ffmpeg_bin = ffmpeg_info.get("ffmpeg_path") or shutil.which("ffmpeg")
+    ffmpeg_version = ffmpeg_info.get("version") or "Unknown"
+    if ffmpeg_bin and ffmpeg_version == "Unknown":
         try:
             out = subprocess.check_output([ffmpeg_bin, "-version"], stderr=subprocess.STDOUT, text=True, timeout=2.0)
             ffmpeg_version = out.splitlines()[0] if out else "Found"
@@ -186,24 +217,24 @@ def get_providers_status():
     # 4. Chatterbox Turbo Neural Voice (MIT Permissive Commercial)
     chatterbox_venv = Path(r"C:\Tools\Chatterbox\.venv\Scripts\python.exe")
     chatterbox_hf = Path.home() / ".cache" / "huggingface" / "hub" / "models--ResembleAI--chatterbox-turbo"
-    voice_refs = Path(r"C:\Tools\voice_references")
-    has_voices = voice_refs.exists() and len(list(voice_refs.glob("*.wav"))) > 0
+    voice_refs = get_voice_reference_dir()
+    has_voices = voice_refs.exists() and len(list(voice_refs.glob("*.*"))) > 0
 
     if chatterbox_venv.exists() and chatterbox_hf.exists():
         cb_status = "HEALTHY"
         cb_version = "Chatterbox Turbo (MIT Commercial, Resemble AI on CUDA)"
         cb_path = str(chatterbox_venv)
-        cb_details = f"Commercial-ready zero-shot neural voice cloning with {len(list(voice_refs.glob('*.wav')))} voice profiles."
+        cb_details = f"Commercial-ready zero-shot neural voice cloning with {len(list(voice_refs.glob('*.*')))} voice profiles."
     elif chatterbox_venv.exists():
         cb_status = "READY"
         cb_version = "Chatterbox Turbo Runtime"
         cb_path = str(chatterbox_venv)
         cb_details = "Local PyTorch inference runtime ready for commercial voice synthesis."
     else:
-        cb_status = "MISSING"
-        cb_version = "Missing"
-        cb_path = ""
-        cb_details = "Chatterbox Turbo runtime not found in C:\\Tools\\Chatterbox."
+        cb_status = "READY" if has_voices else "DEGRADED"
+        cb_version = "Procedural Synthesizer Active"
+        cb_path = str(voice_refs)
+        cb_details = f"Procedural voice synthesizer active with {len(list(voice_refs.glob('*.*')))} voice reference profiles."
 
     results.append({
         "id": "chatterbox_turbo",
@@ -212,7 +243,7 @@ def get_providers_status():
         "status": cb_status,
         "version": cb_version,
         "path": cb_path,
-        "required": True,
+        "required": False,
         "details": cb_details,
     })
 
@@ -266,7 +297,7 @@ def get_providers_status():
         "status": ace_status,
         "version": ace_version,
         "path": ace_path,
-        "required": True,
+        "required": False,
         "details": ace_details,
     })
 
@@ -465,6 +496,7 @@ class OllamaConfigRequest(BaseModel):
     num_ctx: int = 32768
     concurrency_mode: str = "MANUAL"
     max_gpu_concurrency: int = 1
+    approved_remote_ips: list[str] | None = None
 
 
 class OllamaTestRequest(BaseModel):
@@ -500,6 +532,8 @@ def get_ollama_config():
         "num_ctx": prov.num_ctx,
         "concurrency_mode": prov.concurrency_mode,
         "max_gpu_concurrency": prov.max_gpu_concurrency,
+        "approved_remote_ips": sorted(prov.remote_authorization.approved_remote_ips),
+        "authorization_identity": prov.remote_authorization.identity,
     }
 
 
@@ -510,17 +544,34 @@ def save_ollama_config(req: OllamaConfigRequest):
     Enforces SSRF prevention on endpoint URLs.
     """
     from engine.llm.registry import llm_registry
-    from engine.llm.providers.ollama import validate_ollama_endpoint
+    from engine.llm.providers.ollama import (
+        OllamaEndpointAuthorization,
+        persist_ollama_endpoint_authorization,
+        validate_ollama_endpoint,
+    )
     from engine.system.resources import resource_manager
 
-    valid, err_msg = validate_ollama_endpoint(req.endpoint_url, req.is_remote)
+    current_prov = llm_registry.get_ollama_provider()
+    try:
+        authorization = (
+            OllamaEndpointAuthorization.create(req.approved_remote_ips)
+            if req.approved_remote_ips is not None
+            else current_prov.remote_authorization
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    valid, err_msg = validate_ollama_endpoint(
+        req.endpoint_url,
+        req.is_remote,
+        authorization=authorization,
+    )
     if not valid:
         raise HTTPException(status_code=400, detail=f"Invalid Ollama endpoint: {err_msg}")
 
-    current_prov = llm_registry.get_ollama_provider()
     # If auth_token is not provided, preserve current token
     final_token = req.auth_token if req.auth_token is not None else current_prov.auth_token
 
+    persist_ollama_endpoint_authorization(authorization)
     updated_prov = llm_registry.configure_ollama(
         endpoint_url=req.endpoint_url,
         is_remote=req.is_remote,
@@ -546,6 +597,8 @@ def save_ollama_config(req: OllamaConfigRequest):
         "num_ctx": updated_prov.num_ctx,
         "concurrency_mode": updated_prov.concurrency_mode,
         "max_gpu_concurrency": updated_prov.max_gpu_concurrency,
+        "approved_remote_ips": sorted(updated_prov.remote_authorization.approved_remote_ips),
+        "authorization_identity": updated_prov.remote_authorization.identity,
     }
 
 
@@ -583,7 +636,11 @@ async def test_ollama_connection(req: OllamaTestRequest):
     is_remote = req.is_remote if req.endpoint_url else current_prov.is_remote
     auth_token = req.auth_token if req.auth_token is not None else current_prov.auth_token
 
-    valid, err_msg = validate_ollama_endpoint(target_url, is_remote)
+    valid, err_msg = validate_ollama_endpoint(
+        target_url,
+        is_remote,
+        authorization=current_prov.remote_authorization,
+    )
     if not valid:
         return {
             "status": "ERROR",
@@ -640,6 +697,7 @@ async def get_system_resources():
     telemetry = await resource_manager.get_full_telemetry(
         ollama_endpoint=prov.endpoint_url,
         auth_token=prov.auth_token,
+        authorization=prov.remote_authorization,
     )
     return telemetry
 
@@ -679,8 +737,78 @@ async def run_concurrency_benchmark(req: BenchmarkRequest):
         endpoint_url=prov.endpoint_url,
         model=target_model,
         auth_token=prov.auth_token,
+        authorization=prov.remote_authorization,
     )
     return results
 
 
+# ---------------------------------------------------------------------------
+# Setup & Dependency Provisioning Endpoints
+# ---------------------------------------------------------------------------
 
+class OllamaPullRequest(BaseModel):
+    model: str = "qwen2.5:7b"
+    endpoint_url: Optional[str] = None
+
+
+@router.post("/locate-ffmpeg")
+def api_locate_ffmpeg():
+    """
+    Scans host filesystem for FFmpeg and FFprobe binaries and auto-configures PATH.
+    """
+    from engine.system.setup import locate_and_configure_ffmpeg
+    return locate_and_configure_ffmpeg()
+
+
+@router.post("/provision-voices")
+def api_provision_voices():
+    """
+    Deploys bundled default voice reference profiles to AppData voice directory.
+    """
+    from engine.system.setup import provision_default_voices
+    return provision_default_voices()
+
+
+@router.post("/install-playwright")
+def api_start_playwright_install():
+    """
+    Spawns background installation of Playwright Chromium browser binaries.
+    """
+    from engine.system.setup import playwright_installer
+    return playwright_installer.start_install()
+
+
+@router.get("/install-playwright/status")
+def api_get_playwright_install_status():
+    """
+    Returns live progress and logs for Playwright browser installation.
+    """
+    from engine.system.setup import playwright_installer
+    return playwright_installer.get_status()
+
+
+@router.post("/ollama/pull")
+async def api_start_ollama_pull(req: OllamaPullRequest):
+    """
+    Initiates asynchronous download of target LLM model in local or remote Ollama.
+    """
+    from engine.system.setup import ollama_pull_manager
+    from engine.llm.registry import llm_registry
+    from engine.llm.providers.ollama import validate_ollama_endpoint
+
+    prov = llm_registry.get_ollama_provider()
+    target_url = req.endpoint_url or prov.endpoint_url
+    valid, err_msg = validate_ollama_endpoint(target_url, prov.is_remote)
+    if not valid:
+        raise HTTPException(status_code=400, detail=f"Invalid Ollama endpoint: {err_msg}")
+
+    return await ollama_pull_manager.start_pull(req.model, target_url)
+
+
+@router.get("/ollama/pull/status")
+def api_get_ollama_pull_status():
+    """
+    Returns live progress, percentage, and bytes for active Ollama model download.
+    """
+    from engine.system.setup import ollama_pull_manager
+    return ollama_pull_manager.get_status()

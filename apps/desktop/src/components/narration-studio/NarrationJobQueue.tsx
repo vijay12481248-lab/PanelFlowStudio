@@ -303,14 +303,15 @@ export const NarrationJobQueue: React.FC<NarrationJobQueueProps> = ({
     <div className={`p-3.5 rounded-xl bg-zinc-900/60 border border-zinc-800 space-y-3 select-none text-xs ${className}`}>
       {/* Header & Simulation Badge */}
       <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
-        <div className="flex items-center gap-1.5">
-          <span className="w-5 h-5 rounded-md bg-indigo-600/80 text-white flex items-center justify-center font-bold text-[10px]">
-            ⚙️
+        <div className="flex items-center gap-2">
+          <span className="w-5 h-5 rounded-md bg-indigo-600/80 text-white flex items-center justify-center font-bold text-[10px] shadow-sm">
+            <Icons.Cpu className="w-3.5 h-3.5" />
           </span>
           <span className="font-bold text-zinc-200 uppercase tracking-wider text-[11px]">
             Narration Job Engine
           </span>
         </div>
+
 
         <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-indigo-950/80 text-indigo-400 font-bold border border-indigo-800 flex items-center gap-1">
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />

@@ -59,6 +59,9 @@ class PanelCoverageReport(BaseModel):
 
 # Promotional and non-story OCR text patterns
 PROMO_PATTERNS = [
+    re.compile(r"\b(?:visit|read|support|join|follow)\s+(?:us\s+(?:at|on)\s+|our\s+(?:web)?site\b)", re.IGNORECASE),
+    re.compile(r"\b(?:https?://|www\.)\S+", re.IGNORECASE),
+    re.compile(r"\b[\w-]+\.(?:com|net|org|io|gg)\b", re.IGNORECASE),
     re.compile(r"manhuaplus", re.IGNORECASE),
     re.compile(r"read\s*on\s*manhua", re.IGNORECASE),
     re.compile(r"faster\s*release", re.IGNORECASE),
@@ -104,7 +107,7 @@ class PanelClassifier:
 
         # 1. Deterministic Geometry Checks for Ribbons & Banners
         # Webtoon/manhua banner ribbons are typically wide and very thin (aspect > 4.0, h <= 250)
-        if aspect >= 4.0 and h <= 250 and w >= 700:
+        if aspect >= 4.0 and h <= 250 and w >= 700 and not ocr_text.strip() and not vision_summary:
             return PanelCoverageItem(
                 panel_id=panel_id,
                 reading_order=reading_order,
@@ -113,16 +116,16 @@ class PanelClassifier:
                 width=w,
                 height=h,
                 aspect_ratio=aspect,
-                classification=PanelClassificationKind.NON_STORY_CONTENT,
+                classification=PanelClassificationKind.UNCERTAIN,
                 subtype=NonStorySubtype.ADVERTISEMENT_BANNER,
-                confidence=0.98,
+                confidence=0.55,
                 exclusion_reason=f"Geometric horizontal banner ribbon: aspect {aspect:.2f} (w={w}, h={h} <= 250)",
                 ocr_snippets=[ocr_text] if ocr_text else [],
                 vision_description=vision_summary,
             )
 
         # Small watermark / promo icons
-        if w <= 400 and h <= 120:
+        if w <= 400 and h <= 120 and not ocr_text.strip() and not vision_summary:
             return PanelCoverageItem(
                 panel_id=panel_id,
                 reading_order=reading_order,
@@ -131,9 +134,9 @@ class PanelClassifier:
                 width=w,
                 height=h,
                 aspect_ratio=aspect,
-                classification=PanelClassificationKind.NON_STORY_CONTENT,
+                classification=PanelClassificationKind.UNCERTAIN,
                 subtype=NonStorySubtype.PROMOTIONAL_ICON,
-                confidence=0.95,
+                confidence=0.5,
                 exclusion_reason=f"Small logo/icon geometry: w={w} <= 400, h={h} <= 120",
                 ocr_snippets=[ocr_text] if ocr_text else [],
                 vision_description=vision_summary,

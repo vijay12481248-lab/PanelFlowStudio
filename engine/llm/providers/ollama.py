@@ -1,70 +1,164 @@
 import asyncio
 import base64
+import hashlib
 import ipaddress
 import json
 import logging
+import os
+from dataclasses import dataclass
 from pathlib import Path
-from typing import TypeVar, Type, Any, Optional
+from typing import TypeVar, Type, Any, Optional, Iterable
 from urllib.parse import urlparse
 import httpx
 from pydantic import BaseModel, ValidationError
 
 from engine.llm.providers.base import LLMProvider, ModelMetadata
+from engine.llm.errors import GenerationLimitError
 
 T = TypeVar("T", bound=BaseModel)
 logger = logging.getLogger("panelflow.llm.ollama")
 
 
-def validate_ollama_endpoint(url: str, is_remote: bool = False) -> tuple[bool, str]:
-    """
-    Validates target Ollama endpoint and enforces SSRF security rules.
-    Rejects malformed schemes, link-local addresses, and cloud metadata endpoints.
-    """
+@dataclass(frozen=True)
+class OllamaEndpointAuthorization:
+    """Immutable identity for the user-approved remote Ollama IP set."""
+
+    approved_remote_ips: frozenset[str]
+    identity: str
+
+    @classmethod
+    def create(cls, approved_remote_ips: Iterable[str]) -> "OllamaEndpointAuthorization":
+        normalized: set[str] = set()
+        for value in approved_remote_ips:
+            try:
+                ip = ipaddress.ip_address(str(value).strip())
+            except ValueError as exc:
+                raise ValueError(f"Invalid approved Ollama IP address: {value}") from exc
+            if _is_forbidden_remote_ip(ip):
+                raise ValueError(f"Approved Ollama IP must be public: {ip}")
+            normalized.add(str(ip))
+        frozen = frozenset(normalized)
+        identity = hashlib.sha256(json.dumps(sorted(frozen), separators=(",", ":")).encode("utf-8")).hexdigest()
+        return cls(frozen, identity)
+
+
+def _authorization_path() -> Path:
+    from engine.config.settings import settings
+
+    return settings.app_data_dir / "config" / "ollama_remote_allowlist.json"
+
+
+def load_ollama_endpoint_authorization() -> OllamaEndpointAuthorization:
+    configured: list[str] = []
+    path = _authorization_path()
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if isinstance(data, dict) and isinstance(data.get("approved_remote_ips"), list):
+            configured.extend(str(value) for value in data["approved_remote_ips"])
+    except FileNotFoundError:
+        pass
+    except (OSError, json.JSONDecodeError, ValueError) as exc:
+        raise ValueError("Persisted Ollama remote allowlist is invalid") from exc
+    configured.extend(
+        value.strip()
+        for value in os.environ.get("PANELFLOW_OLLAMA_REMOTE_ALLOWLIST", "").split(",")
+        if value.strip()
+    )
+    return OllamaEndpointAuthorization.create(configured)
+
+
+def persist_ollama_endpoint_authorization(authorization: OllamaEndpointAuthorization) -> None:
+    path = _authorization_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(".tmp")
+    temporary.write_text(
+        json.dumps(
+            {
+                "approved_remote_ips": sorted(authorization.approved_remote_ips),
+                "authorization_identity": authorization.identity,
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    temporary.replace(path)
+
+
+def _is_forbidden_remote_ip(ip: ipaddress._BaseAddress) -> bool:
+    return any(
+        (
+            ip.is_private,
+            ip.is_loopback,
+            ip.is_link_local,
+            ip.is_multicast,
+            ip.is_reserved,
+            ip.is_unspecified,
+        )
+    )
+
+
+def validate_ollama_endpoint(
+    url: str,
+    is_remote: bool = False,
+    approved_remote_ips: Iterable[str] | None = None,
+    authorization: OllamaEndpointAuthorization | None = None,
+) -> tuple[bool, str]:
+    """Validate an Ollama endpoint without allowing SSRF to internal networks."""
     if not url or not url.strip():
         return False, "Endpoint URL cannot be empty"
     try:
         parsed = urlparse(url.strip())
-    except Exception as e:
-        return False, f"Invalid URL format: {e}"
+        port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    except (TypeError, ValueError) as exc:
+        return False, f"Invalid URL format: {exc}"
 
     if parsed.scheme not in ("http", "https"):
         return False, f"Unsupported scheme '{parsed.scheme}'. Only http and https are allowed."
-
+    if parsed.username is not None or parsed.password is not None:
+        return False, "Endpoint URL must not contain embedded credentials"
+    if parsed.params or parsed.query or parsed.fragment:
+        return False, "Endpoint URL must be an origin without parameters, query, or fragment"
     hostname = parsed.hostname
     if not hostname:
         return False, "URL hostname is missing"
-
     hostname_lower = hostname.lower()
 
     if not is_remote:
         if hostname_lower in ("localhost", "127.0.0.1", "::1"):
+            if parsed.path not in ("", "/"):
+                return False, "Endpoint URL must not contain a path"
             return True, ""
         try:
             ip = ipaddress.ip_address(hostname_lower)
             if ip.is_loopback:
+                if parsed.path not in ("", "/"):
+                    return False, "Endpoint URL must not contain a path"
                 return True, ""
         except ValueError:
             pass
         return False, f"Local endpoint must be localhost or 127.0.0.1 (got {hostname})"
 
-    # Remote checks: block dangerous addresses
-    if hostname_lower in ("localhost", "127.0.0.1", "::1", "0.0.0.0"):
-        return False, f"Remote endpoint cannot be loopback or unroutable ({hostname})"
+    if "metadata.google.internal" in hostname_lower or hostname_lower in {"localhost", "0.0.0.0"}:
+        return False, f"Remote endpoint cannot target local or cloud metadata hosts ({hostname})"
 
     try:
         ip = ipaddress.ip_address(hostname_lower)
-        if ip.is_link_local:
-            return False, f"Rejected link-local address: {hostname}"
-        if ip.is_multicast:
-            return False, f"Rejected multicast address: {hostname}"
-        if ip.is_reserved:
-            return False, f"Rejected reserved address: {hostname}"
-        if ip.is_unspecified:
-            return False, f"Rejected unspecified address: {hostname}"
-    except ValueError:
-        if "metadata.google.internal" in hostname_lower or "169.254" in hostname_lower:
-            return False, f"Blocked cloud metadata domain: {hostname}"
-
+    except ValueError as exc:
+        return False, "Remote Ollama endpoints must use a public IP literal to prevent DNS rebinding"
+    if _is_forbidden_remote_ip(ip):
+        return False, f"Rejected non-public remote address {ip}"
+    try:
+        approved = authorization or (
+            OllamaEndpointAuthorization.create(approved_remote_ips)
+            if approved_remote_ips is not None
+            else load_ollama_endpoint_authorization()
+        )
+    except ValueError as exc:
+        return False, str(exc)
+    if str(ip) not in approved.approved_remote_ips:
+        return False, f"Remote Ollama address {ip} is not explicitly user-approved"
+    if parsed.path not in ("", "/"):
+        return False, "Endpoint URL must not contain a path"
     return True, ""
 
 
@@ -95,7 +189,21 @@ class OllamaProvider(LLMProvider):
         num_ctx: int = 32768,
         concurrency_mode: str = "MANUAL",
         max_gpu_concurrency: int = 1,
+        approved_remote_ips: Iterable[str] | None = None,
+        endpoint_authorization: OllamaEndpointAuthorization | None = None,
     ):
+        self.remote_authorization = endpoint_authorization or (
+            OllamaEndpointAuthorization.create(approved_remote_ips)
+            if approved_remote_ips is not None
+            else load_ollama_endpoint_authorization()
+        )
+        valid, error = validate_ollama_endpoint(
+            endpoint_url,
+            is_remote=is_remote,
+            authorization=self.remote_authorization,
+        )
+        if not valid:
+            raise ValueError(f"Invalid Ollama endpoint: {error}")
         self.endpoint_url = endpoint_url.rstrip("/")
         self.is_remote = is_remote
         self.auth_token = auth_token
@@ -124,7 +232,7 @@ class OllamaProvider(LLMProvider):
 
     async def health_check(self) -> bool:
         try:
-            async with httpx.AsyncClient(timeout=3.0, headers=self._get_headers()) as client:
+            async with httpx.AsyncClient(timeout=3.0, headers=self._get_headers(), follow_redirects=False) as client:
                 res = await client.get(f"{self.endpoint_url}/api/tags")
                 return res.status_code == 200
         except Exception:
@@ -132,7 +240,7 @@ class OllamaProvider(LLMProvider):
 
     async def list_available_models(self) -> list[str]:
         try:
-            async with httpx.AsyncClient(timeout=4.0, headers=self._get_headers()) as client:
+            async with httpx.AsyncClient(timeout=4.0, headers=self._get_headers(), follow_redirects=False) as client:
                 res = await client.get(f"{self.endpoint_url}/api/tags")
                 if res.status_code == 200:
                     data = res.json()
@@ -147,7 +255,7 @@ class OllamaProvider(LLMProvider):
         quantization, family, and parameter size.
         """
         try:
-            async with httpx.AsyncClient(timeout=8.0, headers=self._get_headers()) as client:
+            async with httpx.AsyncClient(timeout=8.0, headers=self._get_headers(), follow_redirects=False) as client:
                 res = await client.post(f"{self.endpoint_url}/api/show", json={"name": model_name})
                 if res.status_code != 200:
                     return {
@@ -260,7 +368,7 @@ class OllamaProvider(LLMProvider):
     async def get_active_telemetry(self) -> list[dict]:
         """Queries GET /api/ps for running models and allocated VRAM."""
         try:
-            async with httpx.AsyncClient(timeout=3.0, headers=self._get_headers()) as client:
+            async with httpx.AsyncClient(timeout=3.0, headers=self._get_headers(), follow_redirects=False) as client:
                 res = await client.get(f"{self.endpoint_url}/api/ps")
                 if res.status_code == 200:
                     data = res.json()
@@ -268,6 +376,75 @@ class OllamaProvider(LLMProvider):
         except Exception:
             pass
         return []
+
+    async def _generate_response(self, payload, *, attempt=1, max_attempts=1):
+        """Stream for tracked jobs; keep the existing buffered API elsewhere."""
+        import time
+        from engine.llm.activity import activity_sink, publish_activity, generation_cancelled
+        cancelled = generation_cancelled.get()
+        if cancelled and cancelled():
+            raise asyncio.CancelledError("Model request cancelled")
+        if activity_sink.get() is None:
+            async with httpx.AsyncClient(timeout=self.timeout, headers=self._get_headers(), follow_redirects=False) as client:
+                response = await client.post(f"{self.endpoint_url}/api/generate", json=payload)
+                if response.status_code != 200 and isinstance(payload.get("format"), dict):
+                    payload = {**payload, "format": "json"}
+                    response = await client.post(f"{self.endpoint_url}/api/generate", json=payload)
+                if response.status_code != 200:
+                    raise RuntimeError(f"Ollama generation failed: HTTP {response.status_code}: {response.text}")
+                result = response.json()
+                if result.get("done_reason") == "length":
+                    raise GenerationLimitError("length", result.get("eval_count"), payload.get("options", {}).get("num_predict"))
+                return result.get("response", "").strip()
+
+        started = time.monotonic()
+        last_update = started
+        parts = []
+        characters = 0
+        activity = {"model": payload["model"], "phase": "preparing", "attempt": attempt,
+                    "max_attempts": max_attempts, "output_characters": 0,
+                    "output_token_limit": payload.get("options", {}).get("num_predict"),
+                    "context_limit": payload.get("options", {}).get("num_ctx"), "elapsed_seconds": 0}
+        publish_activity(dict(activity))
+        async with httpx.AsyncClient(timeout=self.timeout, headers=self._get_headers(), follow_redirects=False) as client:
+            for format_attempt in range(2):
+                async with client.stream("POST", f"{self.endpoint_url}/api/generate", json={**payload, "stream": True}) as response:
+                    if response.status_code != 200:
+                        await response.aread()
+                        if format_attempt == 0 and isinstance(payload.get("format"), dict):
+                            payload = {**payload, "format": "json"}
+                            continue
+                        raise RuntimeError(f"Ollama generation failed: HTTP {response.status_code}: {response.text}")
+                    done = False
+                    async for line in response.aiter_lines():
+                        if cancelled and cancelled():
+                            raise asyncio.CancelledError("Model request cancelled")
+                        if not line.strip():
+                            continue
+                        event = json.loads(line)
+                        if event.get("error"):
+                            raise RuntimeError(f"Ollama generation failed: {event['error']}")
+                        fragment = event.get("response", "")
+                        parts.append(fragment)
+                        characters += len(fragment)
+                        now = time.monotonic()
+                        activity.update(phase="generating", output_characters=characters,
+                                        elapsed_seconds=round(now - started, 1))
+                        if event.get("done"):
+                            done = True
+                            duration = event.get("eval_duration", 0) / 1e9
+                            activity.update(phase="validating", input_tokens=event.get("prompt_eval_count"),
+                                            output_tokens=event.get("eval_count"),
+                                            tokens_per_second=round(event.get("eval_count", 0) / duration, 1) if duration else None,
+                                            finish_reason=event.get("done_reason"))
+                        if done or len(parts) == 1 or now - last_update >= 1.0:
+                            publish_activity(dict(activity))
+                            last_update = now
+                        if done and event.get("done_reason") == "length":
+                            raise GenerationLimitError("length", event.get("eval_count"), payload.get("options", {}).get("num_predict"))
+                    if not done:
+                        raise RuntimeError("Ollama response stream ended before completion")
+                    return "".join(parts).strip()
 
     async def generate_text(
         self,
@@ -295,11 +472,7 @@ class OllamaProvider(LLMProvider):
         if system_prompt:
             payload["system"] = system_prompt
 
-        async with httpx.AsyncClient(timeout=self.timeout, headers=self._get_headers()) as client:
-            res = await client.post(f"{self.endpoint_url}/api/generate", json=payload)
-            if res.status_code != 200:
-                raise RuntimeError(f"Ollama text generation failed: HTTP {res.status_code}: {res.text}")
-            return res.json().get("response", "").strip()
+        return await self._generate_response(payload)
 
     async def generate_structured(
         self,
@@ -311,10 +484,9 @@ class OllamaProvider(LLMProvider):
         **kwargs
     ) -> T:
         schema_dict = response_model.model_json_schema()
-        schema_json = json.dumps(schema_dict, indent=2)
         system_instruction = (
             (system_prompt or "You are a precise narrative structure analysis engine.") +
-            f"\n\nYou MUST respond ONLY with valid JSON conforming to this JSON schema:\n{schema_json}\n"
+            "\nRespond ONLY with valid JSON conforming to the supplied structured-output schema. "
             "Do NOT include markdown fences, comments, or preamble. Return raw JSON only."
         )
 
@@ -340,16 +512,7 @@ class OllamaProvider(LLMProvider):
                 },
             }
 
-            async with httpx.AsyncClient(timeout=self.timeout, headers=self._get_headers()) as client:
-                res = await client.post(f"{self.endpoint_url}/api/generate", json=payload)
-                if res.status_code != 200 and isinstance(payload.get("format"), dict):
-                    payload["format"] = "json"
-                    res = await client.post(f"{self.endpoint_url}/api/generate", json=payload)
-
-                if res.status_code != 200:
-                    raise RuntimeError(f"Ollama structured generation failed: HTTP {res.status_code}: {res.text}")
-
-                raw_json = res.json().get("response", "").strip()
+            raw_json = await self._generate_response(payload, attempt=attempt + 1, max_attempts=max_repair_retries + 1)
 
             try:
                 # Parse JSON
@@ -362,9 +525,8 @@ class OllamaProvider(LLMProvider):
                 if attempt < max_repair_retries:
                     # Construct repair prompt
                     current_prompt = (
-                        f"Previous response was invalid:\n{raw_json}\n\n"
-                        f"Validation error:\n{last_error}\n\n"
-                        f"Please fix the JSON to strictly conform to schema. Original request was:\n{prompt}"
+                        f"{prompt}\n\nThe previous attempt failed validation: {last_error[:800]}. "
+                        "Generate a fresh, concise complete JSON response; do not repeat verbose descriptions."
                     )
                 else:
                     break
@@ -403,11 +565,7 @@ class OllamaProvider(LLMProvider):
         if system_prompt:
             payload["system"] = system_prompt
 
-        async with httpx.AsyncClient(timeout=self.timeout, headers=self._get_headers()) as client:
-            res = await client.post(f"{self.endpoint_url}/api/generate", json=payload)
-            if res.status_code != 200:
-                raise RuntimeError(f"Ollama vision analysis failed: HTTP {res.status_code}: {res.text}")
-            return res.json().get("response", "").strip()
+        return await self._generate_response(payload)
 
     def context_window(self) -> int:
         return self.num_ctx
@@ -425,6 +583,7 @@ class OllamaProvider(LLMProvider):
                 "reasoning_model": self.reasoning_model,
                 "narration_model": self.narration_model,
                 "is_remote": self.is_remote,
+                "remote_authorization_identity": self.remote_authorization.identity,
                 "concurrency_mode": self.concurrency_mode,
                 "max_gpu_concurrency": self.max_gpu_concurrency,
             },

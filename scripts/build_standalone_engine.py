@@ -48,6 +48,7 @@ cmd = [
     "--hidden-import=sqlite3",
     "--hidden-import=engine",
     "--hidden-import=engine.api.app",
+    "--hidden-import=engine.imaging.redaction",
     # Exclude unused heavy packages that pull in 2.5GB of CUDA DLLs
     "--exclude-module=torch",
     "--exclude-module=torchvision",

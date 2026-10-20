@@ -68,6 +68,7 @@ from engine.story.llm_schemas import (
 )
 from engine.story.script.adapter import script_adapter
 from engine.story.script.validator import script_validator
+from engine.security.paths import read_contained_bytes, write_contained_json
 
 logger = logging.getLogger("panelflow.story.service")
 
@@ -81,6 +82,33 @@ class StoryService:
     def __init__(self):
         self.continuity_auditor = ContinuityAuditor()
 
+    async def _resolve_pinned_provider(self, provider_id: str):
+        """Never substitute another provider for a persisted provider ID."""
+        provider = llm_registry.get_provider(provider_id)
+        if provider_id != "mock_llm" and not await provider.health_check():
+            raise RuntimeError(f"Persisted story provider is unavailable: {provider_id}")
+        return provider
+
+    def resolve_script_provider_identity(self, narrative: NarrativeDocument) -> tuple[str, str]:
+        """Resolve and freeze the exact provider/model used for script generation."""
+        preferred = (narrative.analysis_metadata or {}).get("provider")
+        provider = asyncio.run(llm_registry.get_active_provider(preferred))
+        metadata = provider.model_metadata()
+        return provider.provider_id, metadata.model_name
+
+    def resolve_pinned_script_provider(self, provider_id: str, model_name: str):
+        """Resolve only the persisted script provider and reject model drift."""
+        if not provider_id or not model_name:
+            raise ValueError("Persisted script provider/model identity is missing")
+        provider = asyncio.run(self._resolve_pinned_provider(provider_id))
+        current_model = provider.model_metadata().model_name
+        if current_model != model_name:
+            raise RuntimeError(
+                f"Persisted script model is unavailable: {provider_id}/{model_name} "
+                f"(registered model: {current_model})"
+            )
+        return provider
+
     # -----------------------------------------------------------------------
     # Narrative IR Extraction Pipeline
     # -----------------------------------------------------------------------
@@ -90,6 +118,8 @@ class StoryService:
         db: Session,
         project_id: str,
         preferred_provider_id: Optional[str] = None,
+        operation_only: bool = False,
+        panel_ids: list[str] | None = None,
     ) -> str:
         project = db.query(ProjectRecord).filter(ProjectRecord.id == project_id).first()
         if not project:
@@ -97,11 +127,16 @@ class StoryService:
 
         visual_mode = bool((project.settings or {}).get("visual_storytelling"))
         previous_review = self.get_narrative(db, project_id) if visual_mode else None
-        allowed_stages = (PipelineStage.OCR_APPROVED, PipelineStage.STORY_ANALYZED, PipelineStage.STORY_APPROVED)
+        allowed_stages = (
+            PipelineStage.OCR_APPROVED,
+            PipelineStage.OCR_COMPLETE,
+            PipelineStage.STORY_ANALYZED,
+            PipelineStage.STORY_APPROVED,
+        )
         if visual_mode:
-            allowed_stages += (PipelineStage.PANELS_DETECTED, PipelineStage.OCR_COMPLETE,)
+            allowed_stages += (PipelineStage.PANELS_DETECTED,)
         if project.current_stage not in allowed_stages:
-            raise ValueError(f"Cannot analyze story: Project stage must be OCR_APPROVED or STORY_ANALYZED (current: {project.current_stage}).")
+            raise ValueError(f"Cannot analyze story: Project stage must be OCR_COMPLETE, OCR_APPROVED, or STORY_ANALYZED (current: {project.current_stage}).")
 
         panels = (
             db.query(PanelRecord)
@@ -111,22 +146,39 @@ class StoryService:
         )
         if not panels:
             raise ValueError("Cannot analyze story: No panels detected in project.")
+        if panel_ids is not None:
+            if not panel_ids or len(panel_ids) != len(set(panel_ids)) or set(panel_ids) != {p.id for p in panels}:
+                # The worker must not silently analyze new/removed panels after scheduling.
+                raise ValueError("Persisted story panel set is no longer available.")
+        else:
+            panel_ids = [p.id for p in panels]
 
-        job = job_manager.create_job(
-            project_id=project_id,
-            job_type=JobType.STORY_ANALYSIS,
-            job_input={"total_panels": len(panels), "preferred_provider": preferred_provider_id},
-            priority=15,
-            requires_gpu=True,
-            gpu_vram_mb=4000,
-        )
-        job_id = job.job_id
+        job_id = None
+        if not operation_only:
+            # Resolve once before persistence so crash recovery uses the exact
+            # provider selected at submission rather than a changed fallback.
+            import asyncio
+            selected_provider = asyncio.run(llm_registry.get_active_provider(preferred_provider_id))
+            preferred_provider_id = selected_provider.provider_id
+            job = job_manager.create_job(
+                project_id=project_id,
+                job_type=JobType.STORY_ANALYSIS,
+                job_input={"total_panels": len(panels), "panel_ids": panel_ids, "preferred_provider": preferred_provider_id},
+                priority=15,
+                requires_gpu=True,
+                gpu_vram_mb=4000,
+            )
+            job_id = job.job_id
+        elif not isinstance(preferred_provider_id, str) or not preferred_provider_id:
+            raise ValueError("Persisted story provider is missing")
+
+        pinned_provider_id = preferred_provider_id
 
 
         async def run_story_analysis(cancel_token: PipelineCancellationToken, progress_cb):
             from engine.database.session import SessionLocal
 
-            provider = await llm_registry.get_active_provider(preferred_provider_id)
+            provider = await self._resolve_pinned_provider(pinned_provider_id)
             if visual_mode and provider.provider_id == "mock_llm":
                 raise ValueError("Vision analysis requires a real provider; select a configured vision model in Story review.")
             logger.info(f"Using LLM provider '{provider.provider_id}' for story analysis of {project_id}")
@@ -136,14 +188,18 @@ class StoryService:
             with SessionLocal() as inner_db:
                 inner_panels = (
                     inner_db.query(PanelRecord)
-                    .filter(PanelRecord.project_id == project_id, PanelRecord.status != "IGNORED")
+                    .filter(PanelRecord.project_id == project_id, PanelRecord.status != "IGNORED",
+                            PanelRecord.id.in_(panel_ids))
                     .order_by(PanelRecord.sequence.asc())
                     .all()
                 )
+                if {panel.id for panel in inner_panels} != set(panel_ids):
+                    raise ValueError("Persisted story panel set is no longer available.")
                 inner_regions = (
                     inner_db.query(TextRegionRecord)
                     .filter(
                         TextRegionRecord.project_id == project_id,
+                        TextRegionRecord.panel_id.in_(panel_ids),
                         TextRegionRecord.status != "REJECTED",
                     )
                     .order_by(TextRegionRecord.sequence_global.asc())
@@ -603,10 +659,12 @@ class StoryService:
                     },
                 )
 
-            warnings = self.continuity_auditor.audit(narrative_doc)
+            warnings = [*narrative_doc.continuity_warnings, *self.continuity_auditor.audit(narrative_doc)]
             narrative_doc.continuity_warnings = warnings
 
             # 7. Persist in Database & Disk
+            if cancel_token.is_cancelled:
+                raise RuntimeError("Story analysis lost its worker lease before persistence")
             with SessionLocal() as inner_db:
                 # Clear previous machine-derived Layer B records for this project
                 inner_db.query(NarrativeRecord).filter(NarrativeRecord.project_id == project_id).delete()
@@ -764,13 +822,12 @@ class StoryService:
                     proj_rec.current_stage = PipelineStage.STORY_ANALYZED.value
                     proj_rec.updated_at = utc_now()
 
+                if cancel_token.is_cancelled:
+                    raise RuntimeError("Story analysis lost its worker lease before commit")
                 inner_db.commit()
 
             # Write narrative.json sidecar
-            story_dir = ws_path / "story"
-            story_dir.mkdir(parents=True, exist_ok=True)
-            narrative_file = story_dir / "narrative.json"
-            narrative_file.write_text(json.dumps(narrative_doc.model_dump(), indent=2), encoding="utf-8")
+            write_contained_json(ws_path, Path("story") / "narrative.json", narrative_doc.model_dump())
 
             # Invalidate downstream SCRIPT
             dependency_graph.invalidate(project_id, PipelineEntityTier.NARRATIVE_IR)
@@ -785,6 +842,8 @@ class StoryService:
                 "utterances": len(utterances),
             }
 
+        if operation_only:
+            return run_story_analysis
         job_manager.enqueue_async(job_id, run_story_analysis)
         return job_id
 
@@ -828,10 +887,11 @@ class StoryService:
         # Fallback to narrative.json on disk if present
         proj = db.query(ProjectRecord).filter(ProjectRecord.id == project_id).first()
         if proj:
-            disk_path = Path(proj.workspace_path) / "story" / "narrative.json"
-            if disk_path.exists():
-                data = json.loads(disk_path.read_text(encoding="utf-8"))
+            try:
+                data = json.loads(read_contained_bytes(proj.workspace_path, Path("story") / "narrative.json").decode("utf-8"))
                 return NarrativeDocument.model_validate(data)
+            except FileNotFoundError:
+                pass
         return None
 
     def confirm_story(self, db: Session, project_id: str) -> ProjectRecord:
@@ -1058,6 +1118,8 @@ class StoryService:
         project_id: str,
         profile: str = "FAITHFUL",
         cancelled=lambda: False,
+        provider_id: str | None = None,
+        model_name: str | None = None,
     ) -> VideoScript:
         narrative = self.get_narrative(db, project_id)
         if not narrative:
@@ -1073,10 +1135,22 @@ class StoryService:
         adaptation_profile = AdaptationProfile(profile)
         if narrative.analysis_metadata.get("engine") == "vision-story-v1":
             from engine.story.visual import VisualStoryEngine
+            pinned_provider = (
+                self.resolve_pinned_script_provider(provider_id, model_name)
+                if provider_id is not None or model_name is not None
+                else None
+            )
             async def create_narration():
-                provider = await llm_registry.get_active_provider(narrative.analysis_metadata.get("provider"))
+                provider = pinned_provider or await llm_registry.get_active_provider(
+                    narrative.analysis_metadata.get("provider")
+                )
                 return await VisualStoryEngine().narrate(narrative, provider, adaptation_profile)
             script = asyncio.run(create_narration())
+        elif provider_id is not None or model_name is not None:
+            # Even deterministic adaptation jobs must prove the persisted provider
+            # identity still resolves; recovery must never silently substitute one.
+            self.resolve_pinned_script_provider(provider_id, model_name)
+            script = script_adapter.adapt(narrative, profile=adaptation_profile)
         else:
             script = script_adapter.adapt(narrative, profile=adaptation_profile)
 
@@ -1144,9 +1218,7 @@ class StoryService:
 
         # Save script.json sidecar
         ws_path = Path(proj.workspace_path)
-        script_dir = ws_path / "script"
-        script_dir.mkdir(parents=True, exist_ok=True)
-        (script_dir / "script.json").write_text(json.dumps(script.model_dump(), indent=2), encoding="utf-8")
+        write_contained_json(ws_path, Path("script") / "script.json", script.model_dump())
 
         dependency_graph.clear(project_id, PipelineEntityTier.SCRIPT)
         return script

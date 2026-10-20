@@ -1,5 +1,6 @@
 import os
 from typing import Dict, List
+from urllib.parse import urlparse
 from engine.llm.providers.base import LLMProvider
 from engine.llm.providers.mock import MockLLMProvider
 from engine.llm.providers.ollama import OllamaProvider
@@ -31,24 +32,31 @@ class LLMRegistry:
         return results
 
     async def get_active_provider(self, preferred_id: str | None = None) -> LLMProvider:
-        """Returns the requested provider if healthy, or falls back to first available or mock."""
+        """Resolve a healthy provider without silently fabricating production content."""
         if preferred_id:
             pid = "mock_llm" if preferred_id in ("mock", "mock_llm") else preferred_id
+            if pid in self._providers:
+                p = self._providers[pid]
+                if pid == "mock_llm":
+                    # Explicit mock selection remains available for tests and fixtures.
+                    return p
+                if await p.health_check():
+                    return p
+
+        # Probe real local/compatible providers automatically. Production should not
+        # require a hidden USE_REAL_LLM switch just to avoid mock content.
+        for pid in ["ollama", "lmstudio", "openai_compatible"]:
             if pid in self._providers:
                 p = self._providers[pid]
                 if await p.health_check():
                     return p
 
-        # Check real local providers if explicitly enabled via environment
-        if os.environ.get("USE_REAL_LLM", "").lower() in ("1", "true", "yes"):
-            for pid in ["ollama", "lmstudio", "openai_compatible"]:
-                if pid in self._providers:
-                    p = self._providers[pid]
-                    if await p.health_check():
-                        return p
-
-        # Fallback to deterministic mock
-        return self._providers.get("mock_llm", list(self._providers.values())[0])
+        # Mock fallback is opt-in only; otherwise fail closed so generated story
+        # content cannot be mistaken for analysis of real source material.
+        allow_mock = os.environ.get("PANELFLOW_ALLOW_MOCK_LLM", "").lower() in ("1", "true", "yes")
+        if allow_mock and "mock_llm" in self._providers:
+            return self._providers["mock_llm"]
+        raise RuntimeError("No healthy real LLM provider is configured. Enable Ollama/compatible provider or explicitly set PANELFLOW_ALLOW_MOCK_LLM for tests.")
 
     def get_ollama_provider(self) -> OllamaProvider:
         p = self._providers.get("ollama")
@@ -94,7 +102,9 @@ def get_default_llm_registry() -> LLMRegistry:
     ollama_text = os.environ.get("OLLAMA_TEXT_MODEL", "qwen3.5:9b")
     ollama_vision = os.environ.get("OLLAMA_VISION_MODEL", "qwen3.5:9b")
     ollama_ctx = int(os.environ.get("OLLAMA_NUM_CTX", "32768"))
-    registry.register(OllamaProvider(endpoint_url=ollama_url, text_model=ollama_text, vision_model=ollama_vision, num_ctx=ollama_ctx))
+    ollama_host = (urlparse(ollama_url).hostname or "").lower()
+    ollama_is_remote = ollama_host not in {"localhost", "127.0.0.1", "::1"}
+    registry.register(OllamaProvider(endpoint_url=ollama_url, is_remote=ollama_is_remote, text_model=ollama_text, vision_model=ollama_vision, num_ctx=ollama_ctx))
 
     lmstudio_url = os.environ.get("LMSTUDIO_URL", "http://127.0.0.1:1234/v1")
     registry.register(LMStudioProvider(endpoint_url=lmstudio_url))

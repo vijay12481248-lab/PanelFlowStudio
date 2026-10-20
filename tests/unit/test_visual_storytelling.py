@@ -28,6 +28,15 @@ class VisionProvider:
 
     async def generate_structured(self, prompt, response_model, **kwargs):
         self.chapter_prompt = prompt
+        if response_model.__name__ == "Section":
+            data = json.loads(prompt.split("SOURCE_DATA:\n", 1)[1])
+            first, last = data["panels"][0]["panel"], data["panels"][-1]["panel"]
+            return response_model.model_validate({
+                "summary": "A guard watches the gate.",
+                "actors": [], "locations": [], "events": [], "relationships": [],
+                "scenes": [{"start": first, "end": last, "title": "The gate", "summary": "A guard keeps watch.", "characters": []}],
+                "beats": [{"scene": 1, "panels": list(dict.fromkeys([first, last])), "summary": "A guard keeps watch."}],
+            })
         return response_model.model_validate({
             "chapter_summary": "A guard watches the gate.",
             "scenes": [{"scene_id": "s1", "sequence": 1, "title": "The gate", "panel_start": "p1", "panel_end": "p2", "summary": "A guard keeps watch."}],
@@ -63,6 +72,20 @@ def test_no_mock_story_can_be_presented_as_visual_analysis(tmp_path):
     provider.provider_id = "mock_llm"
     with pytest.raises(ValueError, match="real vision"):
         asyncio.run(VisualStoryEngine().analyze("project", tmp_path, panels(tmp_path), [], provider))
+
+
+def test_unresolved_model_cast_is_visible_as_review_warning(tmp_path):
+    provider = VisionProvider()
+    original = provider.generate_structured
+    async def unresolved(*args, **kwargs):
+        result = await original(*args, **kwargs)
+        result.scenes[0].characters = [999]
+        return result
+    provider.generate_structured = unresolved
+    document = asyncio.run(VisualStoryEngine().analyze("project", tmp_path, panels(tmp_path), [], provider))
+    assert document.continuity_warnings
+    assert document.continuity_warnings[0].warning_type == "RECONSTRUCTION_REVIEW"
+    assert document.scenes[0].character_ids == []
 
 
 def test_failed_panel_preserves_checkpoint_and_identifies_stage(tmp_path):

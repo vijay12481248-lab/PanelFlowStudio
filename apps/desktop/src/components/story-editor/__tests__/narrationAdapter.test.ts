@@ -463,4 +463,54 @@ describe("Chapter 5B: Timeline Integration Contract (Schema 5A-v2) Ingestion", (
     assert.equal(ingested[1].review_status, "NEEDS_REVIEW");
     assert.equal(ingested[1].previous_audio_asset_uri, "/assets/demo/seg_02_prior.mp3");
   });
+
+  test("buildInitialNarrationChapter grounds narration text and speaker in real TextRegions", () => {
+    const scenes = createMockScenes();
+    const mockRegions: any[] = [
+      {
+        id: "tr_1",
+        panel_id: "panel_01_01",
+        sequence_in_panel: 1,
+        raw_text: "What is that light?",
+        corrected_text: "What is that light over there?!",
+        region_type: "SPEECH",
+        speaker_character_id: "char_marcus",
+        status: "CONFIRMED",
+      },
+      {
+        id: "tr_2",
+        panel_id: "panel_01_02",
+        sequence_in_panel: 1,
+        raw_text: "The seal is weakening...",
+        corrected_text: "The ancient seal is weakening rapidly.",
+        region_type: "NARRATION",
+        speaker_character_id: "char_narrator",
+        status: "CONFIRMED",
+      },
+    ];
+
+    const chapter = buildInitialNarrationChapter(
+      "proj_real",
+      "Demon Emperor",
+      scenes,
+      undefined,
+      null,
+      null,
+      undefined,
+      mockRegions
+    );
+
+    assert.equal(chapter.segments.length, 3);
+    // Segment 1 from panel_01_01 has real corrected speech
+    assert.equal(chapter.segments[0].narration_text, "What is that light over there?!");
+    assert.equal(chapter.segments[0].source_context.raw_ocr_dialogue, "What is that light over there?!");
+    assert.equal(chapter.segments[0].speaker_type, "CHARACTER");
+
+    // Segment 2 from panel_01_02 has narration box
+    assert.equal(chapter.segments[1].narration_text, "The ancient seal is weakening rapidly.");
+    assert.equal(chapter.segments[1].speaker_type, "NARRATOR");
+
+    // Segment 3 has no OCR, so has natural non-robotic title
+    assert.equal(chapter.segments[2].narration_text, "Ancient Seal.");
+  });
 });

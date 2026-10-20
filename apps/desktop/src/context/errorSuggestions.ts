@@ -16,15 +16,19 @@ export function generateSuggestions(
       "Verify the local Chatterbox environment is present at C:\\Tools\\Chatterbox."
     );
     suggestions.push("Re-queue or retry the audio generation job.");
+  } else if (text.includes("unterminated string") || text.includes("model output reached") || text.includes("automatic whole-chapter retries stopped")) {
+    suggestions.push("This is a model output-size or structure problem, not evidence that Ollama is disconnected.");
+    suggestions.push("Use the updated section reconstruction workflow; completed panel and section checkpoints are reused.");
+    suggestions.push("Check the reported panel range. If its smallest section still fails, review its source observations or choose another configured model before retrying.");
   } else if (text.includes("ollama") || text.includes("qwen") || jobType === "STORY_ANALYSIS") {
     suggestions.push(
       "Verify that Ollama is running locally ('ollama serve' on port 11434)."
     );
     suggestions.push(
-      "Ensure the model is pulled: run 'ollama pull qwen2.5:9b' in your terminal."
+      "Verify the selected model in Tools & Models is installed and healthy."
     );
     suggestions.push(
-      "For large chapters (15+ pages), LLM reconstruction at 80% can take 5–10 minutes on consumer hardware."
+      "Check the current section, live model activity, and worker heartbeat in Story Review. Completed sections are checkpointed."
     );
   } else if (text.includes("ocr") || text.includes("windows_media") || text.includes("tesseract")) {
     suggestions.push("Ensure Windows Media OCR language pack (e.g. English US) is installed in Windows Settings.");

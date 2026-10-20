@@ -13,6 +13,7 @@ import type {
 } from "@panelflow/shared-types";
 import { Button, Card, Badge, ProgressBar, Icons } from "@panelflow/ui";
 import { useError } from "../context/ErrorContext";
+import { StoryboardPreview } from "../components/StoryboardPreview";
 
 interface ScriptReviewScreenProps {
   project: Project;
@@ -599,11 +600,10 @@ export const ScriptReviewScreen: React.FC<ScriptReviewScreenProps> = ({
                       {sbSeg.supporting_panels.map((pRef, pIdx) => (
                         <div key={`${pRef.panel_id}-${pIdx}`} className="space-y-1.5">
                           <div className="relative group rounded-lg overflow-hidden border border-zinc-800 bg-zinc-900 aspect-video flex items-center justify-center">
-                            <img
-                              src={pRef.image_url || api.getPanelImageUrl(project.id, pRef.panel_id)}
-                              alt={`Manga panel ${pRef.panel_id}`}
-                              className="w-full h-full object-contain"
-                              loading="lazy"
+                            <StoryboardPreview
+                              key={`${project.id}-${pRef.panel_id}`}
+                              src={api.getPanelImageUrl(project.id, pRef.panel_id)}
+                              readingOrder={pRef.reading_order}
                             />
                             <div className="absolute top-2 left-2 flex items-center gap-1.5">
                               <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-black/75 text-zinc-200">
@@ -667,8 +667,9 @@ export const ScriptReviewScreen: React.FC<ScriptReviewScreenProps> = ({
                             {sbSeg.emotion} ({Math.round(sbSeg.intensity * 100)}%)
                           </Badge>
                           {isUnsupported && (
-                            <Badge variant="danger" className="text-[9px] font-bold">
-                              ⚠️ UNSUPPORTED CLAIM
+                            <Badge variant="danger" className="text-[9px] font-bold flex items-center gap-1">
+                              <Icons.AlertTriangle className="w-3 h-3 text-rose-400" />
+                              <span>UNSUPPORTED CLAIM</span>
                             </Badge>
                           )}
                           {sbSeg.manual_override && (
@@ -682,12 +683,22 @@ export const ScriptReviewScreen: React.FC<ScriptReviewScreenProps> = ({
                           <span className="text-[11px] font-mono text-zinc-300 font-bold">
                             {sbSeg.measured_duration_sec}s
                           </span>
-                          <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded font-bold ${
+                          <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded font-bold flex items-center gap-1 ${
                             sbSeg.audio_clip_path
                               ? "bg-emerald-950/60 border border-emerald-800 text-emerald-300"
                               : "bg-zinc-800 text-zinc-400"
                           }`}>
-                            {sbSeg.audio_clip_path ? "🔊 TTS LOCKED" : "⏱️ ESTIMATED"}
+                            {sbSeg.audio_clip_path ? (
+                              <>
+                                <Icons.Volume className="w-3 h-3 text-emerald-400" />
+                                <span>TTS LOCKED</span>
+                              </>
+                            ) : (
+                              <>
+                                <Icons.Clock className="w-3 h-3 text-zinc-400" />
+                                <span>ESTIMATED</span>
+                              </>
+                            )}
                           </span>
                         </div>
                       </div>
@@ -765,10 +776,14 @@ export const ScriptReviewScreen: React.FC<ScriptReviewScreenProps> = ({
                     {/* Audio & Ducking Directives */}
                     <div className="pt-2 border-t border-zinc-800/80 flex items-center justify-between text-[11px] text-zinc-400 font-mono">
                       <div className="flex items-center gap-3">
-                        <span>🎵 Music: <strong className="text-zinc-300">{sbSeg.music_cue?.intent || "CALM"}</strong></span>
+                        <span className="flex items-center gap-1">
+                          <Icons.Music className="w-3 h-3 text-amber-400" />
+                          <span>Music: <strong className="text-zinc-300">{sbSeg.music_cue?.intent || "CALM"}</strong></span>
+                        </span>
                         <span>Ducking: <strong className="text-amber-400">{sbSeg.music_cue?.ducking_gain_db ?? -14.0} dB</strong></span>
                         <span>SFX: <strong className="text-zinc-300">{sbSeg.sfx_cue?.type || "NONE"}</strong></span>
                       </div>
+
 
                       {!isEditing && (
                         <Button

@@ -18,6 +18,7 @@ import time
 import urllib.parse
 import urllib.request
 import urllib.error
+import io
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -25,6 +26,7 @@ import numpy as np
 import soundfile as sf
 
 from engine.audio.models.music_plan import MusicTakeRecord
+from engine.security.paths import ensure_contained_directory, write_contained_bytes
 
 logger = logging.getLogger("panelflow.audio.ace_step")
 
@@ -266,7 +268,8 @@ class ACEStepProvider:
             progress_cb(0.90, "Downloading generated audio master...")
 
         # 3. Download generated audio
-        workspace_music_dir.mkdir(parents=True, exist_ok=True)
+        workspace = workspace_music_dir.parents[1]
+        ensure_contained_directory(workspace, Path("audio") / "music")
         timestamp_str = int(time.time())
         clean_cue = "".join(c for c in cue_id if c.isalnum() or c in ("-", "_")) or "cue"
         target_filename = f"music_{clean_cue}_t{take_index}_{timestamp_str}.wav"
@@ -279,7 +282,6 @@ class ACEStepProvider:
         try:
             with urllib.request.urlopen(dl_req, timeout=30) as dl_resp:
                 raw_bytes = dl_resp.read()
-            target_path.write_bytes(raw_bytes)
         except Exception as e:
             raise IOError(f"Failed to download audio from {download_url}: {e}")
 
@@ -287,11 +289,9 @@ class ACEStepProvider:
         if progress_cb:
             progress_cb(0.95, "Validating audio samples, headroom, and waveform...")
 
-        info = sf.info(str(target_path))
-        data_np, sr = sf.read(str(target_path), dtype="float32")
+        data_np, sr = sf.read(io.BytesIO(raw_bytes), dtype="float32")
 
         if len(data_np) == 0:
-            target_path.unlink(missing_ok=True)
             raise ValueError("ACE-Step output file is empty (0 samples)")
 
         # Ensure stereo representation
@@ -314,14 +314,17 @@ class ACEStepProvider:
             peak_dbfs = 20.0 * np.log10(peak_amp)
 
         # Write clean 48 kHz 16-bit PCM master
-        sf.write(str(target_path), data_np, sr, subtype="PCM_16")
+        encoded = io.BytesIO()
+        sf.write(encoded, data_np, sr, format="WAV", subtype="PCM_16")
+        normalized_bytes = encoded.getvalue()
+        write_contained_bytes(workspace, target_path.relative_to(workspace), normalized_bytes)
 
         # 5. Extract 100-point normalized waveform envelope for fast UI display
         waveform_peaks = self._compute_waveform_peaks(data_np, points=100)
 
         # Compute SHA256 checksum
         hasher = hashlib.sha256()
-        hasher.update(target_path.read_bytes())
+        hasher.update(normalized_bytes)
         file_sha256 = hasher.hexdigest()
 
         duration_sec = round(len(data_np) / float(sr), 3)
@@ -340,7 +343,7 @@ class ACEStepProvider:
             sample_rate=sr,
             channels=2,
             format="wav",
-            file_size_bytes=target_path.stat().st_size,
+            file_size_bytes=len(normalized_bytes),
             checksum_sha256=file_sha256,
             prompt=prompt,
             seed=final_seed,
@@ -360,7 +363,8 @@ class ACEStepProvider:
 
         # 7. Write sidecar JSON metadata
         sidecar_path = workspace_music_dir / f"{target_filename}.music.json"
-        sidecar_path.write_text(record.model_dump_json(indent=2), encoding="utf-8")
+        write_contained_bytes(workspace, sidecar_path.relative_to(workspace),
+                              record.model_dump_json(indent=2).encode("utf-8"))
 
         if progress_cb:
             progress_cb(1.0, f"Music take ready ({duration_sec}s, {generation_time}s)")

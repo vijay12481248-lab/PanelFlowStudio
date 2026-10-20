@@ -9,7 +9,7 @@ import type {
   TextRegionType,
   TextRegionStatus,
 } from "@panelflow/shared-types";
-import { Button, Card, Badge, ProgressBar, Icons } from "@panelflow/ui";
+import { Button, Card, Badge, ProgressBar, Icons, Modal } from "@panelflow/ui";
 import { useError } from "../context/ErrorContext";
 
 interface OCRReviewScreenProps {
@@ -92,6 +92,19 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
     height: 100,
     blur_radius: 24,
   });
+
+  // Interactive Marquee Drag-to-Redact State
+  const [isMarqueeBlurMode, setIsMarqueeBlurMode] = useState<boolean>(false);
+  const [marqueeStart, setMarqueeStart] = useState<{ x: number; y: number } | null>(null);
+  const [marqueeCurrent, setMarqueeCurrent] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  const [marqueePendingBox, setMarqueePendingBox] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
+  const svgRef = useRef<SVGSVGElement | null>(null);
+
+  // Batch Watermarks / Blur state
+  const [isBatchBlurModalOpen, setIsBatchBlurModalOpen] = useState<boolean>(false);
+  const [batchBlurLoading, setBatchBlurLoading] = useState<boolean>(false);
+  const [batchPreset, setBatchPreset] = useState<"TOP_WATERMARK" | "BOTTOM_SUBSCRIBE" | "ALL_TEXT_REGIONS" | "ENTIRE_PANEL">("TOP_WATERMARK");
+  const [batchHeight, setBatchHeight] = useState<number>(80);
 
   // Selected Region Form State
   const [editForm, setEditForm] = useState<{
@@ -245,13 +258,24 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
           setSelectedRegionId(panelRegions[nextIdx].id);
         }
       } else if (e.key === "Escape") {
-        setSelectedRegionId(null);
+        if (marqueePendingBox || marqueeCurrent) {
+          setMarqueePendingBox(null);
+          setMarqueeCurrent(null);
+        } else if (isMarqueeBlurMode) {
+          setIsMarqueeBlurMode(false);
+        } else {
+          setSelectedRegionId(null);
+        }
+      } else if (e.key.toLowerCase() === "r" || e.key.toLowerCase() === "b") {
+        setIsMarqueeBlurMode((v) => !v);
+        setMarqueePendingBox(null);
+        setMarqueeCurrent(null);
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [panelRegions, selectedRegionId, handleUndo, handleRedo]);
+  }, [panelRegions, selectedRegionId, handleUndo, handleRedo, isMarqueeBlurMode, marqueePendingBox, marqueeCurrent]);
 
   const handleDetectRegions = async () => {
     setDetectingRegions(true);
@@ -491,6 +515,142 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
     }
   };
 
+  const getSvgCoordinates = (e: React.MouseEvent<SVGSVGElement>): { x: number; y: number } => {
+    if (!svgRef.current || !activePanel) return { x: 0, y: 0 };
+    const svg = svgRef.current;
+    const pt = svg.createSVGPoint();
+    pt.x = e.clientX;
+    pt.y = e.clientY;
+    const ctm = svg.getScreenCTM();
+    if (!ctm) return { x: 0, y: 0 };
+    const transformed = pt.matrixTransform(ctm.inverse());
+    return {
+      x: Math.max(0, Math.min(activePanel.width, Math.round(transformed.x))),
+      y: Math.max(0, Math.min(activePanel.height, Math.round(transformed.y))),
+    };
+  };
+
+  const handleSvgMouseDown = (e: React.MouseEvent<SVGSVGElement>) => {
+    if (!isMarqueeBlurMode) return;
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    const coords = getSvgCoordinates(e);
+    setMarqueeStart(coords);
+    setMarqueeCurrent({ x: coords.x, y: coords.y, w: 0, h: 0 });
+    setMarqueePendingBox(null);
+  };
+
+  const handleSvgMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
+    if (!isMarqueeBlurMode || !marqueeStart) return;
+    const coords = getSvgCoordinates(e);
+    const x = Math.min(marqueeStart.x, coords.x);
+    const y = Math.min(marqueeStart.y, coords.y);
+    const w = Math.abs(coords.x - marqueeStart.x);
+    const h = Math.abs(coords.y - marqueeStart.y);
+    setMarqueeCurrent({ x, y, w, h });
+  };
+
+  const handleSvgMouseUp = async (e: React.MouseEvent<SVGSVGElement>) => {
+    if (!isMarqueeBlurMode || !marqueeStart) return;
+    const coords = getSvgCoordinates(e);
+    const x = Math.min(marqueeStart.x, coords.x);
+    const y = Math.min(marqueeStart.y, coords.y);
+    const w = Math.abs(coords.x - marqueeStart.x);
+    const h = Math.abs(coords.y - marqueeStart.y);
+    setMarqueeStart(null);
+
+    if (w >= 10 && h >= 10) {
+      const box = { x, y, width: w, height: h };
+      setMarqueePendingBox(box);
+      setMarqueeCurrent(null);
+
+      // Shift+Drag instantly applies blur without confirmation modal
+      if (e.shiftKey && activePanel) {
+        setBlurringPanel(true);
+        try {
+          pushUndo(textRegions);
+          await api.blurPanelRegion(project.id, activePanel.id, {
+            ...box,
+            blur_radius: customBlurBox.blur_radius || 24,
+            feather: 4,
+          });
+          setCacheBuster(Date.now());
+          const st = await api.getPanelBlurStatus(project.id, activePanel.id);
+          setPanelBlurStatus(st);
+          showToast(`Direct blur applied (${w}×${h}px)!`, "success");
+          setMarqueePendingBox(null);
+        } catch (err: any) {
+          showToast(`Failed to blur area: ${err.message}`, "warn");
+        } finally {
+          setBlurringPanel(false);
+        }
+      }
+    } else {
+      setMarqueeCurrent(null);
+    }
+  };
+
+  const handleApplyMarqueeBlur = async () => {
+    if (!activePanel || !marqueePendingBox) return;
+    setBlurringPanel(true);
+    try {
+      pushUndo(textRegions);
+      await api.blurPanelRegion(project.id, activePanel.id, {
+        x: marqueePendingBox.x,
+        y: marqueePendingBox.y,
+        width: marqueePendingBox.width,
+        height: marqueePendingBox.height,
+        blur_radius: customBlurBox.blur_radius || 24,
+        feather: 4,
+      });
+      setCacheBuster(Date.now());
+      const st = await api.getPanelBlurStatus(project.id, activePanel.id);
+      setPanelBlurStatus(st);
+      showToast(
+        `Blurred watermark (${marqueePendingBox.width}×${marqueePendingBox.height}px)! (Saved to video stream)`,
+        "success"
+      );
+      setMarqueePendingBox(null);
+      setMarqueeCurrent(null);
+    } catch (err: any) {
+      showToast(`Failed to blur area: ${err.message}`, "warn");
+    } finally {
+      setBlurringPanel(false);
+    }
+  };
+
+  const handleCreateTextRegionFromMarquee = async () => {
+    if (!activePanel || !marqueePendingBox) return;
+    try {
+      pushUndo(textRegions);
+      const newRegion = await api.createManualTextRegion(
+        project.id,
+        activePanel.id,
+        marqueePendingBox.x,
+        marqueePendingBox.y,
+        marqueePendingBox.width,
+        marqueePendingBox.height,
+        "SPEECH"
+      );
+      let finalRegion = newRegion;
+      try {
+        finalRegion = await api.ocrSingleRegion(project.id, newRegion.id, selectedEngine, "en");
+      } catch (e) {
+        // Fall back to un-transcribed manual region
+      }
+      setTextRegions((prev) => [...prev, finalRegion]);
+      setSelectedRegionId(finalRegion.id);
+      showToast(
+        `Added dialogue bubble: "${finalRegion.raw_text || finalRegion.corrected_text || "(empty)"}"`,
+        "success"
+      );
+      setMarqueePendingBox(null);
+      setMarqueeCurrent(null);
+    } catch (err: any) {
+      showToast(`Failed to create text region: ${err.message}`, "warn");
+    }
+  };
+
   const handleResetPanelImage = async () => {
     if (!activePanel) return;
     if (!confirm(`Restore original unblurred image for Panel #${activePanel.sequence}?`)) return;
@@ -508,6 +668,40 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
       alert(`Failed to reset panel image: ${err.message}`);
     } finally {
       setResettingPanel(false);
+    }
+  };
+
+  const handleRunBatchBlur = async () => {
+    try {
+      setBatchBlurLoading(true);
+      const res = await api.batchBlurPanels(project.id, {
+        preset: batchPreset,
+        height_px: Number(batchHeight),
+      });
+      alert(`Batch blur completed! Blurred ${res.blurred_panels_count} of ${res.total_panels} panels.`);
+      setCacheBuster(Date.now());
+      setIsBatchBlurModalOpen(false);
+      loadData();
+    } catch (err: any) {
+      alert(`Batch blur failed: ${err.message}`);
+    } finally {
+      setBatchBlurLoading(false);
+    }
+  };
+
+  const handleRunBatchReset = async () => {
+    if (!confirm("Are you sure you want to reset all panels in this project back to their original unblurred images?")) return;
+    try {
+      setBatchBlurLoading(true);
+      const res = await api.batchResetPanels(project.id);
+      alert(`Batch reset completed! Restored ${res.restored_panels_count} of ${res.total_panels} panels.`);
+      setCacheBuster(Date.now());
+      setIsBatchBlurModalOpen(false);
+      loadData();
+    } catch (err: any) {
+      alert(`Batch reset failed: ${err.message}`);
+    } finally {
+      setBatchBlurLoading(false);
     }
   };
 
@@ -590,6 +784,7 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
   };
 
   const handleMouseDown = (e: React.MouseEvent) => {
+    if (isMarqueeBlurMode) return;
     if (zoomLevel > 1.0 && (e.button === 0 || e.button === 1)) {
       setIsPanning(true);
       panStartRef.current = { x: e.clientX - panOffset.x, y: e.clientY - panOffset.y };
@@ -597,6 +792,7 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
+    if (isMarqueeBlurMode) return;
     if (isPanning) {
       setPanOffset({
         x: e.clientX - panStartRef.current.x,
@@ -1064,6 +1260,17 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
               Use <kbd className="px-1.5 py-0.5 bg-zinc-800 border border-zinc-700 rounded text-zinc-300 font-mono">←</kbd> / <kbd className="px-1.5 py-0.5 bg-zinc-800 border border-zinc-700 rounded text-zinc-300 font-mono">→</kbd> keys or preview edge arrows to navigate
             </span>
 
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsBatchBlurModalOpen(true)}
+              className="text-xs text-amber-300 border-amber-700/60 hover:bg-amber-950/40"
+              title="Batch blur site watermark banners, headers, or subscribe notes across all panels"
+            >
+              <Icons.EyeOff className="w-3.5 h-3.5 mr-1 text-amber-400" />
+              Batch Watermarks...
+            </Button>
+
             {activePanel && (
               <Button
                 variant="ghost"
@@ -1287,7 +1494,11 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                 onMouseUp={handleMouseUp}
                 onMouseLeave={handleMouseUp}
                 className={`relative inline-block max-w-full overflow-hidden rounded-lg shadow-2xl border border-zinc-800 group/preview select-none ${
-                  zoomLevel > 1.0 ? (isPanning ? "cursor-grabbing" : "cursor-grab") : "cursor-default"
+                  isMarqueeBlurMode
+                    ? "cursor-crosshair"
+                    : zoomLevel > 1.0
+                    ? (isPanning ? "cursor-grabbing" : "cursor-grab")
+                    : "cursor-default"
                 }`}
               >
                 {/* Scaled/Panned Content (Image and SVG Overlays in perfect sync) */}
@@ -1306,8 +1517,12 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                     draggable={false}
                   />
 
-                  {/* SVG Overlay of detected Text Regions */}
+                  {/* SVG Overlay of detected Text Regions & Interactive Marquee */}
                   <svg
+                    ref={svgRef}
+                    onMouseDown={isMarqueeBlurMode ? handleSvgMouseDown : undefined}
+                    onMouseMove={isMarqueeBlurMode ? handleSvgMouseMove : undefined}
+                    onMouseUp={isMarqueeBlurMode ? handleSvgMouseUp : undefined}
                     className="absolute inset-0 w-full h-full pointer-events-auto"
                     viewBox={`0 0 ${activePanel.width} ${activePanel.height}`}
                     preserveAspectRatio="none"
@@ -1320,10 +1535,11 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                         <g
                           key={tr.id}
                           onClick={(e) => {
+                            if (isMarqueeBlurMode) return;
                             e.stopPropagation();
                             setSelectedRegionId(tr.id);
                           }}
-                          className="cursor-pointer group"
+                          className={isMarqueeBlurMode ? "pointer-events-none" : "cursor-pointer group"}
                         >
                           <rect
                             x={tr.x}
@@ -1359,6 +1575,43 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                         </g>
                       );
                     })}
+
+                    {/* Live Marquee Drag Box or Pending Confirmation Box */}
+                    {(marqueeCurrent || marqueePendingBox) && (
+                      <g className="pointer-events-none">
+                        <rect
+                          x={marqueePendingBox ? marqueePendingBox.x : marqueeCurrent!.x}
+                          y={marqueePendingBox ? marqueePendingBox.y : marqueeCurrent!.y}
+                          width={marqueePendingBox ? marqueePendingBox.width : marqueeCurrent!.w}
+                          height={marqueePendingBox ? marqueePendingBox.height : marqueeCurrent!.h}
+                          fill="rgba(245, 158, 11, 0.35)"
+                          stroke="#f59e0b"
+                          strokeWidth={3}
+                          strokeDasharray="6,4"
+                          rx={4}
+                        />
+                        <rect
+                          x={marqueePendingBox ? marqueePendingBox.x : marqueeCurrent!.x}
+                          y={Math.max(0, (marqueePendingBox ? marqueePendingBox.y : marqueeCurrent!.y) - 22)}
+                          width={130}
+                          height={20}
+                          fill="#b45309"
+                          rx={4}
+                        />
+                        <text
+                          x={(marqueePendingBox ? marqueePendingBox.x : marqueeCurrent!.x) + 6}
+                          y={Math.max(0, (marqueePendingBox ? marqueePendingBox.y : marqueeCurrent!.y) - 8)}
+                          fill="#ffffff"
+                          fontSize="11"
+                          fontWeight="bold"
+                          fontFamily="monospace"
+                        >
+                          {marqueePendingBox
+                            ? `${marqueePendingBox.width} × ${marqueePendingBox.height}px`
+                            : `${marqueeCurrent!.w} × ${marqueeCurrent!.h}px`}
+                        </text>
+                      </g>
+                    )}
                   </svg>
                 </div>
 
@@ -1459,6 +1712,25 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                     <button
                       type="button"
                       onClick={() => {
+                        setIsMarqueeBlurMode((v) => !v);
+                        setMarqueePendingBox(null);
+                        setMarqueeCurrent(null);
+                      }}
+                      className={`px-2.5 py-1 rounded-md border text-xs font-medium shadow-lg backdrop-blur-md flex items-center gap-1.5 transition-all cursor-pointer ${
+                        isMarqueeBlurMode
+                          ? "bg-amber-600 text-white border-amber-400 ring-2 ring-amber-400/50"
+                          : "bg-zinc-900/90 hover:bg-zinc-800 border-zinc-700/80 text-zinc-300 hover:text-white"
+                      }`}
+                      title="Click & drag directly on the panel image to marquee-select and blur any watermark or text [R]"
+                    >
+                      <Icons.Crosshair className="w-3.5 h-3.5 text-amber-400" />
+                      <span>{isMarqueeBlurMode ? "Redact Mode: Active" : "Marquee Redact"}</span>
+                      <kbd className="text-[10px] bg-zinc-950/60 px-1 py-0.2 rounded font-mono text-zinc-400">R</kbd>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
                         if (activePanel) {
                           setCustomBlurBox({
                             x: 0,
@@ -1501,6 +1773,104 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                     </button>
                   </div>
                 </div>
+
+                {/* Active Marquee Redact Guide Banner */}
+                {isMarqueeBlurMode && (
+                  <div className="absolute top-14 left-1/2 -translate-x-1/2 z-30 px-3.5 py-1.5 rounded-full bg-amber-950/95 border border-amber-500/80 text-amber-200 text-xs font-medium shadow-2xl backdrop-blur-md flex items-center gap-2 animate-in fade-in duration-150 pointer-events-auto">
+                    <Icons.Crosshair className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+                    <span>Click & drag over any watermark, credit, or text to redact.</span>
+                    <span className="text-[11px] text-amber-300 bg-amber-900/70 px-1.5 py-0.5 rounded font-mono font-semibold">
+                      Shift+Drag = Instant Blur
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsMarqueeBlurMode(false);
+                        setMarqueePendingBox(null);
+                        setMarqueeCurrent(null);
+                      }}
+                      className="ml-1 text-amber-400 hover:text-white p-0.5 rounded hover:bg-amber-900/50"
+                      title="Exit Marquee Mode (Esc)"
+                    >
+                      <Icons.X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+
+                {/* Floating Marquee Action Confirmation Bar */}
+                {marqueePendingBox && (
+                  <div className="absolute bottom-3 left-3 z-40 max-w-lg bg-zinc-950/95 border border-amber-500/90 rounded-xl p-3 shadow-2xl backdrop-blur-md flex flex-wrap items-center gap-3 animate-in fade-in slide-in-from-bottom-2 duration-150 pointer-events-auto">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse"></div>
+                      <div>
+                        <div className="text-xs font-bold text-amber-200 flex items-center gap-2">
+                          <span>Area: {marqueePendingBox.width} × {marqueePendingBox.height}px</span>
+                          <span className="text-[10px] text-zinc-400 font-mono font-normal">
+                            (X: {marqueePendingBox.x}, Y: {marqueePendingBox.y})
+                          </span>
+                        </div>
+                        <div className="text-[10px] text-amber-300/70">
+                          Redacts watermark or logo in preview and final MP4 video
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 ml-auto">
+                      {/* Blur Radius Selector */}
+                      <div className="flex items-center gap-1 bg-zinc-900 border border-zinc-800 rounded-lg p-0.5 text-[11px]">
+                        <span className="text-zinc-500 px-1 text-[10px] uppercase font-bold">Radius</span>
+                        {[16, 24, 36, 48].map((rad) => (
+                          <button
+                            key={rad}
+                            type="button"
+                            onClick={() => setCustomBlurBox((prev) => ({ ...prev, blur_radius: rad }))}
+                            className={`px-1.5 py-0.5 rounded text-[11px] font-mono transition-colors ${
+                              customBlurBox.blur_radius === rad
+                                ? "bg-amber-600 text-white font-bold"
+                                : "text-zinc-400 hover:text-white"
+                            }`}
+                          >
+                            {rad}px
+                          </button>
+                        ))}
+                      </div>
+
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        disabled={blurringPanel}
+                        onClick={handleApplyMarqueeBlur}
+                        className="bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold flex items-center gap-1.5 shadow-lg shadow-amber-900/40"
+                      >
+                        <Icons.EyeOff className="w-3.5 h-3.5" />
+                        <span>{blurringPanel ? "Blurring..." : "Blur Area"}</span>
+                      </Button>
+
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleCreateTextRegionFromMarquee}
+                        className="text-xs text-indigo-300 border-indigo-700/60 hover:bg-indigo-950/50 flex items-center gap-1"
+                        title="Extract dialogue or speech bubble from this selection"
+                      >
+                        <Icons.Plus className="w-3.5 h-3.5 text-indigo-400" />
+                        <span>+ Bubble</span>
+                      </Button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMarqueePendingBox(null);
+                          setMarqueeCurrent(null);
+                        }}
+                        className="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+                        title="Cancel Selection (Esc)"
+                      >
+                        <Icons.X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 {/* Floating Zoom & Pan Controls (Bottom Right) */}
                 <div className="absolute bottom-3 right-3 z-30 flex items-center gap-1 bg-zinc-950/90 backdrop-blur-md border border-zinc-700/80 rounded-lg p-1 shadow-2xl text-zinc-300">
@@ -2225,6 +2595,165 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
             </div>
           </Card>
         </div>
+      )}
+
+      {/* Batch Watermarks / Blur Modal */}
+      {isBatchBlurModalOpen && (
+        <Modal
+          isOpen={isBatchBlurModalOpen}
+          onClose={() => setIsBatchBlurModalOpen(false)}
+          title="Batch Watermark & Banner Redaction"
+        >
+          <div className="space-y-4">
+            <p className="text-xs text-zinc-400 leading-relaxed">
+              Automatically blur website banners (e.g. <code className="text-amber-300">manhuaplus.com</code>), translator notes, or credit watermarks across all {panels.length} panels in this chapter. Pristine originals are safely backed up before modification.
+            </p>
+
+            <div className="space-y-2">
+              <label className="text-xs font-semibold uppercase tracking-wider text-zinc-300 block">
+                Redaction Preset
+              </label>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBatchPreset("TOP_WATERMARK");
+                    setBatchHeight(80);
+                  }}
+                  className={`p-3 rounded-lg border text-left transition-all ${
+                    batchPreset === "TOP_WATERMARK"
+                      ? "bg-amber-950/60 border-amber-500 text-amber-200"
+                      : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200"
+                  }`}
+                >
+                  <div className="font-bold flex items-center gap-1.5 mb-1">
+                    <Icons.EyeOff className="w-4 h-4 text-amber-400" />
+                    <span>Top Watermark Banner</span>
+                  </div>
+                  <span className="text-[11px] opacity-80 block">
+                    Blurs header domain names & website URLs (top 80px)
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBatchPreset("BOTTOM_SUBSCRIBE");
+                    setBatchHeight(100);
+                  }}
+                  className={`p-3 rounded-lg border text-left transition-all ${
+                    batchPreset === "BOTTOM_SUBSCRIBE"
+                      ? "bg-amber-950/60 border-amber-500 text-amber-200"
+                      : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200"
+                  }`}
+                >
+                  <div className="font-bold flex items-center gap-1.5 mb-1">
+                    <Icons.EyeOff className="w-4 h-4 text-amber-400" />
+                    <span>Bottom Subscribe Note</span>
+                  </div>
+                  <span className="text-[11px] opacity-80 block">
+                    Blurs translator credits & subscribe banners (bottom 100px)
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setBatchPreset("ALL_TEXT_REGIONS")}
+                  className={`p-3 rounded-lg border text-left transition-all ${
+                    batchPreset === "ALL_TEXT_REGIONS"
+                      ? "bg-amber-950/60 border-amber-500 text-amber-200"
+                      : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200"
+                  }`}
+                >
+                  <div className="font-bold flex items-center gap-1.5 mb-1">
+                    <Icons.Layers className="w-4 h-4 text-indigo-400" />
+                    <span>All Detected Text</span>
+                  </div>
+                  <span className="text-[11px] opacity-80 block">
+                    Blurs all detected speech bubbles & OCR regions
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setBatchPreset("ENTIRE_PANEL")}
+                  className={`p-3 rounded-lg border text-left transition-all ${
+                    batchPreset === "ENTIRE_PANEL"
+                      ? "bg-amber-950/60 border-amber-500 text-amber-200"
+                      : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200"
+                  }`}
+                >
+                  <div className="font-bold flex items-center gap-1.5 mb-1">
+                    <Icons.EyeOff className="w-4 h-4 text-rose-400" />
+                    <span>Entire Panels</span>
+                  </div>
+                  <span className="text-[11px] opacity-80 block">
+                    Blurs 100% of the panel area (full promo/credit pages)
+                  </span>
+                </button>
+              </div>
+            </div>
+
+            {(batchPreset === "TOP_WATERMARK" || batchPreset === "BOTTOM_SUBSCRIBE") && (
+              <div className="bg-zinc-900/60 p-3 rounded-lg border border-zinc-800 space-y-1.5">
+                <label className="text-xs text-zinc-300 font-medium block">
+                  Banner Height (pixels from {batchPreset === "TOP_WATERMARK" ? "top" : "bottom"}):
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="range"
+                    min={40}
+                    max={250}
+                    step={10}
+                    value={batchHeight}
+                    onChange={(e) => setBatchHeight(Number(e.target.value))}
+                    className="flex-1 accent-amber-500"
+                  />
+                  <span className="text-xs font-mono text-amber-300 font-bold w-14 text-right">
+                    {batchHeight}px
+                  </span>
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-center justify-between pt-3 border-t border-zinc-800">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={handleRunBatchReset}
+                disabled={batchBlurLoading}
+                className="text-zinc-400 hover:text-rose-300 text-xs"
+                title="Restore all panels back to pristine originals"
+              >
+                <Icons.Refresh className="w-3.5 h-3.5 mr-1" />
+                Reset All Panels
+              </Button>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setIsBatchBlurModalOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  variant="primary"
+                  size="sm"
+                  loading={batchBlurLoading}
+                  onClick={handleRunBatchBlur}
+                  className="bg-amber-600 hover:bg-amber-500 text-white font-medium"
+                >
+                  <Icons.EyeOff className="w-4 h-4 mr-1.5" />
+                  Apply Batch Blur ({panels.length} Panels)
+                </Button>
+              </div>
+            </div>
+          </div>
+        </Modal>
       )}
 
       {/* Non-blocking Floating Toast Notification */}

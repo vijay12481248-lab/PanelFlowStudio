@@ -1,5 +1,5 @@
 import React from "react";
-import { Box, Wrench } from "lucide-react";
+import { Box } from "lucide-react";
 import { ErrorNotificationBell } from "../error";
 
 interface DashboardHeaderProps {
@@ -8,6 +8,8 @@ interface DashboardHeaderProps {
   onOpenToolsModels: () => void;
   onRetryEngine?: () => void;
   retryingEngine?: boolean;
+  onRestartEngine?: () => void;
+  restartingEngine?: boolean;
 }
 
 export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
@@ -16,23 +18,25 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
   onOpenToolsModels,
   onRetryEngine,
   retryingEngine,
+  onRestartEngine,
+  restartingEngine,
 }) => {
   return (
-    <header className="h-14 border-b border-[#181c2b] bg-[#0c0e18] px-4 flex items-center justify-between flex-shrink-0 z-20 select-none">
+    <header className="h-16 border-b border-[#1d2538] bg-[#0b0f18]/95 px-5 flex items-center justify-between flex-shrink-0 z-20 select-none backdrop-blur-xl">
       {/* Left: Logo & Tagline */}
       <div className="flex items-center">
         <div className="flex items-center gap-2.5 cursor-pointer">
-          <div className="w-7 h-7 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-black text-sm shadow-md shadow-indigo-600/30 flex-shrink-0">
-            P
+          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#6d5dfc] to-[#3f37c9] flex items-center justify-center text-white font-black text-sm shadow-lg shadow-indigo-900/40 flex-shrink-0">
+            <span className="-rotate-6">P</span>
           </div>
-          <span className="text-zinc-100 font-bold text-sm tracking-tight whitespace-nowrap">
+          <span className="text-zinc-100 font-semibold text-[15px] tracking-tight whitespace-nowrap">
             PanelFlow Studio
           </span>
         </div>
 
         <div className="hidden md:flex items-center ml-3 pl-3 border-l border-zinc-800">
-          <span className="text-xs text-zinc-400 font-normal truncate">
-            AI-Assisted Motion Comic Ingestion & Production Engine
+          <span className="text-[11px] text-zinc-500 font-normal truncate">
+            Story-to-motion production workspace
           </span>
         </div>
       </div>
@@ -43,15 +47,15 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
 
         <button
           onClick={onOpenToolsModels}
-          className="bg-[#151928] hover:bg-[#1d2338] border border-[#242c44] text-indigo-300 hover:text-indigo-200 text-xs font-medium rounded-lg px-3 py-1.5 flex items-center gap-1.5 transition-colors shadow-sm"
+          className="bg-[#151b2a] hover:bg-[#20283d] border border-[#27324c] text-indigo-200 hover:text-white text-xs font-medium rounded-lg px-3 py-2 flex items-center gap-1.5 transition-colors shadow-sm"
           title="Inspect local models, workers, and tool engines"
         >
-          <Box className="w-3.5 h-3.5 text-indigo-400" />
-          <span>Tools & Models</span>
+          <Box className="w-3.5 h-3.5 text-indigo-300" />
+          <span>Workspace health</span>
         </button>
 
         <div className="flex items-center gap-2 text-xs">
-          <span
+        <span
             className={`w-2 h-2 rounded-full ${
               engineConnected ? "bg-emerald-400 animate-pulse" : "bg-rose-500"
             }`}
@@ -61,8 +65,8 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
           </span>
         </div>
 
-        <span
-          className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold tracking-wider uppercase border ${
+          <span
+          className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wider uppercase border ${
             engineConnected
               ? "bg-[#062e20] text-emerald-400 border-emerald-700/80"
               : "bg-rose-950/80 text-rose-400 border-rose-800"
@@ -71,7 +75,14 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
           {engineConnected ? "CONNECTED" : "OFFLINE"}
         </span>
 
-        {!engineConnected && onRetryEngine && (
+        {onRestartEngine && (
+          <button onClick={onRestartEngine} disabled={!engineConnected || restartingEngine || retryingEngine}
+            className="text-xs text-zinc-300 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {restartingEngine ? "Restarting…" : "Restart Engine"}
+          </button>
+        )}
+        {!engineConnected && onRetryEngine && !restartingEngine && (
           <button
             onClick={onRetryEngine}
             disabled={retryingEngine}

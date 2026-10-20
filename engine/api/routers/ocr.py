@@ -1,11 +1,10 @@
-from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, status, Query
-from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from engine.database.session import get_db
 from engine.database.models import OCRRecord, TextRegionRecord
 from engine.projects.service import project_service
+from engine.security.paths import contained_file_response, project_path
 from engine.ocr.providers.registry import get_default_ocr_registry
 from engine.api.schemas import (
     OCREngineInfo,
@@ -190,11 +189,11 @@ def get_text_region_file(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Text region crop not found")
 
     proj = project_service.get_project(db, project_id)
-    crop_path = Path(proj.workspace_path) / "text_regions" / tr.crop_filename
-    if not crop_path.exists():
+    try:
+        crop_path = project_path(proj.workspace_path, "text_regions", tr.crop_filename)
+        return contained_file_response(proj.workspace_path, crop_path, media_type="image/jpeg")
+    except (ValueError, FileNotFoundError, OSError):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Crop file does not exist on disk")
-
-    return FileResponse(crop_path, media_type="image/jpeg")
 
 
 # -------------------------------------------------------------

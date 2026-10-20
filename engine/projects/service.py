@@ -38,8 +38,178 @@ from engine.acquisition.adapters.registry import AdapterRegistry
 from engine.imaging.normalization import page_normalizer, NormalizationConfig
 from engine.imaging.panels import panel_detector, PanelBox
 from engine.jobs.manager import job_manager
+from engine.security.paths import (
+    ensure_contained_directory,
+    open_contained_output,
+    project_path,
+    read_contained_bytes,
+    resolve_contained_path,
+    unlink_contained_file,
+    write_contained_image,
+)
 
 logger = logging.getLogger(__name__)
+
+
+def protected_panel_pages(db: Session, project_id: str) -> set[str]:
+    """Redetection must not invalidate approved work or timeline references."""
+    project = db.query(ProjectRecord).filter(ProjectRecord.id == project_id).first()
+    state = (project.settings or {}).get("story_editor_state", {}) if project else {}
+    linked = {layer.get("source_panel_id") for scene in state.get("scenes", [])
+              for layer in scene.get("layers", [])}
+    return {p.page_id for p in db.query(PanelRecord).filter(PanelRecord.project_id == project_id).all()
+            if p.manually_modified or p.status in ("MANUAL", "CONFIRMED") or p.id in linked}
+
+
+def reconcile_story_editor_state_with_panels(
+    db: Session,
+    project_id: str,
+    state: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    """Refresh source-panel geometry without overwriting editor-authored motion.
+
+    Panel Review is the source of truth for page/panel geometry. Story Editor
+    owns scene timing, transforms, motion, and audio. Reconcile only the shared
+    source fields at every read/save/render boundary so the two workflows cannot
+    silently drift apart.
+    """
+    if not isinstance(state, dict):
+        return state
+
+    panels = {
+        panel.id: panel
+        for panel in db.query(PanelRecord)
+        .filter(PanelRecord.project_id == project_id)
+        .all()
+    }
+    
+    # Track used panels for validation
+    used_panels = set()
+    removed_layers = []
+    
+    reconciled = json.loads(json.dumps(state))
+    scenes = reconciled.get("scenes", [])
+    
+    # Track which panels are referenced by scenes
+    for scene in scenes:
+        scene_layers = scene.get("layers", [])
+        # Filter out layers referencing deleted panels
+        active_layers = []
+        for layer in scene_layers:
+            panel_id = layer.get("source_panel_id")
+            if not panel_id:
+                active_layers.append(layer)
+                continue
+                
+            panel = panels.get(panel_id)
+            if not panel:
+                # Panel was deleted in Panel Review - mark layer for removal
+                removed_layers.append({
+                    "scene_id": scene.get("id"),
+                    "layer_id": layer.get("id"),
+                    "panel_id": panel_id,
+                })
+                active_layers.append(layer)
+                continue
+            
+            used_panels.add(panel_id)
+            # Update panel geometry and metadata
+            layer["source_page_id"] = panel.page_id
+            layer["page_sequence"] = panel.page_sequence
+            layer["crop"] = {
+                "x": panel.x,
+                "y": panel.y,
+                "width": panel.width,
+                "height": panel.height,
+            }
+            layer["name"] = layer.get("name") or f"Panel #{panel.page_sequence}"
+            layer["panel_updated_at"] = panel.updated_at.isoformat() if panel.updated_at else None
+            layer["panel_sequence"] = panel.sequence
+            active_layers.append(layer)
+        
+        scene["layers"] = active_layers
+        
+        # Remove empty scenes
+        if not scene.get("layers"):
+            reconciled.get("panels_stale", False)
+    
+    # Detect panel changes by comparing panel count and order
+    current_panel_ids = sorted(panels.keys())
+    if state.get("scenes"):
+        # Extract panel IDs from state in order
+        state_panel_ids = []
+        for scene in state.get("scenes", []):
+            for layer in scene.get("layers", []):
+                pid = layer.get("source_panel_id")
+                if pid:
+                    state_panel_ids.append(pid)
+        
+        # Check if panels have been added/removed/reordered
+        if set(state_panel_ids) != set(current_panel_ids):
+            reconciled["panels_stale"] = True
+            reconciled["panel_sync_required"] = True
+        else:
+            # Check if order changed
+            # Only check order for panels that are still present
+            common_ids = [pid for pid in state_panel_ids if pid in panels]
+            if common_ids != sorted([pid for pid in current_panel_ids if pid in state_panel_ids], key=lambda x: panels[x].sequence):
+                reconciled["panels_stale"] = True
+                reconciled["panel_sync_required"] = True
+    
+    # Update panel metadata
+    reconciled["panel_review_sync"] = {
+        "synced_at": datetime.now(timezone.utc).isoformat(),
+        "panel_count": len(panels),
+        "used_panel_count": len(used_panels),
+        "removed_layers_count": len(removed_layers),
+        "removed_layers": removed_layers,
+        "panels_stale": reconciled.get("panels_stale", False),
+    }
+    
+    return reconciled
+
+def align_panel_scenes(db: Session, project_id: str, state: dict) -> dict:
+    """Explicitly rebuild panel membership/order, retaining surviving scene edits."""
+    result = json.loads(json.dumps(state))
+    panels = db.query(PanelRecord).filter(PanelRecord.project_id == project_id,
+                                         PanelRecord.status != "IGNORED").order_by(PanelRecord.sequence).all()
+    scenes = result.get("scenes", [])
+    if any(len(s.get("layers", [])) != 1 or not s["layers"][0].get("source_panel_id") for s in scenes):
+        raise ValueError("Automatic alignment requires one source panel per scene. Review custom or multi-layer scenes manually.")
+    existing = {s["layers"][0]["source_panel_id"]: s for s in scenes}
+    if len(existing) != len(scenes):
+        raise ValueError("Repeated panels have custom timing. Review their order manually.")
+    old_starts = {s["id"]: float(s.get("start_time_sec", 0)) for s in scenes}
+    aligned = []
+    time = 0.0
+    for panel in panels:
+        scene = existing.get(panel.id) or {
+            "id": f"scene_{panel.id}", "title": f"Panel {panel.sequence}", "duration_sec": 4.0,
+            "transition_in": "none", "layers": [{"id": f"layer_{panel.id}",
+                "source_panel_id": panel.id, "source_page_id": panel.page_id,
+                "image_url": f"/api/projects/{project_id}/pages/{panel.page_id}/file",
+                "transform": {"x": 0, "y": 0, "scale": 1, "rotation": 0, "opacity": 1, "z_index": 1},
+                "motion_preset": "none", "start_offset_sec": 0, "duration_sec": 4.0}]}
+        scene["sequence"] = len(aligned) + 1
+        scene["start_time_sec"] = time
+        time += float(scene["duration_sec"])
+        aligned.append(scene)
+    # Audio belonging to removed scenes needs a deliberate editorial decision.
+    surviving = {s["id"]: s for s in aligned}
+    for clip in result.get("narration_clips", []):
+        scene_id = clip.get("scene_id")
+        if clip.get("linked_to_scene", True) and scene_id in old_starts:
+            if scene_id not in surviving:
+                raise ValueError("A removed panel has linked narration. Reassign or remove that narration before alignment.")
+            clip["start_time_sec"] = float(clip.get("start_time_sec", 0)) + surviving[scene_id]["start_time_sec"] - old_starts[scene_id]
+    result["scenes"] = aligned
+    result["panels_stale"] = False
+    result["panel_sync_required"] = False
+    result["selected_object"] = None
+    result["is_playing"] = False
+    result["playhead_sec"] = 0
+    return reconcile_story_editor_state_with_panels(db, project_id, result)
+
 
 def utc_now():
     return datetime.now(timezone.utc)
@@ -78,13 +248,17 @@ class ProjectService:
             custom_path = source_metadata.get("project_path")
 
         if custom_path:
-            workspace_path = Path(custom_path).resolve()
+            workspace_path = Path(custom_path).expanduser().absolute()
         else:
             workspace_path = self.workspace_root / project_id
 
+        resolve_contained_path(workspace_path.parent, workspace_path.name)
+        if workspace_path.exists() and any(workspace_path.iterdir()):
+            raise ValueError("Project destination must be an empty directory")
         workspace_path.mkdir(parents=True, exist_ok=True)
+        resolve_contained_path(workspace_path, "project.json")
         for sub in ("source", "normalized", "panels", "ocr", "story", "script", "audio", "motion", "renders", "logs"):
-            (workspace_path / sub).mkdir(exist_ok=True)
+            resolve_contained_path(workspace_path, sub).mkdir(exist_ok=True)
 
         initial_stage = (
             PipelineStage.RIGHTS_APPROVED
@@ -118,7 +292,6 @@ class ProjectService:
         return record
 
     def _write_project_json(self, record: ProjectRecord) -> None:
-        p_path = Path(record.workspace_path) / "project.json"
         data = {
             "id": record.id,
             "title": record.title,
@@ -131,8 +304,8 @@ class ProjectService:
             "created_at": record.created_at.isoformat() if record.created_at else None,
             "updated_at": record.updated_at.isoformat() if record.updated_at else None,
         }
-        with open(p_path, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
+        with open_contained_output(record.workspace_path, "project.json") as f:
+            f.write(json.dumps(data, indent=2).encode("utf-8"))
 
     def get_project(self, db: Session, project_id: str) -> ProjectRecord | None:
         return db.query(ProjectRecord).filter(ProjectRecord.id == project_id).first()
@@ -145,20 +318,17 @@ class ProjectService:
         if not record:
             return False
 
-        ws_path = Path(record.workspace_path)
-        if ws_path.is_dir():
-            try:
-                shutil.rmtree(ws_path)
-            except Exception as e:
-                logger.warning(f"Error deleting workspace {ws_path}: {e}")
-
-        db.delete(record)
-        db.commit()
-        return True
+        # A checked pathname and its marker do not bind shutil.rmtree to the
+        # same directory. An ordinary directory can be renamed into place.
+        # Refuse deletion until a handle-bound recursive remover is available.
+        raise NotImplementedError("Whole-project deletion requires handle-bound traversal")
 
     def sync_manifest_with_db(self, db: Session, project_id: str) -> AcquisitionManifest:
         """
-        Reconstructs and atomically writes `manifest.json` from SQLite pages.
+        Reconstructs `manifest.json` from SQLite pages using a contained handle.
+
+        The write is intentionally not atomic: a pathname-based temporary-file
+        replace can escape through a concurrently swapped junction.
         """
         record = self.get_project(db, project_id)
         if not record:
@@ -172,16 +342,12 @@ class ProjectService:
         )
 
         ws_path = Path(record.workspace_path)
-        manifest_file = ws_path / "manifest.json"
-
         created_at_iso = utc_now().isoformat()
-        if manifest_file.exists():
-            try:
-                with open(manifest_file, "r", encoding="utf-8") as f:
-                    old_data = json.load(f)
-                    created_at_iso = old_data.get("created_at", created_at_iso)
-            except Exception:
-                pass
+        try:
+            old_data = json.loads(read_contained_bytes(ws_path, "manifest.json").decode("utf-8"))
+            created_at_iso = old_data.get("created_at", created_at_iso)
+        except (FileNotFoundError, ValueError, OSError, json.JSONDecodeError):
+            pass
 
         manifest_pages = [
             ManifestPage(
@@ -218,10 +384,10 @@ class ProjectService:
             pages=manifest_pages,
         )
 
-        temp_manifest = ws_path / "manifest.json.tmp"
-        with open(temp_manifest, "w", encoding="utf-8") as f:
-            f.write(manifest.model_dump_json(indent=2))
-        temp_manifest.replace(manifest_file)
+        # Direct handle-backed write: pathname-based replace is unsafe under a
+        # concurrent junction swap. This metadata update is not atomic.
+        with open_contained_output(ws_path, "manifest.json") as f:
+            f.write(manifest.model_dump_json(indent=2).encode("utf-8"))
 
         return manifest
 
@@ -231,6 +397,12 @@ class ProjectService:
         project_id: str,
         adapter_registry: AdapterRegistry,
         source_override: str | None = None,
+        chapter_id: str | None = None,
+        adapter_id: str | None = None,
+        page_delay_sec: float | None = None,
+        candidate_snapshot: list[dict] | None = None,
+        chapter_snapshot: dict | None = None,
+        operation_only: bool = False,
     ) -> str:
         record = self.get_project(db, project_id)
         if not record:
@@ -248,22 +420,34 @@ class ProjectService:
             raise ValueError("No source URL or directory path provided for project acquisition.")
 
         adapter = adapter_registry.get_adapter_for(source_loc)
-        inspection = adapter.inspect(source_loc)
-        if not inspection.is_valid:
-            raise ValueError(f"Source validation failed: {inspection.error}")
-
-        chapters = adapter.list_chapters(source_loc)
-        if not chapters:
-            raise ValueError("No chapters or image sequences discovered from source.")
-
-        selected_chapter = chapters[0]
-        candidates = adapter.list_pages(selected_chapter)
+        if adapter_id and adapter.adapter_id != adapter_id:
+            raise ValueError(f"Persisted acquisition adapter is unavailable: {adapter_id}")
+        if operation_only:
+            if not candidate_snapshot or not chapter_snapshot:
+                raise ValueError("Persisted acquisition snapshot is missing")
+            selected_chapter = ChapterInfo.model_validate(chapter_snapshot)
+            if chapter_id != selected_chapter.id:
+                raise ValueError("Persisted acquisition chapter snapshot does not match")
+            candidates = [PageCandidate.model_validate(item) for item in candidate_snapshot]
+        else:
+            inspection = adapter.inspect(source_loc)
+            if not inspection.is_valid:
+                raise ValueError(f"Source validation failed: {inspection.error}")
+            chapters = adapter.list_chapters(source_loc)
+            if not chapters:
+                raise ValueError("No chapters or image sequences discovered from source.")
+            selected_chapter = next((chapter for chapter in chapters if chapter.id == chapter_id), None) if chapter_id else chapters[0]
+            if selected_chapter is None:
+                raise ValueError(f"Persisted acquisition chapter was not found: {chapter_id}")
+            candidates = adapter.list_pages(selected_chapter)
         if not candidates:
             raise ValueError("No image candidates discovered in chapter.")
+        if len({candidate.sequence for candidate in candidates}) != len(candidates):
+            raise ValueError("Acquisition snapshot contains duplicate page sequences")
 
         # Check for simulated delay from project settings
-        page_delay = 0.0
-        if record.settings and "simulated_page_delay_sec" in record.settings:
+        page_delay = 0.0 if page_delay_sec is None else page_delay_sec
+        if page_delay_sec is None and record.settings and "simulated_page_delay_sec" in record.settings:
             try:
                 page_delay = float(record.settings["simulated_page_delay_sec"])
             except (ValueError, TypeError):
@@ -275,19 +459,22 @@ class ProjectService:
                     c.extra_metadata = {}
                 c.extra_metadata["delay_sec"] = page_delay
 
-        # Create job
-        job = job_manager.create_job(
-            project_id=project_id,
-            job_type=JobType.ACQUISITION,
-            job_input={
-                "source": source_loc,
-                "chapter_id": selected_chapter.id,
-                "total_pages": len(candidates),
-                "adapter_id": adapter.adapter_id,
-                "page_delay_sec": page_delay,
-            },
-        )
-        job_id = job.job_id
+        job_id = None
+        if not operation_only:
+            job = job_manager.create_job(
+                project_id=project_id,
+                job_type=JobType.ACQUISITION,
+                job_input={
+                    "source": source_loc,
+                    "chapter_id": selected_chapter.id,
+                    "total_pages": len(candidates),
+                    "adapter_id": adapter.adapter_id,
+                    "page_delay_sec": page_delay,
+                    "chapter": selected_chapter.model_dump(mode="json"),
+                    "candidates": [candidate.model_dump(mode="json") for candidate in candidates],
+                },
+            )
+            job_id = job.job_id
 
         # Define background async task
         async def run_acquisition(cancel_token: PipelineCancellationToken, progress_cb):
@@ -307,9 +494,14 @@ class ProjectService:
                 cancel_token=cancel_token,
             )
 
+            if cancel_token.is_cancelled:
+                raise RuntimeError("Acquisition worker lease was lost before database publication")
+
             # Update DB Page records
             from engine.database.session import SessionLocal
             with SessionLocal() as inner_db:
+                if cancel_token.is_cancelled:
+                    raise RuntimeError("Acquisition worker lease was lost before page publication")
                 # Remove prior pages
                 inner_db.query(PageRecord).filter(PageRecord.project_id == project_id).delete()
                 
@@ -335,14 +527,20 @@ class ProjectService:
                         ready_count += 1
 
                 # Update project stage ONLY if not cancelled
-                if not cancel_token.is_cancelled:
-                    proj = inner_db.query(ProjectRecord).filter(ProjectRecord.id == project_id).first()
-                    if proj and ready_count > 0:
-                        proj.current_stage = PipelineStage.ACQUIRED.value
-                        proj.updated_at = utc_now()
-                        self._write_project_json(proj)
+                proj = inner_db.query(ProjectRecord).filter(ProjectRecord.id == project_id).first()
+                stage_changed = bool(proj and ready_count > 0)
+                if stage_changed:
+                    proj.current_stage = PipelineStage.ACQUIRED.value
+                    proj.updated_at = utc_now()
 
+                if cancel_token.is_cancelled:
+                    raise RuntimeError("Acquisition worker lease was lost before database commit")
                 inner_db.commit()
+                if stage_changed:
+                    if cancel_token.is_cancelled:
+                        raise RuntimeError("Acquisition worker lease was lost before project metadata publication")
+                    inner_db.refresh(proj)
+                    self._write_project_json(proj)
 
             return {
                 "total": len(candidates),
@@ -350,6 +548,8 @@ class ProjectService:
                 "failed": len([r for r in results if not r.success]),
             }
 
+        if operation_only:
+            return run_acquisition
         job_manager.enqueue_async(job_id, run_acquisition)
         return job_id
 
@@ -358,49 +558,62 @@ class ProjectService:
         db: Session,
         project_id: str,
         adapter_registry: AdapterRegistry,
+        page_ids: list[str] | None = None,
+        source_override: str | None = None,
+        adapter_id: str | None = None,
+        operation_only: bool = False,
     ) -> str:
         record = self.get_project(db, project_id)
         if not record:
             raise KeyError(f"Project not found: {project_id}")
 
-        failed_pages = (
-            db.query(PageRecord)
-            .filter(PageRecord.project_id == project_id, PageRecord.status == "FAILED")
-            .order_by(PageRecord.sequence.asc())
-            .all()
-        )
+        failed_query = db.query(PageRecord).filter(PageRecord.project_id == project_id, PageRecord.status == "FAILED")
+        if page_ids is not None:
+            failed_query = failed_query.filter(PageRecord.id.in_(page_ids))
+        failed_pages = failed_query.order_by(PageRecord.sequence.asc()).all()
+        if page_ids is not None and ({page.id for page in failed_pages} != set(page_ids) or len(page_ids) != len(failed_pages)):
+            raise ValueError("Persisted retry page set is no longer available")
         if not failed_pages:
             raise ValueError("No failed pages found to retry.")
 
-        source_loc = record.source_url or record.source_metadata.get("path")
+        source_loc = source_override or record.source_url or record.source_metadata.get("path")
         adapter = adapter_registry.get_adapter_for(source_loc)
+        if adapter_id and adapter.adapter_id != adapter_id:
+            raise ValueError(f"Persisted retry adapter is unavailable: {adapter_id}")
 
         candidates = [
             PageCandidate(
                 sequence=p.sequence,
-                source_uri=p.source_url or str(Path(record.workspace_path) / "source" / p.filename),
+                source_uri=p.source_url or str(project_path(record.workspace_path, "source", p.filename)),
                 suggested_filename=p.filename,
             )
             for p in failed_pages
         ]
 
-        job = job_manager.create_job(
-            project_id=project_id,
-            job_type=JobType.RETRY_PAGES,
-            job_input={"retry_count": len(candidates)},
-        )
-        job_id = job.job_id
+        job_id = None
+        if not operation_only:
+            job = job_manager.create_job(
+                project_id=project_id,
+                job_type=JobType.RETRY_PAGES,
+                job_input={
+                    "retry_count": len(candidates),
+                    "page_ids": [page.id for page in failed_pages],
+                    "source": source_loc,
+                    "adapter_id": adapter.adapter_id,
+                },
+            )
+            job_id = job.job_id
 
         async def run_retry(cancel_token: PipelineCancellationToken, progress_cb):
             pipeline = DownloadPipeline()
             ws_path = Path(record.workspace_path)
 
             # Read existing manifest
-            manifest_file = ws_path / "manifest.json"
             existing_manifest = None
-            if manifest_file.exists():
-                with open(manifest_file, "r", encoding="utf-8") as f:
-                    existing_manifest = AcquisitionManifest.model_validate_json(f.read())
+            try:
+                existing_manifest = AcquisitionManifest.model_validate_json(read_contained_bytes(ws_path, "manifest.json"))
+            except FileNotFoundError:
+                pass
 
             results, manifest = await pipeline.execute(
                 project_id=project_id,
@@ -415,9 +628,14 @@ class ProjectService:
                 existing_manifest=existing_manifest,
             )
 
+            if cancel_token.is_cancelled:
+                raise RuntimeError("Retry worker lease was lost before database publication")
+
             # Update DB records for retried pages
             from engine.database.session import SessionLocal
             with SessionLocal() as inner_db:
+                if cancel_token.is_cancelled:
+                    raise RuntimeError("Retry worker lease was lost before page publication")
                 for r in results:
                     p_rec = (
                         inner_db.query(PageRecord)
@@ -439,18 +657,28 @@ class ProjectService:
                             p_rec.error_message = r.error_message
 
                 # Check if we now have ready pages and can advance stage
-                if not cancel_token.is_cancelled:
-                    ready_count = inner_db.query(PageRecord).filter(
-                        PageRecord.project_id == project_id,
-                        PageRecord.status == "READY"
-                    ).count()
-                    proj = inner_db.query(ProjectRecord).filter(ProjectRecord.id == project_id).first()
-                    if proj and ready_count > 0 and proj.current_stage == PipelineStage.RIGHTS_APPROVED.value:
-                        proj.current_stage = PipelineStage.ACQUIRED.value
-                        proj.updated_at = utc_now()
-                        self._write_project_json(proj)
+                ready_count = inner_db.query(PageRecord).filter(
+                    PageRecord.project_id == project_id,
+                    PageRecord.status == "READY"
+                ).count()
+                proj = inner_db.query(ProjectRecord).filter(ProjectRecord.id == project_id).first()
+                stage_changed = bool(
+                    proj and ready_count > 0 and proj.current_stage == PipelineStage.RIGHTS_APPROVED.value
+                )
+                if stage_changed:
+                    proj.current_stage = PipelineStage.ACQUIRED.value
+                    proj.updated_at = utc_now()
 
+                if cancel_token.is_cancelled:
+                    raise RuntimeError("Retry worker lease was lost before database commit")
                 inner_db.commit()
+                if stage_changed:
+                    if cancel_token.is_cancelled:
+                        raise RuntimeError("Retry worker lease was lost before project metadata publication")
+                    inner_db.refresh(proj)
+                    self._write_project_json(proj)
+                if cancel_token.is_cancelled:
+                    raise RuntimeError("Retry worker lease was lost before manifest synchronization")
                 self.sync_manifest_with_db(inner_db, project_id)
 
             return {
@@ -459,6 +687,8 @@ class ProjectService:
                 "remaining_failed": len([r for r in results if not r.success]),
             }
 
+        if operation_only:
+            return run_retry
         job_manager.enqueue_async(job_id, run_retry)
         return job_id
 
@@ -491,10 +721,10 @@ class ProjectService:
         if not page:
             raise KeyError(f"Page not found: {page_id}")
 
-        file_path = Path(record.workspace_path) / "source" / page.filename
+        file_path = project_path(record.workspace_path, "source", page.filename)
         if file_path.exists():
             try:
-                file_path.unlink()
+                unlink_contained_file(record.workspace_path, Path("source") / page.filename)
             except Exception as e:
                 logger.warning(f"Error removing file {file_path}: {e}")
 
@@ -523,7 +753,7 @@ class ProjectService:
         if not page:
             raise KeyError(f"Page not found: {page_id}")
 
-        file_path = Path(record.workspace_path) / "source" / page.filename
+        file_path = project_path(record.workspace_path, "source", page.filename)
         if not file_path.exists():
             raise FileNotFoundError(f"Source file does not exist: {file_path}")
 
@@ -564,30 +794,38 @@ class ProjectService:
         db: Session,
         project_id: str,
         target_width: int = 1920,
+        page_ids: list[str] | None = None,
+        operation_only: bool = False,
     ) -> str:
         record = self.get_project(db, project_id)
         if not record:
             raise KeyError(f"Project not found: {project_id}")
 
-        pages = (
-            db.query(PageRecord)
-            .filter(PageRecord.project_id == project_id, PageRecord.status == "READY")
-            .order_by(PageRecord.sequence.asc())
-            .all()
-        )
+        page_query = db.query(PageRecord).filter(PageRecord.project_id == project_id, PageRecord.status == "READY")
+        if page_ids:
+            page_query = page_query.filter(PageRecord.id.in_(page_ids))
+        pages = page_query.order_by(PageRecord.sequence.asc()).all()
         if not pages:
             raise ValueError("No ready pages available to normalize.")
+        if page_ids and {page.id for page in pages} != set(page_ids):
+            raise ValueError("Persisted normalization page set is no longer available.")
 
-        job = job_manager.create_job(
-            project_id=project_id,
-            job_type=JobType.NORMALIZATION,
-            job_input={"total_pages": len(pages), "target_width": target_width},
-        )
-        job_id = job.job_id
+        job_id = None
+        if not operation_only:
+            job = job_manager.create_job(
+                project_id=project_id,
+                job_type=JobType.NORMALIZATION,
+                job_input={
+                    "total_pages": len(pages),
+                    "target_width": target_width,
+                    "page_ids": [page.id for page in pages],
+                },
+            )
+            job_id = job.job_id
 
         async def run_normalization(cancel_token: PipelineCancellationToken, progress_cb):
             ws_path = Path(record.workspace_path)
-            norm_dir = ws_path / "normalized"
+            norm_dir = resolve_contained_path(ws_path, "normalized")
             norm_dir.mkdir(parents=True, exist_ok=True)
 
             config = NormalizationConfig(target_width=target_width)
@@ -597,8 +835,8 @@ class ProjectService:
             for idx, p in enumerate(pages, start=1):
                 if cancel_token.is_cancelled:
                     break
-                src_img = ws_path / "source" / p.filename
-                out_img = norm_dir / f"page_{p.sequence:04d}.jpg"
+                src_img = project_path(ws_path, "source", p.filename)
+                out_img = project_path(ws_path, "normalized", f"page_{p.sequence:04d}.jpg")
                 norm_res = page_normalizer.normalize_page(src_img, out_img, config)
 
                 with SessionLocal() as inner_db:
@@ -634,6 +872,8 @@ class ProjectService:
 
             return {"normalized_pages": total}
 
+        if operation_only:
+            return run_normalization
         job_manager.enqueue_async(job_id, run_normalization)
         return job_id
 
@@ -644,41 +884,51 @@ class ProjectService:
         reading_direction: str = "ltr",
         min_area_ratio: float = 0.02,
         profile: str = "AUTO",
+        page_ids: list[str] | None = None,
+        operation_only: bool = False,
     ) -> str:
         record = self.get_project(db, project_id)
         if not record:
             raise KeyError(f"Project not found: {project_id}")
 
-        pages = (
-            db.query(PageRecord)
-            .filter(PageRecord.project_id == project_id, PageRecord.status == "READY")
-            .order_by(PageRecord.sequence.asc())
-            .all()
-        )
+        page_query = db.query(PageRecord).filter(PageRecord.project_id == project_id, PageRecord.status == "READY")
+        if page_ids:
+            page_query = page_query.filter(PageRecord.id.in_(page_ids))
+        pages = page_query.order_by(PageRecord.sequence.asc()).all()
         if not pages:
             raise ValueError("No ready pages found for panel detection.")
+        if page_ids and {page.id for page in pages} != set(page_ids):
+            raise ValueError("Persisted panel-detection page set is no longer available.")
 
-        job = job_manager.create_job(
-            project_id=project_id,
-            job_type=JobType.PANEL_DETECTION,
-            job_input={
-                "total_pages": len(pages),
-                "reading_direction": reading_direction,
-                "min_area_ratio": min_area_ratio,
-                "profile": profile,
-            },
-        )
-        job_id = job.job_id
+        job_id = None
+        if not operation_only:
+            job = job_manager.create_job(
+                project_id=project_id,
+                job_type=JobType.PANEL_DETECTION,
+                job_input={
+                    "total_pages": len(pages),
+                    "reading_direction": reading_direction,
+                    "min_area_ratio": min_area_ratio,
+                    "profile": profile,
+                    "page_ids": [page.id for page in pages],
+                },
+            )
+            job_id = job.job_id
 
         async def run_detection(cancel_token: PipelineCancellationToken, progress_cb):
             ws_path = Path(record.workspace_path)
-            norm_dir = ws_path / "normalized"
-            panels_dir = ws_path / "panels"
+            norm_dir = resolve_contained_path(ws_path, "normalized")
+            panels_dir = resolve_contained_path(ws_path, "panels")
             panels_dir.mkdir(parents=True, exist_ok=True)
 
             from engine.database.session import SessionLocal
             with SessionLocal() as inner_db:
-                inner_db.query(PanelRecord).filter(PanelRecord.project_id == project_id).delete()
+                protected_pages = protected_panel_pages(inner_db, project_id)
+                selected_page_ids = [page.id for page in pages if page.id not in protected_pages]
+                inner_db.query(PanelRecord).filter(
+                    PanelRecord.project_id == project_id,
+                    PanelRecord.page_id.in_(selected_page_ids),
+                ).delete(synchronize_session=False)
                 inner_db.commit()
 
             total_pages = len(pages)
@@ -687,10 +937,13 @@ class ProjectService:
             for p_idx, page in enumerate(pages, start=1):
                 if cancel_token.is_cancelled:
                     break
+                if page.id in protected_pages:
+                    progress_cb(p_idx / total_pages, f"Preserved edited or linked panels on page {p_idx}/{total_pages}")
+                    continue
 
-                img_path = norm_dir / f"page_{page.sequence:04d}.jpg"
+                img_path = project_path(ws_path, "normalized", f"page_{page.sequence:04d}.jpg")
                 if not img_path.exists():
-                    img_path = ws_path / "source" / page.filename
+                    img_path = project_path(ws_path, "source", page.filename)
 
                 detected_boxes = panel_detector.detect_panels(
                     img_path,
@@ -701,8 +954,8 @@ class ProjectService:
 
                 with SessionLocal() as inner_db:
                     for p_box in detected_boxes:
-                        crop_filename = f"panel_{overall_seq:04d}.jpg"
-                        crop_path = panels_dir / crop_filename
+                        crop_filename = f"panel_{p_box.id}.jpg"
+                        crop_path = project_path(ws_path, "panels", crop_filename)
 
                         panel_detector.extract_crop(img_path, p_box, crop_path)
 
@@ -720,6 +973,7 @@ class ProjectService:
                             normalized_y=p_box.normalized_y,
                             normalized_width=p_box.normalized_width,
                             normalized_height=p_box.normalized_height,
+                            polygon_json=p_box.polygon_json,
                             crop_filename=crop_filename,
                             reading_direction=reading_direction,
                             detection_method=p_box.detection_method,
@@ -738,10 +992,14 @@ class ProjectService:
                 progress_cb(p_idx / total_pages, f"Detected panels on page {p_idx}/{total_pages}")
 
             with SessionLocal() as inner_db:
+                self._resequence_project_panels(inner_db, project_id)
                 self._sync_panels_json(inner_db, project_id)
 
-            return {"total_panels_detected": overall_seq - 1}
+            return {"total_panels_detected": overall_seq - 1,
+                    "preserved_pages": len(set(page.id for page in pages) & protected_pages)}
 
+        if operation_only:
+            return run_detection
         job_manager.enqueue_async(job_id, run_detection)
         return job_id
 
@@ -763,17 +1021,19 @@ class ProjectService:
             raise KeyError(f"Page not found: {page_id}")
 
         ws_path = Path(record.workspace_path)
-        img_path = ws_path / "normalized" / f"page_{page.sequence:04d}.jpg"
+        img_path = project_path(ws_path, "normalized", f"page_{page.sequence:04d}.jpg")
         if not img_path.exists():
-            img_path = ws_path / "source" / page.filename
+            img_path = project_path(ws_path, "source", page.filename)
 
         # Remove existing panels for this page
+        if page_id in protected_panel_pages(db, project_id):
+            return self.list_panels(db, project_id, page_id)
         existing_panels = db.query(PanelRecord).filter(PanelRecord.page_id == page_id).all()
         for ep in existing_panels:
-            cf = ws_path / "panels" / ep.crop_filename
+            cf = project_path(ws_path, "panels", ep.crop_filename)
             if cf.exists():
                 try:
-                    cf.unlink()
+                    unlink_contained_file(ws_path, Path("panels") / ep.crop_filename)
                 except Exception:
                     pass
             db.delete(ep)
@@ -786,14 +1046,14 @@ class ProjectService:
             profile=profile,
         )
 
-        panels_dir = ws_path / "panels"
+        panels_dir = resolve_contained_path(ws_path, "panels")
         panels_dir.mkdir(parents=True, exist_ok=True)
 
         max_seq = db.query(PanelRecord).filter(PanelRecord.project_id == project_id).count()
 
         for idx, p_box in enumerate(detected_boxes, start=1):
             crop_filename = f"panel_{page.sequence:04d}_{idx:03d}.jpg"
-            crop_path = panels_dir / crop_filename
+            crop_path = project_path(ws_path, "panels", crop_filename)
             panel_detector.extract_crop(img_path, p_box, crop_path)
 
             pr = PanelRecord(
@@ -810,6 +1070,7 @@ class ProjectService:
                 normalized_y=p_box.normalized_y,
                 normalized_width=p_box.normalized_width,
                 normalized_height=p_box.normalized_height,
+                polygon_json=p_box.polygon_json,
                 crop_filename=crop_filename,
                 reading_direction=reading_direction,
                 detection_method=p_box.detection_method,
@@ -853,9 +1114,9 @@ class ProjectService:
             raise KeyError(f"Page not found: {page_id}")
 
         ws_path = Path(record.workspace_path)
-        img_path = ws_path / "normalized" / f"page_{page.sequence:04d}.jpg"
+        img_path = project_path(ws_path, "normalized", f"page_{page.sequence:04d}.jpg")
         if not img_path.exists():
-            img_path = ws_path / "source" / page.filename
+            img_path = project_path(ws_path, "source", page.filename)
 
         orig_w = page.width or 1200
         orig_h = page.height or 1800
@@ -865,7 +1126,7 @@ class ProjectService:
 
         panel_id = str(uuid.uuid4())
         crop_filename = f"panel_{max_seq:04d}.jpg"
-        crop_path = ws_path / "panels" / crop_filename
+        crop_path = project_path(ws_path, "panels", crop_filename)
 
         p_box = PanelBox(
             id=panel_id,
@@ -894,6 +1155,7 @@ class ProjectService:
             normalized_y=round(float(y) / float(orig_h), 4),
             normalized_width=round(float(width) / float(orig_w), 4),
             normalized_height=round(float(height) / float(orig_h), 4),
+            polygon_json=p_box.polygon_json,
             crop_filename=crop_filename,
             reading_direction="ltr",
             detection_method="MANUAL",
@@ -933,9 +1195,9 @@ class ProjectService:
 
         page = db.query(PageRecord).filter(PageRecord.id == panel.page_id).first()
         ws_path = Path(record.workspace_path)
-        img_path = ws_path / "normalized" / f"page_{page.sequence:04d}.jpg"
+        img_path = project_path(ws_path, "normalized", f"page_{page.sequence:04d}.jpg")
         if not img_path.exists():
-            img_path = ws_path / "source" / page.filename
+            img_path = project_path(ws_path, "source", page.filename)
 
         orig_w = page.width or 1200
         orig_h = page.height or 1800
@@ -955,7 +1217,7 @@ class ProjectService:
             panel.panel_type = panel_type
         panel.updated_at = utc_now()
 
-        crop_path = ws_path / "panels" / panel.crop_filename
+        crop_path = project_path(ws_path, "panels", panel.crop_filename)
         p_box = PanelBox(
             id=panel.id,
             page_id=panel.page_id,
@@ -992,9 +1254,9 @@ class ProjectService:
 
         page = db.query(PageRecord).filter(PageRecord.id == panel.page_id).first()
         ws_path = Path(record.workspace_path)
-        img_path = ws_path / "normalized" / f"page_{page.sequence:04d}.jpg"
+        img_path = project_path(ws_path, "normalized", f"page_{page.sequence:04d}.jpg")
         if not img_path.exists():
-            img_path = ws_path / "source" / page.filename
+            img_path = project_path(ws_path, "source", page.filename)
 
         orig_w = page.width or 1200
         orig_h = page.height or 1800
@@ -1010,7 +1272,7 @@ class ProjectService:
             p1_box = (panel.x, panel.y, split_w1, panel.height)
             p2_box = (panel.x + split_w1, panel.y, split_w2, panel.height)
 
-        panels_dir = ws_path / "panels"
+        panels_dir = resolve_contained_path(ws_path, "panels")
 
         # Update first panel in-place
         panel.width = p1_box[2]
@@ -1023,13 +1285,13 @@ class ProjectService:
         panel.updated_at = utc_now()
 
         box1 = PanelBox(id=panel.id, page_id=panel.page_id, sequence=panel.page_sequence, x=panel.x, y=panel.y, width=panel.width, height=panel.height)
-        panel_detector.extract_crop(img_path, box1, panels_dir / panel.crop_filename)
+        panel_detector.extract_crop(img_path, box1, project_path(record.workspace_path, "panels", panel.crop_filename))
 
         # Create second panel
         p2_id = str(uuid.uuid4())
         crop2_name = f"panel_{p2_id[:8]}.jpg"
         box2 = PanelBox(id=p2_id, page_id=panel.page_id, sequence=panel.page_sequence + 1, x=p2_box[0], y=p2_box[1], width=p2_box[2], height=p2_box[3])
-        panel_detector.extract_crop(img_path, box2, panels_dir / crop2_name)
+        panel_detector.extract_crop(img_path, box2, project_path(ws_path, "panels", crop2_name))
 
         p2_rec = PanelRecord(
             id=p2_id,
@@ -1085,9 +1347,9 @@ class ProjectService:
 
         page = db.query(PageRecord).filter(PageRecord.id == panels[0].page_id).first()
         ws_path = Path(record.workspace_path)
-        img_path = ws_path / "normalized" / f"page_{page.sequence:04d}.jpg"
+        img_path = project_path(ws_path, "normalized", f"page_{page.sequence:04d}.jpg")
         if not img_path.exists():
-            img_path = ws_path / "source" / page.filename
+            img_path = project_path(ws_path, "source", page.filename)
 
         orig_w = page.width or 1200
         orig_h = page.height or 1800
@@ -1119,13 +1381,13 @@ class ProjectService:
         primary.updated_at = utc_now()
 
         p_box = PanelBox(id=primary.id, page_id=primary.page_id, sequence=primary.page_sequence, x=min_x, y=min_y, width=new_w, height=new_h)
-        panel_detector.extract_crop(img_path, p_box, ws_path / "panels" / primary.crop_filename)
+        panel_detector.extract_crop(img_path, p_box, project_path(ws_path, "panels", primary.crop_filename))
 
         for op in others:
-            crop_f = ws_path / "panels" / op.crop_filename
+            crop_f = project_path(ws_path, "panels", op.crop_filename)
             if crop_f.exists():
                 try:
-                    crop_f.unlink()
+                    unlink_contained_file(ws_path, Path("panels") / op.crop_filename)
                 except Exception:
                     pass
             db.delete(op)
@@ -1161,10 +1423,10 @@ class ProjectService:
         if not panel:
             raise KeyError(f"Panel not found: {panel_id}")
 
-        crop_file = Path(record.workspace_path) / "panels" / panel.crop_filename
+        crop_file = project_path(record.workspace_path, "panels", panel.crop_filename)
         if crop_file.exists():
             try:
-                crop_file.unlink()
+                unlink_contained_file(record.workspace_path, Path("panels") / panel.crop_filename)
             except Exception as e:
                 logger.warning(f"Failed to delete crop {crop_file}: {e}")
 
@@ -1215,6 +1477,23 @@ class ProjectService:
 
         self._write_project_json(record)
         self._sync_panels_json(db, project_id)
+        
+        # Mark Story Editor state as needing panel sync
+        try:
+            settings = record.settings or {}
+            if isinstance(settings, dict) and "story_editor_state" in settings:
+                state = settings.get("story_editor_state")
+                if isinstance(state, dict):
+                    panel_sync = dict(state.get("panel_review_sync") or {})
+                    panel_sync["last_panel_confirm"] = utc_now().isoformat()
+                    panel_sync["panels_stale"] = True
+                    state["panel_review_sync"] = panel_sync
+                    settings["story_editor_state"] = state
+                    record.settings = settings
+                    db.commit()
+        except Exception as e:
+            logger.warning(f"Failed to mark story editor state as stale: {e}")
+        
         return record
 
     def _sync_panels_json(self, db: Session, project_id: str) -> dict:
@@ -1229,9 +1508,9 @@ class ProjectService:
             .all()
         )
 
-        panels_dir = Path(record.workspace_path) / "panels"
+        panels_dir = resolve_contained_path(record.workspace_path, "panels")
         panels_dir.mkdir(parents=True, exist_ok=True)
-        panels_json_file = panels_dir / "panels.json"
+        panels_json_file = project_path(record.workspace_path, "panels", "panels.json")
 
         data = {
             "project_id": project_id,
@@ -1267,10 +1546,8 @@ class ProjectService:
             ],
         }
 
-        temp_file = panels_dir / "panels.json.tmp"
-        with open(temp_file, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
-        temp_file.replace(panels_json_file)
+        with open_contained_output(record.workspace_path, Path("panels") / "panels.json") as f:
+            f.write(json.dumps(data, indent=2).encode("utf-8"))
 
         return data
 
@@ -1280,62 +1557,65 @@ class ProjectService:
         project_id: str,
         engine_id: str = "mock_ocr",
         language: str = "en",
+        panel_ids: list[str] | None = None,
+        operation_only: bool = False,
     ) -> str:
         record = self.get_project(db, project_id)
         if not record:
             raise KeyError(f"Project not found: {project_id}")
 
-        panels = (
-            db.query(PanelRecord)
-            .filter(PanelRecord.project_id == project_id)
-            .order_by(PanelRecord.sequence)
-            .all()
-        )
+        panel_query = db.query(PanelRecord).filter(PanelRecord.project_id == project_id)
+        if panel_ids:
+            panel_query = panel_query.filter(PanelRecord.id.in_(panel_ids))
+        panels = panel_query.order_by(PanelRecord.sequence).all()
         if not panels:
             raise ValueError(
                 f"Project {project_id} has no panels detected. Run panel detection first."
             )
+        if panel_ids and {panel.id for panel in panels} != set(panel_ids):
+            raise ValueError("Persisted OCR panel set is no longer available.")
 
         from engine.ocr.providers.registry import get_default_ocr_registry
         ocr_registry = get_default_ocr_registry()
-        try:
-            ocr_engine = ocr_registry.get_engine(engine_id)
-        except KeyError:
-            ocr_engine = ocr_registry.get_default_engine()
+        ocr_engine = ocr_registry.get_engine(engine_id)
 
-        job = job_manager.create_job(
-            project_id=project_id,
-            job_type=JobType.OCR_EXTRACTION,
-            job_input={
-                "total_panels": len(panels),
-                "engine_id": ocr_engine.engine_id,
-                "language": language,
-            },
-        )
-        job_id = job.job_id
+        job_id = None
+        if not operation_only:
+            job = job_manager.create_job(
+                project_id=project_id,
+                job_type=JobType.OCR_EXTRACTION,
+                job_input={
+                    "total_panels": len(panels),
+                    "engine_id": ocr_engine.engine_id,
+                    "language": language,
+                    "panel_ids": [panel.id for panel in panels],
+                },
+            )
+            job_id = job.job_id
 
         async def run_ocr(cancel_token: PipelineCancellationToken, progress_cb):
             from engine.database.session import SessionLocal
             with SessionLocal() as worker_db:
                 ws_path = Path(record.workspace_path)
-                panels_dir = ws_path / "panels"
+                panels_dir = resolve_contained_path(ws_path, "panels")
                 total_panels = len(panels)
 
                 for idx, panel in enumerate(panels, start=1):
                     if cancel_token.is_cancelled:
                         break
 
-                    crop_path = panels_dir / panel.crop_filename
+                    crop_path = project_path(record.workspace_path, "panels", panel.crop_filename)
                     if not crop_path.exists():
-                        norm_path = ws_path / "normalized" / panel.page.filename
+                        norm_path = project_path(ws_path, "normalized", panel.page.filename)
                         src_path = (
                             norm_path
                             if norm_path.exists()
-                            else ws_path / "source" / panel.page.filename
+                            else project_path(ws_path, "source", panel.page.filename)
                         )
                         if src_path.exists():
                             from PIL import Image
-                            with Image.open(src_path) as full_img:
+                            import io
+                            with Image.open(io.BytesIO(read_contained_bytes(ws_path, src_path))) as full_img:
                                 box = (
                                     panel.x,
                                     panel.y,
@@ -1343,7 +1623,7 @@ class ProjectService:
                                     panel.y + panel.height,
                                 )
                                 crop = full_img.crop(box)
-                                crop.save(crop_path, "JPEG", quality=95)
+                                write_contained_image(ws_path, crop_path, crop, "JPEG", quality=95)
 
                     raw_result = ocr_engine.extract_text(
                         crop_path, panel.id, language=language
@@ -1439,6 +1719,8 @@ class ProjectService:
                 "engine": ocr_engine.engine_id,
             }
 
+        if operation_only:
+            return run_ocr
         job_manager.enqueue_async(job_id, run_ocr)
         return job_id
 
@@ -1562,15 +1844,14 @@ class ProjectService:
         panels = query.order_by(PanelRecord.sequence).all()
 
         ws_path = Path(record.workspace_path)
-        panels_dir = ws_path / "panels"
-        regions_dir = ws_path / "text_regions"
-        regions_dir.mkdir(parents=True, exist_ok=True)
+        panels_dir = resolve_contained_path(ws_path, "panels")
+        regions_dir = ensure_contained_directory(ws_path, "text_regions")
 
         created_records: list[TextRegionRecord] = []
         global_seq = 1
 
         for panel in panels:
-            crop_path = panels_dir / panel.crop_filename
+            crop_path = project_path(record.workspace_path, "panels", panel.crop_filename)
             if not crop_path.exists():
                 continue
 
@@ -1590,7 +1871,13 @@ class ProjectService:
                 reading_direction=panel.reading_direction,
             )
 
-            # Delete old auto-detected regions for this panel (preserve MANUAL)
+            # Preserve OCR and corrections during repeated Detect & Review runs.
+            existing_regions = db.query(TextRegionRecord).filter(TextRegionRecord.panel_id == panel.id).all()
+            if any(r.raw_text or r.corrected_text or r.detection_method == "MANUAL" for r in existing_regions):
+                created_records.extend(existing_regions)
+                global_seq += len(existing_regions)
+                continue
+            # Replace only unreviewed regions that have no OCR yet.
             db.query(TextRegionRecord).filter(
                 TextRegionRecord.panel_id == panel.id,
                 TextRegionRecord.detection_method != "MANUAL",
@@ -1598,7 +1885,8 @@ class ProjectService:
 
             from PIL import Image
             import hashlib
-            with Image.open(crop_path) as p_img:
+            import io
+            with Image.open(io.BytesIO(read_contained_bytes(ws_path, crop_path))) as p_img:
                 for box in detected_boxes:
                     rx1 = max(0, min(box.x, p_img.width - 1))
                     ry1 = max(0, min(box.y, p_img.height - 1))
@@ -1607,10 +1895,10 @@ class ProjectService:
 
                     region_crop = p_img.crop((rx1, ry1, rx2, ry2))
                     crop_filename = f"reg_{panel.id[:8]}_{box.sequence_in_panel}_{uuid.uuid4().hex[:6]}.jpg"
-                    reg_crop_path = regions_dir / crop_filename
-                    region_crop.save(reg_crop_path, "JPEG", quality=95)
+                    reg_crop_path = project_path(ws_path, "text_regions", crop_filename)
+                    write_contained_image(ws_path, reg_crop_path, region_crop, "JPEG", quality=95)
 
-                    crop_bytes = reg_crop_path.read_bytes()
+                    crop_bytes = read_contained_bytes(ws_path, reg_crop_path)
                     crop_sha = hashlib.sha256(crop_bytes).hexdigest()
 
                     tr_rec = TextRegionRecord(
@@ -1802,24 +2090,24 @@ class ProjectService:
 
         proj = self.get_project(db, project_id)
         ws_path = Path(proj.workspace_path)
-        crop_path = ws_path / "text_regions" / tr.crop_filename
+        crop_path = project_path(ws_path, "text_regions", tr.crop_filename)
 
         if not crop_path.exists():
             # Extract crop on demand from panel crop
             panel = db.query(PanelRecord).filter(PanelRecord.id == tr.panel_id).first()
-            p_crop = ws_path / "panels" / panel.crop_filename if panel else None
+            p_crop = project_path(ws_path, "panels", panel.crop_filename) if panel else None
             if p_crop and p_crop.exists():
                 from PIL import Image
                 import hashlib
-                with Image.open(p_crop) as p_img:
+                import io
+                with Image.open(io.BytesIO(read_contained_bytes(ws_path, p_crop))) as p_img:
                     rx1 = max(0, min(tr.x, p_img.width - 1))
                     ry1 = max(0, min(tr.y, p_img.height - 1))
                     rx2 = max(rx1 + 1, min(tr.x + tr.width, p_img.width))
                     ry2 = max(ry1 + 1, min(tr.y + tr.height, p_img.height))
                     reg_img = p_img.crop((rx1, ry1, rx2, ry2))
-                    crop_path.parent.mkdir(parents=True, exist_ok=True)
-                    reg_img.save(crop_path, "JPEG", quality=95)
-                    tr.crop_sha256 = hashlib.sha256(crop_path.read_bytes()).hexdigest()
+                    write_contained_image(ws_path, crop_path, reg_img, "JPEG", quality=95)
+                    tr.crop_sha256 = hashlib.sha256(read_contained_bytes(ws_path, crop_path)).hexdigest()
 
         from engine.ocr.cache import compute_ocr_cache_key, get_cached_ocr, store_cached_ocr
         from engine.ocr.providers.registry import ocr_registry
@@ -1969,9 +2257,9 @@ class ProjectService:
 
         ocr_records = self.list_project_ocr(db, project_id)
         ws_path = Path(record.workspace_path)
-        ocr_dir = ws_path / "ocr"
+        ocr_dir = resolve_contained_path(ws_path, "ocr")
         ocr_dir.mkdir(parents=True, exist_ok=True)
-        ocr_json_file = ocr_dir / "ocr.json"
+        ocr_json_file = project_path(ws_path, "ocr", "ocr.json")
 
         data = {
             "project_id": project_id,
@@ -1993,10 +2281,8 @@ class ProjectService:
             ],
         }
 
-        temp_file = ocr_dir / "ocr.json.tmp"
-        with open(temp_file, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
-        temp_file.replace(ocr_json_file)
+        with open_contained_output(ws_path, Path("ocr") / "ocr.json") as f:
+            f.write(json.dumps(data, indent=2).encode("utf-8"))
 
         return data
 
@@ -2020,7 +2306,7 @@ class ProjectService:
         if not panel:
             raise KeyError(f"Panel not found: {panel_id}")
 
-        crop_path = Path(record.workspace_path) / "panels" / panel.crop_filename
+        crop_path = project_path(record.workspace_path, "panels", panel.crop_filename)
         if not crop_path.exists():
             raise FileNotFoundError(f"Panel crop file missing: {crop_path}")
 
@@ -2053,7 +2339,7 @@ class ProjectService:
         if not panel:
             raise KeyError(f"Panel not found: {tr.panel_id}")
 
-        crop_path = Path(record.workspace_path) / "panels" / panel.crop_filename
+        crop_path = project_path(record.workspace_path, "panels", panel.crop_filename)
         if not crop_path.exists():
             raise FileNotFoundError(f"Panel crop file missing: {crop_path}")
 
@@ -2062,7 +2348,7 @@ class ProjectService:
 
         # If region crop thumbnail exists, blur it too
         if tr.crop_filename:
-            reg_thumb = Path(record.workspace_path) / "text_regions" / tr.crop_filename
+            reg_thumb = project_path(record.workspace_path, "text_regions", tr.crop_filename)
             if reg_thumb.exists():
                 from engine.imaging.redaction import blur_entire_image
                 blur_entire_image(reg_thumb, blur_radius=blur_radius, backup=True)
@@ -2096,7 +2382,7 @@ class ProjectService:
         if not panel:
             raise KeyError(f"Panel not found: {panel_id}")
 
-        crop_path = Path(record.workspace_path) / "panels" / panel.crop_filename
+        crop_path = project_path(record.workspace_path, "panels", panel.crop_filename)
         if not crop_path.exists():
             raise FileNotFoundError(f"Panel crop file missing: {crop_path}")
 
@@ -2110,7 +2396,7 @@ class ProjectService:
         for tr in regions:
             blur_image_box(crop_path, tr.x, tr.y, tr.width, tr.height, blur_radius=blur_radius, feather=feather, backup=True)
             if tr.crop_filename:
-                reg_thumb = Path(record.workspace_path) / "text_regions" / tr.crop_filename
+                reg_thumb = project_path(record.workspace_path, "text_regions", tr.crop_filename)
                 if reg_thumb.exists():
                     blur_entire_image(reg_thumb, blur_radius=blur_radius, backup=True)
 
@@ -2142,7 +2428,7 @@ class ProjectService:
         if not panel:
             raise KeyError(f"Panel not found: {panel_id}")
 
-        crop_path = Path(record.workspace_path) / "panels" / panel.crop_filename
+        crop_path = project_path(record.workspace_path, "panels", panel.crop_filename)
         if not crop_path.exists():
             raise FileNotFoundError(f"Panel crop file missing: {crop_path}")
 
@@ -2178,7 +2464,7 @@ class ProjectService:
         if not panel:
             raise KeyError(f"Panel not found: {panel_id}")
 
-        crop_path = Path(record.workspace_path) / "panels" / panel.crop_filename
+        crop_path = project_path(record.workspace_path, "panels", panel.crop_filename)
         from engine.imaging.redaction import restore_image_backup
         restored = restore_image_backup(crop_path)
 
@@ -2197,7 +2483,7 @@ class ProjectService:
 
             # Restore region thumbnail if backup exists
             if tr.crop_filename:
-                reg_thumb = Path(record.workspace_path) / "text_regions" / tr.crop_filename
+                reg_thumb = project_path(record.workspace_path, "text_regions", tr.crop_filename)
                 restore_image_backup(reg_thumb)
 
         db.commit()
@@ -2217,7 +2503,7 @@ class ProjectService:
         if not panel:
             raise KeyError(f"Panel not found: {panel_id}")
 
-        crop_path = Path(record.workspace_path) / "panels" / panel.crop_filename
+        crop_path = project_path(record.workspace_path, "panels", panel.crop_filename)
         from engine.imaging.redaction import has_image_backup
         has_backup = has_image_backup(crop_path)
 
@@ -2260,7 +2546,7 @@ class ProjectService:
         for panel in panels:
             if not panel.crop_filename:
                 continue
-            crop_path = panels_dir / panel.crop_filename
+            crop_path = project_path(record.workspace_path, "panels", panel.crop_filename)
             if not crop_path.exists():
                 continue
 
@@ -2328,7 +2614,7 @@ class ProjectService:
         for panel in panels:
             if not panel.crop_filename:
                 continue
-            crop_path = panels_dir / panel.crop_filename
+            crop_path = project_path(record.workspace_path, "panels", panel.crop_filename)
             if restore_image_backup(crop_path, delete_backup=True):
                 restored_count += 1
 

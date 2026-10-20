@@ -5,6 +5,7 @@ import type {
   VideoScript,
   StoryboardDocument,
   CharacterEntity,
+  TextRegion,
 } from "@panelflow/shared-types";
 import {
   type NarrationChapter,
@@ -43,7 +44,8 @@ export function buildInitialNarrationChapter(
   existingChapter?: NarrationChapter,
   realScript?: VideoScript | null,
   realStoryboard?: StoryboardDocument | null,
-  characters?: CharacterEntity[]
+  characters?: CharacterEntity[],
+  textRegions?: TextRegion[]
 ): NarrationChapter {
   const hasMockArtifacts = existingChapter?.segments?.some(
     (s) =>
@@ -139,11 +141,43 @@ export function buildInitialNarrationChapter(
   const defaultSpeaker = MOCK_CHARACTERS[0]; // The Narrator
   const segments: NarrationSegment[] = scenes.map((scene, idx) => {
     const primaryLayer = scene.layers[0];
-    const text = scene.title
-      ? `${scene.title}.`
-      : `Scene ${scene.sequence}: Story progression.`;
+    const scenePanelIds = scene.layers.map((l) => l.source_panel_id).filter(Boolean);
 
-    const emotion: NarrationEmotion = "Neutral";
+    // Look up real OCR text regions for the panels in this scene
+    const matchedRegions = (textRegions || []).filter(
+      (tr) => tr.panel_id && scenePanelIds.includes(tr.panel_id) && tr.status !== "REJECTED"
+    );
+    const ocrDialogue = matchedRegions
+      .map((tr) => (tr.corrected_text || tr.raw_text || "").trim())
+      .filter(Boolean)
+      .join(" ");
+
+    // Speaker determination from text regions
+    const primaryRegion = matchedRegions.find((tr) => tr.speaker_character_id) || matchedRegions[0];
+    const isDialogue = !!ocrDialogue && ocrDialogue.length > 2;
+    const speakerChar = primaryRegion?.speaker_character_id
+      ? characters?.find((c) => c.character_id === primaryRegion.speaker_character_id)
+      : null;
+
+    const speakerName = speakerChar?.canonical_name || speakerChar?.display_name || (isDialogue ? "Marcus" : defaultSpeaker.name);
+    const speakerId = primaryRegion?.speaker_character_id || (isDialogue ? "char_marcus" : defaultSpeaker.id);
+    const speakerType = isDialogue && primaryRegion?.region_type !== "NARRATION" ? "CHARACTER" : "NARRATOR";
+    const voiceProfileId = speakerChar?.role === "PROTAGONIST" ? "voice_marcus_male" : (speakerType === "NARRATOR" ? "voice_aria_female_narrator" : "voice_marcus_male");
+
+    let text = "";
+    if (ocrDialogue) {
+      text = ocrDialogue;
+    } else if (scene.title) {
+      // Clean robotic prefixes like "Scene 1 — Panel #1" or "Scene 2 — Pulse in the Dark"
+      const cleanTitle = scene.title
+        .replace(/^(?:Scene|Panel|Shot)\s*#?\d+\s*[-—–:]\s*(?:Panel\s*#?\d+\s*[-—–:]\s*)?/i, "")
+        .trim();
+      text = cleanTitle ? `${cleanTitle}.` : `Scene ${scene.sequence}: Story progression.`;
+    } else {
+      text = `Scene ${scene.sequence}: Story progression.`;
+    }
+
+    const emotion: NarrationEmotion = (isDialogue && ocrDialogue.includes("!")) ? "Determined" : "Neutral";
     const speed = 1.0;
     const estimatedDuration = estimateReadingDuration(text, speed);
 
@@ -154,33 +188,33 @@ export function buildInitialNarrationChapter(
       scene_title: scene.title,
       linked_to_scene: true,
       scene_offset_sec: 0.0,
-      speaker_id: defaultSpeaker.id,
-      speaker_name: defaultSpeaker.name,
-      speaker_type: "NARRATOR",
-      voice_profile_id: defaultSpeaker.default_voice_profile_id,
+      speaker_id: speakerId,
+      speaker_name: speakerName,
+      speaker_type: speakerType,
+      voice_profile_id: voiceProfileId,
       narration_text: text,
       text_revision: 1,
       content_hash: computeContentHash(text, emotion, speed, "short"),
       source_context: {
         page_id: primaryLayer?.source_page_id || `page_${idx + 1}`,
         page_number: primaryLayer?.page_sequence || idx + 1,
-        panel_ids: primaryLayer?.source_panel_id ? [primaryLayer.source_panel_id] : [`panel_${idx + 1}`],
+        panel_ids: scenePanelIds.length > 0 ? (scenePanelIds as string[]) : [`panel_${idx + 1}`],
         panel_labels: [primaryLayer?.name || `Panel #${primaryLayer?.page_sequence || idx + 1}`],
         panel_preview_url: primaryLayer?.image_url,
-        raw_ocr_dialogue: "",
+        raw_ocr_dialogue: ocrDialogue,
         visual_description: `Scene ${scene.sequence} visual framing and composition.`,
         story_context: `Narrative progression for ${scene.title}.`,
       },
       delivery: {
         emotion,
-        intensity: 0.5,
+        intensity: isDialogue ? 0.6 : 0.5,
         speech_speed: speed,
         pause: {
           preset: "short",
           duration_ms: 300,
           placement: "after_first_sentence",
         },
-        performance_notes: "Grounded, atmospheric delivery.",
+        performance_notes: isDialogue ? "Grounded character delivery." : "Atmospheric narrator delivery.",
         pronunciation_guide: [],
       },
       review_status: (isMockTestingHarness ? "APPROVED" : "DRAFT") as ReviewStatus,

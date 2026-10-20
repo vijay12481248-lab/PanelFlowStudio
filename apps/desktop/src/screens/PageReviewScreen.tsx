@@ -22,6 +22,8 @@ export const PageReviewScreen: React.FC<PageReviewScreenProps> = ({
   const [loading, setLoading] = useState<boolean>(true);
   const [confirming, setConfirming] = useState<boolean>(false);
   const [inspectPage, setInspectPage] = useState<Page | null>(null);
+  const [draggedPageIndex, setDraggedPageIndex] = useState<number | null>(null);
+  const [dragOverPageIndex, setDragOverPageIndex] = useState<number | null>(null);
   const [manifest, setManifest] = useState<AcquisitionManifest | null>(null);
   const [showManifestModal, setShowManifestModal] = useState<boolean>(false);
   const [cacheBuster, setCacheBuster] = useState<number>(Date.now());
@@ -48,6 +50,52 @@ export const PageReviewScreen: React.FC<PageReviewScreenProps> = ({
   useEffect(() => {
     loadPages();
   }, [project.id]);
+
+  const handlePageDragStart = (e: React.DragEvent, index: number) => {
+    e.dataTransfer.setData("application/panelflow-page-reorder", JSON.stringify({ fromIndex: index }));
+    e.dataTransfer.effectAllowed = "move";
+    setDraggedPageIndex(index);
+  };
+
+  const handlePageDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    if (index !== draggedPageIndex) setDragOverPageIndex(index);
+  };
+
+  const handlePageDragLeave = (e: React.DragEvent, index: number) => {
+    if (dragOverPageIndex === index) setDragOverPageIndex(null);
+  };
+
+  const handlePageDrop = async (e: React.DragEvent, targetIndex: number) => {
+    e.preventDefault();
+    setDragOverPageIndex(null);
+    setDraggedPageIndex(null);
+    try {
+      const reorderData = e.dataTransfer.getData("application/panelflow-page-reorder");
+      if (!reorderData) return;
+      const { fromIndex } = JSON.parse(reorderData);
+      if (fromIndex === targetIndex) return;
+
+      const newPages = [...pages];
+      const [moved] = newPages.splice(fromIndex, 1);
+      newPages.splice(targetIndex, 0, moved);
+
+      const pageIds = newPages.map((p) => p.id);
+      const updated = await api.reorderPages(project.id, pageIds);
+      setPages(updated);
+    } catch (err: any) {
+      reportError({
+        title: "Page Reordering Failed",
+        message: err.message || "Failed to reorder pages.",
+        severity: "warning",
+        source: "pipeline",
+        projectId: project.id,
+        rawDetails: err,
+      });
+      loadPages();
+    }
+  };
 
   const handleMove = async (index: number, direction: "left" | "right") => {
     const targetIndex = direction === "left" ? index - 1 : index + 1;
@@ -380,26 +428,29 @@ export const PageReviewScreen: React.FC<PageReviewScreenProps> = ({
 
                 {/* Card Controls */}
                 <div className="pt-2 border-t border-zinc-800/80 flex items-center justify-between">
-                  {/* Sequence reorder buttons */}
+                  {/* Drag handle for reorder */}
                   <div className="flex items-center gap-1">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleMove(idx, "left")}
-                      disabled={isFirst}
-                      title="Move earlier"
+                    <div
+                      draggable
+                      onDragStart={(e) => handlePageDragStart(e, idx)}
+                      onDragOver={(e) => handlePageDragOver(e, idx)}
+                      onDragLeave={(e) => handlePageDragLeave(e, idx)}
+                      onDrop={(e) => handlePageDrop(e, idx)}
+                      className="flex items-center gap-1"
                     >
-                      <Icons.ArrowLeft className="w-3.5 h-3.5" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleMove(idx, "right")}
-                      disabled={isLast}
-                      title="Move later"
-                    >
-                      <Icons.ArrowRight className="w-3.5 h-3.5" />
-                    </Button>
+                      <div
+                        className={`w-6 h-6 flex items-center justify-center cursor-grab active:cursor-grabbing rounded $\{
+                          draggedPageIndex === idx
+                            ? 'bg-indigo-900/50 border-indigo-400'
+                            : dragOverPageIndex === idx
+                            ? 'bg-indigo-900/30 border-indigo-400'
+                            : 'bg-zinc-800 border-zinc-700 hover:bg-zinc-700'
+                        \}`}
+                        title="Drag to reorder"
+                      >
+                        <Icons.GripVertical className="w-3.5 h-3.5 text-zinc-400" />
+                      </div>
+                    </div>
                   </div>
 
                   {/* Rotate and Delete */}

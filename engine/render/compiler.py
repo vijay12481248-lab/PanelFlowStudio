@@ -158,6 +158,8 @@ class TimelineCompiler:
         Reports warnings (outdated audio, missing optional cues) and blockers (missing scenes, missing media).
         """
         issues: List[str] = []
+        if state.get("panel_review_sync", {}).get("removed_layers_count", 0):
+            issues.append("Source panels were deleted or replaced. Review the affected video layers before exporting.")
         warnings: List[str] = []
         scenes = state.get("scenes", [])
         if not scenes:
@@ -253,6 +255,8 @@ class TimelineCompiler:
         Compiles the state dictionary into an inspectable, deterministic RenderPlan.
         """
         prof = profile or RenderProfile.standard_1080p()
+        if state.get("panel_review_sync", {}).get("removed_layers_count", 0):
+            raise ValueError("Source panels were deleted or replaced. Review the affected video layers before exporting.")
         fps = prof.fps
         clock = RenderFrameClock(fps=fps)
 

@@ -26,6 +26,7 @@ from engine.database.models import (
     SceneRecord,
     VisualTimelineRecord,
 )
+from engine.security.paths import ensure_contained_directory, read_contained_bytes, write_contained_bytes
 
 logger = logging.getLogger("panelflow.audio.music_director")
 
@@ -54,12 +55,12 @@ class StoryAwareMusicDirector:
 
         workspace = Path(proj.workspace_path)
         music_dir = workspace / "audio" / "music"
-        music_dir.mkdir(parents=True, exist_ok=True)
+        ensure_contained_directory(workspace, Path("audio") / "music")
         plan_file = music_dir / "music_direction_plan.json"
 
         if plan_file.exists() and not force_replan:
             try:
-                data = json.loads(plan_file.read_text(encoding="utf-8"))
+                data = json.loads(read_contained_bytes(workspace, Path("audio/music/music_direction_plan.json")).decode("utf-8"))
                 return MusicDirectionPlan(**data)
             except Exception as e:
                 logger.warning(f"Could not load existing music direction plan: {e}. Generating fresh plan.")
@@ -72,10 +73,11 @@ class StoryAwareMusicDirector:
     def save_plan(self, workspace_path: Path, plan: MusicDirectionPlan) -> None:
         """Persists the MusicDirectionPlan JSON sidecar to workspace."""
         music_dir = Path(workspace_path) / "audio" / "music"
-        music_dir.mkdir(parents=True, exist_ok=True)
+        ensure_contained_directory(workspace_path, Path("audio") / "music")
         plan_file = music_dir / "music_direction_plan.json"
         plan.updated_at = time.time()
-        plan_file.write_text(plan.model_dump_json(indent=2), encoding="utf-8")
+        write_contained_bytes(workspace_path, Path("audio/music/music_direction_plan.json"),
+                              plan.model_dump_json(indent=2).encode("utf-8"))
 
     def analyze_and_plan_soundtrack(
         self,

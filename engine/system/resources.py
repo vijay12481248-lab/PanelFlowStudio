@@ -12,8 +12,33 @@ import logging
 from typing import Dict, Any, Tuple, Optional, Set
 import psutil
 import httpx
+from urllib.parse import urlsplit
+from engine.llm.providers.ollama import (
+    OllamaEndpointAuthorization,
+    load_ollama_endpoint_authorization,
+    validate_ollama_endpoint,
+)
 
 logger = logging.getLogger("panelflow.system.resources")
+
+
+def _validated_ollama_url(
+    endpoint_url: str,
+    authorization: OllamaEndpointAuthorization | None = None,
+) -> str:
+    """Validate again at the network boundary, independent of API callers."""
+    local_ok, _ = validate_ollama_endpoint(endpoint_url)
+    remote_ok, _ = validate_ollama_endpoint(
+        endpoint_url,
+        is_remote=True,
+        authorization=authorization or load_ollama_endpoint_authorization(),
+    )
+    if not (local_ok or remote_ok):
+        raise ValueError("Invalid Ollama endpoint")
+    parsed = urlsplit(endpoint_url)
+    if parsed.username or parsed.password or parsed.fragment or parsed.query or parsed.path not in ("", "/"):
+        raise ValueError("Invalid Ollama endpoint: credentials, path, query and fragment are not allowed")
+    return endpoint_url.rstrip("/")
 
 
 class SystemResourceManager:
@@ -143,7 +168,12 @@ class SystemResourceManager:
             "headroom_mb": 0.0,
         }
 
-    async def get_ollama_runtime(self, endpoint_url: str = "http://127.0.0.1:11434", auth_token: Optional[str] = None) -> Dict[str, Any]:
+    async def get_ollama_runtime(
+        self,
+        endpoint_url: str = "http://127.0.0.1:11434",
+        auth_token: Optional[str] = None,
+        authorization: OllamaEndpointAuthorization | None = None,
+    ) -> Dict[str, Any]:
         """
         Inspects running models, allocated VRAM, and context sizes via Ollama GET /api/ps.
         """
@@ -151,9 +181,9 @@ class SystemResourceManager:
         if auth_token:
             headers["Authorization"] = f"Bearer {auth_token}"
 
-        clean_url = endpoint_url.rstrip("/")
         try:
-            async with httpx.AsyncClient(timeout=3.0, headers=headers) as client:
+            clean_url = _validated_ollama_url(endpoint_url, authorization)
+            async with httpx.AsyncClient(timeout=3.0, headers=headers, follow_redirects=False) as client:
                 res = await client.get(f"{clean_url}/api/ps")
                 if res.status_code == 200:
                     data = res.json()
@@ -187,11 +217,16 @@ class SystemResourceManager:
             "models": [],
         }
 
-    async def get_full_telemetry(self, ollama_endpoint: str = "http://127.0.0.1:11434", auth_token: Optional[str] = None) -> Dict[str, Any]:
+    async def get_full_telemetry(
+        self,
+        ollama_endpoint: str = "http://127.0.0.1:11434",
+        auth_token: Optional[str] = None,
+        authorization: OllamaEndpointAuthorization | None = None,
+    ) -> Dict[str, Any]:
         """Aggregates host RAM, GPU VRAM, active scheduler jobs, and Ollama runtime telemetry."""
         ram = self.get_system_memory()
         gpu = self.get_gpu_memory()
-        ollama = await self.get_ollama_runtime(ollama_endpoint, auth_token)
+        ollama = await self.get_ollama_runtime(ollama_endpoint, auth_token, authorization)
 
         # Dynamic Auto-concurrency adjustment
         effective_concurrency = self._max_gpu_concurrency
@@ -263,6 +298,7 @@ class SystemResourceManager:
         endpoint_url: str = "http://127.0.0.1:11434",
         model: str = "qwen3.5:9b",
         auth_token: Optional[str] = None,
+        authorization: OllamaEndpointAuthorization | None = None,
     ) -> Dict[str, Any]:
         """
         Benchmarks sequential vs 2-request concurrent performance under identical workloads.
@@ -271,7 +307,7 @@ class SystemResourceManager:
         if auth_token:
             headers["Authorization"] = f"Bearer {auth_token}"
 
-        clean_url = endpoint_url.rstrip("/")
+        clean_url = _validated_ollama_url(endpoint_url, authorization)
         test_payload = {
             "model": model,
             "prompt": "Summarize the essence of courage in exactly two sentences.",
@@ -281,18 +317,25 @@ class SystemResourceManager:
 
         # 1. Measure sequential execution (2 requests back-to-back)
         t0 = time.perf_counter()
-        async with httpx.AsyncClient(timeout=60.0, headers=headers) as client:
+        async with httpx.AsyncClient(timeout=60.0, headers=headers, follow_redirects=False) as client:
             r1 = await client.post(f"{clean_url}/api/generate", json=test_payload)
+            if r1.status_code != 200:
+                raise RuntimeError(f"Ollama benchmark failed: HTTP {r1.status_code}")
             r2 = await client.post(f"{clean_url}/api/generate", json=test_payload)
+            if r2.status_code != 200:
+                raise RuntimeError(f"Ollama benchmark failed: HTTP {r2.status_code}")
         seq_duration = time.perf_counter() - t0
 
         # 2. Measure concurrent execution (2 requests simultaneously via asyncio.gather)
         t1 = time.perf_counter()
-        async with httpx.AsyncClient(timeout=60.0, headers=headers) as client:
+        async with httpx.AsyncClient(timeout=60.0, headers=headers, follow_redirects=False) as client:
             c1, c2 = await asyncio.gather(
                 client.post(f"{clean_url}/api/generate", json=test_payload),
                 client.post(f"{clean_url}/api/generate", json=test_payload),
             )
+            for response in (c1, c2):
+                if response.status_code != 200:
+                    raise RuntimeError(f"Ollama benchmark failed: HTTP {response.status_code}")
         concurrent_duration = time.perf_counter() - t1
 
         speedup_ratio = round(seq_duration / max(0.001, concurrent_duration), 2)

@@ -15,6 +15,7 @@ import sys
 import tempfile
 import time
 import uuid
+import io
 from pathlib import Path
 import numpy as np
 import soundfile as sf
@@ -22,8 +23,18 @@ from types import SimpleNamespace
 
 logger = logging.getLogger("panelflow.audio.synthesis")
 
+from engine.system.setup import get_voice_reference_dir
+from engine.security.paths import (
+    promote_contained_file,
+    read_contained_bytes,
+    resolve_contained_path,
+    unlink_contained_file,
+    write_contained_bytes,
+    write_contained_json,
+)
+
 TOOLS_ROOT = Path(os.environ.get("PANELFLOW_LOCAL_TOOLS_ROOT", r"C:\Tools"))
-VOICE_REF_DIR = TOOLS_ROOT / "voice_references"
+VOICE_REF_DIR = get_voice_reference_dir()
 CHATTERBOX_PYTHON = TOOLS_ROOT / "Chatterbox" / ".venv" / "Scripts" / "python.exe"
 
 # Voice identity mapping to authorized local reference files
@@ -90,29 +101,83 @@ EMOTION_SETTINGS: Dict[str, Dict[str, Any]] = {
 def sanitize_tts_text(text: str) -> str:
     """
     Cleans text for neural TTS generation.
-    Strips bracketed stage directions ([whisper], [sigh], [gasp], [Scene 1:], etc.)
-    and parenthetical acting cues that would otherwise be spoken verbatim or cause
-    degenerate repetition loops in autoregressive decoders.
+    - Strips bracketed stage directions ([whisper], [sigh], [gasp], etc.)
+    - Strips parenthetical acting cues ((whispering), (sighs))
+    - Strips Japanese brackets (「, 」, 『, 』)
+    - Strips leading speaker labels (Narrator:, Marcus:, etc.)
+    - Strips robotic scene/panel prefixes (Scene 1:, Panel 2 —, etc.)
+    - Prevents vocalizing dummy scene/panel labels
     """
     import re
+    if not text:
+        return ""
+
     # Remove bracketed directions like [whisper], [sigh], [gasp], [pause]
     cleaned = re.sub(r"\[[^\]]*\]", " ", text)
     # Remove parenthetical cues like (whispering), (sighs)
     cleaned = re.sub(r"\([^\)]*\)", " ", cleaned)
-    # Replace non-breaking spaces and smart quotes/dashes
+
+    # Normalize Japanese brackets & quotation marks
+    cleaned = cleaned.replace("「", '"').replace("」", '"')
+    cleaned = cleaned.replace("『", '"').replace("』", '"')
+    cleaned = cleaned.replace("【", "").replace("】", "")
+
+    # Replace smart quotes and dashes
     cleaned = cleaned.replace("\u201c", '"').replace("\u201d", '"')
     cleaned = cleaned.replace("\u2018", "'").replace("\u2019", "'")
     cleaned = cleaned.replace("\u2014", " - ").replace("\u2013", " - ")
     cleaned = cleaned.replace("\u2026", "...")
-    # Normalize whitespace
+
+    # Normalize whitespace first
     cleaned = " ".join(cleaned.split()).strip()
-    return cleaned or text.strip()
+
+    # Strip leading speaker tags like "The Narrator:", "Narrator:", "Marcus:", "Aria:", "Seraphina:"
+    cleaned = re.sub(
+        r"^(?:The\s+)?(?:Narrator|Marcus|Aria|Seraphina|Leon|Zhuo\s+Fan|Protagonist|Speaker|[A-Z][a-zA-Z0-9_]{1,24})\s*:\s*",
+        "",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+
+    # Strip leading scene/panel prefixes like "Scene 1 — Panel #1:", "Scene 1:", "Panel #2 —"
+    cleaned = re.sub(
+        r"^(?:Scene|Panel|Shot)\s*#?\d+\s*(?:[—–\-:]|\s*(?:—|–|-)\s*Panel\s*#?\d+)?\s*[:—–\-.]\s*",
+        "",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+
+    # If the remaining text is purely a dummy label like "Scene 1 — Panel #1." or "Scene 2."
+    if re.match(r"^(?:Scene|Panel|Shot)\s*#?\d+(?:\s*[-—–.]\s*(?:Panel\s*#?\d+)?)?\.?$", cleaned, flags=re.IGNORECASE):
+        return ""
+
+    # Strip accidental dangling leading or trailing colons/dashes
+    cleaned = re.sub(r"^[:—–\-\s]+", "", cleaned)
+    cleaned = re.sub(r"[:—–\-]+$", "", cleaned)
+
+    return cleaned.strip()
+
+
+def _check_voice_file(target: Optional[Path]) -> Optional[str]:
+    if not target:
+        return None
+    if target.exists():
+        return str(target)
+    # Check current dynamic voice reference dir
+    active_dir = get_voice_reference_dir()
+    alt = active_dir / target.name
+    if alt.exists():
+        return str(alt)
+    # Check bundled package directory
+    bundled = Path(__file__).resolve().parent / "voice_references" / target.name
+    if bundled.exists():
+        return str(bundled)
+    return None
 
 
 def resolve_voice_reference(voice_identifier: str) -> Optional[str]:
     if not voice_identifier:
-        default_ref = VOICE_MAP.get("marcus_male") or VOICE_MAP.get("aria_female")
-        return str(default_ref) if default_ref and default_ref.exists() else None
+        return _check_voice_file(VOICE_MAP.get("marcus_male")) or _check_voice_file(VOICE_MAP.get("aria_female"))
 
     # Check direct path
     p = Path(voice_identifier)
@@ -120,34 +185,33 @@ def resolve_voice_reference(voice_identifier: str) -> Optional[str]:
         return str(p)
 
     key = voice_identifier.strip().lower()
-    if key in VOICE_MAP and VOICE_MAP[key].exists():
-        return str(VOICE_MAP[key])
+    if key in VOICE_MAP:
+        found = _check_voice_file(VOICE_MAP[key])
+        if found:
+            return found
 
     # Fuzzy heuristic matching on key tokens
     if any(k in key for k in ("marcus", "male", "warrior", "zhuo", "danqing", "valerian", "leon", "boy")):
-        target = VOICE_MAP.get("marcus_male")
-        if target and target.exists():
-            return str(target)
+        found = _check_voice_file(VOICE_MAP.get("marcus_male"))
+        if found:
+            return found
 
     if any(k in key for k in ("seraphina", "priestess", "ethereal", "queen")):
-        target = VOICE_MAP.get("seraphina_female")
-        if target and target.exists():
-            return str(target)
+        found = _check_voice_file(VOICE_MAP.get("seraphina_female"))
+        if found:
+            return found
 
     if any(k in key for k in ("aria", "female", "girl", "woman")):
-        target = VOICE_MAP.get("aria_female")
-        if target and target.exists():
-            return str(target)
+        found = _check_voice_file(VOICE_MAP.get("aria_female"))
+        if found:
+            return found
 
     if "narrator" in key:
-        target = VOICE_MAP.get("the narrator")
-        if target and target.exists():
-            return str(target)
+        found = _check_voice_file(VOICE_MAP.get("the narrator"))
+        if found:
+            return found
 
-    default_ref = VOICE_MAP.get("marcus_male") or VOICE_MAP.get("aria_female")
-    if default_ref and default_ref.exists():
-        return str(default_ref)
-    return None
+    return _check_voice_file(VOICE_MAP.get("marcus_male")) or _check_voice_file(VOICE_MAP.get("aria_female"))
 
 
 def postprocess_speech_audio(wav_path: Path, target_peak: float = 0.95) -> Dict[str, Any]:
@@ -157,7 +221,8 @@ def postprocess_speech_audio(wav_path: Path, target_peak: float = 0.95) -> Dict[
     - Trims excess leading/trailing silence (>300ms) with clean fade in/out
     - Measures exact duration and sample rate
     """
-    data, sr = sf.read(str(wav_path))
+    root = wav_path.parents[2]
+    data, sr = sf.read(io.BytesIO(read_contained_bytes(root, wav_path)))
     if len(data.shape) > 1:
         data = data[:, 0]  # Mono
     data = data.astype(np.float32)
@@ -177,7 +242,9 @@ def postprocess_speech_audio(wav_path: Path, target_peak: float = 0.95) -> Dict[
     if peak > 0.0001:
         data = (data / peak) * target_peak
 
-    sf.write(str(wav_path), data, sr, subtype="PCM_16")
+    encoded = io.BytesIO()
+    sf.write(encoded, data, sr, format="WAV", subtype="PCM_16")
+    write_contained_bytes(root, wav_path, encoded.getvalue())
     duration = len(data) / float(sr)
     return {
         "duration": round(duration, 3),
@@ -210,7 +277,8 @@ class LocalSpeechSynthesizer:
         Synthesizes a single narration line with emotion conditioning and content addressing.
         """
         directory = Path(directory)
-        directory.mkdir(parents=True, exist_ok=True)
+        root = directory.parents[1]
+        resolve_contained_path(root, directory)
 
         if self.adapter_factory:
             key = hashlib.sha256(json.dumps([
@@ -220,7 +288,7 @@ class LocalSpeechSynthesizer:
                 key += "_" + uuid.uuid4().hex[:12]
             target = directory / f"speech_{key}.wav"
             if target.exists() and not force:
-                if sf.info(str(target)).duration > 0:
+                if sf.info(io.BytesIO(read_contained_bytes(root, target))).duration > 0:
                     return target
             brief = SimpleNamespace(
                 scene=text, audio_type="voice",
@@ -234,17 +302,21 @@ class LocalSpeechSynthesizer:
                 result = self.adapter_factory(provider_id).generate(brief, output_path=temporary)
                 if not result.success:
                     raise ValueError(getattr(result, "error_message", "Local speech model failed"))
-                if not temporary.exists() or sf.info(str(temporary)).duration <= 0:
+                if not temporary.exists() or sf.info(io.BytesIO(read_contained_bytes(root, temporary))).duration <= 0:
                     raise ValueError("Local speech model returned no valid audio")
-                temporary.replace(target)
-                target.with_suffix(".json").write_text(json.dumps({
+                promote_contained_file(root, temporary, target)
+                duration = sf.info(io.BytesIO(read_contained_bytes(root, target))).duration
+                write_contained_json(root, target.with_suffix(".json"), {
                     "text": text, "voice": voice, "provider": provider_id,
                     "emotion": emotion, "intensity": intensity, "pace": pace,
-                    "duration": sf.info(str(target)).duration, "audio_path": str(target),
-                }, ensure_ascii=False, indent=2), encoding="utf-8")
+                    "duration": duration, "audio_path": str(target),
+                }, ensure_ascii=False)
                 return target
             finally:
-                temporary.unlink(missing_ok=True)
+                try:
+                    unlink_contained_file(root, temporary)
+                except FileNotFoundError:
+                    pass
 
         results = self.synthesize_batch(
             tasks=[{
@@ -294,7 +366,8 @@ class LocalSpeechSynthesizer:
             if not cleaned_text:
                 continue
             directory = Path(t["directory"])
-            directory.mkdir(parents=True, exist_ok=True)
+            root = directory.parents[1]
+            resolve_contained_path(root, directory)
             voice = t.get("voice", "Narrator")
             emotion_raw = t.get("emotion", "Neutral").strip().lower()
             emo_cfg = EMOTION_SETTINGS.get(emotion_raw, EMOTION_SETTINGS["neutral"])
@@ -313,7 +386,7 @@ class LocalSpeechSynthesizer:
             # Content-addressed cache hit check
             if target_wav.exists() and not t.get("force") and meta_path.exists():
                 try:
-                    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+                    meta = json.loads(read_contained_bytes(root, meta_path).decode("utf-8"))
                     if meta.get("duration", 0) > 0.2:
                         results.append({
                             "id": t["id"],
@@ -327,9 +400,11 @@ class LocalSpeechSynthesizer:
                 except Exception:
                     pass
 
+            temporary_wav = directory / f"speech_{content_key}_{uuid.uuid4().hex}.tmp.wav"
             prepared_tasks.append({
                 "id": t["id"],
-                "target_path": str(target_wav),
+                "target_path": str(temporary_wav),
+                "authoritative_path": str(target_wav),
                 "meta_path": str(meta_path),
                 "text": cleaned_text,
                 "raw_text": raw_text,
@@ -422,10 +497,15 @@ with open({repr(batch_output_path)}, 'w', encoding='utf-8') as f:
                 matched_task = next((pt for pt in prepared_tasks if pt["id"] == br["id"]), None)
                 if br.get("success") and matched_task:
                     # Apply conservative postprocessing & cleanup
-                    clean_info = postprocess_speech_audio(Path(br["audio_path"]))
+                    temporary_wav = Path(br["audio_path"])
+                    target_wav = Path(matched_task["authoritative_path"])
+                    clean_info = postprocess_speech_audio(temporary_wav)
+                    root = target_wav.parents[2]
+                    promote_contained_file(root, temporary_wav, target_wav)
+                    br["audio_path"] = str(target_wav)
                     br["duration"] = clean_info["duration"]
                     # Write metadata sidecar
-                    Path(matched_task["meta_path"]).write_text(json.dumps({
+                    write_contained_json(root, Path(matched_task["meta_path"]), {
                         "text": matched_task["raw_text"],
                         "formatted_text": matched_task["text"],
                         "voice": matched_task["voice"],
@@ -436,7 +516,7 @@ with open({repr(batch_output_path)}, 'w', encoding='utf-8') as f:
                         "provider": provider_id,
                         "text_revision": matched_task["text_revision"],
                         "created_at": time.time(),
-                    }, indent=2), encoding="utf-8")
+                    })
                 results.append(br)
 
         finally:

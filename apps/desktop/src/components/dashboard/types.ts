@@ -19,6 +19,8 @@ export interface DashboardShellProps {
   engineVersion: string;
   onRetryEngine: () => void;
   retryingEngine: boolean;
+  onRestartEngine?: () => void;
+  restartingEngine?: boolean;
   onOpenToolsModels: () => void;
   onNewProject: () => void;
   onOpenAcquisition: (project: Project) => void;

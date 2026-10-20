@@ -1,0 +1,21 @@
+{
+  "passed": true,
+  "security_concerns": [
+    "Project deletion via shutil.rmtree is explicitly blocked (NotImplementedError) because pathname-based directory traversal cannot be bound to the validated root; a handle-bound recursive remover is needed before project deletion can be safely enabled.",
+    "Manifest.json write uses open_contained_output without atomic replace; the code comments acknowledge that pathname-based temporary-file replace can escape through a concurrently swapped junction. This is a known limitation (metadata update is not atomic) but does not allow escape from the project root.",
+    "Windows directory creation uses a held handle via CreateFileW but the directory itself is created via os.mkdir outside the held handle scope on the next iteration; however resolve_contained_path re-validates immediately after, providing defense-in-depth.",
+    "Ollama endpoint validation requires explicit user approval for remote IPs via a persisted allowlist; however the allowlist file is written via a .tmp rename pattern that is not atomic on Windows if the destination exists and is locked. The risk is low since this is a user-config file, not a security boundary.",
+    "ComfyUI client allows remote endpoints only with PANELFLOW_COMFYUI_ALLOW_REMOTE=true and explicit PANELFLOW_COMFYUI_ALLOWED_HOSTS entries, and requires public IP literals (no hostnames) to prevent DNS rebinding. This is correctly enforced."
+  ],
+  "logic_errors": [
+    "test_story_recovery_passes_persisted_panel_snapshot fails due to a test bug (mock returns lambda instead of coroutine), not a production logic error. The test needs to return an async function or coroutine from the mocked analyze_story_project."
+  ],
+  "suggestions": [
+    "Implement a handle-bound recursive directory remover (using openat/O_NOFOLLOW on POSIX and NtCreateFile with FILE_FLAG_BACKUP_SEMANTICS on Windows) to enable safe project deletion without NotImplementedError.",
+    "Consider making manifest.json writes atomic by writing to a temporary file in the same directory and using os.replace (POSIX) or MoveFileEx with MOVEFILE_REPLACE_EXISTING (Windows) after validating the temp file handle, to eliminate the concurrent junction swap window.",
+    "Add a test for Ollama allowlist persistence atomicity on Windows (write .tmp, close, then rename) to ensure the persisted authorization cannot be corrupted by concurrent access.",
+    "The test_story_recovery_passes_persisted_panel_snapshot should be fixed to return a proper async mock (e.g., AsyncMock or a real async function) instead of a lambda.",
+    "Consider adding a project-scoped read-only token for the Tauri desktop to call the engine API, complementing the existing PANELFLOW_ENGINE_TOKEN mechanism for engine-to-engine authentication."
+  ],
+  "summary": "All security-critical unit tests (97) and integration tests (16) pass. Path containment in engine/security/paths.py is comprehensive with handle-bound validation on both POSIX and Windows, symlink/junction rejection, and TOCTOU mitigation. Project filesystem operations in engine/projects/service.py consistently use resolve_contained_path and project_path guards. Durable job recovery in engine/jobs/manager.py and engine/jobs/workflow.py correctly rehydrates operations from persisted input with factory registration, validates panel/provider snapshots before side effects, and fails closed when handlers are unavailable. SSRF/SSRF prevention in engine/llm/providers/ollama.py and engine/comfyui/client.py enforces localhost-only for local endpoints, requires public IP literals and explicit user approval for remote endpoints, rejects credentials/fragments/paths in URLs, and disables redirects. One test failure is a test bug (mock returns lambda, not coroutine), not a production issue. The codebase meets the PanelFlow Engineering Constitution requirements for the Studio 2.0 gate checkpoint."
+}

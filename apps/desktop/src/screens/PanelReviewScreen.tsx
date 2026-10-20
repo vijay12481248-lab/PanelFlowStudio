@@ -58,6 +58,8 @@ export const PanelReviewScreen: React.FC<PanelReviewScreenProps> = ({
   // Dragging / Resizing / Drawing refs & state
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [dragMode, setDragMode] = useState<DragMode>("none");
+  const [draggedPanelIndex, setDraggedPanelIndex] = useState<number | null>(null);
+  const [dragOverPanelIndex, setDragOverPanelIndex] = useState<number | null>(null);
   const [activeHandle, setActiveHandle] = useState<ResizeHandle | null>(null);
   const [dragStart, setDragStart] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [initialBox, setInitialBox] = useState<{ x: number; y: number; w: number; h: number }>({ x: 0, y: 0, w: 0, h: 0 });
@@ -73,6 +75,54 @@ export const PanelReviewScreen: React.FC<PanelReviewScreenProps> = ({
   const [batchBlurLoading, setBatchBlurLoading] = useState<boolean>(false);
   const [batchPreset, setBatchPreset] = useState<"TOP_WATERMARK" | "BOTTOM_SUBSCRIBE" | "ALL_TEXT_REGIONS" | "ENTIRE_PANEL">("TOP_WATERMARK");
   const [batchHeight, setBatchHeight] = useState<number>(80);
+  const [contentReview, setContentReview] = useState<Awaited<ReturnType<typeof api.getPanelContentSuggestions>> | null>(null);
+  const [contentBusy, setContentBusy] = useState(false);
+  const [contentError, setContentError] = useState("");
+  const [smartProgress, setSmartProgress] = useState("");
+  const [previewRegion, setPreviewRegion] = useState<string | null>(null);
+
+  const detectAndReview = async () => {
+    setContentBusy(true);
+    setContentError("");
+    try {
+      const engines = await api.listOCREngines();
+      const engine = engines.find(e => e.is_available && !e.engine_id.toLowerCase().includes("mock"));
+      if (!engine) throw new Error("Configure an available OCR engine in Tools & Models to use Detect & Review.");
+      setSmartProgress("Detecting panels; edited and linked pages are preserved…");
+      const result = await api.detectPanels(project.id, readingDirection, 0.02);
+      let succeeded = false;
+      for (let attempt = 0; attempt < 600; attempt++) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        const job = await api.getJob(result.job_id);
+        if (job.status === "FAILED" || job.status === "CANCELLED") throw new Error(job.error || job.message || "Detection stopped.");
+        if (job.status === "SUCCEEDED") { succeeded = true; break; }
+      }
+      if (!succeeded) throw new Error("Detection is still running. Check the job queue before retrying.");
+      setPanels(await api.listPanels(project.id));
+      setSmartProgress("Finding text regions…");
+      const regions = await api.detectTextRegions(project.id);
+      const pending = regions.filter(r => !r.raw_text && !r.corrected_text && r.status !== "IGNORED");
+      for (let index = 0; index < pending.length; index++) {
+        setSmartProgress(`Reading text ${index + 1} of ${pending.length}…`);
+        await api.ocrSingleRegion(project.id, pending[index].id, engine.engine_id);
+      }
+      setContentReview(await api.getPanelContentSuggestions(project.id));
+      setCacheBuster(Date.now());
+    } catch (error: any) { setContentError(error.message || "Detect & Review failed."); }
+    finally { setContentBusy(false); setSmartProgress(""); }
+  };
+
+  const scanPromotionalText = async () => {
+    setContentBusy(true);
+    setContentError("");
+    try {
+      setContentReview(await api.getPanelContentSuggestions(project.id));
+    } catch (error: any) {
+      setContentError(error.message || "Could not inspect OCR regions.");
+    } finally {
+      setContentBusy(false);
+    }
+  };
 
   const activePage = pages[selectedPageIndex] || null;
   const canvasWidth = loadedImage && activePage && loadedImage.pageId === activePage.id ? loadedImage.width : activePage?.width || 1200;
@@ -223,10 +273,20 @@ export const PanelReviewScreen: React.FC<PanelReviewScreenProps> = ({
     setDetecting(true);
     try {
       const res = await api.detectPanels(project.id, readingDirection, 0.02);
+      let completed = false;
       for (let i = 0; i < 40; i++) {
         await new Promise((r) => setTimeout(r, 600));
         const job = await api.getJob(res.job_id);
-        if (job.status === "SUCCEEDED" || job.status === "FAILED") break;
+        if (job.status === "FAILED") {
+          throw new Error(job.error || job.message || "Panel detection failed. Review the job details and retry.");
+        }
+        if (job.status === "SUCCEEDED") {
+          completed = true;
+          break;
+        }
+      }
+      if (!completed) {
+        throw new Error("Panel detection is still processing. Check the job queue before starting another detection.");
       }
       const updatedPanels = await api.listPanels(project.id);
       pushUndo(panels);
@@ -421,6 +481,56 @@ export const PanelReviewScreen: React.FC<PanelReviewScreenProps> = ({
       alert(`Batch reset failed: ${err.message}`);
     } finally {
       setBatchBlurLoading(false);
+    }
+  };
+
+  const handlePanelDragStart = (e: React.DragEvent, index: number) => {
+    e.dataTransfer.setData("application/panelflow-panel-reorder", JSON.stringify({ fromIndex: index }));
+    e.dataTransfer.effectAllowed = "move";
+    setDraggedPanelIndex(index);
+  };
+
+  const handlePanelDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    if (index !== draggedPanelIndex) setDragOverPanelIndex(index);
+  };
+
+  const handlePanelDragLeave = (e: React.DragEvent, index: number) => {
+    if (dragOverPanelIndex === index) setDragOverPanelIndex(null);
+  };
+
+  const handlePanelDrop = async (e: React.DragEvent, targetIndex: number) => {
+    e.preventDefault();
+    setDragOverPanelIndex(null);
+    setDraggedPanelIndex(null);
+    try {
+      const reorderData = e.dataTransfer.getData("application/panelflow-panel-reorder");
+      if (!reorderData) return;
+      const { fromIndex } = JSON.parse(reorderData);
+      if (fromIndex === targetIndex) return;
+
+      pushUndo(panels);
+      const newPagePanels = [...pagePanels];
+      const [moved] = newPagePanels.splice(fromIndex, 1);
+      newPagePanels.splice(targetIndex, 0, moved);
+
+      const otherPanels = panels.filter((p) => p.page_id !== activePage?.id);
+      const combined = [...otherPanels, ...newPagePanels];
+      setPanels(combined);
+
+      const updated = await api.reorderPanels(project.id, combined.map((p) => p.id));
+      setPanels(updated);
+    } catch (err: any) {
+      reportError({
+        title: "Panel Reordering Failed",
+        message: err.message || "Failed to reorder panels.",
+        severity: "warning",
+        source: "pipeline",
+        projectId: project.id,
+        rawDetails: err,
+      });
+      loadData();
     }
   };
 
@@ -699,7 +809,7 @@ export const PanelReviewScreen: React.FC<PanelReviewScreenProps> = ({
             size="sm"
             onClick={handleAutoDetect}
             loading={detecting}
-            title="Run auto-detection across whole project"
+            title="Detect untouched pages. Pages containing manual edits, approved panels, or panels linked to video scenes are preserved."
           >
             <Icons.Rotate className="w-3.5 h-3.5 mr-1" />
             Auto-Detect All
@@ -715,6 +825,53 @@ export const PanelReviewScreen: React.FC<PanelReviewScreenProps> = ({
             <Icons.EyeOff className="w-3.5 h-3.5 mr-1 text-amber-400" />
             Batch Watermarks...
           </Button>
+
+          <Button variant="outline" size="sm" onClick={scanPromotionalText} loading={contentBusy}>
+            Review promotional text
+          </Button>
+          <Button variant="primary" size="sm" onClick={detectAndReview} disabled={contentBusy || detecting}>
+            Detect &amp; Review
+          </Button>
+          {smartProgress && <p role="status" className="basis-full text-sm text-indigo-200">{smartProgress}</p>}
+          {(contentReview || contentError) && (
+            <div role="region" aria-label="Promotional text review" className="basis-full p-4 border border-amber-700/50 rounded-lg bg-zinc-900 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="font-semibold">Promotional text review</h3>
+                <button type="button" onClick={() => { setContentReview(null); setContentError(""); }}>Close</button>
+              </div>
+              {contentError && <p role="alert" className="text-rose-300">{contentError}</p>}
+              {contentReview?.ocr_required && <p>Run OCR &amp; Text Review first, then scan again to locate website links and credits.</p>}
+              {contentReview && !contentReview.ocr_required && <p className="text-xs text-zinc-400">Checked {contentReview.regions_checked} text regions. {contentReview.suggestions.length} suggestions. Review each crop before blurring; source originals are backed up.</p>}
+              <div className="max-h-80 overflow-y-auto space-y-3">
+                {contentReview?.suggestions.map(item => (
+                  <div key={item.region_id} className="flex gap-4 items-center border-t border-zinc-700 pt-3">
+                    <svg viewBox={`0 0 ${panels.find(p => p.id === item.panel_id)?.width || 1} ${panels.find(p => p.id === item.panel_id)?.height || 1}`} role="img" aria-label="Panel preview with proposed blur region outlined" className="w-32 h-32 bg-black shrink-0">
+                      <image href={api.getPanelImageUrl(project.id, item.panel_id)} width="100%" height="100%" />
+                      <rect x={item.bbox[0]} y={item.bbox[1]} width={item.bbox[2]} height={item.bbox[3]} fill="rgba(251,191,36,0.15)" stroke="#fbbf24" strokeWidth="3" vectorEffect="non-scaling-stroke" />
+                    </svg>
+                    <div className="flex-1 min-w-0"><p className="text-sm break-words">{item.text}</p><p className="text-xs text-zinc-400">{item.reason}</p></div>
+                    <div className="space-y-2">
+                      <Button size="sm" variant="outline" onClick={() => setPreviewRegion(previewRegion === item.region_id ? null : item.region_id)}>Before / after</Button>
+                      {previewRegion === item.region_id && <div className="grid grid-cols-2 gap-2 max-w-lg">
+                        <figure><img src={api.getPanelImageUrl(project.id, item.panel_id)} alt="Before cleanup" className="max-h-64 object-contain" /><figcaption className="text-xs">Before</figcaption></figure>
+                        <figure><img src={api.getTextBlurPreviewUrl(project.id, item.panel_id, item.region_id)} alt="Proposed cleanup preview" className="max-h-64 object-contain" onError={() => setContentError("Preview unavailable. Retry before applying cleanup.")} /><figcaption className="text-xs">After preview · not applied</figcaption></figure>
+                      </div>}
+                    </div>
+                    <Button size="sm" variant="outline" disabled={contentBusy} onClick={async () => {
+                      setContentBusy(true);
+                      setContentError("");
+                      try {
+                        await api.blurPanelText(project.id, item.panel_id, { region_ids: [item.region_id] });
+                        setContentReview(prev => prev ? { ...prev, suggestions: prev.suggestions.filter(s => s.region_id !== item.region_id) } : prev);
+                        setCacheBuster(Date.now());
+                      } catch (error: any) { setContentError(error.message || "Could not blur selected text."); }
+                      finally { setContentBusy(false); }
+                    }}>Blur this text</Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           <Button
             variant="secondary"
@@ -1203,6 +1360,7 @@ export const PanelReviewScreen: React.FC<PanelReviewScreenProps> = ({
                         <div className="font-medium text-zinc-200">
                           Panel #{panel.page_sequence}
                         </div>
+                        {(panel.confidence < 0.8 || panel.status === "NEEDS_REVIEW") && <span className="text-amber-300 text-xs">Review suggested · {Math.round(panel.confidence * 100)}% confidence</span>}
                         <div className="text-[10px] text-zinc-500 font-mono">
                           {panel.width}x{panel.height} px
                         </div>
@@ -1210,30 +1368,27 @@ export const PanelReviewScreen: React.FC<PanelReviewScreenProps> = ({
                     </div>
 
                     <div className="flex items-center gap-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        disabled={idx === 0}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleReorder(idx, "up");
-                        }}
-                        title="Move Earlier"
+                      <div
+                        draggable
+                        onDragStart={(e) => handlePanelDragStart(e, idx)}
+                        onDragOver={(e) => handlePanelDragOver(e, idx)}
+                        onDragLeave={(e) => handlePanelDragLeave(e, idx)}
+                        onDrop={(e) => handlePanelDrop(e, idx)}
+                        className="flex items-center gap-1"
                       >
-                        <Icons.ArrowLeft className="w-3 h-3" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        disabled={idx === pagePanels.length - 1}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleReorder(idx, "down");
-                        }}
-                        title="Move Later"
-                      >
-                        <Icons.ArrowRight className="w-3 h-3" />
-                      </Button>
+                        <div
+                          className={`w-6 h-6 flex items-center justify-center cursor-grab active:cursor-grabbing rounded $\{
+                            draggedPanelIndex === idx
+                              ? 'bg-cyan-900/50 border-cyan-400'
+                              : dragOverPanelIndex === idx
+                              ? 'bg-cyan-900/30 border-cyan-400'
+                              : 'bg-zinc-800 border-zinc-700 hover:bg-zinc-700'
+                          \}`}
+                          title="Drag to reorder"
+                        >
+                          <Icons.GripVertical className="w-3.5 h-3.5 text-zinc-400" />
+                        </div>
+                      </div>
                     </div>
                   </div>
                 );

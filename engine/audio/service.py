@@ -9,6 +9,7 @@ import json
 import copy
 import logging
 import soundfile as sf
+import io
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 
@@ -17,6 +18,11 @@ logger = logging.getLogger("panelflow.audio.service")
 from engine.database.models import ProjectRecord, VideoScriptRecord, ScriptSegmentRecord, AudioTimelineRecord, VisualTimelineRecord, RenderJobRecord
 from engine.acquisition.models.models import PipelineStage
 from engine.motion.models.input_contract import MasterAudioTimeline, AudioInterval, TimelineSourceType
+from engine.security.paths import ensure_contained_directory, read_contained_bytes, write_contained_json
+
+
+def _contained_audio_info(workspace: Path | str, path: Path | str):
+    return sf.info(io.BytesIO(read_contained_bytes(workspace, path)))
 
 
 def utc_now():
@@ -45,7 +51,7 @@ class AudioService:
         force: bool = False,
     ) -> Dict[str, Any]:
         dialogue_dir = Path(workspace_path) / "audio" / "dialogue"
-        dialogue_dir.mkdir(parents=True, exist_ok=True)
+        ensure_contained_directory(workspace_path, Path("audio") / "dialogue")
         wav_path = self.synthesizer.synthesize(
             directory=dialogue_dir,
             text=text,
@@ -56,7 +62,7 @@ class AudioService:
             text_revision=text_revision,
             force=force,
         )
-        info = sf.info(str(wav_path))
+        info = _contained_audio_info(workspace_path, wav_path)
         return {
             "success": True,
             "segment_id": segment_id,
@@ -75,7 +81,7 @@ class AudioService:
         cancelled=lambda: False,
     ) -> List[Dict[str, Any]]:
         dialogue_dir = Path(workspace_path) / "audio" / "dialogue"
-        dialogue_dir.mkdir(parents=True, exist_ok=True)
+        ensure_contained_directory(workspace_path, Path("audio") / "dialogue")
         batch_tasks = []
         for t in tasks:
             batch_tasks.append({
@@ -104,8 +110,11 @@ class AudioService:
         warnings = []
         project = db.query(ProjectRecord).filter(ProjectRecord.id == project_id).first()
         plan_path = Path(project.workspace_path) / "audio" / "chapter_audio_plan.json" if project else None
-        if plan_path and plan_path.exists():
-            warnings = json.loads(plan_path.read_text(encoding="utf-8")).get("warnings", [])
+        if plan_path:
+            try:
+                warnings = json.loads(read_contained_bytes(str(project.workspace_path), Path("audio") / "chapter_audio_plan.json").decode("utf-8")).get("warnings", [])
+            except FileNotFoundError:
+                pass
         return {
             "id": record.id,
             "project_id": record.project_id,
@@ -118,6 +127,49 @@ class AudioService:
             "updated_at": record.updated_at.isoformat() if record.updated_at else None,
         }
 
+    _DEFAULT_VOICE_CASTING = {
+        "char_marcus": "Marcus (Male Deep F5-TTS)",
+        "char_narrator": "Narrator",
+        "NARRATOR": "Narrator",
+        "narrator": "Narrator",
+        "The Narrator": "Narrator",
+        "char_seraphina": "Seraphina (Cinematic)",
+        "char_aria": "Aria (The Narrator)",
+        "char_leon": "Leon",
+    }
+    _TTS_MODELS = {"chatterbox_turbo": "ChatterboxTurboTTS"}
+
+    def resolve_voice_casting(self, voice_casting: Optional[Dict[str, str]] = None) -> Dict[str, str]:
+        """Freeze the complete voice map so recovery does not inherit new defaults."""
+        return {**self._DEFAULT_VOICE_CASTING, **(voice_casting or {})}
+
+    def resolve_tts_provider_identity(self, db: Session, project_id: str) -> tuple[str, str]:
+        project = db.query(ProjectRecord).filter(ProjectRecord.id == project_id).first()
+        if not project:
+            raise ValueError(f"Project not found: {project_id}")
+        provider_id = (project.settings or {}).get("tts_provider", "chatterbox_turbo")
+        model_name = (project.settings or {}).get("tts_model") or self._TTS_MODELS.get(provider_id)
+        if not isinstance(provider_id, str) or not isinstance(model_name, str):
+            raise ValueError("Configured TTS provider/model identity is incomplete")
+        self.validate_pinned_tts_provider(provider_id, model_name, require_available=False)
+        return provider_id, model_name
+
+    def validate_pinned_tts_provider(
+        self,
+        provider_id: str,
+        model_name: str,
+        *,
+        require_available: bool = True,
+    ) -> None:
+        """Reject unavailable or drifted persisted TTS identities without fallback."""
+        expected_model = self._TTS_MODELS.get(provider_id)
+        if expected_model is None or expected_model != model_name:
+            raise RuntimeError(f"Persisted TTS provider/model is unavailable: {provider_id}/{model_name}")
+        if require_available and not getattr(self.synthesizer, "adapter_factory", None):
+            python_exe = getattr(self.synthesizer, "python_exe", None)
+            if python_exe is not None and not python_exe.exists():
+                raise RuntimeError(f"Persisted TTS provider is unavailable: {provider_id}")
+
     def generate_audio_timeline(
         self,
         db: Session,
@@ -125,6 +177,9 @@ class AudioService:
         voice_casting: Optional[Dict[str, str]] = None,
         progress=lambda *args: None,
         cancelled=lambda: False,
+        tts_provider_id: str | None = None,
+        tts_model_name: str | None = None,
+        voice_casting_is_resolved: bool = False,
     ) -> Dict[str, Any]:
         """
         Synthesizes / aligns all dialogue segments from the approved script into a MasterAudioTimeline.
@@ -148,9 +203,13 @@ class AudioService:
         workspace = Path(proj.workspace_path)
         audio_dir = workspace / "audio"
         dialogue_dir = audio_dir / "dialogue"
-        dialogue_dir.mkdir(parents=True, exist_ok=True)
+        ensure_contained_directory(workspace, Path("audio") / "dialogue")
 
-        voice_map = voice_casting or {"char_marcus": "Marcus (Male Deep F5-TTS)", "NARRATOR": "Narrator"}
+        if tts_provider_id is None and tts_model_name is None:
+            tts_provider_id, tts_model_name = self.resolve_tts_provider_identity(db, project_id)
+        else:
+            self.validate_pinned_tts_provider(tts_provider_id or "", tts_model_name or "")
+        voice_map = dict(voice_casting or {}) if voice_casting_is_resolved else self.resolve_voice_casting(voice_casting)
 
         intervals: List[AudioInterval] = []
         current_time = 0.5  # 0.5s pre-speech establishing pause
@@ -162,7 +221,8 @@ class AudioService:
         for seg in ordered_segments:
             if not seg.text.strip() or seg.type in ("PAUSE", "TRANSITION", "SFX_CUE"):
                 continue
-            voice = voice_map.get(seg.speaker_character_id or "NARRATOR", "Narrator")
+            speaker_key = seg.speaker_character_id or "NARRATOR"
+            voice = voice_map.get(speaker_key) or voice_map.get(speaker_key.lower()) or "Narrator"
             speech_tasks.append({
                 "id": seg.id,
                 "directory": str(dialogue_dir),
@@ -181,7 +241,7 @@ class AudioService:
             try:
                 batch_res = self.synthesizer.synthesize_batch(
                     speech_tasks,
-                    provider_id=(proj.settings or {}).get("tts_provider", "chatterbox_turbo"),
+                    provider_id=tts_provider_id,
                     progress_cb=progress,
                     cancelled_cb=cancelled,
                 )
@@ -211,13 +271,14 @@ class AudioService:
                 seg_audio_file = Path(br["audio_path"])
                 dur = round(br.get("duration", 3.0), 3)
             else:
-                voice = voice_map.get(seg.speaker_character_id or "NARRATOR", "Narrator")
+                speaker_key = seg.speaker_character_id or "NARRATOR"
+                voice = voice_map.get(speaker_key) or voice_map.get(speaker_key.lower()) or "Narrator"
                 seg_audio_file = self.synthesizer.synthesize(
                     dialogue_dir, seg.text, voice,
-                    provider_id=(proj.settings or {}).get("tts_provider", "chatterbox_turbo"),
+                    provider_id=tts_provider_id,
                     emotion=seg.emotion, intensity=seg.intensity,
                 )
-                info = sf.info(str(seg_audio_file))
+                info = _contained_audio_info(workspace, seg_audio_file)
                 dur = round(info.duration, 3)
 
             start_t = round(current_time, 3)
@@ -258,9 +319,7 @@ class AudioService:
             raise ValueError("Audio generation cancelled; generated assets were preserved.")
 
         # Save JSON sidecar
-        mat_json_path = audio_dir / "master_audio_timeline.json"
-        with open(mat_json_path, "w", encoding="utf-8") as f:
-            f.write(mat.model_dump_json(indent=2))
+        write_contained_json(workspace, Path("audio") / "master_audio_timeline.json", mat.model_dump())
 
         # Persist record in SQLite
         rec = AudioTimelineRecord(
@@ -356,7 +415,7 @@ class AudioService:
             previous = previous_intervals[idx]
             if idx > target_idx:
                 current_time += max(0.0, previous["start_time"] - previous_intervals[idx - 1]["end_time"])
-            file_dur = (round(sf.info(iv["audio_file_uri"]).duration, 3) if iv.get("audio_file_uri")
+            file_dur = (round(_contained_audio_info(str(proj.workspace_path), iv["audio_file_uri"]).duration, 3) if iv.get("audio_file_uri")
                         else previous["end_time"] - previous["start_time"])
             iv["start_time"] = round(current_time, 3)
             iv["end_time"] = round(current_time + file_dur, 3)
@@ -366,7 +425,7 @@ class AudioService:
         mat_dict["total_duration_sec"] = total_duration
         mat_dict["intervals"] = intervals
 
-        (Path(proj.workspace_path) / "audio" / "master_audio_timeline.json").write_text(json.dumps(mat_dict, indent=2), encoding="utf-8")
+        write_contained_json(str(proj.workspace_path), Path("audio") / "master_audio_timeline.json", mat_dict)
 
         # Mark as DRAFT and invalidate downstream motion & render
         record.timeline_json = mat_dict
@@ -382,9 +441,11 @@ class AudioService:
             from engine.audio.chapter_plan import plan_chapter_audio
             plan_settings = dict(proj.settings or {})
             plan_settings["auto_music"] = False
-            prior_plan = Path(proj.workspace_path) / "audio" / "chapter_audio_plan.json"
-            if prior_plan.exists():
-                plan_settings["chapter_music_path"] = json.loads(prior_plan.read_text(encoding="utf-8")).get("music", {}).get("path")
+            try:
+                prior = json.loads(read_contained_bytes(str(proj.workspace_path), Path("audio") / "chapter_audio_plan.json").decode("utf-8"))
+                plan_settings["chapter_music_path"] = prior.get("music", {}).get("path")
+            except FileNotFoundError:
+                pass
             plan_chapter_audio(Path(proj.workspace_path), plan_settings, sorted(script.segments, key=lambda s: s.sequence), mat_dict)
         db.commit()
 

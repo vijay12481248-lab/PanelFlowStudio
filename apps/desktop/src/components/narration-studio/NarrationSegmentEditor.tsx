@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from "react";
 import { Icons, Button, Badge } from "@panelflow/ui";
+import { api } from "@panelflow/api-client";
 import {
   type NarrationSegment,
   type CharacterProfile,
@@ -43,6 +44,8 @@ export const NarrationSegmentEditor: React.FC<NarrationSegmentEditorProps> = ({
   const [fontFamily, setFontFamily] = useState<"sans" | "serif">("serif");
   const [fontSize, setFontSize] = useState<"sm" | "base" | "lg">("base");
   const [showContinuityDetails, setShowContinuityDetails] = useState<boolean>(false);
+  const [isAnalyzingVision, setIsAnalyzingVision] = useState<boolean>(false);
+  const [isLightboxOpen, setIsLightboxOpen] = useState<boolean>(false);
 
   // Character mapping
   const currentCharacter = useMemo(() => {
@@ -344,6 +347,191 @@ export const NarrationSegmentEditor: React.FC<NarrationSegmentEditorProps> = ({
 
       {/* Main Working Area: Script Editor */}
       <div className="p-5 space-y-4 flex-1">
+        {/* Manga Visual Evidence & Panel Framing Card */}
+        {(() => {
+          const primaryPanelId = segment.source_context.panel_ids?.[0];
+          const primaryPageId = segment.source_context.page_id;
+          const rawUrl = segment.source_context.panel_preview_url || segment.source_context.image_url;
+
+          let panelImgUrl = "";
+          if (projectId && primaryPanelId) {
+            panelImgUrl = api.getPanelImageUrl(projectId, primaryPanelId);
+          } else if (rawUrl) {
+            panelImgUrl = rawUrl.startsWith("http") || rawUrl.startsWith("data:")
+              ? rawUrl
+              : `http://127.0.0.1:8765${rawUrl.startsWith("/") ? "" : "/"}${rawUrl}`;
+          } else if (projectId && primaryPageId) {
+            panelImgUrl = api.getPageImageUrl(projectId, primaryPageId);
+          }
+
+          const handleReanalyzeVision = async () => {
+            if (!projectId || !primaryPanelId) return;
+            setIsAnalyzingVision(true);
+            try {
+              const res = await api.analyzePanelVision(projectId, primaryPanelId);
+              if (res?.visual_description) {
+                onUpdateSegment({
+                  source_context: {
+                    ...segment.source_context,
+                    visual_description: res.visual_description,
+                  },
+                });
+              }
+            } catch (err: any) {
+              console.warn("Vision analysis failed:", err);
+            } finally {
+              setIsAnalyzingVision(false);
+            }
+          };
+
+          return (
+            <div className="rounded-xl border border-zinc-800 bg-zinc-900/70 p-3.5 space-y-3 shadow-md">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-md bg-indigo-950 border border-indigo-800 flex items-center justify-center text-indigo-400">
+                    <Icons.Image className="w-3.5 h-3.5" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-zinc-100 flex items-center gap-1.5">
+                      <span>Source Manga Panel</span>
+                      <span className="text-zinc-600">•</span>
+                      <span className="text-zinc-400 font-normal">
+                        Page {segment.source_context.page_number} ({segment.source_context.panel_labels?.[0] || `Panel #${segment.sequence}`})
+                      </span>
+                    </h4>
+                    <span className="text-[10px] text-zinc-500 font-mono">
+                      Grounded visual evidence for narration & dialogue
+                    </span>
+                  </div>
+                </div>
+
+                {primaryPanelId && projectId && (
+                  <button
+                    type="button"
+                    onClick={handleReanalyzeVision}
+                    disabled={isAnalyzingVision}
+                    className="text-[11px] px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-indigo-300 font-semibold border border-zinc-700/80 flex items-center gap-1.5 transition-colors disabled:opacity-50"
+                    title="Run Ollama Vision model on this specific panel crop"
+                  >
+                    {isAnalyzingVision ? (
+                      <>
+                        <span className="w-3 h-3 border-2 border-indigo-400/30 border-t-indigo-400 rounded-full animate-spin" />
+                        <span>Analyzing Vision...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Icons.Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                        <span>Re-Analyze with Vision</span>
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
+
+              <div className="grid grid-cols-12 gap-3.5 items-stretch">
+                {/* Panel Image Thumbnail */}
+                <div className="col-span-12 sm:col-span-4 rounded-lg overflow-hidden bg-zinc-950 border border-zinc-800 relative group flex items-center justify-center min-h-[140px] max-h-[190px]">
+                  {panelImgUrl ? (
+                    <>
+                      <img
+                        src={panelImgUrl}
+                        alt="Manga Panel Crop"
+                        className="w-full h-full object-contain cursor-pointer transition-transform duration-200 group-hover:scale-102"
+                        onClick={() => setIsLightboxOpen(true)}
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          if (projectId && primaryPageId && !target.src.includes("/pages/")) {
+                            target.src = api.getPageImageUrl(projectId, primaryPageId);
+                          }
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setIsLightboxOpen(true)}
+                        className="absolute bottom-1.5 right-1.5 p-1 rounded bg-black/70 text-zinc-300 hover:text-white backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity"
+                        title="Click to view full resolution"
+                      >
+                        <Icons.Maximize className="w-3.5 h-3.5" />
+                      </button>
+                    </>
+                  ) : (
+                    <div className="text-zinc-600 text-xs flex flex-col items-center">
+                      <Icons.Image className="w-6 h-6 mb-1 text-zinc-700" />
+                      <span>No Panel Image</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Grounded Evidence Details: Dialogue & Action */}
+                <div className="col-span-12 sm:col-span-8 flex flex-col justify-between gap-2 text-xs">
+                  {/* OCR Dialogue */}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1">
+                        <Icons.MessageSquare className="w-3 h-3" />
+                        Speech Bubble Dialogue (OCR)
+                      </span>
+                      {segment.source_context.raw_ocr_dialogue && (
+                        <button
+                          type="button"
+                          onClick={() => handleTextChange(segment.source_context.raw_ocr_dialogue)}
+                          className="text-[10px] font-semibold text-emerald-400 hover:text-emerald-300 underline"
+                          title="Copy OCR dialogue text into narration script"
+                        >
+                          Use as Script
+                        </button>
+                      )}
+                    </div>
+                    {segment.source_context.raw_ocr_dialogue ? (
+                      <p className="p-2 rounded-lg bg-zinc-950/80 border border-zinc-800 text-zinc-200 font-serif italic text-xs leading-relaxed">
+                        &ldquo;{segment.source_context.raw_ocr_dialogue}&rdquo;
+                      </p>
+                    ) : (
+                      <p className="p-2 rounded-lg bg-zinc-950/40 border border-zinc-850 text-zinc-500 italic text-[11px]">
+                        No dialogue bubbles detected in this panel (Visual exposition or silent beat).
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Visual Action & Pacing Description */}
+                  <div className="space-y-1">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-400 flex items-center gap-1">
+                      <Icons.Eye className="w-3 h-3" />
+                      Visual Action & Atmosphere
+                    </span>
+                    <p className="p-2 rounded-lg bg-zinc-950/80 border border-zinc-800 text-zinc-300 font-sans text-xs leading-relaxed">
+                      {segment.source_context.visual_description || "Visual framing ready for story generation."}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Lightbox Modal */}
+              {isLightboxOpen && panelImgUrl && (
+                <div
+                  className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-6 cursor-zoom-out"
+                  onClick={() => setIsLightboxOpen(false)}
+                >
+                  <div className="max-w-4xl max-h-[90vh] relative">
+                    <img
+                      src={panelImgUrl}
+                      alt="Full Panel Preview"
+                      className="max-w-full max-h-[85vh] object-contain rounded-xl shadow-2xl border border-zinc-700"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setIsLightboxOpen(false)}
+                      className="absolute top-2 right-2 p-1.5 rounded-full bg-zinc-900/90 text-white hover:bg-zinc-800"
+                    >
+                      <Icons.X className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
         {/* Editor Controls Ribbon */}
         <div className="flex items-center justify-between pb-2 border-b border-zinc-800/80 text-xs">
           <div className="flex items-center gap-3">
@@ -470,6 +658,19 @@ export const NarrationSegmentEditor: React.FC<NarrationSegmentEditorProps> = ({
               <Icons.Scissors className="w-3.5 h-3.5 mr-1 text-zinc-400" />
               Split Segment
             </Button>
+
+            {onAddToTimeline && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => onAddToTimeline(segment)}
+                className="text-xs h-8 border border-emerald-700/80 bg-emerald-950/60 hover:bg-emerald-900 text-emerald-300 font-semibold flex items-center gap-1.5"
+                title="Add this narration segment directly to the video timeline"
+              >
+                <Icons.Plus className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Add to Timeline</span>
+              </Button>
+            )}
           </div>
 
           <button

@@ -1,7 +1,9 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
+import { StoryAnalysisActivity } from "../components/StoryAnalysisActivity";
 import { api } from "@panelflow/api-client";
 import type {
   Project,
+  Job,
   NarrativeDocument,
   CharacterEntity,
   SceneEntity,
@@ -34,13 +36,17 @@ export const StoryReviewScreen: React.FC<StoryReviewScreenProps> = ({
   const [providers, setProviders] = useState<LLMProviderInfo[]>([]);
   const [selectedProvider, setSelectedProvider] = useState<string>(project.settings?.visual_storytelling ? "ollama" : "mock");
 
-  const { reportError, inspectError } = useError();
+  const { reportError, inspectError, cancelJob } = useError();
+  const [cancelling, setCancelling] = useState(false);
   const [analysisError, setAnalysisError] = useState<AppError | null>(null);
 
   const [loading, setLoading] = useState<boolean>(true);
   const [analyzing, setAnalyzing] = useState<boolean>(false);
   const [progress, setProgress] = useState<number>(0);
   const [progressMsg, setProgressMsg] = useState<string>("");
+  const [analysisJob, setAnalysisJob] = useState<Job | null>(null);
+  const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const watchedJob = useRef<string | null>(null);
   const [activeTab, setActiveTab] = useState<"characters" | "scenes" | "utterances" | "continuity">("characters");
 
   // Character edit state
@@ -90,23 +96,40 @@ export const StoryReviewScreen: React.FC<StoryReviewScreenProps> = ({
 
   useEffect(() => {
     loadData();
+    let live = true;
+    api.listProjectJobs(project.id).then((jobs) => {
+      if (!live) return;
+      const job = jobs.find((item) => item.job_type === "STORY_ANALYSIS" && (item.status === "RUNNING" || item.status === "QUEUED"));
+      if (job) {
+        setAnalysisJob(job);
+        setProgress(job.progress);
+        setProgressMsg(job.message);
+        watchAnalysisJob(job.job_id);
+      }
+    }).catch(() => undefined);
+    return () => {
+      live = false;
+      watchedJob.current = null;
+      if (pollTimer.current) clearInterval(pollTimer.current);
+    };
   }, [loadData]);
 
-  const handleStartAnalysis = async () => {
+  function watchAnalysisJob(jobId: string) {
+    if (watchedJob.current === jobId) return;
+    if (pollTimer.current) clearInterval(pollTimer.current);
+    watchedJob.current = jobId;
     setAnalyzing(true);
-    setAnalysisError(null);
-    setProgress(0.1);
-    setProgressMsg("Queuing story analysis...");
-
-    try {
-      const res = await api.analyzeStory(project.id, selectedProvider);
-      const jobId = res.job_id;
       let consecutiveErrors = 0;
+      let polling = false;
 
       // Poll job
       const pollInterval = setInterval(async () => {
+        if (polling) return;
+        polling = true;
         try {
           const j = await api.getJob(jobId);
+          if (watchedJob.current !== jobId) return;
+          setAnalysisJob(j);
           consecutiveErrors = 0;
 
           if (j.status === "RUNNING") {
@@ -126,6 +149,11 @@ export const StoryReviewScreen: React.FC<StoryReviewScreenProps> = ({
           ) {
             clearInterval(pollInterval);
             setAnalyzing(false);
+            if (j.status === "CANCELLED") {
+              setAnalysisError(null);
+              reportError({ title: "Story analysis cancelled", message: j.message, severity: "info", source: "job", jobId, projectId: project.id, rawDetails: j });
+              return;
+            }
             const errObj: AppError = {
               id: `err_story_${jobId}`,
               title: "Story Understanding Failed",
@@ -142,8 +170,8 @@ export const StoryReviewScreen: React.FC<StoryReviewScreenProps> = ({
               rawDetails: j,
               suggestions: [
                 "Verify Ollama is running on http://127.0.0.1:11434 ('ollama serve').",
-                "Ensure model 'qwen2.5:9b' is installed ('ollama pull qwen2.5:9b').",
-                "For chapters with 15+ pages, LLM context generation takes 8–10 minutes. Ensure adequate VRAM.",
+                "Check the selected model in Tools & Models rather than installing a different model from an old error message.",
+                "Reconstruction saves small sections. Inspect the failed panel range; repeating an unchanged output-limit failure is unlikely to help.",
                 "Check %LOCALAPPDATA%\\PanelFlow Studio\\logs\\engine.log for full diagnostic trace.",
               ],
             };
@@ -177,8 +205,24 @@ export const StoryReviewScreen: React.FC<StoryReviewScreenProps> = ({
             setAnalysisError(netErr);
             reportError(netErr);
           }
+        } finally {
+          polling = false;
         }
       }, 1000);
+      pollTimer.current = pollInterval;
+  }
+
+  const handleStartAnalysis = async () => {
+    setAnalyzing(true);
+    setAnalysisError(null);
+    setAnalysisJob(null);
+    setProgress(0.1);
+    setProgressMsg("Queuing story analysis...");
+
+    try {
+      const res = await api.analyzeStory(project.id, selectedProvider);
+      const jobId = res.job_id;
+      watchAnalysisJob(jobId);
     } catch (err: any) {
       setAnalyzing(false);
       const startErr: AppError = {
@@ -348,9 +392,10 @@ export const StoryReviewScreen: React.FC<StoryReviewScreenProps> = ({
           >
             {providers.filter(p => !project.settings?.visual_storytelling || p.provider_id !== "mock_llm").map((p) => (
               <option key={p.provider_id} value={p.provider_id}>
-                {p.provider_name} {p.is_local ? "(Local)" : ""} {p.is_healthy ? "✓" : "✗"}
+                {p.provider_name} {p.is_local ? "• Local" : ""} {p.is_healthy ? "• Online" : "• Offline"}
               </option>
             ))}
+
           </select>
 
           <Button
@@ -395,6 +440,11 @@ export const StoryReviewScreen: React.FC<StoryReviewScreenProps> = ({
             <span>{Math.round(progress * 100)}%</span>
           </div>
           <ProgressBar progress={progress} />
+          <StoryAnalysisActivity job={analysisJob} />
+          {analysisJob && (analysisJob.status === "QUEUED" || analysisJob.status === "RUNNING") && <Button variant="ghost" size="sm" disabled={cancelling}
+            onClick={async () => { setCancelling(true); try { await cancelJob(analysisJob.job_id); } finally { setCancelling(false); } }}>
+            {cancelling ? "Requesting cancellation…" : "Cancel analysis"}
+          </Button>}
         </Card>
       )}
 

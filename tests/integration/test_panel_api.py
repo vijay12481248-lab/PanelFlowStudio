@@ -119,3 +119,53 @@ def test_normalization_and_panel_api_workflow(tmp_path: Path):
     confirm_resp = client.post(f"/api/projects/{project_id}/panels/confirm")
     assert confirm_resp.status_code == 200
     assert confirm_resp.json()["current_stage"] == "PANELS_DETECTED"
+
+    # 9. Test Panel Blur & Redaction Endpoints
+    target_panel = panels[0]
+    p_id = target_panel["id"]
+
+    # Initial blur status
+    status_resp = client.get(f"/api/projects/{project_id}/panels/{p_id}/blur-status")
+    assert status_resp.status_code == 200
+    assert status_resp.json()["is_blurred"] is False
+
+    # Blur a custom watermark box
+    blur_resp = client.post(f"/api/projects/{project_id}/panels/{p_id}/blur-region", json={
+        "x": 10,
+        "y": 10,
+        "width": 80,
+        "height": 40,
+        "blur_radius": 15,
+        "feather": 2,
+    })
+    assert blur_resp.status_code == 200
+    assert blur_resp.json()["success"] is True
+
+    # Check status is now blurred
+    status_resp2 = client.get(f"/api/projects/{project_id}/panels/{p_id}/blur-status")
+    assert status_resp2.status_code == 200
+    assert status_resp2.json()["is_blurred"] is True
+
+    # Restore original image
+    restore_resp = client.post(f"/api/projects/{project_id}/panels/{p_id}/reset-image")
+    assert restore_resp.status_code == 200
+    assert restore_resp.json()["success"] is True
+
+    # Blur entire panel
+    entire_resp = client.post(f"/api/projects/{project_id}/panels/{p_id}/blur-panel", json={"blur_radius": 20})
+    assert entire_resp.status_code == 200
+    assert entire_resp.json()["success"] is True
+
+    # Batch blur top watermarks across all panels
+    batch_resp = client.post(f"/api/projects/{project_id}/panels/batch-blur", json={
+        "preset": "TOP_WATERMARK",
+        "height_px": 50,
+        "blur_radius": 20,
+    })
+    assert batch_resp.status_code == 200
+    assert batch_resp.json()["blurred_panels_count"] >= 1
+
+    # Batch reset
+    batch_rest_resp = client.post(f"/api/projects/{project_id}/panels/batch-reset", json={})
+    assert batch_rest_resp.status_code == 200
+    assert batch_rest_resp.json()["restored_panels_count"] >= 1

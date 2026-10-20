@@ -163,12 +163,13 @@ def rotate_image_file(image_path: Path, degrees: int) -> dict:
         270: Image.ROTATE_90,
     }
 
-    with Image.open(image_path) as img:
+    from engine.security.paths import open_contained_output, read_contained_bytes
+    with Image.open(io.BytesIO(read_contained_bytes(image_path.parent.parent, image_path))) as img:
         img_format = img.format or "JPEG"
         rotated = img.transpose(pil_rot[norm_deg])
-        rotated.save(image_path, format=img_format)
-
-    with open(image_path, "rb") as f:
-        data = f.read()
-
+        buffer = io.BytesIO()
+        rotated.save(buffer, format=img_format)
+    data = buffer.getvalue()
+    with open_contained_output(image_path.parent.parent, image_path) as output:
+        output.write(data)
     return validate_image_bytes(data, image_path.name)

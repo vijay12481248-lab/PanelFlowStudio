@@ -4,7 +4,16 @@ import { useError } from "../../context/ErrorContext";
 import type { AppError } from "../../types/error";
 
 export const ErrorAlertBanner: React.FC = () => {
-  const { activeErrors, dismissError, clearAllErrors, inspectError } = useError();
+  const { activeErrors, dismissError, clearAllErrors, inspectError, engineHealthy } = useError();
+  const oldestId = activeErrors[activeErrors.length - 1]?.id;
+
+  React.useEffect(() => {
+    if (!oldestId) return;
+    const timer = setTimeout(() => {
+      dismissError(oldestId);
+    }, 7000);
+    return () => clearTimeout(timer);
+  }, [oldestId, dismissError]);
 
   if (activeErrors.length === 0) return null;
 
@@ -12,7 +21,7 @@ export const ErrorAlertBanner: React.FC = () => {
     <div
       role="region"
       aria-label="Error Alerts"
-      className="fixed top-16 right-4 z-50 flex flex-col gap-2.5 max-w-md w-full pointer-events-none select-none"
+      className="fixed bottom-6 right-6 z-50 flex flex-col-reverse gap-2.5 max-w-sm w-full pointer-events-none select-none"
     >
       {activeErrors.length > 1 && (
         <div className="flex items-center justify-between px-3 py-1 bg-[#1a1424]/90 backdrop-blur-md border border-rose-900/40 rounded-lg text-xs pointer-events-auto shadow-lg">
@@ -31,6 +40,7 @@ export const ErrorAlertBanner: React.FC = () => {
       {activeErrors.slice(0, 3).map((err) => {
         const isSevere = err.severity === "error";
         const isWarning = err.severity === "warning";
+        const job = typeof err.rawDetails === "object" && err.rawDetails?.job_id ? err.rawDetails : null;
 
         return (
           <div
@@ -76,16 +86,21 @@ export const ErrorAlertBanner: React.FC = () => {
                 </div>
 
                 <p className="text-[11px] text-zinc-300 line-clamp-2 leading-relaxed">
-                  {err.message}
+                  {job?.message || err.message}
                 </p>
 
+                <div className="flex items-center justify-between pt-1">
+                  {job && <span className="text-[10px] text-zinc-400">{job.status} · {Math.round(job.progress * 100)}% · Engine {engineHealthy ? "healthy" : "unavailable"}</span>}
+                </div>
+                {job && <p className="text-[10px] text-zinc-500 break-all font-mono">{job.job_id}</p>}
+                {job && <p className="text-[10px] text-zinc-400">Started: {job.started_at ? new Date(/(Z|[+-]\d\d:\d\d)$/.test(job.started_at) ? job.started_at : `${job.started_at}Z`).toLocaleTimeString() : "Waiting"}</p>}
                 <div className="flex items-center justify-between pt-1">
                   <button
                     onClick={() => inspectError(err)}
                     className="text-[11px] font-semibold text-cyan-300 hover:text-cyan-200 flex items-center gap-1 group transition-colors"
                   >
                     <Eye className="w-3 h-3 text-cyan-400" />
-                    <span>View Error Details</span>
+                    <span>{err.jobId ? "View Job Details" : "View Error Details"}</span>
                     <ChevronRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
                   </button>
 

@@ -47,6 +47,7 @@ class PanelBox(BaseModel):
     normalized_y: float = 0.0
     normalized_width: float = 0.0
     normalized_height: float = 0.0
+    polygon_json: str | None = None
     confidence: float = 1.0
     panel_type: str = PanelType.STANDARD.value
     status: str = PanelStatus.DETECTED.value

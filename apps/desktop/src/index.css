@@ -10,6 +10,26 @@ body {
   user-select: none;
 }
 
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 2px solid #8b84ff;
+  outline-offset: 2px;
+}
+
+::selection {
+  background: rgba(109, 93, 252, 0.42);
+  color: #ffffff;
+}
+
 /* Custom scrollbars */
 ::-webkit-scrollbar {
   width: 8px;

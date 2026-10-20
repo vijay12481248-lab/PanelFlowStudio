@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { api } from "@panelflow/api-client";
 import type { ProviderHealth, SystemProvidersResponse, HardwareDiagnostics } from "@panelflow/shared-types";
-import { Button, Card, Badge, Icons } from "@panelflow/ui";
+import { Button, Card, Badge, ProgressBar, Icons } from "@panelflow/ui";
 
 interface ProviderHealthModalProps {
   open: boolean;
@@ -78,6 +78,100 @@ export const ProviderHealthModal: React.FC<ProviderHealthModalProps> = ({ open, 
   const [authTokenInput, setAuthTokenInput] = useState("");
   const [benchmarking, setBenchmarking] = useState(false);
   const [benchmarkResult, setBenchmarkResult] = useState<any>(null);
+
+  // Setup & Onboarding Assistant State
+  const [locatingFfmpeg, setLocatingFfmpeg] = useState(false);
+  const [ffmpegResult, setFfmpegResult] = useState<string | null>(null);
+  const [provisioningVoices, setProvisioningVoices] = useState(false);
+  const [voiceResult, setVoiceResult] = useState<string | null>(null);
+  const [installingPlaywright, setInstallingPlaywright] = useState(false);
+  const [playwrightStatus, setPlaywrightStatus] = useState<any>(null);
+  const [pullingModel, setPullingModel] = useState(false);
+  const [pullModelInput, setPullModelInput] = useState("qwen2.5:7b");
+  const [pullStatus, setPullStatus] = useState<any>(null);
+
+  const handleLocateFfmpeg = async () => {
+    setLocatingFfmpeg(true);
+    setFfmpegResult(null);
+    try {
+      const res = await api.locateFfmpeg();
+      if (res.found) {
+        setFfmpegResult(`Found: ${res.ffmpeg_path} (${res.version})`);
+        await loadHealth();
+      } else {
+        setFfmpegResult("FFmpeg was not located in standard paths. Please install via winget or specify path.");
+      }
+    } catch (err: any) {
+      setFfmpegResult(`Scan failed: ${err.message}`);
+    } finally {
+      setLocatingFfmpeg(false);
+    }
+  };
+
+  const handleProvisionVoices = async () => {
+    setProvisioningVoices(true);
+    setVoiceResult(null);
+    try {
+      const res = await api.provisionVoices();
+      setVoiceResult(`Ready: ${res.total_profiles} voice profiles verified in ${res.voice_directory}`);
+      await loadHealth();
+    } catch (err: any) {
+      setVoiceResult(`Provisioning failed: ${err.message}`);
+    } finally {
+      setProvisioningVoices(false);
+    }
+  };
+
+  const handleInstallPlaywright = async () => {
+    setInstallingPlaywright(true);
+    try {
+      await api.installPlaywrightBrowsers();
+      const poll = setInterval(async () => {
+        try {
+          const st = await api.getPlaywrightInstallStatus();
+          setPlaywrightStatus(st);
+          if (st.status === "COMPLETED" || st.status === "FAILED") {
+            clearInterval(poll);
+            setInstallingPlaywright(false);
+            await loadHealth();
+          }
+        } catch {
+          clearInterval(poll);
+          setInstallingPlaywright(false);
+        }
+      }, 1500);
+    } catch (err: any) {
+      alert(`Failed to start Playwright installer: ${err.message}`);
+      setInstallingPlaywright(false);
+    }
+  };
+
+  const handlePullModel = async (modelToPull?: string) => {
+    const target = (modelToPull || pullModelInput).trim();
+    if (!target) return;
+    setPullingModel(true);
+    setPullStatus({ status: "STARTING", status_text: `Connecting to Ollama for ${target}...`, percent: 0 });
+    try {
+      await api.pullOllamaModel(target, ollamaConfig?.endpoint_url);
+      const poll = setInterval(async () => {
+        try {
+          const st = await api.getOllamaPullStatus();
+          setPullStatus(st);
+          if (st.status === "COMPLETED" || st.status === "FAILED") {
+            clearInterval(poll);
+            setPullingModel(false);
+            await loadOllamaAndResources();
+          }
+        } catch {
+          clearInterval(poll);
+          setPullingModel(false);
+        }
+      }, 1200);
+    } catch (err: any) {
+      alert(`Model download request failed: ${err.message}`);
+      setPullingModel(false);
+    }
+  };
 
   const loadHealth = async () => {
     setLoading(true);
@@ -284,6 +378,123 @@ export const ProviderHealthModal: React.FC<ProviderHealthModalProps> = ({ open, 
                   </p>
                 </Card>
               )}
+
+              {/* 1-Click Setup & Model Onboarding Assistant Card */}
+              <Card className="p-4 bg-gradient-to-r from-indigo-950/40 via-zinc-950 to-zinc-950 border-indigo-900/40 shadow-sm space-y-3">
+                <div className="flex items-center justify-between border-b border-zinc-800/80 pb-2">
+                  <div className="flex items-center gap-2">
+                    <Icons.ShieldCheck className="w-4 h-4 text-indigo-400" />
+                    <span className="text-xs font-bold uppercase tracking-wider text-indigo-200">
+                      Setup & Dependency Assistant
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-zinc-400 font-mono">1-Click Local Provisioning</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {/* Action 1: Locate FFmpeg */}
+                  <div className="p-3 rounded-lg bg-zinc-900/70 border border-zinc-800 flex flex-col justify-between space-y-2">
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-zinc-100">FFmpeg Discovery</span>
+                        <Badge variant={data?.providers.find((p) => p.id === "ffmpeg")?.status === "HEALTHY" ? "success" : "warning"} className="text-[9px]">
+                          {data?.providers.find((p) => p.id === "ffmpeg")?.status || "MISSING"}
+                        </Badge>
+                      </div>
+                      <p className="text-[11px] text-zinc-400 mt-1">
+                        Deep scan standard directories, Winget, Scoop, and auto-inject into PATH.
+                      </p>
+                    </div>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={handleLocateFfmpeg}
+                      disabled={locatingFfmpeg}
+                      className="w-full text-xs"
+                    >
+                      <Icons.Refresh className={`w-3.5 h-3.5 mr-1.5 ${locatingFfmpeg ? "animate-spin" : ""}`} />
+                      {locatingFfmpeg ? "Scanning..." : "Auto-Locate FFmpeg"}
+                    </Button>
+                  </div>
+
+                  {/* Action 2: Provision Voices */}
+                  <div className="p-3 rounded-lg bg-zinc-900/70 border border-zinc-800 flex flex-col justify-between space-y-2">
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-zinc-100">Default Voice Pack</span>
+                        <Badge variant="accent" className="text-[9px]">
+                          AppData Sync
+                        </Badge>
+                      </div>
+                      <p className="text-[11px] text-zinc-400 mt-1">
+                        Deploys bundled neural voice profiles (Aria, Marcus, Seraphina) into user AppData.
+                      </p>
+                    </div>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={handleProvisionVoices}
+                      disabled={provisioningVoices}
+                      className="w-full text-xs"
+                    >
+                      <Icons.Plus className="w-3.5 h-3.5 mr-1.5 text-indigo-400" />
+                      {provisioningVoices ? "Provisioning..." : "Provision Voice Profiles"}
+                    </Button>
+                  </div>
+
+                  {/* Action 3: Install Playwright */}
+                  <div className="p-3 rounded-lg bg-zinc-900/70 border border-zinc-800 flex flex-col justify-between space-y-2">
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-zinc-100">Playwright Chromium</span>
+                        <Badge variant={data?.providers.find((p) => p.id === "playwright")?.status === "HEALTHY" ? "success" : "neutral"} className="text-[9px]">
+                          {data?.providers.find((p) => p.id === "playwright")?.status === "HEALTHY" ? "READY" : "INSTALL"}
+                        </Badge>
+                      </div>
+                      <p className="text-[11px] text-zinc-400 mt-1">
+                        Downloads headless Chromium browser for crawling dynamic webtoon pages.
+                      </p>
+                    </div>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={handleInstallPlaywright}
+                      disabled={installingPlaywright || data?.providers.find((p) => p.id === "playwright")?.status === "HEALTHY"}
+                      className="w-full text-xs"
+                    >
+                      <Icons.Globe className="w-3.5 h-3.5 mr-1.5 text-cyan-400" />
+                      {installingPlaywright ? "Downloading..." : data?.providers.find((p) => p.id === "playwright")?.status === "HEALTHY" ? "Installed" : "Install Browsers"}
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Notifications & Result banners */}
+                {ffmpegResult && (
+                  <p className="text-[11px] font-mono text-indigo-300 bg-indigo-950/40 border border-indigo-900/60 rounded px-2.5 py-1.5">
+                    {ffmpegResult}
+                  </p>
+                )}
+                {voiceResult && (
+                  <p className="text-[11px] font-mono text-emerald-300 bg-emerald-950/40 border border-emerald-900/60 rounded px-2.5 py-1.5">
+                    {voiceResult}
+                  </p>
+                )}
+                {playwrightStatus && (
+                  <div className="p-2.5 rounded bg-zinc-900 border border-zinc-800 text-[11px] font-mono space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-zinc-300 font-bold">Playwright Installer: {playwrightStatus.status}</span>
+                      {playwrightStatus.exit_code !== null && (
+                        <span className="text-zinc-500">Exit Code: {playwrightStatus.exit_code}</span>
+                      )}
+                    </div>
+                    {playwrightStatus.log_lines && playwrightStatus.log_lines.length > 0 && (
+                      <p className="text-zinc-400 truncate max-w-full">
+                        {playwrightStatus.log_lines[playwrightStatus.log_lines.length - 1]}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </Card>
 
               {/* Providers List */}
               <div className="space-y-2.5">
@@ -509,6 +720,92 @@ export const ProviderHealthModal: React.FC<ProviderHealthModalProps> = ({ open, 
                     </select>
                     <p className="text-[10px] text-zinc-500">Emotional storyteller recap & cadence adaptation</p>
                   </div>
+                </div>
+              </Card>
+
+              {/* 1-Click Model Downloader Card */}
+              <Card className="p-4 bg-zinc-950 border-zinc-800 space-y-3">
+                <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
+                  <div className="flex items-center gap-2">
+                    <Icons.Plus className="w-4 h-4 text-indigo-400" />
+                    <span className="text-xs font-bold uppercase tracking-wider text-zinc-200">
+                      Download & Pull Ollama Models
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-zinc-400 font-mono">Direct Streaming via /api/pull</span>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs text-zinc-400">Quick Recommendations:</span>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => handlePullModel("qwen2.5:7b")}
+                      disabled={pullingModel}
+                      className="text-xs"
+                    >
+                      qwen2.5:7b (Recommended)
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => handlePullModel("llama3.2:3b")}
+                      disabled={pullingModel}
+                      className="text-xs"
+                    >
+                      llama3.2:3b (Low VRAM)
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => handlePullModel("qwen3.5:9b")}
+                      disabled={pullingModel}
+                      className="text-xs"
+                    >
+                      qwen3.5:9b (Thinking)
+                    </Button>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={pullModelInput}
+                      onChange={(e) => setPullModelInput(e.target.value)}
+                      placeholder="e.g. qwen2.5:7b or mistral"
+                      disabled={pullingModel}
+                      className="flex-1 bg-zinc-900 border border-zinc-700 rounded px-3 py-1.5 font-mono text-zinc-200 text-xs focus:outline-none focus:border-indigo-500"
+                    />
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onClick={() => handlePullModel()}
+                      disabled={pullingModel || !pullModelInput.trim()}
+                    >
+                      <Icons.Refresh className={`w-3.5 h-3.5 mr-1 ${pullingModel ? "animate-spin" : ""}`} />
+                      {pullingModel ? "Pulling..." : "Pull Model"}
+                    </Button>
+                  </div>
+
+                  {pullStatus && (
+                    <div className="p-3 rounded-lg bg-zinc-900 border border-zinc-800 space-y-2">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-mono font-bold text-zinc-200">
+                          {pullStatus.status_text || pullStatus.status}
+                        </span>
+                        <span className="font-mono text-indigo-400 font-bold">
+                          {pullStatus.percent ? `${pullStatus.percent}%` : ""}
+                        </span>
+                      </div>
+                      <ProgressBar progress={pullStatus.percent || 0} />
+                      {pullStatus.total_bytes > 0 && (
+                        <div className="flex justify-between text-[10px] text-zinc-500 font-mono">
+                          <span>{Math.round(pullStatus.completed_bytes / (1024 * 1024))} MB</span>
+                          <span>{Math.round(pullStatus.total_bytes / (1024 * 1024))} MB</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </Card>
 

@@ -41,9 +41,14 @@ class ScriptAdapter:
             if profile in (AdaptationProfile.DRAMATIC_NARRATION, AdaptationProfile.ACCESSIBLE_RECAP) or (
                 profile == AdaptationProfile.FAITHFUL and scene.summary and len(narrative.scenes) > 1
             ):
-                intro_text = f"Scene {scene.sequence}: {scene.title}." if scene.title else ""
-                if scene.summary:
-                    intro_text += f" {scene.summary}"
+                import re
+                candidate_text = scene.summary or scene.title or ""
+                # Strip robotic scene/panel prefixes so narrator doesn't vocalize numbers
+                cleaned_intro = re.sub(r"^(?:Scene|Panel|Shot)\s*#?\d+\s*[-:—–.]\s*", "", candidate_text, flags=re.IGNORECASE).strip()
+                # If candidate is purely a dummy label like "Scene 1", discard it
+                if re.match(r"^(?:Scene|Panel|Shot)\s*#?\d+$", cleaned_intro, flags=re.IGNORECASE):
+                    cleaned_intro = ""
+                intro_text = cleaned_intro
 
                 if intro_text:
                     dur = estimate_segment_duration(intro_text, segment_type="NARRATOR")

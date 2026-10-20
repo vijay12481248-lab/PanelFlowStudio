@@ -14,6 +14,7 @@ import { ScriptReviewScreen } from "./screens/ScriptReviewScreen";
 import { AudioScreen } from "./screens/AudioScreen";
 import { MotionScreen } from "./screens/MotionScreen";
 import { RenderScreen } from "./screens/RenderScreen";
+import { ComfyImageScreen } from "./screens/ComfyImageScreen";
 import { StoryEditorScreen } from "./screens/StoryEditorScreen";
 import { PipelineNavbar } from "./components/PipelineNavbar";
 import { ProviderHealthModal } from "./components/ProviderHealthModal";
@@ -37,32 +38,45 @@ type ScreenMode =
   | "script"
   | "audio"
   | "motion"
-  | "render";
+  | "render"
+  | "comfy_image";
 
 const DesktopAppContent: React.FC = () => {
-  const { selectedError, closeInspector, dismissError, retryJob } = useError();
+  const { selectedError, closeInspector, dismissError, retryJob, reportError } = useError();
   const [currentScreen, setCurrentScreen] = useState<ScreenMode>("projects");
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [engineConnected, setEngineConnected] = useState<boolean>(false);
   const [engineVersion, setEngineVersion] = useState<string>("");
   const [healthModalOpen, setHealthModalOpen] = useState<boolean>(false);
   const [retrying, setRetrying] = useState<boolean>(false);
+  const [restartingEngine, setRestartingEngine] = useState(false);
   const [startupGracePeriod, setStartupGracePeriod] = useState<boolean>(true);
 
   const checkEngine = async () => {
-    try {
-      const h = await api.checkHealth();
-      if (h.status === "healthy") {
-        setEngineConnected(true);
-        setEngineVersion(h.version);
-        setStartupGracePeriod(false);
-      } else {
+      if (restartingEngine) return;
+      try {
+        const h = await api.checkHealth();
+        if (h.status === "healthy") {
+          setEngineConnected(true);
+          setEngineVersion(h.version);
+          setStartupGracePeriod(false);
+          // Ensure engine token is set for authenticated API calls
+          if (typeof window !== "undefined" && ("__TAURI_INTERNALS__" in window || "__TAURI__" in window)) {
+            try {
+              const { invoke } = await import("@tauri-apps/api/core");
+              const token = await invoke<string>("get_engine_token_cmd");
+              api.setEngineToken(token);
+            } catch {
+              // Ignore token fetch errors in non-Tauri contexts
+            }
+          }
+        } else {
+          setEngineConnected(false);
+        }
+      } catch {
         setEngineConnected(false);
       }
-    } catch {
-      setEngineConnected(false);
-    }
-  };
+    };
 
   const handleRetryEngine = async () => {
     setRetrying(true);
@@ -71,6 +85,7 @@ const DesktopAppContent: React.FC = () => {
         try {
           const { invoke } = await import("@tauri-apps/api/core");
           await invoke("start_engine_cmd");
+          api.setEngineToken(await invoke<string>("get_engine_token_cmd"));
         } catch (e) {
           console.warn("[PanelFlow] Tauri start_engine_cmd notice:", e);
         }
@@ -92,6 +107,31 @@ const DesktopAppContent: React.FC = () => {
     } finally {
       await checkEngine();
       setRetrying(false);
+    }
+  };
+
+  const handleRestartEngine = async () => {
+    if (restartingEngine) return;
+    setRestartingEngine(true);
+    try {
+      const previous = await api.restartEngine();
+      for (let i = 0; i < 60; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        try {
+          const health = await api.checkHealth();
+          if (health.status === "healthy" && health.instance_id && health.instance_id !== previous.instance_id) {
+            setEngineConnected(true);
+            setEngineVersion(health.version);
+            return;
+          }
+        } catch { /* Expected while the engine restarts. */ }
+      }
+      throw new Error("Engine did not reconnect within 60 seconds. Check the engine log or run launch_panelflow again.");
+    } catch (error: any) {
+      reportError({ title: "Engine Restart Failed", message: error.message || "Could not restart the engine.", severity: "error", source: "engine" });
+    } finally {
+      setRestartingEngine(false);
+      await checkEngine();
     }
   };
 
@@ -121,9 +161,12 @@ const DesktopAppContent: React.FC = () => {
     checkEngine();
 
     // Auto-invoke start_engine_cmd on application launch in Tauri desktop
-    if (typeof window !== "undefined" && ("__TAURI_INTERNALS__" in window || "__TAURI__" in window)) {
+    if (!restartingEngine && typeof window !== "undefined" && ("__TAURI_INTERNALS__" in window || "__TAURI__" in window)) {
       import("@tauri-apps/api/core")
-        .then(({ invoke }) => invoke("start_engine_cmd"))
+        .then(async ({ invoke }) => {
+          await invoke("start_engine_cmd");
+          api.setEngineToken(await invoke<string>("get_engine_token_cmd"));
+        })
         .catch((e) => console.warn("[PanelFlow] Auto-start notice:", e));
     }
 
@@ -138,7 +181,7 @@ const DesktopAppContent: React.FC = () => {
       clearTimeout(graceTimer);
       clearInterval(timer);
     };
-  }, [engineConnected]);
+  }, [engineConnected, restartingEngine]);
 
   // Dedicated Video-First Story Editor View
   if (selectedProject && currentScreen === "story_editor") {
@@ -174,6 +217,8 @@ const DesktopAppContent: React.FC = () => {
           engineConnected={engineConnected}
           engineVersion={engineVersion}
           onRetryEngine={handleRetryEngine}
+          onRestartEngine={handleRestartEngine}
+          restartingEngine={restartingEngine}
           retryingEngine={retrying}
           onOpenToolsModels={() => setHealthModalOpen(true)}
           onNewProject={() => setCurrentScreen("new_project")}
@@ -259,6 +304,19 @@ const DesktopAppContent: React.FC = () => {
             Tools & Models
           </Button>
 
+          {selectedProject && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setCurrentScreen("comfy_image")}
+              className="text-xs text-zinc-400 hover:text-zinc-200"
+              title="Generate an original image with an approved ComfyUI workflow"
+            >
+              <Icons.Sparkles className="w-4 h-4 mr-1.5 text-indigo-400" />
+              Generate Image
+            </Button>
+          )}
+
           <div className="flex items-center gap-2 text-xs">
             <span
               className={`w-2 h-2 rounded-full ${
@@ -270,6 +328,9 @@ const DesktopAppContent: React.FC = () => {
             </span>
           </div>
 
+          <Button variant="ghost" size="sm" onClick={handleRestartEngine} disabled={!engineConnected || restartingEngine || retrying}>
+            {restartingEngine ? "Restarting…" : "Restart Engine"}
+          </Button>
           <Badge variant={engineConnected ? "success" : "danger"} className="hidden sm:inline-flex">
             {engineConnected ? "CONNECTED" : "DISCONNECTED"}
           </Badge>
@@ -477,6 +538,13 @@ const DesktopAppContent: React.FC = () => {
                 onRenderComplete={(updated) => {
                   setSelectedProject(updated);
                 }}
+              />
+            )}
+
+            {currentScreen === "comfy_image" && selectedProject && (
+              <ComfyImageScreen
+                project={selectedProject}
+                onBack={() => setCurrentScreen("projects")}
               />
             )}
           </>

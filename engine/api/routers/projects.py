@@ -9,7 +9,7 @@ from engine.database.models import (
     VisualTimelineRecord,
     RenderJobRecord,
 )
-from engine.projects.service import project_service
+from engine.projects.service import project_service, reconcile_story_editor_state_with_panels
 from engine.acquisition.adapters.registry import get_default_registry
 from engine.api.schemas import (
     ProjectCreateRequest,
@@ -107,7 +107,11 @@ def get_story_editor_state(project_id: str, db: Session = Depends(get_db)):
     p = project_service.get_project(db, project_id)
     if not p:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
-    state = (p.settings or {}).get("story_editor_state")
+    state = reconcile_story_editor_state_with_panels(
+        db,
+        project_id,
+        (p.settings or {}).get("story_editor_state"),
+    )
     return {"state": state}
 
 
@@ -123,6 +127,13 @@ def save_story_editor_state(project_id: str, payload: dict, db: Session = Depend
     if state.get("project_id") not in (None, project_id):
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="state project_id does not match the requested project")
     settings = dict(p.settings or {})
+    if payload.get("align_panels"):
+        from engine.projects.service import align_panel_scenes
+        try:
+            state = align_panel_scenes(db, project_id, state)
+        except ValueError as error:
+            raise HTTPException(status_code=409, detail=str(error))
+    state = reconcile_story_editor_state_with_panels(db, project_id, state) or state
     settings["story_editor_state"] = {**state, "project_id": project_id}
     p.settings = settings
     db.add(p)

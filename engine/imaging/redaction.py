@@ -5,6 +5,7 @@ Provides non-destructive Gaussian blurring over panels and text regions.
 from pathlib import Path
 from typing import Optional, Tuple
 import shutil
+import io
 from PIL import Image, ImageDraw, ImageFilter
 
 
@@ -17,7 +18,10 @@ def ensure_backup(image_path: Path) -> Path:
     backup_path = get_backup_path(image_path)
     if not backup_path.exists() and image_path.exists():
         backup_path.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(image_path, backup_path)
+        from engine.security.paths import read_contained_bytes, open_contained_output
+        original = read_contained_bytes(image_path.parent.parent, image_path)
+        with open_contained_output(image_path.parent.parent, backup_path, exclusive=True) as output:
+            output.write(original)
     return backup_path
 
 
@@ -25,13 +29,35 @@ def has_image_backup(image_path: Path) -> bool:
     return get_backup_path(image_path).exists()
 
 
+def preview_blur_box(image: Image.Image, x: int, y: int, width: int, height: int,
+                     blur_radius: int = 24, feather: int = 4) -> Image.Image:
+    """Shared in-memory blur used for previews and committed cleanup."""
+    result = image.convert("RGB").copy()
+    w, h = result.size
+    x1, y1 = max(0, min(x, w - 1)), max(0, min(y, h - 1))
+    x2, y2 = max(x1 + 1, min(x + width, w)), max(y1 + 1, min(y + height, h))
+    bw, bh = x2 - x1, y2 - y1
+    region = result.crop((x1, y1, x2, y2))
+    blurred = region.filter(ImageFilter.GaussianBlur(radius=max(blur_radius, int(min(bw, bh) * 0.22))))
+    if feather > 0 and bw > feather * 2 and bh > feather * 2:
+        mask = Image.new("L", (bw, bh), 0)
+        ImageDraw.Draw(mask).rectangle([feather, feather, bw - feather, bh - feather], fill=255)
+        result.paste(blurred, (x1, y1), mask.filter(ImageFilter.GaussianBlur(radius=feather)))
+    else:
+        result.paste(blurred, (x1, y1))
+    return result
+
+
 def restore_image_backup(image_path: Path, delete_backup: bool = True) -> bool:
     backup_path = get_backup_path(image_path)
     if backup_path.exists():
-        shutil.copy2(backup_path, image_path)
+        from engine.security.paths import read_contained_bytes, open_contained_output, unlink_contained_file
+        original = read_contained_bytes(image_path.parent.parent, backup_path)
+        with open_contained_output(image_path.parent.parent, image_path) as output:
+            output.write(original)
         if delete_backup:
             try:
-                backup_path.unlink()
+                unlink_contained_file(image_path.parent.parent, backup_path)
             except OSError:
                 pass
         return True
@@ -58,45 +84,17 @@ def blur_image_box(
     if backup:
         ensure_backup(image_path)
 
-    with Image.open(image_path) as img:
-        img_rgb = img.convert("RGB")
-        w, h = img_rgb.size
-
-        # Clamp box to image bounds
-        x1 = max(0, min(x, w - 1))
-        y1 = max(0, min(y, h - 1))
-        x2 = max(x1 + 1, min(x + width, w))
-        y2 = max(y1 + 1, min(y + height, h))
-
-        box_w = x2 - x1
-        box_h = y2 - y1
-
-        if box_w <= 0 or box_h <= 0:
-            return False
-
-        # Extract region to blur
-        region = img_rgb.crop((x1, y1, x2, y2))
-
-        # Determine effective blur radius scaled to box size
-        effective_radius = max(blur_radius, int(min(box_w, box_h) * 0.22))
-        blurred = region.filter(ImageFilter.GaussianBlur(radius=effective_radius))
-
-        # Soft feathering mask for seamless border integration
-        if feather > 0 and box_w > feather * 2 and box_h > feather * 2:
-            feather_mask = Image.new("L", (box_w, box_h), 0)
-            draw = ImageDraw.Draw(feather_mask)
-            draw.rectangle(
-                [feather, feather, box_w - feather, box_h - feather],
-                fill=255,
-            )
-            feather_mask = feather_mask.filter(ImageFilter.GaussianBlur(radius=feather))
-            img_rgb.paste(blurred, (x1, y1), feather_mask)
-        else:
-            img_rgb.paste(blurred, (x1, y1))
-
+    from engine.security.paths import read_contained_bytes
+    with Image.open(io.BytesIO(read_contained_bytes(image_path.parent.parent, image_path))) as img:
+        # Use the same implementation as the non-mutating preview.
+        img_rgb = preview_blur_box(img, x, y, width, height, blur_radius, feather)
         # Save back in original format
         fmt = "JPEG" if image_path.suffix.lower() in (".jpg", ".jpeg") else "PNG"
-        img_rgb.save(image_path, format=fmt, quality=95)
+        buffer = io.BytesIO()
+        img_rgb.save(buffer, format=fmt, quality=95)
+        from engine.security.paths import open_contained_output
+        with open_contained_output(image_path.parent.parent, image_path) as output:
+            output.write(buffer.getvalue())
 
     return True
 
@@ -115,10 +113,15 @@ def blur_entire_image(
     if backup:
         ensure_backup(image_path)
 
-    with Image.open(image_path) as img:
+    from engine.security.paths import read_contained_bytes
+    with Image.open(io.BytesIO(read_contained_bytes(image_path.parent.parent, image_path))) as img:
         img_rgb = img.convert("RGB")
         blurred = img_rgb.filter(ImageFilter.GaussianBlur(radius=blur_radius))
         fmt = "JPEG" if image_path.suffix.lower() in (".jpg", ".jpeg") else "PNG"
-        blurred.save(image_path, format=fmt, quality=95)
+        buffer = io.BytesIO()
+        blurred.save(buffer, format=fmt, quality=95)
+        from engine.security.paths import open_contained_output
+        with open_contained_output(image_path.parent.parent, image_path) as output:
+            output.write(buffer.getvalue())
 
     return True

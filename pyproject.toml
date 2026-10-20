@@ -1,0 +1,48 @@
+[project]
+name = "panelflow-engine"
+version = "1.0.0b2"
+description = "PanelFlow Studio local production engine"
+requires-python = ">=3.12,<3.15"
+dependencies = [
+  "beautifulsoup4",
+  "fastapi",
+  "httpx",
+  "numpy",
+  "opencv-python",
+  "pillow",
+  "psutil",
+  "pydantic",
+  "pydantic-settings",
+  "scipy",
+  "soundfile",
+  "sqlalchemy",
+  "uvicorn[standard]",
+]
+
+[project.optional-dependencies]
+test = [
+  "pytest",
+  "pytest-asyncio",
+  "playwright",
+]
+ocr = [
+  "manga-ocr",
+  "paddleocr",
+]
+media = [
+  "imageio-ffmpeg",
+]
+ui-automation = [
+  "playwright",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "-ra"
+
+[tool.ruff]
+line-length = 120

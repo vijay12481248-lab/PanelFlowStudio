@@ -14,6 +14,9 @@ import {
   ShieldAlert,
 } from "lucide-react";
 import type { AppError } from "../../types/error";
+import { JobActivityCard } from "../JobActivityPanel";
+import { useError } from "../../context/ErrorContext";
+import type { Job } from "@panelflow/shared-types";
 
 interface ErrorDetailsModalProps {
   error: AppError | null;
@@ -31,8 +34,10 @@ export const ErrorDetailsModal: React.FC<ErrorDetailsModalProps> = ({
   const [copied, setCopied] = useState(false);
   const [retrying, setRetrying] = useState(false);
   const [showRawJson, setShowRawJson] = useState(true);
+  const { cancelJob, engineHealthy } = useError();
 
   if (!error) return null;
+  const liveJob = typeof error.rawDetails === "object" && error.rawDetails?.job_id ? error.rawDetails as Job : null;
 
   const handleCopyDetails = async () => {
     try {
@@ -198,6 +203,7 @@ export const ErrorDetailsModal: React.FC<ErrorDetailsModalProps> = ({
           </div>
 
           {/* Context Metadata Grid */}
+          {liveJob && <JobActivityCard job={liveJob} engineHealthy={engineHealthy} onCancel={cancelJob} />}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
             {error.jobType && (
               <div className="bg-[#141826] border border-[#21293d] rounded-lg p-2.5 space-y-0.5">
@@ -345,7 +351,7 @@ export const ErrorDetailsModal: React.FC<ErrorDetailsModalProps> = ({
               )}
             </button>
 
-            {error.jobId && onRetryJob && (
+            {error.jobId && onRetryJob && (!liveJob || liveJob.status === "FAILED" || liveJob.status === "CANCELLED") && (
               <button
                 onClick={handleRetry}
                 disabled={retrying}

@@ -112,7 +112,7 @@ def test_job_manager_create_and_lease():
     with SessionLocal() as db:
         updated = db.query(JobRecord).filter(JobRecord.job_id == job.job_id).first()
         assert updated.status == JobStatus.RUNNING.value
-        assert updated.worker_lease_id == jm.worker_id
+        assert updated.worker_lease_id.startswith(f"{jm.worker_id}:")
         assert updated.lease_expires_at is not None
 
 
@@ -132,7 +132,7 @@ def test_job_manager_lease_heartbeat():
         initial_expiry = initial.lease_expires_at
 
     # Update progress
-    jm.update_job_progress(job.job_id, 0.5, "Halfway done")
+    jm.update_job_progress(job.job_id, 0.5, "Halfway done", lease_id=initial.worker_lease_id)
 
     with SessionLocal() as db:
         refreshed = db.query(JobRecord).filter(JobRecord.job_id == job.job_id).first()
@@ -143,7 +143,7 @@ def test_job_manager_lease_heartbeat():
 
 
 def test_job_manager_recover_expired_leases():
-    """Verify expired worker leases are automatically re-queued up to max_retries."""
+    """Expired leases fail closed when no durable operation handler exists."""
     _ensure_project("test_proj_queue_03")
     jm = JobManager()
 
@@ -154,35 +154,17 @@ def test_job_manager_recover_expired_leases():
     )
     jm.claim_job_lease(job.job_id)
 
-    # Force the lease to be expired in the past
     past_time = datetime.now(timezone.utc) - timedelta(seconds=120)
     with SessionLocal() as db:
         j = db.query(JobRecord).filter(JobRecord.job_id == job.job_id).first()
         j.lease_expires_at = past_time
         db.commit()
 
-    # Run expired lease recovery
     recovered_count = jm.recover_expired_leases()
     assert recovered_count >= 1
 
     with SessionLocal() as db:
         j = db.query(JobRecord).filter(JobRecord.job_id == job.job_id).first()
-        # Should be re-queued with retry_count = 1
-        assert j.status == JobStatus.QUEUED.value
-        assert j.retry_count == 1
-        assert j.worker_lease_id is None
-
-        # Force second expiration
-        j.status = JobStatus.RUNNING.value
-        j.lease_expires_at = past_time
-        j.retry_count = 2  # At max_retries
-        db.commit()
-
-    # Second recovery when retries exhausted
-    jm.recover_expired_leases()
-
-    with SessionLocal() as db:
-        j = db.query(JobRecord).filter(JobRecord.job_id == job.job_id).first()
-        # Should now be marked FAILED
         assert j.status == JobStatus.FAILED.value
-        assert "max retries exceeded" in (j.error or "").lower()
+        assert "cannot be rehydrated" in (j.error or "").lower()
+        assert j.worker_lease_id is None

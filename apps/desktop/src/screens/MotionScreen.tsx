@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { api } from "@panelflow/api-client";
-import type { Project, MotionTimelineResponse, MotionStylePreset, Shot } from "@panelflow/shared-types";
-import { Button, Card, Badge, Icons } from "@panelflow/ui";
+import type { Project, MotionTimelineResponse, MotionStylePreset, Shot, Panel } from "@panelflow/shared-types";
+import { Button, Card, Badge, Icons, SvgCameraFramingVisualizer } from "@panelflow/ui";
 import { useError } from "../context/ErrorContext";
 
 export interface MotionScreenProps {
@@ -19,6 +19,7 @@ export const MotionScreen: React.FC<MotionScreenProps> = ({
 }) => {
   const { reportError, inspectError } = useError();
   const [motionData, setMotionData] = useState<MotionTimelineResponse | null>(null);
+  const [panels, setPanels] = useState<Panel[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [planning, setPlanning] = useState<boolean>(false);
   const [approving, setApproving] = useState<boolean>(false);
@@ -27,8 +28,12 @@ export const MotionScreen: React.FC<MotionScreenProps> = ({
   const loadMotion = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await api.getMotionTimeline(project.id);
+      const [data, panelsList] = await Promise.all([
+        api.getMotionTimeline(project.id).catch(() => null),
+        api.listPanels(project.id).catch(() => []),
+      ]);
       setMotionData(data);
+      setPanels(panelsList);
       if (data?.style_preset) {
         setSelectedPreset(data.style_preset as MotionStylePreset);
       }
@@ -215,8 +220,19 @@ export const MotionScreen: React.FC<MotionScreenProps> = ({
           <p className="text-xs text-zinc-400">Loading Visual Timeline...</p>
         </Card>
       ) : (() => {
-        const shotsList: any[] = (motionData?.timeline as any)?.shots || (Array.isArray(motionData?.timeline) ? motionData.timeline : []) || (motionData as any)?.shots || [];
-        if (shotsList.length === 0) {
+        const timelineObj: any = motionData?.timeline || {};
+        const scenesList: any[] = timelineObj.scenes || [];
+        const rawShots: any[] = scenesList.length > 0
+          ? scenesList.flatMap((s: any) =>
+              (s.shots || []).map((shot: any) => ({
+                ...shot,
+                sceneTitle: s.title || `Scene ${s.sequence}`,
+                sceneSeq: s.sequence,
+              }))
+            )
+          : (timelineObj.shots || (Array.isArray(timelineObj) ? timelineObj : []) || (motionData as any)?.shots || []);
+
+        if (rawShots.length === 0) {
           return (
             <Card className="p-12 text-center bg-zinc-900 border-zinc-800 space-y-4">
               <Icons.Layers className="w-10 h-10 text-zinc-600 mx-auto" />
@@ -234,89 +250,129 @@ export const MotionScreen: React.FC<MotionScreenProps> = ({
         }
 
         return (
-          <div className="space-y-3">
-            {shotsList.map((shot: any, idx: number) => {
-            const startBox = shot.camera_start || shot.start_rect || { x: 0, y: 0, width: 1, height: 1, center_x: 0.5, center_y: 0.5 };
-            const endBox = shot.camera_end || shot.end_rect || { x: 0, y: 0, width: 1, height: 1, center_x: 0.5, center_y: 0.5 };
-            const startCx = startBox.center_x ?? ((startBox.x ?? 0) + (startBox.width ?? 1) / 2);
-            const startCy = startBox.center_y ?? ((startBox.y ?? 0) + (startBox.height ?? 1) / 2);
-            const startW = startBox.width ?? 1;
-            const endCx = endBox.center_x ?? ((endBox.x ?? 0) + (endBox.width ?? 1) / 2);
-            const endCy = endBox.center_y ?? ((endBox.y ?? 0) + (endBox.height ?? 1) / 2);
-            const endW = endBox.width ?? 1;
-            const isMoving = Math.abs(startCx - endCx) > 0.01 || Math.abs(startCy - endCy) > 0.01 || Math.abs(startW - endW) > 0.01;
-            const motionType = shot.motion_type || shot.camera_motion_type || "STATIC";
-            const sourceId = shot.source_asset_id || shot.panel_id || shot.visual_source_id || `Shot ${idx + 1}`;
-            const startTime = shot.start_time_sec ?? shot.start_time ?? 0;
-            const endTime = shot.end_time_sec ?? shot.end_time ?? 0;
-            const duration = shot.duration_sec ?? shot.duration ?? Math.max(0, endTime - startTime);
-            const easing = shot.easing || shot.easing_function || "LINEAR";
+          <div className="space-y-4">
+            <div className="flex items-center justify-between text-xs text-zinc-400 pb-1">
+              <span>{rawShots.length} Planned Camera Moves Aligned to Master Audio</span>
+              <span className="text-[11px] font-mono text-indigo-400">Interactive Visual Trajectories</span>
+            </div>
 
-            return (
-              <Card
-                key={shot.shot_id || idx}
-                className="p-4 bg-zinc-900 border-zinc-800 hover:border-zinc-700 transition-colors"
-              >
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                  {/* Left: Shot Identification & Motion Details */}
-                  <div className="space-y-1.5 flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs font-bold text-indigo-400 font-mono">
-                        Shot #{idx + 1}
+            {rawShots.map((shot: any, idx: number) => {
+              const startCam = shot.camera_start || shot.start_rect || { center_x: 0.5, center_y: 0.5, zoom: 1.0 };
+              const endCam = shot.camera_end || shot.end_rect || { center_x: 0.5, center_y: 0.5, zoom: 1.0 };
+              const duration = shot.duration_sec ?? shot.duration ?? Math.max(0, (shot.end_time ?? 0) - (shot.start_time ?? 0));
+              const motionType = shot.motion_type || shot.camera_motion_type || "CINEMATIC";
+              const easing = shot.easing || shot.easing_function || "SMOOTHSTEP";
+              const caption = shot.caption_cues && shot.caption_cues[0] ? shot.caption_cues[0] : null;
+
+              // Resolve matched panel image
+              const provPanels: string[] = shot.provenance?.panel_ids || [];
+              let matchedPanel = panels.find((p: any) =>
+                provPanels.includes(p.id) ||
+                shot.source_panel_id === p.id ||
+                shot.panel_id === p.id
+              );
+
+              if (!matchedPanel && shot.source_panel_id) {
+                const match = String(shot.source_panel_id).match(/panel_(\d+)/i);
+                if (match) {
+                  const seq = parseInt(match[1], 10);
+                  matchedPanel = panels.find((p: any) => p.sequence === seq);
+                }
+              }
+
+              if (!matchedPanel && panels.length > 0) {
+                matchedPanel = panels[idx % panels.length];
+              }
+
+              const panelImageUrl = matchedPanel ? api.getPanelImageUrl(project.id, matchedPanel.id) : undefined;
+
+              return (
+                <Card
+                  key={shot.shot_id || idx}
+                  className="p-4 bg-zinc-900 border-zinc-800 hover:border-zinc-700 transition-all shadow-sm"
+                >
+                  <div className="flex flex-col lg:flex-row lg:items-center gap-4">
+                    {/* Left: Interactive Visual Camera Framing Preview */}
+                    <SvgCameraFramingVisualizer
+                      imageUrl={panelImageUrl}
+                      startCamera={startCam}
+                      endCamera={endCam}
+                      motionType={motionType}
+                      durationSec={duration}
+                      easing={easing}
+                    />
+
+                    {/* Center: Shot Metadata, Captions, and Pacing */}
+                    <div className="space-y-2 flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-bold text-indigo-400 font-mono">
+                          Shot #{idx + 1}
+                        </span>
+                        {shot.sceneTitle && (
+                          <span className="text-[10px] uppercase font-bold bg-zinc-800 text-zinc-300 px-2 py-0.5 rounded border border-zinc-700/60">
+                            {shot.sceneTitle}
+                          </span>
+                        )}
+                        <Badge
+                          variant="accent"
+                          className="text-[10px] uppercase font-bold"
+                        >
+                          {motionType}
+                        </Badge>
+                        <span className="text-[11px] font-mono text-zinc-400">
+                          {(shot.start_time ?? 0).toFixed(2)}s - {(shot.end_time ?? 0).toFixed(2)}s ({duration.toFixed(2)}s)
+                        </span>
+                        {shot.transition_in && (
+                          <span className="text-[10px] bg-zinc-850 text-zinc-400 px-2 py-0.5 rounded font-mono border border-zinc-800">
+                            {typeof shot.transition_in === "string" ? shot.transition_in : shot.transition_in.transition_type}
+                            {typeof shot.transition_in === "object" && shot.transition_in.duration_sec ? ` (${shot.transition_in.duration_sec}s)` : ""}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Dialogue / Caption Line Preview */}
+                      {caption && (
+                        <div className="p-2.5 rounded bg-zinc-950 border border-zinc-800/80 text-xs">
+                          <span className="font-bold text-indigo-300 mr-2 uppercase text-[10px] tracking-wider">
+                            {caption.speaker || "SPEAKER"}:
+                          </span>
+                          <span className="text-zinc-200 italic leading-relaxed">
+                            "{caption.text}"
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Camera Framing Details */}
+                      <div className="flex items-center gap-3 text-[11px] text-zinc-400 font-mono">
+                        <span>
+                          Start: {startCam.zoom ? `${startCam.zoom.toFixed(2)}x Zoom` : "1.00x"}
+                        </span>
+                        <span>→</span>
+                        <span className="text-zinc-200">
+                          End: {endCam.zoom ? `${endCam.zoom.toFixed(2)}x Zoom` : "1.00x"}
+                        </span>
+                        <span className="text-zinc-500">· Easing: {easing}</span>
+                      </div>
+                    </div>
+
+                    {/* Right: Duration pill & Panel Reference */}
+                    <div className="flex flex-col sm:flex-row lg:flex-col items-end justify-between gap-3 flex-shrink-0">
+                      <span className="text-xs font-mono font-bold text-zinc-200 bg-zinc-800/90 px-3 py-1 rounded border border-zinc-700">
+                        {duration.toFixed(2)}s
                       </span>
-                      <Badge
-                        variant={isMoving ? "accent" : "neutral"}
-                        className="text-[10px] uppercase font-bold"
-                      >
-                        {motionType}
-                      </Badge>
-                      <span className="text-xs font-bold text-zinc-100">
-                        {sourceId}
-                      </span>
-                      <span className="text-[11px] font-mono text-zinc-400">
-                        {startTime.toFixed(2)}s - {endTime.toFixed(2)}s ({duration.toFixed(2)}s)
-                      </span>
-                      {shot.transition_in && shot.transition_in !== "CUT" && (
-                        <span className="text-[10px] bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded font-mono">
-                          {shot.transition_in} ({shot.transition_duration_sec || 0.5}s)
+                      {matchedPanel && (
+                        <span className="text-[10px] font-mono text-zinc-500">
+                          Panel #{matchedPanel.sequence}
                         </span>
                       )}
                     </div>
-
-                    {/* Camera framing trajectories */}
-                    <div className="flex items-center gap-4 text-[11px] text-zinc-400 font-mono pt-1">
-                      <div>
-                        Start Framing:{" "}
-                        <span className="text-zinc-300">
-                          [{startCx.toFixed(2)}, {startCy.toFixed(2)}] ({Math.round(startW * 100)}% w)
-                        </span>
-                      </div>
-                      <div>→</div>
-                      <div>
-                        End Framing:{" "}
-                        <span className="text-zinc-300">
-                          [{endCx.toFixed(2)}, {endCy.toFixed(2)}] ({Math.round(endW * 100)}% w)
-                        </span>
-                      </div>
-                      <div className="text-[10px] text-zinc-500">
-                        Easing: {easing}
-                      </div>
-                    </div>
                   </div>
-
-                  {/* Right: Duration pill */}
-                  <div className="text-right flex-shrink-0">
-                    <span className="text-xs font-mono font-bold text-zinc-300 bg-zinc-800/80 px-2.5 py-1 rounded">
-                      {duration.toFixed(2)}s
-                    </span>
-                  </div>
-                </div>
-              </Card>
-            );
-          })}
-        </div>
-      );
-    })()}
+                </Card>
+              );
+            })}
+          </div>
+        );
+      })()}
     </div>
   );
 };
