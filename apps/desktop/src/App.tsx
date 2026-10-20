@@ -39,6 +39,7 @@ type ScreenMode =
   | "audio"
   | "motion"
   | "render"
+  | "ai_provider_management"
   | "comfy_image";
 
 const DesktopAppContent: React.FC = () => {
@@ -153,7 +154,8 @@ const DesktopAppContent: React.FC = () => {
     } else if (stage === "VOICE_GENERATED" || stage === "AUDIO_APPROVED" || stage === "SHOT_PLAN_GENERATED") {
       setCurrentScreen("motion");
     } else {
-      setCurrentScreen("render");
+      setCurrentScreen("render"
+  | "ai_provider_management");
     }
   };
 
@@ -296,6 +298,21 @@ const DesktopAppContent: React.FC = () => {
           <Button
             variant="ghost"
             size="sm"
+            onClick={() => setHealthModalOpen(true)}
+            className="text-xs text-zinc-400 hover:text-zinc-200"
+            title="Inspect local models and tool engine status"
+          >
+<Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setCurrentScreen("ai_provider_management")}
+            className="text-xs text-zinc-400 hover:text-zinc-200"
+            title="AI Provider Management"
+          >
+            <Icons.Brain className="w-4 h-4 mr-1.5 text-indigo-400" />
+            AI Provider Management
+          </Button>
+          <Button
             onClick={() => setHealthModalOpen(true)}
             className="text-xs text-zinc-400 hover:text-zinc-200"
             title="Inspect local models and tool engine status"
@@ -522,16 +539,19 @@ const DesktopAppContent: React.FC = () => {
                 onBack={() => setCurrentScreen("audio")}
                 onMotionApproved={(updated) => {
                   setSelectedProject(updated);
-                  setCurrentScreen("render");
+                  setCurrentScreen("render"
+  | "ai_provider_management");
                 }}
                 onProceedToRender={(proj) => {
                   setSelectedProject(proj);
-                  setCurrentScreen("render");
+                  setCurrentScreen("render"
+  | "ai_provider_management");
                 }}
               />
             )}
 
-            {currentScreen === "render" && selectedProject && (
+            {currentScreen === "render"
+  | "ai_provider_management" && selectedProject && (
               <RenderScreen
                 project={selectedProject}
                 onBack={() => setCurrentScreen("motion")}

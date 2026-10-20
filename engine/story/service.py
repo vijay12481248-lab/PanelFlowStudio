@@ -28,6 +28,18 @@ from engine.database.models import (
 )
 from engine.jobs.manager import job_manager, PipelineCancellationToken
 from engine.llm.registry import llm_registry
+
+
+# Universal AI Gateway imports
+from engine.ai_gateway.contracts import (
+    CapabilityType,
+    FinishStatus,
+    AIRequest,
+    AIResponse,
+    AttemptResult,
+)
+from engine.ai_gateway.adapters.factory import adapter_factory
+from engine.ai_gateway.routing.routing_engine import RoutingEngine
 from engine.story.models import (
     NarrativeDocument,
     CharacterEntity,
@@ -281,9 +293,17 @@ class StoryService:
                             "--- UNTRUSTED SOURCE CONTENT ---\n" +
                             "\n".join(panels_text)
                         )
-                        char_res: CharacterDiscoveryResponse = await provider.generate_structured(
-                            prompt=char_prompt,
-                            response_model=CharacterDiscoveryResponse,
+                        char_res: CharacterDiscoveryResponse = await adapter_factory.execute_request(
+                            CapabilityType.TEXT_STRUCTURED,
+                            NormalizedRequest(
+                                request_id=f"char-{uuid.uuid4().hex[:8]}",
+                                workflow_job_id="",
+                                project_id="",
+                                capability=CapabilityType.TEXT_STRUCTURED,
+                                prompt=char_prompt,
+                                system_prompt=None,
+                                output_schema=CharacterDiscoveryResponse.model_json_schema(),
+                            ),
                         )
                         for c in char_res.characters:
                             char_id = f"char_{uuid.uuid4().hex[:8]}"
@@ -464,9 +484,17 @@ class StoryService:
                             "\n".join(panels_text) +
                             f"\nCharacters: {[c.display_name for c in characters]}"
                         )
-                        event_res: EventExtractionResponse = await provider.generate_structured(
-                            prompt=events_prompt,
-                            response_model=EventExtractionResponse,
+                        event_res: EventExtractionResponse = await adapter_factory.execute_request(
+                            CapabilityType.TEXT_STRUCTURED,
+                            NormalizedRequest(
+                                request_id=f"event-{uuid.uuid4().hex[:8]}",
+                                workflow_job_id="",
+                                project_id="",
+                                capability=CapabilityType.TEXT_STRUCTURED,
+                                prompt=events_prompt,
+                                system_prompt=None,
+                                output_schema=EventExtractionResponse.model_json_schema(),
+                            ),
                         )
                         for e in event_res.events:
                             p_id = e.panel_id if e.panel_id in valid_p_ids else inner_panels[0].id
@@ -525,9 +553,17 @@ class StoryService:
                             "Partition these comic panels into scenes and story beats:\n" +
                             "\n".join(panels_text)
                         )
-                        scene_res: SceneSegmentationResponse = await provider.generate_structured(
-                            prompt=scene_prompt,
-                            response_model=SceneSegmentationResponse,
+                        scene_res: SceneSegmentationResponse = await adapter_factory.execute_request(
+                            CapabilityType.TEXT_STRUCTURED,
+                            NormalizedRequest(
+                                request_id=f"scene-{uuid.uuid4().hex[:8]}",
+                                workflow_job_id="",
+                                project_id="",
+                                capability=CapabilityType.TEXT_STRUCTURED,
+                                prompt=scene_prompt,
+                                system_prompt=None,
+                                output_schema=SceneSegmentationResponse.model_json_schema(),
+                            ),
                         )
                         for idx, s in enumerate(scene_res.scenes, start=1):
                             p_start = s.panel_start if s.panel_start in valid_p_ids else inner_panels[0].id
