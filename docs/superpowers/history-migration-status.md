@@ -1,0 +1,45 @@
+# History integration coverage
+
+Recorded 2026-10-21. This is a migration ledger, not a claim of system-wide undo.
+
+## Implemented
+
+- Independently packable `@panelflow/history` package: CommandRegistry, HistoryManager, Memento strategy, Composite operations, observer state, revisioned storage port, memory strategy, optional Node file strategy, synchronous draft snapshots.
+- Setup selector draft geometry, split, delete-selector, shape completion and completed drag gestures use the framework's SnapshotHistory. Undo and redo controls and focused canvas shortcuts restore actual draft coordinates. New edits invalidate redo.
+- Shared shortcut resolver leaves native input/textarea/contenteditable undo alone and respects an inner scope's consumed event.
+- Story Editor persistence, undo and redo now use an engine-owned SQLite command journal. The `editor.replace` strategy has versioned validation, idempotent operation receipts, optimistic revision checks, fingerprint conflict detection, archive-and-reset recovery, and transactional restore after reopening the application.
+- Narration Studio now uses the reusable `SnapshotHistory` caretaker for its local chapter draft scope. Undo/redo marks the restored chapter unsaved so the parent callback persists it through the Story Editor journal.
+- Panel creation, deletion, reorder, geometry edits, selector saves, splits, merges and confirmation now use the same durable journal. Their strategies retain `panels.json`, `project.json` and affected crop files before the command, atomically capture the after-image, restore exact files on undo/redo, and compensate filesystem changes if a database commit fails. Delete and merge restore removed OCR/text-region rows and original panel order; selector saves and splits use deterministic operation-owned IDs/files for exact replay. The API client routes `addPanel`, `deletePanel`, `reorderPanels`, `updatePanel`, `savePanelSelections`, `addPageSelections`, `splitPanel`, `mergePanels` and `confirmPanels` through revisioned commands.
+- Panel image mutations and restorations (`panel.image.blur_region`, `panel.image.blur_text`, `panel.image.blur_panel`, `panel.image.reset`, `panel.image.batch_blur`, `panel.image.batch_reset`) are now integrated into the durable journal. They stage and retain exact crop files, `.originals` backups, and text-region thumbnails/records before mutation, restore exact image bytes and blur metadata on undo/redo, and synchronize the `.originals` folder across history directions. The API client routes `blurPanelRegion`, `blurPanelText`, `blurEntirePanel`, `resetPanelImage`, `batchBlurPanels`, and `batchResetPanels` through revisioned commands.
+- Page operations (`page.reorder`, `page.rotate`, `page.delete`) are now integrated into the durable journal. Page delete retains and restores source/normalized page images, child panel crops, OCR records, TextRegion rows, and normalization records, resequencing remaining pages and restoring original order and `manifest.json`/`panels.json` on undo/redo. Page rotate persists clockwise rotations with byte-exact image restoration without generational JPEG compression loss. The API client routes `reorderPages`, `rotatePage`, and `deletePage` through revisioned commands.
+- Project confirmation (`project.confirm`) is now integrated into the durable journal. It validates ready page inventory, transitions the project to `PipelineStage.ACQUIRED`, stages and retains `project.json` and `manifest.json`, and restores previous pipeline stages and documents on undo/redo. The API client routes `confirmAcquisition` through revisioned commands.
+- OCR operations and text regions (`ocr.region.create`, `ocr.region.update`, `ocr.region.delete`, `ocr.block.update`, `ocr.confirm`) are now integrated into the durable journal. Manual text region creation generates deterministic identities with sequence preservation; text region updates cleanly revert geometry, human corrected text, and speaker attributions while invalidating dependent entity tiers; text region deletion retains and restores crop thumbnail assets on undo/redo; adapted block edits retain and synchronize `ocr/ocr.json`; and strict OCR stage gate approval (`PipelineStage.OCR_APPROVED`) enforces panel verification and unresolved review checks, retaining and restoring `project.json` and `ocr/ocr.json`. The API client routes `createManualTextRegion`, `updateTextRegion`, `deleteTextRegion`, `updateAdaptedBlock`, and `confirmOCR` through revisioned commands.
+- Story domain operations (`story.confirm`, `character.update`, `character.merge`, `character.split`, `scene.merge`, `script.segment.update`, `script.approve`, `storyboard.segment.update`, `storyboard.realign`) are now integrated into the durable journal. Story confirmation validates narrative continuity and transitions to `PipelineStage.STORY_APPROVED`, retaining and restoring `project.json`. Character edits, merges, and splits atomically reassign and restore text region speaker links, dialogue event actors, and character aliases. Scene merges combine summaries and boundaries and reassign story beats, cleanly restoring original scenes and beats on undo/redo. Script segment updates recalculate cumulative start/end timings and reset script approval to `DRAFT`, while script approval transitions to `PipelineStage.SCRIPT_APPROVED` with strict validation. Storyboard segment updates and realignments retain and restore `story/storyboard.json` asset versions and synchronize script segment timings on undo/redo. The API client routes `confirmStory`, `updateCharacter`, `mergeCharacters`, `splitCharacter`, `mergeScenes`, `updateScriptSegment`, `approveScript`, `updateStoryboardSegment`, and `realignStoryboard` through revisioned commands.
+- Motion domain operations (`motion.overrides`, `motion.approve`, `motion.plan.accept`) are now integrated into the durable journal. They restore `VisualTimelineRecord` in SQLite, shot overrides, and pipeline stage transitions (`PipelineStage.MOTION_APPROVED`), while capturing and restoring disk asset `motion/visual_timeline.json` using `RetainedAssetStore`. The API client routes `setShotOverrides`, `approveMotionTimeline`, and `acceptMotionPlan` through revisioned commands.
+- Audio domain operations (`audio.approve`, `audio.draft.accept`, `audio.synthesized.accept`) are now integrated into the durable journal. They restore `AudioTimelineRecord` in SQLite, interval alignments, voice casting, and pipeline stage transitions (`PipelineStage.AUDIO_APPROVED`), while capturing and restoring disk asset `audio/master_audio_timeline.json` and retaining synthesized audio assets via `RetainedAssetStore`. The API client routes `approveAudioTimeline`, `acceptAudioDraft`, and `acceptSynthesizedAudio` through revisioned commands.
+
+## Pending durable application migration
+
+All 9 domain groups across Project, Panels, Images, Pages, OCR, Story, Motion, and Audio are now fully migrated to the durable journal.
+
+Generation, OCR extraction, detection, normalization and analysis jobs may create reversible accepted project results, but the requests and compute themselves are not reversible. Retain results for deterministic redo; revision-check inputs before acceptance. Existing routes that combine generation and acceptance need separating or a server-owned journal transaction.
+
+## Explicit irreversible or UI-only boundaries
+
+- Acquisition, retries, cancellation, remote API calls and paid generation: cannot undo compute or external side effects.
+- Exports/render files outside the project: never delete as a consequence of project undo.
+- Project creation/removal: recoverable-trash workflow still needed; current deletion is not made reversible here.
+- Credentials, provider/account configuration, installer changes, permanent purge: outside project content history.
+- Playback, hover, selection and canvas navigation: UI-only, excluded from document history.
+
+## Integration gate
+
+Before migrating saved edits, implement the engine-owned transaction/revision journal, retained assets and startup file recovery. Do not wrap existing destructive APIs with frontend array snapshots. Existing task notes identify concurrent ownership of engine/projects/service.py and API-client/frontend areas; resolve overlap before modifying them.
+
+## Verification at current milestone
+
+- Core package tests include shared-context race regression, listener reentrancy, byte-limit metadata growth, corrupt null files, separate-process persistence, and source-level ES2020 desktop compilation.
+- Broad frontend run: 192 passed.
+- API Client history suite: 15 passed (`npx tsx --test packages/api-client/src/history.test.ts`).
+- Backend targeted history/API/persistence run: 53 passed (`pytest tests/unit/test_durable_history.py tests/unit/test_retained_assets.py -q`).
+- Full monorepo production build: clean pass (`npm run build`).

@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createServer } from "node:http";
 import { PanelFlowApiClient } from "./index.ts";
 
 test("API client sends the engine token in a header and never in JSON", async () => {
@@ -50,6 +51,36 @@ test("API client can receive a token after Tauri starts the engine", async () =>
     assert.equal(capturedHeaders["X-PanelFlow-Token"], "late-token");
   } finally {
     globalThis.fetch = originalFetch;
+  }
+});
+
+test("project DELETE sends current authentication over real fetch and handles a bodyless 204", async () => {
+  // Disposable HTTP fixture, not the engine: no real project can be deleted.
+  const requests: Array<{ url?: string; method?: string; token?: string; body: string }> = [];
+  const server = createServer((request, response) => {
+    let body = "";
+    request.on("data", (chunk) => { body += chunk; });
+    request.on("end", () => {
+      requests.push({ url: request.url, method: request.method, token: request.headers["x-panelflow-token"] as string, body });
+      response.writeHead(204).end();
+    });
+  });
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  try {
+    const address = server.address();
+    assert.ok(address && typeof address !== "string");
+    const client = new PanelFlowApiClient(`http://127.0.0.1:${address.port}`, "expired-fixture");
+    client.setEngineToken("current-fixture");
+    assert.equal(await client.deleteProject("test-only-project"), null);
+    assert.deepEqual(requests, [{
+      url: "/api/projects/test-only-project", method: "DELETE", token: "current-fixture", body: "",
+    }]);
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
   }
 });
 
