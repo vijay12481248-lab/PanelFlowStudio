@@ -275,6 +275,14 @@ export class PanelFlowApiClient {
     return { ...reply, state: this.hydrateStoryEditorState(projectId, reply.state) };
   }
 
+  async undo(projectId: string): Promise<import("@panelflow/shared-types").ProjectHistoryReply> {
+    return this.moveProjectHistory(projectId, "undo");
+  }
+
+  async redo(projectId: string): Promise<import("@panelflow/shared-types").ProjectHistoryReply> {
+    return this.moveProjectHistory(projectId, "redo");
+  }
+
   async resetProjectHistory(projectId: string, fingerprint: string): Promise<import("@panelflow/shared-types").ProjectHistoryReply> {
     const reply = await this.projectWrite(projectId, `/api/projects/${projectId}/history/reset`, { fingerprint });
     return { ...reply, state: this.hydrateStoryEditorState(projectId, reply.state) };

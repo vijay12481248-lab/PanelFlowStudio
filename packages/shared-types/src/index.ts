@@ -92,6 +92,7 @@ export type PanelType =
 export type PanelStatus = "DETECTED" | "CONFIRMED" | "NEEDS_REVIEW" | "IGNORED" | "MANUAL" | "APPROVED";
 
 export interface Panel {
+  polygon_json?: string | null;
   id: string;
   project_id: string;
   page_id: string;
@@ -1225,6 +1226,18 @@ export interface StoryEditorState {
   ripple_edit?: boolean; // Chapter 3 explicit ripple toggle
   show_motion_paths?: boolean; // Chapter 4 canvas motion path toggle
   clipboard_animation?: LayerAnimationConfig; // Chapter 4 copy/paste animation
+}
+
+/** Server-authoritative project history, using the portable library's state vocabulary. */
+export interface ProjectHistoryState {
+  scope: string; revision: number; undoCount: number; redoCount: number;
+  undoLabel: string | null; redoLabel: string | null; canUndo: boolean; canRedo: boolean;
+  busy: boolean; recoveryRequired: boolean; conflicted: boolean; fingerprint: string;
+  error: { code: string; message: string } | null;
+}
+export interface ProjectHistoryReply {
+  state: StoryEditorState | null; history: ProjectHistoryState;
+  replayed?: boolean; operation_revision?: number;
 }
 
 // ---------------------------------------------------------------------------
