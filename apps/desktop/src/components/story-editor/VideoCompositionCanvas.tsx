@@ -1,5 +1,7 @@
 import React, { useRef, useState, useEffect } from "react";
 import { Icons, Button } from "@panelflow/ui";
+import { fitCompositionFrame } from "./editorWorkspace";
+import { sceneAtTime, sceneTimelineDuration } from "./sceneTiming";
 import type { VideoScene, VisualLayer, StoryEditorState } from "@panelflow/shared-types";
 import {
   evaluateLayerTransform,
@@ -9,6 +11,7 @@ import {
 } from "./animationEngine";
 
 interface VideoCompositionCanvasProps {
+  previewOnly?: boolean;
   state: StoryEditorState;
   onUpdateState: (updater: (prev: StoryEditorState) => StoryEditorState) => void;
   onSelectLayer: (layerId: string, sceneId: string) => void;
@@ -18,8 +21,23 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
   state,
   onUpdateState,
   onSelectLayer,
+  previewOnly = false,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
+  const frameRef = useRef<HTMLDivElement>(null);
+  const [viewZoom, setViewZoom] = useState("fit");
+  const [frameSize, setFrameSize] = useState({ width: 800, height: 450 });
+  const [fullscreenError, setFullscreenError] = useState<string | null>(null);
+  useEffect(() => {
+    const frame = frameRef.current;
+    if (!frame) return;
+    const measure = () => setFrameSize({ width: Math.max(1, frame.clientWidth - 32), height: Math.max(1, frame.clientHeight - 32) });
+    measure();
+    const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(measure) : null;
+    observer?.observe(frame);
+    window.addEventListener("resize", measure);
+    return () => { observer?.disconnect(); window.removeEventListener("resize", measure); };
+  }, []);
   const [showSafeZones, setShowSafeZones] = useState<boolean>(false);
   const [playbackSpeed, setPlaybackSpeed] = useState<number>(1.0);
   type ResizeHandle = "nw" | "ne" | "se" | "sw" | "n" | "s" | "e" | "w" | "center" | "rotate";
@@ -40,29 +58,8 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
   const [isCanvasDragOver, setIsCanvasDragOver] = useState<boolean>(false);
   const [dragStartPos, setDragStartPos] = useState<{ mouseX: number; mouseY: number; initialX: number; initialY: number } | null>(null);
 
-  // Compute total duration of all scenes
-  const totalDurationSec = state.scenes.reduce((acc, s) => acc + s.duration_sec, 0);
-
-  // Find active scene at current playhead position
-  let cumulativeTime = 0;
-  let activeScene: VideoScene | null = null;
-  let sceneProgress = 0; // 0.0 to 1.0 within the active scene
-
-  for (const scene of state.scenes) {
-    if (state.playhead_sec >= cumulativeTime && state.playhead_sec <= cumulativeTime + scene.duration_sec) {
-      activeScene = scene;
-      const elapsedInScene = state.playhead_sec - cumulativeTime;
-      sceneProgress = scene.duration_sec > 0 ? Math.min(1, Math.max(0, elapsedInScene / scene.duration_sec)) : 0;
-      break;
-    }
-    cumulativeTime += scene.duration_sec;
-  }
-
-  // Fallback to first scene if playhead is 0 or before
-  if (!activeScene && state.scenes.length > 0) {
-    activeScene = state.scenes[0];
-    sceneProgress = 0;
-  }
+  const totalDurationSec = sceneTimelineDuration(state.scenes);
+  const activeScene = sceneAtTime(state.scenes, state.playhead_sec);
 
   // Playback timer loop
   useEffect(() => {
@@ -77,7 +74,7 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
 
       onUpdateState((prev) => {
         const nextTime = prev.playhead_sec + deltaSec;
-        const total = prev.scenes.reduce((acc, s) => acc + s.duration_sec, 0);
+        const total = sceneTimelineDuration(prev.scenes);
 
         if (nextTime >= total) {
           // Loop or stop
@@ -104,26 +101,24 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Don't trigger if user is typing in an input
-      if (["INPUT", "TEXTAREA"].includes((e.target as HTMLElement)?.tagName)) {
+      if (e.defaultPrevented || ["INPUT", "TEXTAREA", "SELECT", "BUTTON"].includes((e.target as HTMLElement)?.tagName) || (e.target as HTMLElement)?.isContentEditable || (e.target as HTMLElement)?.closest?.("[role=dialog]")) {
         return;
       }
-      if (e.code === "Space") {
-        e.preventDefault();
-        onUpdateState((s) => ({ ...s, is_playing: !s.is_playing }));
-      } else if (e.key === "ArrowLeft") {
+      // Space is owned by StoryEditorScreen; a second listener toggles twice.
+      if (e.key === "ArrowLeft") {
         e.preventDefault();
         onUpdateState((s) => ({ ...s, playhead_sec: Math.max(0, s.playhead_sec - (e.shiftKey ? 1 : 0.1)) }));
       } else if (e.key === "ArrowRight") {
         e.preventDefault();
         onUpdateState((s) => ({ ...s, playhead_sec: Math.min(totalDurationSec, s.playhead_sec + (e.shiftKey ? 1 : 0.1)) }));
-      } else if (e.key.toLowerCase() === "m") {
+      } else if (!previewOnly && e.key.toLowerCase() === "m") {
         e.preventDefault();
         onUpdateState((s) => ({ ...s, show_motion_paths: !s.show_motion_paths }));
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [totalDurationSec, onUpdateState]);
+  }, [totalDurationSec, onUpdateState, previewOnly]);
 
   // Format seconds to mm:ss.d
   const formatTime = (secs: number) => {
@@ -370,7 +365,7 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
     if (!dataStr) return;
     try {
       const p = JSON.parse(dataStr);
-      const targetScene = activeScene || state.scenes[0];
+      const targetScene = activeScene;
       if (!targetScene) return;
 
       const elapsedInScene = Math.max(0, state.playhead_sec - targetScene.start_time_sec);
@@ -413,16 +408,15 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
     }
   };
 
-  const isPortrait = state.aspect_ratio === "9:16";
+  const viewport = fitCompositionFrame(state.aspect_ratio, frameSize.width, frameSize.height, viewZoom === "fit" ? 100 : Number(viewZoom));
   const selectedLayerObj =
     activeScene?.layers.find((l) => l.id === selectedLayerId) || activeScene?.layers[0] || null;
   const camera = activeScene ? evaluateCameraTransform(activeScene, state.playhead_sec) : { zoom: 1.0, panX: 0, panY: 0 };
   const transition = activeScene ? evaluateSceneTransition(activeScene, state.playhead_sec) : null;
 
   return (
-    <div className="flex-1 flex flex-col bg-zinc-950 relative overflow-hidden select-none">
-      {/* 16:9 Central Composition Area */}
-      <div className="flex-1 flex items-center justify-center p-6 relative">
+    <div className="pf-composition-workspace flex-1 min-w-0 min-h-0 flex flex-col relative overflow-hidden select-none" aria-label="Video composition workspace">
+      <div ref={frameRef} className="pf-composition-frame flex-1 min-h-0 relative overflow-auto">
         <div
           ref={containerRef}
           onDragOver={(e) => {
@@ -432,15 +426,9 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
           }}
           onDragLeave={() => setIsCanvasDragOver(false)}
           onDrop={handleCanvasDrop}
-          className={`relative bg-black rounded-xl overflow-hidden shadow-2xl border transition-all duration-200 ${
-            isCanvasDragOver
-              ? "border-cyan-400 ring-4 ring-cyan-500/30 scale-[1.01]"
-              : "border-zinc-800"
-          } ${
-            isPortrait
-              ? "aspect-[9/16] h-[70vh] max-w-full"
-              : "aspect-[16/9] w-full max-w-[1020px] max-h-[66vh]"
-          }`}
+          className={`pf-composition-stage relative bg-black overflow-hidden border shrink-0 ${isCanvasDragOver ? "border-cyan-400 ring-2 ring-cyan-500/30" : "border-white/10"}`}
+          data-aspect-ratio={state.aspect_ratio}
+          style={{ width: viewport.width, height: viewport.height }}
           onClick={() => {
             // Deselect layer if clicked on blank canvas
             if (activeScene) {
@@ -476,9 +464,9 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
                   return (
                     <div
                       key={layer.id}
-                      onPointerDown={(e) => handleLayerPointerDown(e, layer)}
-                      className={`absolute cursor-move select-none transition-shadow ${
-                        isSelected ? "ring-2 ring-indigo-500 shadow-xl" : "hover:ring-1 hover:ring-white/40"
+                      onPointerDown={previewOnly ? undefined : (e) => handleLayerPointerDown(e, layer)}
+                      className={`absolute ${previewOnly ? "" : "cursor-move"} select-none transition-shadow ${
+                        previewOnly ? "" : isSelected ? "ring-2 ring-indigo-500 shadow-xl" : "hover:ring-1 hover:ring-white/40"
                       }`}
                       style={{
                         left: `calc(50% + ${evaluated.x}%)`,
@@ -497,6 +485,7 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
                         alt={layer.name || "Scene Panel"}
                         className="block object-contain pointer-events-none rounded shadow-md max-w-full max-h-full"
                         style={{
+                          ...(previewOnly ? { maxWidth: viewport.width * .9, maxHeight: viewport.height * .9 } : {}),
                           clipPath: layer.clip_path
                             ? layer.clip_path
                             : layer.polygon_points && layer.polygon_points.length >= 3
@@ -507,7 +496,7 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
                       />
 
                       {/* On-Canvas Draggable Bounding Handles & Precision Studio Controls */}
-                      {isSelected && !state.is_playing && (
+                      {!previewOnly && isSelected && !state.is_playing && (
                         <div className="absolute inset-0 pointer-events-none border-2 border-indigo-500/90 shadow-[0_0_20px_rgba(99,102,241,0.25)] ring-1 ring-cyan-400/30">
                           {/* Live Dimensions, Position & Rotation HUD Pill */}
                           <div className="absolute -top-7 left-1/2 -translate-x-1/2 bg-zinc-950/90 backdrop-blur-md border border-zinc-700/80 text-zinc-200 font-mono text-[10px] font-semibold px-2.5 py-0.5 rounded-full shadow-2xl whitespace-nowrap pointer-events-none flex items-center gap-1.5 z-30 ring-1 ring-white/10">
@@ -693,7 +682,7 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
                     </div>
                   );
                 })
-            ) : (
+            ) : activeScene || state.scenes.length === 0 ? (
               /* Empty State */
               <div className="absolute inset-0 flex flex-col items-center justify-center p-8 text-center text-zinc-500">
                 <div className="w-16 h-16 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center mb-4 text-zinc-400">
@@ -704,7 +693,7 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
                   Select a manga panel from the right panel and click <strong>“Add to Scene”</strong> or drag it here to begin your video.
                 </p>
               </div>
-            )}
+            ) : null}
 
             {/* Transition Color Overlay */}
             {transition?.overlayColor && transition.overlayOpacity !== undefined && transition.overlayOpacity > 0 && (
@@ -718,7 +707,7 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
             )}
 
             {/* Motion Path Trajectory Visualization */}
-            {selectedLayerObj && activeScene && (state.show_motion_paths || selectedLayerId) && !state.is_playing && (() => {
+            {!previewOnly && selectedLayerObj && activeScene && (state.show_motion_paths || selectedLayerId) && !state.is_playing && (() => {
               const points = computeMotionPathPoints(selectedLayerObj, activeScene, 16);
               if (points.length < 2) return null;
               const svgPoints = points.map((p) => `${50 + p.x},${50 + p.y}`).join(" ");
@@ -799,20 +788,25 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
       </div>
 
       {/* Canvas-only tools. Playback and scrubbing live in the timeline below. */}
-      <div className="bg-zinc-900/90 backdrop-blur-md border-t border-zinc-800/80 px-4 py-1.5 shrink-0 select-none flex items-center justify-end">
+      <div className="pf-canvas-view-tools px-3 py-2 shrink-0 select-none flex items-center justify-between gap-3">
+        <span className="text-[10px] text-zinc-500 truncate">{activeScene ? activeScene.title : state.scenes.length ? "Timeline gap" : "Drop a page or panel to begin"}</span>
         <div className="flex items-center gap-2" aria-label="Canvas view tools">
             {/* Fit dropdown */}
             <select
               className="bg-zinc-950 border border-zinc-800 text-[11px] font-mono text-zinc-300 rounded px-2 py-1 focus:outline-none"
-              defaultValue="Fit"
+              aria-label="Canvas view zoom"
+              value={viewZoom}
+              onChange={(event) => setViewZoom(event.target.value)}
             >
-              <option value="Fit">Fit</option>
-              <option value="100%">100%</option>
-              <option value="50%">50%</option>
+              <option value="fit">Fit</option>
+              <option value="50">50%</option>
+              <option value="75">75%</option>
+              <option value="100">100%</option>
+              <option value="150">150%</option>
             </select>
 
             {/* Motion Paths Toggle */}
-            <button
+            {!previewOnly && <button
               type="button"
               onClick={() => onUpdateState((s) => ({ ...s, show_motion_paths: !s.show_motion_paths }))}
               className={`p-1.5 rounded transition-colors ${
@@ -821,9 +815,11 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
                   : "text-zinc-400 hover:text-white"
               }`}
               title="Toggle Motion Paths & Keyframe Trajectory (M)"
+              aria-label="Toggle motion paths"
+              aria-pressed={!!state.show_motion_paths}
             >
               <Icons.Sparkles className="w-3.5 h-3.5" />
-            </button>
+            </button>}
 
             {/* Safe Zones Toggle */}
             <button
@@ -833,6 +829,8 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
                 showSafeZones ? "bg-indigo-600/20 text-indigo-400 border border-indigo-500/30" : "text-zinc-400 hover:text-white"
               }`}
               title="Toggle Safe Frame Guides"
+              aria-label="Toggle safe frame guides"
+              aria-pressed={showSafeZones}
             >
               <Icons.Layout className="w-3.5 h-3.5" />
             </button>
@@ -842,16 +840,25 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
               type="button"
               onClick={() => {
                 const el = containerRef.current;
-                if (el?.requestFullscreen) el.requestFullscreen();
+                setFullscreenError(null);
+                if (document.fullscreenElement) {
+                  void document.exitFullscreen().catch(() => setFullscreenError("Could not exit fullscreen."));
+                } else if (el?.requestFullscreen) {
+                  void el.requestFullscreen().catch(() => setFullscreenError("Fullscreen is not available in this window."));
+                } else {
+                  setFullscreenError("Fullscreen is not available in this window.");
+                }
               }}
               className="p-1.5 text-zinc-400 hover:text-white rounded"
               title="Fullscreen Canvas"
+              aria-label="Fullscreen canvas"
             >
               <Icons.Maximize className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
 
+      {fullscreenError && <p role="status" className="px-3 pb-2 text-xs text-amber-300">{fullscreenError}</p>}
       {/* "May I add this crop to the timeline?" Confirmation Modal */}
       {cropModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn">

@@ -1,0 +1,71 @@
+.pf-motion-editor {
+  --editor-bg: #090b12;
+  --editor-panel: #0d1019;
+  --editor-line: #262b3d;
+  --editor-purple: #7042ff;
+  background: var(--editor-bg);
+  color: #e7e9f5;
+  color-scheme: dark;
+}
+.pf-motion-editor > header {
+  flex-shrink: 0;
+  background: linear-gradient(110deg, #101320, #090b12 72%);
+  border-color: #252b3d;
+}
+.pf-editor-main { gap: 10px; padding: 8px 10px 8px 0; }
+.pf-editor-sidebar {
+  width: clamp(320px, 25vw, 410px);
+  display: grid;
+  grid-template-rows: minmax(145px, .88fr) minmax(180px, 1fr);
+  gap: 8px;
+}
+.pf-editor-source, .pf-editor-inspector {
+  background: linear-gradient(135deg, #111520, #0c0f17);
+  border: 1px solid var(--editor-line);
+  border-radius: 12px;
+  box-shadow: 0 0 0 1px #ffffff03, 0 8px 24px #00000025;
+}
+.pf-editor-source > div { border-left: 0; background-color: transparent; }
+.pf-composition-workspace {
+  border: 1px solid #51438b;
+  border-radius: 14px;
+  background: radial-gradient(ellipse at 50% 45%, #19182c, #0b0d16 72%);
+  box-shadow: 0 0 20px #6f40ff12, inset 0 0 35px #00000040;
+}
+.pf-composition-frame { display: grid; place-items: safe center; padding: 16px; }
+.pf-composition-stage { box-shadow: 0 8px 45px #00000045; }
+.pf-composition-stage:fullscreen { width: 100vw !important; height: 100vh !important; border: 0; }
+.pf-canvas-view-tools { background: #0a0d16b8; border-top: 1px solid #ffffff08; }
+.pf-canvas-view-tools select { border-radius: 7px; min-height: 29px; padding-inline: 9px; }
+.pf-canvas-view-tools button { border: 1px solid #292f42; background-color: #111520; border-radius: 7px; }
+.pf-inspector { background: linear-gradient(140deg, #121620, #0d1018); }
+.pf-inspector.fixed { height: auto; }
+.pf-inspector > div:first-child { background: #0c0f18b0; min-height: 36px; padding-block: 8px; }
+.pf-inspector > div:nth-child(3) { padding-block: 8px; }
+.pf-inspector > div:nth-child(3) img { max-height: 40px; }
+.pf-inspector > div:last-child { padding: 8px 12px; }
+.pf-inspector .space-y-3 > :not([hidden]) ~ :not([hidden]) { margin-top: 8px; }
+.pf-inspector .space-y-4 > :not([hidden]) ~ :not([hidden]) { margin-top: 12px; }
+.pf-inspector > div:nth-child(2) { padding: 3px 5px; gap: 0; }
+.pf-inspector > div:nth-child(2) > button { flex: 1; border-radius: 7px; border-bottom: 0; min-height: 34px; }
+.pf-inspector > div:nth-child(2) > button[aria-pressed=true] { background: linear-gradient(110deg, #6737f5, #4724d1); color: white; box-shadow: 0 0 14px #6c3aff33; }
+.pf-inspector input[type=range] { min-width: 0; width: 100%; accent-color: #7042ff; }
+.pf-inspector input[type=number] { max-width: 70px; }
+.pf-editor-timeline-region { flex: 0 0 clamp(230px, 29vh, 290px); min-height: 0; padding: 0 10px 10px; }
+.pf-editor-sidebar[hidden], .pf-editor-inspector[hidden], .pf-editor-timeline-region[hidden], .pf-editor-rail[hidden] { display: none !important; }
+.pf-editor-sidebar[data-setup=true]:not([hidden]) { display: flex; flex-direction: column; }
+.pf-editor-sidebar[data-setup=true] .pf-editor-source { flex: 1; }
+.pf-editor-timeline-region > div { height: 100%; max-height: 100%; border-radius: 12px; overflow: hidden; border: 1px solid var(--editor-line); background: #0c0f17; }
+.pf-editor-loading { position: fixed; top: 68px; left: 50%; transform: translateX(-50%); z-index: 35; background: #151126f0; border: 1px solid #7042ff80; border-radius: 20px; padding: 8px 16px; font-size: 12px; color: #ddd4ff; box-shadow: 0 4px 20px #0006; pointer-events: none; }
+.pf-editor-settings { width: min(460px, calc(100vw - 48px)); border: 1px solid #4f4379; border-radius: 16px; padding: 24px; color: #e7e9f5; background: linear-gradient(140deg, #151723, #0c0f18); box-shadow: 0 24px 80px #0009; }
+.pf-editor-settings::backdrop { background: #05060bc9; backdrop-filter: blur(4px); }
+@media (max-width: 1180px) {
+  .pf-editor-main { gap: 7px; padding-right: 7px; }
+  .pf-editor-sidebar { width: 306px; }
+  .pf-editor-timeline-region { padding-inline: 7px; }
+}
+@media (max-height: 740px) {
+  .pf-editor-timeline-region { flex-basis: 215px; }
+  .pf-editor-sidebar { grid-template-rows: minmax(120px, .8fr) minmax(145px, 1fr); }
+  .pf-editor-main { padding-top: 5px; padding-bottom: 5px; }
+}

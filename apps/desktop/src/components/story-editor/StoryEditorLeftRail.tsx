@@ -6,11 +6,13 @@ export type LeftRailTab = "pages" | "story" | "narration" | "motion" | "audio" |
 interface StoryEditorLeftRailProps {
   activeTab: LeftRailTab;
   onSelectTab: (tab: LeftRailTab) => void;
+  engineConnected?: boolean;
 }
 
 export const StoryEditorLeftRail: React.FC<StoryEditorLeftRailProps> = ({
   activeTab,
   onSelectTab,
+  engineConnected,
 }) => {
   const tabs: Array<{ id: LeftRailTab; label: string; icon: React.ReactNode }> = [
     {
@@ -46,8 +48,8 @@ export const StoryEditorLeftRail: React.FC<StoryEditorLeftRailProps> = ({
   ];
 
   return (
-    <aside className="w-16 bg-zinc-950 border-r border-zinc-800 flex flex-col items-center py-3 select-none z-30 shrink-0">
-      <div className="flex flex-col gap-1.5 w-full px-2">
+    <aside className="w-[72px] lg:w-[100px] min-h-0 bg-[#0d1019] border-r border-[#262a3b] flex flex-col items-center py-3 select-none z-30 shrink-0">
+      <nav aria-label="Editor workspaces" className="flex min-h-0 flex-1 flex-col gap-2 w-full overflow-y-auto px-2 pb-3">
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id;
           return (
@@ -55,25 +57,34 @@ export const StoryEditorLeftRail: React.FC<StoryEditorLeftRailProps> = ({
               key={tab.id}
               type="button"
               onClick={() => onSelectTab(tab.id)}
-              className={`relative flex flex-col items-center justify-center py-2.5 px-1 rounded-xl transition-all duration-150 group ${
+              aria-pressed={isActive}
+              className={`relative flex min-h-[72px] shrink-0 flex-col items-center justify-center gap-2 py-3 px-1 rounded-lg transition-colors duration-150 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-violet-400 ${
                 isActive
-                  ? "bg-indigo-600/15 text-indigo-400 font-semibold border border-indigo-500/30 shadow-sm"
-                  : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60"
+                  ? "bg-gradient-to-br from-violet-600/20 to-indigo-600/10 text-violet-300 font-semibold shadow-[inset_0_0_24px_#713fff12]"
+                  : "text-slate-300 hover:text-white hover:bg-white/5"
               }`}
               title={tab.label}
             >
               {isActive && (
-                <span className="absolute -left-2 top-1/2 -translate-y-1/2 w-1 h-5 bg-indigo-500 rounded-r-full shadow-sm shadow-indigo-500/50" />
+                <span aria-hidden="true" className="absolute -left-2 top-1/2 -translate-y-1/2 w-1 h-12 bg-violet-500 rounded-r-full shadow-[0_0_14px_#8b5cf680]" />
               )}
-              <div className="transition-transform duration-150 group-hover:scale-110">
+              <span aria-hidden="true" className={isActive ? "text-violet-400" : "text-slate-300"}>
                 {tab.icon}
-              </div>
-              <span className="text-[10px] mt-1 tracking-tight leading-none">
+              </span>
+              <span className="text-[11px] lg:text-xs tracking-tight leading-none">
                 {tab.label}
               </span>
             </button>
           );
         })}
+      </nav>
+      <div role="status" aria-live="polite" className="mx-2 mt-3 flex self-stretch shrink-0 flex-col items-center gap-1 rounded-lg border border-[#30364a] bg-[#0b0d15] px-1 py-2.5 text-[10px] lg:text-xs">
+        <span className="flex items-center gap-1.5 text-slate-300">
+          <span aria-hidden="true" className={`h-2 w-2 rounded-full border ${engineConnected === true ? "border-emerald-400 bg-emerald-400/20" : engineConnected === false ? "border-rose-400 bg-rose-400/20" : "border-amber-400 bg-amber-400/20"}`} />Engine
+        </span>
+        <span className={`font-semibold ${engineConnected === true ? "text-emerald-400" : engineConnected === false ? "text-rose-400" : "text-amber-300"}`}>
+          {engineConnected === true ? "Healthy" : engineConnected === false ? "Offline" : "Checking"}
+        </span>
       </div>
     </aside>
   );

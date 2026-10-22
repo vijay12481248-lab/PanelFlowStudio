@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { SnapshotHistory } from "@panelflow/history";
 import { Icons, Button, Badge } from "@panelflow/ui";
 import {
   type NarrationChapter,
@@ -19,6 +20,7 @@ import { CharacterVoiceManager } from "./CharacterVoiceManager";
 import { AudioPreviewPlayer } from "./AudioPreviewPlayer";
 import { api } from "@panelflow/api-client";
 import { NarrationJobQueue } from "./NarrationJobQueue";
+import { historyShortcut } from "../../history/shortcuts";
 
 export const NarrationStudio: React.FC<NarrationStudioProps> = ({
   initialChapter,
@@ -121,9 +123,11 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
     };
   }, [scenes, targetSceneId, selectedOllamaModel]);
 
-  // Undo / Redo History Stacks
-  const [history, setHistory] = useState<NarrationChapter[]>([]);
-  const [future, setFuture] = useState<NarrationChapter[]>([]);
+  // Local draft history is deliberately separate from the persisted project
+  // journal. The parent receives the restored chapter through autosave and
+  // records that durable change as one project command.
+  const historyRef = useRef(new SnapshotHistory<NarrationChapter>({ limit: 40 }));
+  const [historyState, setHistoryState] = useState(() => historyRef.current.getState());
 
   // Find currently selected segment and adjacent neighbors
   const selectedIndex = chapter.segments.findIndex((s) => s.id === selectedSegmentId);
@@ -152,9 +156,8 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
     (updater: (prev: NarrationChapter) => NarrationChapter, trackHistory = true) => {
       setChapter((prev) => {
         const next = updater(prev);
-        if (trackHistory && next !== prev) {
-          setHistory((h) => [...h.slice(-40), prev]);
-          setFuture([]);
+        if (trackHistory && historyRef.current.record(prev, next)) {
+          setHistoryState(historyRef.current.getState());
           setSaveStatus("unsaved");
         }
         return next;
@@ -179,22 +182,20 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
 
   // Undo / Redo Handlers
   const handleUndo = useCallback(() => {
-    if (history.length === 0) return;
-    const previous = history[history.length - 1];
-    setHistory((h) => h.slice(0, -1));
-    setFuture((f) => [chapter, ...f]);
+    const previous = historyRef.current.undo();
+    if (previous === null) return;
     setChapter(previous);
-    setSaveStatus("saved");
-  }, [history, chapter]);
+    setHistoryState(historyRef.current.getState());
+    setSaveStatus("unsaved");
+  }, []);
 
   const handleRedo = useCallback(() => {
-    if (future.length === 0) return;
-    const next = future[0];
-    setFuture((f) => f.slice(1));
-    setHistory((h) => [...h, chapter]);
+    const next = historyRef.current.redo();
+    if (next === null) return;
     setChapter(next);
-    setSaveStatus("saved");
-  }, [future, chapter]);
+    setHistoryState(historyRef.current.getState());
+    setSaveStatus("unsaved");
+  }, []);
 
   // Keyboard shortcut listener (Ctrl+Z, Ctrl+Y, ArrowUp, ArrowDown)
   useEffect(() => {
@@ -203,15 +204,11 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
       const target = e.target as HTMLElement;
       const isInput = target.tagName === "INPUT" || target.tagName === "TEXTAREA";
 
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
-        if (e.shiftKey) {
-          e.preventDefault();
-          handleRedo();
-        } else {
-          e.preventDefault();
-          handleUndo();
-        }
-      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") {
+      const action = historyShortcut(e);
+      if (action === "undo") {
+        e.preventDefault();
+        handleUndo();
+      } else if (action === "redo") {
         e.preventDefault();
         handleRedo();
       } else if (!isInput && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
@@ -797,7 +794,7 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
             <button
               type="button"
               onClick={handleUndo}
-              disabled={history.length === 0}
+              disabled={!historyState.canUndo}
               className="p-1 rounded hover:text-white disabled:opacity-30 transition-colors"
               title="Undo (Ctrl+Z)"
             >
@@ -806,7 +803,7 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
             <button
               type="button"
               onClick={handleRedo}
-              disabled={future.length === 0}
+              disabled={!historyState.canRedo}
               className="p-1 rounded hover:text-white disabled:opacity-30 transition-colors"
               title="Redo (Ctrl+Y)"
             >

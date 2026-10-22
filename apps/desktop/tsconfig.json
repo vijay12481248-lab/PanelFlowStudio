@@ -16,6 +16,7 @@
     "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true,
     "paths": {
+      "@panelflow/history": ["../../packages/history/src/index.ts"],
       "@panelflow/shared-types": ["../../packages/shared-types/src/index.ts"],
       "@panelflow/api-client": ["../../packages/api-client/src/index.ts"],
       "@panelflow/ui": ["../../packages/ui/src/index.tsx"]

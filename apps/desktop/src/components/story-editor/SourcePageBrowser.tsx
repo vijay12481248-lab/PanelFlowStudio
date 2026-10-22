@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import { Icons, Button, Badge } from "@panelflow/ui";
 import type { Page, Panel } from "@panelflow/shared-types";
 import { api } from "@panelflow/api-client";
@@ -29,6 +29,9 @@ interface SourcePageBrowserProps {
   onClose?: () => void;
   activeSubTab?: "pages" | "panels";
   onSubTabChange?: (tab: "pages" | "panels") => void;
+  /** Sidebar gallery; the full crop workspace remains available on expansion. */
+  compact?: boolean;
+  hideEditingTools?: boolean;
 }
 
 export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
@@ -43,7 +46,22 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
   onClose,
   activeSubTab: externalSubTab,
   onSubTabChange,
+  compact = false,
+  hideEditingTools = false,
 }) => {
+  const [expanded, setExpanded] = useState(false);
+  const workspaceDialogRef = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    if (!compact || !expanded) return;
+    const dialog = workspaceDialogRef.current;
+    const previousFocus = document.activeElement as HTMLElement | null;
+    // Native modal dialog supplies focus containment, inert background and Escape.
+    dialog?.showModal();
+    return () => {
+      dialog?.close();
+      previousFocus?.focus();
+    };
+  }, [compact, expanded]);
   const [internalSubTab, setInternalSubTab] = useState<"pages" | "panels">("pages");
   const subTab = externalSubTab ?? internalSubTab;
   const setSubTab = (tab: "pages" | "panels") => {
@@ -139,7 +157,7 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
   const handlePrevPage = () => {
     if (activePageIndex > 0) {
       onSelectPage(pages[activePageIndex - 1].id);
-      onSelectPanel(null);
+      if (!hideEditingTools) onSelectPanel(null);
       setDrawBox(null);
       setPolygonPoints([]);
       setPenPoints([]);
@@ -149,12 +167,18 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
   const handleNextPage = () => {
     if (activePageIndex < pages.length - 1) {
       onSelectPage(pages[activePageIndex + 1].id);
-      onSelectPanel(null);
+      if (!hideEditingTools) onSelectPanel(null);
       setDrawBox(null);
       setPolygonPoints([]);
       setPenPoints([]);
     }
   };
+
+  // Scroll-to-zoom for manga page viewer
+  const handleWheelZoom = useCallback((e: React.WheelEvent) => {
+    e.preventDefault();
+    setZoomLevel(z => Math.min(200, Math.max(50, z - Math.sign(e.deltaY) * 5)));
+  }, []);
 
   // Chapter 3: Drag panel onto composition canvas or timeline
   const handlePanelDragStart = (e: React.DragEvent, panel: Panel) => {
@@ -164,7 +188,9 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
       panelId: panel.id,
       pageSequence: panel.page_sequence,
       crop: { x: panel.x, y: panel.y, width: panel.width, height: panel.height },
-      imageUrl: api.getPageImageUrl(projectId, activePage.id),
+      imageUrl: hideEditingTools
+        ? `${api.getPanelImageUrl(projectId, panel.id)}?v=${encodeURIComponent(panel.crop_filename || "detected")}`
+        : api.getPageImageUrl(projectId, activePage.id),
       name: `Panel #${panel.page_sequence}`,
     };
     e.dataTransfer.setData("application/panelflow-panel", JSON.stringify(payload));
@@ -311,6 +337,11 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
     }
   };
 
+  const closeWorkspace = () => {
+    handleSvgMouseUp();
+    setExpanded(false);
+  };
+
   // SVG Double-Click to close polygon or pen cut
   const handleSvgDoubleClick = (e: React.MouseEvent<SVGSVGElement>) => {
     e.stopPropagation();
@@ -418,16 +449,14 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
     { border: "#fbbf24", fill: "rgba(251, 191, 36, 0.12)" }, // amber
   ];
 
-  return (
-    <div className="h-full flex flex-col bg-zinc-900 border-l border-zinc-800 select-none overflow-hidden">
-      {/* Top Header: Source Pages title, page counter, and sub-tabs */}
+  const header = (
       <div className="p-2.5 border-b border-zinc-800 bg-zinc-950/70 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2">
           <span className="text-xs font-bold text-zinc-100 uppercase tracking-wider">
             Source Pages
           </span>
           <span className="text-[11px] font-mono text-zinc-400">
-            {activePageIndex + 1} / {pages.length || 1}
+            {activePage ? Math.max(0, activePageIndex) + 1 : 0} / {pages.length}
           </span>
         </div>
 
@@ -482,18 +511,24 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
             </button>
           </div>
 
-          {onClose && (
+          {(onClose || (compact && expanded)) && (
             <button
               type="button"
-              onClick={onClose}
+              onClick={compact && expanded ? closeWorkspace : onClose}
               className="p-1 text-zinc-400 hover:text-white ml-1"
-              title="Close Source Panel"
+              title={compact && expanded ? "Close source workspace" : "Close Source Panel"}
+              aria-label={compact && expanded ? "Close source workspace" : "Close Source Panel"}
             >
               <Icons.XCircle className="w-4 h-4" />
             </button>
           )}
         </div>
       </div>
+  );
+
+  const workspace = (
+    <div className="h-full flex flex-col bg-zinc-900 border-l border-zinc-800 select-none overflow-hidden">
+      {header}
 
       {/* Main Area: Page Canvas on Left + Vertical Filmstrip on Right */}
       <div className="flex-1 flex overflow-hidden bg-zinc-950 relative">
@@ -585,7 +620,7 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
           </div>
         ) : (
           /* Manga Page Viewer with Colored Bounding Boxes */
-          <div className="flex-1 overflow-auto p-3 flex justify-center items-start">
+          <div className="flex-1 overflow-auto p-3 flex justify-center items-start" onWheel={handleWheelZoom}>
             {activePage ? (
               <div
                 ref={imageContainerRef}
@@ -1312,5 +1347,88 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
         </div>
       )}
     </div>
+  );
+
+  if (!compact) return workspace;
+
+  return (
+    <>
+      <section aria-label="Source Pages" className="min-w-0 flex flex-col overflow-hidden rounded-xl border border-zinc-800 bg-[#0b0d15] text-zinc-200">
+        {header}
+        <div aria-label={subTab === "pages" ? "Source page thumbnails" : "Source panel thumbnails"}
+          className="grid grid-cols-4 gap-2 p-3 overflow-y-auto content-start"
+          style={{ maxHeight: 196, gridAutoRows: 80 }}>
+          {subTab === "pages" ? pages.map((page, index) => (
+            <button key={page.id} type="button" aria-label={`Select page ${index + 1}`}
+              aria-pressed={page.id === activePage?.id}
+              onClick={() => {
+                onSelectPage(page.id);
+                if (page.id !== activePage?.id) { if (!hideEditingTools) onSelectPanel(null); handleClearCrop(); }
+              }}
+              onDoubleClick={() => { onSelectPage(page.id); if (!hideEditingTools) { setSubTab("pages"); setExpanded(true); } }}
+              title={`Page ${index + 1} — double-click to open workspace`}
+              className={`relative min-w-0 h-full rounded-md border overflow-hidden focus-visible:outline focus-visible:outline-2 focus-visible:outline-violet-400 ${page.id === activePage?.id ? "border-violet-500 ring-2 ring-violet-500/50" : "border-zinc-700 hover:border-violet-400"}`}>
+              <img src={api.getPageImageUrl(projectId, page.id)} alt={`Page ${page.sequence}`} loading="lazy" className="w-full h-full object-cover object-top" />
+              <span className="absolute top-1 right-1 rounded bg-black/80 px-1 text-[10px]">{index + 1}</span>
+            </button>
+          )) : pagePanels.map((p) => (
+            <button key={p.id} type="button" draggable
+              aria-label={`Select panel ${p.page_sequence}`} aria-pressed={p.id === selectedPanelId}
+              onClick={() => onSelectPanel(p)} onDragStart={(e) => handlePanelDragStart(e, p)}
+              onDoubleClick={() => { if (!hideEditingTools) { setSubTab("pages"); setExpanded(true); } }}
+              title={`Panel ${p.page_sequence} — drag to timeline or double-click to edit`}
+              className={`relative min-w-0 h-full rounded-md border overflow-hidden ${p.id === selectedPanelId ? "border-violet-500 ring-2 ring-violet-500/50" : "border-zinc-700 hover:border-violet-400"}`}>
+              <img src={api.getPageImageUrl(projectId, activePage!.id)} alt={`Panel ${p.page_sequence}`}
+                loading="lazy" className="absolute max-w-none" style={{
+                  width: `${((activePage!.width || 1200) / Math.max(1, p.width)) * 100}%`,
+                  height: `${((activePage!.height || 1800) / Math.max(1, p.height)) * 100}%`,
+                  left: `-${(p.x / Math.max(1, p.width)) * 100}%`,
+                  top: `-${(p.y / Math.max(1, p.height)) * 100}%`,
+                }} />
+              <span className="absolute top-1 right-1 rounded bg-black/80 px-1 text-[10px]">{p.page_sequence}</span>
+            </button>
+          ))}
+          {(subTab === "pages" ? pages.length === 0 : pagePanels.length === 0) && (
+            <p className="col-span-4 text-xs text-zinc-500 py-4 text-center">{subTab === "pages" ? "No pages available" : "No detected panels on this page"}</p>
+          )}
+        </div>
+        {!hideEditingTools && <div className="border-t border-zinc-800 p-2 flex flex-wrap gap-1" role="group" aria-label="Source tools">
+          {([
+            ["select", "Select", Icons.Layout], ["rect", "Rectangle", Icons.Maximize],
+            ["polygon", "Polygon", Icons.Sparkles], ["pen", "Pen", Icons.Scissors],
+          ] as const).map(([mode, label, Icon]) => (
+            <button key={mode} type="button" aria-pressed={toolMode === mode} disabled={!activePage}
+              onClick={() => {
+                setToolMode(mode);
+                if (mode !== "select") { onSelectPanel(null); setSubTab("pages"); setExpanded(true); }
+              }}
+              className={`flex items-center gap-1 px-2 py-2 rounded-md border text-[11px] disabled:opacity-40 ${toolMode === mode ? "bg-violet-600/20 border-violet-500 text-violet-300" : "border-zinc-800 text-zinc-400 hover:text-white"}`}>
+              <Icon className="w-3.5 h-3.5" />{label}
+            </button>
+          ))}
+        </div>}
+        {!hideEditingTools && <div className="px-3 pb-2 flex items-center justify-end gap-3 text-zinc-400">
+          <Icons.ZoomOut className="w-4 h-4" />
+          <input type="range" aria-label="Source zoom" min={50} max={200} step={10} value={zoomLevel}
+            onChange={(e) => setZoomLevel(Number(e.target.value))} className="w-24 accent-violet-500" />
+          <span className="text-[10px] font-mono w-8">{zoomLevel}%</span>
+          <button type="button" aria-label="Expand source workspace" title="Expand source workspace" disabled={!activePage}
+            onClick={() => { setSubTab("pages"); setExpanded(true); }} className="p-1 hover:text-white disabled:opacity-40">
+            <Icons.Maximize className="w-4 h-4" />
+          </button>
+        </div>}
+      </section>
+      {expanded && (
+        <dialog ref={workspaceDialogRef} aria-label="Source page workspace" aria-modal="true"
+          className="fixed inset-0 m-auto w-[94vw] max-w-none h-[90vh] max-h-none p-0 overflow-hidden rounded-xl border border-zinc-700 bg-zinc-950 text-zinc-100 shadow-2xl backdrop:bg-black/80"
+          onCancel={(e) => {
+            e.preventDefault();
+            if (showAddPromptModal) setShowAddPromptModal(false);
+            else closeWorkspace();
+          }}>
+          {workspace}
+        </dialog>
+      )}
+    </>
   );
 };

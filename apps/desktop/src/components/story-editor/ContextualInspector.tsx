@@ -1,4 +1,5 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
+import { resetLayerTransform } from "./editorWorkspace";
 import { Icons, Button, Badge } from "@panelflow/ui";
 import { api } from "@panelflow/api-client";
 import type {
@@ -58,6 +59,13 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
   onOpenNarrationStudio,
   onOpenAudioLibrary,
 }) => {
+  const [expanded, setExpanded] = useState(false);
+  useEffect(() => {
+    if (!expanded) return;
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setExpanded(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [expanded]);
   const [internalTab, setInternalTab] = useState<InspectorTab>("image");
   const activeTab = externalTab ?? internalTab;
   const setActiveTab = (tab: InspectorTab) => {
@@ -496,7 +504,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
   };
 
   return (
-    <div className="h-full flex flex-col bg-zinc-900 border-l border-zinc-800 text-zinc-100 select-none overflow-hidden">
+    <div aria-label="Contextual inspector" className={`pf-inspector h-full flex flex-col text-zinc-100 select-none overflow-hidden ${expanded ? "fixed inset-6 z-40 rounded-xl border border-violet-500/50 shadow-2xl" : ""}`}>
       {/* Top Header: Inspector Title and Window Controls */}
       <div className="p-3 border-b border-zinc-800 bg-zinc-950/70 flex items-center justify-between shrink-0">
         <h3 className="text-xs font-bold text-zinc-100 uppercase tracking-wider flex items-center gap-1.5">
@@ -546,7 +554,10 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
           <button
             type="button"
             className="p-1 text-zinc-400 hover:text-white rounded"
-            title="Maximize Panel"
+            title={expanded ? "Restore Inspector" : "Maximize Panel"}
+            aria-label={expanded ? "Restore inspector" : "Expand inspector"}
+            aria-expanded={expanded}
+            onClick={() => setExpanded((value) => !value)}
           >
             <Icons.Maximize className="w-3.5 h-3.5" />
           </button>
@@ -573,6 +584,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                 key={tab}
                 type="button"
                 onClick={() => setActiveTab(tab)}
+                aria-pressed={isActive}
                 className={`px-3 py-1.5 text-xs font-medium capitalize rounded-t-lg transition-colors border-b-2 ${
                   isActive
                     ? "border-indigo-500 text-indigo-400 bg-zinc-900/80 font-bold"
@@ -617,6 +629,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
           )}
         </div>
       )}
+
 
       {/* Main Content Area */}
       <div className="p-3 space-y-4 flex-1 overflow-y-auto min-h-0">
@@ -1637,9 +1650,12 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
               <div className="space-y-4">
                 {/* Transform Block */}
                 <div className="space-y-3">
-                  <h4 className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">
-                    Transform
-                  </h4>
+                  <div className="flex items-center justify-between gap-2">
+                    <h4 className="text-xs font-semibold text-zinc-300">Transform</h4>
+                    <button type="button" aria-label="Reset transform" onClick={() => updateSelectedLayer({ transform: resetLayerTransform(selectedLayer.transform) })} className="rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-[11px] text-zinc-300 hover:text-white flex items-center gap-1">
+                      <Icons.Rotate className="w-3 h-3" /> Reset
+                    </button>
+                  </div>
 
                   {/* Position X / Y */}
                   <div className="grid grid-cols-2 gap-2 items-center">
@@ -1649,6 +1665,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                         <span className="text-[10px] text-zinc-500 font-mono mr-1">X</span>
                         <input
                           type="number"
+                          aria-label="Position X"
                           value={Math.round(selectedLayer.transform.x * 6.4 + 320)}
                           onChange={(e) =>
                             updateSelectedLayerTransform({
@@ -1662,6 +1679,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                         <span className="text-[10px] text-zinc-500 font-mono mr-1">Y</span>
                         <input
                           type="number"
+                          aria-label="Position Y"
                           value={Math.round(selectedLayer.transform.y * 3.6 + 180)}
                           onChange={(e) =>
                             updateSelectedLayerTransform({
@@ -1683,6 +1701,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                         min="50"
                         max="250"
                         step="5"
+                        aria-label="Layer scale"
                         value={Math.round(selectedLayer.transform.scale * 100)}
                         onChange={(e) =>
                           updateSelectedLayerTransform({
@@ -1701,6 +1720,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                   <div className="grid grid-cols-2 gap-2 items-center">
                     <span className="text-xs text-zinc-300">Rotation</span>
                     <select
+                      aria-label="Layer rotation"
                       value={selectedLayer.transform.rotation}
                       onChange={(e) =>
                         updateSelectedLayerTransform({
@@ -1725,6 +1745,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                         min="0"
                         max="100"
                         step="5"
+                        aria-label="Layer opacity"
                         value={Math.round(selectedLayer.transform.opacity * 100)}
                         onChange={(e) =>
                           updateSelectedLayerTransform({

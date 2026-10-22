@@ -1,8 +1,9 @@
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import { api } from "@panelflow/api-client";
-import type { Project, Page, Panel } from "@panelflow/shared-types";
+import type { Project, Page, Panel, ProjectHistoryState } from "@panelflow/shared-types";
 import { Button, Card, Badge, Modal, Input, Icons } from "@panelflow/ui";
 import { useError } from "../context/ErrorContext";
+import { historyShortcut } from "../history/shortcuts";
 
 interface PanelReviewScreenProps {
   project: Project;
@@ -51,9 +52,10 @@ export const PanelReviewScreen: React.FC<PanelReviewScreenProps> = ({
   const [manualW, setManualW] = useState<number>(400);
   const [manualH, setManualH] = useState<number>(300);
 
-  // Undo / Redo History Stack
-  const [undoStack, setUndoStack] = useState<Array<Panel[]>>([]);
-  const [redoStack, setRedoStack] = useState<Array<Panel[]>>([]);
+  // Undo / Redo History Stack (deprecated in favor of server-owned project history)
+  const [projectHistory, setProjectHistory] = useState<ProjectHistoryState | null>(() => api.getCachedProjectHistory(project.id));
+  const [historyBusy, setHistoryBusy] = useState<boolean>(false);
+  const historyAction = useRef<boolean>(false);
 
   // Dragging / Resizing / Drawing refs & state
   const svgRef = useRef<SVGSVGElement | null>(null);
@@ -132,28 +134,44 @@ export const PanelReviewScreen: React.FC<PanelReviewScreenProps> = ({
     : [];
   const selectedPanel = panels.find((p) => p.id === selectedPanelId) || null;
 
-  const pushUndo = useCallback((currentPanels: Panel[]) => {
-    setUndoStack((prev) => [...prev.slice(-20), currentPanels]);
-    setRedoStack([]);
+  const pushUndo = useCallback((_currentPanels?: Panel[]) => {
+    // Deprecated: UI stack replaced by server-owned project history
   }, []);
 
-  const handleUndo = useCallback(async () => {
-    if (undoStack.length === 0) return;
-    const previous = undoStack[undoStack.length - 1];
-    setUndoStack((prev) => prev.slice(0, -1));
-    setRedoStack((prev) => [...prev, panels]);
-    setPanels(previous);
-    setCacheBuster(Date.now());
-  }, [undoStack, panels]);
+  const moveHistory = useCallback(async (direction: "undo" | "redo") => {
+    if (historyAction.current || loading || isAddModalOpen || isBatchBlurModalOpen) return;
+    historyAction.current = true;
+    setHistoryBusy(true);
+    try {
+      const known = api.getCachedProjectHistory(project.id);
+      if (known && !(direction === "undo" ? known.canUndo : known.canRedo)) {
+        setProjectHistory(known);
+        return;
+      }
+      const reply = direction === "undo" ? await api.undo(project.id) : await api.redo(project.id);
+      setProjectHistory(reply.history ?? api.getCachedProjectHistory(project.id));
+      setPanels(await api.listPanels(project.id));
+      setCacheBuster(Date.now());
+    } catch (err: any) {
+      setProjectHistory(api.getCachedProjectHistory(project.id));
+      reportError({
+        title: direction === "undo" ? "Undo Failed" : "Redo Failed",
+        message: err.message || `Could not ${direction} project state.`,
+        severity: "warning",
+        source: "pipeline",
+        projectId: project.id,
+        rawDetails: err,
+      });
+    } finally {
+      historyAction.current = false;
+      setHistoryBusy(false);
+    }
+  }, [loading, isAddModalOpen, isBatchBlurModalOpen, project.id, reportError]);
 
-  const handleRedo = useCallback(async () => {
-    if (redoStack.length === 0) return;
-    const next = redoStack[redoStack.length - 1];
-    setRedoStack((prev) => prev.slice(0, -1));
-    setUndoStack((prev) => [...prev, panels]);
-    setPanels(next);
-    setCacheBuster(Date.now());
-  }, [redoStack, panels]);
+  const handleUndo = useCallback(() => { void moveHistory("undo"); }, [moveHistory]);
+  const handleRedo = useCallback(() => { void moveHistory("redo"); }, [moveHistory]);
+  const canUndo = !historyBusy && !loading && !projectHistory?.conflicted && !projectHistory?.recoveryRequired && !!projectHistory?.canUndo;
+  const canRedo = !historyBusy && !loading && !projectHistory?.conflicted && !projectHistory?.recoveryRequired && !!projectHistory?.canRedo;
 
   const loadData = async () => {
     try {
@@ -194,19 +212,26 @@ export const PanelReviewScreen: React.FC<PanelReviewScreenProps> = ({
   // Keyboard Navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      const target = e.target as HTMLElement;
+      if (
+        e.defaultPrevented ||
+        ["INPUT", "TEXTAREA", "SELECT"].includes(target?.tagName) ||
+        target?.isContentEditable ||
+        target?.closest?.("[role=dialog], dialog") ||
+        isAddModalOpen ||
+        isBatchBlurModalOpen
+      ) {
+        return;
+      }
 
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
+      const action = historyShortcut(e);
+      if (action) {
         e.preventDefault();
-        if (e.shiftKey) {
-          handleRedo();
-        } else {
-          handleUndo();
-        }
-      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") {
-        e.preventDefault();
-        handleRedo();
-      } else if (e.key === "ArrowLeft" && !e.shiftKey) {
+        if (action === "undo") handleUndo(); else handleRedo();
+        return;
+      }
+
+      if (e.key === "ArrowLeft" && !e.shiftKey) {
         if (selectedPageIndex > 0) {
           setSelectedPageIndex((prev) => prev - 1);
           setSelectedPanelId(null);
@@ -768,10 +793,16 @@ export const PanelReviewScreen: React.FC<PanelReviewScreenProps> = ({
 
         {/* Global Action Controls */}
         <div className="flex flex-wrap items-center gap-2">
-          {undoStack.length > 0 && (
-            <Button variant="ghost" size="sm" onClick={handleUndo} title="Undo (Ctrl+Z)">
+          {canUndo && (
+            <Button variant="ghost" size="sm" onClick={handleUndo} title="Undo (Ctrl+Z)" disabled={historyBusy}>
               <Icons.Rotate className="w-3.5 h-3.5 mr-1" />
               Undo
+            </Button>
+          )}
+          {canRedo && (
+            <Button variant="ghost" size="sm" onClick={handleRedo} title="Redo (Ctrl+Y / Ctrl+Shift+Z)" disabled={historyBusy}>
+              <Icons.Rotate className="w-3.5 h-3.5 mr-1 scale-x-[-1]" />
+              Redo
             </Button>
           )}
 

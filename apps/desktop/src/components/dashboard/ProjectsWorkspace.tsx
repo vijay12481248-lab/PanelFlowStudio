@@ -12,6 +12,9 @@ import { DashboardProjectCard } from "./DashboardProjectCard";
 
 interface ProjectsWorkspaceProps {
   projects: Project[];
+  loading?: boolean;
+  error?: string | null;
+  onRetry?: () => void;
   favorites: Record<string, boolean>;
   coversMap?: Record<string, string>;
   onToggleFavorite: (projectId: string) => void;
@@ -26,6 +29,9 @@ interface ProjectsWorkspaceProps {
 
 export const ProjectsWorkspace: React.FC<ProjectsWorkspaceProps> = ({
   projects,
+  loading = false,
+  error,
+  onRetry,
   favorites,
   coversMap,
   onToggleFavorite,
@@ -178,8 +184,18 @@ export const ProjectsWorkspace: React.FC<ProjectsWorkspaceProps> = ({
         </button>
       </div>
 
-      {/* Projects Grid / List */}
-      {filteredProjects.length === 0 ? (
+      {error && (
+        <div role="alert" className="rounded-xl border border-amber-800 bg-amber-950/30 p-4 text-sm text-amber-200">
+          <p>{error}</p>
+          {onRetry && <button onClick={onRetry} disabled={loading} className="mt-2 rounded border border-amber-700 px-3 py-1 hover:bg-amber-900/40 focus-visible:outline focus-visible:outline-amber-300 disabled:opacity-50">Retry</button>}
+        </div>
+      )}
+      {/* Loading and errors must not masquerade as an empty project database. */}
+      {loading && projects.length === 0 ? (
+        <div role="status" className="rounded-xl border border-[#1e2538] bg-[#111422] p-10 text-center text-sm text-zinc-300">
+          Loading projects…
+        </div>
+      ) : error && projects.length === 0 ? null : filteredProjects.length === 0 ? (
         <div className="bg-[#111422] border border-dashed border-[#1e2538] rounded-xl p-10 text-center space-y-3">
           <div className="w-12 h-12 rounded-2xl bg-[#14192a] border border-[#232b45] flex items-center justify-center text-zinc-400 mx-auto">
             <Folder className="w-6 h-6" />

@@ -10,7 +10,9 @@ import type { AppError } from "../types/error";
 import { api } from "@panelflow/api-client";
 import type { Job } from "@panelflow/shared-types";
 import { generateSuggestions } from "./errorSuggestions";
-import { JobActivityPanel, isActiveJob } from "../components/JobActivityPanel";
+
+// Local helper copied from JobActivityPanel.tsx to avoid circular imports
+const isActiveJob = (job: Job) => job.status === "QUEUED" || job.status === "RUNNING";
 
 export { generateSuggestions };
 
@@ -28,6 +30,7 @@ interface ErrorContextValue {
   retryJob: (jobId: string) => Promise<boolean>;
   cancelJob: (jobId: string) => Promise<boolean>;
   engineHealthy: boolean;
+  jobs: Job[];
 }
 
 const ErrorContext = createContext<ErrorContextValue | undefined>(undefined);
@@ -334,10 +337,11 @@ export const ErrorProvider: React.FC<{ children: React.ReactNode }> = ({
         retryJob,
         cancelJob,
         engineHealthy,
+        jobs: jobSnapshots,
       }}
     >
       {children}
-      <JobActivityPanel jobs={jobSnapshots} engineHealthy={engineHealthy} onCancel={cancelJob} onInspect={(job) => inspectError({ id: `job_details_${job.job_id}`, title: `Job Details: ${job.job_type.replace(/_/g, " ")}`, message: job.message, severity: job.status === "FAILED" ? "error" : "info", source: "job", timestamp: new Date().toISOString(), jobId: job.job_id, projectId: job.project_id, jobType: job.job_type, rawDetails: job })} />
+      {/* EngineJobStatus is now rendered in workspace toolbars (StoryEditorScreen, PanelReviewScreen) via useError() */}
     </ErrorContext.Provider>
   );
 };
