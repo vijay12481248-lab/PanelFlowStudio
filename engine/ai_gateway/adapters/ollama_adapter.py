@@ -17,7 +17,7 @@ import json
 import logging
 from decimal import Decimal
 from pathlib import Path
-from typing import TypeVar, Type, Any, Optional, Iterable
+from typing import TypeVar, Type, Any, Optional, Iterable, Dict
 
 import httpx
 from pydantic import BaseModel, ValidationError

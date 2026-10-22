@@ -147,6 +147,31 @@ class TimelineCompiler:
 
         return None
 
+    @staticmethod
+    def _resolve_scene_timing(scenes: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Match editor intervals: explicit gaps survive; missing/stale starts follow the previous end."""
+        result = []
+        end = 0.0
+        for scene in scenes:
+            raw_start = scene.get("start_time_sec")
+            start = max(end, float(raw_start)) if isinstance(raw_start, (int, float)) and math.isfinite(raw_start) else end
+            duration = float(scene.get("duration_sec", 4.0))
+            result.append({**scene, "start_time_sec": start, "duration_sec": duration})
+            end = start + duration
+        return result
+
+    @staticmethod
+    def _resolve_narration_timing(scenes: List[Dict[str, Any]], clips: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        starts = {scene.get("id"): scene["start_time_sec"] for scene in scenes}
+        result = []
+        for clip in clips:
+            parent = clip.get("scene_id")
+            offset = clip.get("scene_offset_sec")
+            if clip.get("linked_to_scene") is not False and parent in starts and isinstance(offset, (int, float)) and math.isfinite(offset):
+                clip = {**clip, "start_time_sec": round(starts[parent] + offset, 2)}
+            result.append(clip)
+        return result
+
     def preflight_validate(
         self,
         state: Dict[str, Any],
@@ -161,7 +186,7 @@ class TimelineCompiler:
         if state.get("panel_review_sync", {}).get("removed_layers_count", 0):
             issues.append("Source panels were deleted or replaced. Review the affected video layers before exporting.")
         warnings: List[str] = []
-        scenes = state.get("scenes", [])
+        scenes = self._resolve_scene_timing(state.get("scenes", []))
         if not scenes:
             issues.append("Project timeline has no scenes to render.")
 
@@ -183,7 +208,7 @@ class TimelineCompiler:
                     warnings.append(f"Visual asset for layer '{ly.get('id', 'unnamed')}' in Scene '{sc.get('title', sc.get('id'))}' could not be resolved.")
 
         # 2. Validate Narration clips
-        narration_clips = state.get("narration_clips", [])
+        narration_clips = self._resolve_narration_timing(scenes, state.get("narration_clips", []))
         approved_narration = 0
         outdated_narration = 0
         missing_narration = 0
@@ -221,7 +246,7 @@ class TimelineCompiler:
                 resolved_sfx_count += 1
 
         # Calculate planned duration
-        planned_duration = sum(float(sc.get("duration_sec", 4.0)) for sc in scenes)
+        planned_duration = max((sc["start_time_sec"] + sc["duration_sec"] for sc in scenes), default=0.0)
 
         return {
             "valid": len(issues) == 0,
@@ -260,7 +285,7 @@ class TimelineCompiler:
         fps = prof.fps
         clock = RenderFrameClock(fps=fps)
 
-        scenes = state.get("scenes", [])
+        scenes = self._resolve_scene_timing(state.get("scenes", []))
         if not scenes:
             raise ValueError("Cannot compile timeline: no scenes found in timeline state.")
 
@@ -270,7 +295,7 @@ class TimelineCompiler:
         speech_intervals: List[Tuple[float, float, float]] = []
 
         # Gather narration intervals first for ducking & captions
-        narration_clips = state.get("narration_clips", [])
+        narration_clips = self._resolve_narration_timing(scenes, state.get("narration_clips", []))
         audio_tracks: List[RenderAudioTrack] = []
 
         for clip in narration_clips:
@@ -461,8 +486,8 @@ class TimelineCompiler:
             "project_id": project_id,
             "duration": round(total_duration, 4),
             "total_frames": total_frames,
-            "shots": [s.shot_id for s in shot_plans],
-            "audio": [a.file_path for a in audio_tracks],
+            "shots": [{"id": s.shot_id, "start_frame": s.start_frame, "end_frame": s.end_frame} for s in shot_plans],
+            "audio": [{"path": a.file_path, "start": a.start_time, "end": a.end_time} for a in audio_tracks],
             "profile": prof.model_dump(),
         }
         plan_hash = hashlib.sha256(json.dumps(hash_payload, sort_keys=True).encode()).hexdigest()

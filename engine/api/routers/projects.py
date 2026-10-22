@@ -1,5 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from uuid import uuid4
+from engine.history.service import project_history
+from engine.api.routers.history import respond
 
 from engine.database.session import get_db
 from engine.database.models import (
@@ -107,12 +110,13 @@ def get_story_editor_state(project_id: str, db: Session = Depends(get_db)):
     p = project_service.get_project(db, project_id)
     if not p:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+    reply = respond(lambda: project_history.read(db, project_id))
     state = reconcile_story_editor_state_with_panels(
         db,
         project_id,
-        (p.settings or {}).get("story_editor_state"),
+        reply["state"],
     )
-    return {"state": state}
+    return {**reply, "state": state}
 
 
 @router.put("/{project_id}/story-editor")
@@ -126,7 +130,6 @@ def save_story_editor_state(project_id: str, payload: dict, db: Session = Depend
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="state must be an object")
     if state.get("project_id") not in (None, project_id):
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="state project_id does not match the requested project")
-    settings = dict(p.settings or {})
     if payload.get("align_panels"):
         from engine.projects.service import align_panel_scenes
         try:
@@ -134,12 +137,16 @@ def save_story_editor_state(project_id: str, payload: dict, db: Session = Depend
         except ValueError as error:
             raise HTTPException(status_code=409, detail=str(error))
     state = reconcile_story_editor_state_with_panels(db, project_id, state) or state
-    settings["story_editor_state"] = {**state, "project_id": project_id}
-    p.settings = settings
-    db.add(p)
-    db.commit()
-    db.refresh(p)
-    return {"state": settings["story_editor_state"], "updated_at": p.updated_at.isoformat() if p.updated_at else ""}
+    if "expected_revision" not in payload:
+        current = respond(lambda: project_history.read(db, project_id))
+        if current["history"]["revision"] != 0:
+            raise HTTPException(status_code=409, detail={"code": "CONFLICT", "message": "Reload the project before saving with its history revision"})
+    reply = respond(lambda: project_history.execute(db, project_id,
+        operation_id=payload.get("operation_id", str(uuid4())), expected_revision=payload.get("expected_revision", 0),
+        command_type="editor.replace", version=1, label="Align panels" if payload.get("align_panels") else "Save editor edits",
+        input={"state": state}))
+    saved = db.get(ProjectRecord, project_id)
+    return {**reply, "updated_at": saved.updated_at.isoformat() if saved.updated_at else ""}
 
 @router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_project(project_id: str, db: Session = Depends(get_db)):

@@ -25,18 +25,40 @@ if ($engineWasRunning -and (Test-Path -LiteralPath $tokenFile)) {
 }
 $authHeaders = @{ 'X-PanelFlow-Token' = $env:PANELFLOW_ENGINE_TOKEN }
 
+function Invoke-PanelFlowJsonGet {
+    param([Parameter(Mandatory=$true)][string]$Uri)
+    $response = Invoke-RestMethod -Uri $Uri -Headers $authHeaders -TimeoutSec 5
+    if ($response -is [string]) {
+        # Windows PowerShell 5.1 silently returns raw JSON when its case-insensitive
+        # parser encounters legitimate case-distinct settings keys (Visuals/visuals).
+        # These endpoints must return lists; malformed data must block a restart.
+        if ($response.TrimStart() -notmatch '^\[') { throw 'Expected a JSON inventory array; engine kept running.' }
+        if ((Get-Command ConvertFrom-Json).Parameters.ContainsKey('AsHashtable')) {
+            $response = ConvertFrom-Json -InputObject $response -AsHashtable -ErrorAction Stop
+        } else {
+            Add-Type -AssemblyName System.Web.Extensions
+            $parser = New-Object System.Web.Script.Serialization.JavaScriptSerializer
+            $parser.MaxJsonLength = 16777216
+            $parser.RecursionLimit = 128
+            $response = $parser.DeserializeObject($response)
+        }
+    }
+    return $response
+}
+
 function Get-PanelFlowActiveWork {
     foreach ($jobStatus in @('QUEUED', 'RUNNING')) {
-        $jobs = Invoke-RestMethod "http://127.0.0.1:8765/api/jobs?status=$jobStatus&limit=200" -Headers $authHeaders -TimeoutSec 5
+        $jobs = Invoke-PanelFlowJsonGet "http://127.0.0.1:8765/api/jobs?status=$jobStatus&limit=200"
         foreach ($job in $jobs) {
             if ($job.status -eq $jobStatus) {
                 [pscustomobject]@{Id=$job.job_id; Type=$job.job_type; Status=$job.status; Progress=[math]::Round(100*$job.progress); Project=$job.project_id; Started=$job.started_at; CancelUrl="http://127.0.0.1:8765/api/jobs/$($job.job_id)/cancel"}
             }
         }
     }
-    $projects = Invoke-RestMethod 'http://127.0.0.1:8765/api/projects' -Headers $authHeaders -TimeoutSec 5
+    $projects = Invoke-PanelFlowJsonGet 'http://127.0.0.1:8765/api/projects'
     foreach ($project in $projects) {
-        $renders = Invoke-RestMethod "http://127.0.0.1:8765/api/projects/$($project.id)/render/jobs" -Headers $authHeaders -TimeoutSec 5
+        if ([string]::IsNullOrWhiteSpace($project.id)) { throw 'Project inventory is missing an ID; engine kept running.' }
+        $renders = Invoke-PanelFlowJsonGet "http://127.0.0.1:8765/api/projects/$($project.id)/render/jobs"
         foreach ($render in $renders) {
             if ($render.status -in @('QUEUED', 'RUNNING', 'PREPARING', 'COMPOSING', 'ENCODING', 'MUXING', 'VALIDATING')) {
                 $renderId = if ($render.render_id) { $render.render_id } else { $render.id }

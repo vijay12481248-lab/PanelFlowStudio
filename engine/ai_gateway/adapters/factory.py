@@ -8,7 +8,7 @@ provider adapter based on capability, availability, and policy.
 from decimal import Decimal
 from typing import Dict, List, Optional, Type
 
-from engine.ai_gateway.adapters.base import ProviderAdapter, NormalizedRequest, NormalizedResponse
+from engine.ai_gateway.adapters.base import ProviderAdapter, NormalizedRequest, NormalizedResponse, CapabilityType
 from engine.ai_gateway.adapters.ollama_adapter import OllamaAdapter
 from engine.ai_gateway.adapters.openai_adapter import OpenAIAdapter
 

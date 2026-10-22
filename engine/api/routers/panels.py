@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from engine.database.session import get_db
 from engine.database.models import PanelRecord, PageRecord, ProjectRecord
 from engine.projects.service import project_service
+from engine.projects.panel_selections import SaveSelectionsRequest, save_selections
 from engine.security.paths import resolve_contained_path
 from engine.api.schemas import (
     NormalizeProjectRequest,
@@ -27,6 +28,25 @@ from engine.api.schemas import (
 
 router = APIRouter(prefix="/api/projects/{project_id}", tags=["panels"])
 logger = logging.getLogger("panelflow.api.panels")
+
+@router.put("/panels/{panel_id}/selections", response_model=list[PanelResponse])
+def replace_panel_selections(project_id: str, panel_id: str, req: SaveSelectionsRequest, db: Session = Depends(get_db)):
+    try:
+        return [format_panel_response(p, project_id) for p in save_selections(db, project_id, panel_id, req.selections, page_bounds=req.page_bounds)]
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail=str(error))
+    except (ValueError, FileNotFoundError) as error:
+        raise HTTPException(status_code=400, detail=str(error))
+
+
+@router.post("/pages/{page_id}/selections", response_model=list[PanelResponse], status_code=201)
+def create_page_selections(project_id: str, page_id: str, req: SaveSelectionsRequest, db: Session = Depends(get_db)):
+    try:
+        return [format_panel_response(p, project_id) for p in save_selections(db, project_id, None, req.selections, page_id=page_id, page_bounds=True)]
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail=str(error))
+    except (ValueError, FileNotFoundError) as error:
+        raise HTTPException(status_code=400, detail=str(error))
 
 
 @router.get("/panels/{panel_id}/text-blur-preview")
@@ -326,7 +346,7 @@ def get_panel_crop_file(
     if not crop_path.is_file():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Panel crop file not found on disk")
 
-    return FileResponse(crop_path, media_type="image/jpeg")
+    return FileResponse(crop_path, media_type="image/png" if crop_path.suffix.lower() == ".png" else "image/jpeg")
 
 @router.get("/pages/{page_id}/normalized-file")
 @router.get("/pages/{page_id}/normalized")

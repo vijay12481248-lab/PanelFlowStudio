@@ -596,6 +596,13 @@ class FrameComposer:
         target_h = plan.profile.height
         timestamp_sec = self.clock.frame_to_time(frame_index)
 
+        # Story Editor gaps are intentional black intervals, not held first/last shots.
+        # Keep legacy motion-timeline hold behavior unchanged.
+        if plan.metadata.get("compiled_from_story_editor") and not any(
+            shot.start_frame <= frame_index < shot.end_frame for shot in plan.shots
+        ):
+            return Image.new("RGB", (target_w, target_h), color=(0, 0, 0))
+
         # 1. Locate active shot in plan
         shot = plan.find_shot_at_frame(frame_index)
         if not shot:

@@ -115,6 +115,8 @@ def run_sqlite_migrations(db_engine):
 
 def init_db():
     """Initializes tables in database and runs non-destructive migrations."""
+    # Register additive history tables even when init_db is called without app imports.
+    from engine.history import models as _history_models
     Base.metadata.create_all(bind=engine)
     run_sqlite_migrations(engine)
 

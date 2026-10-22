@@ -6,7 +6,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from engine.config.settings import settings
-from engine.database.session import init_db
+from engine.database.session import init_db, SessionLocal
+from engine.database.models import ProjectRecord
+from engine.history.assets import recover_workspaces
 from engine.jobs.manager import job_manager
 from engine.security.local_api import (
     ENGINE_TOKEN_ENV,
@@ -15,6 +17,7 @@ from engine.security.local_api import (
     insecure_local_api_enabled,
 )
 from engine.api.routers import projects, pages, panels, ocr, jobs, adapters, system, story, audio, motion, render, music, comfyui
+from engine.api.routers import history
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("panelflow.engine")
@@ -24,6 +27,12 @@ async def lifespan(app: FastAPI):
     # Startup: Initialize database schema and recover interrupted/expired jobs.
     logger.info("Initializing SQLite database tables...")
     init_db()
+    # File commands leave a prepared manifest before changing project assets.
+    # Heal those interrupted writes before any endpoint can expose history.
+    with SessionLocal() as db:
+        recovered_assets = recover_workspaces([row.workspace_path for row in db.query(ProjectRecord.workspace_path).all()])
+    if recovered_assets:
+        logger.warning("Recovered interrupted retained-asset operations: %s", recovered_assets)
     recovered_count = job_manager.recover_interrupted_jobs()
     expired_count = job_manager.recover_expired_leases()
     if recovered_count or expired_count:
@@ -84,6 +93,7 @@ def create_app(
     # Include routers
     app.include_router(system.router)
     app.include_router(projects.router)
+    app.include_router(history.router)
     app.include_router(pages.router)
     app.include_router(panels.router)
     app.include_router(ocr.router)
