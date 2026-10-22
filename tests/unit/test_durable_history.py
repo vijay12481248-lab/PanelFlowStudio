@@ -1335,3 +1335,79 @@ def test_audio_domain_history_strategies(history, tmp_path):
         proj = db.get(ProjectRecord, "p")
         assert proj.current_stage == "MOTION_APPROVED"
 
+
+def test_end_to_end_restart_recovery_cleans_staged_files_and_uncommitted_journals(history, tmp_path):
+    """Assert that mid-transaction crashes leave staged files and journals clean on restart."""
+    import json
+    from engine.database.models import Base, OCRRecord, ProjectRecord, PanelRecord, PageRecord, TextRegionRecord, VisualTimelineRecord
+    from engine.history.assets import RetainedAssetStore, recover_workspaces
+    from engine.history.models import HistoryRecord, HistoryReceipt
+
+    engine, service, _ = history
+    workspace = tmp_path / "recovery_proj"
+    workspace.mkdir(parents=True, exist_ok=True)
+    (workspace / "motion").mkdir(parents=True, exist_ok=True)
+    timeline_file = workspace / "motion" / "visual_timeline.json"
+    timeline_file.write_text(json.dumps({"status": "INITIAL", "shots": []}), encoding="utf-8")
+
+    with Session(engine) as db:
+        db.add(ProjectRecord(
+            id="proj-recover",
+            title="Recovery Project",
+            source_type="LOCAL_FOLDER",
+            workspace_path=str(workspace),
+            settings={},
+            current_stage="STORY_APPROVED",
+        ))
+        db.add(VisualTimelineRecord(
+            id="vt-rec",
+            project_id="proj-recover",
+            total_duration=12.0,
+            total_shots=0,
+            style_preset="cinematic",
+            status="DRAFT",
+            timeline_json={},
+            overrides_json={},
+        ))
+        db.commit()
+
+    # Simulate a mid-transaction crash: RetainedAssetStore captured before, staged file partially written,
+    # but process crashed before capture_after and before DB commit
+    crash_op = str(uuid4())
+    store = RetainedAssetStore(workspace)
+    store.capture_before(crash_op, ["motion/visual_timeline.json"])
+    timeline_file.write_text("PARTIAL_CORRUPT_WRITE_DURING_CRASH", encoding="utf-8")
+
+    # Verify crash state before restart: file is corrupted, journal in DB was never committed
+    assert timeline_file.read_text(encoding="utf-8") == "PARTIAL_CORRUPT_WRITE_DURING_CRASH"
+    with Session(engine) as db:
+        assert db.query(HistoryRecord).filter_by(project_id="proj-recover").count() == 0
+        assert db.query(HistoryReceipt).filter_by(project_id="proj-recover").count() == 0
+
+    # Simulate application restart: engine lifespan executes recover_workspaces
+    recovered_map = recover_workspaces([workspace])
+    assert str(workspace.resolve()) in recovered_map
+    assert crash_op in recovered_map[str(workspace.resolve())]
+
+    # Verify staged files restored to pristine pre-crash state on restart
+    restored_content = json.loads(timeline_file.read_text(encoding="utf-8"))
+    assert restored_content == {"status": "INITIAL", "shots": []}
+
+    # Verify project history can cleanly continue and execute normal revisioned commands post-restart
+    with Session(engine) as db:
+        reply = service.execute(
+            db, "proj-recover", operation_id=str(uuid4()), expected_revision=0,
+            command_type="motion.approve", version=1,
+            label="Post-recovery motion approve", input={}
+        )
+        assert reply["history"]["revision"] == 1
+        assert reply["history"]["canUndo"] is True
+        assert reply["history"]["recoveryRequired"] is False
+        assert db.query(HistoryRecord).filter_by(project_id="proj-recover").count() == 1
+
+        # Verify undo works cleanly
+        undo_reply = service.move(db, "proj-recover", direction="undo", operation_id=str(uuid4()), expected_revision=1)
+        assert undo_reply["history"]["revision"] == 2
+        assert undo_reply["history"]["canRedo"] is True
+
+
