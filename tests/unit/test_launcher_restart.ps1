@@ -18,10 +18,19 @@ function Invoke-RestMethod {
         return ,@()
     }
     if ($Uri -match '/api/projects$') {
+        if ($global:panelFlowTestMode -in @('json-idle', 'json-render')) {
+            return '[{"id":"test-project","settings":{"Visuals":{},"visuals":{}}}]'
+        }
+        if ($global:panelFlowTestMode -eq 'invalid-json') { return 'not JSON' }
         if ($global:panelFlowTestMode -eq 'render') { return [pscustomobject]@{id='test-project'} }
         return ,@()
     }
-    if ($Uri -match '/render/jobs$') {
+    if ($Uri -match '/api/projects/test-project/render/jobs$') {
+        if ($global:panelFlowTestMode -eq 'json-idle') { return '[]' }
+        if ($global:panelFlowTestMode -eq 'json-render') {
+            if ($global:panelFlowTestCancelled) { return '[]' }
+            return '[{"render_id":"test-render","status":"ENCODING","progress":0.8}]'
+        }
         if (-not $global:panelFlowTestCancelled) { return [pscustomobject]@{render_id='test-render';status='ENCODING';progress=0.8} }
         return ,@()
     }
@@ -84,4 +93,23 @@ foreach ($cancelMode in @('busy', 'render', 'pending')) {
         throw "Cancel-and-restart failed for $cancelMode"
     }
     Write-Output "PASS: $cancelMode cancellation behavior (mocked)"
+}
+
+foreach ($jsonMode in @('json-idle', 'json-render', 'invalid-json')) {
+    $global:panelFlowTestMode=$jsonMode
+    $global:panelFlowTestCancelled=$false
+    $global:panelFlowTestCancelCalls=0
+    $global:panelFlowTestStopped=@()
+    $global:panelFlowTestLaunched=$null
+    $failed=$false
+    try { & (Join-Path $PSScriptRoot '..\..\launch_panelflow.ps1') -EngineOnly -CancelJobs }
+    catch { $failed=$true }
+    if ($jsonMode -eq 'invalid-json') {
+        if (-not $failed -or $global:panelFlowTestStopped.Count -or $global:panelFlowTestLaunched) { throw 'Malformed inventory must fail closed without stopping the engine' }
+    } else {
+        if ($failed -or $global:panelFlowTestStopped.Count -ne 1 -or -not $global:panelFlowTestLaunched) { throw "Raw JSON inventory handling failed: $jsonMode" }
+        $expectedCancels = if ($jsonMode -eq 'json-render') { 1 } else { 0 }
+        if ($global:panelFlowTestCancelCalls -ne $expectedCancels) { throw "Raw JSON render cancellation not respected: $jsonMode" }
+    }
+    Write-Output "PASS: $jsonMode inventory handling (mocked)"
 }

@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "@panelflow/api-client";
+import { Icons } from "@panelflow/ui";
 import type {
   Project,
   Page,
@@ -9,13 +10,17 @@ import type {
   VisualLayer,
   NarrationClip,
   TextRegion,
+  ProjectHistoryState,
 } from "@panelflow/shared-types";
 import { StoryEditorTopBar } from "../components/story-editor/StoryEditorTopBar";
 import { StoryEditorLeftRail, LeftRailTab } from "../components/story-editor/StoryEditorLeftRail";
 import { VideoCompositionCanvas } from "../components/story-editor/VideoCompositionCanvas";
 import { SourcePageBrowser } from "../components/story-editor/SourcePageBrowser";
+import { SourceSetupCanvas } from "../components/story-editor/SourceSetupCanvas";
+import type { SetupDraft } from "../components/story-editor/SourceSetupCanvas";
 import { ContextualInspector, InspectorTab } from "../components/story-editor/ContextualInspector";
 import { StoryEditorTimeline } from "../components/story-editor/StoryEditorTimeline";
+import { useError } from "../context/ErrorContext";
 import { WorkflowStepperRibbon, WorkflowStepId } from "../components/story-editor/WorkflowStepperRibbon";
 import { NarrationStudio } from "../components/narration-studio/NarrationStudio";
 import type { NarrationSegment } from "../components/narration-studio/NarrationStudio.types";
@@ -23,18 +28,25 @@ import {
   buildInitialNarrationChapter,
   syncChapterToTimelineClips,
   syncTimelineContractToState,
-  rippleShiftLinkedNarration,
 } from "../components/story-editor/narrationAdapter";
 import { AudioLibrary } from "../components/audio-library";
 import type { AudioToTimelineContract } from "../components/audio-library/AudioLibrary.types";
 import { useTimelineAudioPlayback } from "../components/story-editor/useTimelineAudioPlayback";
-import { applyAudioContractToState } from "../components/story-editor/audioAdapter";
+import { applyAudioContractToState, deleteAudioClip } from "../components/story-editor/audioAdapter";
 import { ExportVideoModal } from "../components/story-editor/ExportVideoModal";
+import { EngineJobStatus } from "../components/JobActivityPanel";
+import { createEmptyEditorState } from "../components/story-editor/editorWorkspace";
+import { resolveSceneTiming, sceneTimelineDuration, reconcileSceneDurationEdit, alignLinkedNarration, packSceneTiming, insertSceneTiming } from "../components/story-editor/sceneTiming";
+import { createDebouncedSaveQueue } from "../components/story-editor/editorSaveQueue";
+import { EditorSettingsDialog } from "../components/story-editor/EditorSettingsDialog";
+import { historyShortcut } from "../history/shortcuts";
+import "../components/story-editor/motion-editor.css";
 
 interface StoryEditorScreenProps {
   project: Project;
   onBack: () => void;
   onExport: () => void;
+  engineConnected?: boolean;
   initialTab?: LeftRailTab;
   initialWorkflowStep?: WorkflowStepId;
   initialOpenModal?: "narration" | "audio" | "export";
@@ -44,6 +56,7 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
   project,
   onBack,
   onExport,
+  engineConnected,
   initialTab,
   initialWorkflowStep,
   initialOpenModal,
@@ -52,12 +65,22 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
   const [panels, setPanels] = useState<Panel[]>([]);
   const [textRegions, setTextRegions] = useState<TextRegion[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const saveQueueRef = useRef<ReturnType<typeof createDebouncedSaveQueue<StoryEditorState>> | null>(null);
+  // Engine & job status — integrates EngineJobStatus into toolbar
+  const { engineHealthy, jobs, cancelJob: cancelJobContext } = useError();
+  const [showEditorSettings, setShowEditorSettings] = useState(false);
   const [activeLeftTab, setActiveLeftTab] = useState<LeftRailTab>(initialTab ?? "story");
   const [workflowStep, setWorkflowStep] = useState<WorkflowStepId>(initialWorkflowStep ?? 3);
+  const [rightSidebarTab, setRightSidebarTab] = useState<"source" | "inspector">("source");
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>("image");
   const [sourceSubTab, setSourceSubTab] = useState<"pages" | "panels">("pages");
   const [selectedPageId, setSelectedPageId] = useState<string | null>(null);
   const [selectedPanelId, setSelectedPanelId] = useState<string | null>(null);
+  const [canvasMode, setCanvasMode] = useState<"setup" | "player">("player");
+  const [setupSourcesOpen, setSetupSourcesOpen] = useState(false);
+  const [setupTimelineOpen, setSetupTimelineOpen] = useState(false);
+  const setupDrafts = useRef<Record<string, SetupDraft>>({});
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "unsaved">("saved");
   const [showNarrationStudio, setShowNarrationStudio] = useState<boolean>(initialOpenModal === "narration");
   const [showAudioLibrary, setShowAudioLibrary] = useState<boolean>(initialOpenModal === "audio");
@@ -68,66 +91,41 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
   const [panelSyncAlert, setPanelSyncAlert] = useState<{ show: boolean; message: string; removedCount?: number }>({ show: false, message: "" });
 
   // Main Editor State
-  const [editorState, setEditorState] = useState<StoryEditorState>({
-    schema_version: 2,
-    ripple_edit: true,
-    project_id: project.id,
-    aspect_ratio: "16:9",
-    mode: "simple",
-    scenes: [],
-    narration_clips: [],
-    bgm_tracks: [
-      {
-        id: "bgm_default",
-        title: "Ambient Discovery (D-Minor)",
-        file_url: "/assets/demo/crystal_resonance_bgm.mp3",
-        volume: 0.6,
-        start_time_sec: 0,
-        duration_sec: 25,
-        loop: true,
-        ducking_enabled: true,
-        ducking_amount_db: -12,
-      },
-    ],
-    sfx_cues: [
-      { id: "sfx_1", name: "Energy Burst", category: "magic", file_url: "/assets/demo/blade_shimmer_sfx.mp3", start_time_sec: 1.0, duration_sec: 2.2, volume: 0.8 },
-      { id: "sfx_2", name: "Footsteps", category: "movement", file_url: "/assets/demo/blade_shimmer_sfx.mp3", start_time_sec: 7.5, duration_sec: 2.2, volume: 0.8 },
-      { id: "sfx_3", name: "Magic Shimmer", category: "magic", file_url: "/assets/demo/blade_shimmer_sfx.mp3", start_time_sec: 14.0, duration_sec: 2.2, volume: 0.9 },
-      { id: "sfx_4", name: "Whoosh", category: "transition", file_url: "/assets/demo/blade_shimmer_sfx.mp3", start_time_sec: 22.0, duration_sec: 2.2, volume: 0.8 },
-    ],
-    track_states: {
-      Narration: { visible: true, locked: false },
-      Visuals: { visible: true, locked: false },
-      "Layer 2": { visible: true, locked: false },
-      "Motion / FX": { visible: true, locked: false },
-      Music: { visible: true, locked: false },
-      SFX: { visible: true, locked: false },
-    },
-    selected_object: null,
-    playhead_sec: 0,
-    is_playing: false,
-    zoom_level: 100,
-  });
+  const [editorState, setEditorState] = useState<StoryEditorState>(() => createEmptyEditorState(project.id));
+
+  // All playback entry points (timeline, Space, and source auto-play) use Player.
+  useEffect(() => {
+    if (editorState.is_playing) setCanvasMode("player");
+  }, [editorState.is_playing]);
 
   // Synchronized Timeline HTML5 Audio Playback Hook
   useTimelineAudioPlayback(editorState);
 
-  // Undo / Redo History Stacks
-  const [history, setHistory] = useState<StoryEditorState[]>([]);
-  const [future, setFuture] = useState<StoryEditorState[]>([]);
+  // The engine owns saved history. Selector drafts have their own child scope.
+  const [projectHistory, setProjectHistory] = useState<ProjectHistoryState | null>(null);
+  const [historyBusy, setHistoryBusy] = useState(false);
+  const historyAction = useRef(false);
 
   // Update state with automatic undo tracking
   const updateEditorState = useCallback(
     (updater: (prev: StoryEditorState) => StoryEditorState) => {
       setEditorState((prev) => {
-        const next = updater(prev);
+        // An undo/redo response is authoritative. Do not let incidental UI
+        // events (playback, focus, or selection changes) replace its state
+        // while it is being applied.
+        if (historyAction.current) return prev;
+        const next = reconcileSceneDurationEdit(prev, updater(prev));
         // Only push to history if meaningful state changed
         if (
           next.scenes !== prev.scenes ||
           next.narration_clips !== prev.narration_clips ||
+          next.narration_chapter !== prev.narration_chapter ||
           next.bgm_tracks !== prev.bgm_tracks ||
           next.sfx_cues !== prev.sfx_cues ||
           next.aspect_ratio !== prev.aspect_ratio ||
+          next.background_default !== prev.background_default ||
+          next.canvas_width !== prev.canvas_width ||
+          next.canvas_height !== prev.canvas_height ||
           next.mode !== prev.mode ||
           next.track_states !== prev.track_states ||
           next.zoom_level !== prev.zoom_level ||
@@ -136,8 +134,6 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
           next.show_motion_paths !== prev.show_motion_paths ||
           next.clipboard_animation !== prev.clipboard_animation
         ) {
-          setHistory((h) => [...h.slice(-40), prev]);
-          setFuture([]);
           setSaveStatus("unsaved");
         }
         return next;
@@ -151,22 +147,40 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
     setShowAudioLibrary(true);
   };
 
-  const handleUndo = () => {
-    if (history.length === 0) return;
-    const previous = history[history.length - 1];
-    setFuture((f) => [editorState, ...f]);
-    setHistory((h) => h.slice(0, h.length - 1));
-    setEditorState(previous);
-    setSaveStatus("unsaved");
+  const applyHistoryReply = (reply: { state: StoryEditorState | null; history: ProjectHistoryState }) => {
+    const restored = { ...createEmptyEditorState(project.id), ...reply.state, is_playing: false };
+    setEditorState(restored); setProjectHistory(reply.history); setSaveStatus("saved"); setSaveError(null);
+    try { localStorage.setItem(`panelflow_story_editor_${project.id}`, JSON.stringify(api.sanitizeStoryEditorState(project.id, restored))); }
+    catch { /* Engine transaction is authoritative. */ }
   };
 
-  const handleRedo = () => {
-    if (future.length === 0) return;
-    const next = future[0];
-    setHistory((h) => [...h, editorState]);
-    setFuture((f) => f.slice(1));
-    setEditorState(next);
-    setSaveStatus("unsaved");
+  const moveHistory = async (direction: "undo" | "redo") => {
+    if (historyAction.current || loading || showNarrationStudio || showAudioLibrary) return;
+    historyAction.current = true; setHistoryBusy(true);
+    try {
+      if (await saveQueueRef.current?.flush() === false) return;
+      const known = api.getCachedProjectHistory(project.id);
+      if (known && !(direction === "undo" ? known.canUndo : known.canRedo)) { setProjectHistory(known); return; }
+      applyHistoryReply(await api.moveProjectHistory(project.id, direction));
+    } catch (error) {
+      setProjectHistory(api.getCachedProjectHistory(project.id));
+      setSaveError(error instanceof Error ? error.message : "Could not restore saved history. Reload the project before retrying.");
+    } finally { historyAction.current = false; setHistoryBusy(false); }
+  };
+  const handleUndo = () => { void moveHistory("undo"); };
+  const handleRedo = () => { void moveHistory("redo"); };
+  const canUndo = !historyBusy && !loading && !projectHistory?.conflicted && !projectHistory?.recoveryRequired && (saveStatus !== "saved" || !!projectHistory?.canUndo);
+  const canRedo = !historyBusy && !loading && saveStatus === "saved" && !!projectHistory?.canRedo;
+
+  const startFreshHistory = async () => {
+    if (historyAction.current || !window.confirm("Reload the saved project, discard local unsaved edits, and archive the old undo history?")) return;
+    historyAction.current = true; setHistoryBusy(true);
+    try {
+      await saveQueueRef.current?.discardPending();
+      const canonical = await api.getProjectHistory(project.id);
+      applyHistoryReply(await api.resetProjectHistory(project.id, canonical.history.fingerprint));
+    } catch (error) { setSaveError(error instanceof Error ? error.message : "History recovery failed; no local edits were saved."); }
+    finally { historyAction.current = false; setHistoryBusy(false); }
   };
 
   // Workflow step orchestrator
@@ -225,6 +239,8 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
     } else if (tab === "audio") {
       setWorkflowStep(6);
       handleOpenAudioLibrary();
+    } else if (tab === "settings") {
+      setShowEditorSettings(true);
     }
   };
 
@@ -233,61 +249,69 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
       if (
-        target.tagName === "INPUT" ||
-        target.tagName === "TEXTAREA" ||
-        target.isContentEditable
+        e.defaultPrevented ||
+        ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) ||
+        target.isContentEditable || target.closest?.("[role=dialog], dialog")
       ) {
         return;
       }
 
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
-        if (e.shiftKey) {
-          handleRedo();
-        } else {
-          handleUndo();
-        }
-        e.preventDefault();
-      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") {
-        handleRedo();
+      const action = historyShortcut(e);
+      if (action) {
+        if (action === "undo") handleUndo(); else handleRedo();
         e.preventDefault();
       } else if (e.code === "Space") {
         updateEditorState((prev) => ({ ...prev, is_playing: !prev.is_playing }));
         e.preventDefault();
+      } else if (e.code === "Delete" || e.code === "Backspace") {
+        if (editorState.selected_object?.type === "scene") {
+          handleDeleteScene(editorState.selected_object.id);
+          e.preventDefault();
+        } else if (editorState.selected_object?.type === "layer") {
+          const { id: layerId, sceneId } = editorState.selected_object;
+          if (sceneId) handleDeleteLayer(layerId, sceneId);
+          e.preventDefault();
+        } else if (editorState.selected_object?.type === "bgm" || editorState.selected_object?.type === "sfx") {
+          const audioType = editorState.selected_object.type;
+          const audioId = editorState.selected_object.id;
+          updateEditorState((prev) => deleteAudioClip(prev, audioId, audioType));
+          e.preventDefault();
+        }
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [history.length, future.length, editorState.is_playing, updateEditorState]);
+  }, [projectHistory, historyBusy, loading, showNarrationStudio, showAudioLibrary, editorState.is_playing, updateEditorState]);
 
-  // Persist the editor state to the project backend, retaining localStorage as a recovery copy.
   useEffect(() => {
-    if (saveStatus !== "unsaved") return;
-    let cancelled = false;
-    const timer = setTimeout(() => {
-      setSaveStatus("saving");
-      void (async () => {
-        try {
-          await api.saveStoryEditorState(project.id, editorState);
-          try {
-            localStorage.setItem(`panelflow_story_editor_${project.id}`, JSON.stringify(editorState));
-          } catch (err) {
-            console.warn("Failed to write editor recovery copy:", err);
-          }
-          if (!cancelled) setSaveStatus("saved");
-        } catch (err) {
-          console.warn("Failed to persist editor state to backend; keeping local recovery copy:", err);
-          try {
-            localStorage.setItem(`panelflow_story_editor_${project.id}`, JSON.stringify(editorState));
-          } catch (storageErr) {
-            console.warn("Failed to persist editor recovery copy:", storageErr);
-          }
-          if (!cancelled) setSaveStatus("unsaved");
-        }
-      })();
-    }, 1000);
-    return () => { cancelled = true; clearTimeout(timer); };
-  }, [saveStatus, editorState, project.id]);
+    const queue = createDebouncedSaveQueue<StoryEditorState>(async (snapshot) => {
+      try {
+        const response = await api.saveStoryEditorState(project.id, snapshot);
+        setProjectHistory(response?.history ?? api.getCachedProjectHistory(project.id));
+      } catch (error) {
+        setProjectHistory(api.getCachedProjectHistory(project.id));
+        throw error;
+      }
+      finally {
+        try { localStorage.setItem(`panelflow_story_editor_${project.id}`, JSON.stringify(api.sanitizeStoryEditorState(project.id, snapshot))); }
+        catch { /* Recovery is best-effort; engine persistence is authoritative. */ }
+      }
+    }, { status: setSaveStatus, error: setSaveError });
+    saveQueueRef.current = queue;
+    return () => { queue.dispose(); if (saveQueueRef.current === queue) saveQueueRef.current = null; };
+  }, [project.id]);
+
+  // Status updates must not cancel or restart the request that produced them.
+  // Transient preview playback is never persisted as playing on the next open.
+  useEffect(() => {
+    if (!loading && saveStatus === "unsaved") saveQueueRef.current?.schedule({ ...editorState, is_playing: false });
+  }, [editorState, project.id, loading]);
+
+  const handleBackToProjects = async () => {
+    const saved = await saveQueueRef.current?.flush();
+    if (saved !== false) onBack();
+  };
 
   // Load project assets and initialize story scenes
   useEffect(() => {
@@ -315,13 +339,17 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
 
         // Restore the backend state first. Local storage is a recovery path for an interrupted save.
         const storageKey = `panelflow_story_editor_${project.id}`;
-        const backendState = await api.getStoryEditorState(project.id).then((response) => response.state).catch(() => null);
+        const backendState = await api.getStoryEditorState(project.id).then((response) => {
+          if (mounted) setProjectHistory(response.history ?? api.getCachedProjectHistory(project.id));
+          return response.state;
+        }).catch(() => null);
         const savedData = backendState ? JSON.stringify(backendState) : localStorage.getItem(storageKey);
         if (savedData) {
           try {
-            const parsed = JSON.parse(savedData) as StoryEditorState;
+            let parsed = JSON.parse(savedData) as StoryEditorState;
             if (parsed && parsed.project_id === project.id && Array.isArray(parsed.scenes)) {
-              const migratedScenes = parsed.scenes.map((sc, scIdx) => ({
+              parsed = api.hydrateStoryEditorState(project.id, parsed);
+              const migratedScenes = resolveSceneTiming(parsed.scenes).map((sc, scIdx) => ({
                 ...sc,
                 sequence: sc.sequence || scIdx + 1,
                 transition_in: sc.transition_in || "none",
@@ -338,11 +366,19 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
                   easing: "ease_in_out",
                   duration_sec: sc.duration_sec,
                 },
-                layers: (sc.layers || []).map((ly) => ({
-                  ...ly,
-                  start_offset_sec: ly.start_offset_sec ?? 0,
-                  duration_sec: ly.duration_sec ?? sc.duration_sec,
-                })),
+                layers: (sc.layers || []).map((ly) => {
+                  let imgUrl = ly.image_url;
+                  if (ly.source_panel_id && (!imgUrl || imgUrl.includes("/pages/"))) {
+                    const matched = loadedPanels.find((p: Panel) => p.id === ly.source_panel_id);
+                    imgUrl = `${api.getPanelImageUrl(project.id, ly.source_panel_id)}?v=${encodeURIComponent(matched?.crop_filename || "detected")}`;
+                  }
+                  return {
+                    ...ly,
+                    image_url: imgUrl,
+                    start_offset_sec: ly.start_offset_sec ?? 0,
+                    duration_sec: ly.duration_sec ?? sc.duration_sec,
+                  };
+                }),
               }));
 
               const hasMockArtifacts = parsed.narration_chapter?.segments?.some(
@@ -369,7 +405,7 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
                 ripple_edit: parsed.ripple_edit ?? true,
                 scenes: migratedScenes,
                 narration_chapter: restoredChapter,
-                narration_clips: migratedNarration,
+                narration_clips: alignLinkedNarration(migratedScenes, migratedNarration),
               });
               
               // Check for panel sync issues
@@ -409,7 +445,7 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
               id: `layer_${panel.id}`,
               source_page_id: panel.page_id,
               source_panel_id: panel.id,
-              image_url: api.getPageImageUrl(project.id, panel.page_id),
+              image_url: `${api.getPanelImageUrl(project.id, panel.id)}?v=${encodeURIComponent(panel.crop_filename || "detected")}`,
               page_sequence: panel.page_sequence,
               crop: {
                 x: panel.x,
@@ -483,7 +519,7 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
             try {
               localStorage.setItem(
                 `panelflow_story_editor_${project.id}`,
-                JSON.stringify(initialEditorState)
+                JSON.stringify(api.sanitizeStoryEditorState(project.id, initialEditorState))
               );
             } catch (e) {
               console.warn("Failed to save initial state:", e);
@@ -571,17 +607,43 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
       ? { x: panel.x, y: panel.y, width: panel.width, height: panel.height }
       : { x: 0, y: 0, width: page.width || 1200, height: Math.min(page.height || 1800, 1400) });
 
+    let cropType = customCrop?.crop_type;
+    let polygonPoints = customCrop?.polygon_points;
+    let clipPath = customCrop?.clip_path;
+
+    if (!customCrop && panel?.polygon_json) {
+      try {
+        const parsed = JSON.parse(panel.polygon_json);
+        const pts: Array<{ x: number; y: number }> = Array.isArray(parsed)
+          ? parsed.map((p: any) => (Array.isArray(p) ? { x: p[0], y: p[1] } : p))
+          : [];
+        if (pts.length >= 3 && panel.width > 0 && panel.height > 0) {
+          cropType = "polygon";
+          const relPts = pts.map((p) => ({
+            x: Math.max(0, Math.min(100, Math.round(((p.x - panel.x) / panel.width) * 1000) / 10)),
+            y: Math.max(0, Math.min(100, Math.round(((p.y - panel.y) / panel.height) * 1000) / 10)),
+          }));
+          polygonPoints = relPts;
+          clipPath = `polygon(${relPts.map((p) => `${p.x}% ${p.y}%`).join(", ")})`;
+        }
+      } catch {
+        // Fallback to standard rectangular bounds
+      }
+    }
+
     const newLayerId = `layer_${Date.now()}`;
     const newLayer: VisualLayer = {
       id: newLayerId,
       source_page_id: page.id,
       source_panel_id: panel?.id,
-      image_url: api.getPageImageUrl(project.id, page.id),
+      image_url: panel
+        ? `${api.getPanelImageUrl(project.id, panel.id)}?v=${encodeURIComponent(panel.crop_filename || "detected")}`
+        : api.getPageImageUrl(project.id, page.id),
       page_sequence: page.sequence,
       crop,
-      crop_type: customCrop?.crop_type,
-      clip_path: customCrop?.clip_path,
-      polygon_points: customCrop?.polygon_points,
+      crop_type: cropType,
+      clip_path: clipPath,
+      polygon_points: polygonPoints,
       transform: {
         x: 0,
         y: 0,
@@ -599,7 +661,7 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
     if (asNewScene || editorState.scenes.length === 0) {
       // Append as new scene
       const newSceneId = `scene_${Date.now()}`;
-      const totalDuration = editorState.scenes.reduce((acc, s) => acc + s.duration_sec, 0);
+      const totalDuration = sceneTimelineDuration(editorState.scenes);
 
       updateEditorState((prev) => ({
         ...prev,
@@ -647,7 +709,7 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
   // Handler: Add blank scene
   const handleAddBlankScene = () => {
     const newSceneId = `scene_${Date.now()}`;
-    const totalDuration = editorState.scenes.reduce((acc, s) => acc + s.duration_sec, 0);
+    const totalDuration = sceneTimelineDuration(editorState.scenes);
 
     updateEditorState((prev) => ({
       ...prev,
@@ -706,14 +768,9 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
       };
       updatedScenes.splice(sceneIdx + 1, 0, secondScene);
 
-      let running = 0;
-      const resyncedScenes = updatedScenes.map((sc, idx) => {
-        const s = { ...sc, sequence: idx + 1, start_time_sec: running };
-        running += sc.duration_sec;
-        return s;
-      });
+      const resyncedScenes = prev.ripple_edit === false ? resolveSceneTiming(updatedScenes) : packSceneTiming(updatedScenes);
 
-      const resyncedClips = rippleShiftLinkedNarration(resyncedScenes, prev.narration_clips);
+      const resyncedClips = alignLinkedNarration(resyncedScenes, prev.narration_clips, prev.scenes);
 
       return {
         ...prev,
@@ -743,17 +800,9 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
 
     updateEditorState((prev) => {
       const idx = prev.scenes.findIndex((s) => s.id === sceneId);
-      const copy = [...prev.scenes];
-      copy.splice(idx + 1, 0, dupScene);
+      const resyncedScenes = insertSceneTiming(prev.scenes, dupScene, idx + 1, prev.ripple_edit !== false);
 
-      let running = 0;
-      const resyncedScenes = copy.map((sc, i) => {
-        const s = { ...sc, sequence: i + 1, start_time_sec: running };
-        running += sc.duration_sec;
-        return s;
-      });
-
-      const resyncedClips = rippleShiftLinkedNarration(resyncedScenes, prev.narration_clips);
+      const resyncedClips = alignLinkedNarration(resyncedScenes, prev.narration_clips, prev.scenes);
 
       return {
         ...prev,
@@ -766,19 +815,21 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
 
   // Handler: Delete scene
   const handleDeleteScene = (sceneId: string) => {
-    if (editorState.scenes.length <= 1) {
-      alert("At least one scene must remain in the story editor.");
-      return;
-    }
     updateEditorState((prev) => {
-      let running = 0;
-      const remainingScenes = prev.scenes
-        .filter((s) => s.id !== sceneId)
-        .map((sc, idx) => {
-          const s = { ...sc, sequence: idx + 1, start_time_sec: running };
-          running += sc.duration_sec;
-          return s;
-        });
+      const remaining = resolveSceneTiming(prev.scenes).filter((scene) => scene.id !== sceneId);
+      const remainingScenes = remaining.length === 0
+        ? [
+            {
+              id: `scene_empty_${Date.now()}`,
+              sequence: 1,
+              title: "Scene 1",
+              duration_sec: 4.0,
+              start_time_sec: 0,
+              layers: [],
+              transition_in: "none" as const,
+            },
+          ]
+        : (prev.ripple_edit === false ? resolveSceneTiming(remaining) : packSceneTiming(remaining));
 
       // Orphaned narration safety: unbind clips linked to the deleted scene so they become floating unlinked audio
       const preservedClips = prev.narration_clips.map((clip) => {
@@ -791,7 +842,7 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
         return clip;
       });
 
-      const resyncedClips = rippleShiftLinkedNarration(remainingScenes, preservedClips);
+      const resyncedClips = alignLinkedNarration(remainingScenes, preservedClips, prev.scenes);
 
       let updatedChapter = prev.narration_chapter;
       if (updatedChapter) {
@@ -809,18 +860,32 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
         };
       }
 
+      const nextSelected = remainingScenes.length > 0
+        ? (remainingScenes[0].layers.length > 0
+            ? { type: "layer" as const, id: remainingScenes[0].layers[0].id, sceneId: remainingScenes[0].id }
+            : { type: "scene" as const, id: remainingScenes[0].id })
+        : null;
+
+      const nextPlayhead = remainingScenes.length > 0 ? remainingScenes[0].start_time_sec : 0;
+
       return {
         ...prev,
         scenes: remainingScenes,
         narration_chapter: updatedChapter,
         narration_clips: resyncedClips,
-        selected_object: null,
+        selected_object: nextSelected,
+        playhead_sec: nextPlayhead,
       };
     });
   };
 
   // Handler: Delete layer
   const handleDeleteLayer = (layerId: string, sceneId: string) => {
+    const targetScene = editorState.scenes.find((sc) => sc.id === sceneId);
+    if (targetScene && targetScene.layers.length <= 1) {
+      handleDeleteScene(sceneId);
+      return;
+    }
     updateEditorState((prev) => ({
       ...prev,
       scenes: prev.scenes.map((sc) => {
@@ -835,7 +900,7 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
   };
 
   return (
-    <div className="h-screen w-screen flex flex-col bg-zinc-950 text-zinc-100 overflow-hidden font-sans">
+    <div className="pf-motion-editor h-screen w-screen flex flex-col text-zinc-100 overflow-hidden font-sans">
       {/* Panel Sync Alert */}
       {panelSyncAlert.show && (
         <div className="absolute top-16 left-1/2 transform -translate-x-1/2 z-50 w-full max-w-2xl px-4">
@@ -869,104 +934,247 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
         project={project}
         state={editorState}
         onUpdateState={updateEditorState}
-        canUndo={history.length > 0}
-        canRedo={future.length > 0}
+        canUndo={canUndo}
+        canRedo={canRedo}
         onUndo={handleUndo}
         onRedo={handleRedo}
-        onBackToDashboard={onBack}
+        onBackToDashboard={handleBackToProjects}
         onExportClick={() => setShowExportModal(true)}
         saveStatus={saveStatus}
         onOpenNarrationStudio={() => setShowNarrationStudio(true)}
         onOpenAudioLibrary={() => handleOpenAudioLibrary()}
       />
 
+      {saveError && (
+        <div role="alert" className="shrink-0 flex items-center justify-between gap-3 border-b border-red-800 bg-red-950 px-4 py-2 text-sm text-red-100">
+          <span>{saveError}</span>
+          <button
+            type="button"
+            onClick={() => { void saveQueueRef.current?.flush(); }}
+            disabled={saveStatus === "saving"}
+            className="shrink-0 rounded border border-red-400 px-3 py-1 font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-300 disabled:opacity-50"
+          >
+            Retry save
+          </button>
+        </div>
+      )}
+
+      {(projectHistory?.conflicted || projectHistory?.recoveryRequired) && <div role="alert" className="shrink-0 flex flex-wrap items-center gap-3 border-b border-amber-800 bg-amber-950 px-4 py-2 text-sm text-amber-100">
+        <span>Saved history cannot safely restore this project because it changed outside the journal. Reload the saved project before starting fresh history.</span>
+        <button type="button" disabled={historyBusy} className="rounded border border-amber-400 px-3 py-1 disabled:opacity-50" onClick={() => void startFreshHistory()}>Reload and start fresh history</button>
+      </div>}
+      {historyBusy && <div role="status" className="shrink-0 px-4 py-1 text-xs text-indigo-200">Restoring saved project history…</div>}
+
       {/* 2. Middle Main Workspace (Left Rail + Central Player + Right Panels) */}
-      <div className="flex-1 min-h-0 flex overflow-hidden">
+      <div className="pf-editor-main flex-1 min-h-0 flex overflow-hidden">
         {/* Left Narrow Rail */}
+        <div hidden={canvasMode === "setup"} className="pf-editor-rail shrink-0 min-h-0">
         <StoryEditorLeftRail
           activeTab={activeLeftTab}
           onSelectTab={handleLeftRailSelect}
+          engineConnected={engineConnected}
         />
+        </div>
 
         {/* Center: 16:9 Composition Canvas */}
-        <VideoCompositionCanvas
+        <div className="flex flex-col flex-1 min-w-0 min-h-0">
+          <div role="group" aria-label="Canvas mode" className="flex items-center gap-2 px-2 py-1 border-b border-zinc-800 bg-zinc-950 shrink-0">
+            <button type="button" aria-pressed={canvasMode === "setup"} disabled={!pages.length}
+              onClick={() => { setCanvasMode("setup"); updateEditorState(s => ({ ...s, is_playing: false })); }}
+              className={`px-3 py-1 rounded text-xs ${canvasMode === "setup" ? "bg-indigo-600 text-white" : "text-zinc-400"}`}>Setup</button>
+            <button type="button" aria-pressed={canvasMode === "player"} onClick={() => setCanvasMode("player")}
+              className={`px-3 py-1 rounded text-xs ${canvasMode === "player" ? "bg-indigo-600 text-white" : "text-zinc-400"}`}>Player</button>
+            {canvasMode === "setup" && <div className="ml-auto flex items-center gap-2">
+              <button type="button" className="pf-setup-control" aria-expanded={setupSourcesOpen} onClick={() => setSetupSourcesOpen(open => !open)}>{setupSourcesOpen ? "Hide sources" : "Show sources"}</button>
+              <button type="button" className="pf-setup-control" aria-expanded={setupTimelineOpen} onClick={() => setSetupTimelineOpen(open => !open)}>{setupTimelineOpen ? "Hide timeline" : "Show timeline"}</button>
+            </div>}
+          </div>
+          {/* Engine & Job Status — toolbar-integrated, fixed positioning removed */}
+          <EngineJobStatus
+            engineHealthy={engineHealthy}
+            jobs={jobs}
+            onCancel={(id) => cancelJobContext(id)}
+            onOpenManager={() => {/* placeholder: could open a dedicated page */}}
+          />
+        {canvasMode === "setup" ? <SourceSetupCanvas
+          key={project.id}
+          projectId={project.id}
+          drafts={setupDrafts}
+          page={pages.find(page => page.id === selectedPageId) || pages[0] || null}
+          pages={pages}
+          onSelectPage={pageId => {
+            setSelectedPageId(pageId);
+            setSelectedPanelId(panels.filter(p => p.page_id === pageId).sort((a, b) => a.page_sequence - b.page_sequence)[0]?.id || null);
+          }}
+          panels={panels} selectedPanelId={selectedPanelId}
+          onSelectPanel={panel => setSelectedPanelId(panel.id)}
+          onPanelSaved={panel => setPanels(previous => previous.map(existing => existing.id === panel.id ? panel : existing))}
+          onPanelsChanged={all => {
+            setPanels(all);
+            void api.getProjectHistory(project.id).then(reply => setProjectHistory(reply.history)).catch(() => {});
+          }}
+          onAddPanel={(page, panel, customCrop) => { handleAddPanelToScene(page, panel, customCrop, true, false); setCanvasMode("player"); }}
+          onBeforeSave={async () => {
+            if (historyAction.current || await saveQueueRef.current?.flush() === false) throw new Error("Save the current editor changes before modifying source panels.");
+          }}
+        /> : <VideoCompositionCanvas
+          previewOnly
+          projectId={project.id}
           state={editorState}
           onUpdateState={updateEditorState}
           onSelectLayer={(layerId, sceneId) => {
-            updateEditorState((s) => ({
-              ...s,
-              selected_object: { type: "layer", id: layerId, sceneId },
-            }));
+            updateEditorState((s) => {
+              const sc = s.scenes.find((item) => item.id === sceneId);
+              const layer = sc?.layers.find((l) => l.id === layerId);
+              const layerOffset = layer?.start_offset_sec ?? 0;
+              return {
+                ...s,
+                selected_object: { type: "layer", id: layerId, sceneId },
+                playhead_sec: sc ? sc.start_time_sec + layerOffset : s.playhead_sec,
+              };
+            });
           }}
-        />
+        />}
+        </div>
 
-        {/* Right Split: Source Manga Browser (top) & Contextual Inspector (bottom) */}
-        <div className="w-96 flex flex-col border-l border-zinc-800 bg-zinc-900 shrink-0 overflow-hidden">
-          {/* Upper Half: Manga Source Browser & Panel Selection */}
-          <div className="h-1/2 overflow-hidden border-b border-zinc-800 flex flex-col min-h-0">
-            <SourcePageBrowser
-              projectId={project.id}
-              pages={pages}
-              panels={panels}
-              selectedPageId={selectedPageId}
-              onSelectPage={(pageId) => setSelectedPageId(pageId)}
-              selectedPanelId={selectedPanelId}
-              onSelectPanel={(panel) => setSelectedPanelId(panel?.id || null)}
-              onAddPanelToScene={handleAddPanelToScene}
-              activeSubTab={sourceSubTab}
-              onSubTabChange={setSourceSubTab}
-            />
-          </div>
+        {/* Unified Right Sidebar: Tabbed container with "Source Pages" and "Inspector" */}
+        <div hidden={canvasMode === "setup" && !setupSourcesOpen} data-setup={canvasMode === "setup"} className="pf-editor-sidebar shrink-0 min-h-0 flex flex-col h-full overflow-hidden">
+          {/* Top Tab Bar: Source Pages | Inspector */}
+          {canvasMode !== "setup" && (
+            <div className="flex items-center gap-1 p-1 bg-zinc-950/80 border-b border-zinc-800 shrink-0 rounded-t-xl select-none" role="tablist" aria-label="Sidebar Sections">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={rightSidebarTab === "source"}
+                onClick={() => setRightSidebarTab("source")}
+                className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
+                  rightSidebarTab === "source"
+                    ? "bg-violet-600 text-white shadow-sm shadow-violet-600/30 ring-1 ring-violet-400/40"
+                    : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900"
+                }`}
+              >
+                <Icons.Layers className="w-3.5 h-3.5" />
+                <span>Source Pages</span>
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={rightSidebarTab === "inspector"}
+                onClick={() => setRightSidebarTab("inspector")}
+                className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
+                  rightSidebarTab === "inspector"
+                    ? "bg-violet-600 text-white shadow-sm shadow-violet-600/30 ring-1 ring-violet-400/40"
+                    : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900"
+                }`}
+              >
+                <Icons.Sliders className="w-3.5 h-3.5" />
+                <span>Inspector</span>
+              </button>
+            </div>
+          )}
 
-          {/* Lower Half: Contextual Inspector */}
-          <div className="h-1/2 overflow-hidden flex flex-col min-h-0">
-            <ContextualInspector
-              state={editorState}
-              onUpdateState={updateEditorState}
-              onDeleteLayer={handleDeleteLayer}
-              onDeleteScene={handleDeleteScene}
-              activeTab={inspectorTab}
-              onSelectTab={setInspectorTab}
-              onOpenNarrationStudio={(segmentId) => {
-                if (segmentId) {
-                  updateEditorState((s) => ({
-                    ...s,
-                    selected_object: { type: "narration", id: segmentId },
-                  }));
-                }
-                setShowNarrationStudio(true);
-              }}
-              onOpenAudioLibrary={handleOpenAudioLibrary}
-            />
+          {/* Active Tab Content (Full Height) */}
+          <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+            {canvasMode === "setup" || rightSidebarTab === "source" ? (
+              <div className="pf-editor-source flex-1 overflow-hidden flex flex-col min-h-0 h-full">
+                <SourcePageBrowser
+                  compact
+                  hideEditingTools
+                  projectId={project.id}
+                  pages={pages}
+                  panels={panels}
+                  selectedPageId={selectedPageId}
+                  onSelectPage={(pageId) => {
+                    setSelectedPageId(pageId);
+                    setSelectedPanelId(panels.filter(panel => panel.page_id === pageId).sort((a, b) => a.page_sequence - b.page_sequence)[0]?.id || null);
+                    if (canvasMode === "setup") {
+                      updateEditorState(s => ({ ...s, is_playing: false }));
+                    }
+                  }}
+                  selectedPanelId={selectedPanelId}
+                  onSelectPanel={(panel) => {
+                    setSelectedPanelId(panel?.id || null);
+                    if (panel) {
+                      setSelectedPageId(panel.page_id);
+                    }
+                    if (canvasMode === "setup") {
+                      updateEditorState(s => ({ ...s, is_playing: false }));
+                    }
+                  }}
+                  onAddPanelToScene={handleAddPanelToScene}
+                  activeSubTab={sourceSubTab}
+                  onSubTabChange={setSourceSubTab}
+                />
+              </div>
+            ) : (
+              <div className="pf-editor-inspector flex-1 overflow-hidden flex flex-col min-h-0 h-full">
+                <ContextualInspector
+                  projectId={project.id}
+                  state={editorState}
+                  onUpdateState={updateEditorState}
+                  onDeleteLayer={handleDeleteLayer}
+                  onDeleteScene={handleDeleteScene}
+                  activeTab={inspectorTab}
+                  onSelectTab={setInspectorTab}
+                  onOpenNarrationStudio={(segmentId) => {
+                    if (segmentId) {
+                      updateEditorState((s) => ({
+                        ...s,
+                        selected_object: { type: "narration", id: segmentId },
+                      }));
+                    }
+                    setShowNarrationStudio(true);
+                  }}
+                  onOpenAudioLibrary={handleOpenAudioLibrary}
+                />
+              </div>
+            )}
           </div>
         </div>
       </div>
 
+      {loading && <div role="status" className="pf-editor-loading">Loading saved scenes and source pages…</div>}
       {/* 3. Bottom Timeline */}
+      <div hidden={canvasMode === "setup" && !setupTimelineOpen} className="pf-editor-timeline-region">
       <StoryEditorTimeline
+        projectId={project.id}
         state={editorState}
         onUpdateState={updateEditorState}
-        canUndo={history.length > 0}
-        canRedo={future.length > 0}
+        onDeleteLayer={handleDeleteLayer}
+        canUndo={canUndo}
+        canRedo={canRedo}
         onUndo={handleUndo}
         onRedo={handleRedo}
         onSelectScene={(sceneId) => {
-          updateEditorState((s) => ({
-            ...s,
-            selected_object: { type: "scene", id: sceneId },
-          }));
+          setCanvasMode("player");
+          updateEditorState((s) => {
+            const sc = s.scenes.find((item) => item.id === sceneId);
+            return {
+              ...s,
+              selected_object: { type: "scene", id: sceneId },
+              playhead_sec: sc ? sc.start_time_sec : s.playhead_sec,
+            };
+          });
         }}
         onSelectLayer={(layerId, sceneId) => {
-          updateEditorState((s) => ({
-            ...s,
-            selected_object: { type: "layer", id: layerId, sceneId },
-          }));
+          setCanvasMode("player");
+          updateEditorState((s) => {
+            const sc = s.scenes.find((item) => item.id === sceneId);
+            const layer = sc?.layers.find((l) => l.id === layerId);
+            const layerOffset = layer?.start_offset_sec ?? 0;
+            return {
+              ...s,
+              selected_object: { type: "layer", id: layerId, sceneId },
+              playhead_sec: sc ? sc.start_time_sec + layerOffset : s.playhead_sec,
+            };
+          });
         }}
         onSelectMotionBadge={(sceneId, layerId) => {
           updateEditorState((s) => ({
             ...s,
             selected_object: layerId ? { type: "layer", id: layerId, sceneId } : { type: "scene", id: sceneId },
           }));
+          setRightSidebarTab("inspector");
           setInspectorTab("motion");
         }}
         onOpenNarrationStudio={(segmentId) => {
@@ -985,11 +1193,10 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
         onDeleteScene={handleDeleteScene}
       />
 
-      {/* 4. Bottom 7-Step Workflow Ribbon */}
-      <WorkflowStepperRibbon
-        currentStep={workflowStep}
-        onSelectStep={handleSelectWorkflowStep}
-      />
+      </div>
+      {/* Guided production steps remain available in Advanced mode. */}
+      {editorState.mode === "advanced" && <WorkflowStepperRibbon currentStep={workflowStep} onSelectStep={handleSelectWorkflowStep} />}
+      {showEditorSettings && <EditorSettingsDialog state={editorState} onUpdateState={updateEditorState} onClose={() => { setShowEditorSettings(false); setActiveLeftTab("story"); }} />}
 
       {/* 5. Full-Screen Narration Studio Workspace Overlay */}
       {showNarrationStudio && (
@@ -1043,8 +1250,8 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
                     narration_segment_id: seg.id,
                     scene_id: matchingScene?.id,
                     linked_to_scene: true,
-                    scene_offset_sec: 0,
-                    start_time_sec: prev.playhead_sec,
+                    scene_offset_sec: Math.max(0, prev.playhead_sec - (matchingScene?.start_time_sec ?? 0)),
+                    start_time_sec: Math.max(matchingScene?.start_time_sec ?? 0, prev.playhead_sec),
                     duration_sec: seg.measured_duration_sec || seg.estimated_duration_sec || 3.0,
                     speaker: seg.speaker_name,
                     speaker_id: seg.speaker_id,

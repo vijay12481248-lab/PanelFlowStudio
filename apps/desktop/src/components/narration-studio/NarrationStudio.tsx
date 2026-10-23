@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { SnapshotHistory } from "@panelflow/history";
 import { Icons, Button, Badge } from "@panelflow/ui";
 import {
   type NarrationChapter,
@@ -19,6 +20,10 @@ import { CharacterVoiceManager } from "./CharacterVoiceManager";
 import { AudioPreviewPlayer } from "./AudioPreviewPlayer";
 import { api } from "@panelflow/api-client";
 import { NarrationJobQueue } from "./NarrationJobQueue";
+import { historyShortcut } from "../../history/shortcuts";
+import { ProviderHealthModal } from "../ProviderHealthModal";
+import { GlobalLLMSelector } from "../GlobalLLMSelector";
+import type { CloudLLMConfig } from "@panelflow/shared-types";
 
 export const NarrationStudio: React.FC<NarrationStudioProps> = ({
   initialChapter,
@@ -89,12 +94,19 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
   const [postDraftPrompt, setPostDraftPrompt] = useState<boolean>(false);
   const [targetSceneId, setTargetSceneId] = useState<string>(() => scenes?.[0]?.id || "");
 
+  // Global & Flow-Wise LLM Selection
+  const [selectedProviderId, setSelectedProviderId] = useState<string>("global");
+  const [selectedModel, setSelectedModel] = useState<string>("");
+  const [showProviderSettingsModal, setShowProviderSettingsModal] = useState<boolean>(false);
+
   useEffect(() => {
     let isMounted = true;
-    const fetchOllama = async () => {
+    const fetchProviders = async () => {
       try {
-        const res = await api.getOllamaModels();
-        if (isMounted) {
+        const ollamaRes = await api.getOllamaModels().catch(() => null);
+
+        if (isMounted && ollamaRes) {
+          const res = ollamaRes;
           const modelList = res.models?.map((m: any) => m.name || m) || [];
           setOllamaModels(modelList);
           setOllamaDetailedModels(res.models || []);
@@ -110,20 +122,24 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
           if (scenes && scenes.length > 0 && !targetSceneId) {
             setTargetSceneId(scenes[0].id);
           }
+        } else if (isMounted) {
+          setIsOllamaOnline(false);
         }
       } catch (err) {
         if (isMounted) setIsOllamaOnline(false);
       }
     };
-    fetchOllama();
+    fetchProviders();
     return () => {
       isMounted = false;
     };
   }, [scenes, targetSceneId, selectedOllamaModel]);
 
-  // Undo / Redo History Stacks
-  const [history, setHistory] = useState<NarrationChapter[]>([]);
-  const [future, setFuture] = useState<NarrationChapter[]>([]);
+  // Local draft history is deliberately separate from the persisted project
+  // journal. The parent receives the restored chapter through autosave and
+  // records that durable change as one project command.
+  const historyRef = useRef(new SnapshotHistory<NarrationChapter>({ limit: 40 }));
+  const [historyState, setHistoryState] = useState(() => historyRef.current.getState());
 
   // Find currently selected segment and adjacent neighbors
   const selectedIndex = chapter.segments.findIndex((s) => s.id === selectedSegmentId);
@@ -152,9 +168,8 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
     (updater: (prev: NarrationChapter) => NarrationChapter, trackHistory = true) => {
       setChapter((prev) => {
         const next = updater(prev);
-        if (trackHistory && next !== prev) {
-          setHistory((h) => [...h.slice(-40), prev]);
-          setFuture([]);
+        if (trackHistory && historyRef.current.record(prev, next)) {
+          setHistoryState(historyRef.current.getState());
           setSaveStatus("unsaved");
         }
         return next;
@@ -179,22 +194,20 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
 
   // Undo / Redo Handlers
   const handleUndo = useCallback(() => {
-    if (history.length === 0) return;
-    const previous = history[history.length - 1];
-    setHistory((h) => h.slice(0, -1));
-    setFuture((f) => [chapter, ...f]);
+    const previous = historyRef.current.undo();
+    if (previous === null) return;
     setChapter(previous);
-    setSaveStatus("saved");
-  }, [history, chapter]);
+    setHistoryState(historyRef.current.getState());
+    setSaveStatus("unsaved");
+  }, []);
 
   const handleRedo = useCallback(() => {
-    if (future.length === 0) return;
-    const next = future[0];
-    setFuture((f) => f.slice(1));
-    setHistory((h) => [...h, chapter]);
+    const next = historyRef.current.redo();
+    if (next === null) return;
     setChapter(next);
-    setSaveStatus("saved");
-  }, [future, chapter]);
+    setHistoryState(historyRef.current.getState());
+    setSaveStatus("unsaved");
+  }, []);
 
   // Keyboard shortcut listener (Ctrl+Z, Ctrl+Y, ArrowUp, ArrowDown)
   useEffect(() => {
@@ -203,15 +216,11 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
       const target = e.target as HTMLElement;
       const isInput = target.tagName === "INPUT" || target.tagName === "TEXTAREA";
 
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
-        if (e.shiftKey) {
-          e.preventDefault();
-          handleRedo();
-        } else {
-          e.preventDefault();
-          handleUndo();
-        }
-      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") {
+      const action = historyShortcut(e);
+      if (action === "undo") {
+        e.preventDefault();
+        handleUndo();
+      } else if (action === "redo") {
         e.preventDefault();
         handleRedo();
       } else if (!isInput && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
@@ -590,8 +599,8 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
       const draftResult = await api.draftNarration(
         projectId,
         scenesPayload,
-        "ollama",
-        selectedOllamaModel
+        selectedProviderId === "global" ? undefined : selectedProviderId,
+        selectedModel || undefined
       );
 
       if (draftResult?.beats && draftResult.beats.length > 0) {
@@ -602,6 +611,7 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
             const text = beat.proposed_narration_text || "";
             const emotion = beat.recommended_emotion || "Neutral";
             const speed = beat.recommended_speed || 1.0;
+            const characterName = beat.character_name || beat.speaker || "The Narrator";
             return {
               id: `narr_${beat.scene_id || bIdx + 1}`,
               sequence: bIdx + 1,
@@ -610,7 +620,7 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
               linked_to_scene: !!matchingScene,
               scene_offset_sec: 0.0,
               speaker_id: "char_narrator",
-              speaker_name: beat.speaker || "The Narrator",
+              speaker_name: characterName,
               speaker_type: beat.speaker_type || "NARRATOR",
               voice_profile_id: "voice_aria_female_narrator",
               narration_text: text,
@@ -635,6 +645,8 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
                 visual_description:
                   beat.observed_visual_evidence || primaryLayer?.name || `Scene ${bIdx + 1}`,
                 story_context: beat.inferred_subtext || `Story beat ${bIdx + 1}`,
+                page_context_summary: beat.page_context_summary,
+                character_name: characterName,
               },
               delivery: {
                 emotion: emotion as any,
@@ -797,7 +809,7 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
             <button
               type="button"
               onClick={handleUndo}
-              disabled={history.length === 0}
+              disabled={!historyState.canUndo}
               className="p-1 rounded hover:text-white disabled:opacity-30 transition-colors"
               title="Undo (Ctrl+Z)"
             >
@@ -806,7 +818,7 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
             <button
               type="button"
               onClick={handleRedo}
-              disabled={future.length === 0}
+              disabled={!historyState.canRedo}
               className="p-1 rounded hover:text-white disabled:opacity-30 transition-colors"
               title="Redo (Ctrl+Y)"
             >
@@ -816,39 +828,17 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
 
           <div className="h-4 w-px bg-zinc-800" />
 
-          {/* Real-time Ollama Model Discovery & Selector */}
-          <div className="flex items-center gap-1.5 bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1">
-            <span
-              className={`w-2 h-2 rounded-full ${isOllamaOnline ? "bg-emerald-400 shadow-sm shadow-emerald-400/50" : "bg-rose-500"}`}
-              title={isOllamaOnline ? "Ollama Online (127.0.0.1:11434)" : "Ollama Offline"}
-            />
-            <span className="text-[11px] font-semibold text-zinc-400">Model:</span>
-            <select
-              value={selectedOllamaModel}
-              onChange={(e) => setSelectedOllamaModel(e.target.value)}
-              className="bg-transparent text-xs text-zinc-200 font-mono focus:outline-none cursor-pointer max-w-[130px] truncate"
-            >
-              {ollamaModels.length > 0 ? (
-                ollamaModels.map((m) => (
-                  <option key={m} value={m} className="bg-zinc-900 text-zinc-200">
-                    {m}
-                  </option>
-                ))
-              ) : (
-                <option value="qwen3.5:9b" className="bg-zinc-900 text-zinc-200">
-                  qwen3.5:9b
-                </option>
-              )}
-            </select>
-            <button
-              type="button"
-              onClick={() => setShowOllamaGuideModal(true)}
-              className="p-0.5 rounded text-zinc-400 hover:text-indigo-300 hover:bg-zinc-800 transition-colors ml-0.5"
-              title="Open Ollama Models Guide & Diagnostics"
-            >
-              <Icons.Info className="w-3.5 h-3.5" />
-            </button>
-          </div>
+          {/* Centralized Global & Flow-Wise LLM Selector */}
+          <GlobalLLMSelector
+            flowId="story_narration"
+            selectedProviderId={selectedProviderId}
+            selectedModel={selectedModel}
+            onChange={(pid, model) => {
+              setSelectedProviderId(pid);
+              setSelectedModel(model);
+            }}
+            onOpenSettings={() => setShowProviderSettingsModal(true)}
+          />
 
           {/* Single-Click AI Narration Generation */}
           <button
@@ -1524,6 +1514,16 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {showProviderSettingsModal && (
+        <ProviderHealthModal
+          open={showProviderSettingsModal}
+          onClose={() => {
+            setShowProviderSettingsModal(false);
+          }}
+          initialTab="global"
+        />
       )}
     </div>
   );

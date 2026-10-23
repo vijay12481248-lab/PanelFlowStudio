@@ -60,14 +60,16 @@ def test_story_submission_pins_selected_provider_before_queue(tmp_path, monkeypa
 def test_story_recovery_passes_persisted_panel_snapshot(monkeypatch):
     from engine.story.service import story_service
     seen = {}
+    async def dummy_runner(token, progress):
+        return None
     def analyze(db, project_id, **kwargs):
         seen.update(kwargs)
-        return lambda token, progress: None
+        return dummy_runner
     monkeypatch.setattr(story_service, 'analyze_story_project', analyze)
     operation = build_story_analysis_operation('project', {'panel_ids': ['panel-one'], 'preferred_provider': 'mock_llm'})
     try:
         operation(MagicMock(), lambda *args: None, lambda: False)
-    except TypeError:
+    except (TypeError, ValueError):
         pass  # A dummy coroutine return is not relevant to the argument contract.
     assert seen['panel_ids'] == ['panel-one']
     assert seen['operation_only'] is True

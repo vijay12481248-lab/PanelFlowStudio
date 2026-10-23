@@ -1,0 +1,53 @@
+{
+  "executable": "C:\\Users\\Vijaya sekhar\\Tools\\PanelFlow Studio\\apps\\desktop\\src-tauri\\resources\\engine_runtime\\panelflow-engine.exe",
+  "sha256": "7ba3a7d58d062dd60973d631e1e1a24dcdef965a4fbc62d322c1aa0fff36e527",
+  "executable_bytes": 23739607,
+  "scratch": "C:\\Users\\Vijaya sekhar\\AppData\\Local\\hermes\\cache\\scratch\\engine-packaging-final\\coldstart-hln4omhx",
+  "port": 49603,
+  "health": {
+    "status": 200,
+    "body": {
+      "status": "healthy",
+      "app": "PanelFlow Studio",
+      "version": "1.0.0-beta.2",
+      "instance_id": "bb9ebecee1114321a753267413a88c6f",
+      "workspace_root": "C:\\Users\\Vijaya sekhar\\AppData\\Local\\hermes\\cache\\scratch\\engine-packaging-final\\coldstart-hln4omhx\\workspace"
+    }
+  },
+  "unauthenticated_projects_status": 401,
+  "projects": {
+    "status": 200,
+    "count": 0
+  },
+  "jobs": {
+    "status": 200,
+    "count": 0
+  },
+  "openapi": {
+    "status": 200,
+    "count": 138
+  },
+  "database_tables": [
+    "assets",
+    "audio_timelines",
+    "characters",
+    "events",
+    "jobs",
+    "locations",
+    "motion_timelines",
+    "narratives",
+    "ocr_cache",
+    "ocr_results",
+    "page_normalizations",
+    "pages",
+    "panels",
+    "projects",
+    "render_jobs",
+    "scenes",
+    "script_segments",
+    "story_beats",
+    "text_regions",
+    "video_scripts"
+  ],
+  "log": "C:\\Users\\Vijaya sekhar\\AppData\\Local\\hermes\\cache\\scratch\\engine-packaging-final\\coldstart-hln4omhx\\engine.log"
+}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { SidebarClose, SidebarOpen } from "lucide-react";
 import { api } from "@panelflow/api-client";
 import type { Project, Job, SystemResourcesResponse } from "@panelflow/shared-types";
@@ -12,6 +12,7 @@ import { QuickActionsPanel } from "./QuickActionsPanel";
 import { RecentActivityPanel } from "./RecentActivityPanel";
 import { DashboardPromoCard } from "./DashboardPromoCard";
 import { useError } from "../../context/ErrorContext";
+import { createDashboardLoader } from "./dashboardData";
 
 export const DashboardShell: React.FC<DashboardShellProps> = ({
   engineConnected,
@@ -21,6 +22,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
   onRestartEngine,
   restartingEngine,
   onOpenToolsModels,
+  onOpenProviderManagement,
   onNewProject,
   onOpenAcquisition,
   onOpenReview,
@@ -65,66 +67,32 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
     });
   };
 
-  // Fetch projects, covers, jobs, and system telemetry
-  const loadData = useCallback(async () => {
-    try {
-      const [projData, jobsData, sysResources] = await Promise.all([
-        api.listProjects().catch((err) => {
-          console.warn("Projects load warning:", err.message);
-          return [] as Project[];
-        }),
-        api.listAllJobs(undefined, undefined, 40).catch((err) => {
-          console.warn("Jobs load warning:", err.message);
-          return [] as Job[];
-        }),
-        api.getSystemResources().catch(() => null),
-      ]);
+  const loaderRef = useRef<ReturnType<typeof createDashboardLoader> | null>(null);
+  const loadData = useCallback(() => loaderRef.current?.refresh(true) ?? Promise.resolve(), []);
 
-      setProjects(projData);
-      setJobs(jobsData);
-      if (sysResources) {
-        setResources(sysResources);
-      }
-      setError(null);
-
-      // Asynchronously fetch cover page for each project
-      const coverMap: Record<string, string> = {};
-      await Promise.all(
-        projData.map(async (p) => {
-          try {
-            const pages = await api.listPages(p.id);
-            if (pages && pages.length > 0) {
-              const firstPage = pages.find((pg) => pg.sequence === 1) || pages[0];
-              coverMap[p.id] = api.getPageImageUrl(p.id, firstPage.id);
-            }
-          } catch {
-            // ignore
-          }
-        })
-      );
-      setProjectCovers(coverMap);
-    } catch (err: any) {
-      setError(err.message || "Failed to connect to PanelFlow local engine.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
+  // Authentication readiness is established by App before this flag becomes true.
   useEffect(() => {
-    loadData();
+    if (!engineConnected) { setLoading(true); return; }
+    const loader = createDashboardLoader(api, {
+      projects: setProjects, jobs: setJobs, resources: setResources,
+      loading: setLoading, error: setError,
+      cover: (projectId, url) => setProjectCovers((previous) => {
+        const next = { ...previous };
+        if (url) next[projectId] = url; else delete next[projectId];
+        return next;
+      }),
+    });
+    loaderRef.current = loader;
+    void loader.refresh(true);
+    return () => { loader.dispose(); if (loaderRef.current === loader) loaderRef.current = null; };
+  }, [engineConnected]);
 
-    // Check interval based on whether jobs are currently in flight
-    const hasRunningOrQueued = jobs.some(
-      (j) => j.status === "RUNNING" || j.status === "QUEUED"
-    );
-    const intervalMs = hasRunningOrQueued ? 3000 : 8000;
-
-    const timer = setInterval(() => {
-      loadData();
-    }, intervalMs);
-
+  const hasRunningOrQueued = jobs.some((job) => job.status === "RUNNING" || job.status === "QUEUED");
+  useEffect(() => {
+    if (!engineConnected) return;
+    const timer = setInterval(() => { void loadData(); }, hasRunningOrQueued ? 3000 : 8000);
     return () => clearInterval(timer);
-  }, [loadData, jobs.some((j) => j.status === "RUNNING" || j.status === "QUEUED")]);
+  }, [engineConnected, loadData, hasRunningOrQueued]);
 
   // Project action handlers
   const handleOpenFolder = async (projectId: string) => {
@@ -148,6 +116,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
     }
     try {
       await api.deleteProject(projectId);
+      loaderRef.current?.removeProject(projectId);
       setProjects((prev) => prev.filter((p) => p.id !== projectId));
     } catch (err: any) {
       reportError({
@@ -205,6 +174,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
         engineConnected={engineConnected}
         engineVersion={engineVersion}
         onOpenToolsModels={onOpenToolsModels}
+        onOpenProviderManagement={onOpenProviderManagement}
         onRetryEngine={onRetryEngine}
         retryingEngine={retryingEngine}
         onRestartEngine={onRestartEngine}
@@ -248,6 +218,9 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
           {/* Main Your Projects Section */}
           <ProjectsWorkspace
             projects={projects}
+            loading={loading}
+            error={error}
+            onRetry={() => void loadData()}
             favorites={favorites}
             coversMap={projectCovers}
             onToggleFavorite={handleToggleFavorite}

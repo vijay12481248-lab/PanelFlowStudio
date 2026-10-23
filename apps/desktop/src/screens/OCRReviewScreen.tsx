@@ -8,9 +8,11 @@ import type {
   TextRegion,
   TextRegionType,
   TextRegionStatus,
+  ProjectHistoryState,
 } from "@panelflow/shared-types";
 import { Button, Card, Badge, ProgressBar, Icons, Modal } from "@panelflow/ui";
 import { useError } from "../context/ErrorContext";
+import { historyShortcut } from "../history/shortcuts";
 
 interface OCRReviewScreenProps {
   project: Project;
@@ -75,9 +77,10 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
     }, 2800);
   }, []);
 
-  // Undo / Redo history stack for Text Regions
-  const [undoStack, setUndoStack] = useState<TextRegion[][]>([]);
-  const [redoStack, setRedoStack] = useState<TextRegion[][]>([]);
+  // Undo / Redo history state (deprecated local stack in favor of server-owned project history)
+  const [projectHistory, setProjectHistory] = useState<ProjectHistoryState | null>(() => api.getCachedProjectHistory(project.id));
+  const [historyBusy, setHistoryBusy] = useState<boolean>(false);
+  const historyAction = useRef<boolean>(false);
 
   // Blur & Redaction State
   const [blurringRegion, setBlurringRegion] = useState<boolean>(false);
@@ -134,26 +137,49 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
   const selectedRegion = textRegions.find((tr) => tr.id === selectedRegionId) || null;
   const needsReviewCount = textRegions.filter((tr) => tr.status === "NEEDS_REVIEW").length;
 
-  const pushUndo = useCallback((currentRegions: TextRegion[]) => {
-    setUndoStack((prev) => [...prev.slice(-25), currentRegions]);
-    setRedoStack([]);
+  const pushUndo = useCallback((_currentRegions?: TextRegion[]) => {
+    // Deprecated: local UI stack replaced by server-owned project history
   }, []);
 
-  const handleUndo = useCallback(() => {
-    if (undoStack.length === 0) return;
-    const previous = undoStack[undoStack.length - 1];
-    setUndoStack((prev) => prev.slice(0, -1));
-    setRedoStack((prev) => [...prev, textRegions]);
-    setTextRegions(previous);
-  }, [undoStack, textRegions]);
+  const moveHistory = useCallback(async (direction: "undo" | "redo") => {
+    if (historyAction.current || loading || isCustomBlurOpen || isBatchBlurModalOpen) return;
+    historyAction.current = true;
+    setHistoryBusy(true);
+    try {
+      const known = api.getCachedProjectHistory(project.id);
+      if (known && !(direction === "undo" ? known.canUndo : known.canRedo)) {
+        setProjectHistory(known);
+        return;
+      }
+      const reply = direction === "undo" ? await api.undo(project.id) : await api.redo(project.id);
+      setProjectHistory(reply.history ?? api.getCachedProjectHistory(project.id));
+      const [regionsList, panelList] = await Promise.all([
+        api.listTextRegions(project.id),
+        api.listPanels(project.id),
+      ]);
+      setTextRegions(regionsList);
+      setPanels(panelList);
+      setCacheBuster(Date.now());
+    } catch (err: any) {
+      setProjectHistory(api.getCachedProjectHistory(project.id));
+      reportError({
+        title: direction === "undo" ? "Undo Failed" : "Redo Failed",
+        message: err.message || `Could not ${direction} OCR project state.`,
+        severity: "warning",
+        source: "pipeline",
+        projectId: project.id,
+        rawDetails: err,
+      });
+    } finally {
+      historyAction.current = false;
+      setHistoryBusy(false);
+    }
+  }, [loading, isCustomBlurOpen, isBatchBlurModalOpen, project.id, reportError]);
 
-  const handleRedo = useCallback(() => {
-    if (redoStack.length === 0) return;
-    const next = redoStack[redoStack.length - 1];
-    setRedoStack((prev) => prev.slice(0, -1));
-    setUndoStack((prev) => [...prev, textRegions]);
-    setTextRegions(next);
-  }, [redoStack, textRegions]);
+  const handleUndo = useCallback(() => { void moveHistory("undo"); }, [moveHistory]);
+  const handleRedo = useCallback(() => { void moveHistory("redo"); }, [moveHistory]);
+  const canUndo = !historyBusy && !loading && !projectHistory?.conflicted && !projectHistory?.recoveryRequired && !!projectHistory?.canUndo;
+  const canRedo = !historyBusy && !loading && !projectHistory?.conflicted && !projectHistory?.recoveryRequired && !!projectHistory?.canRedo;
 
   const loadData = async () => {
     try {
@@ -231,19 +257,26 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
   // Keyboard navigation & Shortcuts (Ctrl+Z / Ctrl+Shift+Z / Bracket navigation)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      const target = e.target as HTMLElement;
+      if (
+        e.defaultPrevented ||
+        ["INPUT", "TEXTAREA", "SELECT"].includes(target?.tagName) ||
+        target?.isContentEditable ||
+        target?.closest?.("[role=dialog], dialog") ||
+        isCustomBlurOpen ||
+        isBatchBlurModalOpen
+      ) {
+        return;
+      }
 
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
+      const action = historyShortcut(e);
+      if (action) {
         e.preventDefault();
-        if (e.shiftKey) {
-          handleRedo();
-        } else {
-          handleUndo();
-        }
-      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") {
-        e.preventDefault();
-        handleRedo();
-      } else if (e.key === "[" || (e.shiftKey && e.key === "Tab")) {
+        if (action === "undo") handleUndo(); else handleRedo();
+        return;
+      }
+
+      if (e.key === "[" || (e.shiftKey && e.key === "Tab")) {
         e.preventDefault();
         if (panelRegions.length > 0) {
           const currIdx = panelRegions.findIndex((r) => r.id === selectedRegionId);
@@ -965,6 +998,18 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
 
         {/* Engine Controls & Actions */}
         <div className="flex flex-wrap items-center gap-2.5">
+          {canUndo && (
+            <Button variant="ghost" size="sm" onClick={handleUndo} title="Undo (Ctrl+Z)" disabled={historyBusy}>
+              <Icons.Rotate className="w-3.5 h-3.5 mr-1" />
+              Undo
+            </Button>
+          )}
+          {canRedo && (
+            <Button variant="ghost" size="sm" onClick={handleRedo} title="Redo (Ctrl+Y / Ctrl+Shift+Z)" disabled={historyBusy}>
+              <Icons.Rotate className="w-3.5 h-3.5 mr-1 scale-x-[-1]" />
+              Redo
+            </Button>
+          )}
           <div className="flex items-center gap-2">
             <span className="text-xs text-zinc-400">Engine:</span>
             <select

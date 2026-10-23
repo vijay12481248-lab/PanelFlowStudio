@@ -26,7 +26,7 @@ from engine.acquisition.models.models import PipelineStage
 from engine.motion.models.timeline import VisualTimeline
 from engine.motion.models.input_contract import MasterAudioTimeline
 from engine.render.engine import RenderEngine
-from engine.render.models.profiles import RenderProfile
+from engine.render.models.profiles import RenderProfile, editor_render_profile
 from engine.render.models.render_plan import RenderPlan, RenderAudioTrack
 from engine.render.models.enums import MusicDurationPolicy, RenderStage, RenderStatus
 
@@ -212,23 +212,7 @@ class RenderService:
 
         chosen_profile_name = "draft_720p" if is_draft else profile_name
 
-        if chosen_profile_name == "vertical_shorts":
-            profile = RenderProfile.vertical_shorts()
-        elif chosen_profile_name == "square_feed":
-            profile = RenderProfile.square_feed()
-        elif chosen_profile_name == "draft_720p":
-            if aspect == "9:16":
-                profile = RenderProfile(width=720, height=1280, fps=30, crf=26, preset="ultrafast")
-            elif aspect == "1:1":
-                profile = RenderProfile(width=720, height=720, fps=30, crf=26, preset="ultrafast")
-            else:
-                profile = RenderProfile.draft_720p()
-        elif aspect == "9:16":
-            profile = RenderProfile.vertical_shorts()
-        elif aspect == "1:1":
-            profile = RenderProfile.square_feed()
-        else:
-            profile = RenderProfile.standard_1080p()
+        profile = editor_render_profile(chosen_profile_name, timeline_data)
 
         if custom_output_path:
             out_file = Path(custom_output_path)

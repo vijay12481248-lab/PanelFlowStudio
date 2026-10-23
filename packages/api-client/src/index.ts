@@ -41,6 +41,17 @@ import type {
   MusicDirectionPlan,
   MusicGenerationRequest,
   SFXCapabilityReport,
+  CloudLLMConfig,
+  CloudLLMTestRequest,
+  CloudLLMTestResponse,
+  AvailableLLMProvidersResponse,
+  GlobalLLMSettings,
+  SaveGlobalLLMSettingsRequest,
+  YouTubePackagingData,
+  YouTubePackagingGenerateRequest,
+  AutoPilotStatusResponse,
+  AutoPilotStartRequest,
+  AutoPilotStageItem,
 } from "@panelflow/shared-types";
 
 
@@ -91,9 +102,16 @@ export interface CreateProjectParams {
   settings?: Record<string, any>;
 }
 
+export class ApiRequestError extends Error {
+  constructor(message: string, readonly status: number, readonly code?: string) { super(message); this.name = "ApiRequestError"; }
+}
+
 export class PanelFlowApiClient {
   private baseUrl: string;
   private engineToken?: string;
+  private projectHistory = new Map<string, import("@panelflow/shared-types").ProjectHistoryState>();
+  private projectWriters = new Map<string, Promise<unknown>>();
+  private pendingProjectWrites = new Map<string, { path: string; body: string; signature: string }>();
 
   constructor(baseUrl: string = "http://127.0.0.1:8765", engineToken?: string) {
     this.baseUrl = baseUrl.replace(/\/$/, "");
@@ -131,15 +149,17 @@ export class PanelFlowApiClient {
 
     if (!response.ok) {
       let errorMsg = `HTTP Error ${response.status}: ${response.statusText}`;
+      let errorCode: string | undefined;
       try {
         const errJson = await response.json();
         if (errJson.detail) {
-          errorMsg = typeof errJson.detail === "string" ? errJson.detail : JSON.stringify(errJson.detail);
+          errorMsg = typeof errJson.detail === "string" ? errJson.detail : typeof errJson.detail.message === "string" ? errJson.detail.message : JSON.stringify(errJson.detail);
+          errorCode = typeof errJson.detail.code === "string" ? errJson.detail.code : undefined;
         }
       } catch {
         // use fallback
       }
-      throw new Error(errorMsg);
+      throw new ApiRequestError(errorMsg, response.status, errorCode);
     }
 
     if (response.status === 204) {
@@ -169,15 +189,172 @@ export class PanelFlowApiClient {
     return this.request<Project>(`/api/projects/${projectId}`);
   }
 
-  async getStoryEditorState(projectId: string): Promise<{ state: any | null }> {
-    return this.request<{ state: any | null }>(`/api/projects/${projectId}/story-editor`);
+  async uploadBackgroundImage(projectId: string, file: Blob): Promise<{ image_url: string; width: number; height: number }> {
+    const result = await this.request<{ image_url: string; width: number; height: number }>(`/api/projects/${encodeURIComponent(projectId)}/backgrounds`, {
+      method: "POST", body: file, headers: { "Content-Type": file.type || "application/octet-stream" },
+    });
+    return { ...result, image_url: this.resourceUrl(result.image_url) };
   }
 
-  async saveStoryEditorState(projectId: string, state: any, alignPanels = false): Promise<{ state: any; updated_at: string }> {
-    return this.request<{ state: any; updated_at: string }>(`/api/projects/${projectId}/story-editor`, {
-      method: "PUT",
-      body: JSON.stringify({ state, align_panels: alignPanels }),
-    });
+  /** Restore only recognized project source references with this session's capability. */
+  hydrateStoryEditorState<T>(projectId: string, state: T): T {
+    return this.storyEditorStateImages(state, projectId, true);
+  }
+
+  /** Durable editor snapshots must not retain per-launch engine capabilities. */
+  sanitizeStoryEditorState<T>(projectId: string, state: T): T {
+    return this.storyEditorStateImages(state, projectId, false);
+  }
+
+  private storyEditorStateImages(state: any, projectId: string, authenticated: boolean): any {
+    if (!state || typeof state !== "object") return state;
+    const imageReference = (imageUrl: unknown, pageId: unknown, panelId?: unknown) => {
+      if (typeof imageUrl !== "string") return imageUrl;
+      const projectPath = `/api/projects/${encodeURIComponent(projectId)}`;
+      const allowed = new Set<string>();
+      if (typeof pageId === "string") {
+        const pagePath = `${projectPath}/pages/${encodeURIComponent(pageId)}`;
+        allowed.add(`${pagePath}/file`); allowed.add(`${pagePath}/normalized-file`);
+      }
+      if (typeof panelId === "string") allowed.add(`${projectPath}/panels/${encodeURIComponent(panelId)}/file`);
+      else if (Array.isArray(panelId)) {
+        for (const pid of panelId) {
+          if (typeof pid === "string") allowed.add(`${projectPath}/panels/${encodeURIComponent(pid)}/file`);
+        }
+      }
+      try {
+        const base = new URL(this.baseUrl);
+        const url = new URL(imageUrl, base);
+        const loopback = new Set(["127.0.0.1", "localhost", "[::1]"]);
+        const sameEngine = url.origin === base.origin || (
+          loopback.has(base.hostname) && loopback.has(url.hostname) &&
+          url.protocol === base.protocol && url.port === base.port
+        );
+        const endpoint = url.pathname.replace(/;pf-token=[^/]*$/, "");
+        if (endpoint.startsWith(`${projectPath}/backgrounds/`) &&
+            /^[a-f\d]{32}\.png\/file$/.test(endpoint.slice(`${projectPath}/backgrounds/`.length))) allowed.add(endpoint);
+        if (!sameEngine || url.username || url.password ||
+            !allowed.has(endpoint)) return imageUrl;
+        const credentialKeys = new Set(["token", "pf-token", "engine_token", "engine-token", "x-panelflow-token"]);
+        for (const key of Array.from(url.searchParams.keys())) {
+          if (credentialKeys.has(key.toLowerCase())) url.searchParams.delete(key);
+        }
+        const query = url.searchParams.toString();
+        const resource = authenticated ? this.resourceUrl(endpoint) : endpoint;
+        return `${resource}${query ? `?${query}` : ""}`;
+      } catch { return imageUrl; }
+    };
+    const backgroundReference = (background: any) => background && typeof background === "object"
+      ? { ...background, ...(typeof background.custom_image_url === "string" ? { custom_image_url: imageReference(background.custom_image_url, null) } : {}) } : background;
+    return {
+      ...state,
+      ...(state.background_default ? { background_default: backgroundReference(state.background_default) } : {}),
+      ...(Array.isArray(state.scenes) ? { scenes: state.scenes.map((scene: any) => {
+        if (!scene || !Array.isArray(scene.layers)) return scene;
+        return { ...scene, ...(scene.background ? { background: backgroundReference(scene.background) } : {}), layers: scene.layers.map((layer: any) => {
+          if (!layer || typeof layer.image_url !== "string") return layer;
+          return { ...layer, image_url: imageReference(layer.image_url, layer.source_page_id, layer.source_panel_id) };
+        }) };
+      }) } : {}),
+      ...(Array.isArray(state.narration_chapter?.segments) ? { narration_chapter: {
+        ...state.narration_chapter,
+        segments: state.narration_chapter.segments.map((segment: any) => {
+          const context = segment?.source_context;
+          if (!context || typeof context.panel_preview_url !== "string") return segment;
+          return { ...segment, source_context: { ...context,
+            panel_preview_url: imageReference(context.panel_preview_url, context.page_id, context.panel_id || context.panel_ids),
+          } };
+        }),
+      } } : {}),
+    };
+  }
+
+  async getStoryEditorState(projectId: string): Promise<{ state: any | null; history?: import("@panelflow/shared-types").ProjectHistoryState }> {
+    const response = await this.request<{ state: any | null; history?: import("@panelflow/shared-types").ProjectHistoryState }>(`/api/projects/${projectId}/story-editor`);
+    this.observeProjectHistory(projectId, response.history);
+    return { ...response, state: this.hydrateStoryEditorState(projectId, response.state) };
+  }
+
+  async saveStoryEditorState(projectId: string, state: any, alignPanels = false): Promise<{ state: any; updated_at: string; history?: import("@panelflow/shared-types").ProjectHistoryState }> {
+    const input = { state: this.sanitizeStoryEditorState(projectId, state), align_panels: alignPanels };
+    const response = await this.projectWrite(projectId, `/api/projects/${projectId}/story-editor`, input, "PUT");
+    return { ...response, state: this.hydrateStoryEditorState(projectId, response.state) };
+  }
+
+  getCachedProjectHistory(projectId: string): import("@panelflow/shared-types").ProjectHistoryState | null {
+    const cached = this.projectHistory.get(projectId);
+    return cached ? structuredClone(cached) : null;
+  }
+
+  private observeProjectHistory(projectId: string, history?: import("@panelflow/shared-types").ProjectHistoryState): void {
+    if (history && Number.isSafeInteger(history.revision) && history.revision >= (this.projectHistory.get(projectId)?.revision ?? 0))
+      this.projectHistory.set(projectId, structuredClone(history));
+  }
+
+  async getProjectHistory(projectId: string): Promise<import("@panelflow/shared-types").ProjectHistoryReply> {
+    const reply = await this.request<import("@panelflow/shared-types").ProjectHistoryReply>(`/api/projects/${projectId}/history`);
+    this.observeProjectHistory(projectId, reply.history);
+    return { ...reply, state: this.hydrateStoryEditorState(projectId, reply.state) };
+  }
+
+  async moveProjectHistory(projectId: string, direction: "undo" | "redo"): Promise<import("@panelflow/shared-types").ProjectHistoryReply> {
+    if (!this.projectHistory.has(projectId)) await this.getProjectHistory(projectId);
+    const reply = await this.projectWrite(projectId, `/api/projects/${projectId}/history/${direction}`, {});
+    return { ...reply, state: this.hydrateStoryEditorState(projectId, reply.state) };
+  }
+
+  async undo(projectId: string): Promise<import("@panelflow/shared-types").ProjectHistoryReply> {
+    return this.moveProjectHistory(projectId, "undo");
+  }
+
+  async redo(projectId: string): Promise<import("@panelflow/shared-types").ProjectHistoryReply> {
+    return this.moveProjectHistory(projectId, "redo");
+  }
+
+  async resetProjectHistory(projectId: string, fingerprint: string): Promise<import("@panelflow/shared-types").ProjectHistoryReply> {
+    const reply = await this.projectWrite(projectId, `/api/projects/${projectId}/history/reset`, { fingerprint });
+    return { ...reply, state: this.hydrateStoryEditorState(projectId, reply.state) };
+  }
+
+  async executeProjectHistoryCommand(projectId: string, command: { type: string; version: number; label: string; input: object }): Promise<import("@panelflow/shared-types").ProjectHistoryReply> {
+    if (!this.projectHistory.has(projectId)) await this.getProjectHistory(projectId);
+    const reply = await this.projectWrite(projectId, `/api/projects/${projectId}/history/commands`, command);
+    return { ...reply, state: this.hydrateStoryEditorState(projectId, reply.state) };
+  }
+
+  /** One writer per project. Ambiguous failures keep the same receipt ID for retry. */
+  private projectWrite(projectId: string, path: string, input: object, method = "POST"): Promise<any> {
+    const signature = JSON.stringify({ path, method, input });
+    const run = async () => {
+      const send = async (pending: { path: string; body: string }) => {
+        try {
+          const response = await this.request<any>(pending.path, { method: pending.path.endsWith("/story-editor") ? "PUT" : "POST", body: pending.body });
+          this.observeProjectHistory(projectId, response.history);
+          this.pendingProjectWrites.delete(projectId);
+          return response;
+        } catch (error) {
+          if (error instanceof ApiRequestError && error.status < 500) {
+            this.pendingProjectWrites.delete(projectId);
+            if (error.code === "CONFLICT") {
+              const previous = this.projectHistory.get(projectId);
+              if (previous) this.projectHistory.set(projectId, { ...previous, conflicted: true, canUndo: false, canRedo: false, error: { code: error.code, message: error.message } });
+            }
+          }
+          throw error;
+        }
+      };
+      const pending = this.pendingProjectWrites.get(projectId);
+      if (pending?.signature === signature) return send(pending);
+      // Resolve a possibly committed earlier operation before issuing a different edit.
+      if (pending) await send(pending);
+      const body = JSON.stringify({ ...input, expected_revision: this.projectHistory.get(projectId)?.revision ?? 0, operation_id: globalThis.crypto.randomUUID() });
+      const next = { path, body, signature };
+      this.pendingProjectWrites.set(projectId, next);
+      return send(next);
+    };
+    const result = (this.projectWriters.get(projectId) ?? Promise.resolve()).then(run);
+    this.projectWriters.set(projectId, result.catch(() => undefined));
+    return result;
   }
 
   async deleteProject(projectId: string): Promise<void> {
@@ -199,9 +376,13 @@ export class PanelFlowApiClient {
   }
 
   async confirmAcquisition(projectId: string): Promise<Project> {
-    return this.request<Project>(`/api/projects/${projectId}/confirm`, {
-      method: "POST",
+    await this.executeProjectHistoryCommand(projectId, {
+      type: "project.confirm",
+      version: 1,
+      label: "Confirm acquisition",
+      input: {},
     });
+    return this.getProject(projectId);
   }
 
   async getManifest(projectId: string): Promise<AcquisitionManifest> {
@@ -214,23 +395,35 @@ export class PanelFlowApiClient {
   }
 
   async reorderPages(projectId: string, pageIds: string[]): Promise<Page[]> {
-    return this.request<Page[]>(`/api/projects/${projectId}/pages/reorder`, {
-      method: "POST",
-      body: JSON.stringify({ page_ids: pageIds }),
+    await this.executeProjectHistoryCommand(projectId, {
+      type: "page.reorder",
+      version: 1,
+      label: "Reorder pages",
+      input: { page_ids: pageIds },
     });
+    return this.listPages(projectId);
   }
 
   async deletePage(projectId: string, pageId: string): Promise<void> {
-    return this.request<void>(`/api/projects/${projectId}/pages/${pageId}`, {
-      method: "DELETE",
+    await this.executeProjectHistoryCommand(projectId, {
+      type: "page.delete",
+      version: 1,
+      label: "Delete page",
+      input: { page_id: pageId },
     });
   }
 
   async rotatePage(projectId: string, pageId: string, degrees: number = 90): Promise<Page> {
-    return this.request<Page>(`/api/projects/${projectId}/pages/${pageId}/rotate`, {
-      method: "POST",
-      body: JSON.stringify({ degrees }),
+    await this.executeProjectHistoryCommand(projectId, {
+      type: "page.rotate",
+      version: 1,
+      label: "Rotate page",
+      input: { page_id: pageId, degrees },
     });
+    const pages = await this.listPages(projectId);
+    const page = pages.find((p) => p.id === pageId);
+    if (!page) throw new Error("Rotated page not found");
+    return page;
   }
 
   getPageImageUrl(projectId: string, pageId: string): string {
@@ -274,10 +467,13 @@ export class PanelFlowApiClient {
     height: number,
     panelType: string = "STANDARD"
   ): Promise<Panel> {
-    return this.request<Panel>(`/api/projects/${projectId}/panels`, {
-      method: "POST",
-      body: JSON.stringify({ page_id: pageId, x, y, width, height, panel_type: panelType }),
+    const panelId = globalThis.crypto.randomUUID();
+    await this.executeProjectHistoryCommand(projectId, {
+      type: "panel.create", version: 1, label: "Add panel", input: { panel_id: panelId, page_id: pageId, x, y, width, height, panel_type: panelType },
     });
+    const panel = (await this.listPanels(projectId)).find((candidate) => candidate.id === panelId);
+    if (!panel) throw new Error("Panel was not returned after it was created");
+    return panel;
   }
 
   async updatePanel(
@@ -290,10 +486,35 @@ export class PanelFlowApiClient {
     status?: string,
     panelType?: string
   ): Promise<Panel> {
-    return this.request<Panel>(`/api/projects/${projectId}/panels/${panelId}`, {
-      method: "PUT",
-      body: JSON.stringify({ x, y, width, height, status, panel_type: panelType }),
+    await this.executeProjectHistoryCommand(projectId, {
+      type: "panel.geometry",
+      version: 1,
+      label: "Edit panel",
+      input: { panel_id: panelId, x, y, width, height, status, panel_type: panelType },
     });
+    const panel = (await this.listPanels(projectId)).find((candidate) => candidate.id === panelId);
+    if (!panel) throw new Error("Panel was not returned after its geometry was updated");
+    return panel;
+  }
+
+  async savePanelSelections(projectId: string, panelId: string, selections: Array<{
+    x: number; y: number; width: number; height: number; points?: Array<[number, number]>;
+  }>, pageBounds = false): Promise<Panel[]> {
+    await this.executeProjectHistoryCommand(projectId, {
+      type: "panel.selections", version: 1, label: "Save panel selectors",
+      input: { panel_id: panelId, selections, page_bounds: pageBounds },
+    });
+    return this.listPanels(projectId);
+  }
+
+  async addPageSelections(projectId: string, pageId: string, selections: Array<{
+    x: number; y: number; width: number; height: number; points?: Array<[number, number]>;
+  }>): Promise<Panel[]> {
+    await this.executeProjectHistoryCommand(projectId, {
+      type: "panel.selections", version: 1, label: "Save page selectors",
+      input: { page_id: pageId, selections, page_bounds: true },
+    });
+    return this.listPanels(projectId);
   }
 
   async splitPanel(
@@ -302,17 +523,22 @@ export class PanelFlowApiClient {
     splitType: "horizontal" | "vertical" = "horizontal",
     ratio: number = 0.5
   ): Promise<Panel[]> {
-    return this.request<Panel[]>(`/api/projects/${projectId}/panels/${panelId}/split`, {
-      method: "POST",
-      body: JSON.stringify({ split_type: splitType, ratio }),
+    await this.executeProjectHistoryCommand(projectId, {
+      type: "panel.split", version: 1, label: "Split panel", input: { panel_id: panelId, split_type: splitType, ratio },
     });
+    return this.listPanels(projectId);
   }
 
   async mergePanels(projectId: string, panelIds: string[]): Promise<Panel> {
-    return this.request<Panel>(`/api/projects/${projectId}/panels/merge`, {
-      method: "POST",
-      body: JSON.stringify({ panel_ids: panelIds }),
+    const before = await this.listPanels(projectId);
+    const primaryId = before.find((panel) => panelIds.includes(panel.id))?.id;
+    await this.executeProjectHistoryCommand(projectId, {
+      type: "panel.merge", version: 1, label: "Merge panels", input: { panel_ids: panelIds },
     });
+    const panels = await this.listPanels(projectId);
+    const panel = panels.find((candidate) => candidate.id === primaryId);
+    if (!panel) throw new Error("Merged panel was not returned");
+    return panel;
   }
 
   async detectPagePanels(
@@ -328,22 +554,23 @@ export class PanelFlowApiClient {
   }
 
   async deletePanel(projectId: string, panelId: string): Promise<void> {
-    return this.request<void>(`/api/projects/${projectId}/panels/${panelId}`, {
-      method: "DELETE",
+    await this.executeProjectHistoryCommand(projectId, {
+      type: "panel.delete", version: 1, label: "Delete panel", input: { panel_id: panelId },
     });
   }
 
   async reorderPanels(projectId: string, panelIds: string[]): Promise<Panel[]> {
-    return this.request<Panel[]>(`/api/projects/${projectId}/panels/reorder`, {
-      method: "POST",
-      body: JSON.stringify({ panel_ids: panelIds }),
+    await this.executeProjectHistoryCommand(projectId, {
+      type: "panel.reorder", version: 1, label: "Reorder panels", input: { panel_ids: panelIds },
     });
+    return this.listPanels(projectId);
   }
 
   async confirmPanels(projectId: string): Promise<{ current_stage: string; message: string }> {
-    return this.request<{ current_stage: string; message: string }>(`/api/projects/${projectId}/panels/confirm`, {
-      method: "POST",
+    await this.executeProjectHistoryCommand(projectId, {
+      type: "panel.confirm", version: 1, label: "Confirm panels", input: {},
     });
+    return { current_stage: "PANELS_DETECTED", message: "Panels confirmed" };
   }
 
   getPanelImageUrl(projectId: string, panelId: string): string {
@@ -367,13 +594,13 @@ export class PanelFlowApiClient {
     panelId: string,
     box: { x: number; y: number; width: number; height: number; blur_radius?: number; feather?: number }
   ): Promise<{ success: boolean; panel_id: string; has_backup: boolean }> {
-    return this.request<{ success: boolean; panel_id: string; has_backup: boolean }>(
-      `/api/projects/${projectId}/panels/${panelId}/blur-region`,
-      {
-        method: "POST",
-        body: JSON.stringify(box),
-      }
-    );
+    await this.executeProjectHistoryCommand(projectId, {
+      type: "panel.image.blur_region",
+      version: 1,
+      label: "Blur panel region",
+      input: { panel_id: panelId, ...box },
+    });
+    return { success: true, panel_id: panelId, has_backup: true };
   }
 
   async blurPanelText(
@@ -381,13 +608,14 @@ export class PanelFlowApiClient {
     panelId: string,
     params?: { region_ids?: string[]; blur_radius?: number; feather?: number }
   ): Promise<{ success: boolean; panel_id: string; blurred_count: number }> {
-    return this.request<{ success: boolean; panel_id: string; blurred_count: number }>(
-      `/api/projects/${projectId}/panels/${panelId}/blur-text`,
-      {
-        method: "POST",
-        body: JSON.stringify(params || {}),
-      }
-    );
+    await this.executeProjectHistoryCommand(projectId, {
+      type: "panel.image.blur_text",
+      version: 1,
+      label: "Blur panel text",
+      input: { panel_id: panelId, ...(params || {}) },
+    });
+    const status = await this.getPanelBlurStatus(projectId, panelId);
+    return { success: true, panel_id: panelId, blurred_count: status.blurred_regions_count };
   }
 
   async blurEntirePanel(
@@ -395,25 +623,25 @@ export class PanelFlowApiClient {
     panelId: string,
     blurRadius: number = 32
   ): Promise<{ success: boolean; panel_id: string }> {
-    return this.request<{ success: boolean; panel_id: string }>(
-      `/api/projects/${projectId}/panels/${panelId}/blur-panel`,
-      {
-        method: "POST",
-        body: JSON.stringify({ blur_radius: blurRadius }),
-      }
-    );
+    await this.executeProjectHistoryCommand(projectId, {
+      type: "panel.image.blur_panel",
+      version: 1,
+      label: "Blur entire panel",
+      input: { panel_id: panelId, blur_radius: blurRadius },
+    });
+    return { success: true, panel_id: panelId };
   }
 
   async resetPanelImage(
     projectId: string,
     panelId: string
   ): Promise<{ success: boolean; panel_id: string }> {
-    return this.request<{ success: boolean; panel_id: string }>(
-      `/api/projects/${projectId}/panels/${panelId}/reset-image`,
-      {
-        method: "POST",
-      }
-    );
+    const status = await this.getPanelBlurStatus(projectId, panelId);
+    if (!status.is_blurred) return { success: false, panel_id: panelId };
+    await this.executeProjectHistoryCommand(projectId, {
+      type: "panel.image.reset", version: 1, label: "Reset panel image", input: { panel_id: panelId },
+    });
+    return { success: true, panel_id: panelId };
   }
 
   async getPanelBlurStatus(
@@ -435,26 +663,41 @@ export class PanelFlowApiClient {
       panel_ids?: string[];
     }
   ): Promise<{ success: boolean; project_id: string; preset: string; blurred_panels_count: number; total_panels: number }> {
-    return this.request(
-      `/api/projects/${projectId}/panels/batch-blur`,
-      {
-        method: "POST",
-        body: JSON.stringify(params || {}),
-      }
-    );
+    const panels = await this.listPanels(projectId);
+    const targetCount = params?.panel_ids?.length ?? panels.length;
+    await this.executeProjectHistoryCommand(projectId, {
+      type: "panel.image.batch_blur",
+      version: 1,
+      label: "Batch blur panels",
+      input: params || {},
+    });
+    return {
+      success: true,
+      project_id: projectId,
+      preset: params?.preset || "TOP_WATERMARK",
+      blurred_panels_count: targetCount,
+      total_panels: panels.length,
+    };
   }
 
   async batchResetPanels(
     projectId: string,
     panelIds?: string[]
   ): Promise<{ success: boolean; project_id: string; restored_panels_count: number; total_panels: number }> {
-    return this.request(
-      `/api/projects/${projectId}/panels/batch-reset`,
-      {
-        method: "POST",
-        body: JSON.stringify({ panel_ids: panelIds }),
-      }
-    );
+    const panels = await this.listPanels(projectId);
+    const targetCount = panelIds?.length ?? panels.length;
+    await this.executeProjectHistoryCommand(projectId, {
+      type: "panel.image.batch_reset",
+      version: 1,
+      label: "Batch reset panels",
+      input: { panel_ids: panelIds },
+    });
+    return {
+      success: true,
+      project_id: projectId,
+      restored_panels_count: targetCount,
+      total_panels: panels.length,
+    };
   }
 
   // OCR
@@ -497,25 +740,33 @@ export class PanelFlowApiClient {
       notes?: string;
     }
   ): Promise<OCRRecord> {
-    return this.request<OCRRecord>(
-      `/api/projects/${projectId}/panels/${panelId}/ocr/blocks/${blockId}`,
-      {
-        method: "PUT",
-        body: JSON.stringify(data),
-      }
-    );
+    await this.executeProjectHistoryCommand(projectId, {
+      type: "ocr.block.update",
+      version: 1,
+      label: "Update OCR block",
+      input: {
+        panel_id: panelId,
+        block_id: blockId,
+        ...data,
+      },
+    });
+    return this.getPanelOCR(projectId, panelId);
   }
 
   async confirmOCR(
     projectId: string
   ): Promise<{ project_id: string; current_stage: string; message: string }> {
-    return this.request<{
-      project_id: string;
-      current_stage: string;
-      message: string;
-    }>(`/api/projects/${projectId}/ocr/confirm`, {
-      method: "POST",
+    await this.executeProjectHistoryCommand(projectId, {
+      type: "ocr.confirm",
+      version: 1,
+      label: "Confirm OCR",
+      input: {},
     });
+    return {
+      project_id: projectId,
+      current_stage: "OCR_APPROVED",
+      message: "OCR approved successfully.",
+    };
   }
 
   // Text Regions (Parts 5-9, 13)
@@ -543,10 +794,25 @@ export class PanelFlowApiClient {
     height: number,
     regionType: string = "SPEECH"
   ): Promise<TextRegion> {
-    return this.request<TextRegion>(`/api/projects/${projectId}/panels/${panelId}/text-regions`, {
-      method: "POST",
-      body: JSON.stringify({ x, y, width, height, region_type: regionType }),
+    const regionId = globalThis.crypto.randomUUID();
+    await this.executeProjectHistoryCommand(projectId, {
+      type: "ocr.region.create",
+      version: 1,
+      label: "Create text region",
+      input: {
+        region_id: regionId,
+        panel_id: panelId,
+        x,
+        y,
+        width,
+        height,
+        region_type: regionType,
+      },
     });
+    const regions = await this.listTextRegions(projectId, undefined, panelId);
+    const region = regions.find((candidate) => candidate.id === regionId);
+    if (!region) throw new Error("Text region was not returned after creation");
+    return region;
   }
 
   async updateTextRegion(
@@ -567,15 +833,27 @@ export class PanelFlowApiClient {
       speaker_assignment_method?: string;
     }
   ): Promise<TextRegion> {
-    return this.request<TextRegion>(`/api/projects/${projectId}/text-regions/${regionId}`, {
-      method: "PUT",
-      body: JSON.stringify(updates),
+    await this.executeProjectHistoryCommand(projectId, {
+      type: "ocr.region.update",
+      version: 1,
+      label: "Update text region",
+      input: {
+        region_id: regionId,
+        ...updates,
+      },
     });
+    const regions = await this.listTextRegions(projectId);
+    const region = regions.find((candidate) => candidate.id === regionId);
+    if (!region) throw new Error("Text region was not returned after update");
+    return region;
   }
 
   async deleteTextRegion(projectId: string, regionId: string): Promise<void> {
-    return this.request<void>(`/api/projects/${projectId}/text-regions/${regionId}`, {
-      method: "DELETE",
+    await this.executeProjectHistoryCommand(projectId, {
+      type: "ocr.region.delete",
+      version: 1,
+      label: "Delete text region",
+      input: { region_id: regionId },
     });
   }
 
@@ -691,9 +969,17 @@ export class PanelFlowApiClient {
   }
 
   async confirmStory(projectId: string): Promise<{ project_id: string; current_stage: string; message: string }> {
-    return this.request<{ project_id: string; current_stage: string; message: string }>(`/api/projects/${projectId}/story/confirm`, {
-      method: "POST",
+    await this.executeProjectHistoryCommand(projectId, {
+      type: "story.confirm",
+      version: 1,
+      label: "Confirm story",
+      input: {},
     });
+    return {
+      project_id: projectId,
+      current_stage: "STORY_APPROVED",
+      message: "Narrative IR approved successfully.",
+    };
   }
 
   async listCharacters(projectId: string): Promise<CharacterEntity[]> {
@@ -710,22 +996,43 @@ export class PanelFlowApiClient {
       aliases?: string[];
       description?: string;
       status?: string;
+      reference_asset_id?: string | null;
+      generation_params?: Record<string, unknown>;
+      proposed_changes?: Record<string, unknown>;
+      change_status?: "NONE" | "PENDING_REVIEW" | "APPROVED" | "REJECTED";
     }
-  ): Promise<any> {
-    return this.request<any>(`/api/projects/${projectId}/characters/${characterId}`, {
-      method: "PUT",
-      body: JSON.stringify(updates),
+  ): Promise<CharacterEntity | undefined> {
+    await this.executeProjectHistoryCommand(projectId, {
+      type: "character.update",
+      version: 1,
+      label: "Update character",
+      input: {
+        character_id: characterId,
+        ...updates,
+      },
     });
+    const chars = await this.listCharacters(projectId);
+    return chars.find(c => c.character_id === characterId || (c as any).id === characterId);
   }
 
   async mergeCharacters(projectId: string, sourceCharacterId: string, targetCharacterId: string): Promise<any> {
-    return this.request<any>(`/api/projects/${projectId}/characters/merge`, {
-      method: "POST",
-      body: JSON.stringify({
+    await this.executeProjectHistoryCommand(projectId, {
+      type: "character.merge",
+      version: 1,
+      label: "Merge characters",
+      input: {
         source_character_id: sourceCharacterId,
         target_character_id: targetCharacterId,
-      }),
+      },
     });
+    const chars = await this.listCharacters(projectId);
+    const target = chars.find(c => c.character_id === targetCharacterId || (c as any).id === targetCharacterId);
+    return {
+      id: targetCharacterId,
+      display_name: target?.display_name || "",
+      aliases: target?.aliases || [],
+      message: "Characters merged successfully.",
+    };
   }
 
   async splitCharacter(
@@ -734,13 +1041,26 @@ export class PanelFlowApiClient {
     newName: string,
     panelIds: string[]
   ): Promise<any> {
-    return this.request<any>(`/api/projects/${projectId}/characters/${characterId}/split`, {
-      method: "POST",
-      body: JSON.stringify({
+    const newCharId = `char_${globalThis.crypto.randomUUID().replace(/-/g, "").slice(0, 8)}`;
+    await this.executeProjectHistoryCommand(projectId, {
+      type: "character.split",
+      version: 1,
+      label: "Split character",
+      input: {
+        character_id: characterId,
         new_name: newName,
         panel_ids: panelIds,
-      }),
+        new_character_id: newCharId,
+      },
     });
+    const chars = await this.listCharacters(projectId);
+    const created = chars.find(c => c.character_id === newCharId || (c as any).id === newCharId || c.display_name === newName);
+    return {
+      id: created?.character_id || newCharId,
+      character_id: created?.character_id || newCharId,
+      display_name: newName,
+      message: "Character identity split successfully.",
+    };
   }
 
   async listScenes(projectId: string): Promise<SceneEntity[]> {
@@ -748,13 +1068,23 @@ export class PanelFlowApiClient {
   }
 
   async mergeScenes(projectId: string, sceneId1: string, sceneId2: string): Promise<any> {
-    return this.request<any>(`/api/projects/${projectId}/scenes/merge`, {
-      method: "POST",
-      body: JSON.stringify({
+    await this.executeProjectHistoryCommand(projectId, {
+      type: "scene.merge",
+      version: 1,
+      label: "Merge scenes",
+      input: {
         scene_id_1: sceneId1,
         scene_id_2: sceneId2,
-      }),
+      },
     });
+    const scenes = await this.listScenes(projectId);
+    const merged = scenes.find(s => s.scene_id === sceneId1 || (s as any).id === sceneId1);
+    return {
+      id: sceneId1,
+      scene_id: sceneId1,
+      title: merged?.title || "",
+      message: "Scenes merged successfully.",
+    };
   }
 
   // Script Adaptation (Milestone 4 - Layer C)
@@ -806,10 +1136,24 @@ export class PanelFlowApiClient {
       estimated_duration?: number;
     }
   ): Promise<any> {
-    return this.request<any>(`/api/projects/${projectId}/scripts/${scriptId}/segments/${segmentId}`, {
-      method: "PUT",
-      body: JSON.stringify(updates),
+    await this.executeProjectHistoryCommand(projectId, {
+      type: "script.segment.update",
+      version: 1,
+      label: "Update script segment",
+      input: {
+        script_id: scriptId,
+        segment_id: segmentId,
+        ...updates,
+      },
     });
+    const script = await this.getScript(projectId);
+    const seg = script?.segments?.find((s: any) => s.segment_id === segmentId || s.id === segmentId);
+    return {
+      id: segmentId,
+      text: seg?.text,
+      estimated_duration: seg?.estimated_duration,
+      manual_override: true,
+    };
   }
 
   async editScriptSegment(projectId: string, scriptId: string, segmentId: string, action: string): Promise<VideoScript> {
@@ -825,9 +1169,19 @@ export class PanelFlowApiClient {
   }
 
   async approveScript(projectId: string, scriptId: string): Promise<{ script_id: string; status: string; message: string }> {
-    return this.request<{ script_id: string; status: string; message: string }>(`/api/projects/${projectId}/scripts/${scriptId}/approve`, {
-      method: "POST",
+    await this.executeProjectHistoryCommand(projectId, {
+      type: "script.approve",
+      version: 1,
+      label: "Approve script",
+      input: {
+        script_id: scriptId,
+      },
     });
+    return {
+      script_id: scriptId,
+      status: "APPROVED",
+      message: "Script approved! Project advanced to SCRIPT_APPROVED.",
+    };
   }
 
   // ---------------------------------------------------------------------------
@@ -858,9 +1212,37 @@ export class PanelFlowApiClient {
   }
 
   async approveAudio(projectId: string): Promise<{ approved: boolean; message: string }> {
-    return this.request<{ approved: boolean; message: string }>(`/api/projects/${projectId}/audio/approve`, {
-      method: "POST",
+    await this.executeProjectHistoryCommand(projectId, {
+      type: "audio.approve",
+      version: 1,
+      label: "Approve audio",
+      input: {},
     });
+    return { approved: true, message: "Audio timeline approved" };
+  }
+
+  async acceptAudioDraft(projectId: string, draft: any): Promise<any> {
+    await this.executeProjectHistoryCommand(projectId, {
+      type: "audio.draft.accept",
+      version: 1,
+      label: "Accept audio draft",
+      input: { draft },
+    });
+    return this.getAudioTimeline(projectId);
+  }
+
+  async acceptSynthesizedAudio(projectId: string, result: any): Promise<any> {
+    await this.executeProjectHistoryCommand(projectId, {
+      type: "audio.synthesized.accept",
+      version: 1,
+      label: "Accept synthesized audio",
+      input: { result },
+    });
+    return this.getAudioTimeline(projectId);
+  }
+
+  async approveAudioTimeline(projectId: string): Promise<{ approved: boolean; message: string }> {
+    return this.approveAudio(projectId);
   }
 
   getAudioFileUrl(projectId: string, filePath: string): string {
@@ -995,16 +1377,44 @@ export class PanelFlowApiClient {
     projectId: string,
     overrides: Record<string, any>
   ): Promise<MotionTimelineResponse> {
-    return this.request<MotionTimelineResponse>(`/api/projects/${projectId}/motion/overrides`, {
-      method: "POST",
-      body: JSON.stringify({ overrides }),
+    await this.executeProjectHistoryCommand(projectId, {
+      type: "motion.overrides",
+      version: 1,
+      label: "Set shot overrides",
+      input: { overrides },
     });
+    return this.getMotionTimeline(projectId);
+  }
+
+  async setShotOverrides(
+    projectId: string,
+    overrides: Record<string, any>
+  ): Promise<MotionTimelineResponse> {
+    return this.applyMotionOverrides(projectId, overrides);
   }
 
   async approveMotion(projectId: string): Promise<{ approved: boolean; message: string }> {
-    return this.request<{ approved: boolean; message: string }>(`/api/projects/${projectId}/motion/approve`, {
-      method: "POST",
+    await this.executeProjectHistoryCommand(projectId, {
+      type: "motion.approve",
+      version: 1,
+      label: "Approve motion",
+      input: {},
     });
+    return { approved: true, message: "Motion timeline approved" };
+  }
+
+  async approveMotionTimeline(projectId: string): Promise<{ approved: boolean; message: string }> {
+    return this.approveMotion(projectId);
+  }
+
+  async acceptMotionPlan(projectId: string, plan: any): Promise<MotionTimelineResponse> {
+    await this.executeProjectHistoryCommand(projectId, {
+      type: "motion.plan.accept",
+      version: 1,
+      label: "Accept motion plan",
+      input: { plan },
+    });
+    return this.getMotionTimeline(projectId);
   }
 
   // ---------------------------------------------------------------------------
@@ -1146,6 +1556,42 @@ export class PanelFlowApiClient {
   }
 
   // ---------------------------------------------------------------------------
+  // Cloud & Free LLM Gateway (OpenRouter, Groq, Custom OpenAI-Compatible)
+  // ---------------------------------------------------------------------------
+  async getCloudLLMConfig(): Promise<CloudLLMConfig> {
+    return this.request<CloudLLMConfig>("/api/system/llm/cloud-config");
+  }
+
+  async saveCloudLLMConfig(config: CloudLLMConfig): Promise<CloudLLMConfig> {
+    return this.request<CloudLLMConfig>("/api/system/llm/cloud-config", {
+      method: "POST",
+      body: JSON.stringify(config),
+    });
+  }
+
+  async testCloudLLMConnection(params: CloudLLMTestRequest): Promise<CloudLLMTestResponse> {
+    return this.request<CloudLLMTestResponse>("/api/system/llm/cloud-test", {
+      method: "POST",
+      body: JSON.stringify(params),
+    });
+  }
+
+  async getAllAvailableLLMProviders(): Promise<AvailableLLMProvidersResponse> {
+    return this.request<AvailableLLMProvidersResponse>("/api/system/llm/providers/all");
+  }
+
+  async getGlobalLLMSettings(): Promise<GlobalLLMSettings> {
+    return this.request<GlobalLLMSettings>("/api/system/llm/global-settings");
+  }
+
+  async saveGlobalLLMSettings(settings: SaveGlobalLLMSettingsRequest): Promise<any> {
+    return this.request<any>("/api/system/llm/global-settings", {
+      method: "POST",
+      body: JSON.stringify(settings),
+    });
+  }
+
+  // ---------------------------------------------------------------------------
   // System Resource Telemetry & Concurrency
   // ---------------------------------------------------------------------------
   async getSystemResources(): Promise<SystemResourcesResponse> {
@@ -1178,16 +1624,29 @@ export class PanelFlowApiClient {
     segmentId: string,
     update: StoryboardSegmentUpdate
   ): Promise<StoryboardSegment> {
-    return this.request<StoryboardSegment>(`/api/projects/${projectId}/storyboard/segments/${segmentId}`, {
-      method: "PUT",
-      body: JSON.stringify(update),
+    await this.executeProjectHistoryCommand(projectId, {
+      type: "storyboard.segment.update",
+      version: 1,
+      label: "Update storyboard segment",
+      input: {
+        segment_id: segmentId,
+        updates: update,
+      },
     });
+    const storyboard = await this.getStoryboard(projectId);
+    const seg = storyboard.segments.find(s => s.segment_id === segmentId);
+    if (!seg) throw new Error("Storyboard segment was not found after update");
+    return seg;
   }
 
   async realignStoryboard(projectId: string): Promise<StoryboardDocument> {
-    return this.request<StoryboardDocument>(`/api/projects/${projectId}/storyboard/realign`, {
-      method: "POST",
+    await this.executeProjectHistoryCommand(projectId, {
+      type: "storyboard.realign",
+      version: 1,
+      label: "Realign storyboard",
+      input: {},
     });
+    return this.getStoryboard(projectId);
   }
 
   // ---------------------------------------------------------------------------
@@ -1290,6 +1749,40 @@ export class PanelFlowApiClient {
 
   getGeneratedAssetUrl(projectId: string, assetId: string): string {
     return this.resourceUrl(`/api/projects/${projectId}/assets/${assetId}/file`);
+  }
+
+  // YouTube Packaging & ComfyUI Thumbnail Research
+  async getYoutubePackaging(projectId: string, refresh = false, profileName?: string): Promise<YouTubePackagingData> {
+    const params = new URLSearchParams();
+    if (refresh) params.set("refresh", "true");
+    if (profileName) params.set("profile_name", profileName);
+    const query = params.toString() ? `?${params.toString()}` : "";
+    return this.request<YouTubePackagingData>(`/api/projects/${projectId}/youtube/packaging${query}`);
+  }
+
+  async generateYoutubePackaging(projectId: string, request: YouTubePackagingGenerateRequest): Promise<YouTubePackagingData> {
+    return this.request<YouTubePackagingData>(`/api/projects/${projectId}/youtube/packaging/generate`, {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
+  }
+
+  // End-to-End Pipeline Auto-Pilot
+  async startAutoPilot(projectId: string, request: AutoPilotStartRequest = {}): Promise<AutoPilotStatusResponse> {
+    return this.request<AutoPilotStatusResponse>(`/api/projects/${projectId}/autopilot/run`, {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
+  }
+
+  async getAutoPilotStatus(projectId: string): Promise<AutoPilotStatusResponse> {
+    return this.request<AutoPilotStatusResponse>(`/api/projects/${projectId}/autopilot/status`);
+  }
+
+  async cancelAutoPilot(projectId: string): Promise<{ cancelled: boolean; project_id: string }> {
+    return this.request<{ cancelled: boolean; project_id: string }>(`/api/projects/${projectId}/autopilot/cancel`, {
+      method: "POST",
+    });
   }
 
   // ---------------------------------------------------------------------------

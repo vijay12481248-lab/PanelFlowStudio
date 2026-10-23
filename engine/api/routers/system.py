@@ -214,6 +214,23 @@ def get_providers_status():
         "details": f"Local story comprehension, speaker attribution, and scriptwriting ({', '.join(ollama_models[:3]) if ollama_models else 'no models'}).",
     })
 
+    # 3b. Cloud / Free LLM API Gateway (OpenRouter, Groq, Custom)
+    from engine.llm.registry import llm_registry
+    cloud_cfg = llm_registry.get_cloud_config()
+    has_cloud_key = bool(cloud_cfg.get("api_key", "").strip())
+    cloud_ptype = cloud_cfg.get("provider_type", "openrouter").capitalize()
+    cloud_model = cloud_cfg.get("model_name", "meta-llama/llama-3.3-70b-instruct:free")
+    results.append({
+        "id": "cloud_llm",
+        "name": f"Cloud & Free LLMs ({cloud_ptype})",
+        "category": "story_intelligence",
+        "status": "HEALTHY" if has_cloud_key else "READY",
+        "version": cloud_model,
+        "path": cloud_cfg.get("endpoint_url", "https://openrouter.ai/api/v1"),
+        "required": False,
+        "details": f"Cloud narrative intelligence & vision via {cloud_ptype} ({'API Key configured' if has_cloud_key else 'Configurable in Cloud LLM tab'}).",
+    })
+
     # 4. Chatterbox Turbo Neural Voice (MIT Permissive Commercial)
     chatterbox_venv = Path(r"C:\Tools\Chatterbox\.venv\Scripts\python.exe")
     chatterbox_hf = Path.home() / ".cache" / "huggingface" / "hub" / "models--ResembleAI--chatterbox-turbo"
@@ -812,3 +829,295 @@ def api_get_ollama_pull_status():
     """
     from engine.system.setup import ollama_pull_manager
     return ollama_pull_manager.get_status()
+
+
+# =====================================================================
+# Cloud & Free LLM API Gateway Endpoints (OpenRouter, Groq, Custom)
+# =====================================================================
+
+class CloudLLMConfigRequest(BaseModel):
+    provider_type: str = "openrouter"  # openrouter, groq, custom_openai
+    endpoint_url: str = "https://openrouter.ai/api/v1"
+    api_key: Optional[str] = None
+    model_name: str = "meta-llama/llama-3.3-70b-instruct:free"
+    custom_models: Optional[list[str]] = None
+    is_active: bool = True
+
+
+class CloudLLMTestRequest(BaseModel):
+    endpoint_url: str
+    api_key: Optional[str] = None
+    model_name: Optional[str] = None
+
+
+class FlowOverridePayload(BaseModel):
+    provider_id: str = "global"
+    model_name: Optional[str] = ""
+
+
+class GlobalLLMSettingsRequest(BaseModel):
+    global_default_provider: str = "ollama"
+    global_default_model: str = "qwen3.5:9b"
+    flow_overrides: Optional[Dict[str, FlowOverridePayload]] = None
+
+
+@router.get("/llm/cloud-config")
+def get_cloud_llm_config():
+    """
+    Returns sanitized Cloud / Free LLM configuration.
+    Tokens are never revealed in network responses or logs.
+    """
+    from engine.llm.registry import llm_registry
+    cfg = llm_registry.get_cloud_config()
+    api_key = cfg.get("api_key", "")
+    has_key = bool(api_key and api_key.strip())
+    masked_key = (api_key[:4] + "••••" + api_key[-4:]) if len(api_key) >= 12 else ("••••" if has_key else "")
+    return {
+        "provider_type": cfg.get("provider_type", "openrouter"),
+        "endpoint_url": cfg.get("endpoint_url", "https://openrouter.ai/api/v1"),
+        "has_api_key": has_key,
+        "masked_api_key": masked_key,
+        "model_name": cfg.get("model_name", "meta-llama/llama-3.3-70b-instruct:free"),
+        "custom_models": cfg.get("custom_models", []),
+        "is_active": cfg.get("is_active", False),
+    }
+
+
+@router.post("/llm/cloud-config")
+def save_cloud_llm_config(req: CloudLLMConfigRequest):
+    """
+    Validates and persists Cloud / Free LLM configuration.
+    Enables instant switching to free cloud models (OpenRouter, Groq, etc.).
+    """
+    from engine.llm.registry import llm_registry
+    current_cfg = llm_registry.get_cloud_config()
+
+    key = req.api_key
+    if key is None or "••••" in key:
+        key = current_cfg.get("api_key", "")
+
+    provider = llm_registry.configure_cloud_provider(
+        endpoint_url=req.endpoint_url,
+        api_key=key,
+        model_name=req.model_name,
+        provider_type=req.provider_type,
+        custom_models=req.custom_models,
+        is_active=req.is_active,
+    )
+
+    has_key = bool(key and key.strip())
+    masked_key = (key[:4] + "••••" + key[-4:]) if len(key) >= 12 else ("••••" if has_key else "")
+    return {
+        "status": "SAVED",
+        "provider_type": req.provider_type,
+        "endpoint_url": req.endpoint_url,
+        "has_api_key": has_key,
+        "masked_api_key": masked_key,
+        "model_name": req.model_name,
+        "custom_models": req.custom_models or current_cfg.get("custom_models", []),
+        "is_active": req.is_active,
+    }
+
+
+@router.post("/llm/cloud-test")
+async def test_cloud_llm_connection(req: CloudLLMTestRequest):
+    """
+    Tests live latency and verifies model inventory for the Cloud / Free LLM API.
+    """
+    import time
+    from engine.llm.registry import llm_registry
+    from engine.llm.providers.openai_compatible import OpenAICompatibleProvider
+
+    current_cfg = llm_registry.get_cloud_config()
+    key = req.api_key
+    if not key or "••••" in key:
+        key = current_cfg.get("api_key", "")
+
+    test_prov = OpenAICompatibleProvider(
+        endpoint_url=req.endpoint_url,
+        api_key=key,
+        model_name=req.model_name or "default",
+    )
+
+    t0 = time.time()
+    try:
+        models = await test_prov.list_available_models()
+        latency_ms = round((time.time() - t0) * 1000, 1)
+        healthy = len(models) > 0 or await test_prov.health_check()
+        return {
+            "status": "HEALTHY" if healthy else "DEGRADED",
+            "connected": healthy,
+            "latency_ms": latency_ms,
+            "models_count": len(models),
+            "models": models[:50],
+            "error": None if healthy else "Could not verify models from endpoint",
+        }
+    except Exception as e:
+        latency_ms = round((time.time() - t0) * 1000, 1)
+        return {
+            "status": "ERROR",
+            "connected": False,
+            "latency_ms": latency_ms,
+            "models_count": 0,
+            "models": [],
+            "error": str(e),
+        }
+
+
+@router.get("/llm/providers/all")
+async def get_all_available_llm_providers():
+    """
+    Returns all registered LLM providers (Local Ollama and Cloud / Free LLM)
+    and their selectable models for UI dropdowns in Narration Studio.
+    """
+    from engine.llm.registry import llm_registry
+    ollama_prov = llm_registry.get_ollama_provider()
+    cloud_cfg = llm_registry.get_cloud_config()
+
+    ollama_models = []
+    try:
+        ollama_models = await ollama_prov.list_available_models()
+    except Exception:
+        pass
+
+    cloud_models = list(cloud_cfg.get("custom_models", []))
+    if cloud_cfg.get("model_name") and cloud_cfg.get("model_name") not in cloud_models:
+        cloud_models = [cloud_cfg["model_name"]] + cloud_models
+
+    return {
+        "providers": [
+            {
+                "id": "ollama",
+                "name": "Local Ollama (Offline GPU/CPU)",
+                "type": "local",
+                "endpoint": ollama_prov.endpoint_url,
+                "models": ollama_models if ollama_models else ["qwen3.5:9b"],
+                "active_model": ollama_prov.narration_model or "qwen3.5:9b",
+                "is_healthy": len(ollama_models) > 0,
+            },
+            {
+                "id": "cloud_llm",
+                "name": f"Cloud / Free LLM ({cloud_cfg.get('provider_type', 'openrouter').capitalize()})",
+                "type": "cloud",
+                "endpoint": cloud_cfg.get("endpoint_url", "https://openrouter.ai/api/v1"),
+                "models": cloud_models,
+                "active_model": cloud_cfg.get("model_name", "meta-llama/llama-3.3-70b-instruct:free"),
+                "is_configured": bool(cloud_cfg.get("api_key")),
+                "is_active": cloud_cfg.get("is_active", False),
+            }
+        ]
+    }
+
+
+@router.get("/llm/global-settings")
+async def get_global_llm_settings():
+    """
+    Returns the centralized global LLM configuration, flow overrides,
+    and a unified catalog of all configured and discoverable providers and models.
+    """
+    from engine.llm.registry import llm_registry
+    settings_data = llm_registry.get_global_settings()
+    cloud_cfg = llm_registry.get_cloud_config()
+    ollama_prov = llm_registry.get_ollama_provider()
+
+    ollama_models = []
+    ollama_healthy = False
+    try:
+        ollama_models = await ollama_prov.list_available_models()
+        ollama_healthy = len(ollama_models) > 0
+    except Exception:
+        pass
+
+    cloud_models = list(cloud_cfg.get("custom_models", []))
+    if cloud_cfg.get("model_name") and cloud_cfg.get("model_name") not in cloud_models:
+        cloud_models = [cloud_cfg["model_name"]] + cloud_models
+
+    has_cloud_key = bool(cloud_cfg.get("api_key") and cloud_cfg["api_key"].strip())
+    ptype = cloud_cfg.get("provider_type", "openrouter")
+
+    providers = [
+        {
+            "id": "ollama",
+            "name": "Local Ollama (Offline GPU/CPU)",
+            "type": "local",
+            "is_configured": True,
+            "is_healthy": ollama_healthy,
+            "endpoint": ollama_prov.endpoint_url,
+            "models": ollama_models if ollama_models else ["qwen3.5:9b", "qwen2.5:7b"],
+            "default_model": ollama_prov.narration_model or "qwen2.5:7b",
+        },
+        {
+            "id": "freellmapi",
+            "name": "FreeLLMAPI Gateway (Local/Self-Hosted)",
+            "type": "gateway",
+            "is_configured": (ptype == "freellmapi" and has_cloud_key) or ptype == "freellmapi",
+            "is_healthy": ptype == "freellmapi" and cloud_cfg.get("is_active", False),
+            "endpoint": cloud_cfg.get("endpoint_url") if ptype == "freellmapi" else "http://localhost:3001/v1",
+            "models": ["gemini-2.0-flash", "llama-3.3-70b", "cerebras/llama3.1-70b", "mistralai/mistral-large"],
+            "default_model": "gemini-2.0-flash",
+        },
+        {
+            "id": "openrouter",
+            "name": "OpenRouter Free Tier",
+            "type": "cloud",
+            "is_configured": (ptype == "openrouter" and has_cloud_key),
+            "is_healthy": ptype == "openrouter" and cloud_cfg.get("is_active", False) and has_cloud_key,
+            "endpoint": "https://openrouter.ai/api/v1",
+            "models": ["meta-llama/llama-3.3-70b-instruct:free", "google/gemini-2.0-flash-exp:free", "deepseek/deepseek-r1:free", "qwen/qwen-2.5-vl-72b-instruct:free"],
+            "default_model": "meta-llama/llama-3.3-70b-instruct:free",
+        },
+        {
+            "id": "groq",
+            "name": "Groq Cloud Free Tier",
+            "type": "cloud",
+            "is_configured": (ptype == "groq" and has_cloud_key),
+            "is_healthy": ptype == "groq" and cloud_cfg.get("is_active", False) and has_cloud_key,
+            "endpoint": "https://api.groq.com/openai/v1",
+            "models": ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"],
+            "default_model": "llama-3.3-70b-versatile",
+        },
+        {
+            "id": "custom",
+            "name": "Custom OpenAI-Compatible Endpoint",
+            "type": "custom",
+            "is_configured": ptype == "custom" and has_cloud_key,
+            "is_healthy": ptype == "custom" and cloud_cfg.get("is_active", False),
+            "endpoint": cloud_cfg.get("endpoint_url") if ptype == "custom" else "http://127.0.0.1:1234/v1",
+            "models": cloud_models if ptype == "custom" else ["default"],
+            "default_model": cloud_cfg.get("model_name") if ptype == "custom" else "default",
+        },
+    ]
+
+    return {
+        "global_default_provider": settings_data.get("global_default_provider", "ollama"),
+        "global_default_model": settings_data.get("global_default_model", "qwen3.5:9b"),
+        "flow_overrides": settings_data.get("flow_overrides", {}),
+        "providers": providers,
+    }
+
+
+@router.post("/llm/global-settings")
+def update_global_llm_settings(req: GlobalLLMSettingsRequest):
+    """
+    Updates and persists the centralized global LLM defaults and flow-level routing.
+    """
+    from engine.llm.registry import llm_registry
+    flows_dict = None
+    if req.flow_overrides is not None:
+        flows_dict = {
+            k: v.model_dump() if hasattr(v, "model_dump") else dict(v)
+            for k, v in req.flow_overrides.items()
+        }
+
+    saved = llm_registry.update_global_settings(
+        global_default_provider=req.global_default_provider,
+        global_default_model=req.global_default_model,
+        flow_overrides=flows_dict,
+    )
+    return {
+        "status": "SAVED",
+        "global_default_provider": saved.get("global_default_provider"),
+        "global_default_model": saved.get("global_default_model"),
+        "flow_overrides": saved.get("flow_overrides"),
+    }
+

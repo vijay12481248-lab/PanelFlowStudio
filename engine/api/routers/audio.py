@@ -256,13 +256,26 @@ async def draft_narration_plan(
     Generates a structured intermediate story beat plan and contextually aware
     narration draft grounded in manga panels and observed OCR dialogue.
     """
-    from engine.database.models import ProjectRecord, TextRegionRecord, PanelRecord
+    from engine.database.models import (
+        ProjectRecord,
+        TextRegionRecord,
+        PanelRecord,
+        PageRecord,
+        CharacterRecord,
+        LocationRecord,
+    )
     from engine.story.narration import story_narration_service
     proj = db.query(ProjectRecord).filter(ProjectRecord.id == project_id).first()
     if not proj:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
 
-    # Fetch ground-truth text regions and panels from database to ensure high fidelity
+    # Fetch ground-truth pages, text regions, characters, and panels from database
+    db_pages = (
+        db.query(PageRecord)
+        .filter(PageRecord.project_id == project_id, PageRecord.status != "FAILED")
+        .order_by(PageRecord.sequence.asc())
+        .all()
+    )
     db_panels = (
         db.query(PanelRecord)
         .filter(PanelRecord.project_id == project_id, PanelRecord.status != "IGNORED")
@@ -275,6 +288,47 @@ async def draft_narration_plan(
         .order_by(TextRegionRecord.sequence_in_panel.asc())
         .all()
     )
+    db_characters = (
+        db.query(CharacterRecord)
+        .filter(CharacterRecord.project_id == project_id)
+        .all()
+    )
+
+    characters_data = [
+        {
+            "id": c.id,
+            "name": c.display_name,
+            "canonical_name": c.canonical_name or c.display_name,
+            "role": c.role,
+            "description": c.description,
+            "visual_traits": c.visual_traits if isinstance(c.visual_traits, list) else [],
+            "aliases": c.aliases if isinstance(c.aliases, list) else [],
+        }
+        for c in db_characters
+    ]
+
+    panel_to_page_map = {p.id: p.page_id for p in db_panels}
+    page_id_to_seq = {pg.id: pg.sequence for pg in db_pages}
+    page_id_to_file = {pg.id: pg.filename for pg in db_pages}
+
+    # Build page-level metadata
+    pages_data = []
+    for pg in db_pages:
+        pg_panels = [p for p in db_panels if p.page_id == pg.id]
+        pg_regions = [r for r in db_regions if r.page_id == pg.id]
+        pg_ocr = [
+            (r.corrected_text or r.raw_text or "").strip()
+            for r in pg_regions
+            if (r.corrected_text or r.raw_text)
+        ]
+        pages_data.append({
+            "id": pg.id,
+            "sequence": pg.sequence,
+            "filename": pg.filename,
+            "panel_ids": [p.id for p in pg_panels],
+            "ocr_lines": pg_ocr,
+            "panels_count": len(pg_panels),
+        })
 
     panel_ocr_map: Dict[str, list[str]] = {}
     panel_speaker_map: Dict[str, str] = {}
@@ -295,6 +349,7 @@ async def draft_narration_plan(
     if not scenes_data and db_panels:
         for idx, p in enumerate(db_panels, start=1):
             ocr_lines = panel_ocr_map.get(p.id, [])
+            matched_page_id = panel_to_page_map.get(p.id)
             scenes_data.append({
                 "id": f"scene_{idx}",
                 "sequence": idx,
@@ -302,6 +357,8 @@ async def draft_narration_plan(
                 "visual_description": f"Panel #{p.sequence} visual composition",
                 "ocr_text": " ".join(ocr_lines),
                 "panel_ids": [p.id],
+                "page_id": matched_page_id,
+                "page_sequence": page_id_to_seq.get(matched_page_id, 1),
                 "crop_filenames": [p.crop_filename] if p.crop_filename else [],
                 "characters": [panel_speaker_map.get(p.id, "The Narrator")],
             })
@@ -311,6 +368,12 @@ async def draft_narration_plan(
             crops = [panel_crop_map[pid] for pid in pids if pid in panel_crop_map]
             if crops:
                 sc["crop_filenames"] = crops
+
+            if not sc.get("page_id") and pids:
+                sc_page_id = next((panel_to_page_map.get(pid) for pid in pids if pid in panel_to_page_map), None)
+                if sc_page_id:
+                    sc["page_id"] = sc_page_id
+                    sc["page_sequence"] = page_id_to_seq.get(sc_page_id, 1)
 
             if not sc.get("ocr_text"):
                 matched_ocr = []
@@ -329,6 +392,8 @@ async def draft_narration_plan(
         plan = await story_narration_service.generate_narration_draft(
             project_id=project_id,
             scenes_data=scenes_data,
+            pages_data=pages_data,
+            characters_data=characters_data,
             provider_id=req.provider_id,
             model_name=req.model_name,
             workspace_path=Path(proj.workspace_path) if proj.workspace_path else None,

@@ -237,10 +237,11 @@ def test_story_and_script_full_lifecycle():
     assert val_report["script_id"] == script_id
     assert "supported_segments" in val_report
     assert val_report["supported_segments"] >= 1
+    assert val_report["unsupported_segments"] == 0, val_report["issues"]
 
     # 13. Script Approval Gate
     approve_script_resp = client.post(f"/api/projects/{project_id}/scripts/{script_id}/approve")
-    assert approve_script_resp.status_code == 200
+    assert approve_script_resp.status_code == 200, approve_script_resp.json()
     assert approve_script_resp.json()["status"] == "APPROVED"
 
     # 14. Verify v1 Non-Goals (Strict Guardrails: No YouTube publishing, No cloud rendering)

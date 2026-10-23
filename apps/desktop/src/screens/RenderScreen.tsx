@@ -3,6 +3,7 @@ import { api } from "@panelflow/api-client";
 import type { Project, RenderJob, RenderStatus } from "@panelflow/shared-types";
 import { Button, Card, Badge, ProgressBar, Icons, SvgProductionTrophy } from "@panelflow/ui";
 import { useError } from "../context/ErrorContext";
+import { YouTubePackagingModal } from "../components/story-editor/YouTubePackagingModal";
 
 export interface RenderScreenProps {
   project: Project;
@@ -21,6 +22,7 @@ export const RenderScreen: React.FC<RenderScreenProps> = ({
   const [loading, setLoading] = useState<boolean>(true);
   const [rendering, setRendering] = useState<boolean>(false);
   const [cancelling, setCancelling] = useState<boolean>(false);
+  const [showPackagingModal, setShowPackagingModal] = useState<boolean>(false);
 
   // Render Settings
   const [selectedProfile, setSelectedProfile] = useState<string>("standard_1080p");
@@ -567,6 +569,15 @@ export const RenderScreen: React.FC<RenderScreenProps> = ({
                         >
                           Open Folder
                         </Button>
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          onClick={() => setShowPackagingModal(true)}
+                          className="bg-red-600 hover:bg-red-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm shadow-red-600/30"
+                        >
+                          <Icons.Sparkles className="w-3.5 h-3.5" />
+                          <span>YouTube Packaging & Thumbnail</span>
+                        </Button>
                       </div>
                     </div>
                   </div>
@@ -888,6 +899,12 @@ export const RenderScreen: React.FC<RenderScreenProps> = ({
           </div>
         )}
       </Card>
+      <YouTubePackagingModal
+        isOpen={showPackagingModal}
+        onClose={() => setShowPackagingModal(false)}
+        project={project}
+        profileName={activeJob?.output_profile}
+      />
     </div>
   );
 };

@@ -1,5 +1,8 @@
 import React, { useRef, useState, useEffect, useCallback } from "react";
+import { resolveSceneTiming, sceneTimelineDuration, trimSceneTiming, insertSceneTiming, alignLinkedNarration } from "./sceneTiming";
 import { Icons, Button } from "@panelflow/ui";
+import { api } from "@panelflow/api-client";
+import { readPanelDrag, panelInsertionIndex, type PanelDragItem } from "./panelDrag";
 import type {
   StoryEditorState,
   VideoScene,
@@ -17,6 +20,8 @@ interface StoryEditorTimelineProps {
   onSplitScene: (sceneId: string, atSec: number) => void;
   onDuplicateScene: (sceneId: string) => void;
   onDeleteScene: (sceneId: string) => void;
+  onDeleteLayer?: (layerId: string, sceneId: string) => void;
+  projectId?: string;
   canUndo?: boolean;
   canRedo?: boolean;
   onUndo?: () => void;
@@ -32,6 +37,42 @@ import {
   applyAudioContractToState,
 } from "./audioAdapter";
 
+const timelineTrackAliases: Record<string, string> = {
+  Narration: "narration", Visuals: "visuals", "Layer 2": "layer2",
+  "Motion / FX": "motion", Music: "music", SFX: "sfx",
+};
+
+export function getTimelineTrackState(tracks: StoryEditorState["track_states"], key: string) {
+  return tracks?.[key] || tracks?.[timelineTrackAliases[key]] || { visible: true, locked: false };
+}
+
+// Write canonical keys for playback, retaining existing legacy aliases.
+export function toggleTimelineTrackState(state: StoryEditorState, key: string, prop: "visible" | "locked"): StoryEditorState {
+  const current = getTimelineTrackState(state.track_states, key);
+  const next = { ...current, [prop]: !current[prop] };
+  const alias = timelineTrackAliases[key];
+  return {
+    ...state,
+    track_states: {
+      ...state.track_states,
+      [key]: next,
+      ...(state.track_states?.[alias] ? { [alias]: next } : {}),
+    },
+  };
+}
+
+// Never synthesize a waveform: only measured audio amplitudes carry bars.
+const AudioPeaks: React.FC<{ peaks?: number[] }> = ({ peaks }) => {
+  const measured = peaks?.length && peaks.every(Number.isFinite);
+  return measured ? (
+    <span data-waveform="measured" role="img" aria-label="Measured audio waveform" className="pf-timeline-waveform">
+      {peaks.map((peak, idx) => <span key={idx} style={{ height: `${Math.max(1, Math.min(1, Math.abs(peak)) * 18)}px` }} />)}
+    </span>
+  ) : (
+    <span data-waveform="unmeasured" role="img" aria-label="Audio waveform not measured" title="Waveform not measured" className="pf-timeline-audio-bar" />
+  );
+};
+
 export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
   state,
   onUpdateState,
@@ -41,6 +82,8 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
   onSplitScene,
   onDuplicateScene,
   onDeleteScene,
+  onDeleteLayer,
+  projectId,
   canUndo = false,
   canRedo = false,
   onUndo,
@@ -50,11 +93,42 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
   onOpenAudioLibrary,
 }) => {
   const rulerRef = useRef<HTMLDivElement>(null);
+  const timelineScrollRef = useRef<HTMLDivElement>(null);
+  const autoScrollRafRef = useRef<number | null>(null);
+  const latestClientXRef = useRef<number>(0);
+  const shiftKeyRef = useRef<boolean>(false);
   const snappingEnabled = state.snapping !== false;
+
+  const getLayerImageUrl = (layer: VisualLayer): string => {
+    const projId = projectId || state.project_id;
+    if (projId && layer.source_panel_id && (!layer.image_url || layer.image_url.includes("/pages/"))) {
+      return `${api.getPanelImageUrl(projId, layer.source_panel_id)}?v=${encodeURIComponent(layer.crop_filename || "detected")}`;
+    }
+    return layer.image_url;
+  };
 
   // Drag and drop states
   const [dragOverInsertIndex, setDragOverInsertIndex] = useState<number | null>(null);
+  const [panelInsertIndex, setPanelInsertIndex] = useState<number | null>(null);
+  const [pendingPanelDrop, setPendingPanelDrop] = useState<{ items: PanelDragItem[]; index: number } | null>(null);
+  const duplicateDialogRef = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    if (!pendingPanelDrop) return;
+    const dialog = duplicateDialogRef.current;
+    if (dialog?.showModal) dialog.showModal();
+    else dialog?.setAttribute("open", "");
+    return () => { if (dialog?.open) dialog.close?.(); };
+  }, [pendingPanelDrop]);
+  useEffect(() => {
+    // Source cards live outside the timeline; cancellation ends on the source.
+    const clearInsertion = () => setPanelInsertIndex(null);
+    window.addEventListener("dragend", clearInsertion);
+    return () => window.removeEventListener("dragend", clearInsertion);
+  }, []);
   const [dragOverSceneId, setDragOverSceneId] = useState<string | null>(null);
+  const [dragOverLayerId, setDragOverLayerId] = useState<string | null>(null);
+  const [dragOverNarrationId, setDragOverNarrationId] = useState<string | null>(null);
+  const [dragOverMotionSceneId, setDragOverMotionSceneId] = useState<string | null>(null);
 
   // Trimming interaction state for scenes, layers, bgm, and sfx
   const [trimming, setTrimming] = useState<{
@@ -83,11 +157,12 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
     initialStartSec: number;
   } | null>(null);
 
-  const totalDurationSec = Math.max(30, state.scenes.reduce((acc, s) => acc + s.duration_sec, 0));
+  const timedScenes = resolveSceneTiming(state.scenes);
+  const totalDurationSec = sceneTimelineDuration(timedScenes);
 
   // Pixels per second based on zoom slider (zoom_level 50 to 250)
   const pxPerSec = 40 * (state.zoom_level / 100);
-  const totalTimelineWidthPx = Math.max(1100, totalDurationSec * pxPerSec + 200);
+  const totalTimelineWidthPx = Math.max(1100, Math.max(30, totalDurationSec) * pxPerSec + 200);
 
   // Mouse Move listener for live trimming & narration shifting
   useEffect(() => {
@@ -107,40 +182,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
             nextDuration = Math.max(0.8, Math.round((trimming.initialDuration - deltaSec) * 10) / 10);
           }
 
-          onUpdateState((prev) => {
-            const idx = prev.scenes.findIndex((s) => s.id === trimming.id);
-            if (idx < 0) return prev;
-            const updated = [...prev.scenes];
-            updated[idx] = { ...updated[idx], duration_sec: nextDuration };
-
-            // Ripple shift start_time_sec for all scenes
-            let run = 0;
-            const resynced = updated.map((sc, i) => {
-              const r = { ...sc, sequence: i + 1, start_time_sec: run };
-              run += sc.duration_sec;
-              return r;
-            });
-
-            // Ripple shift linked narration preserving scene_offset_sec
-            const resyncedNarr = prev.narration_clips.map((n) => {
-              if (n.scene_id && n.linked_to_scene !== false) {
-                const parent = resynced.find((s) => s.id === n.scene_id);
-                if (parent) {
-                  return {
-                    ...n,
-                    start_time_sec: Math.round((parent.start_time_sec + (n.scene_offset_sec || 0)) * 100) / 100,
-                  };
-                }
-              }
-              return n;
-            });
-
-            return {
-              ...prev,
-              scenes: resynced,
-              narration_clips: resyncedNarr,
-            };
-          });
+          onUpdateState((prev) => trimSceneTiming(prev, trimming.id, nextDuration));
         } else if (trimming.type === "layer" && trimming.sceneId) {
           const sceneId = trimming.sceneId;
           const layerId = trimming.id;
@@ -152,7 +194,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
               return {
                 ...sc,
                 layers: sc.layers.map((ly) => {
-                  if (ly.id !== layerId) return ly;
+                  if (ly.id !== layerId || ly.locked) return ly;
                   const currentStart = trimming.initialStartOffset ?? 0;
                   const currentDur = trimming.initialDuration;
 
@@ -235,11 +277,12 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
           ...prev,
           narration_clips: prev.narration_clips.map((n) => {
             if (n.id !== draggingNarration.id) return n;
-            const parent = n.scene_id ? prev.scenes.find((s) => s.id === n.scene_id) : undefined;
-            const newOffset = parent ? Math.max(0, Math.round((newStart - parent.start_time_sec) * 10) / 10) : (n.scene_offset_sec || 0);
+            const parent = n.linked_to_scene !== false && n.scene_id ? resolveSceneTiming(prev.scenes).find((s) => s.id === n.scene_id) : undefined;
+            const boundedStart = parent ? Math.max(parent.start_time_sec, newStart) : newStart;
+            const newOffset = parent ? Math.round((boundedStart - parent.start_time_sec) * 10) / 10 : (n.scene_offset_sec || 0);
             return {
               ...n,
-              start_time_sec: newStart,
+              start_time_sec: boundedStart,
               scene_offset_sec: newOffset,
             };
           }),
@@ -254,8 +297,8 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
           if (Math.abs(nextStart - state.playhead_sec) < 0.25) {
             nextStart = state.playhead_sec;
           }
-          let run = 0;
-          for (const sc of state.scenes) {
+          for (const sc of resolveSceneTiming(state.scenes)) {
+            let run = sc.start_time_sec;
             if (Math.abs(nextStart - run) < 0.25) {
               nextStart = run;
               break;
@@ -311,15 +354,21 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
   // Compute precise time from pointer clientX with smooth thresholding
   const getTimeFromClientX = useCallback(
     (clientX: number, snap: boolean = snappingEnabled) => {
-      if (!rulerRef.current) return 0;
-      const rect = rulerRef.current.getBoundingClientRect();
-      const clickX = clientX - rect.left;
+      const scrollContainer = timelineScrollRef.current;
+      const ruler = rulerRef.current;
+      let clickX = 0;
+      if (scrollContainer && ruler) {
+        const containerRect = scrollContainer.getBoundingClientRect();
+        clickX = (clientX - containerRect.left) + scrollContainer.scrollLeft;
+      } else if (ruler) {
+        clickX = clientX - ruler.getBoundingClientRect().left;
+      }
       let targetSec = Math.max(0, Math.min(totalDurationSec, clickX / pxPerSec));
 
       if (snap) {
         // Tight 0.12s threshold so snapping never feels sticky or stuttery
-        let cumulative = 0;
-        for (const scene of state.scenes) {
+        for (const scene of resolveSceneTiming(state.scenes)) {
+          let cumulative = scene.start_time_sec;
           if (Math.abs(targetSec - cumulative) < 0.12) {
             targetSec = cumulative;
             break;
@@ -349,15 +398,23 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
       }
 
       setIsScrubbing(true);
-      const rulerRect = rulerRef.current?.getBoundingClientRect();
-      const rulerLeft = rulerRect?.left || 0;
+      latestClientXRef.current = e.clientX;
+      shiftKeyRef.current = e.shiftKey;
 
       const calcSec = (clientX: number, snap: boolean) => {
-        const clickX = clientX - rulerLeft;
+        const scrollContainer = timelineScrollRef.current;
+        const ruler = rulerRef.current;
+        let clickX = 0;
+        if (scrollContainer && ruler) {
+          const containerRect = scrollContainer.getBoundingClientRect();
+          clickX = (clientX - containerRect.left) + scrollContainer.scrollLeft;
+        } else if (ruler) {
+          clickX = clientX - ruler.getBoundingClientRect().left;
+        }
         let targetSec = Math.max(0, Math.min(totalDurationSec, clickX / pxPerSec));
         if (snap) {
-          let cumulative = 0;
-          for (const scene of state.scenes) {
+          for (const scene of resolveSceneTiming(state.scenes)) {
+            let cumulative = scene.start_time_sec;
             if (Math.abs(targetSec - cumulative) < 0.12) {
               targetSec = cumulative;
               break;
@@ -376,8 +433,41 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
       lastScrubSecRef.current = initialSec;
       onUpdateState((s) => ({ ...s, playhead_sec: initialSec }));
 
+      // Auto-scroll timeline while scrubbing near or past container edges
+      const autoScrollLoop = () => {
+        const scrollContainer = timelineScrollRef.current;
+        if (scrollContainer) {
+          const rect = scrollContainer.getBoundingClientRect();
+          const clientX = latestClientXRef.current;
+          const edgeThreshold = 60;
+          let scrollDelta = 0;
+
+          if (clientX > rect.right - edgeThreshold) {
+            const distance = Math.max(1, clientX - (rect.right - edgeThreshold));
+            scrollDelta = Math.min(30, Math.max(4, distance * 0.35));
+          } else if (clientX < rect.left + edgeThreshold) {
+            const distance = Math.max(1, (rect.left + edgeThreshold) - clientX);
+            scrollDelta = -Math.min(30, Math.max(4, distance * 0.35));
+          }
+
+          if (scrollDelta !== 0) {
+            const prevScroll = scrollContainer.scrollLeft;
+            scrollContainer.scrollLeft += scrollDelta;
+            if (scrollContainer.scrollLeft !== prevScroll) {
+              const sec = calcSec(clientX, snappingEnabled && !shiftKeyRef.current);
+              lastScrubSecRef.current = sec;
+              onUpdateState((s) => ({ ...s, playhead_sec: sec }));
+            }
+          }
+        }
+        autoScrollRafRef.current = requestAnimationFrame(autoScrollLoop);
+      };
+      autoScrollRafRef.current = requestAnimationFrame(autoScrollLoop);
+
       const handlePointerMove = (ev: PointerEvent) => {
         ev.preventDefault();
+        latestClientXRef.current = ev.clientX;
+        shiftKeyRef.current = ev.shiftKey;
         if (scrubRafRef.current) cancelAnimationFrame(scrubRafRef.current);
         scrubRafRef.current = requestAnimationFrame(() => {
           const sec = calcSec(ev.clientX, snappingEnabled && !ev.shiftKey);
@@ -394,6 +484,10 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
           cancelAnimationFrame(scrubRafRef.current);
           scrubRafRef.current = null;
         }
+        if (autoScrollRafRef.current) {
+          cancelAnimationFrame(autoScrollRafRef.current);
+          autoScrollRafRef.current = null;
+        }
         setIsScrubbing(false);
         onUpdateState((s) => ({
           ...s,
@@ -407,35 +501,38 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
     [state.is_playing, totalDurationSec, pxPerSec, state.scenes, snappingEnabled, onUpdateState]
   );
 
+  // Auto-scroll timeline to follow playhead during playback
+  useEffect(() => {
+    if (!state.is_playing || isScrubbing) return;
+    const scrollEl = timelineScrollRef.current;
+    if (!scrollEl) return;
+    const playheadPx = state.playhead_sec * pxPerSec;
+    const visibleStart = scrollEl.scrollLeft;
+    const visibleEnd = visibleStart + scrollEl.clientWidth;
+    if (playheadPx > visibleEnd - 80) {
+      scrollEl.scrollLeft = playheadPx - 100;
+    } else if (playheadPx < visibleStart) {
+      scrollEl.scrollLeft = Math.max(0, playheadPx - 50);
+    }
+  }, [state.playhead_sec, state.is_playing, isScrubbing, pxPerSec]);
+
+  useEffect(() => {
+    return () => {
+      if (scrubRafRef.current) cancelAnimationFrame(scrubRafRef.current);
+      if (autoScrollRafRef.current) cancelAnimationFrame(autoScrollRafRef.current);
+    };
+  }, []);
+
   // Reorder scenes state update
   const handleReorderScenes = (fromIndex: number, toIndex: number) => {
     if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0) return;
     onUpdateState((prev) => {
-      const copy = [...prev.scenes];
+      const copy = resolveSceneTiming(prev.scenes);
       const [moved] = copy.splice(fromIndex, 1);
+      if (!moved) return prev;
       const target = toIndex > fromIndex ? toIndex - 1 : toIndex;
-      copy.splice(target, 0, moved);
-
-      let running = 0;
-      const resynced = copy.map((sc, idx) => {
-        const item = { ...sc, sequence: idx + 1, start_time_sec: running };
-        running += sc.duration_sec;
-        return item;
-      });
-
-      // Shift linked narration preserving scene_offset_sec
-      const resyncedNarr = prev.narration_clips.map((n) => {
-        if (n.scene_id && n.linked_to_scene !== false) {
-          const parent = resynced.find((s) => s.id === n.scene_id);
-          if (parent) {
-            return {
-              ...n,
-              start_time_sec: Math.round((parent.start_time_sec + (n.scene_offset_sec || 0)) * 100) / 100,
-            };
-          }
-        }
-        return n;
-      });
+      const resynced = insertSceneTiming(copy, moved, target, prev.ripple_edit !== false);
+      const resyncedNarr = alignLinkedNarration(resynced, prev.narration_clips, prev.scenes);
 
       return {
         ...prev,
@@ -446,51 +543,114 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
     });
   };
 
-  // Insert new scene from panel at index
-  const handleInsertSceneFromPanel = (panelData: any, atIndex: number) => {
+  // Swap positions of two scenes directly on drop
+  const handleSwapScenes = (fromIndex: number, toIndex: number) => {
+    if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0) return;
     onUpdateState((prev) => {
-      const newSceneId = `scene_${Date.now()}`;
-      const newLayerId = `layer_${Date.now()}`;
-      const newLayer: VisualLayer = {
-        id: newLayerId,
-        source_page_id: panelData.pageId,
-        source_panel_id: panelData.panelId,
-        image_url: panelData.imageUrl,
-        page_sequence: panelData.pageSequence,
-        crop: panelData.crop,
-        transform: { x: 0, y: 0, scale: 1.0, rotation: 0, opacity: 1.0, z_index: 1 },
-        motion_preset: "slow_zoom_in",
-        name: panelData.name || `Panel #${panelData.pageSequence}`,
-        start_offset_sec: 0,
-        duration_sec: 4.0,
+      const copy = resolveSceneTiming(prev.scenes);
+      if (!copy[fromIndex] || !copy[toIndex]) return prev;
+      const sceneA = copy[fromIndex];
+      const sceneB = copy[toIndex];
+
+      if (prev.ripple_edit !== false) {
+        copy[fromIndex] = sceneB;
+        copy[toIndex] = sceneA;
+        copy.forEach((sc, i) => {
+          sc.sequence = i + 1;
+        });
+        let currentSec = 0;
+        copy.forEach((sc) => {
+          sc.start_time_sec = currentSec;
+          currentSec += sc.duration_sec;
+        });
+      } else {
+        const startA = sceneA.start_time_sec;
+        const startB = sceneB.start_time_sec;
+        sceneA.start_time_sec = startB;
+        sceneB.start_time_sec = startA;
+        copy[fromIndex] = sceneB;
+        copy[toIndex] = sceneA;
+        copy.sort((a, b) => a.start_time_sec - b.start_time_sec);
+        copy.forEach((sc, i) => {
+          sc.sequence = i + 1;
+        });
+      }
+
+      const resyncedNarr = alignLinkedNarration(copy, prev.narration_clips, prev.scenes);
+      return {
+        ...prev,
+        scenes: copy,
+        narration_clips: resyncedNarr,
+        selected_object: { type: "scene", id: sceneA.id },
       };
+    });
+  };
 
-      const newScene: VideoScene = {
-        id: newSceneId,
-        sequence: atIndex + 1,
-        title: `Scene — ${newLayer.name}`,
-        duration_sec: 4.0,
-        start_time_sec: 0,
-        layers: [newLayer],
-        transition_in: atIndex === 0 ? "fade" : "none",
-      };
+  // Insert new scene from panel at index
+  const handleInsertSceneFromPanel = (input: PanelDragItem | PanelDragItem[], atIndex: number) => {
+    const panels = Array.isArray(input) ? input : [input];
+    onUpdateState((prev) => {
+      const previousScenes = resolveSceneTiming(prev.scenes);
+      const additions: VideoScene[] = [];
+      for (const panelData of panels) {
+        const projId = projectId || prev.project_id;
+        const resolvedImg = panelData.panelId && projId
+          ? `${api.getPanelImageUrl(projId, panelData.panelId)}?v=${encodeURIComponent(panelData.cropFilename || "detected")}`
+          : panelData.imageUrl;
+        const newSceneId = `scene_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+        const newLayerId = `layer_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+        const newLayer: VisualLayer = {
+          id: newLayerId,
+          source_page_id: panelData.pageId || "",
+          source_panel_id: panelData.panelId,
+          image_url: resolvedImg || "",
+          page_sequence: panelData.pageSequence || 1,
+          crop: panelData.crop || { x: 0, y: 0, width: 1, height: 1 },
+          transform: { x: 0, y: 0, scale: 1.0, rotation: 0, opacity: 1.0, z_index: 1 },
+          motion_preset: "slow_zoom_in",
+          name: panelData.name || `Panel #${panelData.pageSequence}`,
+          start_offset_sec: 0,
+          duration_sec: 4.0,
+        };
 
-      const updated = [...prev.scenes];
-      const safeIndex = Math.max(0, Math.min(updated.length, atIndex));
-      updated.splice(safeIndex, 0, newScene);
+        const newScene: VideoScene = {
+          id: newSceneId,
+          sequence: atIndex + 1,
+          title: `Scene — ${newLayer.name}`,
+          duration_sec: 4.0,
+          start_time_sec: 0,
+          layers: [newLayer],
+          transition_in: atIndex === 0 ? "fade" : "none",
+        };
 
-      let running = 0;
-      const resynced = updated.map((sc, i) => {
-        const s = { ...sc, sequence: i + 1, start_time_sec: running };
-        running += sc.duration_sec;
-        return s;
+        additions.push(newScene);
+      }
+      if (!additions.length) return prev;
+      const at = Math.max(0, Math.min(atIndex, previousScenes.length));
+      const remaining = previousScenes;
+      // Explicit insertion makes room even when trim ripple is off. Preserve gaps
+      // and earlier anchors; only push following scenes that would overlap.
+      const start = at > 0 ? remaining[at - 1].start_time_sec + remaining[at - 1].duration_sec : 0;
+      let end = start;
+      const placed = additions.map(scene => {
+        const result = { ...scene, start_time_sec: end };
+        end += scene.duration_sec;
+        return result;
+      });
+      const combined = [...remaining.slice(0, at), ...placed, ...remaining.slice(at)];
+      let cursor = 0;
+      const resynced = combined.map((scene, index) => {
+        const startTime = prev.ripple_edit !== false ? cursor : Math.max(cursor, scene.start_time_sec);
+        cursor = startTime + scene.duration_sec;
+        return { ...scene, sequence: index + 1, start_time_sec: startTime };
       });
 
       return {
         ...prev,
         scenes: resynced,
-        selected_object: { type: "scene", id: newSceneId },
-        playhead_sec: newScene.start_time_sec,
+        narration_clips: alignLinkedNarration(resynced, prev.narration_clips, prev.scenes),
+        selected_object: { type: "scene", id: placed[0].id },
+        playhead_sec: resynced.find(scene => scene.id === placed[0].id)!.start_time_sec,
       };
     });
   };
@@ -500,12 +660,16 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
     onUpdateState((prev) => {
       const targetScene = prev.scenes.find((s) => s.id === sceneId);
       if (!targetScene) return prev;
-      const newLayerId = `layer_${Date.now()}`;
+      const projId = projectId || prev.project_id;
+      const resolvedImg = panelData.panelId && projId
+        ? `${api.getPanelImageUrl(projId, panelData.panelId)}?v=${encodeURIComponent(panelData.cropFilename || "detected")}`
+        : panelData.imageUrl;
+      const newLayerId = `layer_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
       const newLayer: VisualLayer = {
         id: newLayerId,
         source_page_id: panelData.pageId,
         source_panel_id: panelData.panelId,
-        image_url: panelData.imageUrl,
+        image_url: resolvedImg,
         page_sequence: panelData.pageSequence,
         crop: panelData.crop,
         transform: {
@@ -572,6 +736,322 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
     });
   };
 
+  // Replace the visual panel of an existing scene
+  const handleReplaceSceneVisual = (panelData: any, sceneId: string) => {
+    onUpdateState((prev) => {
+      const targetScene = prev.scenes.find((s) => s.id === sceneId);
+      if (!targetScene) return prev;
+      const projId = projectId || prev.project_id;
+      const resolvedImg =
+        panelData.panelId && projId
+          ? `${api.getPanelImageUrl(projId, panelData.panelId)}?v=${encodeURIComponent(panelData.cropFilename || "detected")}`
+          : panelData.imageUrl;
+
+      const newLayerName = panelData.name || `Panel #${panelData.pageSequence || 1}`;
+
+      let updatedLayers: VisualLayer[];
+      if (targetScene.layers.length > 0) {
+        updatedLayers = targetScene.layers.map((ly, idx) => {
+          if (idx === 0) {
+            return {
+              ...ly,
+              source_page_id: panelData.pageId,
+              source_panel_id: panelData.panelId,
+              image_url: resolvedImg,
+              page_sequence: panelData.pageSequence,
+              crop: panelData.crop,
+              name: newLayerName,
+            };
+          }
+          return ly;
+        });
+      } else {
+        const newLayerId = `layer_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+        updatedLayers = [
+          {
+            id: newLayerId,
+            source_page_id: panelData.pageId,
+            source_panel_id: panelData.panelId,
+            image_url: resolvedImg,
+            page_sequence: panelData.pageSequence,
+            crop: panelData.crop,
+            transform: { x: 0, y: 0, scale: 1.0, rotation: 0, opacity: 1.0, z_index: 1 },
+            motion_preset: "slow_zoom_in",
+            name: newLayerName,
+            start_offset_sec: 0,
+            duration_sec: targetScene.duration_sec,
+          },
+        ];
+      }
+
+      return {
+        ...prev,
+        scenes: prev.scenes.map((sc) => {
+          if (sc.id !== sceneId) return sc;
+          return {
+            ...sc,
+            title: `Scene — ${newLayerName}`,
+            layers: updatedLayers,
+          };
+        }),
+        selected_object: { type: "scene", id: sceneId },
+      };
+    });
+  };
+
+  // Replace the image/visual data of a specific layer
+  const handleReplaceLayerVisual = (panelData: any, layerId: string, sceneId: string) => {
+    onUpdateState((prev) => {
+      const projId = projectId || prev.project_id;
+      const resolvedImg =
+        panelData.panelId && projId
+          ? `${api.getPanelImageUrl(projId, panelData.panelId)}?v=${encodeURIComponent(panelData.cropFilename || "detected")}`
+          : panelData.imageUrl;
+
+      return {
+        ...prev,
+        scenes: prev.scenes.map((sc) => {
+          if (sc.id !== sceneId) return sc;
+          return {
+            ...sc,
+            layers: sc.layers.map((ly) => {
+              if (ly.id !== layerId) return ly;
+              return {
+                ...ly,
+                source_page_id: panelData.pageId,
+                source_panel_id: panelData.panelId,
+                image_url: resolvedImg,
+                page_sequence: panelData.pageSequence,
+                crop: panelData.crop,
+                name: panelData.name || `Panel #${panelData.pageSequence || 1}`,
+              };
+            }),
+          };
+        }),
+        selected_object: { type: "layer", id: layerId, sceneId },
+      };
+    });
+  };
+
+  // Swap or replace two visual layers across or within scenes
+  const handleSwapOrReplaceLayers = (
+    fromLayerId: string,
+    fromSceneId: string,
+    targetLayerId: string,
+    targetSceneId: string
+  ) => {
+    if (fromLayerId === targetLayerId) return;
+    onUpdateState((prev) => {
+      const fromScene = prev.scenes.find((s) => s.id === fromSceneId);
+      const targetScene = prev.scenes.find((s) => s.id === targetSceneId);
+      if (!fromScene || !targetScene) return prev;
+
+      const fromLayer = fromScene.layers.find((l) => l.id === fromLayerId);
+      const targetLayer = targetScene.layers.find((l) => l.id === targetLayerId);
+      if (!fromLayer || !targetLayer) return prev;
+
+      if (fromSceneId === targetSceneId) {
+        return {
+          ...prev,
+          scenes: prev.scenes.map((sc) => {
+            if (sc.id !== fromSceneId) return sc;
+            const newLayers = [...sc.layers];
+            const iA = newLayers.findIndex((l) => l.id === fromLayerId);
+            const iB = newLayers.findIndex((l) => l.id === targetLayerId);
+            if (iA >= 0 && iB >= 0) {
+              const temp = newLayers[iA];
+              newLayers[iA] = newLayers[iB];
+              newLayers[iB] = temp;
+            }
+            return { ...sc, layers: newLayers };
+          }),
+          selected_object: { type: "layer", id: fromLayerId, sceneId: targetSceneId },
+        };
+      } else {
+        const adjustedFromLayer: VisualLayer = {
+          ...fromLayer,
+          start_offset_sec: 0,
+          duration_sec: targetScene.duration_sec,
+        };
+        const adjustedTargetLayer: VisualLayer = {
+          ...targetLayer,
+          start_offset_sec: 0,
+          duration_sec: fromScene.duration_sec,
+        };
+
+        return {
+          ...prev,
+          scenes: prev.scenes.map((sc) => {
+            if (sc.id === fromSceneId) {
+              return {
+                ...sc,
+                layers: sc.layers.map((l) => (l.id === fromLayerId ? adjustedTargetLayer : l)),
+              };
+            }
+            if (sc.id === targetSceneId) {
+              return {
+                ...sc,
+                layers: sc.layers.map((l) => (l.id === targetLayerId ? adjustedFromLayer : l)),
+              };
+            }
+            return sc;
+          }),
+          selected_object: { type: "layer", id: fromLayerId, sceneId: targetSceneId },
+        };
+      }
+    });
+  };
+
+  // Swap positions & timing of two narration clips
+  const handleSwapNarrationClips = (fromId: string, toId: string) => {
+    if (fromId === toId) return;
+    onUpdateState((prev) => {
+      const fromNarr = prev.narration_clips.find((n) => n.id === fromId);
+      const toNarr = prev.narration_clips.find((n) => n.id === toId);
+      if (!fromNarr || !toNarr) return prev;
+
+      const fromTime = fromNarr.start_time_sec;
+      const fromSceneId = fromNarr.scene_id;
+      const fromOffset = fromNarr.scene_offset_sec;
+      const fromLinked = fromNarr.linked_to_scene;
+
+      const toTime = toNarr.start_time_sec;
+      const toSceneId = toNarr.scene_id;
+      const toOffset = toNarr.scene_offset_sec;
+      const toLinked = toNarr.linked_to_scene;
+
+      const updated = prev.narration_clips.map((n) => {
+        if (n.id === fromId) {
+          return {
+            ...n,
+            start_time_sec: toTime,
+            scene_id: toSceneId,
+            scene_offset_sec: toOffset,
+            linked_to_scene: toLinked,
+          };
+        }
+        if (n.id === toId) {
+          return {
+            ...n,
+            start_time_sec: fromTime,
+            scene_id: fromSceneId,
+            scene_offset_sec: fromOffset,
+            linked_to_scene: fromLinked,
+          };
+        }
+        return n;
+      });
+
+      return {
+        ...prev,
+        narration_clips: updated.sort((a, b) => a.start_time_sec - b.start_time_sec),
+        selected_object: { type: "narration", id: fromId },
+      };
+    });
+  };
+
+  // Attach/link narration to a scene when dropped onto a scene clip
+  const handleAttachNarrationToScene = (narrationId: string, targetSceneId: string) => {
+    onUpdateState((prev) => {
+      const targetScene = resolveSceneTiming(prev.scenes).find((s) => s.id === targetSceneId);
+      if (!targetScene) return prev;
+
+      const updated = prev.narration_clips.map((n) => {
+        if (n.id !== narrationId) return n;
+        return {
+          ...n,
+          scene_id: targetSceneId,
+          start_time_sec: targetScene.start_time_sec,
+          scene_offset_sec: 0,
+          linked_to_scene: true,
+        };
+      });
+
+      return {
+        ...prev,
+        narration_clips: updated.sort((a, b) => a.start_time_sec - b.start_time_sec),
+        selected_object: { type: "narration", id: narrationId },
+      };
+    });
+  };
+
+  // Transfer, replace, or swap motion effects between scenes
+  const handleTransferOrSwapMotion = (motionData: any, targetSceneId: string) => {
+    const fromSceneId = motionData.fromSceneId;
+    if (fromSceneId === targetSceneId) return;
+
+    onUpdateState((prev) => {
+      const fromScene = prev.scenes.find((s) => s.id === fromSceneId);
+      const targetScene = prev.scenes.find((s) => s.id === targetSceneId);
+      if (!targetScene) return prev;
+
+      if (motionData.type === "camera") {
+        const sourceCamera = motionData.camera || fromScene?.camera;
+        const targetCamera = targetScene.camera;
+
+        return {
+          ...prev,
+          scenes: prev.scenes.map((sc) => {
+            if (sc.id === targetSceneId) {
+              return { ...sc, camera: sourceCamera ? { ...sourceCamera } : undefined };
+            }
+            if (fromScene && sc.id === fromSceneId) {
+              return { ...sc, camera: targetCamera ? { ...targetCamera } : { preset: "static" as const } };
+            }
+            return sc;
+          }),
+          selected_object: { type: "scene", id: targetSceneId },
+        };
+      }
+
+      // type === "layer_motion"
+      const targetMotionLayer =
+        targetScene.layers.find(
+          (l) => (l.motion_preset && l.motion_preset !== "none") || l.animation_config?.preset === "custom"
+        ) || targetScene.layers[0];
+
+      const fromLayer = fromScene?.layers.find((l) => l.id === motionData.layerId);
+      const targetPrevPreset = targetMotionLayer?.motion_preset;
+      const targetPrevAnim = targetMotionLayer?.animation_config;
+
+      return {
+        ...prev,
+        scenes: prev.scenes.map((sc) => {
+          if (sc.id === targetSceneId) {
+            if (sc.layers.length === 0) return sc;
+            const targetLId = targetMotionLayer?.id || sc.layers[0].id;
+            return {
+              ...sc,
+              layers: sc.layers.map((ly) => {
+                if (ly.id !== targetLId) return ly;
+                return {
+                  ...ly,
+                  motion_preset: motionData.motionPreset,
+                  animation_config: motionData.animationConfig ? { ...motionData.animationConfig } : undefined,
+                };
+              }),
+            };
+          }
+          if (fromScene && sc.id === fromSceneId && fromLayer) {
+            return {
+              ...sc,
+              layers: sc.layers.map((ly) => {
+                if (ly.id !== fromLayer.id) return ly;
+                return {
+                  ...ly,
+                  motion_preset: targetPrevPreset || "none",
+                  animation_config: targetPrevAnim ? { ...targetPrevAnim } : undefined,
+                };
+              }),
+            };
+          }
+          return sc;
+        }),
+        selected_object: { type: "scene", id: targetSceneId },
+      };
+    });
+  };
+
   // Toggle narration link
   const handleToggleNarrationLink = (narrationId: string) => {
     onUpdateState((prev) => ({
@@ -603,7 +1083,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
 
   // Generate tick markers every 5 seconds
   const tickIntervalSec = 5;
-  const ticksCount = Math.ceil(totalDurationSec / tickIntervalSec) + 1;
+  const ticksCount = Math.ceil(Math.max(30, totalDurationSec) / tickIntervalSec) + 1;
 
   const formatRulerTime = (secs: number) => {
     const m = Math.floor(secs / 60);
@@ -620,32 +1100,51 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
 
   const isAdvancedMode = state.mode === "advanced";
 
-  // Toggle track visibility or lock
   const toggleTrack = (trackName: string, prop: "visible" | "locked") => {
-    onUpdateState((prev) => {
-      const current = prev.track_states?.[trackName] || { visible: true, locked: false };
-      return {
-        ...prev,
-        track_states: {
-          ...prev.track_states,
-          [trackName]: {
-            ...current,
-            [prop]: !current[prop],
-          },
-        },
-      };
-    });
+    onUpdateState((prev) => toggleTimelineTrackState(prev, trackName, prop));
   };
 
-  // Default mock SFX cues if none provided
-  const sfxList: SfxCue[] = state.sfx_cues?.length
-    ? state.sfx_cues
-    : [
-        { id: "sfx_1", name: "Wind", category: "ambience", start_time_sec: 1.0, duration_sec: 4.0, volume: 0.7 },
-        { id: "sfx_2", name: "Footsteps", category: "movement", start_time_sec: 7.5, duration_sec: 3.5, volume: 0.8 },
-        { id: "sfx_3", name: "Magic", category: "magic", start_time_sec: 14.0, duration_sec: 3.0, volume: 0.9 },
-        { id: "sfx_4", name: "Whoosh", category: "transition", start_time_sec: 22.0, duration_sec: 2.5, volume: 0.8 },
-      ];
+  const visualDropEffect = (transfer: DataTransfer) =>
+    transfer.types.some(
+      (type) =>
+        type === "application/panelflow-scene-reorder" ||
+        type === "application/panelflow-layer-move" ||
+        type === "application/panelflow-narration-reorder" ||
+        type === "application/panelflow-motion-move"
+    )
+      ? "move"
+      : "copy";
+
+  const laneProps = (key: string) => {
+    const track = getTimelineTrackState(state.track_states, key);
+    const guardEditing = (e: React.SyntheticEvent) => {
+      const mouseDown = e.type === "mousedown";
+      if (track.locked || !track.visible || (mouseDown && (e as React.MouseEvent).button !== 0) || (e.type === "dragstart" && trimming)) {
+        e.preventDefault();
+        e.stopPropagation();
+      } else if (mouseDown && (e.target as HTMLElement).closest?.("[data-timeline-trim]")) {
+        // A trim is a mouse gesture, never the ancestor clip's native HTML drag.
+        e.preventDefault();
+      }
+    };
+    return {
+      "data-visible": track.visible,
+      "data-locked": track.locked,
+      onPointerDown: (e: React.PointerEvent) => {
+        // Clips keep their own editing gesture; empty lane space still scrubs.
+        if (e.target !== e.currentTarget || track.locked || !track.visible) e.stopPropagation();
+      },
+      onMouseDownCapture: guardEditing,
+      onDragStartCapture: guardEditing,
+      onDropCapture: guardEditing,
+      onClickCapture: guardEditing,
+      onDoubleClickCapture: guardEditing,
+    };
+  };
+
+  // Keep existing SFX available without inventing audio assets.
+  const sfxList: SfxCue[] = state.sfx_cues || [];
+  const showSfx = isAdvancedMode || sfxList.length > 0;
 
   const presetLabels: Record<string, string> = {
     slow_zoom_in: "Zoom In",
@@ -679,9 +1178,47 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
   };
 
   return (
-    <div className={`bg-zinc-950 border-t border-zinc-800 flex flex-col select-none shrink-0 overflow-hidden font-sans transition-all duration-200 ${
-      isAdvancedMode ? "h-[320px]" : "h-[268px]"
-    }`}>
+    <div className="pf-editor-timeline bg-zinc-950 flex flex-col select-none shrink-0 overflow-hidden font-sans"
+      style={{ height: showSfx ? 282 : 246 }}>
+      {pendingPanelDrop && <dialog ref={duplicateDialogRef} aria-label="Add duplicate panels?" aria-describedby="duplicate-panel-message"
+        className="fixed inset-0 m-auto w-[min(420px,90vw)] rounded-xl border border-zinc-700 bg-zinc-950 p-5 text-zinc-100 shadow-2xl backdrop:bg-black/70"
+        onCancel={event => { event.preventDefault(); setPendingPanelDrop(null); }}>
+        <h2 className="text-base font-semibold mb-3">{pendingPanelDrop.items.length === 1 ? "Add duplicate panel?" : "Add duplicate panels?"}</h2>
+        <p id="duplicate-panel-message" className="text-sm text-zinc-300 mb-5">
+          {pendingPanelDrop.items.length === 1
+            ? "Are you sure you want to add this duplicate panel to the timeline?"
+            : "Some selected panels are already on the timeline. Are you sure you want to add the selected panels, including duplicates?"}
+        </p>
+        <div className="flex justify-end gap-2">
+          <button type="button" autoFocus data-cancel-duplicate-panels className="rounded-md border border-zinc-600 px-3 py-2 text-sm hover:bg-zinc-800"
+            onClick={() => setPendingPanelDrop(null)}>Cancel</button>
+          <button type="button" data-confirm-duplicate-panels className="rounded-md bg-indigo-600 px-3 py-2 text-sm text-white hover:bg-indigo-500"
+            onClick={() => {
+              const pending = pendingPanelDrop;
+              setPendingPanelDrop(null);
+              handleInsertSceneFromPanel(pending.items, pending.index);
+            }}>{pendingPanelDrop.items.length === 1 ? "Add duplicate panel" : "Add panels"}</button>
+        </div>
+      </dialog>}
+      <style>{`
+        .pf-editor-timeline { border: 1px solid #293044; border-radius: 14px; background: #0c1019; }
+        .pf-editor-timeline .pf-timeline-track-header { height: 34px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 12px; border-bottom: 1px solid #222838; font-size: 11px; background: linear-gradient(90deg,#121823,#0d121c); }
+        .pf-editor-timeline .pf-timeline-track-header button { padding: 3px; border-radius: 4px; }
+        .pf-editor-timeline button:hover { filter: brightness(1.25); }
+        .pf-editor-timeline button:focus-visible, .pf-editor-timeline input:focus-visible { outline: 2px solid #aa85ff; outline-offset: 2px; }
+        .pf-editor-timeline .pf-timeline-track-header button[aria-pressed=true] { color: #a9b4ff; }
+        .pf-editor-timeline [data-timeline-lane] { height: 34px; border-bottom: 1px solid #222838; }
+        .pf-editor-timeline [data-timeline-lane][data-visible=false] > * { visibility: hidden; pointer-events: none; }
+        .pf-editor-timeline [data-timeline-lane][data-locked=true] { cursor: not-allowed; }
+        .pf-editor-timeline .pf-timeline-waveform { display: flex; align-items: center; gap: 2px; height: 20px; width: 90px; overflow: hidden; opacity: .7; pointer-events: none; }
+        .pf-editor-timeline .pf-timeline-waveform > span { flex: 1; min-width: 1px; background: currentColor; border-radius: 1px; }
+        .pf-editor-timeline .pf-timeline-audio-bar { display: block; width: 36px; height: 2px; border-radius: 2px; background: currentColor; opacity: .35; pointer-events: none; }
+        .pf-editor-timeline [data-timeline-lane="Narration"] { color: #20ddbd; }
+        .pf-editor-timeline [data-timeline-lane="Visuals"] { color: #5894ff; }
+        .pf-editor-timeline [data-timeline-lane="Layer 2"] { color: #bc74ff; }
+        .pf-editor-timeline [data-timeline-lane="Motion / FX"] { color: #ed75ef; }
+        .pf-editor-timeline [data-timeline-lane="Music"] { color: #ffb73c; }
+      `}</style>
       {/* 1. Timeline Toolbar */}
       <div className="h-10 px-4 bg-zinc-900/95 border-b border-zinc-800 flex items-center justify-between shrink-0">
         {/* Left Editing Tools */}
@@ -691,6 +1228,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
             onClick={onUndo}
             disabled={!canUndo}
             className="p-1.5 rounded hover:text-white disabled:opacity-30 transition-colors"
+            aria-label="Undo (Ctrl+Z)"
             title="Undo (Ctrl+Z)"
           >
             <Icons.Undo className="w-3.5 h-3.5" />
@@ -700,6 +1238,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
             onClick={onRedo}
             disabled={!canRedo}
             className="p-1.5 rounded hover:text-white disabled:opacity-30 transition-colors"
+            aria-label="Redo (Ctrl+Y)"
             title="Redo (Ctrl+Y)"
           >
             <Icons.Redo className="w-3.5 h-3.5" />
@@ -707,12 +1246,27 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
 
           <div className="h-4 w-px bg-zinc-800 mx-1" />
 
-          {selectedSceneId && (
+          {(selectedSceneId || state.selected_object?.type === "layer") && (
             <button
               type="button"
-              onClick={() => onDeleteScene(selectedSceneId)}
+              onClick={() => {
+                if (state.selected_object?.type === "layer") {
+                  const { id: layerId, sceneId } = state.selected_object;
+                  const sc = state.scenes.find((s) => s.id === sceneId);
+                  if (sc && sc.layers.length <= 1) {
+                    onDeleteScene(sceneId);
+                  } else if (onDeleteLayer && sceneId) {
+                    onDeleteLayer(layerId, sceneId);
+                  } else if (selectedSceneId) {
+                    onDeleteScene(selectedSceneId);
+                  }
+                } else if (selectedSceneId) {
+                  onDeleteScene(selectedSceneId);
+                }
+              }}
               className="p-1.5 rounded hover:text-rose-400 transition-colors"
-              title="Delete Selected Clip (Del)"
+              aria-label="Delete Selected Clip (Del)"
+              title="Delete Selected Clip / Panel (Del)"
             >
               <Icons.Trash className="w-3.5 h-3.5" />
             </button>
@@ -723,6 +1277,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
               type="button"
               onClick={() => onSplitScene(selectedSceneId, state.playhead_sec)}
               className="p-1.5 rounded hover:text-indigo-400 transition-colors"
+              aria-label="Split Scene at Playhead (Scissors)"
               title="Split Scene at Playhead (Scissors)"
             >
               <Icons.Scissors className="w-3.5 h-3.5" />
@@ -734,6 +1289,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
               type="button"
               onClick={() => onDuplicateScene(selectedSceneId)}
               className="p-1.5 rounded hover:text-white transition-colors"
+              aria-label="Duplicate Selected Scene"
               title="Duplicate Selected Scene"
             >
               <Icons.Copy className="w-3.5 h-3.5" />
@@ -749,6 +1305,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
             className={`p-1.5 rounded transition-colors ${
               snappingEnabled ? "text-indigo-400 bg-zinc-800" : "hover:text-white"
             }`}
+            aria-label="Toggle Magnetic Snapping"
             title="Toggle Magnetic Snapping"
           >
             <Icons.Maximize className="w-3.5 h-3.5" />
@@ -768,7 +1325,8 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                 ? "bg-indigo-900/60 text-indigo-300 border border-indigo-700/60"
                 : "bg-zinc-800 text-zinc-400 hover:text-white"
             }`}
-            title="Ripple Edit: subsequent scenes automatically slide when trimming or moving clips"
+            aria-label="Ripple Edit: subsequent scenes automatically slide when trimming or moving clips"
+            title={state.ripple_edit === false ? "Ripple OFF: existing scene starts stay fixed. Growth stops at the next scene; inserts and moves use a free gap or append at the end." : "Ripple Edit: subsequent scenes automatically slide when trimming or moving clips"}
           >
             <Icons.Layers className="w-3 h-3" />
             <span>Ripple: {state.ripple_edit !== false ? "ON" : "OFF"}</span>
@@ -778,6 +1336,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
             type="button"
             onClick={onAddBlankScene}
             className="px-2 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-xs text-zinc-200 font-medium flex items-center gap-1"
+            aria-label="Insert new blank scene"
             title="Insert new blank scene"
           >
             <Icons.Plus className="w-3.5 h-3.5" />
@@ -792,6 +1351,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
             type="button"
             onClick={() => onUpdateState((s) => ({ ...s, playhead_sec: 0 }))}
             className="p-1 rounded text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+            aria-label="Return to Start (00:00)"
             title="Return to Start (00:00)"
           >
             <Icons.Rotate className="w-3.5 h-3.5" />
@@ -802,6 +1362,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
             type="button"
             onClick={() => onUpdateState((s) => ({ ...s, playhead_sec: Math.max(0, s.playhead_sec - 0.1) }))}
             className="p-1 rounded text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+            aria-label="Step Back 0.1s"
             title="Step Back 0.1s"
           >
             <Icons.ChevronDown className="w-3.5 h-3.5 rotate-90" />
@@ -814,8 +1375,9 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
             className={`px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1.5 shadow-md transition-all active:scale-95 ${
               state.is_playing
                 ? "bg-amber-600 hover:bg-amber-500 text-white ring-2 ring-amber-400/40"
-                : "bg-indigo-600 hover:bg-indigo-500 text-white ring-2 ring-indigo-400/40"
+                : "bg-violet-600 hover:bg-violet-500 text-white ring-2 ring-violet-400/40"
             }`}
+            aria-label={state.is_playing ? "Pause video" : "Play video"}
             title={state.is_playing ? "Pause Video (Space)" : "Play Video (Space)"}
           >
             {state.is_playing ? (
@@ -836,6 +1398,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
             type="button"
             onClick={() => onUpdateState((s) => ({ ...s, playhead_sec: Math.min(totalDurationSec, s.playhead_sec + 0.1) }))}
             className="p-1 rounded text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+            aria-label="Step Forward 0.1s"
             title="Step Forward 0.1s"
           >
             <Icons.ChevronDown className="w-3.5 h-3.5 -rotate-90" />
@@ -860,11 +1423,13 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
             type="button"
             onClick={() => onUpdateState((s) => ({ ...s, zoom_level: Math.max(50, s.zoom_level - 15) }))}
             className="p-1 text-zinc-400 hover:text-white"
+            aria-label="Zoom Timeline Out"
             title="Zoom Timeline Out"
           >
             <Icons.ZoomOut className="w-3.5 h-3.5" />
           </button>
           <input
+            aria-label="Timeline zoom"
             type="range"
             min="50"
             max="250"
@@ -879,6 +1444,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
             type="button"
             onClick={() => onUpdateState((s) => ({ ...s, zoom_level: Math.min(250, s.zoom_level + 15) }))}
             className="p-1 text-zinc-400 hover:text-white"
+            aria-label="Zoom Timeline In"
             title="Zoom Timeline In"
           >
             <Icons.ZoomIn className="w-3.5 h-3.5" />
@@ -889,141 +1455,127 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
       {/* 2. Multi-track Container (Track Headers Left + Track Canvas Right) */}
       <div className="flex-1 flex overflow-hidden">
         {/* Left Track Headers Column */}
-        <div className="w-44 bg-zinc-950 border-r border-zinc-800 flex flex-col shrink-0 text-xs select-none">
+        <div className="w-60 bg-zinc-950 border-r border-zinc-800 flex flex-col shrink-0 text-xs select-none">
           {/* Header spacer for ruler */}
           <div className="h-6 border-b border-zinc-800/80 px-3 flex items-center text-[10px] font-mono text-zinc-500">
             TRACKS
           </div>
 
-          {/* Track 1: Narration */}
-          <div className="h-8 border-b border-zinc-800/40 px-3 flex items-center justify-between bg-zinc-900/30">
-            <span className="flex items-center gap-1.5 font-medium text-emerald-400 text-[11px]">
-              <Icons.MessageSquare className="w-3.5 h-3.5" /> Narration
-            </span>
-            <div className="flex items-center gap-1 text-zinc-500">
-              {onOpenNarrationStudio && (
-                <button
-                  type="button"
-                  onClick={() => onOpenNarrationStudio()}
-                  className="px-1.5 py-0.5 rounded bg-emerald-950 border border-emerald-800 text-[9px] font-semibold text-emerald-300 hover:bg-emerald-900 hover:text-white transition-colors"
-                  title="Open Narration Studio"
-                >
-                  Studio
-                </button>
-              )}
-              <button onClick={() => toggleTrack("narration", "visible")} className="hover:text-white p-0.5">
-                <Icons.Eye className="w-3 h-3" />
-              </button>
-              <button onClick={() => toggleTrack("narration", "locked")} className="hover:text-white p-0.5">
-                <Icons.Lock className="w-3 h-3" />
-              </button>
-            </div>
-          </div>
-
-          {/* Track 2: Visuals */}
-          <div className="h-10 border-b border-zinc-800/40 px-3 flex items-center justify-between bg-zinc-900/40">
-            <span className="flex items-center gap-1.5 font-medium text-indigo-400 text-[11px]">
-              <Icons.Film className="w-3.5 h-3.5" /> Visuals
-            </span>
-            <div className="flex items-center gap-1 text-zinc-500">
-              <button onClick={() => toggleTrack("visuals", "visible")} className="hover:text-white p-0.5">
-                <Icons.Eye className="w-3 h-3" />
-              </button>
-              <button onClick={() => toggleTrack("visuals", "locked")} className="hover:text-white p-0.5">
-                <Icons.Lock className="w-3 h-3" />
-              </button>
-            </div>
-          </div>
-
-          {/* Track 3: Layers */}
-          <div className="h-8 border-b border-zinc-800/40 px-3 flex items-center justify-between bg-zinc-900/30">
-            <span className="flex items-center gap-1.5 font-medium text-purple-400 text-[11px]">
-              <Icons.Layers className="w-3.5 h-3.5" /> Layers
-            </span>
-            <div className="flex items-center gap-1 text-zinc-500">
-              <button onClick={() => toggleTrack("layer2", "visible")} className="hover:text-white p-0.5">
-                <Icons.Eye className="w-3 h-3" />
-              </button>
-              <button onClick={() => toggleTrack("layer2", "locked")} className="hover:text-white p-0.5">
-                <Icons.Lock className="w-3 h-3" />
-              </button>
-            </div>
-          </div>
-
-          {/* Track 4: Motion / FX */}
-          <div className="h-8 border-b border-zinc-800/40 px-3 flex items-center justify-between bg-zinc-900/30">
-            <span className="flex items-center gap-1.5 font-medium text-fuchsia-400 text-[11px]">
-              <Icons.Sparkles className="w-3.5 h-3.5" /> Motion / FX
-            </span>
-            <div className="flex items-center gap-1 text-zinc-500">
-              <button onClick={() => toggleTrack("motion", "visible")} className="hover:text-white p-0.5">
-                <Icons.Eye className="w-3 h-3" />
-              </button>
-              <button onClick={() => toggleTrack("motion", "locked")} className="hover:text-white p-0.5">
-                <Icons.Lock className="w-3 h-3" />
-              </button>
-            </div>
-          </div>
-
-          {/* Track 5: Music */}
-          <div className="h-8 border-b border-zinc-800/40 px-3 flex items-center justify-between bg-zinc-900/30">
-            <span className="flex items-center gap-1.5 font-medium text-amber-400 text-[11px]">
-              <Icons.Music className="w-3.5 h-3.5" /> Music
-            </span>
-            <div className="flex items-center gap-1 text-zinc-500">
-              {onOpenAudioLibrary && (
-                <button
-                  type="button"
-                  onClick={() => onOpenAudioLibrary("music")}
-                  className="px-1.5 py-0.5 rounded bg-amber-950 border border-amber-800 text-[9px] font-semibold text-amber-300 hover:bg-amber-900 hover:text-white transition-colors"
-                  title="Open Audio Library (Music)"
-                >
-                  + Add
-                </button>
-              )}
-              <button onClick={() => toggleTrack("music", "visible")} className="hover:text-white p-0.5" title="Toggle Music Track Mute">
-                <Icons.Eye className="w-3 h-3" />
-              </button>
-              <button onClick={() => toggleTrack("music", "locked")} className="hover:text-white p-0.5" title="Toggle Music Track Lock">
-                <Icons.Lock className="w-3 h-3" />
-              </button>
-            </div>
-          </div>
-
-          {/* Track 6: SFX */}
-          <div className="h-8 border-b border-zinc-800/40 px-3 flex items-center justify-between bg-zinc-900/30">
-            <span className="flex items-center gap-1.5 font-medium text-cyan-400 text-[11px]">
-              <Icons.Volume className="w-3.5 h-3.5" /> SFX
-            </span>
-            <div className="flex items-center gap-1 text-zinc-500">
-              {onOpenAudioLibrary && (
-                <button
-                  type="button"
-                  onClick={() => onOpenAudioLibrary("sfx")}
-                  className="px-1.5 py-0.5 rounded bg-cyan-950 border border-cyan-800 text-[9px] font-semibold text-cyan-300 hover:bg-cyan-900 hover:text-white transition-colors"
-                  title="Open Audio Library (SFX)"
-                >
-                  + Add
-                </button>
-              )}
-              <button onClick={() => toggleTrack("sfx", "visible")} className="hover:text-white p-0.5" title="Toggle SFX Track Mute">
-                <Icons.Eye className="w-3 h-3" />
-              </button>
-              <button onClick={() => toggleTrack("sfx", "locked")} className="hover:text-white p-0.5" title="Toggle SFX Track Lock">
-                <Icons.Lock className="w-3 h-3" />
-              </button>
-            </div>
-          </div>
+          {[
+            { key: "Narration", label: "Narration", Icon: Icons.MessageSquare, color: "#20ddbd", open: onOpenNarrationStudio ? () => onOpenNarrationStudio() : undefined },
+            { key: "Visuals", label: "Visuals", Icon: Icons.Film, color: "#5894ff" },
+            { key: "Layer 2", label: "Layers", Icon: Icons.Layers, color: "#bc74ff" },
+            { key: "Motion / FX", label: "Motion / FX", Icon: Icons.Sparkles, color: "#ed75ef" },
+            { key: "Music", label: "Music", Icon: Icons.Music, color: "#ffb73c", open: onOpenAudioLibrary ? () => onOpenAudioLibrary("music") : undefined },
+            ...(showSfx ? [{ key: "SFX", label: "SFX", Icon: Icons.Volume, color: "#50d7ee", open: onOpenAudioLibrary ? () => onOpenAudioLibrary("sfx") : undefined }] : []),
+          ].map(({ key, label, Icon, color, open }) => {
+            const track = getTimelineTrackState(state.track_states, key);
+            return (
+              <div key={key} className="pf-timeline-track-header" style={{ color }}>
+                <span className="flex items-center gap-2 font-semibold min-w-0"><Icon className="w-4 h-4 shrink-0" />{label}</span>
+                <div className="flex items-center gap-1 text-zinc-400">
+                  {open && <button type="button" onClick={open} aria-label={key === "Narration" ? "Open Narration Studio" : `Add ${label} from Audio Library`} title={key === "Narration" ? "Open Narration Studio" : `Add ${label}`}><Icons.Plus className="w-3 h-3" /></button>}
+                  <button type="button" onClick={() => toggleTrack(key, "visible")} aria-label={`Toggle ${label} visibility`} aria-pressed={track.visible} title={`${track.visible ? "Hide" : "Show"} ${label}`}><Icons.Eye className="w-3.5 h-3.5" /></button>
+                  <button type="button" onClick={() => toggleTrack(key, "locked")} aria-label={`Toggle ${label} lock`} aria-pressed={track.locked} title={`${track.locked ? "Unlock" : "Lock"} ${label}`}><Icons.Lock className="w-3.5 h-3.5" /></button>
+                </div>
+              </div>
+            );
+          })}
         </div>
 
         {/* Right Shared Time Ruler & Synchronized Track Lanes */}
-        <div className="flex-1 overflow-x-auto overflow-y-hidden bg-zinc-950 relative select-none">
+        <div
+          onDragOverCapture={(e) => {
+            if (!e.dataTransfer.types.includes("application/panelflow-panel")) return;
+            const lane = (e.target as HTMLElement).closest<HTMLElement>("[data-timeline-lane]");
+            const track = getTimelineTrackState(state.track_states, lane?.dataset.timelineLane || "Visuals");
+            const visuals = getTimelineTrackState(state.track_states, "Visuals");
+            e.stopPropagation();
+            if (track.locked || !track.visible || visuals.locked || !visuals.visible) { setPanelInsertIndex(null); return; }
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "copy";
+            const time = (e.clientX - (rulerRef.current?.getBoundingClientRect().left ?? 0)) / pxPerSec;
+            setPanelInsertIndex(panelInsertionIndex(timedScenes, time));
+          }}
+          onDropCapture={(e) => {
+            const items = readPanelDrag(e.dataTransfer.getData("application/panelflow-panel") || e.dataTransfer.getData("text/plain"));
+            if (!items.length) return;
+            const lane = (e.target as HTMLElement).closest<HTMLElement>("[data-timeline-lane]");
+            const track = getTimelineTrackState(state.track_states, lane?.dataset.timelineLane || "Visuals");
+            const visuals = getTimelineTrackState(state.track_states, "Visuals");
+            setPanelInsertIndex(null);
+            // Alt-drop retains explicit layer replacement; ordinary source drops insert.
+            if (e.altKey && lane?.dataset.timelineLane === "Layer 2" && items.length === 1 && lane !== e.target && !track.locked && track.visible) return;
+            e.preventDefault();
+            e.stopPropagation();
+            if (track.locked || !track.visible || visuals.locked || !visuals.visible) return;
+            const time = (e.clientX - (rulerRef.current?.getBoundingClientRect().left ?? 0)) / pxPerSec;
+            const index = panelInsertionIndex(timedScenes, time);
+            if (items.some(item => item.panelId && state.scenes.some(scene => scene.layers.some(layer => layer.source_panel_id === item.panelId)))) {
+              setPendingPanelDrop({ items, index });
+            } else {
+              handleInsertSceneFromPanel(items, index);
+            }
+          }}
+          onDragLeave={(e) => {
+            if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setPanelInsertIndex(null);
+          }}
+          onDragEnd={() => setPanelInsertIndex(null)}
+          onDragOver={(e) => {
+            const hasPanel = e.dataTransfer.types.some((t) => t === "application/panelflow-panel" || t === "text/plain");
+            const hasMove = e.dataTransfer.types.some(
+              (t) =>
+                t === "application/panelflow-scene-reorder" ||
+                t === "application/panelflow-layer-move" ||
+                t === "application/panelflow-motion-move" ||
+                t === "application/panelflow-narration-reorder"
+            );
+            if (hasPanel || hasMove) {
+              e.preventDefault();
+              e.dataTransfer.dropEffect = hasMove ? "move" : "copy";
+            }
+          }}
+          onDrop={(e) => {
+            e.stopPropagation();
+            const rawPanel = e.dataTransfer.getData("application/panelflow-panel") || e.dataTransfer.getData("text/plain");
+            if (rawPanel) {
+              try {
+                const parsed = JSON.parse(rawPanel);
+                if (parsed.panelId || parsed.pageId) {
+                  e.preventDefault();
+                  handleInsertSceneFromPanel(parsed, state.scenes.length);
+                }
+              } catch (err) {}
+            }
+          }}
+          ref={timelineScrollRef}
+          onWheel={(e) => {
+            if (e.ctrlKey || e.metaKey) {
+              e.preventDefault();
+              const zoomDelta = e.deltaY < 0 ? 10 : -10;
+              onUpdateState((s) => ({
+                ...s,
+                zoom_level: Math.max(50, Math.min(250, (s.zoom_level || 100) + zoomDelta)),
+              }));
+            } else if (Math.abs(e.deltaY) > Math.abs(e.deltaX) && !e.shiftKey) {
+              if (timelineScrollRef.current) {
+                timelineScrollRef.current.scrollLeft += e.deltaY;
+              }
+            }
+          }}
+          className="flex-1 overflow-x-auto overflow-y-hidden bg-zinc-950 relative select-none"
+        >
           <div
             ref={rulerRef}
             onPointerDown={handleStartScrub}
             className="relative h-full cursor-pointer"
             style={{ width: `${totalTimelineWidthPx}px` }}
           >
+            {panelInsertIndex !== null && <div aria-label="Panel insertion position"
+              className="absolute top-0 bottom-0 z-50 w-0.5 bg-cyan-400 pointer-events-none"
+              style={{ left: `${(panelInsertIndex > 0 ? timedScenes[panelInsertIndex - 1].start_time_sec + timedScenes[panelInsertIndex - 1].duration_sec : 0) * pxPerSec}px` }}>
+              <span className="absolute top-0 left-1 whitespace-nowrap rounded bg-cyan-950 px-2 text-[10px] text-cyan-200">Insert panels</span>
+            </div>}
             {/* Top Time Ruler */}
             <div className="h-6 border-b border-zinc-800/80 relative text-[10px] font-mono text-zinc-500 pointer-events-none select-none">
               {Array.from({ length: ticksCount }).map((_, idx) => {
@@ -1043,7 +1595,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
 
             {/* Draggable Smooth Playhead Vertical Line */}
             <div
-              className={`absolute top-0 bottom-0 z-30 pointer-events-auto transition-opacity ${
+              className={`absolute top-0 bottom-0 z-10 pointer-events-auto transition-opacity ${
                 isScrubbing ? "opacity-100" : "opacity-95"
               }`}
               style={{ left: `${state.playhead_sec * pxPerSec}px` }}
@@ -1053,7 +1605,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                 className={`w-0.5 h-full ${
                   isScrubbing
                     ? "bg-cyan-400 shadow-[0_0_12px_rgba(34,211,238,1)]"
-                    : "bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.5)]"
+                    : "bg-violet-500 shadow-[0_0_8px_rgba(139,92,246,0.5)]"
                 }`}
               />
 
@@ -1073,7 +1625,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                   className={`w-5 h-6 drop-shadow-md transition-transform ${
                     isScrubbing
                       ? "scale-115 text-cyan-400 fill-cyan-400 stroke-cyan-200"
-                      : "text-indigo-500 fill-indigo-500 stroke-indigo-300 group-hover:scale-110 group-hover:text-indigo-400"
+                      : "text-violet-500 fill-violet-500 stroke-violet-300 group-hover:scale-110 group-hover:text-violet-400"
                   }`}
                   viewBox="0 0 20 24"
                   fill="currentColor"
@@ -1092,7 +1644,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
             </div>
 
             {/* TRACK 1: Narration Track */}
-            <div className="h-8 border-b border-zinc-800/30 relative flex items-center bg-zinc-950/40">
+            <div data-timeline-lane="Narration" {...laneProps("Narration")} className="h-8 border-b border-zinc-800/30 relative flex items-center bg-zinc-950/40">
               {state.narration_clips.map((narration) => {
                 const clipLeft = narration.start_time_sec * pxPerSec;
                 const clipWidth = Math.max(120, narration.duration_sec * pxPerSec);
@@ -1103,6 +1655,37 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                 return (
                   <div
                     key={narration.id}
+                    draggable={!getTimelineTrackState(state.track_states, "Narration").locked}
+                    onDragStart={(e) => {
+                      setDraggingNarration(null);
+                      e.dataTransfer.setData(
+                        "application/panelflow-narration-reorder",
+                        JSON.stringify({ narrationId: narration.id, startTimeSec: narration.start_time_sec })
+                      );
+                      e.dataTransfer.effectAllowed = "move";
+                    }}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      e.dataTransfer.dropEffect = "move";
+                      setDragOverNarrationId(narration.id);
+                    }}
+                    onDragLeave={() => {
+                      if (dragOverNarrationId === narration.id) setDragOverNarrationId(null);
+                    }}
+                    onDrop={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      setDragOverNarrationId(null);
+                      const narrData = e.dataTransfer.getData("application/panelflow-narration-reorder");
+                      if (narrData) {
+                        try {
+                          const { narrationId: fromNarrId } = JSON.parse(narrData);
+                          handleSwapNarrationClips(fromNarrId, narration.id);
+                        } catch (err) {
+                          console.error(err);
+                        }
+                      }
+                    }}
                     onClick={(e) => {
                       e.stopPropagation();
                       onUpdateState((s) => ({
@@ -1124,7 +1707,9 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                       });
                     }}
                     className={`absolute h-6 rounded-md px-1.5 flex items-center justify-between text-xs font-mono border transition-all cursor-move select-none ${
-                      isSelected
+                      dragOverNarrationId === narration.id
+                        ? "bg-emerald-700/60 border-cyan-400 ring-2 ring-cyan-400 shadow-lg"
+                        : isSelected
                         ? "bg-emerald-600/30 border-emerald-400 text-emerald-200 ring-1 ring-emerald-500 shadow-md"
                         : narration.status === "OUTDATED"
                         ? "bg-amber-950/70 border-amber-600 text-amber-200 hover:bg-amber-900/70"
@@ -1200,6 +1785,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                             ? "bg-emerald-800/60 border-emerald-600 text-emerald-200"
                             : "bg-zinc-800 border-zinc-700 text-zinc-400 hover:text-white"
                         }`}
+                        aria-label={isLinked ? "Linked to scene (shifts with scene)" : "Unlinked (independent time)"}
                         title={isLinked ? "Linked to scene (shifts with scene)" : "Unlinked (independent time)"}
                       >
                         {isLinked ? (
@@ -1209,12 +1795,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                         )}
                       </button>
 
-                      {/* Mini Waveform graphic */}
-                      <div className="flex items-center gap-0.5 h-3 opacity-60 pointer-events-none">
-                        <span className="w-0.5 h-2 bg-emerald-400 rounded" />
-                        <span className="w-0.5 h-3 bg-emerald-400 rounded" />
-                        <span className="w-0.5 h-1.5 bg-emerald-400 rounded" />
-                      </div>
+                      <AudioPeaks />
                     </div>
                   </div>
                 );
@@ -1222,17 +1803,39 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
             </div>
 
             {/* TRACK 2: Visuals Track (Filmstrip Scenes + Drop Indicators + Trim Handles) */}
-            <div className="h-10 border-b border-zinc-800/30 relative flex items-center bg-zinc-950/40">
+            <div
+              data-timeline-lane="Visuals"
+              {...laneProps("Visuals")}
+              onDragOver={(e) => {
+                const hasPanel = e.dataTransfer.types.some((t) => t === "application/panelflow-panel" || t === "text/plain");
+                const hasReorder = e.dataTransfer.types.some((t) => t === "application/panelflow-scene-reorder" || t === "application/panelflow-layer-move");
+                if (hasPanel || hasReorder) {
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = hasReorder ? "move" : "copy";
+                }
+              }}
+              onDrop={(e) => {
+                e.stopPropagation();
+                const rawPanel = e.dataTransfer.getData("application/panelflow-panel") || e.dataTransfer.getData("text/plain");
+                if (rawPanel) {
+                  try {
+                    const parsed = JSON.parse(rawPanel);
+                    if (parsed.panelId || parsed.pageId) {
+                      e.preventDefault();
+                      handleInsertSceneFromPanel(parsed, state.scenes.length);
+                    }
+                  } catch (err) {}
+                }
+              }}
+              className="h-10 border-b border-zinc-800/30 relative flex items-center bg-zinc-950/40"
+            >
               {(() => {
-                let sceneOffsetSec = 0;
-                return state.scenes.map((scene, idx) => {
-                  const clipLeft = sceneOffsetSec * pxPerSec;
-                  const clipWidth = Math.max(90, scene.duration_sec * pxPerSec);
+                return timedScenes.map((scene, idx) => {
+                  const clipLeft = scene.start_time_sec * pxPerSec;
+                  const clipWidth = Math.max(1, scene.duration_sec * pxPerSec);
                   const isSelected = selectedSceneId === scene.id;
                   const isDragOverScene = dragOverSceneId === scene.id;
                   const isInsertTargetBefore = dragOverInsertIndex === idx;
-
-                  sceneOffsetSec += scene.duration_sec;
 
                   return (
                     <React.Fragment key={scene.id}>
@@ -1240,22 +1843,26 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                       <div
                         onDragOver={(e) => {
                           e.preventDefault();
-                          e.dataTransfer.dropEffect = "copy";
+                          e.dataTransfer.dropEffect = visualDropEffect(e.dataTransfer);
                           setDragOverInsertIndex(idx);
                         }}
                         onDragLeave={() => {
                           if (dragOverInsertIndex === idx) setDragOverInsertIndex(null);
                         }}
                         onDrop={(e) => {
+                          e.stopPropagation();
                           e.preventDefault();
                           setDragOverInsertIndex(null);
-                          const panelData = e.dataTransfer.getData("application/panelflow-panel");
+                          const panelData = e.dataTransfer.getData("application/panelflow-panel") || e.dataTransfer.getData("text/plain");
                           const reorderData = e.dataTransfer.getData("application/panelflow-scene-reorder");
                           const layerMoveData = e.dataTransfer.getData("application/panelflow-layer-move");
 
                           if (panelData) {
                             try {
-                              handleInsertSceneFromPanel(JSON.parse(panelData), idx);
+                              const parsed = JSON.parse(panelData);
+                              if (parsed.panelId || parsed.pageId) {
+                                handleInsertSceneFromPanel(parsed, idx);
+                              }
                             } catch (err) {
                               console.error(err);
                             }
@@ -1298,11 +1905,11 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                             }
                           }
                         }}
-                        className="absolute h-10 w-4 -ml-2 z-20 flex items-center justify-center cursor-pointer"
+                        className="absolute h-10 w-1 -ml-0.5 z-20 flex items-center justify-center cursor-pointer"
                         style={{ left: `${clipLeft}px` }}
                       >
                         {isInsertTargetBefore && (
-                          <div className="w-1.5 h-8 bg-cyan-400 rounded-full shadow-[0_0_8px_#22d3ee] animate-pulse" />
+                          <div className="pointer-events-none w-1.5 h-8 bg-cyan-400 rounded-full shadow-[0_0_8px_#22d3ee] animate-pulse" />
                         )}
                       </div>
 
@@ -1326,7 +1933,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                       {/* Scene Clip */}
                       <div
                         title={scene.title}
-                        draggable={!state.track_states?.["Visuals"]?.locked}
+                        draggable={!getTimelineTrackState(state.track_states, "Visuals").locked}
                         onDragStart={(e) => {
                           e.dataTransfer.setData(
                             "application/panelflow-scene-reorder",
@@ -1336,21 +1943,39 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                         }}
                         onDragOver={(e) => {
                           e.preventDefault();
-                          e.dataTransfer.dropEffect = "copy";
+                          e.dataTransfer.dropEffect = visualDropEffect(e.dataTransfer);
                           setDragOverSceneId(scene.id);
                         }}
                         onDragLeave={() => {
                           if (dragOverSceneId === scene.id) setDragOverSceneId(null);
                         }}
                         onDrop={(e) => {
+                          e.stopPropagation();
                           e.preventDefault();
                           setDragOverSceneId(null);
-                          const panelData = e.dataTransfer.getData("application/panelflow-panel");
+                          const panelData = e.dataTransfer.getData("application/panelflow-panel") || e.dataTransfer.getData("text/plain");
                           const layerMoveData = e.dataTransfer.getData("application/panelflow-layer-move");
+                          const reorderData = e.dataTransfer.getData("application/panelflow-scene-reorder");
+                          const motionData = e.dataTransfer.getData("application/panelflow-motion-move");
+                          const narrData = e.dataTransfer.getData("application/panelflow-narration-reorder");
 
                           if (panelData) {
                             try {
-                              handleAddLayerToScene(JSON.parse(panelData), scene.id);
+                              const parsed = JSON.parse(panelData);
+                              if (parsed.panelId || parsed.pageId) {
+                                if (e.altKey) {
+                                  handleAddLayerToScene(parsed, scene.id);
+                                } else {
+                                  handleReplaceSceneVisual(parsed, scene.id);
+                                }
+                              }
+                            } catch (err) {
+                              console.error(err);
+                            }
+                          } else if (reorderData) {
+                            try {
+                              const { fromIndex } = JSON.parse(reorderData);
+                              handleSwapScenes(fromIndex, idx);
                             } catch (err) {
                               console.error(err);
                             }
@@ -1358,6 +1983,19 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                             try {
                               const { layerId, fromSceneId } = JSON.parse(layerMoveData);
                               handleMoveLayer(layerId, fromSceneId, scene.id);
+                            } catch (err) {
+                              console.error(err);
+                            }
+                          } else if (motionData) {
+                            try {
+                              handleTransferOrSwapMotion(JSON.parse(motionData), scene.id);
+                            } catch (err) {
+                              console.error(err);
+                            }
+                          } else if (narrData) {
+                            try {
+                              const { narrationId } = JSON.parse(narrData);
+                              handleAttachNarrationToScene(narrationId, scene.id);
                             } catch (err) {
                               console.error(err);
                             }
@@ -1372,7 +2010,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                             ? "bg-cyan-950/80 border-cyan-400 ring-2 ring-cyan-400/80"
                             : isSelected
                             ? "bg-indigo-950 border-indigo-400 ring-2 ring-indigo-500/50"
-                            : "bg-zinc-900 border-zinc-700 hover:border-zinc-500"
+                            : "bg-blue-950/70 border-blue-600 hover:border-blue-400"
                         }`}
                         style={{
                           left: `${clipLeft}px`,
@@ -1392,6 +2030,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                             });
                           }}
                           className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-cyan-400/80 z-20 transition-colors"
+                          data-timeline-trim
                           title="Drag to trim left boundary"
                         />
 
@@ -1401,7 +2040,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                             scene.layers.map((ly) => (
                               <img
                                 key={ly.id}
-                                src={ly.image_url}
+                                src={getLayerImageUrl(ly)}
                                 alt="Scene strip"
                                 className="h-full w-10 object-cover border-r border-zinc-800 shrink-0 rounded-sm mr-1"
                               />
@@ -1413,11 +2052,27 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                             {scene.title}
                           </span>
                           {isDragOverScene && (
-                            <span className="ml-auto text-[9px] bg-cyan-500 text-black px-1.5 py-0.5 rounded font-bold shrink-0">
-                              + Layer
+                            <span className="ml-auto text-[9px] bg-cyan-400 text-black px-1.5 py-0.5 rounded font-bold shrink-0 shadow">
+                              Replace Visual
                             </span>
                           )}
                         </div>
+
+                        {/* Delete Scene / Panel Clip Button */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onDeleteScene(scene.id);
+                          }}
+                          className={`absolute right-1 top-1/2 -translate-y-1/2 p-1 rounded bg-zinc-950/80 hover:bg-rose-600 text-zinc-400 hover:text-white transition-all z-30 shadow ${
+                            isSelected ? "opacity-90" : "opacity-0 group-hover:opacity-100"
+                          }`}
+                          title={`Delete ${scene.title} from timeline (Del)`}
+                          aria-label={`Delete ${scene.title}`}
+                        >
+                          <Icons.Trash className="w-3 h-3 pointer-events-none" />
+                        </button>
 
                         {/* Right Trim Handle */}
                         <div
@@ -1432,6 +2087,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                             });
                           }}
                           className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-cyan-400/80 z-20 transition-colors"
+                          data-timeline-trim
                           title="Drag to trim right boundary"
                         />
                       </div>
@@ -1442,7 +2098,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
 
               {/* Inter-scene drop zone AFTER the last scene */}
               {(() => {
-                const totalSec = state.scenes.reduce((acc, s) => acc + s.duration_sec, 0);
+                const totalSec = sceneTimelineDuration(timedScenes);
                 const endLeft = totalSec * pxPerSec;
                 const lastIdx = state.scenes.length;
                 const isTarget = dragOverInsertIndex === lastIdx;
@@ -1451,19 +2107,31 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                   <div
                     onDragOver={(e) => {
                       e.preventDefault();
-                      e.dataTransfer.dropEffect = "copy";
+                      e.dataTransfer.dropEffect = visualDropEffect(e.dataTransfer);
                       setDragOverInsertIndex(lastIdx);
                     }}
                     onDragLeave={() => {
                       if (dragOverInsertIndex === lastIdx) setDragOverInsertIndex(null);
                     }}
                     onDrop={(e) => {
+                      e.stopPropagation();
                       e.preventDefault();
                       setDragOverInsertIndex(null);
-                      const panelData = e.dataTransfer.getData("application/panelflow-panel");
+                      const panelData = e.dataTransfer.getData("application/panelflow-panel") || e.dataTransfer.getData("text/plain");
+                      const reorderData = e.dataTransfer.getData("application/panelflow-scene-reorder");
                       if (panelData) {
                         try {
-                          handleInsertSceneFromPanel(JSON.parse(panelData), lastIdx);
+                          const parsed = JSON.parse(panelData);
+                          if (parsed.panelId || parsed.pageId) {
+                            handleInsertSceneFromPanel(parsed, lastIdx);
+                          }
+                        } catch (err) {
+                          console.error(err);
+                        }
+                      } else if (reorderData) {
+                        try {
+                          const { fromIndex } = JSON.parse(reorderData);
+                          handleReorderScenes(fromIndex, lastIdx);
                         } catch (err) {
                           console.error(err);
                         }
@@ -1473,7 +2141,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                     style={{ left: `${endLeft}px` }}
                   >
                     {isTarget && (
-                      <div className="w-1.5 h-8 bg-cyan-400 rounded-full shadow-[0_0_8px_#22d3ee] animate-pulse" />
+                      <div className="pointer-events-none w-1.5 h-8 bg-cyan-400 rounded-full shadow-[0_0_8px_#22d3ee] animate-pulse" />
                     )}
                   </div>
                 );
@@ -1481,25 +2149,25 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
             </div>
 
             {/* TRACK 3: Layers Track (Independent Layer Blocks + Trim Handles) */}
-            <div className="h-8 border-b border-zinc-800/30 relative flex items-center bg-zinc-950/40">
+            <div data-timeline-lane="Layer 2" {...laneProps("Layer 2")} className="h-8 border-b border-zinc-800/30 relative flex items-center bg-zinc-950/40">
               {(() => {
-                let sceneOffsetSec = 0;
-                return state.scenes.map((scene) => {
-                  const clipLeft = sceneOffsetSec * pxPerSec;
-                  sceneOffsetSec += scene.duration_sec;
+                return timedScenes.map((scene) => {
+                  const clipLeft = scene.start_time_sec * pxPerSec;
 
                   return scene.layers.map((ly) => {
                     const startOffset = ly.start_offset_sec ?? 0;
                     const duration = ly.duration_sec ?? scene.duration_sec;
                     const lLeft = clipLeft + startOffset * pxPerSec;
-                    const lWidth = Math.max(50, duration * pxPerSec);
+                    const visibleDuration = Math.max(0, Math.min(duration, scene.duration_sec - startOffset));
+                    if (visibleDuration <= 0) return null;
+                    const lWidth = Math.max(1, visibleDuration * pxPerSec);
                     const isSelected =
                       state.selected_object?.type === "layer" && state.selected_object.id === ly.id;
 
                     return (
                       <div
                         key={ly.id}
-                        draggable
+                        draggable={!getTimelineTrackState(state.track_states, "Layer 2").locked && !ly.locked}
                         onDragStart={(e) => {
                           e.dataTransfer.setData(
                             "application/panelflow-layer-move",
@@ -1507,12 +2175,47 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                           );
                           e.dataTransfer.effectAllowed = "move";
                         }}
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          e.dataTransfer.dropEffect = visualDropEffect(e.dataTransfer);
+                          setDragOverLayerId(ly.id);
+                        }}
+                        onDragLeave={() => {
+                          if (dragOverLayerId === ly.id) setDragOverLayerId(null);
+                        }}
+                        onDrop={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          setDragOverLayerId(null);
+                          const panelData = e.dataTransfer.getData("application/panelflow-panel") || e.dataTransfer.getData("text/plain");
+                          const layerMoveData = e.dataTransfer.getData("application/panelflow-layer-move");
+
+                          if (panelData) {
+                            try {
+                              const parsed = JSON.parse(panelData);
+                              if (parsed.panelId || parsed.pageId) {
+                                handleReplaceLayerVisual(parsed, ly.id, scene.id);
+                              }
+                            } catch (err) {
+                              console.error(err);
+                            }
+                          } else if (layerMoveData) {
+                            try {
+                              const { layerId: fromLayerId, fromSceneId } = JSON.parse(layerMoveData);
+                              handleSwapOrReplaceLayers(fromLayerId, fromSceneId, ly.id, scene.id);
+                            } catch (err) {
+                              console.error(err);
+                            }
+                          }
+                        }}
                         onClick={(e) => {
                           e.stopPropagation();
                           onSelectLayer(ly.id, scene.id);
                         }}
                         className={`absolute h-6 rounded-md border px-1.5 flex items-center justify-between cursor-pointer shadow transition-all ${
-                          isSelected
+                          dragOverLayerId === ly.id
+                            ? "bg-purple-800 border-cyan-400 ring-2 ring-cyan-400 shadow-md"
+                            : isSelected
                             ? "bg-purple-900 border-purple-400 ring-2 ring-purple-500/60"
                             : "bg-purple-950/80 border-purple-800 hover:border-purple-500"
                         }`}
@@ -1526,6 +2229,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                           <div
                             onMouseDown={(e) => {
                               e.stopPropagation();
+                              if (ly.locked) return;
                               setTrimming({
                                 type: "layer",
                                 id: ly.id,
@@ -1537,16 +2241,34 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                               });
                             }}
                             className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-cyan-400/80 z-20"
+                            data-timeline-trim
                             title="Trim layer start"
                           />
                         )}
 
                         <div className="flex items-center gap-1 overflow-hidden pointer-events-none">
-                          <img src={ly.image_url} alt="Layer" className="w-3.5 h-3.5 rounded object-cover shrink-0" />
+                          <img src={getLayerImageUrl(ly)} alt="Layer" className="w-3.5 h-3.5 rounded object-cover shrink-0" />
                           <span className="text-[10px] font-medium text-purple-200 truncate">
                             {ly.name || "Layer"}
                           </span>
                         </div>
+
+                        {onDeleteLayer && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onDeleteLayer(ly.id, scene.id);
+                            }}
+                            className={`p-0.5 rounded bg-zinc-950/70 hover:bg-rose-600 text-zinc-400 hover:text-white transition-all ml-1 shrink-0 z-30 ${
+                              isSelected ? "opacity-90" : "opacity-0 group-hover:opacity-100"
+                            }`}
+                            title={`Delete layer ${ly.name || "Layer"} (Del)`}
+                            aria-label={`Delete layer ${ly.name || "Layer"}`}
+                          >
+                            <Icons.Trash className="w-2.5 h-2.5 pointer-events-none" />
+                          </button>
+                        )}
 
                         {/* Keyframe diamond indicators on layer chip in Advanced Mode */}
                         {isAdvancedMode && ly.animation_config?.tracks && (
@@ -1582,6 +2304,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                           <div
                             onMouseDown={(e) => {
                               e.stopPropagation();
+                              if (ly.locked) return;
                               setTrimming({
                                 type: "layer",
                                 id: ly.id,
@@ -1593,6 +2316,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                               });
                             }}
                             className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-cyan-400/80 z-20"
+                            data-timeline-trim
                             title="Trim layer duration"
                           />
                         )}
@@ -1603,36 +2327,74 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
               })()}
             </div>
 
-            {/* TRACK 4: Motion / FX Track (Clickable Badges) */}
-            <div className="h-8 border-b border-zinc-800/30 relative flex items-center bg-zinc-950/40">
+            {/* TRACK 4: Motion / FX Track (Clickable & Draggable Badges + Drop Targets) */}
+            <div data-timeline-lane="Motion / FX" {...laneProps("Motion / FX")} className="h-8 border-b border-zinc-800/30 relative flex items-center bg-zinc-950/40">
               {(() => {
-                let sceneOffsetSec = 0;
-                return state.scenes.map((scene) => {
-                  const clipLeft = sceneOffsetSec * pxPerSec;
-                  sceneOffsetSec += scene.duration_sec;
+                return timedScenes.map((scene) => {
+                  const clipLeft = scene.start_time_sec * pxPerSec;
+                  const clipWidth = Math.max(80, scene.duration_sec * pxPerSec);
+                  const isDragOverMotion = dragOverMotionSceneId === scene.id;
 
                   const hasCamera = scene.camera && scene.camera.preset !== "static";
                   const motionLayer = scene.layers.find(
                     (l) => (l.motion_preset && l.motion_preset !== "none") || l.animation_config?.preset === "custom"
                   );
-                  if (!motionLayer && !hasCamera) return null;
 
                   return (
                     <div
-                      key={`motion_${scene.id}`}
-                      className="absolute flex items-center gap-1.5"
-                      style={{ left: `${clipLeft}px` }}
+                      key={`motion_slot_${scene.id}`}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = "move";
+                        setDragOverMotionSceneId(scene.id);
+                      }}
+                      onDragLeave={() => {
+                        if (dragOverMotionSceneId === scene.id) setDragOverMotionSceneId(null);
+                      }}
+                      onDrop={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        setDragOverMotionSceneId(null);
+                        const motionData = e.dataTransfer.getData("application/panelflow-motion-move");
+                        if (motionData) {
+                          try {
+                            handleTransferOrSwapMotion(JSON.parse(motionData), scene.id);
+                          } catch (err) {
+                            console.error(err);
+                          }
+                        }
+                      }}
+                      className={`absolute h-7 rounded flex items-center gap-1.5 px-1 transition-all ${
+                        isDragOverMotion
+                          ? "bg-fuchsia-950/70 border border-fuchsia-400 ring-2 ring-fuchsia-400/80 z-20"
+                          : "border border-transparent"
+                      }`}
+                      style={{ left: `${clipLeft}px`, width: `${clipWidth}px` }}
                     >
                       {/* Layer Motion Badge */}
                       {motionLayer && (
                         <div
+                          draggable={!getTimelineTrackState(state.track_states, "Motion / FX").locked}
+                          onDragStart={(e) => {
+                            e.dataTransfer.setData(
+                              "application/panelflow-motion-move",
+                              JSON.stringify({
+                                fromSceneId: scene.id,
+                                layerId: motionLayer.id,
+                                type: "layer_motion",
+                                motionPreset: motionLayer.motion_preset,
+                                animationConfig: motionLayer.animation_config,
+                              })
+                            );
+                            e.dataTransfer.effectAllowed = "move";
+                          }}
                           onClick={(e) => {
                             e.stopPropagation();
                             onSelectLayer(motionLayer.id, scene.id);
                             onSelectMotionBadge?.(scene.id, motionLayer.id);
                           }}
-                          className="h-6 rounded-md px-2 flex items-center gap-1 text-[10px] font-bold text-fuchsia-200 bg-fuchsia-950/80 border border-fuchsia-800 shadow-sm hover:border-fuchsia-400 cursor-pointer transition-all"
-                          title="Click to configure layer motion in Inspector"
+                          className="h-6 rounded-md px-2 flex items-center gap-1 text-[10px] font-bold text-fuchsia-200 bg-fuchsia-950/80 border border-fuchsia-800 shadow-sm hover:border-fuchsia-400 cursor-grab active:cursor-grabbing transition-all select-none"
+                          title="Click to configure in Inspector; Drag to transfer or swap motion with another scene"
                         >
                           <Icons.Sparkles className="w-3 h-3 text-fuchsia-400" />
                           <span className="truncate max-w-[90px]">
@@ -1646,19 +2408,38 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                       {/* Scene Camera Badge */}
                       {hasCamera && (
                         <div
+                          draggable={!getTimelineTrackState(state.track_states, "Motion / FX").locked}
+                          onDragStart={(e) => {
+                            e.dataTransfer.setData(
+                              "application/panelflow-motion-move",
+                              JSON.stringify({
+                                fromSceneId: scene.id,
+                                type: "camera",
+                                camera: scene.camera,
+                              })
+                            );
+                            e.dataTransfer.effectAllowed = "move";
+                          }}
                           onClick={(e) => {
                             e.stopPropagation();
                             onSelectScene(scene.id);
                             onSelectMotionBadge?.(scene.id);
                           }}
-                          className="h-6 rounded-md px-2 flex items-center gap-1 text-[10px] font-bold text-cyan-200 bg-cyan-950/80 border border-cyan-800 shadow-sm hover:border-cyan-400 cursor-pointer transition-all"
-                          title="Click to configure scene camera in Inspector"
+                          className="h-6 rounded-md px-2 flex items-center gap-1 text-[10px] font-bold text-cyan-200 bg-cyan-950/80 border border-cyan-800 shadow-sm hover:border-cyan-400 cursor-grab active:cursor-grabbing transition-all select-none"
+                          title="Click to configure in Inspector; Drag to transfer or swap camera preset"
                         >
                           <Icons.Film className="w-3 h-3 text-cyan-400" />
                           <span className="truncate max-w-[90px]">
                             Cam: {presetLabels[scene.camera?.preset || ""] || scene.camera?.preset}
                           </span>
                         </div>
+                      )}
+
+                      {/* Empty motion slot drop placeholder */}
+                      {!motionLayer && !hasCamera && isDragOverMotion && (
+                        <span className="text-[9px] font-mono font-medium text-fuchsia-300 animate-pulse">
+                          + Drop motion effect
+                        </span>
                       )}
                     </div>
                   );
@@ -1667,12 +2448,13 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
             </div>
 
             {/* TRACK 5: Music Track (Interactive BGM Clips + Trim Handles + Drag + Drop Zone) */}
-            <div
+            <div data-timeline-lane="Music" {...laneProps("Music")}
               onDragOver={(e) => {
                 e.preventDefault();
                 e.dataTransfer.dropEffect = "copy";
               }}
               onDrop={(e) => {
+                e.stopPropagation();
                 e.preventDefault();
                 const contractJson = e.dataTransfer.getData("application/panelflow-audio-contract");
                 if (contractJson) {
@@ -1701,7 +2483,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                 const clipLeft = bgm.start_time_sec * pxPerSec;
                 const clipWidth = Math.max(80, bgm.duration_sec * pxPerSec);
                 const isSelected = state.selected_object?.type === "bgm" && state.selected_object.id === bgm.id;
-                const isLocked = state.track_states?.["Music"]?.locked;
+                const isLocked = getTimelineTrackState(state.track_states, "Music").locked;
 
                 return (
                   <div
@@ -1749,6 +2531,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                           });
                         }}
                         className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-amber-400 z-20"
+                        data-timeline-trim
                         title="Drag to trim start"
                       />
                     )}
@@ -1770,22 +2553,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
 
                     {/* Clip Right Controls: Waveform, Duplicate, Delete */}
                     <div className="flex items-center gap-1 shrink-0 z-10">
-                      {/* Real Waveform or Unmeasured Indicator */}
-                      {bgm.measured_peaks && bgm.measured_peaks.length > 0 ? (
-                        <div className="flex items-center gap-0.5 h-3 opacity-80 pointer-events-none">
-                          {bgm.measured_peaks.slice(0, 10).map((peak, idx) => (
-                            <span
-                              key={idx}
-                              className="w-0.5 bg-amber-400 rounded-sm"
-                              style={{ height: `${Math.max(2, Math.round(peak * 12))}px` }}
-                            />
-                          ))}
-                        </div>
-                      ) : (
-                        <span className="text-amber-500/70 pointer-events-none flex items-center" title="Real waveform unmeasured">
-                          <Icons.Music className="w-2.5 h-2.5" />
-                        </span>
-                      )}
+                      <AudioPeaks peaks={bgm.measured_peaks} />
 
                       {/* Duplicate Button */}
                       {!isLocked && (
@@ -1796,6 +2564,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                             onUpdateState((prev) => duplicateAudioClip(prev, bgm.id, "bgm"));
                           }}
                           className="hover:text-white text-amber-400/80 p-0.5"
+                          aria-label="Duplicate BGM Clip"
                           title="Duplicate BGM Clip"
                         >
                           <Icons.Copy className="w-2.5 h-2.5" />
@@ -1811,6 +2580,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                             onUpdateState((prev) => deleteAudioClip(prev, bgm.id, "bgm"));
                           }}
                           className="hover:text-rose-300 text-rose-400/80 p-0.5"
+                          aria-label="Delete BGM Clip"
                           title="Delete BGM Clip"
                         >
                           <Icons.Trash className="w-2.5 h-2.5" />
@@ -1832,6 +2602,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                           });
                         }}
                         className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-amber-400 z-20"
+                        data-timeline-trim
                         title="Drag to trim duration"
                       />
                     )}
@@ -1841,12 +2612,13 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
             </div>
 
             {/* TRACK 6: SFX Track (Interactive SFX Cues + Trim Handles + Drag + Drop Zone) */}
-            <div
+            {showSfx && (<div data-timeline-lane="SFX" {...laneProps("SFX")}
               onDragOver={(e) => {
                 e.preventDefault();
                 e.dataTransfer.dropEffect = "copy";
               }}
               onDrop={(e) => {
+                e.stopPropagation();
                 e.preventDefault();
                 const contractJson = e.dataTransfer.getData("application/panelflow-audio-contract");
                 if (contractJson) {
@@ -1875,7 +2647,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                 const sLeft = sfx.start_time_sec * pxPerSec;
                 const sWidth = Math.max(55, sfx.duration_sec * pxPerSec);
                 const isSelected = state.selected_object?.type === "sfx" && state.selected_object.id === sfx.id;
-                const isLocked = state.track_states?.["SFX"]?.locked;
+                const isLocked = getTimelineTrackState(state.track_states, "SFX").locked;
 
                 return (
                   <div
@@ -1923,6 +2695,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                           });
                         }}
                         className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-cyan-400 z-20"
+                        data-timeline-trim
                         title="Drag to trim start"
                       />
                     )}
@@ -1947,6 +2720,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                             onUpdateState((prev) => duplicateAudioClip(prev, sfx.id, "sfx"));
                           }}
                           className="hover:text-white text-cyan-400/80 p-0.5"
+                          aria-label="Duplicate SFX Clip"
                           title="Duplicate SFX Clip"
                         >
                           <Icons.Copy className="w-2.5 h-2.5" />
@@ -1961,6 +2735,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                             onUpdateState((prev) => deleteAudioClip(prev, sfx.id, "sfx"));
                           }}
                           className="hover:text-rose-300 text-rose-400/80 p-0.5"
+                          aria-label="Delete SFX Clip"
                           title="Delete SFX Clip"
                         >
                           <Icons.Trash className="w-2.5 h-2.5" />
@@ -1982,13 +2757,14 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                           });
                         }}
                         className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-cyan-400 z-20"
+                        data-timeline-trim
                         title="Drag to trim duration"
                       />
                     )}
                   </div>
                 );
               })}
-            </div>
+            </div>)}
           </div>
         </div>
       </div>

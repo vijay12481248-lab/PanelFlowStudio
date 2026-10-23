@@ -108,6 +108,33 @@ def run_sqlite_migrations(db_engine):
                     if col_name not in existing_jobs_cols:
                         conn.exec_driver_sql(f"ALTER TABLE jobs ADD COLUMN {col_name} {col_type}")
                         conn.commit()
+
+            # 4. Assets columns
+            res_assets = conn.exec_driver_sql("PRAGMA table_info(assets)").fetchall()
+            existing_asset_cols = {row[1] for row in res_assets}
+            if existing_asset_cols:
+                asset_cols_to_add = [
+                    ("provenance", "JSON DEFAULT '{}'"),
+                ]
+                for col_name, col_type in asset_cols_to_add:
+                    if col_name not in existing_asset_cols:
+                        conn.exec_driver_sql(f"ALTER TABLE assets ADD COLUMN {col_name} {col_type}")
+                        conn.commit()
+
+            # 5. Characters columns
+            res_chars = conn.exec_driver_sql("PRAGMA table_info(characters)").fetchall()
+            existing_char_cols = {row[1] for row in res_chars}
+            if existing_char_cols:
+                char_cols_to_add = [
+                    ("reference_asset_id", "VARCHAR(36) NULL"),
+                    ("generation_params", "JSON DEFAULT '{}'"),
+                    ("proposed_changes", "JSON DEFAULT '{}'"),
+                    ("change_status", "VARCHAR(32) DEFAULT 'NONE'"),
+                ]
+                for col_name, col_type in char_cols_to_add:
+                    if col_name not in existing_char_cols:
+                        conn.exec_driver_sql(f"ALTER TABLE characters ADD COLUMN {col_name} {col_type}")
+                        conn.commit()
     except Exception as exc:
         logger.exception("SQLite schema migration failed")
         raise RuntimeError("PanelFlow SQLite schema migration failed") from exc
@@ -115,6 +142,8 @@ def run_sqlite_migrations(db_engine):
 
 def init_db():
     """Initializes tables in database and runs non-destructive migrations."""
+    # Register additive history tables even when init_db is called without app imports.
+    from engine.history import models as _history_models
     Base.metadata.create_all(bind=engine)
     run_sqlite_migrations(engine)
 

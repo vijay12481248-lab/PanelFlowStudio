@@ -22,6 +22,7 @@ from engine.ai_gateway.contracts import (
     AIResponse,
     AttemptResult,
 )
+from engine.llm.providers.base import ModelMetadata
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -115,7 +116,7 @@ class ProviderAdapter(ABC):
     - health_check(): Verify connectivity and model availability
     - execute(): Normalized request execution
     - supports_capability(): Check if capability is supported
-    - get_capabilities(): Return the ModelMetadata
+    - get_capabilities(): Return the ModelInfo
     - normalize_request(): Convert NormalizedRequest to provider format
     - normalize_response(): Convert provider response to NormalizedResponse
     """
@@ -162,7 +163,7 @@ class ProviderAdapter(ABC):
         pass
 
     @abstractmethod
-    def get_capabilities(self) -> ModelMetadata:
+    def get_capabilities(self) -> ModelInfo:
         """Return model metadata and capability flags for this provider."""
         pass
 

@@ -71,6 +71,8 @@ export interface MangaSourceContext {
   raw_ocr_dialogue: string;
   visual_description: string;
   story_context: string;
+  page_context_summary?: string;
+  character_name?: string;
 }
 
 /**

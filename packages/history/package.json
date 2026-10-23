@@ -1,0 +1,21 @@
+{
+  "name": "@panelflow/history",
+  "version": "0.1.0",
+  "description": "Dependency-free, versioned command and snapshot history for TypeScript applications",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js", "default": "./dist/index.js" },
+    "./node": { "types": "./dist/node.d.ts", "import": "./dist/node.js" }
+  },
+  "files": ["dist", "src", "tsconfig.json", "README.md", "examples"],
+  "sideEffects": false,
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && tsc --strict --skipLibCheck --target ES2020 --module NodeNext --moduleResolution NodeNext --noEmit test/consumer.mts && node --test test/*.test.mjs",
+    "prepack": "npm run build"
+  },
+  "devDependencies": { "typescript": "^5.7.2", "@types/node": "^22.0.0" }
+}

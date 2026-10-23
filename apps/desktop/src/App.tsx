@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { version as appVersion } from "../package.json";
 import { api } from "@panelflow/api-client";
+import { getAuthenticatedEngineHealth } from "./engineConnection";
 import type { Project } from "@panelflow/shared-types";
 import { Badge, Button, Icons } from "@panelflow/ui";
 import { ProjectsScreen } from "./screens/ProjectsScreen";
@@ -18,6 +19,8 @@ import { ComfyImageScreen } from "./screens/ComfyImageScreen";
 import { StoryEditorScreen } from "./screens/StoryEditorScreen";
 import { PipelineNavbar } from "./components/PipelineNavbar";
 import { ProviderHealthModal } from "./components/ProviderHealthModal";
+import { AutoPilotModal } from "./components/AutoPilotModal";
+import ProviderManagementScreen from "./components/ai-gateway/ProviderManagementScreen";
 import { DashboardShell } from "./components/dashboard";
 import { ErrorProvider, useError } from "./context/ErrorContext";
 import {
@@ -52,25 +55,17 @@ const DesktopAppContent: React.FC = () => {
   const [retrying, setRetrying] = useState<boolean>(false);
   const [restartingEngine, setRestartingEngine] = useState(false);
   const [startupGracePeriod, setStartupGracePeriod] = useState<boolean>(true);
+  const [autoPilotOpen, setAutoPilotOpen] = useState<boolean>(false);
 
   const checkEngine = async () => {
       if (restartingEngine) return;
       try {
-        const h = await api.checkHealth();
+        const h = await getAuthenticatedEngineHealth();
         if (h.status === "healthy") {
           setEngineConnected(true);
           setEngineVersion(h.version);
           setStartupGracePeriod(false);
-          // Ensure engine token is set for authenticated API calls
-          if (typeof window !== "undefined" && ("__TAURI_INTERNALS__" in window || "__TAURI__" in window)) {
-            try {
-              const { invoke } = await import("@tauri-apps/api/core");
-              const token = await invoke<string>("get_engine_token_cmd");
-              api.setEngineToken(token);
-            } catch {
-              // Ignore token fetch errors in non-Tauri contexts
-            }
-          }
+
         } else {
           setEngineConnected(false);
         }
@@ -94,7 +89,7 @@ const DesktopAppContent: React.FC = () => {
       for (let i = 0; i < 6; i++) {
         await new Promise((r) => setTimeout(r, 600));
         try {
-          const h = await api.checkHealth();
+          const h = await getAuthenticatedEngineHealth();
           if (h.status === "healthy") {
             setEngineConnected(true);
             setEngineVersion(h.version);
@@ -119,7 +114,7 @@ const DesktopAppContent: React.FC = () => {
       for (let i = 0; i < 60; i++) {
         await new Promise((resolve) => setTimeout(resolve, 1000));
         try {
-          const health = await api.checkHealth();
+          const health = await getAuthenticatedEngineHealth();
           if (health.status === "healthy" && health.instance_id && health.instance_id !== previous.instance_id) {
             setEngineConnected(true);
             setEngineVersion(health.version);
@@ -154,8 +149,7 @@ const DesktopAppContent: React.FC = () => {
     } else if (stage === "VOICE_GENERATED" || stage === "AUDIO_APPROVED" || stage === "SHOT_PLAN_GENERATED") {
       setCurrentScreen("motion");
     } else {
-      setCurrentScreen("render"
-  | "ai_provider_management");
+      setCurrentScreen("render");
     }
   };
 
@@ -192,6 +186,7 @@ const DesktopAppContent: React.FC = () => {
         <ErrorAlertBanner />
         <StoryEditorScreen
           project={selectedProject}
+          engineConnected={engineConnected}
           onBack={() => {
             setCurrentScreen("projects");
             setSelectedProject(null);
@@ -223,6 +218,7 @@ const DesktopAppContent: React.FC = () => {
           restartingEngine={restartingEngine}
           retryingEngine={retrying}
           onOpenToolsModels={() => setHealthModalOpen(true)}
+          onOpenProviderManagement={() => setCurrentScreen("ai_provider_management")}
           onNewProject={() => setCurrentScreen("new_project")}
           onOpenAcquisition={(proj) => {
             setSelectedProject(proj);
@@ -302,24 +298,32 @@ const DesktopAppContent: React.FC = () => {
             className="text-xs text-zinc-400 hover:text-zinc-200"
             title="Inspect local models and tool engine status"
           >
-<Button
+            <Icons.ShieldCheck className="w-4 h-4 mr-1.5 text-indigo-400" />
+            Tools & Models
+          </Button>
+          <Button
             variant="ghost"
             size="sm"
             onClick={() => setCurrentScreen("ai_provider_management")}
             className="text-xs text-zinc-400 hover:text-zinc-200"
             title="AI Provider Management"
           >
-            <Icons.Brain className="w-4 h-4 mr-1.5 text-indigo-400" />
+            <Icons.Sparkles className="w-4 h-4 mr-1.5 text-indigo-400" />
             AI Provider Management
           </Button>
-          <Button
-            onClick={() => setHealthModalOpen(true)}
-            className="text-xs text-zinc-400 hover:text-zinc-200"
-            title="Inspect local models and tool engine status"
-          >
-            <Icons.ShieldCheck className="w-4 h-4 mr-1.5 text-indigo-400" />
-            Tools & Models
-          </Button>
+
+          {selectedProject && (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => setAutoPilotOpen(true)}
+              className="text-xs bg-gradient-to-r from-amber-500 to-indigo-600 hover:from-amber-400 hover:to-indigo-500 text-white font-bold shadow-md shadow-indigo-950/40"
+              title="Run 1-Click End-to-End Pipeline Auto-Pilot"
+            >
+              <Icons.Zap className="w-4 h-4 mr-1.5 text-amber-300 animate-pulse" />
+              Auto-Pilot
+            </Button>
+          )}
 
           {selectedProject && (
             <Button
@@ -400,15 +404,23 @@ const DesktopAppContent: React.FC = () => {
         ) : (
           <>
             {/* Top Interactive Pipeline Progression Navbar */}
-            {selectedProject && currentScreen !== "new_project" && (
+            {selectedProject && currentScreen !== "new_project" && currentScreen !== "ai_provider_management" && (
               <div className="mb-6 bg-zinc-900/60 border border-zinc-800 rounded-xl p-2.5">
                 <PipelineNavbar
                   currentStage={selectedProject.current_stage}
                   currentScreen={currentScreen}
                   onNavigate={(stageKey) => setCurrentScreen(stageKey as ScreenMode)}
                   staleStages={selectedProject.stale_stages}
+                  onOpenAutoPilot={() => setAutoPilotOpen(true)}
                 />
               </div>
+            )}
+
+            {currentScreen === "ai_provider_management" && (
+              <ProviderManagementScreen
+                onBack={() => setCurrentScreen("projects")}
+                onOpenToolsModels={() => setHealthModalOpen(true)}
+              />
             )}
 
             {currentScreen === "new_project" && (
@@ -539,19 +551,16 @@ const DesktopAppContent: React.FC = () => {
                 onBack={() => setCurrentScreen("audio")}
                 onMotionApproved={(updated) => {
                   setSelectedProject(updated);
-                  setCurrentScreen("render"
-  | "ai_provider_management");
+                  setCurrentScreen("render");
                 }}
                 onProceedToRender={(proj) => {
                   setSelectedProject(proj);
-                  setCurrentScreen("render"
-  | "ai_provider_management");
+                  setCurrentScreen("render");
                 }}
               />
             )}
 
-            {currentScreen === "render"
-  | "ai_provider_management" && selectedProject && (
+            {currentScreen === "render" && selectedProject && (
               <RenderScreen
                 project={selectedProject}
                 onBack={() => setCurrentScreen("motion")}
@@ -570,6 +579,23 @@ const DesktopAppContent: React.FC = () => {
           </>
         )}
       </main>
+
+      {/* Auto-Pilot 1-Click Orchestrator Modal */}
+      {selectedProject && (
+        <AutoPilotModal
+          isOpen={autoPilotOpen}
+          onClose={() => setAutoPilotOpen(false)}
+          project={selectedProject}
+          onOpenPackaging={() => {
+            setAutoPilotOpen(false);
+            setCurrentScreen("render");
+          }}
+          onOpenRenderScreen={() => {
+            setAutoPilotOpen(false);
+            setCurrentScreen("render");
+          }}
+        />
+      )}
 
       {/* Provider Health Modal */}
       <ProviderHealthModal

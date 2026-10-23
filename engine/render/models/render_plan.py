@@ -13,6 +13,7 @@ from engine.motion.models.transitions import TransitionInstruction
 from engine.motion.models.cues import CaptionCue
 from engine.render.models.enums import ScalePolicy, BackgroundFillPolicy, MusicDurationPolicy
 from engine.render.models.profiles import RenderProfile
+from engine.render.models.background import BackgroundSettings
 
 
 class RenderShotPlan(BaseModel):
@@ -41,6 +42,8 @@ class RenderShotPlan(BaseModel):
 
     layers: List[LayerInstruction] = Field(default_factory=list)
     scene_layers: List[Dict[str, Any]] = Field(default_factory=list)
+    background: Optional[BackgroundSettings] = None
+    background_image_path: Optional[str] = None
     camera_config: Optional[Dict[str, Any]] = None
     transition_config: Optional[Dict[str, Any]] = None
     effects: List[EffectInstruction] = Field(default_factory=list)

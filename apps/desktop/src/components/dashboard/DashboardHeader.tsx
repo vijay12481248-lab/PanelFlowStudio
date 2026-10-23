@@ -6,6 +6,7 @@ interface DashboardHeaderProps {
   engineConnected: boolean;
   engineVersion: string;
   onOpenToolsModels: () => void;
+  onOpenProviderManagement?: () => void;
   onRetryEngine?: () => void;
   retryingEngine?: boolean;
   onRestartEngine?: () => void;
@@ -16,6 +17,7 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
   engineConnected,
   engineVersion,
   onOpenToolsModels,
+  onOpenProviderManagement,
   onRetryEngine,
   retryingEngine,
   onRestartEngine,
@@ -44,6 +46,16 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
       {/* Right: Alerts Bell + Tools & Models + Engine Status */}
       <div className="flex items-center gap-3">
         <ErrorNotificationBell />
+
+        {onOpenProviderManagement && (
+          <button
+            onClick={onOpenProviderManagement}
+            className="text-xs text-indigo-200 hover:text-white rounded-lg border border-[#27324c] px-3 py-2 focus-visible:outline focus-visible:outline-indigo-400"
+            title="AI Provider Management"
+          >
+            AI Providers
+          </button>
+        )}
 
         <button
           onClick={onOpenToolsModels}

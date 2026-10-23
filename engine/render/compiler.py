@@ -20,6 +20,7 @@ from engine.motion.models.enums import EasingFunction, MotionType
 from engine.motion.models.transitions import TransitionInstruction
 from engine.motion.models.cues import CaptionCue
 from engine.render.clock import RenderFrameClock
+from engine.render.models.background import BackgroundSettings
 
 
 class TimelineCompiler:
@@ -30,7 +31,50 @@ class TimelineCompiler:
     def __init__(self):
         pass
 
-    def _resolve_image_path(self, raw_url_or_id: str, panel_id: Optional[str], page_id: Optional[str], workspace_path: Path) -> Tuple[Optional[str], bool]:
+    @staticmethod
+    def _compile_background(scene, state, layers, workspace_path, project_id):
+        raw = scene.get("background")
+        if raw is None:
+            raw = state.get("background_default")
+        if raw is None:
+            return None, None
+        settings = BackgroundSettings.model_validate(raw)
+        if not settings.enabled or settings.preset == "none":
+            return settings, None
+        if settings.source_mode == "pinned_layer":
+            pinned = next((layer for layer in layers if layer["id"] == settings.source_layer_id), None)
+            if not pinned or not pinned.get("disk_image_path"):
+                raise ValueError("Background pinned layer is missing. Select an existing visual layer or follow the current visual.")
+        custom_path = None
+        if settings.preset == "custom_image" or settings.source_mode == "custom_image":
+            raw_url = settings.custom_image_url or ""
+            # Explicit backgrounds must never invoke the legacy page fallback resolver.
+            for layer in layers:
+                if raw_url and raw_url in (layer.get("image_url"), layer.get("disk_image_path")):
+                    custom_path = layer.get("disk_image_path")
+                    break
+            parsed = urllib.parse.urlparse(raw_url)
+            prefix = f"/api/projects/{urllib.parse.quote(str(project_id), safe='')}/backgrounds/"
+            decoded = urllib.parse.unquote(parsed.path)
+            if custom_path is None and decoded.startswith(prefix):
+                filename = decoded[len(prefix):]
+                if filename.endswith("/file"):
+                    filename = filename[:-len("/file")]
+                if filename and Path(filename).name == filename and "/" not in filename and "\\" not in filename:
+                    root = (workspace_path / "backgrounds").resolve()
+                    candidate = (root / filename).resolve()
+                    if candidate.parent == root and candidate.is_file():
+                        custom_path = str(candidate)
+            if not custom_path or not Path(custom_path).is_file():
+                raise ValueError("Background custom image is missing or unavailable. Upload it again or select a known visual layer.")
+            try:
+                with Image.open(custom_path) as image:
+                    image.verify()
+            except Exception as exc:
+                raise ValueError("Background custom image could not be decoded. Upload a valid PNG, JPEG or WebP image.") from exc
+        return settings, custom_path
+
+    def _resolve_image_path(self, raw_url_or_id: str, panel_id: Optional[str], page_id: Optional[str], workspace_path: Path, strict: bool = False) -> Tuple[Optional[str], bool]:
         """
         Locates the physical image file on disk matching a panel or page reference.
         Returns (file_path, is_already_cropped).
@@ -91,12 +135,13 @@ class TimelineCompiler:
                             return str(candidate.resolve()), False
                 # Check for any page files
                 page_files = sorted(list(dir_p.glob("*.jpg")) + list(dir_p.glob("*.png")))
-                if page_files:
+                if page_files and not strict:
                     return str(page_files[0].resolve()), False
 
         # 4. Check workspace root
-        for p in workspace_path.glob("*.jpg"):
-            return str(p.resolve()), False
+        if not strict:
+            for p in workspace_path.glob("*.jpg"):
+                return str(p.resolve()), False
 
         return None, False
 
@@ -147,6 +192,31 @@ class TimelineCompiler:
 
         return None
 
+    @staticmethod
+    def _resolve_scene_timing(scenes: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Match editor intervals: explicit gaps survive; missing/stale starts follow the previous end."""
+        result = []
+        end = 0.0
+        for scene in scenes:
+            raw_start = scene.get("start_time_sec")
+            start = max(end, float(raw_start)) if isinstance(raw_start, (int, float)) and math.isfinite(raw_start) else end
+            duration = float(scene.get("duration_sec", 4.0))
+            result.append({**scene, "start_time_sec": start, "duration_sec": duration})
+            end = start + duration
+        return result
+
+    @staticmethod
+    def _resolve_narration_timing(scenes: List[Dict[str, Any]], clips: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        starts = {scene.get("id"): scene["start_time_sec"] for scene in scenes}
+        result = []
+        for clip in clips:
+            parent = clip.get("scene_id")
+            offset = clip.get("scene_offset_sec")
+            if clip.get("linked_to_scene") is not False and parent in starts and isinstance(offset, (int, float)) and math.isfinite(offset):
+                clip = {**clip, "start_time_sec": round(starts[parent] + offset, 2)}
+            result.append(clip)
+        return result
+
     def preflight_validate(
         self,
         state: Dict[str, Any],
@@ -161,7 +231,7 @@ class TimelineCompiler:
         if state.get("panel_review_sync", {}).get("removed_layers_count", 0):
             issues.append("Source panels were deleted or replaced. Review the affected video layers before exporting.")
         warnings: List[str] = []
-        scenes = state.get("scenes", [])
+        scenes = self._resolve_scene_timing(state.get("scenes", []))
         if not scenes:
             issues.append("Project timeline has no scenes to render.")
 
@@ -171,19 +241,28 @@ class TimelineCompiler:
         for sc in scenes:
             layers = sc.get("layers", [])
             total_layers += len(layers)
+            background_raw = sc.get("background") if sc.get("background") is not None else state.get("background_default")
+            background_active = bool(background_raw and background_raw.get("enabled", True) and background_raw.get("preset") != "none")
+            resolved_layers = []
             for ly in layers:
                 img_path, _ = self._resolve_image_path(
                     ly.get("image_url", ""),
                     ly.get("source_panel_id"),
                     ly.get("source_page_id"),
                     workspace_path,
+                    strict=background_active,
                 )
+                resolved_layers.append({**ly, "disk_image_path": img_path or ""})
                 if not img_path:
                     missing_images += 1
                     warnings.append(f"Visual asset for layer '{ly.get('id', 'unnamed')}' in Scene '{sc.get('title', sc.get('id'))}' could not be resolved.")
+            try:
+                self._compile_background(sc, state, resolved_layers, workspace_path, project_id)
+            except ValueError as exc:
+                issues.append(f"Background in scene '{sc.get('title', sc.get('id'))}': {exc}")
 
         # 2. Validate Narration clips
-        narration_clips = state.get("narration_clips", [])
+        narration_clips = self._resolve_narration_timing(scenes, state.get("narration_clips", []))
         approved_narration = 0
         outdated_narration = 0
         missing_narration = 0
@@ -221,7 +300,7 @@ class TimelineCompiler:
                 resolved_sfx_count += 1
 
         # Calculate planned duration
-        planned_duration = sum(float(sc.get("duration_sec", 4.0)) for sc in scenes)
+        planned_duration = max((sc["start_time_sec"] + sc["duration_sec"] for sc in scenes), default=0.0)
 
         return {
             "valid": len(issues) == 0,
@@ -260,7 +339,7 @@ class TimelineCompiler:
         fps = prof.fps
         clock = RenderFrameClock(fps=fps)
 
-        scenes = state.get("scenes", [])
+        scenes = self._resolve_scene_timing(state.get("scenes", []))
         if not scenes:
             raise ValueError("Cannot compile timeline: no scenes found in timeline state.")
 
@@ -270,7 +349,7 @@ class TimelineCompiler:
         speech_intervals: List[Tuple[float, float, float]] = []
 
         # Gather narration intervals first for ducking & captions
-        narration_clips = state.get("narration_clips", [])
+        narration_clips = self._resolve_narration_timing(scenes, state.get("narration_clips", []))
         audio_tracks: List[RenderAudioTrack] = []
 
         for clip in narration_clips:
@@ -308,6 +387,9 @@ class TimelineCompiler:
             # Compile visual layers
             compiled_layers: List[Dict[str, Any]] = []
             layers = sc.get("layers", [])
+            raw_background = sc.get("background") if sc.get("background") is not None else state.get("background_default")
+            validated_background = BackgroundSettings.model_validate(raw_background) if raw_background is not None else None
+            background_active = bool(validated_background and validated_background.enabled and validated_background.preset != "none")
 
             for ly in layers:
                 img_path, already_cropped = self._resolve_image_path(
@@ -315,6 +397,7 @@ class TimelineCompiler:
                     ly.get("source_panel_id"),
                     ly.get("source_page_id"),
                     workspace_path,
+                    strict=background_active,
                 )
 
                 # Ensure crop has default
@@ -324,6 +407,7 @@ class TimelineCompiler:
                 layer_data = {
                     "id": ly.get("id", f"layer_{len(compiled_layers) + 1}"),
                     "name": ly.get("name", "Visual Layer"),
+                    "image_url": ly.get("image_url", ""),
                     "disk_image_path": img_path or "",
                     "already_cropped": bool(already_cropped),
                     "crop": raw_crop,
@@ -345,6 +429,14 @@ class TimelineCompiler:
                     "visible": ly.get("visible", True) is not False,
                 }
                 compiled_layers.append(layer_data)
+
+            background, background_image_path = self._compile_background(sc, state, compiled_layers, workspace_path, project_id)
+            if background and background.enabled and background.preset != "none":
+                tracks = state.get("track_states") or {}
+                for layer_index, layer in enumerate(compiled_layers):
+                    key, alias = ("Visuals", "visuals") if layer_index == 0 else ("Layer 2", "layer2")
+                    track = tracks.get(key, tracks.get(alias, {}))
+                    layer["visible"] = layer["visible"] and track.get("visible", True) is not False
 
             # Compile Camera Motion
             cam_data = sc.get("camera_motion") or sc.get("camera") or {
@@ -400,6 +492,8 @@ class TimelineCompiler:
                     end_time=end_time,
                     duration=duration,
                     scene_layers=compiled_layers,
+                    background=background,
+                    background_image_path=background_image_path,
                     camera_config=cam_data,
                     transition_config=trans_data,
                     captions=captions,
@@ -461,8 +555,10 @@ class TimelineCompiler:
             "project_id": project_id,
             "duration": round(total_duration, 4),
             "total_frames": total_frames,
-            "shots": [s.shot_id for s in shot_plans],
-            "audio": [a.file_path for a in audio_tracks],
+            "shots": [{"id": s.shot_id, "start_frame": s.start_frame, "end_frame": s.end_frame,
+                       **({"background": s.background.model_dump(), "background_image_path": s.background_image_path}
+                          if s.background is not None else {})} for s in shot_plans],
+            "audio": [{"path": a.file_path, "start": a.start_time, "end": a.end_time} for a in audio_tracks],
             "profile": prof.model_dump(),
         }
         plan_hash = hashlib.sha256(json.dumps(hash_payload, sort_keys=True).encode()).hexdigest()

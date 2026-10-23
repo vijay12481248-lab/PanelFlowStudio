@@ -22,6 +22,7 @@ export interface DashboardShellProps {
   onRestartEngine?: () => void;
   restartingEngine?: boolean;
   onOpenToolsModels: () => void;
+  onOpenProviderManagement?: () => void;
   onNewProject: () => void;
   onOpenAcquisition: (project: Project) => void;
   onOpenReview: (project: Project) => void;

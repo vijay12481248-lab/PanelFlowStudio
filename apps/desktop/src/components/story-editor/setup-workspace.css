@@ -1,0 +1,53 @@
+.pf-setup-editor {
+  --setup-line: #292d40;
+  --setup-accent: #9b8aff;
+  background: #0c0e15;
+  border: 1px solid var(--setup-line);
+  border-radius: 9px;
+  font: inherit;
+}
+.pf-setup-control {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 28px;
+  padding: 4px 8px;
+  border: 1px solid #34384c;
+  border-radius: 5px;
+  color: #d6d9e5;
+  background: #141722;
+  font-size: 11px;
+  line-height: 16px;
+  white-space: nowrap;
+}
+.pf-setup-control:hover:not(:disabled) { background: #232638; border-color: #646079; }
+.pf-setup-control[aria-selected=true], .pf-setup-control[aria-pressed=true] { color: #eae5ff; background: #352963; border-color: #8d77ee; }
+.pf-setup-control:focus-visible { outline: 2px solid var(--setup-accent); outline-offset: 2px; }
+.pf-setup-control:disabled { opacity: .4; cursor: not-allowed; }
+.pf-setup-commandbar { min-height: 39px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px; padding: 5px 8px; border-bottom: 1px solid var(--setup-line); flex-shrink: 0; background: #10131d; }
+.pf-setup-commandbar > div { display: flex; align-items: center; gap: 5px; }
+.pf-setup-panelstrip { max-height: 67px; background: #10131d; }
+.pf-setup-panelstrip[hidden], .pf-setup-hint[hidden] { display: none !important; }
+.pf-setup-editing-body { display: flex; flex: 1; min-height: 0; min-width: 0; overflow: hidden; }
+.pf-setup-tools { display: flex; flex-direction: column; align-items: stretch; flex: 0 0 62px; min-width: 0; gap: 5px; padding: 8px 4px; overflow-y: auto; border-right: 1px solid var(--setup-line); background: #10131d; }
+.pf-setup-tools button { flex-direction: column; min-height: 42px; white-space: normal; padding: 4px 2px; gap: 3px; border-color: transparent; font-size: 10px; line-height: 12px; }
+.pf-setup-tools button svg { width: 16px; height: 16px; }
+.pf-setup-viewport { flex: 1; min-height: 0; min-width: 0; overflow: hidden; }
+.pf-setup-surface { min-width: 0; min-height: 0; flex: 1; overflow: auto; padding: 18px; background-color: #080a10; background-image: radial-gradient(#252937 1px, transparent 1px); background-size: 16px 16px; }
+.pf-setup-surface-inner { position: relative; margin-inline: auto; flex-shrink: 0; }
+.pf-setup-actions { flex-shrink: 0; max-height: 30%; overflow-y: auto; padding: 6px 8px; border-top: 1px solid var(--setup-line); background: #10131d; }
+.pf-setup-actions fieldset { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; }
+.pf-setup-actions label { font-size: 11px; color: #9da5ba; display: inline-flex; align-items: center; gap: 4px; }
+.pf-setup-actions select, .pf-setup-actions input { max-width: 110px; min-height: 28px; background: #080b12; border: 1px solid #34384c; border-radius: 4px; color: #d6d9e5; font-size: 11px; padding: 3px; }
+.pf-setup-actions .pf-setup-save { background: #5940ce; border-color: #8d77ee; margin-left: auto; color: white; }
+.pf-setup-hint { font-size: 11px; color: #9da5ba; margin-top: 5px; }
+.pf-setup-status { color: #d3bcff; font-size: 10px; white-space: nowrap; }
+.pf-setup-zoom { display: inline-flex; align-items: center; gap: 3px; }
+.pf-setup-zoom select { color: #d6d9e5; background: #080b12; border: 1px solid #34384c; border-radius: 4px; padding: 3px; min-height: 28px; font-size: 11px; max-width: 96px; }
+@media (max-width: 800px) {
+  .pf-setup-tools { flex-basis: 52px; }
+  .pf-setup-control { padding-inline: 6px; }
+  .pf-setup-commandbar { gap: 4px; }
+  .pf-setup-surface { padding: 12px; }
+}

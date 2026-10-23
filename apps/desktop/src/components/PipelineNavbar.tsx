@@ -7,6 +7,7 @@ interface PipelineNavbarProps {
   onNavigate: (stage: string) => void;
   staleStages?: string[];
   currentScreen?: string;
+  onOpenAutoPilot?: () => void;
 }
 
 interface StageEntry {
@@ -85,7 +86,7 @@ const statusDotStyles: Record<StageStatus, string> = {
   NOT_STARTED: "bg-zinc-700",
 };
 
-export const PipelineNavbar: React.FC<PipelineNavbarProps> = ({ currentStage, onNavigate, staleStages, currentScreen }) => {
+export const PipelineNavbar: React.FC<PipelineNavbarProps> = ({ currentStage, onNavigate, staleStages, currentScreen, onOpenAutoPilot }) => {
   return (
     <div className="flex items-center gap-1.5 overflow-x-auto py-2 px-1 scrollbar-thin scrollbar-thumb-zinc-700">
       {PIPELINE_STAGES.map((entry, idx) => {
@@ -117,6 +118,17 @@ export const PipelineNavbar: React.FC<PipelineNavbarProps> = ({ currentStage, on
       })}
 
       <div className="w-px h-5 bg-zinc-800 mx-1 flex-shrink-0" />
+
+            {onOpenAutoPilot && (
+        <button
+          onClick={onOpenAutoPilot}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-500/60 bg-gradient-to-r from-amber-600/30 to-indigo-600/30 hover:from-amber-600/50 hover:to-indigo-600/50 text-amber-200 hover:text-white text-xs font-bold transition-all shadow-md shadow-amber-900/20 flex-shrink-0"
+          title="Launch 1-Click Autonomous End-to-End Pipeline Runner"
+        >
+          <Icons.Zap className="w-4 h-4 text-amber-400 animate-pulse" />
+          <span>1-Click Auto-Pilot</span>
+        </button>
+      )}
 
       <button
         onClick={() => onNavigate("story_editor")}

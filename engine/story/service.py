@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from engine.acquisition.models.models import PipelineStage, JobType
 from engine.database.models import (
     ProjectRecord,
+    AssetRecord,
     PanelRecord,
     TextRegionRecord,
     NarrativeRecord,
@@ -138,7 +139,7 @@ class StoryService:
             raise KeyError(f"Project not found: {project_id}")
 
         visual_mode = bool((project.settings or {}).get("visual_storytelling"))
-        previous_review = self.get_narrative(db, project_id) if visual_mode else None
+        previous_review = self.get_narrative(db, project_id)
         allowed_stages = (
             PipelineStage.OCR_APPROVED,
             PipelineStage.OCR_COMPLETE,
@@ -695,6 +696,9 @@ class StoryService:
                     },
                 )
 
+            from engine.story.world_state import prepare_generated_world_state
+            narrative_doc = prepare_generated_world_state(narrative_doc, previous_review)
+            events = narrative_doc.events
             warnings = [*narrative_doc.continuity_warnings, *self.continuity_auditor.audit(narrative_doc)]
             narrative_doc.continuity_warnings = warnings
 
@@ -939,6 +943,12 @@ class StoryService:
         if not narrative:
             raise ValueError("Cannot approve story: No Narrative IR exists for this project.")
 
+        # Recompute state/continuity diagnostics; stored warnings can be stale.
+        fresh_warnings = self.continuity_auditor.audit(narrative)
+        unresolved_fresh = [w for w in fresh_warnings if w.severity == "ERROR" and not w.resolved]
+        if unresolved_fresh:
+            raise ValueError(f"Cannot approve story: {len(unresolved_fresh)} current continuity errors exist.")
+
         # Strict check for blocking errors
         error_warnings = [w for w in narrative.continuity_warnings if w.severity == "ERROR" and not w.resolved]
         if error_warnings:
@@ -975,6 +985,10 @@ class StoryService:
         aliases: Optional[List[str]] = None,
         description: Optional[str] = None,
         status: Optional[str] = None,
+        reference_asset_id: Optional[str] = None,
+        generation_params: Optional[Dict[str, Any]] = None,
+        proposed_changes: Optional[Dict[str, Any]] = None,
+        change_status: Optional[str] = None,
     ) -> CharacterRecord:
         char = (
             db.query(CharacterRecord)
@@ -996,6 +1010,44 @@ class StoryService:
             char.description = description
         if status is not None:
             char.status = status
+
+        if reference_asset_id is not None:
+            if not isinstance(reference_asset_id, str):
+                raise ValueError("reference_asset_id must be a string")
+            asset = (
+                db.query(AssetRecord)
+                .filter(AssetRecord.id == reference_asset_id, AssetRecord.project_id == project_id)
+                .first()
+            )
+            if not asset:
+                raise ValueError(f"Reference asset {reference_asset_id} does not exist in project {project_id}")
+            char.reference_asset_id = reference_asset_id
+            if asset.provenance and not generation_params and not char.generation_params:
+                char.generation_params = asset.provenance
+
+        if generation_params is not None:
+            char.generation_params = generation_params
+
+        if proposed_changes is not None:
+            char.proposed_changes = proposed_changes
+            if change_status is None:
+                char.change_status = "PENDING_REVIEW" if proposed_changes else "NONE"
+
+        if change_status is not None:
+            if change_status == "APPROVED":
+                props = char.proposed_changes or {}
+                if "visual_traits" in props and isinstance(props["visual_traits"], list):
+                    char.visual_traits = list(props["visual_traits"])
+                if "description" in props and isinstance(props["description"], str):
+                    char.description = props["description"]
+                char.proposed_changes = {}
+                char.change_status = "APPROVED"
+                char.manual_override = True
+            elif change_status == "REJECTED":
+                char.proposed_changes = {}
+                char.change_status = "REJECTED"
+            else:
+                char.change_status = change_status
 
         char.manual_override = True
         char.updated_at = utc_now()
@@ -1065,6 +1117,10 @@ class StoryService:
         character_id: str,
         new_name: str,
         panel_ids: List[str],
+        reference_asset_id: Optional[str] = None,
+        generation_params: Optional[Dict[str, Any]] = None,
+        proposed_changes: Optional[Dict[str, Any]] = None,
+        change_status: Optional[str] = None,
     ) -> CharacterRecord:
         orig = (
             db.query(CharacterRecord)
@@ -1086,6 +1142,10 @@ class StoryService:
             role=orig.role,
             first_panel_id=panel_ids[0] if panel_ids else None,
             reference_panel_ids=panel_ids[:2],
+            reference_asset_id=reference_asset_id,
+            generation_params=generation_params or {},
+            proposed_changes=proposed_changes or {},
+            change_status=change_status or "NONE",
             status="MANUAL",
             manual_override=True,
             created_at=utc_now(),
@@ -1401,16 +1461,7 @@ class StoryService:
             raise KeyError(f"Script not found: {script_id}")
         narrative = self.get_narrative(db, project_id)
         if not narrative:
-            return ScriptValidationReport(
-                script_id=script_id,
-                total_segments=len(script.segments),
-                supported_segments=len(script.segments),
-                weakly_supported_segments=0,
-                unsupported_segments=0,
-                coverage_score=1.0,
-                issues=[],
-                passed=True,
-            )
+            raise ValueError("Cannot validate script: No Narrative IR found for project.")
 
         report = script_validator.validate(script, narrative)
 
@@ -1428,7 +1479,7 @@ class StoryService:
             raise KeyError(f"Script not found: {script_id}")
 
         report = self.validate_script(db, project_id, script_id)
-        if report.unsupported_segments > 0:
+        if not report.passed:
             raise ValueError(
                 f"Cannot approve script: {report.unsupported_segments} statements have unsupported claims. "
                 f"Please review and fix unsupported claims."

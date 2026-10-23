@@ -118,4 +118,7 @@ class ContinuityAuditor:
                         )
                     )
 
+        from engine.story.world_state import replay_world_state
+
+        warnings.extend(replay_world_state(doc).warnings)
         return warnings
