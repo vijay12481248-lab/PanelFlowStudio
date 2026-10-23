@@ -411,3 +411,112 @@ def contained_file_response(root: Path | str, candidate: Path | str, *, media_ty
         from urllib.parse import quote
         headers["Content-Disposition"] = f"attachment; filename*=utf-8''{quote(filename)}"
     return StreamingResponse(chunks(), media_type=media_type, headers=headers)
+
+
+@contextmanager
+def _pin_directory(path: Path | str):
+    """Pin a directory to prevent concurrent rename or swap during traversal."""
+    target = Path(path).expanduser().resolve()
+    if os.name != "nt":
+        flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+        fd = os.open(str(target), flags)
+        try:
+            yield fd
+        finally:
+            os.close(fd)
+    else:
+        import ctypes
+        from ctypes import wintypes
+        kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel.CreateFileW.argtypes = [
+            wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD,
+            ctypes.c_void_p, wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE
+        ]
+        kernel.CreateFileW.restype = wintypes.HANDLE
+        kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+        # Open with DELETE access (0x00010000) and FILE_LIST_DIRECTORY (1) with sharing mode
+        # FILE_SHARE_READ (1) | FILE_SHARE_WRITE (2), omitting FILE_SHARE_DELETE (4).
+        # On Windows, this pins the directory and prevents any concurrent rename/move.
+        handle = kernel.CreateFileW(str(target), 0x00010000 | 1, 1 | 2, None, 3, 0x02000000, None)
+        invalid = ctypes.c_void_p(-1).value
+        if handle == invalid:
+            handle = kernel.CreateFileW(str(target), 1, 1 | 2, None, 3, 0x02000000, None)
+        try:
+            yield handle
+        finally:
+            if handle != invalid:
+                kernel.CloseHandle(handle)
+
+
+def remove_contained_directory(target_path: Path | str, expected_project_id: str | None = None) -> None:
+    """Safely and recursively remove a project directory without following symlinks or escaping root.
+
+    Verifies the directory marker (project.json with matching project ID) before any deletion.
+    Traverses bottom-up without following symlinks or junctions, refusing to delete any entry
+    that does not resolve strictly within the target root.
+    """
+    target = Path(target_path).expanduser()
+    if not target.exists():
+        return
+
+    if not target.is_dir():
+        raise ValueError(f"Target is not a directory: {target}")
+
+    if target.is_symlink() or (hasattr(target, "is_junction") and target.is_junction()):
+        raise ValueError(f"Target directory cannot be a symlink or junction: {target}")
+
+    target_resolved = target.resolve()
+    if len(target_resolved.parts) <= 2 or target_resolved.parent == target_resolved:
+        raise ValueError(f"Refusing to delete filesystem root: {target_resolved}")
+
+    try:
+        home = Path.home().resolve()
+        if target_resolved in (home, home / "Documents", home / "Desktop", home / "Downloads"):
+            raise ValueError(f"Refusing to delete protected user directory: {target_resolved}")
+    except (RuntimeError, OSError):
+        pass
+
+    if expected_project_id is not None:
+        marker = target_resolved / "project.json"
+        if not marker.is_file() or marker.is_symlink():
+            raise ValueError(f"Refusing to delete unmarked external directory: {target_resolved}")
+        try:
+            with open(marker, "r", encoding="utf-8") as f:
+                marker_data = json.load(f)
+            if marker_data.get("id") != expected_project_id:
+                raise ValueError(
+                    f"Project marker ID '{marker_data.get('id')}' does not match expected '{expected_project_id}'"
+                )
+        except Exception as e:
+            if isinstance(e, ValueError):
+                raise
+            raise ValueError(f"Cannot verify project marker in {target_resolved}: {e}")
+
+    with _pin_directory(target_resolved):
+        for root, dirs, files in os.walk(str(target_resolved), topdown=False, followlinks=False):
+            root_path = Path(root).resolve()
+            if not root_path.is_relative_to(target_resolved):
+                raise OSError(f"Directory escaped target root during traversal: {root_path}")
+
+            for fname in files:
+                fpath = Path(root) / fname
+                if fpath.is_symlink():
+                    fpath.unlink()
+                else:
+                    try:
+                        fpath.unlink()
+                    except PermissionError:
+                        fpath.chmod(stat.S_IWRITE)
+                        fpath.unlink()
+
+            for dname in dirs:
+                dpath = Path(root) / dname
+                if dpath.is_symlink() or (hasattr(dpath, "is_junction") and dpath.is_junction()):
+                    try:
+                        os.rmdir(dpath)
+                    except OSError:
+                        dpath.unlink()
+                else:
+                    os.rmdir(dpath)
+
+    os.rmdir(target_resolved)

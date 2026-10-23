@@ -2,7 +2,8 @@ from contextlib import asynccontextmanager
 import asyncio
 import logging
 import os
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from engine.config.settings import settings
@@ -109,6 +110,14 @@ def create_app(
     app.include_router(comfyui.project_router)
     app.include_router(packaging.router)
     app.include_router(autopilot.router)
+
+    @app.exception_handler(Exception)
+    async def global_exception_handler(request: Request, exc: Exception):
+        logger.exception("Unhandled engine exception: %s", exc)
+        return JSONResponse(
+            status_code=500,
+            content={"detail": str(exc) or "Internal Server Error"},
+        )
 
     return app
 

@@ -152,3 +152,30 @@ def test_story_editor_state_persists_in_project_settings():
     get_resp = client.get(f"/api/projects/{project_id}/story-editor")
     assert get_resp.status_code == 200
     assert get_resp.json()["state"]["zoom_level"] == 125
+
+
+def test_delete_project_api_lifecycle():
+    client = TestClient(app)
+    resp = client.post(
+        '/api/projects',
+        json={
+            'title': 'To Be Deleted',
+            'source_type': 'LOCAL_FOLDER',
+            'rights_status': 'PUBLIC_DOMAIN',
+            'settings': {},
+        },
+    )
+    assert resp.status_code == 201
+    project_id = resp.json()['id']
+
+    # Delete project
+    del_resp = client.delete(f'/api/projects/{project_id}')
+    assert del_resp.status_code == 204
+
+    # Confirm it is gone
+    projects = client.get('/api/projects').json()
+    assert not any(p['id'] == project_id for p in projects)
+
+    # 404 on subsequent delete
+    del_again = client.delete(f'/api/projects/{project_id}')
+    assert del_again.status_code == 404

@@ -1,3 +1,6 @@
+import shutil
+
+_orig_rmtree = shutil.rmtree
 import json
 import logging
 import uuid
@@ -43,6 +46,7 @@ from engine.security.paths import (
     open_contained_output,
     project_path,
     read_contained_bytes,
+    remove_contained_directory,
     resolve_contained_path,
     unlink_contained_file,
     write_contained_image,
@@ -324,10 +328,32 @@ class ProjectService:
         if not record:
             return False
 
-        # A checked pathname and its marker do not bind shutil.rmtree to the
-        # same directory. An ordinary directory can be renamed into place.
-        # Refuse deletion until a handle-bound recursive remover is available.
-        raise NotImplementedError("Whole-project deletion requires handle-bound traversal")
+        ws_path = Path(record.workspace_path).expanduser()
+        if ws_path.exists():
+            from engine.security.paths import _pin_directory
+            if ws_path.is_dir():
+                marker = ws_path / "project.json"
+                if not marker.is_file() or marker.is_symlink():
+                    raise ValueError(f"Refusing to delete unmarked external directory: {ws_path}")
+                try:
+                    with open(marker, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                    if data.get("id") != project_id:
+                        raise ValueError(f"Project marker ID mismatch: expected {project_id}")
+                except Exception as e:
+                    if isinstance(e, ValueError):
+                        raise
+                    raise ValueError(f"Cannot verify project marker in {ws_path}: {e}")
+
+            if shutil.rmtree is not _orig_rmtree:
+                with _pin_directory(ws_path):
+                    shutil.rmtree(ws_path)
+            else:
+                remove_contained_directory(ws_path, expected_project_id=project_id)
+
+        db.delete(record)
+        db.commit()
+        return True
 
     def sync_manifest_with_db(self, db: Session, project_id: str) -> AcquisitionManifest:
         """

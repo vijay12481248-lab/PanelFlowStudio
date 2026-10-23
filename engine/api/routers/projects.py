@@ -150,10 +150,17 @@ def save_story_editor_state(project_id: str, payload: dict, db: Session = Depend
 
 @router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_project(project_id: str, db: Session = Depends(get_db)):
-    deleted = project_service.delete_project(db, project_id)
-    if not deleted:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
-    return None
+    try:
+        deleted = project_service.delete_project(db, project_id)
+        if not deleted:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+        return None
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except (OSError, PermissionError) as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Filesystem error during project deletion: {e}")
 
 @router.post("/{project_id}/acquire")
 def start_acquisition(project_id: str, db: Session = Depends(get_db)):

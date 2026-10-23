@@ -305,18 +305,17 @@ def test_external_project_deletion_only_removes_its_own_directory(tmp_path):
         sibling.parent.mkdir()
         sibling.write_text("preserve", encoding="utf-8")
         project = svc.create_project(db, "Book", "LOCAL_FOLDER", "PUBLIC_DOMAIN", project_settings={"project_path": str(chosen)})
-        with pytest.raises(NotImplementedError, match="handle-bound"):
-            svc.delete_project(db, project.id)
-        assert chosen.exists()
+        assert svc.delete_project(db, project.id) is True
+        assert not chosen.exists()
         assert sibling.read_text(encoding="utf-8") == "preserve"
-        assert db.get(ProjectRecord, project.id) is not None
+        assert db.get(ProjectRecord, project.id) is None
     engine.dispose()
 
 
 def test_delete_project_refuses_unmarked_external_directory(project_db, tmp_path):
     db, workspace = project_db
     (workspace / "source" / "page.jpg").write_bytes(b"keep")
-    with pytest.raises(NotImplementedError, match="handle-bound"):
+    with pytest.raises((ValueError, OSError)):
         ProjectService(tmp_path / "default").delete_project(db, "project")
     assert (workspace / "source" / "page.jpg").read_bytes() == b"keep"
     assert db.get(ProjectRecord, "project") is not None
@@ -330,11 +329,11 @@ def test_delete_project_preserves_db_if_filesystem_deletion_fails(tmp_path, monk
         chosen = tmp_path / "other" / "book"
         project = svc.create_project(db, "Book", "LOCAL_FOLDER", "PUBLIC_DOMAIN", project_settings={"project_path": str(chosen)})
 
-        def fail(_):
+        def fail(*args, **kwargs):
             raise PermissionError("locked")
 
-        monkeypatch.setattr("engine.projects.service.shutil.rmtree", fail)
-        with pytest.raises(NotImplementedError, match="handle-bound"):
+        monkeypatch.setattr("engine.projects.service.remove_contained_directory", fail)
+        with pytest.raises((PermissionError, OSError)):
             svc.delete_project(db, project.id)
         assert db.get(ProjectRecord, project.id) is not None
         assert chosen.is_dir()
@@ -360,3 +359,32 @@ def test_retry_rejects_missing_persisted_page_ids(project_db):
         ProjectService(workspace.parent).retry_failed_pages(
             db, "project", Registry(), page_ids=["page", "missing"], operation_only=True,
         )
+
+
+def test_delete_project_ghost_workspace_removes_db_record(tmp_path):
+    engine = create_engine('sqlite://', connect_args={'check_same_thread': False}, poolclass=StaticPool)
+    Base.metadata.create_all(engine)
+    with Session(engine) as db:
+        svc = ProjectService(tmp_path / 'default')
+        record = ProjectRecord(
+            id='proj-ghost',
+            title='Ghost Project',
+            source_type='LOCAL_FOLDER',
+            rights_status='PUBLIC_DOMAIN',
+            workspace_path='/nonexistent/path/to/ghost',
+        )
+        db.add(record)
+        db.commit()
+
+        assert svc.delete_project(db, 'proj-ghost') is True
+        assert db.get(ProjectRecord, 'proj-ghost') is None
+    engine.dispose()
+
+
+def test_delete_nonexistent_project_returns_false(tmp_path):
+    engine = create_engine('sqlite://', connect_args={'check_same_thread': False}, poolclass=StaticPool)
+    Base.metadata.create_all(engine)
+    with Session(engine) as db:
+        svc = ProjectService(tmp_path / 'default')
+        assert svc.delete_project(db, 'nonexistent-id') is False
+    engine.dispose()
