@@ -245,11 +245,12 @@ class AutoPilotRunner:
 
             # 1. Automated Acquisition if project was newly created from URL without pages yet
             if not pages:
-                if project.source_location:
-                    self.log(f"Page Stage: No pages downloaded yet. Starting automated ingestion from {project.source_location}...")
+                source_loc = project.source_url or (project.source_metadata or {}).get("path")
+                if source_loc:
+                    self.log(f"Page Stage: No pages downloaded yet. Starting automated ingestion from {source_loc}...")
                     self.update_stage(s_id, progress=0.1, message="Connecting to chapter source...")
-                    from engine.api.dependencies import get_adapter_registry
-                    registry = get_adapter_registry()
+                    from engine.acquisition.adapters.registry import get_default_registry
+                    registry = get_default_registry()
                     job_id = project_service.start_acquisition_job(db, self.project_id, registry)
                     while True:
                         if self.is_cancelled:
@@ -269,6 +270,8 @@ class AutoPilotRunner:
 
                     db.expire_all()
                     project = db.query(ProjectRecord).filter(ProjectRecord.id == self.project_id).first()
+                    if not project:
+                        raise ValueError(f"Project not found: {self.project_id}")
                     pages = list(project.pages or [])
                 if not pages:
                     raise ValueError("Project has no pages ingested")
