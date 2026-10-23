@@ -190,3 +190,24 @@ def test_invalid_speech_duration_cannot_retime_scenes(duration):
     with pytest.raises(ValueError):
         synchronize_narration(scenes, clips)
     assert scenes[0]["start_time_sec"] == 7
+
+
+def test_balloon_geometry_populates_utterances_from_raw_blocks():
+    from pathlib import Path
+    from engine.story.service import story_service
+    from engine.story.models import CharacterEntity, CharacterRole, CharacterStatus
+    from types import SimpleNamespace
+    p = SimpleNamespace(id="p1", sequence=1, crop_filename=None, ocr_result=SimpleNamespace(raw_blocks=[
+        {"id": "b1", "detected_text": "Look out!", "bbox": [100, 100, 200, 50]}
+    ]))
+    chars = [CharacterEntity(character_id="c1", display_name="Maya", role=CharacterRole.PROTAGONIST, status=CharacterStatus.CONFIRMED)]
+    regions = [SimpleNamespace(
+        id="b1", project_id="proj", panel_id="p1", sequence_global=1, region_type="DIALOGUE",
+        raw_text="Look out!", corrected_text="Look out!", x=100, y=100, width=200, height=50,
+        speaker_assignment_method="BALLOON_GEOMETRY", speaker_character_id=None,
+    )]
+    utts, attrs = story_service._attribute_dialogue_geometry([p], regions, chars, Path("."))
+    assert len(utts) == 1
+    assert utts[0].source_text == "Look out!"
+    assert utts[0].panel_id == "p1"
+    assert len(attrs) == 1

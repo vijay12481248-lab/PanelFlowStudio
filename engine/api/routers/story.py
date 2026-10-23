@@ -109,8 +109,8 @@ def generate_script_job(project_id: str, req: ScriptGenerateRequest, db: Session
         "SCRIPT_GENERATION",
         operation,
         priority=12,
-        requires_gpu=True,
-        gpu_vram_mb=3000,
+        requires_gpu=False,
+        gpu_vram_mb=0,
         job_input=job_input,
     )}
 

@@ -54,6 +54,16 @@ IMAGE_CAPTION_PATTERNS = [
     re.compile(r"\b(the drawing shows)\b", re.IGNORECASE),
 ]
 
+# Forbidden mechanical/cliche narration openings
+CLICHE_OPENING_PATTERNS = [
+    re.compile(r"^\s*little did (he|she|they|everyone|anyone) know\b.*?[,.]\s*", re.IGNORECASE),
+    re.compile(r"^\s*but everything was about to change\b.*?[,.]\s*", re.IGNORECASE),
+    re.compile(r"^\s*(he|she|they) couldn't believe what happened next\b.*?[,.]\s*", re.IGNORECASE),
+    re.compile(r"^\s*what happened next will shock you\b.*?[,.]\s*", re.IGNORECASE),
+    re.compile(r"^\s*as fate would have it\b.*?[,.]\s*", re.IGNORECASE),
+    re.compile(r"^\s*suddenly, out of nowhere\b.*?[,.]\s*", re.IGNORECASE),
+]
+
 
 class NarrativeEditor:
     """
@@ -70,9 +80,16 @@ class NarrativeEditor:
             if matches:
                 count += len(matches)
                 sanitized = pat.sub("", sanitized)
+        for pat in CLICHE_OPENING_PATTERNS:
+            matches = pat.findall(sanitized)
+            if matches:
+                count += len(matches)
+                sanitized = pat.sub("", sanitized)
         # Clean up double spaces or awkward punctuation left over
         sanitized = re.sub(r"\s+", " ", sanitized)
         sanitized = re.sub(r"\s+([,.\?!])", r"\1", sanitized).strip()
+        if sanitized and sanitized[0].islower():
+            sanitized = sanitized[0].upper() + sanitized[1:]
         return sanitized, count
 
     @classmethod
@@ -178,6 +195,9 @@ class NarrativeEditor:
             text = raw_b.get("narration", "")
             # 1. Sanitize raw captioning phrases
             clean_text, san_cnt = cls.sanitize_narration_text(text)
+            if not clean_text or clean_text.lower().rstrip(".") in ("opening", "scene", "panel") or len(clean_text.split()) < 3:
+                repairs.append(f"Pruned placeholder or empty narration beat: '{text}'.")
+                continue
             captions_sanitized_total += san_cnt
             if san_cnt > 0:
                 repairs.append(f"Sanitized {san_cnt} raw image-caption phrases from beat in scene '{raw_b.get('scene_id')}'.")
@@ -214,6 +234,19 @@ class NarrativeEditor:
                     "music_intent": raw_b.get("music_intent", "CALM"),
                     "sfx_intent": raw_b.get("sfx_intent", "NONE"),
                 })
+
+        # Check semantic opening repetition across adjacent beats
+        for idx in range(1, len(refined_beats)):
+            prev_words = refined_beats[idx - 1]["narration"].split()[:3]
+            curr_words = refined_beats[idx]["narration"].split()[:3]
+            if len(prev_words) >= 3 and len(curr_words) >= 3:
+                if [w.lower().strip(".,!") for w in prev_words] == [w.lower().strip(".,!") for w in curr_words]:
+                    repairs.append(f"Detected identical opening phrase across adjacent beats at beat {idx + 1}; varied opening.")
+                    varied_words = refined_beats[idx]["narration"].split()
+                    if len(varied_words) > 4:
+                        new_text = " ".join(varied_words[1:])
+                        if new_text:
+                            refined_beats[idx]["narration"] = new_text[0].upper() + new_text[1:]
 
         # 4. Chronology & Coverage Check
         all_cited_panels = []

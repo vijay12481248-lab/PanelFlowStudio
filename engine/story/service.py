@@ -122,6 +122,85 @@ class StoryService:
             )
         return provider
 
+    def _attribute_dialogue_geometry(
+        self,
+        inner_panels: List[Any],
+        inner_regions: List[Any],
+        characters: List[CharacterEntity],
+        ws_path: Path,
+    ) -> tuple[List[UtteranceEntity], List[SpeakerAttributionEntity]]:
+        from engine.story.balloon_geometry import resolve_speaker_by_geometry
+        attributions: List[SpeakerAttributionEntity] = []
+        utterances: List[UtteranceEntity] = []
+        last_speaker = None
+        for p in inner_panels:
+            p_regions = [r for r in inner_regions if r.panel_id == p.id]
+            if not p_regions:
+                continue
+
+            panel_crop_path = ws_path / "panels" / p.crop_filename if getattr(p, "crop_filename", None) else None
+            geom_attributions = resolve_speaker_by_geometry(
+                panel_id=p.id,
+                text_regions=[{
+                    "id": r.id,
+                    "region_type": getattr(r, "region_type", "DIALOGUE"),
+                    "x": getattr(r, "x", 0),
+                    "y": getattr(r, "y", 0),
+                    "width": getattr(r, "width", 0),
+                    "height": getattr(r, "height", 0),
+                } for r in p_regions],
+                characters_in_panel=characters,
+                previous_speaker_id=last_speaker,
+                panel_image_path=panel_crop_path,
+            )
+
+            for attr in geom_attributions:
+                target_reg = next((r for r in p_regions if r.id == attr.text_region_id), None)
+                if (target_reg and getattr(target_reg, "speaker_assignment_method", None) == "MANUAL"
+                        and getattr(target_reg, "speaker_character_id", None)):
+                    attr = SpeakerAttributionEntity(
+                        text_region_id=target_reg.id,
+                        speaker_character_id=target_reg.speaker_character_id,
+                        confidence=1.0,
+                        method=SpeakerMethod.MANUAL,
+                        evidence_panel_ids=[p.id],
+                        reason_code="MANUAL_OPERATOR_OVERRIDE",
+                    )
+
+                attributions.append(attr)
+                if attr.speaker_character_id not in ("NARRATOR", "SFX", "UNKNOWN"):
+                    last_speaker = attr.speaker_character_id
+
+                if target_reg:
+                    r_type = getattr(target_reg, "region_type", "DIALOGUE").upper()
+                    u_type = (
+                        UtteranceType.NARRATION
+                        if r_type in ("NARRATION", "CAPTION")
+                        else (UtteranceType.SFX if r_type == "SFX" else UtteranceType.DIALOGUE)
+                    )
+                    raw_txt = getattr(target_reg, "raw_text", "")
+                    corr_txt = getattr(target_reg, "corrected_text", None) or raw_txt
+                    u = UtteranceEntity(
+                        utterance_id=f"utt_{str(target_reg.id)[:8]}",
+                        text_region_id=str(target_reg.id),
+                        panel_id=p.id,
+                        speaker_character_id=attr.speaker_character_id,
+                        source_text=raw_txt,
+                        corrected_text=corr_txt,
+                        utterance_type=u_type,
+                        emotion=EmotionType.NEUTRAL if u_type == UtteranceType.NARRATION else EmotionType.DETERMINED,
+                        emotion_confidence=attr.confidence,
+                        intensity=0.5,
+                        sequence=getattr(target_reg, "sequence_global", 1),
+                        provenance=ProvenanceReference(
+                            panel_ids=[p.id],
+                            text_region_ids=[str(target_reg.id)],
+                            confidence=attr.confidence,
+                        ),
+                    )
+                    utterances.append(u)
+        return utterances, attributions
+
     # -----------------------------------------------------------------------
     # Narrative IR Extraction Pipeline
     # -----------------------------------------------------------------------
@@ -178,8 +257,8 @@ class StoryService:
                 job_type=JobType.STORY_ANALYSIS,
                 job_input={"total_panels": len(panels), "panel_ids": panel_ids, "preferred_provider": preferred_provider_id},
                 priority=15,
-                requires_gpu=True,
-                gpu_vram_mb=4000,
+                requires_gpu=False,
+                gpu_vram_mb=0,
             )
             job_id = job.job_id
         elif not isinstance(preferred_provider_id, str) or not preferred_provider_id:
@@ -218,6 +297,31 @@ class StoryService:
                     .order_by(TextRegionRecord.sequence_global.asc())
                     .all()
                 )
+                if not inner_regions:
+                    from types import SimpleNamespace
+                    seq = 1
+                    for p in inner_panels:
+                        if p.ocr_result and p.ocr_result.raw_blocks:
+                            for b in p.ocr_result.raw_blocks:
+                                bbox = b.get("bbox") or [0, 0, 0, 0]
+                                inner_regions.append(SimpleNamespace(
+                                    id=b.get("id") or str(uuid.uuid4()),
+                                    project_id=project_id,
+                                    panel_id=p.id,
+                                    sequence_global=seq,
+                                    region_type="DIALOGUE",
+                                    raw_text=b.get("detected_text") or "",
+                                    corrected_text=b.get("corrected_text") or b.get("detected_text") or "",
+                                    x=bbox[0] if len(bbox) > 0 else 0,
+                                    y=bbox[1] if len(bbox) > 1 else 0,
+                                    width=bbox[2] if len(bbox) > 2 else 0,
+                                    height=bbox[3] if len(bbox) > 3 else 0,
+                                    speaker_assignment_method="BALLOON_GEOMETRY",
+                                    speaker_character_id=None,
+                                    status="CONFIRMED",
+                                ))
+                                seq += 1
+
 
             ws_path = Path(project.workspace_path)
             if visual_mode:
@@ -237,7 +341,14 @@ class StoryService:
                 characters, locations = narrative_doc.characters, narrative_doc.locations
                 scenes, beats, events = narrative_doc.scenes, narrative_doc.beats, narrative_doc.events
                 observations = narrative_doc.observations
-                utterances, attributions = [], []
+                if inner_regions:
+                    utterances, attributions = self._attribute_dialogue_geometry(
+                        inner_panels, inner_regions, characters, ws_path
+                    )
+                    narrative_doc.utterances = utterances
+                    narrative_doc.speaker_attributions = attributions
+                else:
+                    utterances, attributions = [], []
             else:
                 total_panels = len(inner_panels)
                 observations: List[PanelObservationEntity] = []

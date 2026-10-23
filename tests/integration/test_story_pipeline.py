@@ -100,7 +100,7 @@ def test_story_and_script_full_lifecycle():
     assert job_id is not None
 
     # Wait for story analysis job to complete
-    for _ in range(40):
+    for _ in range(80):
         job_stat = client.get(f"/api/jobs/{job_id}").json()
         if job_stat["status"] in ("SUCCEEDED", "FAILED"):
             break

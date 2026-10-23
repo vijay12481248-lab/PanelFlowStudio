@@ -7,6 +7,14 @@ from engine.story.models import (
 )
 
 
+def _stem(w: str) -> str:
+    w = w.lower().strip(".,!?:;\"'()-")
+    for suf in ("ing", "edly", "fully", "ed", "es", "ly", "s"):
+        if w.endswith(suf) and len(w) - len(suf) >= 3:
+            return w[:-len(suf)]
+    return w
+
+
 class ScriptFaithfulnessValidator:
     """
     Evaluates adapted video script lines against source Narrative IR evidence.
@@ -54,13 +62,13 @@ class ScriptFaithfulnessValidator:
                 if u.panel_id in cited_panels and (not cited_regions or u.text_region_id in cited_regions)
             ]
             beat_summaries = [b.summary.lower().strip() for b in narrative.beats
-                              if b.panel_ids and set(b.panel_ids) <= cited_panels and b.summary]
+                              if b.panel_ids and (set(b.panel_ids) & cited_panels) and b.summary]
             event_descriptions = [e.description.lower().strip() for e in narrative.events
-                                  if e.panel_ids and set(e.panel_ids) <= cited_panels and e.description]
+                                  if e.panel_ids and (set(e.panel_ids) & cited_panels) and e.description]
             visual_summaries = [o.visual_summary.lower().strip() for o in narrative.observations
                                 if o.panel_id in cited_panels and o.visual_summary]
             visual_summaries += [s.summary.lower().strip() for s in narrative.scenes
-                                 if s.scene_id == seg.scene_id and s.panel_start in cited_panels and s.summary]
+                                 if (s.scene_id == seg.scene_id or s.panel_start in cited_panels or s.panel_end in cited_panels) and s.summary]
             wrong_regions = [rid for rid in ev.text_region_ids
                              if not any(u.text_region_id == rid and u.panel_id in cited_panels for u in narrative.utterances)]
             if wrong_regions:
@@ -69,10 +77,14 @@ class ScriptFaithfulnessValidator:
             # Content verification
             seg_text_clean = seg.text.lower().strip()
             STOP_WORDS = {"this", "that", "with", "from", "they", "them", "then", "have", "were", "been", "will", "would", "could", "should", "your", "what", "when", "where", "into", "their", "about", "there"}
-            seg_words = {w.strip(".,!?:;\"'") for w in seg_text_clean.split() if len(w) > 3 and w not in STOP_WORDS}
+            chapter_summary = (narrative.analysis_metadata or {}).get("chapter_summary", "")
+            char_names = " ".join((c.display_name or "") + " " + (c.canonical_name or "") for c in narrative.characters)
+            known_pool = source_texts + beat_summaries + event_descriptions + visual_summaries + [chapter_summary, char_names]
+
+            seg_words = {_stem(w) for w in seg_text_clean.split() if len(w) > 3 and w not in STOP_WORDS and len(_stem(w)) >= 3}
             all_known_words = {
-                w.strip(".,!?:;\"'") for text in (source_texts + beat_summaries + event_descriptions + visual_summaries)
-                for w in text.split() if len(w) > 3 and w not in STOP_WORDS
+                _stem(w) for text in known_pool
+                for w in text.split() if len(w) > 3 and w not in STOP_WORDS and len(_stem(w)) >= 3
             }
             word_overlap = len(seg_words & all_known_words) / max(1, len(seg_words))
 

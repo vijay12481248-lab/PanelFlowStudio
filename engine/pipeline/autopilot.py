@@ -343,22 +343,12 @@ class AutoPilotRunner:
             project = db.query(ProjectRecord).filter(ProjectRecord.id == self.project_id).first()
             if not project:
                 raise ValueError("Project not found")
-            se_state = (project.settings or {}).get("story_editor_state") or {}
-            se_narration = se_state.get("narration_clips", [])
-            scripts = list(project.scripts or [])
             from engine.story.service import story_service
+            existing_script = story_service.get_script(db, self.project_id)
 
-            meaningful_clips = [
-                c for c in se_narration
-                if (c.get("text") or "").strip() and (c.get("text") or "").strip().lower() != "opening."
-            ]
-            has_db_script = any(s.segments for s in scripts) if scripts else False
-
-            if (has_db_script or meaningful_clips) and skip_existing:
-                count = len(meaningful_clips) if meaningful_clips else sum(len(s.segments) for s in scripts)
-                self.log(f"Script Stage: Using existing approved script with {count} beats.")
-                if scripts:
-                    story_service.approve_script(db, self.project_id, scripts[0].id)
+            if existing_script and existing_script.segments and skip_existing:
+                self.log(f"Script Stage: Using existing approved script with {len(existing_script.segments)} beats.")
+                story_service.approve_script(db, self.project_id, existing_script.script_id)
             else:
                 self.log("Script Stage: Generating cinematic dialogue & narration...")
                 self.update_stage(s_id, progress=0.5, message="Allocating dialogue beats...")
@@ -542,18 +532,37 @@ class AutoPilotRunner:
             from engine.motion.service import motion_service
             from sqlalchemy.orm.attributes import flag_modified
 
-            # Enforce clean, rock-solid presentation: eliminate shakiness and jitter
-            for sc in se_scenes:
+            # Enforce clean, cinematic presentation: eliminate jitter/shakiness while providing motivated camera paths
+            for idx, sc in enumerate(se_scenes):
+                dur = float(sc.get("duration_sec", 4.0))
+                shot_mod = idx % 4
+                if shot_mod == 0:
+                    cam_preset = "custom"
+                    z_start, z_end = 1.0, 1.045
+                    px_start, px_end = 0.0, 0.0
+                elif shot_mod == 1:
+                    cam_preset = "static"
+                    z_start, z_end = 1.0, 1.0
+                    px_start, px_end = 0.0, 0.0
+                elif shot_mod == 2:
+                    cam_preset = "custom"
+                    z_start, z_end = 1.025, 1.025
+                    px_start, px_end = -2.5, 2.5
+                else:
+                    cam_preset = "custom"
+                    z_start, z_end = 1.04, 1.0
+                    px_start, px_end = 0.0, 0.0
+
                 sc["camera"] = {
-                    "preset": "static",
-                    "zoom_start": 1.0,
-                    "zoom_end": 1.0,
-                    "pan_x_start": 0.0,
-                    "pan_x_end": 0.0,
+                    "preset": cam_preset,
+                    "zoom_start": z_start,
+                    "zoom_end": z_end,
+                    "pan_x_start": px_start,
+                    "pan_x_end": px_end,
                     "pan_y_start": 0.0,
                     "pan_y_end": 0.0,
                     "easing": "ease_in_out",
-                    "duration_sec": sc.get("duration_sec", 4.0),
+                    "duration_sec": dur,
                 }
                 sc["transition_in"] = "none"
                 if "background" in sc and isinstance(sc["background"], dict):
