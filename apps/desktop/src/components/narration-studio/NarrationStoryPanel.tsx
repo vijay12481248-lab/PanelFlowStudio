@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { Icons, Badge } from "@panelflow/ui";
 import { api } from "@panelflow/api-client";
 import type {
@@ -19,6 +19,7 @@ interface NarrationStoryPanelProps {
   onAddSegment: (speakerType: SpeakerType) => void;
   onDuplicateSegment: (segmentId: string) => void;
   onDeleteSegment: (segmentId: string) => void;
+  onOpenPageScript?: (pageId: string, pageNumber: number) => void;
   className?: string;
 }
 
@@ -32,8 +33,16 @@ export const NarrationStoryPanel: React.FC<NarrationStoryPanelProps> = ({
   onAddSegment,
   onDuplicateSegment,
   onDeleteSegment,
+  onOpenPageScript,
   className = "",
 }) => {
+  // Page collapse toggles: track collapsed page numbers
+  const [collapsedPages, setCollapsedPages] = useState<Record<number, boolean>>({});
+
+  const togglePageCollapse = (pageNum: number) => {
+    setCollapsedPages((prev) => ({ ...prev, [pageNum]: !prev[pageNum] }));
+  };
+
   // Compute chapter-level metrics
   const totalWords = useMemo(() => {
     return chapter.segments.reduce((acc, s) => {
@@ -84,6 +93,20 @@ export const NarrationStoryPanel: React.FC<NarrationStoryPanelProps> = ({
     });
   }, [chapter.segments, filter]);
 
+  // Group filtered segments by Page
+  const groupedByPage = useMemo(() => {
+    const groups: Record<number, { pageNumber: number; pageId: string; segments: NarrationSegment[] }> = {};
+    for (const seg of filteredSegments) {
+      const pageNum = seg.source_context.page_number || 1;
+      const pageId = seg.source_context.page_id || `page_${pageNum}`;
+      if (!groups[pageNum]) {
+        groups[pageNum] = { pageNumber: pageNum, pageId, segments: [] };
+      }
+      groups[pageNum].segments.push(seg);
+    }
+    return Object.values(groups).sort((a, b) => a.pageNumber - b.pageNumber);
+  }, [filteredSegments]);
+
   // Helper to get status badge variant
   const getStatusBadge = (status: ReviewStatus, genStatus: string) => {
     if (genStatus === "OUTDATED") {
@@ -126,8 +149,8 @@ export const NarrationStoryPanel: React.FC<NarrationStoryPanelProps> = ({
       aria-label="Story and Source Context"
     >
       {/* Top Section: Chapter Title & Storytelling Statistics */}
-      <div className="p-3.5 border-b border-zinc-800/80 bg-zinc-900/40 shrink-0">
-        <div className="flex items-center justify-between mb-1.5">
+      <div className="p-3.5 border-b border-zinc-800/80 bg-zinc-900/40 shrink-0 space-y-2.5">
+        <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5">
             <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-400 bg-indigo-950/80 border border-indigo-800/60 px-2 py-0.5 rounded">
               Chapter {chapter.chapter_number}
@@ -137,106 +160,62 @@ export const NarrationStoryPanel: React.FC<NarrationStoryPanelProps> = ({
             </span>
           </div>
           <span className="text-[11px] font-mono text-zinc-400 font-semibold">
-            {approvedCount}/{chapter.segments.length}
+            {approvedCount}/{chapter.segments.length} Approved
           </span>
         </div>
 
-        {/* Narrative Metrics Bar */}
-        <div className="grid grid-cols-3 gap-1.5 mt-2 bg-zinc-950/70 p-2 rounded-lg border border-zinc-800/60 text-center">
-          <div className="flex flex-col">
-            <span className="text-[10px] uppercase tracking-wider text-zinc-500 font-medium">Segments</span>
-            <span className="text-xs font-bold text-zinc-200 font-mono">{chapter.segments.length}</span>
-          </div>
-          <div className="flex flex-col border-x border-zinc-800/80">
-            <span className="text-[10px] uppercase tracking-wider text-zinc-500 font-medium">Words</span>
-            <span className="text-xs font-bold text-zinc-200 font-mono">{totalWords}</span>
-          </div>
-          <div className="flex flex-col">
-            <span className="text-[10px] uppercase tracking-wider text-zinc-500 font-medium">Est. Audio</span>
-            <span className="text-xs font-bold text-indigo-400 font-mono">
-              {Math.floor(totalEstDuration)}s
+        {/* Storytelling Metric Tiles */}
+        <div className="grid grid-cols-3 gap-1.5 text-center text-xs">
+          <div className="p-1.5 rounded-lg bg-zinc-950 border border-zinc-800/80">
+            <span className="text-[9px] uppercase tracking-wider text-zinc-500 font-bold block">
+              Pages
+            </span>
+            <span className="font-mono font-bold text-zinc-200">
+              {groupedByPage.length}
             </span>
           </div>
-        </div>
 
-        {/* Storytelling Progress Bar */}
-        <div className="mt-2.5 space-y-1">
-          <div className="flex justify-between text-[10px] font-medium text-zinc-400">
-            <span>Approval Progress</span>
-            <span>{Math.round((approvedCount / (chapter.segments.length || 1)) * 100)}%</span>
+          <div className="p-1.5 rounded-lg bg-zinc-950 border border-zinc-800/80">
+            <span className="text-[9px] uppercase tracking-wider text-zinc-500 font-bold block">
+              Panels
+            </span>
+            <span className="font-mono font-bold text-zinc-200">
+              {chapter.segments.length}
+            </span>
           </div>
-          <div className="w-full bg-zinc-800/80 rounded-full h-1.5 overflow-hidden">
-            <div
-              className="bg-emerald-500 h-1.5 rounded-full transition-all duration-300 ease-out"
-              style={{
-                width: `${(approvedCount / (chapter.segments.length || 1)) * 100}%`,
-              }}
-            />
+
+          <div className="p-1.5 rounded-lg bg-zinc-950 border border-zinc-800/80">
+            <span className="text-[9px] uppercase tracking-wider text-zinc-500 font-bold block">
+              Est. Audio
+            </span>
+            <span className="font-mono font-bold text-indigo-400">
+              {Math.round(totalEstDuration)}s
+            </span>
           </div>
         </div>
       </div>
 
-      {/* Filter & Search Bar */}
-      <div className="p-2.5 border-b border-zinc-800/80 bg-zinc-900/20 space-y-2 shrink-0">
-        {/* Search input */}
+      {/* Filter and Search Bar */}
+      <div className="p-2.5 border-b border-zinc-800/80 bg-zinc-900/20 shrink-0 space-y-2">
+        {/* Search Input */}
         <div className="relative">
+          <Icons.Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
           <input
             type="text"
-            placeholder="Search dialogue, OCR or notes..."
             value={filter.search_query}
             onChange={(e) => onFilterChange({ search_query: e.target.value })}
-            className="w-full pl-8 pr-7 py-1.5 bg-zinc-900 border border-zinc-800 rounded-lg text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-indigo-500/80 transition-colors"
+            placeholder="Search dialogue, OCR or notes..."
+            className="w-full pl-8 pr-7 py-1 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-indigo-500 font-sans"
           />
-          <Icons.Search className="absolute left-2.5 top-2.5 text-zinc-500 w-3.5 h-3.5 pointer-events-none" />
           {filter.search_query && (
             <button
               type="button"
               onClick={() => onFilterChange({ search_query: "" })}
-              className="absolute right-2 top-2 text-zinc-500 hover:text-zinc-300 p-0.5"
-              title="Clear search"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
             >
               <Icons.X className="w-3.5 h-3.5" />
             </button>
           )}
-        </div>
-
-
-        {/* Character / Speaker Filter Dropdown */}
-        <div className="flex items-center gap-1.5">
-          <select
-            value={filter.selected_character_id || ""}
-            onChange={(e) =>
-              onFilterChange({
-                selected_character_id: e.target.value ? e.target.value : null,
-              })
-            }
-            className="flex-1 bg-zinc-900 border border-zinc-800 text-[11px] text-zinc-300 rounded px-2 py-1 focus:outline-none focus:border-indigo-500 cursor-pointer"
-          >
-            <option value="">All Characters ({chapter.segments.length})</option>
-            {chapter.characters.map((char) => {
-              const count = chapter.segments.filter((s) => s.speaker_id === char.id).length;
-              return (
-                <option key={char.id} value={char.id}>
-                  {char.name} ({count})
-                </option>
-              );
-            })}
-          </select>
-
-          {/* Speaker Type Toggle: All / Narrator / Dialogue */}
-          <select
-            value={filter.selected_speaker_type}
-            onChange={(e) =>
-              onFilterChange({
-                selected_speaker_type: e.target.value as SpeakerType | "ALL",
-              })
-            }
-            className="w-24 bg-zinc-900 border border-zinc-800 text-[11px] text-zinc-300 rounded px-1.5 py-1 focus:outline-none focus:border-indigo-500 cursor-pointer"
-          >
-            <option value="ALL">All Roles</option>
-            <option value="NARRATOR">Narrator</option>
-            <option value="CHARACTER">Dialogue</option>
-          </select>
         </div>
 
         {/* Status Filter Tabs */}
@@ -264,9 +243,9 @@ export const NarrationStoryPanel: React.FC<NarrationStoryPanelProps> = ({
         </div>
       </div>
 
-      {/* Ordered Story Segments List */}
-      <div className="flex-1 overflow-y-auto p-2 space-y-2 focus:outline-none" tabIndex={0}>
-        {filteredSegments.length === 0 ? (
+      {/* Grouped Page-by-Page Story Segments List */}
+      <div className="flex-1 overflow-y-auto p-2 space-y-3 focus:outline-none" tabIndex={0}>
+        {groupedByPage.length === 0 ? (
           <div className="p-8 text-center text-zinc-500 text-xs space-y-2">
             <div className="w-10 h-10 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-400 mx-auto mb-2 shadow-inner">
               <Icons.BookOpen className="w-5 h-5" />
@@ -275,74 +254,64 @@ export const NarrationStoryPanel: React.FC<NarrationStoryPanelProps> = ({
             <p className="text-[11px]">Try adjusting your search query or status filter.</p>
           </div>
         ) : (
-          filteredSegments.map((seg, idx) => {
-            const isSelected = seg.id === selectedSegmentId;
-            const character = chapter.characters.find((c) => c.id === seg.speaker_id);
-            const accentColor = character?.color_accent || "#6366f1";
+          groupedByPage.map((pageGroup) => {
+            const isCollapsed = !!collapsedPages[pageGroup.pageNumber];
+            const pageScript = chapter.page_scripts?.[pageGroup.pageId] || chapter.page_scripts?.[String(pageGroup.pageNumber)];
+            const hasPageStory = !!(pageScript && pageScript.lines && pageScript.lines.length >= 3);
+            const pageDuration = pageGroup.segments.reduce((acc, s) => acc + (s.estimated_duration_sec || 0), 0);
 
             return (
-              <div
-                key={seg.id}
-                role="button"
-                tabIndex={0}
-                onClick={() => onSelectSegment(seg.id)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    onSelectSegment(seg.id);
-                  }
-                }}
-                className={`relative group rounded-xl border p-2.5 transition-all text-left cursor-pointer ${
-                  isSelected
-                    ? "bg-zinc-900 border-indigo-500 ring-1 ring-indigo-500/40 shadow-lg shadow-indigo-950/50"
-                    : "bg-zinc-900/60 border-zinc-800/80 hover:border-zinc-700 hover:bg-zinc-900"
-                }`}
-              >
-                {/* Header row: Sequence #, Speaker badge, and Review status */}
-                <div className="flex items-center justify-between gap-1.5 mb-1.5">
-                  <div className="flex items-center gap-1.5">
-                    {/* Sequence Badge */}
-                    <span
-                      className={`w-5 h-5 rounded-md flex items-center justify-center font-mono text-[10px] font-bold ${
-                        isSelected
-                          ? "bg-indigo-600 text-white"
-                          : "bg-zinc-800 text-zinc-300 group-hover:bg-zinc-700"
-                      }`}
+              <div key={pageGroup.pageNumber} className="rounded-xl border border-zinc-800/80 bg-zinc-950/60 overflow-hidden shadow-sm">
+                {/* Page Group Header */}
+                <div
+                  className="p-2.5 bg-zinc-900/60 border-b border-zinc-800/60 flex items-center justify-between cursor-pointer hover:bg-zinc-900 transition-colors"
+                  onClick={() => togglePageCollapse(pageGroup.pageNumber)}
+                >
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      className="text-zinc-400 hover:text-zinc-200"
+                      title={isCollapsed ? "Expand page" : "Collapse page"}
                     >
-                      {seg.sequence}
+                      {isCollapsed ? (
+                        <Icons.ArrowRight className="w-3.5 h-3.5" />
+                      ) : (
+                        <Icons.ChevronDown className="w-3.5 h-3.5" />
+                      )}
+                    </button>
+                    <span className="text-xs font-bold text-zinc-100">
+                      Page {pageGroup.pageNumber}
                     </span>
-
-                    {/* Speaker Chip */}
-                    <div className="flex items-center gap-1 bg-zinc-950 px-1.5 py-0.5 rounded border border-zinc-800">
-                      <span
-                        className="w-2 h-2 rounded-full"
-                        style={{ backgroundColor: accentColor }}
-                      />
-                      <span className="text-[11px] font-semibold text-zinc-200 truncate max-w-[110px]">
-                        {seg.speaker_name}
-                      </span>
-                    </div>
-
-                    {/* Speaker Type tag */}
-                    {seg.speaker_type === "NARRATOR" ? (
-                      <span className="text-[9px] uppercase tracking-wider font-semibold text-indigo-400 bg-indigo-950/60 px-1 py-0.5 rounded">
-                        Voice
-                      </span>
-                    ) : (
-                      <span className="text-[9px] uppercase tracking-wider font-semibold text-emerald-400 bg-emerald-950/60 px-1 py-0.5 rounded">
-                        Dialog
-                      </span>
-                    )}
+                    <span className="text-[10px] text-zinc-500 font-mono">
+                      ({pageGroup.segments.length} {pageGroup.segments.length === 1 ? "panel" : "panels"})
+                    </span>
                   </div>
 
-                  {/* Status Badge */}
-                  <div>{getStatusBadge(seg.review_status, seg.generation_status)}</div>
+                  <div className="flex items-center gap-2">
+                    {hasPageStory ? (
+                      <span className="text-[9px] font-semibold text-amber-300 bg-amber-950/80 border border-amber-800/80 px-1.5 py-0.5 rounded-full flex items-center gap-1" title="5-10 line witty human script generated">
+                        <Icons.Sparkles className="w-2.5 h-2.5 text-amber-400" />
+                        <span>Story Ready</span>
+                      </span>
+                    ) : (
+                      <span className="text-[9px] text-zinc-500 italic">
+                        No Page Story
+                      </span>
+                    )}
+
+                    <span className="text-[10px] text-zinc-400 font-mono">
+                      ~{Math.round(pageDuration)}s
+                    </span>
+                  </div>
                 </div>
 
-                {/* Manga Source Context Preview Box */}
-                <div className="flex items-center gap-2.5 mb-2 p-2 rounded-lg bg-zinc-950/90 border border-zinc-800/80 shadow-sm">
-                  {/* Thumbnail / Manga Panel Preview with real image & robust resolution */}
-                  <div className="w-20 h-14 rounded-md overflow-hidden shrink-0 bg-zinc-900 border border-zinc-800 flex items-center justify-center relative shadow-inner group-hover:border-zinc-700 transition-colors">
-                    {(() => {
+                {/* Page Panels List */}
+                {!isCollapsed && (
+                  <div className="p-1.5 space-y-1.5">
+                    {pageGroup.segments.map((seg, sIdx) => {
+                      const isSelected = seg.id === selectedSegmentId;
+                      const character = chapter.characters.find((c) => c.id === seg.speaker_id);
+                      const accentColor = character?.color_accent || "#6366f1";
                       const primaryPanelId = seg.source_context.panel_ids?.[0];
                       const primaryPageId = seg.source_context.page_id;
                       const rawUrl = seg.source_context.panel_preview_url || seg.source_context.image_url;
@@ -358,162 +327,125 @@ export const NarrationStoryPanel: React.FC<NarrationStoryPanelProps> = ({
                         resolvedUrl = api.getPageImageUrl(chapter.project_id, primaryPageId);
                       }
 
-                      if (resolvedUrl) {
-                        return (
-                          <img
-                            src={resolvedUrl}
-                            alt={seg.source_context.panel_labels?.[0] || "Panel"}
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
-                            loading="lazy"
-                            onError={(e) => {
-                              // If panel file fails, try page image fallback
-                              const target = e.target as HTMLImageElement;
-                              if (chapter.project_id && primaryPageId && !target.src.includes("/pages/")) {
-                                target.src = api.getPageImageUrl(chapter.project_id, primaryPageId);
-                              } else {
-                                target.style.display = "none";
-                              }
-                            }}
-                          />
-                        );
-                      }
-                      if (seg.source_context.svg_thumbnail) {
-                        return (
-                          <div
-                            className="w-full h-full object-cover"
-                            dangerouslySetInnerHTML={{ __html: seg.source_context.svg_thumbnail }}
-                          />
-                        );
-                      }
                       return (
-                        <div className="text-[10px] font-mono text-zinc-500 font-bold flex flex-col items-center">
-                          <Icons.Image className="w-4 h-4 mb-0.5 text-zinc-600" />
-                          <span>P#{seg.source_context.page_number}</span>
+                        <div
+                          key={seg.id}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => onSelectSegment(seg.id)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              onSelectSegment(seg.id);
+                            }
+                          }}
+                          className={`rounded-lg border p-2 transition-all text-left cursor-pointer ${
+                            isSelected
+                              ? "bg-zinc-900 border-indigo-500 ring-1 ring-indigo-500/40 shadow-md shadow-indigo-950/40"
+                              : "bg-zinc-900/40 border-zinc-800/70 hover:border-zinc-700 hover:bg-zinc-900"
+                          }`}
+                        >
+                          {/* Header row */}
+                          <div className="flex items-center justify-between gap-1 mb-1">
+                            <div className="flex items-center gap-1.5">
+                              <span
+                                className={`w-4 h-4 rounded flex items-center justify-center font-mono text-[9px] font-bold ${
+                                  isSelected ? "bg-indigo-600 text-white" : "bg-zinc-800 text-zinc-300"
+                                }`}
+                              >
+                                {seg.sequence}
+                              </span>
+
+                              <div className="flex items-center gap-1 bg-zinc-950 px-1.5 py-0.5 rounded border border-zinc-800">
+                                <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: accentColor }} />
+                                <span className="text-[10px] font-semibold text-zinc-200 truncate max-w-[90px]">
+                                  {seg.speaker_name}
+                                </span>
+                              </div>
+
+                              <span className="text-[9px] text-zinc-500 font-mono">
+                                Panel #{sIdx + 1}
+                              </span>
+                            </div>
+
+                            <div>{getStatusBadge(seg.review_status, seg.generation_status)}</div>
+                          </div>
+
+                          {/* Thumbnail & Dialogue Preview */}
+                          <div className="flex items-center gap-2 mb-1.5">
+                            <div className="w-14 h-10 rounded overflow-hidden shrink-0 bg-zinc-900 border border-zinc-800 flex items-center justify-center">
+                              {resolvedUrl ? (
+                                <img
+                                  src={resolvedUrl}
+                                  alt="Panel preview"
+                                  className="w-full h-full object-cover"
+                                  loading="lazy"
+                                  onError={(e) => {
+                                    const target = e.target as HTMLImageElement;
+                                    if (chapter.project_id && primaryPageId && !target.src.includes("/pages/")) {
+                                      target.src = api.getPageImageUrl(chapter.project_id, primaryPageId);
+                                    } else {
+                                      target.style.display = "none";
+                                    }
+                                  }}
+                                />
+                              ) : (
+                                <Icons.Image className="w-3.5 h-3.5 text-zinc-600" />
+                              )}
+                            </div>
+
+                            <p className="text-[11px] text-zinc-300 line-clamp-2 leading-relaxed flex-1">
+                              {seg.narration_text}
+                            </p>
+                          </div>
+
+                          {/* Footer: Emotion, words & duration */}
+                          <div className="flex items-center justify-between text-[9px] text-zinc-500 border-t border-zinc-800/40 pt-1">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-zinc-400 font-medium">
+                                {seg.delivery.emotion}
+                              </span>
+                              <span>•</span>
+                              <span className="font-mono text-indigo-400">
+                                ~{seg.estimated_duration_sec}s ({seg.narration_text.split(" ").filter(Boolean).length}w)
+                              </span>
+                            </div>
+
+                            {seg.audio_asset_uri && (
+                              <span className="text-emerald-400 flex items-center gap-0.5 font-semibold">
+                                <Icons.Volume className="w-2.5 h-2.5" />
+                                Voice
+                              </span>
+                            )}
+                          </div>
                         </div>
                       );
-                    })()}
+                    })}
                   </div>
-
-                  {/* Panel References Label & OCR Dialogue */}
-                  <div className="flex-1 min-w-0">
-                    <div className="text-[10.5px] font-semibold text-zinc-300 flex items-center gap-1 truncate mb-0.5">
-                      <Icons.Layers className="w-3 h-3 text-indigo-400 shrink-0" />
-                      <span className="truncate">
-                        {seg.source_context.panel_labels?.[0] || `Scene #${seg.sequence}`}
-                      </span>
-                    </div>
-                    {seg.source_context.raw_ocr_dialogue ? (
-                      <div className="text-[10px] text-zinc-400 italic line-clamp-2 leading-tight" title={seg.source_context.raw_ocr_dialogue}>
-                        &ldquo;{seg.source_context.raw_ocr_dialogue}&rdquo;
-                      </div>
-                    ) : (
-                      <div className="text-[10px] text-zinc-500 line-clamp-2 leading-tight">
-                        {seg.source_context.visual_description || "Action / silent framing"}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Narration Script Text Excerpt */}
-                <p className="text-xs text-zinc-200 line-clamp-2 leading-relaxed mb-2">
-                  {seg.narration_text}
-                </p>
-
-                {/* Footer Metadata Chips */}
-                <div className="flex items-center justify-between text-[10px] text-zinc-400 border-t border-zinc-800/60 pt-1.5">
-                  <div className="flex items-center gap-1.5">
-                    {/* Emotion Tag */}
-                    <span className="px-1.5 py-0.5 rounded bg-zinc-800/80 text-zinc-300 font-medium text-[9px]">
-                      {seg.delivery.emotion}
-                    </span>
-                    <span className="font-mono text-zinc-500 text-[9px]">
-                      ~{seg.estimated_duration_sec}s
-                    </span>
-
-                    {/* Voice Audio Ready Indicator */}
-                    {seg.audio_asset_uri && (
-                      <span className="px-1.5 py-0.5 rounded bg-emerald-950/70 border border-emerald-800/80 text-emerald-300 font-mono text-[9px] flex items-center gap-1 font-semibold" title="Neural voice synthesis ready">
-                        <Icons.Volume className="w-2.5 h-2.5 text-emerald-400" />
-                        <span>{seg.measured_duration_sec ? `${seg.measured_duration_sec.toFixed(1)}s` : "Voice"}</span>
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Segment Management Actions: Reorder & Duplicate */}
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onReorderSegment(seg.id, "up");
-                      }}
-                      disabled={idx === 0}
-                      className="p-1 rounded text-zinc-400 hover:text-white hover:bg-zinc-800 disabled:opacity-20 transition-colors"
-                      title="Move Segment Up in Story Order"
-                    >
-                      <Icons.ChevronDown className="w-3 h-3 rotate-180" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onReorderSegment(seg.id, "down");
-                      }}
-                      disabled={idx === filteredSegments.length - 1}
-                      className="p-1 rounded text-zinc-400 hover:text-white hover:bg-zinc-800 disabled:opacity-20 transition-colors"
-                      title="Move Segment Down in Story Order"
-                    >
-                      <Icons.ChevronDown className="w-3 h-3" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onDuplicateSegment(seg.id);
-                      }}
-                      className="p-1 rounded text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
-                      title="Duplicate Segment"
-                    >
-                      <Icons.Copy className="w-3 h-3" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (confirm(`Delete Segment #${seg.sequence}?`)) {
-                          onDeleteSegment(seg.id);
-                        }
-                      }}
-                      className="p-1 rounded text-zinc-400 hover:text-rose-400 hover:bg-zinc-800"
-                      title="Delete Segment"
-                    >
-                      <Icons.Trash className="w-3 h-3" />
-                    </button>
-                  </div>
-                </div>
+                )}
               </div>
             );
           })
         )}
       </div>
 
-      {/* Bottom Sticky Action Area: Add New Segment */}
-      <div className="p-3 border-t border-zinc-800/80 bg-zinc-900/60 shrink-0 flex items-center gap-2">
+      {/* Bottom Bar: Add Segment */}
+      <div className="p-2 border-t border-zinc-800/80 bg-zinc-900/30 flex items-center gap-1.5 shrink-0">
         <button
           type="button"
           onClick={() => onAddSegment("NARRATOR")}
-          className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-indigo-600/90 hover:bg-indigo-600 text-white font-semibold text-xs transition-colors shadow-md shadow-indigo-950"
+          className="flex-1 py-1.5 rounded-lg bg-indigo-600/90 hover:bg-indigo-600 text-white font-semibold text-xs flex items-center justify-center gap-1.5 shadow-sm transition-colors"
         >
           <Icons.Plus className="w-3.5 h-3.5" />
-          <span>Add Narration</span>
+          <span>+ Add Narration</span>
         </button>
+
         <button
           type="button"
           onClick={() => onAddSegment("CHARACTER")}
-          className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-semibold text-xs border border-zinc-700 transition-colors"
+          className="flex-1 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-semibold text-xs flex items-center justify-center gap-1.5 border border-zinc-700 transition-colors"
         >
-          <Icons.Plus className="w-3.5 h-3.5" />
-          <span>Add Dialogue</span>
+          <Icons.MessageSquare className="w-3.5 h-3.5 text-emerald-400" />
+          <span>+ Add Dialogue</span>
         </button>
       </div>
     </aside>

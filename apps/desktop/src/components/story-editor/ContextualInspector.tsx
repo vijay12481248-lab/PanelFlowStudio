@@ -126,7 +126,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
     if (audioPlayerRef.current) {
       audioPlayerRef.current.pause();
     }
-    const audio = new Audio(url);
+    const audio = new Audio(api.getAudioFileUrl(projectId || state.project_id, url));
     audioPlayerRef.current = audio;
     setPlayingTake(take);
     audio.play().catch((err) => {

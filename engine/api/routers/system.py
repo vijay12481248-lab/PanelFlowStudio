@@ -850,6 +850,12 @@ class CloudLLMTestRequest(BaseModel):
     model_name: Optional[str] = None
 
 
+class CloudLLMChatRequest(BaseModel):
+    prompt: str
+    model_name: Optional[str] = None
+    system_prompt: Optional[str] = None
+
+
 class FlowOverridePayload(BaseModel):
     provider_id: str = "global"
     model_name: Optional[str] = ""
@@ -943,14 +949,37 @@ async def test_cloud_llm_connection(req: CloudLLMTestRequest):
     try:
         models = await test_prov.list_available_models()
         latency_ms = round((time.time() - t0) * 1000, 1)
-        healthy = len(models) > 0 or await test_prov.health_check()
+        endpoint_healthy = len(models) > 0 or await test_prov.health_check()
+        if not endpoint_healthy:
+            return {
+                "status": "DEGRADED",
+                "connected": False,
+                "latency_ms": latency_ms,
+                "models_count": len(models),
+                "models": models[:50],
+                "model_verified": False,
+                "response_preview": None,
+                "error": "The endpoint did not return a usable /models response.",
+            }
+
+        selected_model = req.model_name or (models[0] if models else "default")
+        response = await test_prov.generate_text(
+            "Reply with exactly: PANELFLOW_OK",
+            system_prompt="You are a connection test. Follow the requested output exactly.",
+            max_tokens=12,
+            model=selected_model,
+        )
+        latency_ms = round((time.time() - t0) * 1000, 1)
+        model_verified = bool(response and response.strip())
         return {
-            "status": "HEALTHY" if healthy else "DEGRADED",
-            "connected": healthy,
+            "status": "HEALTHY" if model_verified else "DEGRADED",
+            "connected": model_verified,
             "latency_ms": latency_ms,
             "models_count": len(models),
             "models": models[:50],
-            "error": None if healthy else "Could not verify models from endpoint",
+            "model_verified": model_verified,
+            "response_preview": response.strip()[:120] if response else None,
+            "error": None if model_verified else f"The endpoint is reachable, but model '{selected_model}' returned no text.",
         }
     except Exception as e:
         latency_ms = round((time.time() - t0) * 1000, 1)
@@ -960,10 +989,59 @@ async def test_cloud_llm_connection(req: CloudLLMTestRequest):
             "latency_ms": latency_ms,
             "models_count": 0,
             "models": [],
+            "model_verified": False,
+            "response_preview": None,
             "error": str(e),
         }
 
 
+@router.post("/llm/cloud-chat")
+async def chat_with_cloud_llm(req: CloudLLMChatRequest):
+    """Send a real prompt through the saved active cloud/gateway provider."""
+    import time
+    from engine.llm.registry import llm_registry
+
+    prompt = req.prompt.strip()
+    if not prompt:
+        raise HTTPException(status_code=400, detail="Prompt cannot be empty")
+
+    cfg = llm_registry.get_cloud_config()
+    if not cfg.get("is_active", False):
+        raise HTTPException(status_code=409, detail="No active cloud or gateway provider is configured")
+
+    provider = llm_registry.get_cloud_provider()
+    if provider is None:
+        llm_registry.load_persisted_cloud_provider()
+        provider = llm_registry.get_cloud_provider()
+    if provider is None:
+        raise HTTPException(status_code=409, detail="The configured provider is not loaded; restart the engine")
+
+    model_name = req.model_name or cfg.get("model_name") or provider.model_name
+    started = time.time()
+    try:
+        response = await provider.generate_text(
+            prompt,
+            system_prompt=req.system_prompt or "You are a concise assistant testing PanelFlow's configured LLM provider.",
+            max_tokens=1024,
+            model=model_name,
+        )
+        return {
+            "status": "OK",
+            "provider_type": cfg.get("provider_type", "custom"),
+            "model_name": model_name,
+            "response": response,
+            "latency_ms": round((time.time() - started) * 1000, 1),
+            "error": None,
+        }
+    except Exception as exc:
+        return {
+            "status": "ERROR",
+            "provider_type": cfg.get("provider_type", "custom"),
+            "model_name": model_name,
+            "response": "",
+            "latency_ms": round((time.time() - started) * 1000, 1),
+            "error": str(exc),
+        }
 @router.get("/llm/providers/all")
 async def get_all_available_llm_providers():
     """
@@ -1034,6 +1112,13 @@ async def get_global_llm_settings():
 
     has_cloud_key = bool(cloud_cfg.get("api_key") and cloud_cfg["api_key"].strip())
     ptype = cloud_cfg.get("provider_type", "openrouter")
+    cloud_healthy = False
+    if cloud_cfg.get("is_active", False):
+        try:
+            cloud_provider = llm_registry.get_cloud_provider()
+            cloud_healthy = bool(cloud_provider and await cloud_provider.health_check())
+        except Exception:
+            cloud_healthy = False
 
     providers = [
         {
@@ -1050,18 +1135,18 @@ async def get_global_llm_settings():
             "id": "freellmapi",
             "name": "FreeLLMAPI Gateway (Local/Self-Hosted)",
             "type": "gateway",
-            "is_configured": (ptype == "freellmapi" and has_cloud_key) or ptype == "freellmapi",
-            "is_healthy": ptype == "freellmapi" and cloud_cfg.get("is_active", False),
+            "is_configured": ptype == "freellmapi" and has_cloud_key,
+            "is_healthy": ptype == "freellmapi" and cloud_healthy,
             "endpoint": cloud_cfg.get("endpoint_url") if ptype == "freellmapi" else "http://localhost:3001/v1",
-            "models": ["gemini-2.0-flash", "llama-3.3-70b", "cerebras/llama3.1-70b", "mistralai/mistral-large"],
-            "default_model": "gemini-2.0-flash",
+            "models": (["auto"] + cloud_models) if ptype == "freellmapi" else ["auto"],
+            "default_model": "auto",
         },
         {
             "id": "openrouter",
             "name": "OpenRouter Free Tier",
             "type": "cloud",
             "is_configured": (ptype == "openrouter" and has_cloud_key),
-            "is_healthy": ptype == "openrouter" and cloud_cfg.get("is_active", False) and has_cloud_key,
+            "is_healthy": ptype == "openrouter" and cloud_healthy and has_cloud_key,
             "endpoint": "https://openrouter.ai/api/v1",
             "models": ["meta-llama/llama-3.3-70b-instruct:free", "google/gemini-2.0-flash-exp:free", "deepseek/deepseek-r1:free", "qwen/qwen-2.5-vl-72b-instruct:free"],
             "default_model": "meta-llama/llama-3.3-70b-instruct:free",
@@ -1071,7 +1156,7 @@ async def get_global_llm_settings():
             "name": "Groq Cloud Free Tier",
             "type": "cloud",
             "is_configured": (ptype == "groq" and has_cloud_key),
-            "is_healthy": ptype == "groq" and cloud_cfg.get("is_active", False) and has_cloud_key,
+            "is_healthy": ptype == "groq" and cloud_healthy and has_cloud_key,
             "endpoint": "https://api.groq.com/openai/v1",
             "models": ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"],
             "default_model": "llama-3.3-70b-versatile",

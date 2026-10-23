@@ -89,6 +89,8 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
   const [selectedOllamaModel, setSelectedOllamaModel] = useState<string>("qwen3.5:9b");
   const [isOllamaOnline, setIsOllamaOnline] = useState<boolean>(true);
   const [isDraftingNarration, setIsDraftingNarration] = useState<boolean>(false);
+  const [generationStep, setGenerationStep] = useState<string>("");
+  const [showTierDropdown, setShowTierDropdown] = useState<boolean>(false);
   const [isSynthesizingAll, setIsSynthesizingAll] = useState<boolean>(false);
   const [showOllamaGuideModal, setShowOllamaGuideModal] = useState<boolean>(false);
   const [postDraftPrompt, setPostDraftPrompt] = useState<boolean>(false);
@@ -563,10 +565,22 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
     };
   }, [chapter]);
 
-  // Single-Click AI Narration Generation using Real Ollama Model
-  const handleGenerateAiNarration = async () => {
-    if (!projectId) return;
+  // 3-Tier AI Narration Generation (Page Recap 5-10 Lines -> Panel Micro -> Final Synced Script)
+  const handleGenerateAiNarration = async (
+    mode: "full" | "page_only" | "panel_only" | "harmonize" = "full"
+  ) => {
+    if (!projectId && !chapter.segments.length) return;
     setIsDraftingNarration(true);
+    setGenerationStep(
+      mode === "page_only"
+        ? "Drafting 5-10 line page stories..."
+        : mode === "panel_only"
+        ? "Analyzing panel micro beats..."
+        : mode === "harmonize"
+        ? "Comparing and harmonizing scripts..."
+        : "Executing 3-Tier Narration Pipeline (Page -> Panel -> Harmonize)..."
+    );
+
     try {
       const scenesPayload = (scenes && scenes.length > 0 ? scenes : chapter.segments).map(
         (s: any, idx: number) => {
@@ -590,6 +604,8 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
               s.layers?.[0]?.name || s.visual_description || `Scene ${idx + 1} manga visual framing`,
             ocr_text: ocrText,
             panel_ids: panelIds,
+            page_id: s.page_id || matchingSegment?.source_context?.page_id,
+            page_sequence: s.page_sequence || matchingSegment?.source_context?.page_number || 1,
             speaker: speakerName,
             characters: [speakerName],
           };
@@ -600,10 +616,18 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
         projectId,
         scenesPayload,
         selectedProviderId === "global" ? undefined : selectedProviderId,
-        selectedModel || undefined
+        selectedModel || undefined,
+        mode,
+        undefined,
+        chapter.page_scripts
       );
 
       if (draftResult?.beats && draftResult.beats.length > 0) {
+        const nextScripts = {
+          ...(chapter.page_scripts || {}),
+          ...(draftResult.page_scripts || {}),
+        };
+
         const updatedSegments: NarrationSegment[] = draftResult.beats.map(
           (beat: any, bIdx: number) => {
             const matchingScene = scenes.find((sc) => sc.id === beat.scene_id) || scenes[bIdx];
@@ -612,6 +636,10 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
             const emotion = beat.recommended_emotion || "Neutral";
             const speed = beat.recommended_speed || 1.0;
             const characterName = beat.character_name || beat.speaker || "The Narrator";
+            const estDuration =
+              beat.estimated_duration_sec ||
+              Math.max(2.0, Math.round(text.split(" ").filter(Boolean).length / 2.33));
+
             return {
               id: `narr_${beat.scene_id || bIdx + 1}`,
               sequence: bIdx + 1,
@@ -624,6 +652,9 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
               speaker_type: beat.speaker_type || "NARRATOR",
               voice_profile_id: "voice_aria_female_narrator",
               narration_text: text,
+              page_narration_text: beat.page_narration_text,
+              panel_narration_text: beat.panel_narration_text,
+              synthesis_notes: beat.synthesis_notes,
               text_revision: 1,
               content_hash: computeContentHash(text, emotion, speed, "short"),
               source_context: {
@@ -647,13 +678,17 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
                 story_context: beat.inferred_subtext || `Story beat ${bIdx + 1}`,
                 page_context_summary: beat.page_context_summary,
                 character_name: characterName,
+                page_narration_text: beat.page_narration_text,
+                panel_narration_text: beat.panel_narration_text,
+                synthesis_notes: beat.synthesis_notes,
+                panel_duration_budget_sec: beat.target_panel_time_sec || estDuration,
               },
               delivery: {
                 emotion: emotion as any,
                 intensity: 0.6,
                 speech_speed: speed,
                 pause: { preset: "short", duration_ms: 300, placement: "after_first_sentence" },
-                performance_notes: "Emotionally grounded manga narration.",
+                performance_notes: beat.synthesis_notes || "Emotionally grounded manga narration.",
                 pronunciation_guide: [],
               },
               review_status: "DRAFT",
@@ -662,7 +697,7 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
               audio_asset_uri: null,
               previous_audio_asset_uri: null,
               generated_audio_revision: null,
-              estimated_duration_sec: Math.max(2.0, Math.round(text.split(" ").length / 2.5)),
+              estimated_duration_sec: estDuration,
               measured_duration_sec: null,
               updated_at: new Date().toISOString(),
             };
@@ -671,6 +706,7 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
 
         const nextChapter = {
           ...chapter,
+          page_scripts: nextScripts,
           segments: updatedSegments,
           updated_at: new Date().toISOString(),
         };
@@ -684,6 +720,7 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
       alert(`Narration Generation: ${err.message || "Failed to generate narration"}`);
     } finally {
       setIsDraftingNarration(false);
+      setGenerationStep("");
     }
   };
 
@@ -840,26 +877,95 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
             onOpenSettings={() => setShowProviderSettingsModal(true)}
           />
 
-          {/* Single-Click AI Narration Generation */}
-          <button
-            type="button"
-            onClick={handleGenerateAiNarration}
-            disabled={isDraftingNarration}
-            className="text-xs h-8 px-3.5 rounded-lg bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-bold shadow-md shadow-indigo-600/30 flex items-center gap-1.5 transition-all active:scale-95 disabled:opacity-50"
-            title="Generate AI narration grounded in source manga panels"
-          >
-            {isDraftingNarration ? (
-              <>
-                <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                <span>Drafting...</span>
-              </>
-            ) : (
-              <>
-                <Icons.Sparkles className="w-3.5 h-3.5 text-indigo-200" />
-                <span>Generate AI Narration</span>
-              </>
+          {/* 3-Tier AI Narration Multi-Action Generator */}
+          <div className="relative flex items-center">
+            <button
+              type="button"
+              onClick={() => handleGenerateAiNarration("full")}
+              disabled={isDraftingNarration}
+              className="text-xs h-8 px-3.5 rounded-l-lg bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-bold shadow-md shadow-indigo-600/30 flex items-center gap-1.5 transition-all active:scale-95 disabled:opacity-50"
+              title="Execute full 3-tier narration workflow (Page Recap -> Panel Breakdown -> Harmonize & Sync)"
+            >
+              {isDraftingNarration ? (
+                <>
+                  <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  <span>{generationStep || "Drafting 3-Tier..."}</span>
+                </>
+              ) : (
+                <>
+                  <Icons.Sparkles className="w-3.5 h-3.5 text-indigo-200" />
+                  <span>Generate 3-Tier Narration</span>
+                </>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowTierDropdown((v) => !v)}
+              disabled={isDraftingNarration}
+              className="text-xs h-8 px-1.5 rounded-r-lg bg-violet-700 hover:bg-violet-600 border-l border-violet-500 text-white font-bold transition-all disabled:opacity-50"
+              title="Select specific narration stage"
+            >
+              <Icons.ChevronDown className="w-3 h-3" />
+            </button>
+
+            {/* Dropdown Menu */}
+            {showTierDropdown && (
+              <div
+                className="absolute right-0 top-10 w-64 rounded-xl bg-zinc-900 border border-zinc-700 shadow-2xl p-1.5 z-50 space-y-1 text-xs"
+                onClick={() => setShowTierDropdown(false)}
+              >
+                <button
+                  type="button"
+                  onClick={() => handleGenerateAiNarration("full")}
+                  className="w-full text-left p-2 rounded-lg hover:bg-indigo-950/80 text-zinc-100 hover:text-indigo-200 flex items-start gap-2"
+                >
+                  <Icons.Sparkles className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold block">Run Full 3-Tier Workflow</span>
+                    <span className="text-[10px] text-zinc-400">Page Story (5-10 lines) ➔ Panel Micro ➔ Harmonize</span>
+                  </div>
+                </button>
+
+                <div className="h-px bg-zinc-800" />
+
+                <button
+                  type="button"
+                  onClick={() => handleGenerateAiNarration("page_only")}
+                  className="w-full text-left p-2 rounded-lg hover:bg-amber-950/60 text-zinc-100 hover:text-amber-200 flex items-start gap-2"
+                >
+                  <Icons.BookOpen className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold block">Tier 1: Page Stories (5-10 Lines)</span>
+                    <span className="text-[10px] text-zinc-400">Full page image analysis with witty recap</span>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleGenerateAiNarration("panel_only")}
+                  className="w-full text-left p-2 rounded-lg hover:bg-emerald-950/60 text-zinc-100 hover:text-emerald-200 flex items-start gap-2"
+                >
+                  <Icons.Eye className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold block">Tier 2: Panel Breakdown Only</span>
+                    <span className="text-[10px] text-zinc-400">Micro visual framing & OCR extraction</span>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleGenerateAiNarration("harmonize")}
+                  className="w-full text-left p-2 rounded-lg hover:bg-purple-950/60 text-zinc-100 hover:text-purple-200 flex items-start gap-2"
+                >
+                  <Icons.Layout className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold block">Tier 3: Compare & Harmonize</span>
+                    <span className="text-[10px] text-zinc-400">Sync witty page lines with panel durations</span>
+                  </div>
+                </button>
+              </div>
             )}
-          </button>
+          </div>
 
           {/* Single-Click Voices Generation via Chatterbox Turbo */}
           <button
@@ -906,6 +1012,74 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
           )}
         </div>
       </header>
+
+      {/* 3-Tier Storyteller Workflow Progression Bar */}
+      <div className="bg-zinc-900/90 border-b border-zinc-800/80 px-4 py-2 flex items-center justify-between text-xs shrink-0 select-none">
+        <div className="flex items-center gap-3">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-400 bg-indigo-950/80 border border-indigo-800/60 px-2 py-0.5 rounded flex items-center gap-1">
+            <Icons.Layers className="w-3 h-3" />
+            3-Tier Storyteller Flow
+          </span>
+
+          <div className="flex items-center gap-2 text-xs">
+            {/* Step 1 */}
+            <div className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border ${
+              Object.keys(chapter.page_scripts || {}).length > 0
+                ? "bg-amber-950/60 border-amber-800/80 text-amber-300 font-semibold"
+                : "bg-zinc-950 border-zinc-800 text-zinc-400"
+            }`}>
+              <span className="w-3.5 h-3.5 rounded-full bg-amber-500/20 text-amber-300 font-mono text-[9px] flex items-center justify-center font-bold">1</span>
+              <span>Page Story (5-10 Lines)</span>
+              {Object.keys(chapter.page_scripts || {}).length > 0 && (
+                <Icons.Check className="w-3 h-3 text-amber-400" />
+              )}
+            </div>
+
+            <Icons.ArrowRight className="w-3 h-3 text-zinc-600" />
+
+            {/* Step 2 */}
+            <div className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border ${
+              chapter.segments.some((s) => s.panel_narration_text)
+                ? "bg-emerald-950/60 border-emerald-800/80 text-emerald-300 font-semibold"
+                : "bg-zinc-950 border-zinc-800 text-zinc-400"
+            }`}>
+              <span className="w-3.5 h-3.5 rounded-full bg-emerald-500/20 text-emerald-300 font-mono text-[9px] flex items-center justify-center font-bold">2</span>
+              <span>Panel Breakdown</span>
+              {chapter.segments.some((s) => s.panel_narration_text) && (
+                <Icons.Check className="w-3 h-3 text-emerald-400" />
+              )}
+            </div>
+
+            <Icons.ArrowRight className="w-3 h-3 text-zinc-600" />
+
+            {/* Step 3 */}
+            <div className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border ${
+              chapter.segments.some((s) => s.synthesis_notes || s.review_status === "APPROVED")
+                ? "bg-purple-950/60 border-purple-800/80 text-purple-300 font-semibold"
+                : "bg-zinc-950 border-zinc-800 text-zinc-400"
+            }`}>
+              <span className="w-3.5 h-3.5 rounded-full bg-purple-500/20 text-purple-300 font-mono text-[9px] flex items-center justify-center font-bold">3</span>
+              <span>Harmonized & Synced Script</span>
+              {chapter.segments.some((s) => s.synthesis_notes || s.review_status === "APPROVED") && (
+                <Icons.Check className="w-3 h-3 text-purple-400" />
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {isDraftingNarration ? (
+            <div className="flex items-center gap-2 text-indigo-300 font-semibold text-xs">
+              <span className="w-3 h-3 border-2 border-indigo-400/30 border-t-indigo-400 rounded-full animate-spin" />
+              <span>{generationStep || "Running 3-tier narration..."}</span>
+            </div>
+          ) : (
+            <span className="text-[11px] text-zinc-400">
+              {chapter.segments.length} panels • {Object.keys(chapter.page_scripts || {}).length} page stories ready
+            </span>
+          )}
+        </div>
+      </div>
 
       {/* Post-Draft Action Notification Banner */}
       {postDraftPrompt && (
@@ -976,10 +1150,19 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
             nextSegment={nextSegment}
             characters={chapter.characters}
             projectId={projectId}
+            pageScript={
+              chapter.page_scripts?.[selectedSegment?.source_context?.page_id || ""] ||
+              chapter.page_scripts?.[String(selectedSegment?.source_context?.page_number || 1)] ||
+              null
+            }
+            allPageScripts={chapter.page_scripts}
             onUpdateSegment={handleUpdateSegment}
             onDuplicateSegment={handleDuplicateSegment}
             onDeleteSegment={handleDeleteSegment}
             onSplitSegment={handleSplitSegment}
+            onHarmonizeSegment={async () => {
+              await handleGenerateAiNarration("harmonize");
+            }}
             onSynthesizeSceneVoice={async (seg) => {
               if (!projectId) return;
               try {

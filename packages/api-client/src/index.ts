@@ -44,6 +44,8 @@ import type {
   CloudLLMConfig,
   CloudLLMTestRequest,
   CloudLLMTestResponse,
+  CloudLLMChatRequest,
+  CloudLLMChatResponse,
   AvailableLLMProvidersResponse,
   GlobalLLMSettings,
   SaveGlobalLLMSettingsRequest,
@@ -1246,7 +1248,21 @@ export class PanelFlowApiClient {
   }
 
   getAudioFileUrl(projectId: string, filePath: string): string {
-    return `${this.resourceUrl(`/api/projects/${projectId}/audio/file`)}?path=${encodeURIComponent(filePath)}`;
+    if (/^https?:\/\//i.test(filePath)) return filePath;
+
+    let resolvedPath = filePath;
+    const streamedRoute = `/api/projects/${projectId}/audio/file`;
+    if (filePath.startsWith(streamedRoute)) {
+      const parsed = new URL(filePath, this.baseUrl);
+      resolvedPath = parsed.searchParams.get("path") || filePath;
+    } else {
+      const dialoguePrefix = `/api/projects/${projectId}/audio/dialogue/`;
+      if (filePath.startsWith(dialoguePrefix)) {
+        resolvedPath = `audio/dialogue/${decodeURIComponent(filePath.slice(dialoguePrefix.length))}`;
+      }
+    }
+
+    return `${this.resourceUrl(`/api/projects/${projectId}/audio/file`)}?path=${encodeURIComponent(resolvedPath)}`;
   }
 
   async getAudioProviders(): Promise<{
@@ -1271,11 +1287,39 @@ export class PanelFlowApiClient {
     projectId: string,
     scenes: any[],
     providerId?: string,
-    modelName?: string
+    modelName?: string,
+    mode?: "full" | "page_only" | "panel_only" | "harmonize",
+    targetPageSequence?: number,
+    existingPageScripts?: Record<string, any>
   ): Promise<any> {
     return this.request<any>(`/api/projects/${projectId}/narration/draft`, {
       method: "POST",
-      body: JSON.stringify({ scenes, provider_id: providerId, model_name: modelName }),
+      body: JSON.stringify({
+        scenes,
+        provider_id: providerId,
+        model_name: modelName,
+        mode: mode || "full",
+        target_page_sequence: targetPageSequence,
+        existing_page_scripts: existingPageScripts,
+      }),
+    });
+  }
+
+  async harmonizeNarration(
+    projectId: string,
+    scenes: any[],
+    pageScripts: Record<string, any>,
+    providerId?: string,
+    modelName?: string
+  ): Promise<any> {
+    return this.request<any>(`/api/projects/${projectId}/narration/harmonize`, {
+      method: "POST",
+      body: JSON.stringify({
+        scenes,
+        page_scripts: pageScripts,
+        provider_id: providerId,
+        model_name: modelName,
+      }),
     });
   }
 
@@ -1571,6 +1615,13 @@ export class PanelFlowApiClient {
 
   async testCloudLLMConnection(params: CloudLLMTestRequest): Promise<CloudLLMTestResponse> {
     return this.request<CloudLLMTestResponse>("/api/system/llm/cloud-test", {
+      method: "POST",
+      body: JSON.stringify(params),
+    });
+  }
+
+  async chatWithCloudLLM(params: CloudLLMChatRequest): Promise<CloudLLMChatResponse> {
+    return this.request<CloudLLMChatResponse>("/api/system/llm/cloud-chat", {
       method: "POST",
       body: JSON.stringify(params),
     });

@@ -1,12 +1,13 @@
 import { useEffect, useRef } from "react";
 import type { StoryEditorState } from "@panelflow/shared-types";
+import { api } from "@panelflow/api-client";
 import { computeBgmDuckingMultiplier, computeFadeMultiplier } from "./audioAdapter";
 
 /**
  * Custom hook to synchronize real HTML5 audio playback for BGM, SFX, and Narration
  * with the Story Editor's playback controller and playhead position.
  */
-export function useTimelineAudioPlayback(state: StoryEditorState) {
+export function useTimelineAudioPlayback(projectId: string, state: StoryEditorState) {
   // Map of active HTMLAudioElement instances by clip ID
   const audioInstancesRef = useRef<Map<string, HTMLAudioElement>>(new Map());
 
@@ -149,7 +150,7 @@ export function useTimelineAudioPlayback(state: StoryEditorState) {
 
       let audio = instances.get(narr.id);
       if (!audio) {
-        audio = new Audio(narr.audio_url);
+        audio = new Audio(api.getAudioFileUrl(projectId, narr.audio_url));
         audio.preload = "auto";
         instances.set(narr.id, audio);
       }
@@ -187,6 +188,7 @@ export function useTimelineAudioPlayback(state: StoryEditorState) {
     state.sfx_cues,
     state.narration_clips,
     state.track_states,
+    projectId,
   ]);
 
   // Cleanup all on unmount

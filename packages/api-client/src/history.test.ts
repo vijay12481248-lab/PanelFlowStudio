@@ -3,6 +3,15 @@ import assert from "node:assert/strict";
 import { PanelFlowApiClient } from "./index";
 
 const history = (revision: number) => ({ scope: "project:p", revision, undoCount: revision, redoCount: 0, canUndo: revision > 0, canRedo: false, undoLabel: "Edit", redoLabel: null, busy: false, conflicted: false, recoveryRequired: false, fingerprint: "f".repeat(64), error: null });
+
+test("audio URLs from persisted timeline clips resolve through the authenticated engine file route", () => {
+  const client = new PanelFlowApiClient("http://127.0.0.1:8765", "test-only");
+  const persisted = "/api/projects/p/audio/dialogue/speech.wav";
+  assert.equal(
+    client.getAudioFileUrl("p", persisted),
+    "http://127.0.0.1:8765/api/projects/p/audio/file;pf-token=test-only?path=audio%2Fdialogue%2Fspeech.wav",
+  );
+});
 test("editor persistence carries loaded history revision, preserves retry ID, and observes authoritative replies", async () => {
   const original = globalThis.fetch;
   const calls: any[] = []; let fail = false;

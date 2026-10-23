@@ -60,6 +60,16 @@ export interface EmotionalDeliveryConfig {
   pronunciation_guide: PronunciationItem[];
 }
 
+export interface PageScriptRecord {
+  page_id: string;
+  page_sequence: number;
+  full_script: string;
+  lines: string[];
+  tone: string;
+  panels_count?: number;
+  humor_and_emotional_notes?: string;
+}
+
 export interface MangaSourceContext {
   page_id: string;
   page_number: number;
@@ -73,6 +83,11 @@ export interface MangaSourceContext {
   story_context: string;
   page_context_summary?: string;
   character_name?: string;
+  // 3-Tier Narration Properties
+  page_narration_text?: string; // Tier 1: 5-10 line witty human recap script
+  panel_narration_text?: string; // Tier 2: Micro panel observation & beat
+  synthesis_notes?: string; // Tier 3: Comparison & harmonization explanation
+  panel_duration_budget_sec?: number; // Target video display window for this panel
 }
 
 /**
@@ -113,7 +128,10 @@ export interface NarrationSegment {
   has_custom_delivery_override?: boolean;
 
   // Script text and version tracking
-  narration_text: string;
+  narration_text: string; // Final harmonized synced script
+  page_narration_text?: string; // Tier 1: 5-10 lines witty page recap
+  panel_narration_text?: string; // Tier 2: Micro panel beat
+  synthesis_notes?: string; // Tier 3: Comparison notes
   text_revision: number; // monotonically increasing integer per text edit
   content_hash: string; // hash of text + emotion + speed
 
@@ -175,6 +193,7 @@ export interface NarrationChapter {
   segments: NarrationSegment[];
   characters: CharacterProfile[];
   voice_profiles: VoiceProfile[];
+  page_scripts?: Record<string, PageScriptRecord>;
   created_at: string;
   updated_at: string;
 }

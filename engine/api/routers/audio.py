@@ -181,6 +181,16 @@ class DraftNarrationRequest(BaseModel):
     scenes: list[Dict[str, Any]]
     provider_id: Optional[str] = None
     model_name: Optional[str] = None
+    mode: Optional[str] = "full"
+    target_page_sequence: Optional[int] = None
+    existing_page_scripts: Optional[Dict[str, Any]] = None
+
+
+class HarmonizeNarrationRequest(BaseModel):
+    scenes: list[Dict[str, Any]]
+    page_scripts: Dict[str, Any]
+    provider_id: Optional[str] = None
+    model_name: Optional[str] = None
 
 
 @router.get("/audio/providers")
@@ -397,10 +407,67 @@ async def draft_narration_plan(
             provider_id=req.provider_id,
             model_name=req.model_name,
             workspace_path=Path(proj.workspace_path) if proj.workspace_path else None,
+            mode=getattr(req, "mode", "full") or "full",
+            existing_page_scripts=getattr(req, "existing_page_scripts", None),
         )
         return plan.model_dump()
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Narration drafting failed: {e}")
+
+
+
+
+
+@router.post("/projects/{project_id}/narration/harmonize")
+async def harmonize_narration_endpoint(
+    project_id: str,
+    req: HarmonizeNarrationRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Compares existing page-level scripts and panel micro scripts,
+    generating a final synced script aligned to panel visual durations.
+    """
+    from engine.database.models import (
+        ProjectRecord,
+        PanelRecord,
+        PageRecord,
+        CharacterRecord,
+    )
+    from engine.story.narration import story_narration_service
+    proj = db.query(ProjectRecord).filter(ProjectRecord.id == project_id).first()
+    if not proj:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+
+    db_characters = (
+        db.query(CharacterRecord)
+        .filter(CharacterRecord.project_id == project_id)
+        .all()
+    )
+    characters_data = [
+        {
+            "id": c.id,
+            "name": c.display_name,
+            "canonical_name": c.canonical_name or c.display_name,
+            "role": c.role,
+        }
+        for c in db_characters
+    ]
+
+    try:
+        plan = await story_narration_service.generate_narration_draft(
+            project_id=project_id,
+            scenes_data=req.scenes,
+            characters_data=characters_data,
+            provider_id=req.provider_id,
+            model_name=req.model_name,
+            workspace_path=Path(proj.workspace_path) if proj.workspace_path else None,
+            mode="harmonize",
+            existing_page_scripts=req.page_scripts,
+        )
+        return plan.model_dump()
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Harmonization failed: {e}")
 
 
 @router.post("/projects/{project_id}/narration/synthesize-segment")

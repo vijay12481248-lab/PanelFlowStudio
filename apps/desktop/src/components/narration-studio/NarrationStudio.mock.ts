@@ -12,8 +12,45 @@ import {
   type CharacterProfile,
   type VoiceProfile,
   type NarrationSegment,
+  type PageScriptRecord,
   computeContentHash,
 } from "./NarrationStudio.types.ts";
+
+export const MOCK_PAGE_SCRIPTS: Record<string, PageScriptRecord> = {
+  "page_01": {
+    page_id: "page_01",
+    page_sequence: 1,
+    full_script: "Page 1 welcomes us to the depths with dramatic flair and questionable dungeon exploration choices. The narrator opens like we are entering a cathedral of doom, but Elena Vance immediately ruins the eerie silence by yelling at Kaelen for waving his lantern like a festival sparkler. Kaelen's face is pure bewildered regret, wondering why he signed up for this quest in the first place. You have to love the classic trope: ancient unspeakable horrors lurk ahead, yet our squad is busy bickering over flashlight etiquette. The shadows stretch ominously, but Elena refuses to let darkness stop her sarcastic lecture. By the bottom panel, the banter abruptly halts as a faint click in the floor stones reminds them both that traps don't care about their feelings.",
+    lines: [
+      "Page 1 welcomes us to the depths with dramatic flair and questionable dungeon exploration choices.",
+      "The narrator opens like we are entering a cathedral of doom, but Elena Vance immediately ruins the eerie silence by yelling at Kaelen for waving his lantern like a festival sparkler.",
+      "Kaelen's face is pure bewildered regret, wondering why he signed up for this quest in the first place.",
+      "You have to love the classic trope: ancient unspeakable horrors lurk ahead, yet our squad is busy bickering over flashlight etiquette.",
+      "The shadows stretch ominously, but Elena refuses to let darkness stop her sarcastic lecture.",
+      "By the bottom panel, the banter abruptly halts as a faint click in the floor stones reminds them both that traps don't care about their feelings."
+    ],
+    tone: "Humorous, Sarcastic & Suspenseful",
+    panels_count: 4,
+    humor_and_emotional_notes: "Comedic contrast between ancient doom and lantern bickering, pivoting into sudden trap suspense."
+  },
+  "page_02": {
+    page_id: "page_02",
+    page_sequence: 2,
+    full_script: "Moving onto Page 2, and the tension spikes from zero to a hundred in four frantic panels. Scholar Caelum is visibly hyperventilating over an ancient seal, rambling like a terrified graduate student whose thesis just caught fire. Meanwhile, Elena is already drawing her daggers, totally unfazed and clearly unimpressed by the glowing runes of guaranteed obliteration. Kaelen is clutching his talisman like a lucky rabbit's foot, praying to deities that probably retired two centuries ago. The facial expressions here are absolute comedy gold: sheer panic on the left, icy annoyance on the right. And of course, the seal isn't just a decoration—it's a countdown timer that just hit zero!",
+    lines: [
+      "Moving onto Page 2, and the tension spikes from zero to a hundred in four frantic panels.",
+      "Scholar Caelum is visibly hyperventilating over an ancient seal, rambling like a terrified graduate student whose thesis just caught fire.",
+      "Meanwhile, Elena is already drawing her daggers, totally unfazed and clearly unimpressed by the glowing runes of guaranteed obliteration.",
+      "Kaelen is clutching his talisman like a lucky rabbit's foot, praying to deities that probably retired two centuries ago.",
+      "The facial expressions here are absolute comedy gold: sheer panic on the left, icy annoyance on the right.",
+      "And of course, the seal isn't just a decoration—it's a countdown timer that just hit zero!"
+    ],
+    tone: "Comedic Disbelief, Fast-Paced & Tense",
+    panels_count: 4,
+    humor_and_emotional_notes: "Scholar panic roasts vs stoic assassin energy, ending on countdown cliffhanger."
+  }
+};
+
 
 export const MOCK_VOICE_PROFILES: VoiceProfile[] = [
   {
@@ -665,6 +702,7 @@ export const MOCK_CHAPTER: NarrationChapter = {
   segments: MOCK_SEGMENTS,
   characters: MOCK_CHARACTERS,
   voice_profiles: MOCK_VOICE_PROFILES,
+  page_scripts: MOCK_PAGE_SCRIPTS,
   created_at: "2026-10-18T08:00:00Z",
   updated_at: "2026-10-18T10:20:00Z",
 };

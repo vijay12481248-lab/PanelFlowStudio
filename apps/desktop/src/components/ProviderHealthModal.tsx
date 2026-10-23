@@ -6,6 +6,7 @@ import type {
   HardwareDiagnostics,
   CloudLLMConfig,
   CloudLLMTestResponse,
+  CloudLLMChatResponse,
   GlobalLLMSettings,
   FlowOverrideConfig,
   ProviderCatalogItem,
@@ -159,6 +160,12 @@ export const ProviderHealthModal: React.FC<ProviderHealthModalProps> = ({ open, 
   const [cloudTestResult, setCloudTestResult] = useState<CloudLLMTestResponse | null>(null);
   const [cloudSaving, setCloudSaving] = useState<boolean>(false);
   const [cloudSaveMessage, setCloudSaveMessage] = useState<string | null>(null);
+  const [cloudSectionTab, setCloudSectionTab] = useState<"configuration" | "chat">("configuration");
+  const [chatPrompt, setChatPrompt] = useState<string>("");
+  const [chatSending, setChatSending] = useState<boolean>(false);
+  const [chatMessages, setChatMessages] = useState<Array<{ role: "user" | "assistant" | "error"; text: string; meta?: string }>>([]);
+
+  const selectedProviderHealth = globalSettings?.providers?.find((provider) => provider.id === selectedGlobalProvider);
 
   const loadCloudConfig = async () => {
     try {
@@ -189,7 +196,7 @@ export const ProviderHealthModal: React.FC<ProviderHealthModalProps> = ({ open, 
       setCloudModelName("llama-3.3-70b-versatile");
     } else if (preset === "freellmapi") {
       setCloudEndpointUrl("http://localhost:3001/v1");
-      setCloudModelName("gemini-2.0-flash");
+      setCloudModelName("auto");
     } else {
       setCloudEndpointUrl("http://127.0.0.1:1234/v1");
       setCloudModelName("default");
@@ -241,12 +248,48 @@ export const ProviderHealthModal: React.FC<ProviderHealthModalProps> = ({ open, 
         is_active: true,
       });
       setCloudConfig(res);
-      setCloudSaveMessage("Cloud LLM configuration saved and activated successfully!");
+      const nextFlowOverrides = { ...flowOverrides };
+      await api.saveGlobalLLMSettings({
+        global_default_provider: cloudProviderType,
+        global_default_model: cloudModelName,
+        flow_overrides: nextFlowOverrides,
+      });
+      setSelectedGlobalProvider(cloudProviderType);
+      setSelectedGlobalModel(cloudModelName);
+      setCloudSaveMessage("Configuration saved. This provider is now active and verified.");
       await loadHealth();
+      await loadGlobalSettings();
     } catch (err: any) {
       setCloudSaveMessage(`Save failed: ${err.message}`);
     } finally {
       setCloudSaving(false);
+    }
+  };
+
+  const handleSendTestChat = async () => {
+    const prompt = chatPrompt.trim();
+    if (!prompt || chatSending) return;
+    setChatMessages((current) => [...current, { role: "user", text: prompt }]);
+    setChatPrompt("");
+    setChatSending(true);
+    try {
+      const result: CloudLLMChatResponse = await api.chatWithCloudLLM({
+        prompt,
+        model_name: cloudConfig?.model_name || cloudModelName,
+      });
+      if (result.status === "OK") {
+        setChatMessages((current) => [...current, {
+          role: "assistant",
+          text: result.response,
+          meta: `${result.provider_type} · ${result.model_name} · ${result.latency_ms} ms`,
+        }]);
+      } else {
+        setChatMessages((current) => [...current, { role: "error", text: result.error || "The provider returned no response." }]);
+      }
+    } catch (err: any) {
+      setChatMessages((current) => [...current, { role: "error", text: err.message || "The chat request failed." }]);
+    } finally {
+      setChatSending(false);
     }
   };
 
@@ -455,16 +498,16 @@ export const ProviderHealthModal: React.FC<ProviderHealthModalProps> = ({ open, 
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="bg-zinc-900 border border-zinc-700 rounded-2xl shadow-2xl shadow-black/50 max-w-3xl w-full mx-4 max-h-[88vh] overflow-hidden flex flex-col">
+      <div className="bg-zinc-900 border border-zinc-700 rounded-2xl shadow-2xl shadow-black/50 max-w-5xl w-full mx-3 h-[calc(100vh-1.5rem)] max-h-[900px] overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800">
+        <div className="shrink-0 flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-zinc-800">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg bg-indigo-600/20 flex items-center justify-center">
               <Icons.ShieldCheck className="w-4 h-4 text-indigo-400" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-zinc-100">LLM Provider Orchestration & System Diagnostics</h2>
-              <p className="text-[11px] text-zinc-400">Configure global default models, per-workflow routing, FreeLLMAPI/Cloud keys, and local GPU acceleration</p>
+              <h2 className="text-lg font-bold text-zinc-100">AI connections</h2>
+              <p className="text-xs text-zinc-400">Connect a provider, verify a model, then choose where PanelFlow uses it.</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -475,53 +518,53 @@ export const ProviderHealthModal: React.FC<ProviderHealthModalProps> = ({ open, 
         </div>
 
         {/* Navigation Tabs */}
-        <div className="flex border-b border-zinc-800 px-6 bg-zinc-950/60 overflow-x-auto">
+        <div className="shrink-0 grid grid-cols-4 border-b border-zinc-800 px-2 sm:px-6 bg-zinc-950/60">
           <button
             onClick={() => setActiveTab("global")}
-            className={`py-2.5 px-4 text-xs font-bold border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap ${
+            className={`min-w-0 py-2.5 px-1 sm:px-3 text-[11px] sm:text-xs font-bold border-b-2 transition-colors flex items-center justify-center gap-1.5 ${
               activeTab === "global"
                 ? "border-indigo-500 text-indigo-300"
                 : "border-transparent text-zinc-400 hover:text-zinc-200"
             }`}
           >
             <Icons.Sliders className="w-3.5 h-3.5 text-indigo-400" />
-            Global Routing & Workflow Defaults
+            Routing
           </button>
           <button
             onClick={() => setActiveTab("cloud_llm")}
-            className={`py-2.5 px-4 text-xs font-bold border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap ${
+            className={`min-w-0 py-2.5 px-1 sm:px-3 text-[11px] sm:text-xs font-bold border-b-2 transition-colors flex items-center justify-center gap-1.5 ${
               activeTab === "cloud_llm"
                 ? "border-indigo-500 text-indigo-300"
                 : "border-transparent text-zinc-400 hover:text-zinc-200"
             }`}
           >
             <Icons.Sparkles className="w-3.5 h-3.5 text-amber-400" />
-            Cloud & Free LLM APIs (FreeLLMAPI, OpenRouter, Groq)
+            Cloud & gateways
           </button>
           <button
             onClick={() => setActiveTab("ollama")}
-            className={`py-2.5 px-4 text-xs font-bold border-b-2 transition-colors whitespace-nowrap ${
+            className={`min-w-0 py-2.5 px-1 sm:px-3 text-[11px] sm:text-xs font-bold border-b-2 transition-colors flex items-center justify-center ${
               activeTab === "ollama"
                 ? "border-indigo-500 text-indigo-300"
                 : "border-transparent text-zinc-400 hover:text-zinc-200"
             }`}
           >
-            Local Ollama Models & GPU
+            Local Ollama
           </button>
           <button
             onClick={() => setActiveTab("system")}
-            className={`py-2.5 px-4 text-xs font-bold border-b-2 transition-colors whitespace-nowrap ${
+            className={`min-w-0 py-2.5 px-1 sm:px-3 text-[11px] sm:text-xs font-bold border-b-2 transition-colors flex items-center justify-center ${
               activeTab === "system"
                 ? "border-indigo-500 text-indigo-300"
                 : "border-transparent text-zinc-400 hover:text-zinc-200"
             }`}
           >
-            System Dependencies
+            System
           </button>
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 sm:p-6 space-y-4">
           {activeTab === "global" && (
             <div className="space-y-4">
               {/* Header Guidance */}
@@ -565,8 +608,8 @@ export const ProviderHealthModal: React.FC<ProviderHealthModalProps> = ({ open, 
                       Used by all features unless an explicit flow override is configured.
                     </p>
                   </div>
-                  <Badge variant="success">
-                    Active Default: {selectedGlobalProvider} ({selectedGlobalModel})
+                  <Badge variant={selectedProviderHealth?.is_healthy ? "success" : "warning"}>
+                    {selectedProviderHealth?.is_healthy ? "Ready" : "Not verified"}: {selectedGlobalProvider}
                   </Badge>
                 </div>
 
@@ -623,14 +666,28 @@ export const ProviderHealthModal: React.FC<ProviderHealthModalProps> = ({ open, 
                       <option value="">Quick Presets...</option>
                       <option value="qwen3.5:9b">Local Ollama: qwen3.5:9b</option>
                       <option value="qwen3.8:27b">Local Ollama: qwen3.8:27b</option>
-                      <option value="gemini-2.0-flash">FreeLLMAPI: Gemini 2.0 Flash</option>
-                      <option value="cerebras/llama3.1-70b">FreeLLMAPI: Cerebras Llama 3.1 70B</option>
+                      <option value="auto">FreeLLMAPI: Automatic healthy route</option>
+                      <option value="gemini-3.8-flash">FreeLLMAPI: Gemini 3.8 Flash</option>
                       <option value="meta-llama/llama-3.3-70b-instruct:free">OpenRouter: Llama 3.3 70B (Free)</option>
                       <option value="google/gemini-2.0-flash-exp:free">OpenRouter: Gemini 2.0 Flash (Free)</option>
                       <option value="deepseek/deepseek-r1:free">OpenRouter: DeepSeek R1 (Free)</option>
                       <option value="llama-3.3-70b-versatile">Groq: Llama 3.3 70B Versatile</option>
                     </select>
                   </div>
+                  {selectedGlobalProvider !== "ollama" && !selectedProviderHealth?.is_healthy && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (["freellmapi", "openrouter", "groq", "custom"].includes(selectedGlobalProvider)) {
+                          handleApplyPreset(selectedGlobalProvider as "freellmapi" | "openrouter" | "groq" | "custom");
+                        }
+                        setActiveTab("cloud_llm");
+                      }}
+                      className="text-xs font-semibold text-amber-300 hover:text-amber-200"
+                    >
+                      Configure and verify this provider
+                    </button>
+                  )}
                 </div>
               </Card>
 
@@ -1354,15 +1411,51 @@ export const ProviderHealthModal: React.FC<ProviderHealthModalProps> = ({ open, 
 
           {activeTab === "cloud_llm" && (
             <div className="space-y-4">
+              <div className="grid grid-cols-2 rounded-xl border border-zinc-800 bg-zinc-950 p-1" role="tablist" aria-label="Provider tools">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={cloudSectionTab === "configuration"}
+                  onClick={() => setCloudSectionTab("configuration")}
+                  className={`rounded-lg px-4 py-2 text-xs font-bold transition-colors ${cloudSectionTab === "configuration" ? "bg-indigo-600 text-white" : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-100"}`}
+                >
+                  Configuration
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={cloudSectionTab === "chat"}
+                  onClick={() => setCloudSectionTab("chat")}
+                  className={`rounded-lg px-4 py-2 text-xs font-bold transition-colors ${cloudSectionTab === "chat" ? "bg-indigo-600 text-white" : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-100"}`}
+                >
+                  Test chat
+                </button>
+              </div>
+
+              {cloudSectionTab === "configuration" ? (
+                <>
+              <div className="grid grid-cols-3 gap-2" aria-label="Provider setup progress">
+                {[
+                  ["1", "Connection", Boolean(cloudEndpointUrl)],
+                  ["2", "Model test", Boolean(cloudTestResult?.connected && cloudTestResult?.model_verified)],
+                  ["3", "Activated", Boolean(cloudConfig?.is_active && cloudConfig?.provider_type === cloudProviderType)],
+                ].map(([step, label, complete]) => (
+                  <div key={String(step)} className={`rounded-lg border px-3 py-2 ${complete ? "border-emerald-800 bg-emerald-950/20" : "border-zinc-800 bg-zinc-950"}`}>
+                    <span className={`mr-2 inline-flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold ${complete ? "bg-emerald-500 text-zinc-950" : "bg-zinc-800 text-zinc-400"}`}>{complete ? "✓" : step}</span>
+                    <span className={complete ? "text-xs font-semibold text-emerald-200" : "text-xs font-semibold text-zinc-400"}>{label}</span>
+                  </div>
+                ))}
+              </div>
+
               {/* Preset Selector Card */}
               <Card className="p-4 bg-zinc-950 border-zinc-800 space-y-3">
                 <div className="flex items-center justify-between border-b border-zinc-800/80 pb-3">
                   <div className="flex items-center gap-2">
                     <Icons.Sparkles className="w-4 h-4 text-amber-400" />
-                    <h3 className="text-sm font-bold text-zinc-100">Select Provider or Preset</h3>
+                    <h3 className="text-sm font-bold text-zinc-100">Choose a connection</h3>
                   </div>
-                  <Badge variant={cloudConfig?.is_active && cloudConfig?.has_api_key ? "success" : "neutral"}>
-                    {cloudConfig?.is_active && cloudConfig?.has_api_key ? "Active & Configured" : "Configuration Needed"}
+                  <Badge variant={cloudTestResult?.connected ? "success" : cloudConfig?.is_active ? "warning" : "neutral"}>
+                    {cloudTestResult?.connected ? "Verified now" : cloudConfig?.is_active ? "Saved, not verified" : "Setup needed"}
                   </Badge>
                 </div>
 
@@ -1440,11 +1533,11 @@ export const ProviderHealthModal: React.FC<ProviderHealthModalProps> = ({ open, 
                   </button>
                 </div>
 
-                {/* Free API Key Guide Banner */}
+                {/* Provider-specific setup guide */}
                 <div className="p-3 bg-zinc-900/80 rounded-xl border border-zinc-800/80 text-xs text-zinc-300 space-y-1">
-                  <p className="font-semibold text-amber-300 flex items-center gap-1.5">
+                  <p className="font-semibold text-zinc-100 flex items-center gap-1.5">
                     <Icons.Info className="w-3.5 h-3.5" />
-                    How to get and configure your Free API:
+                    {cloudProviderType === "freellmapi" ? "FreeLLMAPI setup" : "What you need"}
                   </p>
                   <ul className="list-disc list-inside space-y-0.5 text-[11px] text-zinc-400 pl-1">
                     {cloudProviderType === "openrouter" && (
@@ -1461,9 +1554,9 @@ export const ProviderHealthModal: React.FC<ProviderHealthModalProps> = ({ open, 
                     )}
                     {cloudProviderType === "freellmapi" && (
                       <>
-                        <li>Run FreeLLMAPI (<span className="font-mono text-emerald-300">github.com/tashfeenahmed/freellmapi</span>) locally via Docker or Node at <span className="font-mono text-indigo-300">http://localhost:3001</span>.</li>
-                        <li>FreeLLMAPI unites free keys from Google Gemini, Groq, Cerebras, Mistral, and GitHub Models into a single OpenAI-compatible <span className="font-mono text-emerald-300">/v1</span> endpoint.</li>
-                        <li>Paste your FreeLLMAPI Master API Key below (or leave blank if authentication is not set), then click <strong className="text-zinc-200">Test Connection</strong> to discover all aggregated models!</li>
+                        <li>Start the FreeLLMAPI gateway first. PanelFlow expects its OpenAI-compatible address at <span className="font-mono text-emerald-300">http://localhost:3001/v1</span>.</li>
+                        <li>Add at least one upstream provider key inside FreeLLMAPI, then copy the <span className="font-mono text-emerald-300">freellmapi-…</span> unified key from its Keys page.</li>
+                        <li>Enter the exact model exposed by the gateway, then use <strong className="text-zinc-200">Test selected model</strong>. A green result means a real completion was returned.</li>
                       </>
                     )}
                     {cloudProviderType === "custom" && (
@@ -1477,7 +1570,10 @@ export const ProviderHealthModal: React.FC<ProviderHealthModalProps> = ({ open, 
 
               {/* Endpoint & Key Configuration Form */}
               <Card className="p-4 bg-zinc-950 border-zinc-800 space-y-3">
-                <h4 className="text-xs font-bold text-zinc-300 uppercase tracking-wider">API Connection Parameters</h4>
+                <div>
+                  <h4 className="text-sm font-bold text-zinc-100">Connection details</h4>
+                  <p className="text-[11px] text-zinc-400">Testing sends one short prompt to the selected model. Saving is enabled only after that succeeds.</p>
+                </div>
                 
                 <div className="space-y-3 text-xs">
                   <div className="space-y-1">
@@ -1485,7 +1581,7 @@ export const ProviderHealthModal: React.FC<ProviderHealthModalProps> = ({ open, 
                     <input
                       type="text"
                       value={cloudEndpointUrl}
-                      onChange={(e) => setCloudEndpointUrl(e.target.value)}
+                      onChange={(e) => { setCloudEndpointUrl(e.target.value); setCloudTestResult(null); }}
                       placeholder="https://openrouter.ai/api/v1"
                       className="w-full bg-zinc-900 border border-zinc-700 rounded px-2.5 py-1.5 font-mono text-zinc-200 text-xs focus:outline-none focus:border-indigo-500"
                     />
@@ -1493,7 +1589,7 @@ export const ProviderHealthModal: React.FC<ProviderHealthModalProps> = ({ open, 
 
                   <div className="space-y-1">
                     <div className="flex items-center justify-between">
-                      <label className="text-zinc-400 font-semibold">API Secret Key</label>
+                      <label className="text-zinc-400 font-semibold">{cloudProviderType === "freellmapi" ? "FreeLLMAPI unified key" : "API secret key"}</label>
                       <button
                         type="button"
                         onClick={() => setCloudShowApiKey(!cloudShowApiKey)}
@@ -1505,10 +1601,13 @@ export const ProviderHealthModal: React.FC<ProviderHealthModalProps> = ({ open, 
                     <input
                       type={cloudShowApiKey ? "text" : "password"}
                       value={cloudApiKey}
-                      onChange={(e) => setCloudApiKey(e.target.value)}
-                      placeholder="sk-or-v1-... or your secret key"
+                      onChange={(e) => { setCloudApiKey(e.target.value); setCloudTestResult(null); }}
+                      placeholder={cloudProviderType === "freellmapi" ? "freellmapi-… (required)" : "Paste your provider key"}
                       className="w-full bg-zinc-900 border border-zinc-700 rounded px-2.5 py-1.5 font-mono text-zinc-200 text-xs focus:outline-none focus:border-indigo-500"
                     />
+                    {cloudProviderType === "freellmapi" && !cloudApiKey && (
+                      <p className="text-[11px] text-amber-300">Required. This gateway is running, but its API currently rejects requests without a unified key.</p>
+                    )}
                   </div>
 
                   <div className="space-y-1">
@@ -1517,13 +1616,13 @@ export const ProviderHealthModal: React.FC<ProviderHealthModalProps> = ({ open, 
                       <input
                         type="text"
                         value={cloudModelName}
-                        onChange={(e) => setCloudModelName(e.target.value)}
+                        onChange={(e) => { setCloudModelName(e.target.value); setCloudTestResult(null); }}
                         placeholder="meta-llama/llama-3.3-70b-instruct:free"
                         className="flex-1 bg-zinc-900 border border-zinc-700 rounded px-2.5 py-1.5 font-mono text-zinc-200 text-xs focus:outline-none focus:border-indigo-500"
                       />
                       <select
                         onChange={(e) => {
-                          if (e.target.value) setCloudModelName(e.target.value);
+                          if (e.target.value) { setCloudModelName(e.target.value); setCloudTestResult(null); }
                         }}
                         className="bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-zinc-200 text-xs focus:outline-none focus:border-indigo-500 cursor-pointer"
                         value=""
@@ -1535,7 +1634,8 @@ export const ProviderHealthModal: React.FC<ProviderHealthModalProps> = ({ open, 
                         <option value="qwen/qwen-2.5-vl-72b-instruct:free">Qwen 2.5 VL 72B (Free Multimodal)</option>
                         <option value="llama-3.3-70b-versatile">Groq Llama 3.3 70B Versatile</option>
                         <option value="llama-3.1-8b-instant">Groq Llama 3.1 8B Instant</option>
-                        <option value="gemini-2.0-flash">Gemini 2.0 Flash (FreeLLMAPI)</option>
+                        <option value="auto">Automatic healthy route (FreeLLMAPI)</option>
+                        <option value="gemini-3.8-flash">Gemini 3.8 Flash (FreeLLMAPI)</option>
                         <option value="cerebras/llama3.1-70b">Cerebras Llama 3.1 70B (FreeLLMAPI)</option>
                         <option value="mistralai/mistral-large">Mistral Large (FreeLLMAPI)</option>
                       </select>
@@ -1569,18 +1669,18 @@ export const ProviderHealthModal: React.FC<ProviderHealthModalProps> = ({ open, 
                       variant="secondary"
                       size="sm"
                       onClick={handleTestCloudConnection}
-                      disabled={cloudTesting || !cloudEndpointUrl}
+                      disabled={cloudTesting || !cloudEndpointUrl || (cloudProviderType === "freellmapi" && !cloudApiKey)}
                       className="text-xs"
                     >
                       {cloudTesting ? (
                         <>
                           <span className="w-3 h-3 border-2 border-zinc-400/30 border-t-zinc-400 rounded-full animate-spin mr-1.5" />
-                          Testing Endpoint...
+                          Testing model...
                         </>
                       ) : (
                         <>
                           <Icons.Activity className="w-3.5 h-3.5 mr-1.5 text-indigo-400" />
-                          Test Connection
+                          Test selected model
                         </>
                       )}
                     </Button>
@@ -1589,31 +1689,35 @@ export const ProviderHealthModal: React.FC<ProviderHealthModalProps> = ({ open, 
                       variant="primary"
                       size="sm"
                       onClick={handleSaveCloudConfig}
-                      disabled={cloudSaving || !cloudEndpointUrl}
+                      disabled={cloudSaving || !cloudTestResult?.connected || !cloudTestResult?.model_verified}
                       className="text-xs"
                     >
-                      {cloudSaving ? "Saving..." : "Save Configuration"}
+                    {cloudSaving ? "Activating..." : "Save, activate & use as default"}
                     </Button>
                   </div>
 
-                  {cloudTestResult && (
-                    <div className="flex items-center gap-2 text-xs">
-                      <Badge variant={cloudTestResult.connected ? "success" : "danger"}>
-                        {cloudTestResult.connected ? `Connected (${cloudTestResult.latency_ms}ms)` : "Failed"}
-                      </Badge>
-                      {cloudTestResult.models_count > 0 && (
-                        <span className="text-zinc-400 font-mono text-[11px]">
-                          {cloudTestResult.models_count} models discovered
-                        </span>
-                      )}
-                      {cloudTestResult.error && (
-                        <span className="text-rose-400 max-w-[240px] truncate" title={cloudTestResult.error}>
-                          {cloudTestResult.error}
-                        </span>
-                      )}
-                    </div>
-                  )}
                 </div>
+
+                {cloudTestResult && (
+                  <div role="status" className={`rounded-xl border p-3 ${cloudTestResult.connected ? "border-emerald-700/70 bg-emerald-950/25" : "border-rose-800/70 bg-rose-950/20"}`}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className={`text-sm font-bold ${cloudTestResult.connected ? "text-emerald-200" : "text-rose-200"}`}>
+                          {cloudTestResult.connected ? "Selected model responded" : "Connection test failed"}
+                        </p>
+                        <p className="mt-1 text-[11px] text-zinc-400">
+                          {cloudTestResult.connected
+                            ? `${cloudTestResult.models_count} models discovered · ${cloudTestResult.latency_ms} ms · response: ${cloudTestResult.response_preview || "received"}`
+                            : cloudTestResult.error || "The endpoint did not return a usable response."}
+                        </p>
+                      </div>
+                      <Badge variant={cloudTestResult.connected ? "success" : "danger"}>{cloudTestResult.connected ? "Working" : "Needs attention"}</Badge>
+                    </div>
+                    {!cloudTestResult.connected && cloudProviderType === "freellmapi" && (
+                      <p className="mt-2 text-[11px] text-amber-200">Check that FreeLLMAPI is running on port 3001, the URL ends in /v1, and the selected model appears in its /v1/models response.</p>
+                    )}
+                  </div>
+                )}
 
                 {cloudSaveMessage && (
                   <p className="text-xs font-semibold text-emerald-400 pt-1">
@@ -1621,13 +1725,83 @@ export const ProviderHealthModal: React.FC<ProviderHealthModalProps> = ({ open, 
                   </p>
                 )}
               </Card>
+                </>
+              ) : (
+                <Card className="p-0 bg-zinc-950 border-zinc-800 overflow-hidden">
+                  <div className="flex items-center justify-between gap-3 border-b border-zinc-800 px-4 py-3">
+                    <div>
+                      <h3 className="text-sm font-bold text-zinc-100">Provider test chat</h3>
+                      <p className="text-[11px] text-zinc-400">Messages use the saved active provider and model, exactly as PanelFlow workflows do.</p>
+                    </div>
+                    <Badge variant={cloudConfig?.is_active ? "success" : "warning"}>
+                      {cloudConfig?.is_active ? `${cloudConfig.provider_type} · ${cloudConfig.model_name}` : "No active provider"}
+                    </Badge>
+                  </div>
+
+                  <div className="min-h-[280px] max-h-[48vh] overflow-y-auto space-y-3 p-4" aria-live="polite">
+                    {chatMessages.length === 0 && (
+                      <div className="flex min-h-[240px] items-center justify-center text-center">
+                        <div className="max-w-sm">
+                          <Icons.Sparkles className="mx-auto mb-3 h-6 w-6 text-indigo-400" />
+                          <p className="text-sm font-semibold text-zinc-200">Send a prompt through PanelFlow</p>
+                          <p className="mt-1 text-xs text-zinc-500">Try “Summarize a dramatic manga scene in two sentences.”</p>
+                        </div>
+                      </div>
+                    )}
+                    {chatMessages.map((message, index) => (
+                      <div key={`${message.role}-${index}`} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}>
+                        <div className={`max-w-[82%] rounded-xl px-3 py-2 text-xs leading-relaxed ${
+                          message.role === "user"
+                            ? "bg-indigo-600 text-white"
+                            : message.role === "error"
+                              ? "border border-rose-800 bg-rose-950/30 text-rose-200"
+                              : "border border-zinc-800 bg-zinc-900 text-zinc-200"
+                        }`}>
+                          <p className="whitespace-pre-wrap">{message.text}</p>
+                          {message.meta && <p className="mt-2 text-[10px] text-zinc-500">{message.meta}</p>}
+                        </div>
+                      </div>
+                    ))}
+                    {chatSending && <p className="text-xs text-zinc-500">Waiting for the provider…</p>}
+                  </div>
+
+                  <div className="border-t border-zinc-800 p-3">
+                    <div className="flex gap-2">
+                      <textarea
+                        value={chatPrompt}
+                        onChange={(event) => setChatPrompt(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" && !event.shiftKey) {
+                            event.preventDefault();
+                            handleSendTestChat();
+                          }
+                        }}
+                        rows={2}
+                        placeholder="Type a test prompt. Enter to send, Shift+Enter for a new line."
+                        className="min-h-[52px] flex-1 resize-none rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs text-zinc-100 outline-none focus:border-indigo-500"
+                      />
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={handleSendTestChat}
+                        disabled={chatSending || !chatPrompt.trim() || !cloudConfig?.is_active}
+                      >
+                        {chatSending ? "Sending…" : "Send"}
+                      </Button>
+                    </div>
+                    {!cloudConfig?.is_active && (
+                      <p className="mt-2 text-[11px] text-amber-300">Configure, test and activate a provider before using chat.</p>
+                    )}
+                  </div>
+                </Card>
+              )}
             </div>
           )}
         </div>
 
 
         {/* Footer */}
-        <div className="px-6 py-3 border-t border-zinc-800 flex items-center justify-between gap-3 bg-zinc-950/50">
+        <div className="shrink-0 px-4 sm:px-6 py-3 border-t border-zinc-800 flex items-center justify-between gap-3 bg-zinc-950/50">
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="sm" onClick={loadHealth} disabled={loading}>
               <Icons.Rotate className={`w-3.5 h-3.5 mr-1.5 ${loading ? "animate-spin" : ""}`} />

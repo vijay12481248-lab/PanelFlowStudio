@@ -178,3 +178,93 @@ def test_cloud_llm_endpoints(tmp_path, monkeypatch):
     assert "ollama" in ids
     assert "cloud_llm" in ids
 
+def test_three_tier_prompts_and_page_recap_structure():
+    from engine.story.narration import build_page_recap_script_prompt, build_harmonized_script_prompt
+
+    # Test Tier 1 Prompt
+    p1_prompt = build_page_recap_script_prompt(
+        page_sequence=1,
+        panels_count=5,
+        ocr_lines=["Out of my way!", "You cannot defeat me!"],
+        roster_text="- Zhou Fan (Role: PROTAGONIST)",
+    )
+    assert "AT LEAST 5 TO 10 LINES" in p1_prompt
+    assert "HUMAN PERSONALITY & HUMOR" in p1_prompt
+    assert "Zhou Fan" in p1_prompt
+    assert "page_sequence" in p1_prompt
+    assert "humor_and_emotional_notes" in p1_prompt
+
+    # Test Tier 3 Harmonization Prompt
+    harm_prompt = build_harmonized_script_prompt(
+        page_sequence=1,
+        page_script={
+            "lines": ["Line 1 witty opener", "Line 2 dramatic comedic flex", "Line 3 climax"],
+            "full_script": "Line 1 witty opener. Line 2 dramatic comedic flex. Line 3 climax.",
+        },
+        scenes_for_page=[
+            {"id": "sc_1", "sequence": 1, "visual_description": "Smirks arrogantly", "ocr_text": "Out of my way!"},
+            {"id": "sc_2", "sequence": 2, "visual_description": "Draws dark energy", "ocr_text": ""},
+        ],
+        roster_text="- Zhou Fan (Role: PROTAGONIST)",
+    )
+    assert "SCRIPT 1: OVERARCHING PAGE RECAP" in harm_prompt
+    assert "SCRIPT 2: PANEL BREAKDOWN" in harm_prompt
+    assert "HARMONIZATION" in harm_prompt
+    assert "VISUAL & AUDIO SYNC" in harm_prompt
+
+
+@pytest.mark.asyncio
+async def test_three_tier_narration_generation_flow(monkeypatch):
+    monkeypatch.setenv("PANELFLOW_ALLOW_MOCK_LLM", "true")
+
+    scenes = [
+        {
+            "id": "scene_p1_1",
+            "sequence": 1,
+            "page_id": "page_01",
+            "page_sequence": 1,
+            "visual_description": "Zhou Fan walks into the hall radiating unbothered confidence",
+            "ocr_text": "Who permitted you to speak?",
+            "characters": ["Zhou Fan"],
+        },
+        {
+            "id": "scene_p1_2",
+            "sequence": 2,
+            "page_id": "page_01",
+            "page_sequence": 1,
+            "visual_description": "Elders look completely terrified and shocked",
+            "ocr_text": "Demon Emperor!",
+            "characters": ["Elders"],
+        }
+    ]
+    chars = [
+        {"name": "Zhou Fan", "canonical_name": "Zhou Fan", "role": "PROTAGONIST"}
+    ]
+    pages = [
+        {"id": "page_01", "sequence": 1, "filename": "page_01.jpg", "panels_count": 2, "ocr_lines": ["Who permitted you to speak?", "Demon Emperor!"]}
+    ]
+
+    plan = await story_narration_service.generate_narration_draft(
+        project_id="test_3tier_proj",
+        scenes_data=scenes,
+        pages_data=pages,
+        characters_data=chars,
+    )
+
+    assert plan.project_id == "test_3tier_proj"
+    assert "page_01" in plan.page_scripts or "1" in plan.page_scripts
+    pg_script = plan.page_scripts.get("page_01") or plan.page_scripts.get("1")
+    assert pg_script is not None
+    assert len(pg_script.lines) >= 5  # At least 5-10 lines per page!
+    assert "Zhou Fan" in pg_script.full_script
+
+    # Verify beats carry 3-tier data
+    assert len(plan.beats) == 2
+    b1 = plan.beats[0]
+    assert b1.proposed_narration_text  # Final Harmonized Script
+    assert b1.page_narration_text  # Tier 1 Page Script
+    assert b1.panel_narration_text  # Tier 2 Panel Micro Script
+    assert b1.synthesis_notes  # Tier 3 Sync / Harmonization Notes
+    assert b1.word_count is not None and b1.word_count > 0
+    assert b1.estimated_duration_sec is not None and b1.estimated_duration_sec > 0
+

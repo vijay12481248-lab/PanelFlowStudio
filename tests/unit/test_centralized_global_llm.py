@@ -132,3 +132,62 @@ def test_global_llm_settings_rest_api(monkeypatch):
     assert saved_data["status"] == "SAVED"
     assert saved_data["global_default_provider"] == "freellmapi"
     assert saved_data["flow_overrides"]["story_narration"]["provider_id"] == "freellmapi"
+
+
+def test_cloud_connection_test_verifies_selected_model(monkeypatch):
+    async def fake_models(self):
+        return ["gemini-test"]
+
+    async def fake_generate(self, prompt, **kwargs):
+        assert kwargs["model"] == "gemini-test"
+        assert kwargs["max_tokens"] == 12
+        return "PANELFLOW_OK"
+
+    monkeypatch.setattr(OpenAICompatibleProvider, "list_available_models", fake_models)
+    monkeypatch.setattr(OpenAICompatibleProvider, "generate_text", fake_generate)
+
+    response = TestClient(app).post(
+        "/api/system/llm/cloud-test",
+        json={
+            "endpoint_url": "http://localhost:3001/v1",
+            "api_key": "test-key",
+            "model_name": "gemini-test",
+        },
+    )
+
+    assert response.status_code == 200
+    result = response.json()
+    assert result["connected"] is True
+    assert result["model_verified"] is True
+    assert result["response_preview"] == "PANELFLOW_OK"
+
+
+def test_cloud_chat_uses_saved_active_provider(monkeypatch):
+    from engine.llm.registry import llm_registry
+
+    class FakeProvider:
+        model_name = "auto"
+
+        async def generate_text(self, prompt, **kwargs):
+            assert prompt == "Explain this panel"
+            assert kwargs["model"] == "auto"
+            return "The hero enters the ruined hall."
+
+    monkeypatch.setattr(llm_registry, "get_cloud_config", lambda: {
+        "is_active": True,
+        "provider_type": "freellmapi",
+        "model_name": "auto",
+    })
+    monkeypatch.setattr(llm_registry, "get_cloud_provider", lambda: FakeProvider())
+
+    response = TestClient(app).post(
+        "/api/system/llm/cloud-chat",
+        json={"prompt": "Explain this panel", "model_name": "auto"},
+    )
+
+    assert response.status_code == 200
+    result = response.json()
+    assert result["status"] == "OK"
+    assert result["provider_type"] == "freellmapi"
+    assert result["model_name"] == "auto"
+    assert result["response"] == "The hero enters the ruined hall."

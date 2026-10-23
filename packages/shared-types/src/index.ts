@@ -588,6 +588,23 @@ export interface CloudLLMTestResponse {
   latency_ms: number;
   models_count: number;
   models: string[];
+  model_verified?: boolean;
+  response_preview?: string | null;
+  error?: string | null;
+}
+
+export interface CloudLLMChatRequest {
+  prompt: string;
+  model_name?: string;
+  system_prompt?: string;
+}
+
+export interface CloudLLMChatResponse {
+  status: "OK" | "ERROR";
+  provider_type: string;
+  model_name: string;
+  response: string;
+  latency_ms: number;
   error?: string | null;
 }
 

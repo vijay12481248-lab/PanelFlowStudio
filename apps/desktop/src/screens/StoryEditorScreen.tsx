@@ -99,7 +99,7 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
   }, [editorState.is_playing]);
 
   // Synchronized Timeline HTML5 Audio Playback Hook
-  useTimelineAudioPlayback(editorState);
+  useTimelineAudioPlayback(project.id, editorState);
 
   // The engine owns saved history. Selector drafts have their own child scope.
   const [projectHistory, setProjectHistory] = useState<ProjectHistoryState | null>(null);
