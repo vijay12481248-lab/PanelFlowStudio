@@ -68,12 +68,12 @@ class AutoPilotStatusResponse(BaseModel):
 DEFAULT_STAGE_TIMEOUTS: Dict[str, float] = {
     "pages": 300.0,
     "panels": 180.0,
-    "ocr": 240.0,
-    "story": 180.0,
-    "script": 120.0,
-    "audio": 300.0,
-    "motion": 120.0,
-    "render": 600.0,
+    "ocr": 300.0,
+    "story": 900.0,
+    "script": 180.0,
+    "audio": 600.0,
+    "motion": 180.0,
+    "render": 900.0,
     "packaging": 180.0,
 }
 
@@ -101,8 +101,9 @@ def diagnose_error(stage_id: str, exc: Exception) -> AutoPilotErrorDetails:
             ]
         elif stage_id == "story":
             troubleshooting = [
-                "Narrative breakdown timed out. Check that your local LLM (Ollama) or API provider is responding quickly.",
-                "Ensure Ollama server is running with `ollama serve` if using local models.",
+                "Narrative breakdown timed out. If visual storytelling is active, analyzing manga panels with a Vision LLM takes 5-7s per panel.",
+                "Completed panel checkpoints are safely cached on disk. Click 'Resume Pipeline' to resume from the latest checkpoint.",
+                "Ensure Ollama server is running with `ollama serve` and your GPU has sufficient memory.",
             ]
         elif stage_id == "script":
             troubleshooting = [
@@ -279,16 +280,59 @@ class AutoPilotRunner:
         return token
 
     def _make_progress_cb(self, stage_id: str, start_pct: float, end_pct: float):
+        last_log_t = [0.0]
+        last_msg = [""]
+
         def _cb(fraction: float, msg: str):
             p = start_pct + fraction * (end_pct - start_pct)
             self.update_stage(stage_id, progress=round(p, 2), message=msg)
+            now = time.monotonic()
+            if msg and msg != last_msg[0] and (now - last_log_t[0] > 3.0 or fraction >= 0.99):
+                last_log_t[0] = now
+                last_msg[0] = msg
+                stage_name = stage_id.capitalize()
+                self.log(f"{stage_name} Stage: {msg}")
+
         return _cb
+
+    def _calculate_stage_timeout(self, stage_id: str) -> float:
+        if stage_id in self.stage_timeouts:
+            return float(self.stage_timeouts[stage_id])
+
+        try:
+            with SessionLocal() as db:
+                project = db.query(ProjectRecord).filter(ProjectRecord.id == self.project_id).first()
+                if project:
+                    panels_count = len(project.panels or [])
+                    is_visual = bool((project.settings or {}).get("visual_storytelling"))
+
+                    if stage_id == "story":
+                        # In visual mode, allocate 16s per panel + 180s buffer for chapter breakdown
+                        if is_visual and panels_count > 0:
+                            return max(900.0, float(panels_count * 16.0 + 180.0))
+                        elif panels_count > 0:
+                            return max(300.0, float(panels_count * 4.0 + 120.0))
+                    elif stage_id == "ocr":
+                        if panels_count > 0:
+                            return max(240.0, float(panels_count * 5.0 + 120.0))
+                    elif stage_id == "audio":
+                        se_scenes = (project.settings or {}).get("story_editor_state", {}).get("scenes", [])
+                        scenes_count = len(se_scenes) or max(1, panels_count // 3)
+                        return max(600.0, float(scenes_count * 15.0 + 180.0))
+                    elif stage_id == "render":
+                        se_scenes = (project.settings or {}).get("story_editor_state", {}).get("scenes", [])
+                        scenes_count = len(se_scenes) or max(1, panels_count // 3)
+                        return max(900.0, float(scenes_count * 20.0 + 300.0))
+        except Exception as e:
+            logger.warning("Could not calculate dynamic timeout for stage %s: %s", stage_id, e)
+
+        return DEFAULT_STAGE_TIMEOUTS.get(stage_id, 600.0)
 
     async def _execute_stage(self, stage_id: str, stage_coro_fn) -> bool:
         if self.is_cancelled:
             return False
 
-        timeout_sec = float(self.stage_timeouts.get(stage_id, DEFAULT_STAGE_TIMEOUTS.get(stage_id, 300.0)))
+        timeout_sec = self._calculate_stage_timeout(stage_id)
         self.current_stage_id = stage_id
         start_t = time.monotonic()
         try:
@@ -683,17 +727,35 @@ class AutoPilotRunner:
                 raise ValueError("Audio requires an approved, source-grounded script and Narrative IR. Review the story and script first.")
 
             timeline_scenes = se_state.get("scenes", [])
+            ordered_panel_ids = [p.id for p in sorted(project.panels or [], key=lambda x: getattr(x, "sequence", 0))]
+            panel_index = {pid: i for i, pid in enumerate(ordered_panel_ids)}
+
+            rebuild_timeline_scenes = False
             if not timeline_scenes and narrative and narrative.scenes:
-                # Construct default timeline scenes from story narrative
-                timeline_scenes = [
-                    {
+                rebuild_timeline_scenes = True
+            elif timeline_scenes and narrative and narrative.scenes:
+                total_scene_layers = sum(len(sc.get("layers", [])) for sc in timeline_scenes)
+                if total_scene_layers < len(ordered_panel_ids):
+                    rebuild_timeline_scenes = True
+
+            if rebuild_timeline_scenes and narrative and narrative.scenes:
+                timeline_scenes = []
+                time_cursor = 0.0
+                for idx, sc in enumerate(narrative.scenes):
+                    s_idx = panel_index.get(sc.panel_start, 0)
+                    e_idx = panel_index.get(sc.panel_end, s_idx)
+                    if s_idx > e_idx:
+                        s_idx, e_idx = e_idx, s_idx
+                    scene_pids = ordered_panel_ids[s_idx : e_idx + 1] if ordered_panel_ids else []
+                    layers = [{"source_panel_id": pid} for pid in scene_pids] if scene_pids else [{"source_panel_id": ""}]
+                    dur = max(4.0, len(scene_pids) * 3.0)
+                    timeline_scenes.append({
                         "id": sc.scene_id,
-                        "start_time_sec": float(sc.scene_sequence - 1) * 5.0,
-                        "duration_sec": 5.0,
-                        "layers": [{"source_panel_id": pid} for pid in sc.panel_ids],
-                    }
-                    for sc in narrative.scenes
-                ]
+                        "start_time_sec": time_cursor,
+                        "duration_sec": dur,
+                        "layers": layers,
+                    })
+                    time_cursor += dur
                 if not se_state:
                     se_state = {}
                 se_state["scenes"] = timeline_scenes

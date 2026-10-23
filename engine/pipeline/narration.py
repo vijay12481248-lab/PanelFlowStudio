@@ -55,8 +55,12 @@ def compile_narration_clips(
         candidates = [sid for sid, panels in scene_panels.items() if panel_ids <= panels]
         if segment.scene_id in candidates:
             scene_id = segment.scene_id
+        elif segment.scene_id in scene_panels and (panel_ids & scene_panels[segment.scene_id]):
+            scene_id = segment.scene_id
         elif len(candidates) == 1:
             scene_id = candidates[0]
+        elif segment.scene_id in scene_panels:
+            scene_id = segment.scene_id
         else:
             raise ValueError(f"Segment {segment.segment_id} cannot map unambiguously to a timeline scene.")
         scene = next(scene for scene in scenes if scene["id"] == scene_id)

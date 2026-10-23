@@ -116,20 +116,110 @@ class SectionPlanner:
 
         def validate(section, chunk):
             available = {item["panel"] for item in chunk}
+
+            # Map of old_key -> resolved_key for actors and locations in this section
+            actor_remap: dict[int, int] = {}
+            used_actor_keys = set(actors.keys())
+
+            def get_next_unused_actor_key() -> int:
+                for k in range(1, 129):
+                    if k not in used_actor_keys:
+                        used_actor_keys.add(k)
+                        return k
+                return 128
+
+            resolved_actors = []
             for actor in section.actors:
-                if actor.key in actors and actor.name.casefold() != actors[actor.key].name.casefold():
-                    raise ValueError("An existing actor key was assigned a different identity")
-            for location in section.locations:
-                if location.key in locations and location.name.casefold() != locations[location.key].name.casefold():
-                    raise ValueError("An existing location key was assigned a different setting")
-            section.actors = [item for item in section.actors if item.key not in actors]
-            section.locations = [item for item in section.locations if item.key not in locations]
+                if actor.key in actors:
+                    existing = actors[actor.key]
+                    if actor.name.casefold() == existing.name.casefold():
+                        # Same actor already known under this key
+                        continue
+                    # Check if name matches another known actor under a different key
+                    matching_known = next((k for k, a in actors.items() if a.name.casefold() == actor.name.casefold()), None)
+                    if matching_known is not None:
+                        actor_remap[actor.key] = matching_known
+                        continue
+                    # Different actor with key collision: allocate fresh unused key
+                    fresh_key = get_next_unused_actor_key()
+                    actor_remap[actor.key] = fresh_key
+                    actor.key = fresh_key
+                    resolved_actors.append(actor)
+                    section.review_notes.append(
+                        f"Actor '{actor.name}' collided with key {existing.key}; remapped to key {fresh_key}."
+                    )
+                else:
+                    if actor.key in [a.key for a in resolved_actors]:
+                        fresh_key = get_next_unused_actor_key()
+                        actor_remap[actor.key] = fresh_key
+                        actor.key = fresh_key
+                    used_actor_keys.add(actor.key)
+                    resolved_actors.append(actor)
+
+            section.actors = resolved_actors
+
+            location_remap: dict[int, int] = {}
+            used_loc_keys = set(locations.keys())
+
+            def get_next_unused_loc_key() -> int:
+                for k in range(1, 129):
+                    if k not in used_loc_keys:
+                        used_loc_keys.add(k)
+                        return k
+                return 128
+
+            resolved_locations = []
+            for loc in section.locations:
+                if loc.key in locations:
+                    existing_loc = locations[loc.key]
+                    if loc.name.casefold() == existing_loc.name.casefold():
+                        continue
+                    matching_loc = next((k for k, l in locations.items() if l.name.casefold() == loc.name.casefold()), None)
+                    if matching_loc is not None:
+                        location_remap[loc.key] = matching_loc
+                        continue
+                    fresh_key = get_next_unused_loc_key()
+                    location_remap[loc.key] = fresh_key
+                    loc.key = fresh_key
+                    resolved_locations.append(loc)
+                    section.review_notes.append(
+                        f"Location '{loc.name}' collided with key {existing_loc.key}; remapped to key {fresh_key}."
+                    )
+                else:
+                    if loc.key in [l.key for l in resolved_locations]:
+                        fresh_key = get_next_unused_loc_key()
+                        location_remap[loc.key] = fresh_key
+                        loc.key = fresh_key
+                    used_loc_keys.add(loc.key)
+                    resolved_locations.append(loc)
+
+            section.locations = resolved_locations
+
+            # Apply actor and location key remaps across scenes, events, and relationships
+            if actor_remap:
+                for scene in section.scenes:
+                    scene.characters = [actor_remap.get(c, c) for c in scene.characters]
+                for event in section.events:
+                    if event.actor in actor_remap:
+                        event.actor = actor_remap[event.actor]
+                    if event.target in actor_remap:
+                        event.target = actor_remap[event.target]
+                for rel in section.relationships:
+                    if rel.a in actor_remap:
+                        rel.a = actor_remap[rel.a]
+                    if rel.b in actor_remap:
+                        rel.b = actor_remap[rel.b]
+
+            if location_remap:
+                for scene in section.scenes:
+                    if scene.location in location_remap:
+                        scene.location = location_remap[scene.location]
+                for event in section.events:
+                    if event.location in location_remap:
+                        event.location = location_remap[event.location]
+
             new_actors = [item.key for item in section.actors]
             new_locations = [item.key for item in section.locations]
-            if len(set(new_actors)) != len(new_actors) or any(key in actors for key in new_actors):
-                raise ValueError("New actors must have unique unused keys")
-            if len(set(new_locations)) != len(new_locations) or any(key in locations for key in new_locations):
-                raise ValueError("New locations must have unique unused keys")
             actor_keys, location_keys = set(actors) | set(new_actors), set(locations) | set(new_locations)
             covered = []
             previous_end = min(available) - 1
@@ -165,12 +255,13 @@ class SectionPlanner:
                 if not set(item.panels) <= available:
                     raise ValueError("Evidence must reference supplied section panels")
             for event in section.events:
-                if any(key is not None and key not in actor_keys for key in (event.actor, event.target)):
-                    raise ValueError("Event references an unknown actor")
+                if event.actor is not None and event.actor not in actor_keys:
+                    event.actor = None
+                if event.target is not None and event.target not in actor_keys:
+                    event.target = None
                 if event.location is not None and event.location not in location_keys:
-                    raise ValueError("Event references an unknown location")
-            if any(item.a not in actor_keys or item.b not in actor_keys for item in section.relationships):
-                raise ValueError("Relationship references an unknown actor")
+                    event.location = None
+            section.relationships = [rel for rel in section.relationships if rel.a in actor_keys and rel.b in actor_keys]
 
         async def process(chunk):
             nonlocal requests, cache_hits
