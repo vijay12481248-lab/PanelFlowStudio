@@ -144,6 +144,18 @@ export function useTimelineAudioPlayback(projectId: string, state: StoryEditorSt
     }
 
     // 3. Process Narration Clips
+    // Determine the single active narration clip at the current playhead to prevent overlapping voices
+    let activeNarrationId: string | null = null;
+    let latestStartSec = -1;
+    for (const narr of state.narration_clips) {
+      if (!narr.audio_url) continue;
+      const isActive = playhead >= narr.start_time_sec && playhead < narr.start_time_sec + narr.duration_sec;
+      if (isActive && narr.start_time_sec > latestStartSec) {
+        latestStartSec = narr.start_time_sec;
+        activeNarrationId = narr.id;
+      }
+    }
+
     for (const narr of state.narration_clips) {
       currentClipIds.add(narr.id);
       if (!narr.audio_url) continue;
@@ -155,9 +167,9 @@ export function useTimelineAudioPlayback(projectId: string, state: StoryEditorSt
         instances.set(narr.id, audio);
       }
 
-      const isActive = playhead >= narr.start_time_sec && playhead < narr.start_time_sec + narr.duration_sec;
+      const shouldPlay = narr.id === activeNarrationId && isPlaying && !isNarrationMuted;
 
-      if (isPlaying && isActive && !isNarrationMuted) {
+      if (shouldPlay) {
         const elapsed = playhead - narr.start_time_sec;
         if (Math.abs(audio.currentTime - elapsed) > 0.25) {
           audio.currentTime = elapsed;

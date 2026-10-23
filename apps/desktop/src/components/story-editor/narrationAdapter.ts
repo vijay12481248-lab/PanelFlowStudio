@@ -244,7 +244,16 @@ export function buildInitialNarrationChapter(
 }
 
 /**
+ * Options for synchronizing Narration Chapter with Timeline Scenes
+ */
+export interface SynchronizeTimelineOptions {
+  rippleScenes?: boolean;
+  cushionSec?: number;
+}
+
+/**
  * Synchronize NarrationChapter domain model to Timeline NarrationClip array
+ * Strictly guarantees non-overlapping speech start times.
  */
 export function syncChapterToTimelineClips(
   chapter: NarrationChapter,
@@ -256,7 +265,12 @@ export function syncChapterToTimelineClips(
     existingMap.set(clip.id, clip);
   }
 
-  let unlinkedAccumulatedSec = 0;
+  const sceneMap = new Map<string, VideoScene>();
+  for (const sc of scenes) {
+    sceneMap.set(sc.id, sc);
+  }
+
+  let previousClipEndTime = 0;
 
   return chapter.segments.map((segment) => {
     const existing = existingMap.get(segment.id);
@@ -264,7 +278,7 @@ export function syncChapterToTimelineClips(
     // Smart Scene Binding: Match by scene_id, or reliable unambiguous source panel match
     let matchingScene: VideoScene | undefined;
     if (segment.scene_id) {
-      matchingScene = scenes.find((s) => s.id === segment.scene_id);
+      matchingScene = sceneMap.get(segment.scene_id);
     }
 
     if (!matchingScene && segment.source_context?.panel_ids?.length > 0) {
@@ -284,15 +298,18 @@ export function syncChapterToTimelineClips(
 
     let startTimeSec: number;
     if (isLinked && matchingScene) {
-      startTimeSec = matchingScene.start_time_sec + (segment.scene_offset_sec || 0);
+      const preferredStart = matchingScene.start_time_sec + (segment.scene_offset_sec || 0);
+      startTimeSec = Math.max(preferredStart, previousClipEndTime);
     } else if (existing && existing.start_time_sec !== undefined) {
-      // Preserve existing unlinked absolute position
-      startTimeSec = existing.start_time_sec;
+      // Preserve existing unlinked absolute position if it does not overlap
+      startTimeSec = Math.max(existing.start_time_sec, previousClipEndTime);
     } else {
-      startTimeSec = unlinkedAccumulatedSec;
+      startTimeSec = previousClipEndTime;
     }
 
-    unlinkedAccumulatedSec = Math.max(unlinkedAccumulatedSec, startTimeSec + duration + 0.5);
+    startTimeSec = Math.round(startTimeSec * 100) / 100;
+    const offset = matchingScene ? Math.max(0, Math.round((startTimeSec - matchingScene.start_time_sec) * 100) / 100) : (segment.scene_offset_sec || 0);
+    previousClipEndTime = Math.round((startTimeSec + duration + 0.15) * 100) / 100;
 
     return {
       id: segment.id,
@@ -303,7 +320,7 @@ export function syncChapterToTimelineClips(
       emotion: segment.delivery.emotion,
       speed: segment.delivery.speech_speed,
       status: segment.generation_status as NarrationClip["status"],
-      start_time_sec: Math.round(startTimeSec * 100) / 100,
+      start_time_sec: startTimeSec,
       duration_sec: Math.round(duration * 10) / 10,
       audio_url: segment.audio_asset_uri || undefined,
       linked_to_scene: isLinked,
@@ -313,7 +330,7 @@ export function syncChapterToTimelineClips(
       text_revision: segment.text_revision,
       content_hash: segment.content_hash,
       delivery_intensity: segment.delivery.intensity,
-      scene_offset_sec: segment.scene_offset_sec || 0,
+      scene_offset_sec: offset,
       review_status: segment.review_status,
       previous_audio_asset_uri: segment.previous_audio_asset_uri,
       source_panel_ids: segment.source_context.panel_ids,
@@ -321,6 +338,184 @@ export function syncChapterToTimelineClips(
       pause_preset: segment.delivery.pause?.preset,
     };
   });
+}
+
+/**
+ * Full Ripple Synchronization between Narration Chapter and Timeline Scenes.
+ * Matches segments to visual scenes, expands each scene to hold its spoken narration,
+ * and ripples all subsequent scenes so there is ZERO audio overlap and perfect visual-audio sync.
+ */
+export function synchronizeChapterWithTimeline(
+  chapter: NarrationChapter,
+  scenes: VideoScene[],
+  existingClips: NarrationClip[] = [],
+  options: SynchronizeTimelineOptions = {}
+): {
+  scenes: VideoScene[];
+  narrationClips: NarrationClip[];
+  chapter: NarrationChapter;
+} {
+  const rippleScenes = options.rippleScenes !== false;
+  const cushion = options.cushionSec ?? 0.2;
+
+  // Clone scenes to avoid in-place mutation
+  const workingScenes: VideoScene[] = scenes.map((s, idx) => ({
+    ...s,
+    sequence: idx + 1,
+  }));
+
+  const sceneMap = new Map<string, VideoScene>();
+  workingScenes.forEach((s) => sceneMap.set(s.id, s));
+
+  // Match each segment to a scene
+  const segmentToSceneId = new Map<string, string>();
+  chapter.segments.forEach((seg, idx) => {
+    let targetScene: VideoScene | undefined;
+    if (seg.scene_id && sceneMap.has(seg.scene_id)) {
+      targetScene = sceneMap.get(seg.scene_id);
+    } else if (seg.source_context?.panel_ids?.length > 0) {
+      const panelId = seg.source_context.panel_ids[0];
+      targetScene = workingScenes.find((s) =>
+        s.layers.some((l) => l.source_panel_id === panelId)
+      );
+    }
+    // Fallback: assign sequentially across available scenes
+    if (!targetScene && workingScenes.length > 0) {
+      targetScene = workingScenes[Math.min(idx, workingScenes.length - 1)];
+    }
+    if (targetScene) {
+      segmentToSceneId.set(seg.id, targetScene.id);
+    }
+  });
+
+  // Group segments by scene ID
+  const groupedByScene = new Map<string, NarrationSegment[]>();
+  workingScenes.forEach((s) => groupedByScene.set(s.id, []));
+  const unassignedSegments: NarrationSegment[] = [];
+
+  chapter.segments.forEach((seg) => {
+    const sceneId = segmentToSceneId.get(seg.id);
+    if (sceneId && groupedByScene.has(sceneId)) {
+      groupedByScene.get(sceneId)!.push(seg);
+    } else {
+      unassignedSegments.push(seg);
+    }
+  });
+
+  // Retime scenes and clips sequentially
+  let runningTimelineSec = 0.0;
+  const resultClips: NarrationClip[] = [];
+  const updatedSegments: NarrationSegment[] = [];
+
+  for (const scene of workingScenes) {
+    scene.start_time_sec = Math.round(runningTimelineSec * 100) / 100;
+    const sceneSegments = groupedByScene.get(scene.id) || [];
+    let cursor = runningTimelineSec;
+
+    for (const seg of sceneSegments) {
+      const duration = seg.measured_duration_sec || seg.estimated_duration_sec || estimateReadingDuration(seg.narration_text, seg.delivery?.speech_speed || 1.0);
+      const clipStart = Math.round(cursor * 100) / 100;
+      const offset = Math.max(0, Math.round((clipStart - scene.start_time_sec) * 100) / 100);
+
+      const clip: NarrationClip = {
+        id: seg.id,
+        scene_id: scene.id,
+        panel_id: seg.source_context?.panel_ids?.[0],
+        speaker: seg.speaker_name,
+        text: seg.narration_text,
+        emotion: seg.delivery.emotion,
+        speed: seg.delivery.speech_speed || 1.0,
+        status: seg.generation_status as NarrationClip["status"],
+        start_time_sec: clipStart,
+        duration_sec: Math.round(duration * 10) / 10,
+        audio_url: seg.audio_asset_uri || undefined,
+        linked_to_scene: true,
+        speaker_id: seg.speaker_id,
+        voice_profile_id: seg.voice_profile_id,
+        speaker_type: seg.speaker_type,
+        text_revision: seg.text_revision,
+        content_hash: seg.content_hash,
+        delivery_intensity: seg.delivery.intensity,
+        scene_offset_sec: offset,
+        review_status: seg.review_status,
+        previous_audio_asset_uri: seg.previous_audio_asset_uri,
+        source_panel_ids: seg.source_context?.panel_ids || [],
+        performance_intent: seg.delivery.performance_notes,
+        pause_preset: seg.delivery.pause?.preset,
+      };
+
+      resultClips.push(clip);
+      updatedSegments.push({
+        ...seg,
+        scene_id: scene.id,
+        scene_offset_sec: offset,
+        linked_to_scene: true,
+      });
+
+      cursor += duration + cushion;
+    }
+
+    if (sceneSegments.length > 0) {
+      const requiredDuration = Math.round((cursor - runningTimelineSec + 0.15) * 10) / 10;
+      if (rippleScenes) {
+        scene.duration_sec = Math.max(scene.duration_sec || 4.0, requiredDuration);
+      }
+    }
+
+    runningTimelineSec += scene.duration_sec;
+  }
+
+  // Handle any remaining unassigned clips after all scenes
+  for (const seg of unassignedSegments) {
+    const duration = seg.measured_duration_sec || seg.estimated_duration_sec || estimateReadingDuration(seg.narration_text, seg.delivery?.speech_speed || 1.0);
+    const clipStart = Math.round(runningTimelineSec * 100) / 100;
+
+    resultClips.push({
+      id: seg.id,
+      scene_id: undefined,
+      panel_id: seg.source_context?.panel_ids?.[0],
+      speaker: seg.speaker_name,
+      text: seg.narration_text,
+      emotion: seg.delivery.emotion,
+      speed: seg.delivery.speech_speed || 1.0,
+      status: seg.generation_status as NarrationClip["status"],
+      start_time_sec: clipStart,
+      duration_sec: Math.round(duration * 10) / 10,
+      audio_url: seg.audio_asset_uri || undefined,
+      linked_to_scene: false,
+      speaker_id: seg.speaker_id,
+      voice_profile_id: seg.voice_profile_id,
+      speaker_type: seg.speaker_type,
+      text_revision: seg.text_revision,
+      content_hash: seg.content_hash,
+      delivery_intensity: seg.delivery.intensity,
+      scene_offset_sec: 0,
+      review_status: seg.review_status,
+      previous_audio_asset_uri: seg.previous_audio_asset_uri,
+      source_panel_ids: seg.source_context?.panel_ids || [],
+      performance_intent: seg.delivery.performance_notes,
+      pause_preset: seg.delivery.pause?.preset,
+    });
+
+    updatedSegments.push({
+      ...seg,
+      linked_to_scene: false,
+    });
+
+    runningTimelineSec += duration + cushion;
+  }
+
+  const updatedChapter: NarrationChapter = {
+    ...chapter,
+    segments: updatedSegments,
+    updated_at: new Date().toISOString(),
+  };
+
+  return {
+    scenes: workingScenes,
+    narrationClips: resultClips,
+    chapter: updatedChapter,
+  };
 }
 
 /**

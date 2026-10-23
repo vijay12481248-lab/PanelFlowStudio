@@ -1647,7 +1647,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
             <div data-timeline-lane="Narration" {...laneProps("Narration")} className="h-8 border-b border-zinc-800/30 relative flex items-center bg-zinc-950/40">
               {state.narration_clips.map((narration) => {
                 const clipLeft = narration.start_time_sec * pxPerSec;
-                const clipWidth = Math.max(120, narration.duration_sec * pxPerSec);
+                const clipWidth = Math.max(48, narration.duration_sec * pxPerSec);
                 const isSelected =
                   state.selected_object?.type === "narration" && state.selected_object.id === narration.id;
                 const isLinked = narration.linked_to_scene !== false;

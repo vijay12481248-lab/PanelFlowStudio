@@ -25,6 +25,7 @@ import type { VideoScene, NarrationClip } from "@panelflow/shared-types";
 import {
   buildInitialNarrationChapter,
   syncChapterToTimelineClips,
+  synchronizeChapterWithTimeline,
   relinkClipToScene,
   unlinkClipFromScene,
   rippleShiftLinkedNarration,
@@ -512,5 +513,62 @@ describe("Chapter 5B: Timeline Integration Contract (Schema 5A-v2) Ingestion", (
 
     // Segment 3 has no OCR, so has natural non-robotic title
     assert.equal(chapter.segments[2].narration_text, "Ancient Seal.");
+  });
+});
+
+describe("Audio Overlap Prevention & Ripple Synchronization", () => {
+  test("synchronizeChapterWithTimeline guarantees zero audio overlap and ripples scene timing", () => {
+    const scenes = createMockScenes();
+    const chapter = buildInitialNarrationChapter("proj_test", "Demon Emperor", scenes);
+
+    // Make segment 1 long (6.5s) on Scene 1 (which was 4.0s)
+    chapter.segments[0].measured_duration_sec = 6.5;
+    chapter.segments[1].measured_duration_sec = 5.0;
+    chapter.segments[2].measured_duration_sec = 4.0;
+
+    const { scenes: syncedScenes, narrationClips: syncedClips } = synchronizeChapterWithTimeline(
+      chapter,
+      scenes,
+      [],
+      { rippleScenes: true }
+    );
+
+    assert.equal(syncedClips.length, 3);
+    // Clip 1 starts at 0.0s
+    assert.equal(syncedClips[0].start_time_sec, 0.0);
+    // Scene 1 duration was expanded to at least 6.5s (plus cushion)
+    assert.ok(syncedScenes[0].duration_sec >= 6.5, "Scene 1 duration should expand to fit audio");
+    // Scene 2 starts AFTER Clip 1 has finished
+    assert.ok(syncedScenes[1].start_time_sec >= 6.5, "Scene 2 start time must follow Scene 1 audio");
+    // Clip 2 starts at or after Scene 2 start, strictly >= Clip 1 end
+    assert.ok(syncedClips[1].start_time_sec >= syncedClips[0].start_time_sec + syncedClips[0].duration_sec);
+    // Clip 3 starts strictly >= Clip 2 end
+    assert.ok(syncedClips[2].start_time_sec >= syncedClips[1].start_time_sec + syncedClips[1].duration_sec);
+
+    // Verify all clips are strictly non-overlapping
+    for (let i = 1; i < syncedClips.length; i++) {
+      const prevEnd = syncedClips[i - 1].start_time_sec + syncedClips[i - 1].duration_sec;
+      assert.ok(
+        syncedClips[i].start_time_sec >= prevEnd,
+        `Clip ${i} at ${syncedClips[i].start_time_sec}s overlaps previous clip ending at ${prevEnd}s`
+      );
+    }
+  });
+
+  test("syncChapterToTimelineClips prevents collision when multiple segments share a scene", () => {
+    const scenes = createMockScenes();
+    const chapter = buildInitialNarrationChapter("proj_test", "Demon Emperor", scenes);
+
+    // Assign segments 0 and 1 to the SAME scene
+    chapter.segments[0].scene_id = "scene_01";
+    chapter.segments[0].measured_duration_sec = 4.0;
+    chapter.segments[1].scene_id = "scene_01";
+    chapter.segments[1].measured_duration_sec = 3.5;
+
+    const clips = syncChapterToTimelineClips(chapter, scenes);
+
+    assert.equal(clips[0].start_time_sec, 0.0);
+    // Clip 1 must NOT start at 0.0s; it must start AFTER Clip 0 finishes
+    assert.ok(clips[1].start_time_sec >= clips[0].start_time_sec + clips[0].duration_sec);
   });
 });

@@ -226,12 +226,13 @@ def build_harmonized_script_prompt(
         f"KNOWN CHARACTERS:\n{roster_text}\n\n"
         "TASK: Compare both scripts and harmonize them into ONE FINAL SCRIPT synced to the panels.\n"
         "CRITICAL DIRECTIVES:\n"
-        "1. HARMONIZATION: Distribute the narrative flow across each panel so that the entire story is told cohesively.\n"
-        "2. CARRY HUMOR & EMOTIONS: Preserve the witty, lively human commentary and comedic/emotional flavor of the Page Script.\n"
-        "3. VISUAL & AUDIO SYNC: Align each panel's narration line directly with the visual action happening in that panel.\n"
-        "4. DURATION & WORD COUNT: Calibrate each panel narration segment to fit the video display time frame "
+        "1. STRICT NAME GROUNDING: ALWAYS use actual character names from the roster (e.g. Zhou Fan) instead of generic phrases like 'this guy', 'the man', or vague pronouns alone.\n"
+        "2. HARMONIZATION: Distribute the narrative flow across each panel so that the entire story is told cohesively.\n"
+        "3. CARRY HUMOR & EMOTIONS: Preserve the witty, lively human commentary and comedic/emotional flavor of the Page Script.\n"
+        "4. VISUAL & AUDIO SYNC: Align each panel's narration line directly with the visual action happening in that panel.\n"
+        "5. DURATION & WORD COUNT: Calibrate each panel narration segment to fit the video display time frame "
         "(aim for ~18 to 35 words per panel, roughly 4-10 seconds of speech).\n"
-        "5. EMOTIONAL DELIVERY: Assign an expressive emotion ('Humorous', 'Sarcastic', 'Suspenseful', 'Determined', 'Mysterious', 'Excited', 'Neutral') and speed (0.85 to 1.15).\n\n"
+        "6. EMOTIONAL DELIVERY: Assign an expressive emotion ('Humorous', 'Sarcastic', 'Suspenseful', 'Determined', 'Mysterious', 'Excited', 'Neutral') and speed (0.85 to 1.15).\n\n"
         "Return a JSON array of objects strictly matching this schema:\n"
         "[\n"
         "  {\n"
@@ -607,6 +608,28 @@ class StoryNarrationService:
                         char_name = matched.get("character_name", primary_char_name or speaker) if matched else (primary_char_name or speaker)
 
                         if final_text:
+                            # Ground character name if known and missing from LLM generated beat text
+                            if char_name and char_name.lower() not in ("the narrator", "narrator") and char_name not in final_text:
+                                if re.search(r"\b(this guy(?:'s)?|this man(?:'s)?|the man(?:'s)?|the protagonist(?:'s)?|the warrior(?:'s)?|our protagonist(?:'s)?)\b", final_text, re.IGNORECASE):
+                                    final_text = re.sub(
+                                        r"\b(this guy's|this man's|the man's|the protagonist's|the warrior's|our protagonist's)\b",
+                                        f"{char_name}'s",
+                                        final_text,
+                                        count=1,
+                                        flags=re.IGNORECASE,
+                                    )
+                                    final_text = re.sub(
+                                        r"\b(this guy|this man|the man|the protagonist|the warrior|our protagonist)\b",
+                                        char_name,
+                                        final_text,
+                                        count=1,
+                                        flags=re.IGNORECASE,
+                                    )
+                                elif re.match(r"^(?:He|She|They)\s+", final_text):
+                                    final_text = re.sub(r"^(?:He|She|They)\s+", f"{char_name} ", final_text)
+                                else:
+                                    final_text = f"{char_name}: {final_text}"
+
                             w_count = len(final_text.split())
                             est_dur = max(2.0, round(w_count / (2.33 * speed), 1))
                             beat = StructuredStoryBeat(
@@ -690,6 +713,27 @@ class StoryNarrationService:
                         final_text = f"{char_lead}surveys the tense atmosphere, waiting for the opposition's next ridiculous blunder."
                         emotion = "Sarcastic"
                         synth_note = "Default comedic narrative beat."
+
+                if primary_char_name and primary_char_name.lower() not in ("the narrator", "narrator") and primary_char_name not in final_text:
+                    if re.search(r"\b(this guy(?:'s)?|this man(?:'s)?|the man(?:'s)?|the protagonist(?:'s)?|the warrior(?:'s)?|our protagonist(?:'s)?)\b", final_text, re.IGNORECASE):
+                        final_text = re.sub(
+                            r"\b(this guy's|this man's|the man's|the protagonist's|the warrior's|our protagonist's)\b",
+                            f"{primary_char_name}'s",
+                            final_text,
+                            count=1,
+                            flags=re.IGNORECASE,
+                        )
+                        final_text = re.sub(
+                            r"\b(this guy|this man|the man|the protagonist|the warrior|our protagonist)\b",
+                            primary_char_name,
+                            final_text,
+                            count=1,
+                            flags=re.IGNORECASE,
+                        )
+                    elif re.match(r"^(?:He|She|They)\s+", final_text):
+                        final_text = re.sub(r"^(?:He|She|They)\s+", f"{primary_char_name} ", final_text)
+                    else:
+                        final_text = f"{primary_char_name}: {final_text}"
 
                 w_count = len(final_text.split())
                 est_dur = max(2.0, round(w_count / 2.33, 1))

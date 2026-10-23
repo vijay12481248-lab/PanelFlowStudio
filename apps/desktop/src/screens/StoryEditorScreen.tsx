@@ -27,6 +27,7 @@ import type { NarrationSegment } from "../components/narration-studio/NarrationS
 import {
   buildInitialNarrationChapter,
   syncChapterToTimelineClips,
+  synchronizeChapterWithTimeline,
   syncTimelineContractToState,
 } from "../components/story-editor/narrationAdapter";
 import { AudioLibrary } from "../components/audio-library";
@@ -505,15 +506,16 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
             loadedCharacters,
             loadedTextRegions
           );
-          const initialNarration = syncChapterToTimelineClips(initialChapter, initialScenes);
+          const { scenes: syncedScenes, narrationClips: initialNarration, chapter: syncedChapter } =
+            synchronizeChapterWithTimeline(initialChapter, initialScenes, [], { rippleScenes: true });
 
           setEditorState((prev) => {
             const initialEditorState: StoryEditorState = {
               ...prev,
-              scenes: initialScenes,
-              narration_chapter: initialChapter,
+              scenes: syncedScenes,
+              narration_chapter: syncedChapter,
               narration_clips: initialNarration,
-              selected_object: initialScenes.length > 0 ? { type: "scene", id: initialScenes[0].id } : null,
+              selected_object: syncedScenes.length > 0 ? { type: "scene", id: syncedScenes[0].id } : null,
             };
 
             try {
@@ -1224,13 +1226,14 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
                   const ch =
                     prev.narration_chapter ||
                     buildInitialNarrationChapter(project.id, project.title, prev.scenes, undefined, undefined, undefined, undefined, textRegions);
-                  const syncedClips = syncChapterToTimelineClips(
-                    ch,
-                    prev.scenes,
-                    prev.narration_clips
-                  );
+                  const { scenes: syncedScenes, narrationClips: syncedClips, chapter: syncedChapter } =
+                    synchronizeChapterWithTimeline(ch, prev.scenes, prev.narration_clips, {
+                      rippleScenes: prev.ripple_edit !== false,
+                    });
                   return {
                     ...prev,
+                    scenes: syncedScenes,
+                    narration_chapter: syncedChapter,
                     narration_clips: syncedClips,
                   };
                 });
@@ -1245,14 +1248,25 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
                   const newClipId = `clip_${Date.now()}`;
                   const matchingScene =
                     prev.scenes.find((s) => s.id === seg.scene_id) || prev.scenes[0];
+                  const duration = seg.measured_duration_sec || seg.estimated_duration_sec || 3.0;
+
+                  // Find collision-free start time that does not overlap existing clips
+                  let safeStart = Math.max(matchingScene?.start_time_sec ?? 0, prev.playhead_sec);
+                  for (const c of prev.narration_clips) {
+                    if (c.narration_segment_id === seg.id) continue;
+                    if (safeStart < c.start_time_sec + c.duration_sec && safeStart + duration > c.start_time_sec) {
+                      safeStart = Math.round((c.start_time_sec + c.duration_sec + 0.15) * 100) / 100;
+                    }
+                  }
+
                   const newClip: NarrationClip = {
                     id: newClipId,
                     narration_segment_id: seg.id,
                     scene_id: matchingScene?.id,
                     linked_to_scene: true,
-                    scene_offset_sec: Math.max(0, prev.playhead_sec - (matchingScene?.start_time_sec ?? 0)),
-                    start_time_sec: Math.max(matchingScene?.start_time_sec ?? 0, prev.playhead_sec),
-                    duration_sec: seg.measured_duration_sec || seg.estimated_duration_sec || 3.0,
+                    scene_offset_sec: Math.max(0, Math.round((safeStart - (matchingScene?.start_time_sec ?? 0)) * 10) / 10),
+                    start_time_sec: safeStart,
+                    duration_sec: duration,
                     speaker: seg.speaker_name,
                     speaker_id: seg.speaker_id,
                     text: seg.narration_text,
@@ -1263,10 +1277,10 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
                   };
                   return {
                     ...prev,
-                    narration_clips: [
+                    narration_clips: alignLinkedNarration(prev.scenes, [
                       ...prev.narration_clips.filter((c) => c.narration_segment_id !== seg.id),
                       newClip,
-                    ],
+                    ]),
                     selected_object: { type: "narration" as const, id: newClipId },
                   };
                 });
@@ -1275,14 +1289,13 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
             }}
             onChapterSave={(updatedChapter) => {
               updateEditorState((prev) => {
-                const syncedClips = syncChapterToTimelineClips(
-                  updatedChapter,
-                  prev.scenes,
-                  prev.narration_clips
-                );
+                const { scenes: syncedScenes, narrationClips: syncedClips, chapter: syncedChapter } =
+                  synchronizeChapterWithTimeline(updatedChapter, prev.scenes, prev.narration_clips, {
+                    rippleScenes: false,
+                  });
                 return {
                   ...prev,
-                  narration_chapter: updatedChapter,
+                  narration_chapter: syncedChapter,
                   narration_clips: syncedClips,
                 };
               });
