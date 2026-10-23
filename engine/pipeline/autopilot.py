@@ -381,6 +381,8 @@ class AutoPilotRunner:
     async def execute(self) -> None:
         self.status = "RUNNING"
         self.started_at = datetime.now(timezone.utc).isoformat()
+        self.error = None
+        self.error_details = None
         self.log(f"Starting End-to-End Auto-Pilot pipeline for project {self.project_id}")
 
         profile_name = self.options.get("target_profile", "standard_1080p")
@@ -425,6 +427,8 @@ class AutoPilotRunner:
 
             self.status = "COMPLETED"
             self.overall_progress = 1.0
+            self.error = None
+            self.error_details = None
             self.completed_at = datetime.now(timezone.utc).isoformat()
             self.log("Auto-Pilot completed all 9 stages. Review the rendered video before release.")
 
