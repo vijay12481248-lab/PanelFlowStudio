@@ -127,8 +127,8 @@ export const PanelReviewScreen: React.FC<PanelReviewScreenProps> = ({
   };
 
   const activePage = pages[selectedPageIndex] || null;
-  const canvasWidth = loadedImage && activePage && loadedImage.pageId === activePage.id ? loadedImage.width : activePage?.width || 1200;
-  const canvasHeight = loadedImage && activePage && loadedImage.pageId === activePage.id ? loadedImage.height : activePage?.height || 1800;
+  const canvasWidth = loadedImage && activePage && loadedImage.pageId === activePage.id ? loadedImage.width : activePage?.width || 1920;
+  const canvasHeight = loadedImage && activePage && loadedImage.pageId === activePage.id ? loadedImage.height : activePage?.height || 2400;
   const pagePanels = activePage
     ? panels.filter((p) => p.page_id === activePage.id).sort((a, b) => a.page_sequence - b.page_sequence)
     : [];
@@ -686,10 +686,14 @@ export const PanelReviewScreen: React.FC<PanelReviewScreenProps> = ({
       setPanels((prev) =>
         prev.map((p) => {
           if (p.id === selectedPanelId) {
+            const nextX = Math.max(0, Math.min(initialBox.x + dx, canvasWidth - p.width));
+            const nextY = Math.max(0, Math.min(initialBox.y + dy, canvasHeight - p.height));
             return {
               ...p,
-              x: Math.max(0, initialBox.x + dx),
-              y: Math.max(0, initialBox.y + dy),
+              x: nextX,
+              y: nextY,
+              normalized_x: canvasWidth > 0 ? Number((nextX / canvasWidth).toFixed(4)) : p.normalized_x,
+              normalized_y: canvasHeight > 0 ? Number((nextY / canvasHeight).toFixed(4)) : p.normalized_y,
             };
           }
           return p;
@@ -704,24 +708,34 @@ export const PanelReviewScreen: React.FC<PanelReviewScreenProps> = ({
             let newW = initialBox.w;
             let newH = initialBox.h;
 
-            if (activeHandle.includes("e")) newW = Math.max(30, initialBox.w + dx);
-            if (activeHandle.includes("s")) newH = Math.max(30, initialBox.h + dy);
+            if (activeHandle.includes("e")) newW = Math.max(30, Math.min(initialBox.w + dx, canvasWidth - newX));
+            if (activeHandle.includes("s")) newH = Math.max(30, Math.min(initialBox.h + dy, canvasHeight - newY));
             if (activeHandle.includes("w")) {
               const proposedW = initialBox.w - dx;
               if (proposedW > 30) {
-                newX = initialBox.x + dx;
-                newW = proposedW;
+                newX = Math.max(0, initialBox.x + dx);
+                newW = Math.min(initialBox.w + (initialBox.x - newX), canvasWidth - newX);
               }
             }
             if (activeHandle.includes("n")) {
               const proposedH = initialBox.h - dy;
               if (proposedH > 30) {
-                newY = initialBox.y + dy;
-                newH = proposedH;
+                newY = Math.max(0, initialBox.y + dy);
+                newH = Math.min(initialBox.h + (initialBox.y - newY), canvasHeight - newY);
               }
             }
 
-            return { ...p, x: newX, y: newY, width: newW, height: newH };
+            return {
+              ...p,
+              x: newX,
+              y: newY,
+              width: newW,
+              height: newH,
+              normalized_x: canvasWidth > 0 ? Number((newX / canvasWidth).toFixed(4)) : p.normalized_x,
+              normalized_y: canvasHeight > 0 ? Number((newY / canvasHeight).toFixed(4)) : p.normalized_y,
+              normalized_width: canvasWidth > 0 ? Number((newW / canvasWidth).toFixed(4)) : p.normalized_width,
+              normalized_height: canvasHeight > 0 ? Number((newH / canvasHeight).toFixed(4)) : p.normalized_height,
+            };
           }
           return p;
         })
@@ -1084,6 +1098,20 @@ export const PanelReviewScreen: React.FC<PanelReviewScreenProps> = ({
                     {pagePanels.map((panel) => {
                       const isSelected = panel.id === selectedPanelId;
                       const isMergeSelected = selectedForMerge.includes(panel.id);
+
+                      // Normalize coordinates to prevent any selection from extending outside page bounds
+                      const hasNorm = panel.normalized_width != null && panel.normalized_width > 0;
+                      const rawX = hasNorm ? Math.round((panel.normalized_x ?? 0) * canvasWidth) : panel.x;
+                      const rawY = hasNorm ? Math.round((panel.normalized_y ?? 0) * canvasHeight) : panel.y;
+                      const rawW = hasNorm ? Math.round(panel.normalized_width! * canvasWidth) : panel.width;
+                      const rawH = hasNorm ? Math.round((panel.normalized_height ?? 0) * canvasHeight) : panel.height;
+
+                      // Strict boundary clamping to page dimensions
+                      const boxX = Math.max(0, Math.min(rawX, canvasWidth - 10));
+                      const boxY = Math.max(0, Math.min(rawY, canvasHeight - 10));
+                      const boxW = Math.max(10, Math.min(rawW, canvasWidth - boxX));
+                      const boxH = Math.max(10, Math.min(rawH, canvasHeight - boxY));
+
                       return (
                         <g
                           key={panel.id}
@@ -1091,10 +1119,10 @@ export const PanelReviewScreen: React.FC<PanelReviewScreenProps> = ({
                           onMouseDown={(e) => handleBoxMouseDown(e, panel)}
                         >
                           <rect
-                            x={panel.x}
-                            y={panel.y}
-                            width={panel.width}
-                            height={panel.height}
+                            x={boxX}
+                            y={boxY}
+                            width={boxW}
+                            height={boxH}
                             fill={
                               isSelected
                                 ? "rgba(99, 102, 241, 0.28)"
@@ -1110,16 +1138,16 @@ export const PanelReviewScreen: React.FC<PanelReviewScreenProps> = ({
 
                           {/* Sequence Badge Tag */}
                           <rect
-                            x={panel.x}
-                            y={Math.max(0, panel.y - 32)}
+                            x={boxX}
+                            y={Math.max(0, boxY - 32)}
                             width={116}
                             height={30}
                             fill={isSelected ? "#4f46e5" : isMergeSelected ? "#ca8a04" : "#0284c7"}
                             rx={4}
                           />
                           <text
-                            x={panel.x + 8}
-                            y={Math.max(0, panel.y - 12)}
+                            x={boxX + 8}
+                            y={Math.max(0, boxY - 12)}
                             fill="#ffffff"
                             fontSize="17"
                             fontWeight="bold"
@@ -1128,12 +1156,12 @@ export const PanelReviewScreen: React.FC<PanelReviewScreenProps> = ({
                             #{panel.page_sequence} ({panel.sequence})
                           </text>
 
-                          {/* 8 Resize Handles on Selected Panel */}
+                          {/* Resize Handles on Selected Panel */}
                           {isSelected && (
                             <>
                               <circle
-                                cx={panel.x}
-                                cy={panel.y}
+                                cx={boxX}
+                                cy={boxY}
                                 r={8}
                                 fill="#ffffff"
                                 stroke="#4f46e5"
@@ -1142,8 +1170,8 @@ export const PanelReviewScreen: React.FC<PanelReviewScreenProps> = ({
                                 onMouseDown={(e) => handleResizeMouseDown(e, "nw", panel)}
                               />
                               <circle
-                                cx={panel.x + panel.width}
-                                cy={panel.y}
+                                cx={boxX + boxW}
+                                cy={boxY}
                                 r={8}
                                 fill="#ffffff"
                                 stroke="#4f46e5"
@@ -1152,8 +1180,8 @@ export const PanelReviewScreen: React.FC<PanelReviewScreenProps> = ({
                                 onMouseDown={(e) => handleResizeMouseDown(e, "ne", panel)}
                               />
                               <circle
-                                cx={panel.x + panel.width}
-                                cy={panel.y + panel.height}
+                                cx={boxX + boxW}
+                                cy={boxY + boxH}
                                 r={8}
                                 fill="#ffffff"
                                 stroke="#4f46e5"
@@ -1162,8 +1190,8 @@ export const PanelReviewScreen: React.FC<PanelReviewScreenProps> = ({
                                 onMouseDown={(e) => handleResizeMouseDown(e, "se", panel)}
                               />
                               <circle
-                                cx={panel.x}
-                                cy={panel.y + panel.height}
+                                cx={boxX}
+                                cy={boxY + boxH}
                                 r={8}
                                 fill="#ffffff"
                                 stroke="#4f46e5"

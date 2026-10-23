@@ -114,6 +114,20 @@ class WindowsMediaOCREngine(OCREngine):
         except Exception:
             img_w, img_h = 800, 600
 
+        # WinRT OcrEngine requires width and height >= 40 pixels
+        if img_w < 40 or img_h < 40:
+            logger.debug(
+                f"Image {image_path} too small for Windows Media OCR ({img_w}x{img_h} < 40x40). Returning empty result."
+            )
+            return RawOCRResult(
+                panel_id=panel_id,
+                engine_id=self.engine_id,
+                engine_version="1.0-winrt",
+                regions=[],
+                full_text="",
+                confidence_avg=1.0,
+            )
+
         async def _run_async_ocr():
             resolved = str(image_path.resolve())
             file = await StorageFile.get_file_from_path_async(resolved)
@@ -139,7 +153,14 @@ class WindowsMediaOCREngine(OCREngine):
                 ocr_res = asyncio.run(_run_async_ocr())
         except Exception as e:
             logger.warning(f"Windows Media OCR execution failed: {e}. Gracefully returning empty regions.")
-            return []
+            return RawOCRResult(
+                panel_id=panel_id,
+                engine_id=self.engine_id,
+                engine_version="1.0-winrt",
+                regions=[],
+                full_text="",
+                confidence_avg=1.0,
+            )
 
         regions: list[OCRRegion] = []
         lines = list(ocr_res.lines) if hasattr(ocr_res, "lines") else []

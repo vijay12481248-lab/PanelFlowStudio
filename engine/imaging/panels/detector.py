@@ -105,22 +105,26 @@ class ContourPanelDetector(BasePanelDetector):
                 )
             ]
 
-        # 4. Construct candidate PanelBox objects
+        # 4. Construct candidate PanelBox objects strictly clamped to page bounds
         candidate_boxes: list[PanelBox] = []
         for x, y, w, h, conf, p_type in filtered_boxes:
-            polygon_json = self._extract_polygon_from_box(img, int(x), int(y), int(w), int(h))
+            clamped_x = max(0, min(int(x), page_w - 1))
+            clamped_y = max(0, min(int(y), page_h - 1))
+            clamped_w = max(10, min(int(w), page_w - clamped_x))
+            clamped_h = max(10, min(int(h), page_h - clamped_y))
+            polygon_json = self._extract_polygon_from_box(img, clamped_x, clamped_y, clamped_w, clamped_h)
             candidate_boxes.append(
                 PanelBox(
                     id=str(uuid.uuid4()),
                     page_id=page_id,
-                    x=int(x),
-                    y=int(y),
-                    width=int(w),
-                    height=int(h),
-                    normalized_x=round(float(x) / float(page_w), 4),
-                    normalized_y=round(float(y) / float(page_h), 4),
-                    normalized_width=round(float(w) / float(page_w), 4),
-                    normalized_height=round(float(h) / float(page_h), 4),
+                    x=clamped_x,
+                    y=clamped_y,
+                    width=clamped_w,
+                    height=clamped_h,
+                    normalized_x=round(float(clamped_x) / float(page_w), 4),
+                    normalized_y=round(float(clamped_y) / float(page_h), 4),
+                    normalized_width=round(float(clamped_w) / float(page_w), 4),
+                    normalized_height=round(float(clamped_h) / float(page_h), 4),
                     polygon_json=polygon_json,
                     confidence=round(float(conf), 2),
                     panel_type=p_type,
@@ -311,10 +315,10 @@ class ContourPanelDetector(BasePanelDetector):
             content_cols = np.where((deviation[y1:y2] > 12).any(axis=0))[0]
 
             if len(content_cols) > 0:
-                x1 = int(content_cols[0])
-                x2 = int(content_cols[-1])
-                w = max(50, x2 - x1 + 1)
-                h = y2 - y1
+                x1 = max(0, min(int(content_cols[0]), page_w - 1))
+                x2 = max(x1, min(int(content_cols[-1]), page_w - 1))
+                w = max(50, min(x2 - x1 + 1, page_w - x1))
+                h = max(50, min(y2 - y1, page_h - y1))
                 # Plausibility check
                 if w >= 50 and h >= 50:
                     candidates.append((x1, y1, w, h, 0.95, PanelType.WEBTOON_SEGMENT.value))

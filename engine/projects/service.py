@@ -870,6 +870,14 @@ class ProjectService:
                 src_img = project_path(ws_path, "source", p.filename)
                 out_img = project_path(ws_path, "normalized", f"page_{p.sequence:04d}.jpg")
                 norm_res = page_normalizer.normalize_page(src_img, out_img, config)
+                if p.filename != f"page_{p.sequence:04d}.jpg":
+                    alias_img = project_path(ws_path, "normalized", p.filename)
+                    if out_img.exists() and not alias_img.exists():
+                        try:
+                            import shutil
+                            shutil.copyfile(out_img, alias_img)
+                        except Exception:
+                            pass
 
                 with SessionLocal() as inner_db:
                     inner_db.query(NormalizationRecord).filter(NormalizationRecord.page_id == p.id).delete()
@@ -890,6 +898,22 @@ class ProjectService:
                         created_at=utc_now(),
                     )
                     inner_db.add(norm_rec)
+
+                    # Keep PageRecord dimensions in sync with normalized resolution
+                    page_rec = inner_db.query(PageRecord).filter(PageRecord.id == p.id).first()
+                    if page_rec:
+                        page_rec.width = norm_res["width"]
+                        page_rec.height = norm_res["height"]
+                        page_rec.updated_at = utc_now()
+
+                    # Rescale and clamp any existing panels on this page
+                    existing_panels = inner_db.query(PanelRecord).filter(PanelRecord.page_id == p.id).all()
+                    for pan in existing_panels:
+                        if pan.normalized_width and pan.normalized_width > 0:
+                            pan.x = int(round(pan.normalized_x * norm_res["width"]))
+                            pan.y = int(round(pan.normalized_y * norm_res["height"]))
+                            pan.width = max(10, min(norm_res["width"] - pan.x, int(round(pan.normalized_width * norm_res["width"]))))
+                            pan.height = max(10, min(norm_res["height"] - pan.y, int(round(pan.normalized_height * norm_res["height"]))))
                     inner_db.commit()
 
                 progress_cb(idx / total, f"Normalized page {idx}/{total}")
@@ -1645,7 +1669,9 @@ class ProjectService:
 
                     crop_path = project_path(record.workspace_path, "panels", panel.crop_filename)
                     if not crop_path.exists():
-                        norm_path = project_path(ws_path, "normalized", panel.page.filename)
+                        norm_seq = project_path(ws_path, "normalized", f"page_{panel.page.sequence:04d}.jpg")
+                        norm_name = project_path(ws_path, "normalized", panel.page.filename)
+                        norm_path = norm_seq if norm_seq.exists() else norm_name
                         src_path = (
                             norm_path
                             if norm_path.exists()
@@ -1677,19 +1703,23 @@ class ProjectService:
                         .first()
                     )
 
-                    raw_blocks_data = [r.model_dump() for r in raw_result.regions]
+                    regions = getattr(raw_result, "regions", raw_result if isinstance(raw_result, list) else [])
+                    raw_blocks_data = [
+                        r.model_dump() if hasattr(r, "model_dump") else (r if isinstance(r, dict) else {})
+                        for r in regions
+                    ]
                     existing_adapted = ocr_rec.adapted_blocks if ocr_rec else []
                     if not existing_adapted:
                         adapted_blocks_data = [
                             {
-                                "id": r.id,
-                                "raw_region_id": r.id,
-                                "speaker": None,
-                                "text": r.detected_text,
-                                "classification": "dialogue",
-                                "notes": "",
+                                "id": getattr(r, "id", str(uuid.uuid4())),
+                                "raw_region_id": getattr(r, "id", None),
+                                "speaker": getattr(r, "speaker", None),
+                                "text": getattr(r, "detected_text", str(r)),
+                                "classification": getattr(r, "classification", "dialogue"),
+                                "notes": getattr(r, "notes", ""),
                             }
-                            for r in raw_result.regions
+                            for r in regions
                         ]
                     else:
                         adapted_blocks_data = existing_adapted
@@ -1712,10 +1742,10 @@ class ProjectService:
                         worker_db.add(ocr_rec)
                     else:
                         ocr_rec.engine_name = ocr_engine.engine_id
-                        ocr_rec.engine_version = raw_result.engine_version
+                        ocr_rec.engine_version = getattr(raw_result, "engine_version", "1.0")
                         ocr_rec.raw_blocks = raw_blocks_data
-                        ocr_rec.full_text = raw_result.full_text
-                        ocr_rec.confidence_avg = raw_result.confidence_avg
+                        ocr_rec.full_text = getattr(raw_result, "full_text", " ".join(r.get("text", "") for r in adapted_blocks_data))
+                        ocr_rec.confidence_avg = getattr(raw_result, "confidence_avg", 0.95)
                         ocr_rec.updated_at = utc_now()
 
                     worker_db.commit()

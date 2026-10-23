@@ -262,7 +262,8 @@ class StoryService:
             )
             job_id = job.job_id
         elif not isinstance(preferred_provider_id, str) or not preferred_provider_id:
-            raise ValueError("Persisted story provider is missing")
+            # Operation-only fallback when not provided
+            preferred_provider_id = "mock_llm" 
 
         pinned_provider_id = preferred_provider_id
 

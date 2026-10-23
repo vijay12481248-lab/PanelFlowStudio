@@ -102,6 +102,9 @@ def get_normalized_page_file(project_id: str, page_id: str, db: Session = Depend
 
     # Serve from normalized/ if available, otherwise fallback to source/
     try:
+        norm_seq = project_path(project.workspace_path, "normalized", f"page_{page.sequence:04d}.jpg")
+        if norm_seq.is_file():
+            return contained_file_response(project.workspace_path, norm_seq, media_type="image/jpeg")
         norm_path = project_path(project.workspace_path, "normalized", page.filename)
         if norm_path.is_file():
             return contained_file_response(project.workspace_path, norm_path, media_type="image/jpeg")

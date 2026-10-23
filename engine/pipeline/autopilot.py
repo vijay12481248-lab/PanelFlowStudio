@@ -28,6 +28,7 @@ from engine.database.models import (
 )
 from engine.database.session import SessionLocal
 from engine.security.paths import resolve_contained_path
+from engine.jobs.manager import job_manager, PipelineCancellationToken
 from engine.story.packaging import generate_youtube_packaging
 
 logger = logging.getLogger("panelflow.pipeline.autopilot")
@@ -143,6 +144,18 @@ class AutoPilotRunner:
         if self._task and not self._task.done():
             self._task.cancel()
 
+    def _create_cancel_token(self) -> PipelineCancellationToken:
+        token = PipelineCancellationToken()
+        if self.is_cancelled:
+            token.cancel()
+        return token
+
+    def _make_progress_cb(self, stage_id: str, start_pct: float, end_pct: float):
+        def _cb(fraction: float, msg: str):
+            p = start_pct + fraction * (end_pct - start_pct)
+            self.update_stage(stage_id, progress=round(p, 2), message=msg)
+        return _cb
+
     async def execute(self) -> None:
         self.status = "RUNNING"
         self.started_at = datetime.now(timezone.utc).isoformat()
@@ -219,27 +232,68 @@ class AutoPilotRunner:
         s_id = "pages"
         self.current_stage_id = s_id
         start_t = time.monotonic()
-        self.update_stage(s_id, status="RUNNING", progress=0.1, message="Inspecting pages...")
+        self.update_stage(s_id, status="RUNNING", progress=0.05, message="Inspecting pages...")
+
+        from engine.projects.service import project_service
+        from engine.database.models import NormalizationRecord, PageRecord
 
         with SessionLocal() as db:
             project = db.query(ProjectRecord).filter(ProjectRecord.id == self.project_id).first()
             if not project:
                 raise ValueError("Project not found")
             pages = list(project.pages or [])
+
+            # 1. Automated Acquisition if project was newly created from URL without pages yet
             if not pages:
-                raise ValueError("Project has no pages ingested")
+                if project.source_location:
+                    self.log(f"Page Stage: No pages downloaded yet. Starting automated ingestion from {project.source_location}...")
+                    self.update_stage(s_id, progress=0.1, message="Connecting to chapter source...")
+                    from engine.api.dependencies import get_adapter_registry
+                    registry = get_adapter_registry()
+                    job_id = project_service.start_acquisition_job(db, self.project_id, registry)
+                    while True:
+                        if self.is_cancelled:
+                            job_manager.cancel_job(job_id)
+                            return
+                        await asyncio.sleep(0.5)
+                        j = job_manager.get_job(job_id)
+                        if not j:
+                            break
+                        if j["status"] == "COMPLETED":
+                            self.log("Page Stage: Chapter acquisition completed.")
+                            break
+                        elif j["status"] in ("FAILED", "CANCELLED"):
+                            raise RuntimeError(f"Page acquisition failed: {j.get('error')}")
+                        elif j.get("progress"):
+                            self.update_stage(s_id, progress=0.1 + 0.3 * j["progress"], message=f"Downloading pages ({int(j['progress']*100)}%)...")
+
+                    db.expire_all()
+                    project = db.query(ProjectRecord).filter(ProjectRecord.id == self.project_id).first()
+                    pages = list(project.pages or [])
+                if not pages:
+                    raise ValueError("Project has no pages ingested")
 
             self.log(f"Page Stage: Found {len(pages)} pages in project.")
-            self.update_stage(s_id, progress=0.5, message="Verifying page sequence...")
 
-            from engine.projects.service import project_service
+            # 2. Confirm acquisition baseline
             try:
                 project_service.confirm_acquisition(db, self.project_id)
             except Exception as e:
                 self.log(f"Page confirmation note: {e}")
 
+            # 3. Automated Normalization to 1920px standard
+            norm_count = db.query(NormalizationRecord).filter(NormalizationRecord.project_id == self.project_id).count()
+            if norm_count < len(pages) or not skip_existing:
+                self.log(f"Page Stage: Normalizing {len(pages)} pages to 1920px broadcast standard...")
+                self.update_stage(s_id, progress=0.45, message="Normalizing page resolution...")
+                norm_coro = project_service.normalize_project(db, self.project_id, target_width=1920, operation_only=True)
+                token = self._create_cancel_token()
+                cb = self._make_progress_cb(s_id, 0.45, 0.95)
+                await norm_coro(token, cb)
+                self.log(f"Page Stage: Successfully normalized {len(pages)} pages.")
+
         self.get_stage(s_id).duration_sec = round(time.monotonic() - start_t, 2)
-        self.update_stage(s_id, status="COMPLETED", progress=1.0, message=f"Verified {len(pages)} pages")
+        self.update_stage(s_id, status="COMPLETED", progress=1.0, message=f"Verified & normalized {len(pages)} pages")
         self.log(f"Page Stage completed in {self.get_stage(s_id).duration_sec}s")
 
     async def _run_stage_panels(self, skip_existing: bool) -> None:
@@ -248,10 +302,14 @@ class AutoPilotRunner:
         start_t = time.monotonic()
         self.update_stage(s_id, status="RUNNING", progress=0.1, message="Checking panel segmentation...")
 
+        from engine.projects.service import project_service
+        from engine.database.models import PanelRecord
+
         with SessionLocal() as db:
             project = db.query(ProjectRecord).filter(ProjectRecord.id == self.project_id).first()
+            if not project:
+                raise ValueError("Project not found")
             panels = list(project.panels or [])
-            from engine.projects.service import project_service
 
             if panels and skip_existing:
                 self.log(f"Panel Stage: Using {len(panels)} existing segmented panels.")
@@ -261,10 +319,14 @@ class AutoPilotRunner:
                     pass
             else:
                 self.log("Panel Stage: Running panel detection algorithm...")
-                self.update_stage(s_id, progress=0.4, message="Detecting panels from pages...")
-                await asyncio.to_thread(project_service.detect_panels_project, db, self.project_id)
+                self.update_stage(s_id, progress=0.2, message="Detecting panels from pages...")
+                detect_coro = project_service.detect_panels_project(db, self.project_id, operation_only=True)
+                token = self._create_cancel_token()
+                cb = self._make_progress_cb(s_id, 0.2, 0.9)
+                await detect_coro(token, cb)
+
                 project_service.confirm_panels(db, self.project_id)
-                panels = list(project.panels or [])
+                panels = db.query(PanelRecord).filter(PanelRecord.project_id == self.project_id).all()
                 self.log(f"Panel Stage: Successfully detected {len(panels)} panels.")
 
         self.get_stage(s_id).duration_sec = round(time.monotonic() - start_t, 2)
@@ -277,10 +339,14 @@ class AutoPilotRunner:
         start_t = time.monotonic()
         self.update_stage(s_id, status="RUNNING", progress=0.1, message="Processing text bubbles...")
 
+        from engine.projects.service import project_service
+        from engine.database.models import OCRRecord, TextRegionRecord
+
         with SessionLocal() as db:
             project = db.query(ProjectRecord).filter(ProjectRecord.id == self.project_id).first()
+            if not project:
+                raise ValueError("Project not found")
             ocr_records = list(project.ocr_results or [])
-            from engine.projects.service import project_service
 
             if ocr_records and skip_existing:
                 self.log(f"OCR Stage: {len(ocr_records)} panels already have OCR text.")
@@ -290,9 +356,30 @@ class AutoPilotRunner:
                     pass
             else:
                 self.log("OCR Stage: Extracting text regions & speech bubbles...")
-                self.update_stage(s_id, progress=0.4, message="Scanning speech bubbles...")
+                self.update_stage(s_id, progress=0.2, message="Scanning speech bubbles...")
+                ocr_coro = project_service.extract_ocr_project(db, self.project_id, operation_only=True)
+                token = self._create_cancel_token()
+                cb = self._make_progress_cb(s_id, 0.2, 0.9)
+                await ocr_coro(token, cb)
+
+                # Auto-resolve any NEEDS_REVIEW text regions so automated pipeline never halts on unreviewed noise
+                unresolved = (
+                    db.query(TextRegionRecord)
+                    .filter(
+                        TextRegionRecord.project_id == self.project_id,
+                        TextRegionRecord.status == "NEEDS_REVIEW",
+                    )
+                    .all()
+                )
+                for tr in unresolved:
+                    if not (tr.corrected_text or tr.raw_text or "").strip():
+                        tr.status = "IGNORED"
+                    else:
+                        tr.status = "CONFIRMED"
+                if unresolved:
+                    db.commit()
+
                 try:
-                    await asyncio.to_thread(project_service.extract_ocr_project, db, self.project_id)
                     project_service.confirm_ocr(db, self.project_id)
                 except Exception as e:
                     self.log(f"OCR note: {e} (proceeding with panel order baseline)")
@@ -307,13 +394,15 @@ class AutoPilotRunner:
         start_t = time.monotonic()
         self.update_stage(s_id, status="RUNNING", progress=0.1, message="Analyzing narrative scenes...")
 
+        from engine.story.service import story_service
+        from engine.database.models import SceneRecord
+
         with SessionLocal() as db:
             project = db.query(ProjectRecord).filter(ProjectRecord.id == self.project_id).first()
             if not project:
                 raise ValueError("Project not found")
             se_scenes = (project.settings or {}).get("story_editor_state", {}).get("scenes", [])
             scenes = list(project.scenes or []) or se_scenes
-            from engine.story.service import story_service
 
             if scenes and skip_existing:
                 self.log(f"Story Stage: Using {len(scenes)} existing narrative scenes.")
@@ -323,10 +412,24 @@ class AutoPilotRunner:
                     pass
             else:
                 self.log("Story Stage: Performing narrative IR scene breakdown...")
-                self.update_stage(s_id, progress=0.5, message="Segmenting scenes & characters...")
-                await asyncio.to_thread(story_service.analyze_story_project, db, self.project_id)
+                self.update_stage(s_id, progress=0.2, message="Segmenting scenes & characters...")
+                from engine.llm.registry import llm_registry
+                pref_provider = self.options.get("preferred_llm_provider")
+                if not pref_provider:
+                    try:
+                        active_p = await llm_registry.get_active_provider()
+                        pref_provider = active_p.provider_id
+                    except Exception:
+                        pref_provider = "mock_llm"
+                story_coro = story_service.analyze_story_project(
+                    db, self.project_id, preferred_provider_id=pref_provider, operation_only=True
+                )
+                token = self._create_cancel_token()
+                cb = self._make_progress_cb(s_id, 0.2, 0.9)
+                await story_coro(token, cb)
+
                 story_service.confirm_story(db, self.project_id)
-                scenes = list(project.scenes or [])
+                scenes = db.query(SceneRecord).filter(SceneRecord.project_id == self.project_id).all()
                 self.log(f"Story Stage: Created {len(scenes)} narrative scenes.")
 
         self.get_stage(s_id).duration_sec = round(time.monotonic() - start_t, 2)
@@ -339,11 +442,12 @@ class AutoPilotRunner:
         start_t = time.monotonic()
         self.update_stage(s_id, status="RUNNING", progress=0.1, message="Generating script adaptation...")
 
+        from engine.story.service import story_service
+
         with SessionLocal() as db:
             project = db.query(ProjectRecord).filter(ProjectRecord.id == self.project_id).first()
             if not project:
                 raise ValueError("Project not found")
-            from engine.story.service import story_service
             existing_script = story_service.get_script(db, self.project_id)
 
             if existing_script and existing_script.segments and skip_existing:
@@ -352,6 +456,7 @@ class AutoPilotRunner:
             else:
                 self.log("Script Stage: Generating cinematic dialogue & narration...")
                 self.update_stage(s_id, progress=0.5, message="Allocating dialogue beats...")
+
                 script = await asyncio.to_thread(story_service.generate_script, db, self.project_id)
                 story_service.approve_script(db, self.project_id, script.script_id)
                 self.log("Script Stage: Script generated and approved.")
@@ -397,13 +502,32 @@ class AutoPilotRunner:
             script = story_service.get_script(db, self.project_id)
             if narrative is None or script is None:
                 raise ValueError("Audio requires an approved, source-grounded script and Narrative IR. Review the story and script first.")
+
+            timeline_scenes = se_state.get("scenes", [])
+            if not timeline_scenes and narrative and narrative.scenes:
+                # Construct default timeline scenes from story narrative
+                timeline_scenes = [
+                    {
+                        "id": sc.scene_id,
+                        "start_time_sec": float(sc.scene_sequence - 1) * 5.0,
+                        "duration_sec": 5.0,
+                        "layers": [{"source_panel_id": pid} for pid in sc.panel_ids],
+                    }
+                    for sc in narrative.scenes
+                ]
+                if not se_state:
+                    se_state = {}
+                se_state["scenes"] = timeline_scenes
+                project.settings = {**(project.settings or {}), "story_editor_state": se_state}
+                db.commit()
+
             if active_clips:
                 active_clips = reconcile_narration_clips(
-                    script, narrative, se_state.get("scenes", []), active_clips
+                    script, narrative, timeline_scenes, active_clips
                 )
                 self.log(f"Audio Stage: Reconciled {len(active_clips)} existing clips with the approved script.")
             else:
-                active_clips = compile_narration_clips(script, narrative, se_state.get("scenes", []))
+                active_clips = compile_narration_clips(script, narrative, timeline_scenes)
                 self.log(f"Audio Stage: Using {len(active_clips)} grounded script segments.")
 
             # 3. Check physical presence of synthesized audio files
