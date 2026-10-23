@@ -15,7 +15,7 @@ accurate motion-comic narration using a Three-Tier Hierarchical Workflow:
    them into ONE cohesive final script where each panel receives its own dedicated,
    duration-calibrated narration segment tightly synced with the video timeline.
 """
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Callable
 from pydantic import BaseModel, Field
 import json
 import logging
@@ -341,11 +341,20 @@ class StoryNarrationService:
         workspace_path: Optional[Path] = None,
         mode: str = "full",  # "full", "page_only", "panel_only", "harmonize"
         existing_page_scripts: Optional[Dict[str, Any]] = None,
+        progress_callback: Optional[Callable[[float, str], None]] = None,
+        is_cancelled: Optional[Callable[[], bool]] = None,
     ) -> NarrationDraftPlan:
         beats: List[StructuredStoryBeat] = []
         page_scripts: Dict[str, PageScriptRecord] = {}
         page_macro_analyses: Dict[str, str] = {}
         pages_list = pages_data or []
+
+        # Early check for cancellation
+        if is_cancelled and is_cancelled():
+            raise asyncio.CancelledError("Narration generation cancelled by user")
+
+        if progress_callback:
+            progress_callback(0.05, f"Initializing {mode.replace('_', ' ').title()} Narration Pipeline...")
 
         # Resolve primary character name from roster for grounded storytelling
         primary_char_name = None
@@ -384,163 +393,246 @@ class StoryNarrationService:
         # -------------------------------------------------------------
         pages_root = workspace_path / "pages" if workspace_path else None
 
-        for pg in pages_list:
-            pg_id_str = str(pg.get("id"))
-            pg_seq = pg.get("sequence", 1)
-            pg_seq_str = str(pg_seq)
-            pg_panels_count = pg.get("panels_count", 1)
-            ocr_lines = pg.get("ocr_lines", [])
+        if mode in ("full", "page_only"):
+            for p_idx, pg in enumerate(pages_list):
+                if is_cancelled and is_cancelled():
+                    raise asyncio.CancelledError("Narration generation cancelled by user")
 
-            # Check if client provided existing page script
-            if existing_page_scripts and (pg_id_str in existing_page_scripts or pg_seq_str in existing_page_scripts):
-                existing_entry = existing_page_scripts.get(pg_id_str) or existing_page_scripts.get(pg_seq_str)
-                if isinstance(existing_entry, dict):
-                    page_scripts[pg_id_str] = PageScriptRecord(
+                pg_id_str = str(pg.get("id"))
+                pg_seq = pg.get("sequence", 1)
+                pg_seq_str = str(pg_seq)
+                pg_panels_count = pg.get("panels_count", 1)
+                ocr_lines = pg.get("ocr_lines", [])
+
+                if progress_callback:
+                    pct = 0.10 + 0.35 * (p_idx / max(1, len(pages_list)))
+                    progress_callback(pct, f"[1/3] Generating 5-10 line story for Page #{pg_seq} ({p_idx + 1}/{len(pages_list)})...")
+
+                # Check if client provided existing page script
+                if existing_page_scripts and (pg_id_str in existing_page_scripts or pg_seq_str in existing_page_scripts):
+                    existing_entry = existing_page_scripts.get(pg_id_str) or existing_page_scripts.get(pg_seq_str)
+                    if isinstance(existing_entry, dict):
+                        page_scripts[pg_id_str] = PageScriptRecord(
+                            page_id=pg_id_str,
+                            page_sequence=pg_seq,
+                            full_script=existing_entry.get("full_script", ""),
+                            lines=existing_entry.get("lines", []),
+                            tone=existing_entry.get("tone", "Humorous & Entertaining"),
+                            panels_count=pg_panels_count,
+                            humor_and_emotional_notes=existing_entry.get("humor_and_emotional_notes"),
+                        )
+                        page_macro_analyses[pg_id_str] = existing_entry.get("full_script", "")
+                        page_macro_analyses[pg_seq_str] = existing_entry.get("full_script", "")
+                        continue
+
+                # Attempt Vision / LLM Page Analysis
+                page_script_generated = False
+                resolved_page = None
+                if pages_root and pages_root.exists() and pg.get("filename"):
+                    try:
+                        resolved_page = resolve_contained_path(pages_root, pg["filename"], must_be_file=True)
+                    except (FileNotFoundError, ValueError, OSError):
+                        resolved_page = None
+
+                if prov and (resolved_page or ocr_lines or scenes_data):
+                    try:
+                        prompt = build_page_recap_script_prompt(
+                            page_sequence=pg_seq,
+                            panels_count=pg_panels_count,
+                            ocr_lines=ocr_lines,
+                            roster_text=roster_summary,
+                        )
+
+                        raw_resp = ""
+                        if supports_vision and resolved_page and resolved_page.is_file():
+                            raw_resp = await asyncio.wait_for(
+                                prov.analyze_vision(
+                                    image=resolved_page,
+                                    prompt=prompt,
+                                    model=vision_model,
+                                ),
+                                timeout=35.0,
+                            )
+                        elif hasattr(prov, "generate_text"):
+                            raw_resp = await asyncio.wait_for(
+                                prov.generate_text(
+                                    prompt=prompt,
+                                    system_prompt="You are an entertaining, comedic manga recap narrator crafting a lively 5-10 line YouTube recap script.",
+                                    model=model_to_use,
+                                ),
+                                timeout=35.0,
+                            )
+
+                        raw_resp = (raw_resp or "").strip()
+                        start_b = raw_resp.find("{")
+                        end_b = raw_resp.rfind("}")
+                        if start_b != -1 and end_b != -1:
+                            parsed = json.loads(raw_resp[start_b:end_b + 1])
+                            lines = parsed.get("lines", [])
+                            if isinstance(lines, list) and len(lines) >= 3:
+                                full_script = parsed.get("full_script") or " ".join(lines)
+                                rec = PageScriptRecord(
+                                    page_id=pg_id_str,
+                                    page_sequence=pg_seq,
+                                    full_script=full_script,
+                                    lines=lines,
+                                    tone=parsed.get("tone", "Humorous & Entertaining"),
+                                    panels_count=pg_panels_count,
+                                    humor_and_emotional_notes=parsed.get("humor_and_emotional_notes"),
+                                )
+                                page_scripts[pg_id_str] = rec
+                                page_scripts[pg_seq_str] = rec
+                                page_macro_analyses[pg_id_str] = full_script
+                                page_macro_analyses[pg_seq_str] = full_script
+                                page_script_generated = True
+                    except Exception as p_err:
+                        logger.warning(f"Tier 1 Page analysis notice/timeout for page {pg_seq}: {p_err}")
+
+                # Deterministic High-Grade Human Fallback for Page Narration (5 to 8 lines)
+                if not page_script_generated:
+                    char_lead = primary_char_name or "our protagonist"
+                    fallback_lines = [
+                        f"Page {pg_seq} kicks off with palpable tension and an almost comical amount of swagger.",
+                        f"Look at {char_lead} standing dead center, radiating absolute unbothered confidence while everyone else panics.",
+                        f"The opposition looks utterly bewildered, realizing their master plan just evaporated into thin air.",
+                        f"You have to laugh at the sheer contrast between their terrified expressions and his quiet smirk.",
+                        f"Instead of breaking a sweat, {char_lead} effortlessly lines up the next move as if reading from a script.",
+                        f"Every warrior in the clearing freezes in place, praying they won't be the next lesson in humility.",
+                        f"And just like that, the comedic disbelief turns deadly serious as the next exchange ignites!"
+                    ]
+                    full_s = " ".join(fallback_lines)
+                    rec = PageScriptRecord(
                         page_id=pg_id_str,
                         page_sequence=pg_seq,
-                        full_script=existing_entry.get("full_script", ""),
-                        lines=existing_entry.get("lines", []),
-                        tone=existing_entry.get("tone", "Humorous & Entertaining"),
+                        full_script=full_s,
+                        lines=fallback_lines,
+                        tone="Humorous, Sarcastic & Dramatic",
                         panels_count=pg_panels_count,
-                        humor_and_emotional_notes=existing_entry.get("humor_and_emotional_notes"),
+                        humor_and_emotional_notes="Playful roasting of terrified expressions contrasted with protagonist's effortless dominance.",
                     )
-                    page_macro_analyses[pg_id_str] = existing_entry.get("full_script", "")
-                    page_macro_analyses[pg_seq_str] = existing_entry.get("full_script", "")
-                    continue
+                    page_scripts[pg_id_str] = rec
+                    page_scripts[pg_seq_str] = rec
+                    page_macro_analyses[pg_id_str] = full_s
+                    page_macro_analyses[pg_seq_str] = full_s
 
-            # Attempt Vision / LLM Page Analysis
-            page_script_generated = False
-            resolved_page = None
-            if pages_root and pages_root.exists() and pg.get("filename"):
-                try:
-                    resolved_page = resolve_contained_path(pages_root, pg["filename"], must_be_file=True)
-                except (FileNotFoundError, ValueError, OSError):
-                    resolved_page = None
-
-            if prov and (resolved_page or ocr_lines or scenes_data):
-                try:
-                    prompt = build_page_recap_script_prompt(
-                        page_sequence=pg_seq,
-                        panels_count=pg_panels_count,
-                        ocr_lines=ocr_lines,
-                        roster_text=roster_summary,
+        elif existing_page_scripts:
+            # Rehydrate existing page scripts for panel/harmonize modes
+            for p_k, p_val in existing_page_scripts.items():
+                if isinstance(p_val, dict):
+                    page_scripts[str(p_k)] = PageScriptRecord(
+                        page_id=str(p_val.get("page_id", p_k)),
+                        page_sequence=int(p_val.get("page_sequence", 1)),
+                        full_script=p_val.get("full_script", ""),
+                        lines=p_val.get("lines", []),
+                        tone=p_val.get("tone", "Humorous & Entertaining"),
+                        panels_count=p_val.get("panels_count", 1),
+                        humor_and_emotional_notes=p_val.get("humor_and_emotional_notes"),
                     )
 
-                    raw_resp = ""
-                    if supports_vision and resolved_page and resolved_page.is_file():
-                        raw_resp = await prov.analyze_vision(
-                            image=resolved_page,
-                            prompt=prompt,
-                            model=vision_model,
-                        )
-                    elif hasattr(prov, "generate_text"):
-                        raw_resp = await prov.generate_text(
-                            prompt=prompt,
-                            system_prompt="You are an entertaining, comedic manga recap narrator crafting a lively 5-10 line YouTube recap script.",
-                            model=model_to_use,
-                        )
-
-                    raw_resp = raw_resp.strip()
-                    start_b = raw_resp.find("{")
-                    end_b = raw_resp.rfind("}")
-                    if start_b != -1 and end_b != -1:
-                        parsed = json.loads(raw_resp[start_b:end_b + 1])
-                        lines = parsed.get("lines", [])
-                        if isinstance(lines, list) and len(lines) >= 3:
-                            full_script = parsed.get("full_script") or " ".join(lines)
-                            rec = PageScriptRecord(
-                                page_id=pg_id_str,
-                                page_sequence=pg_seq,
-                                full_script=full_script,
-                                lines=lines,
-                                tone=parsed.get("tone", "Humorous & Entertaining"),
-                                panels_count=pg_panels_count,
-                                humor_and_emotional_notes=parsed.get("humor_and_emotional_notes"),
-                            )
-                            page_scripts[pg_id_str] = rec
-                            page_scripts[pg_seq_str] = rec
-                            page_macro_analyses[pg_id_str] = full_script
-                            page_macro_analyses[pg_seq_str] = full_script
-                            page_script_generated = True
-                except Exception as p_err:
-                    logger.debug(f"Tier 1 Page analysis notice for page {pg_seq}: {p_err}")
-
-            # Deterministic High-Grade Human Fallback for Page Narration (5 to 8 lines)
-            if not page_script_generated:
-                char_lead = primary_char_name or "our protagonist"
-                fallback_lines = [
-                    f"Page {pg_seq} kicks off with palpable tension and an almost comical amount of swagger.",
-                    f"Look at {char_lead} standing dead center, radiating absolute unbothered confidence while everyone else panics.",
-                    f"The opposition looks utterly bewildered, realizing their master plan just evaporated into thin air.",
-                    f"You have to laugh at the sheer contrast between their terrified expressions and his quiet smirk.",
-                    f"Instead of breaking a sweat, {char_lead} effortlessly lines up the next move as if reading from a script.",
-                    f"Every warrior in the clearing freezes in place, praying they won't be the next lesson in humility.",
-                    f"And just like that, the comedic disbelief turns deadly serious as the next exchange ignites!"
-                ]
-                full_s = " ".join(fallback_lines)
-                rec = PageScriptRecord(
-                    page_id=pg_id_str,
-                    page_sequence=pg_seq,
-                    full_script=full_s,
-                    lines=fallback_lines,
-                    tone="Humorous, Sarcastic & Dramatic",
-                    panels_count=pg_panels_count,
-                    humor_and_emotional_notes="Playful roasting of terrified expressions contrasted with protagonist's effortless dominance.",
-                )
-                page_scripts[pg_id_str] = rec
-                page_scripts[pg_seq_str] = rec
-                page_macro_analyses[pg_id_str] = full_s
-                page_macro_analyses[pg_seq_str] = full_s
+        if mode == "page_only":
+            if progress_callback:
+                progress_callback(1.0, f"Page-level storytelling complete: {len(page_scripts)} pages generated.")
+            return NarrationDraftPlan(
+                project_id=project_id,
+                page_scripts=page_scripts,
+                beats=[],
+            )
 
         # -------------------------------------------------------------
         # TIER 2: Panel-Level Micro Analysis (Cropped Panel Observations)
         # -------------------------------------------------------------
-        panels_root = workspace_path / "panels" if workspace_path else None
-        for sc in scenes_data:
-            vis_existing = str(sc.get("visual_description", "")).strip()
-            panel_file = None
+        if mode in ("full", "panel_only"):
+            panels_root = workspace_path / "panels" if workspace_path else None
+            for idx, sc in enumerate(scenes_data):
+                if is_cancelled and is_cancelled():
+                    raise asyncio.CancelledError("Narration generation cancelled by user")
+                if progress_callback:
+                    pct = 0.45 + (0.20 * (idx / max(1, len(scenes_data))))
+                    progress_callback(pct, f"[2/3] Analyzing panel #{sc.get('sequence', idx + 1)} ({idx + 1}/{len(scenes_data)})...")
 
-            if panels_root and panels_root.exists() and supports_vision and prov:
-                for cf in sc.get("crop_filenames", []):
-                    if isinstance(cf, str) and cf.strip():
+                vis_existing = str(sc.get("visual_description", "")).strip()
+                panel_file = None
+
+                # Optimization: Only invoke vision LLM if visual_description is blank or generic placeholder
+                needs_vision = not vis_existing or bool(re.match(r"^(?:Scene|Panel|Visual\s+framing|No\s+visual)", vis_existing, re.IGNORECASE))
+
+                if needs_vision and panels_root and panels_root.exists() and supports_vision and prov:
+                    for cf in sc.get("crop_filenames", []):
+                        if isinstance(cf, str) and cf.strip():
+                            try:
+                                cand = resolve_contained_path(panels_root, cf, must_be_file=True)
+                                panel_file = cand
+                                break
+                            except (FileNotFoundError, ValueError, OSError):
+                                continue
+
+                    if not panel_file:
+                        seq = sc.get("sequence", 1)
+                        for cand in [
+                            panels_root / f"panel_{seq:04d}.jpg",
+                            panels_root / f"panel_{seq:04d}.png",
+                            panels_root / f"panel_{seq}.jpg",
+                        ]:
+                            try:
+                                resolved_cand = resolve_contained_path(panels_root, cand.name, must_be_file=True)
+                                panel_file = resolved_cand
+                                break
+                            except (FileNotFoundError, ValueError, OSError):
+                                continue
+
+                    if panel_file and panel_file.is_file():
                         try:
-                            cand = resolve_contained_path(panels_root, cf, must_be_file=True)
-                            panel_file = cand
-                            break
-                        except (FileNotFoundError, ValueError, OSError):
-                            continue
+                            vis_summary = await asyncio.wait_for(
+                                prov.analyze_vision(
+                                    image=panel_file,
+                                    prompt="Describe in 1 concise, vivid sentence the character's exact facial expression, emotional state, and immediate physical action in this panel.",
+                                    model=vision_model,
+                                ),
+                                timeout=18.0,
+                            )
+                            if vis_summary and vis_summary.strip():
+                                sc["visual_description"] = vis_summary.strip()
+                        except Exception as img_err:
+                            logger.debug(f"Panel vision analysis skipped/timed out: {img_err}")
 
-                if not panel_file:
-                    seq = sc.get("sequence", 1)
-                    for cand in [
-                        panels_root / f"panel_{seq:04d}.jpg",
-                        panels_root / f"panel_{seq:04d}.png",
-                        panels_root / f"panel_{seq}.jpg",
-                    ]:
-                        try:
-                            resolved_cand = resolve_contained_path(panels_root, cand.name, must_be_file=True)
-                            panel_file = resolved_cand
-                            break
-                        except (FileNotFoundError, ValueError, OSError):
-                            continue
+                # Assign panel-level micro narration text
+                ocr = sc.get("ocr_text", "").strip()
+                seq = sc.get("sequence", idx + 1)
+                vis = sc.get("visual_description", f"Panel #{seq} visual action")
+                sc["panel_narration_text"] = f"{vis}. Spoken: \"{ocr}\"" if ocr else vis
 
-                if panel_file and panel_file.is_file():
-                    try:
-                        vis_summary = await prov.analyze_vision(
-                            image=panel_file,
-                            prompt="Describe in 1 concise, vivid sentence the character's exact facial expression, emotional state, and immediate physical action in this panel.",
-                            model=vision_model,
-                        )
-                        if vis_summary and vis_summary.strip():
-                            sc["visual_description"] = vis_summary.strip()
-                    except Exception as img_err:
-                        logger.debug(f"Panel vision analysis skipped: {img_err}")
-
-            # Assign panel-level micro narration text
-            ocr = sc.get("ocr_text", "").strip()
-            seq = sc.get("sequence", 1)
-            vis = sc.get("visual_description", f"Panel #{seq} visual action")
-            sc["panel_narration_text"] = f"{vis}. Spoken: \"{ocr}\"" if ocr else vis
+        if mode == "panel_only":
+            if progress_callback:
+                progress_callback(1.0, f"Panel breakdown complete: {len(scenes_data)} panels analyzed.")
+            for idx, sc in enumerate(scenes_data):
+                ocr = sc.get("ocr_text", "").strip()
+                vis = sc.get("visual_description", f"Panel #{idx + 1} action")
+                beat = StructuredStoryBeat(
+                    scene_id=sc.get("id", f"scene_{idx + 1}"),
+                    panel_ids=sc.get("panel_ids", [f"panel_{idx + 1}"]),
+                    sequence=sc.get("sequence", idx + 1),
+                    narration_intent="EXPOSITION",
+                    speaker="The Narrator",
+                    speaker_type="NARRATOR",
+                    character_name=primary_char_name or "The Narrator",
+                    observed_ocr_dialogue=ocr,
+                    observed_visual_evidence=vis,
+                    page_sequence=sc.get("page_sequence", 1),
+                    inferred_emotional_context="Neutral",
+                    inferred_subtext="Panel breakdown draft",
+                    continuity_references=[f"Scene {idx + 1}"],
+                    proposed_narration_text=sc.get("panel_narration_text", vis),
+                    page_narration_text=None,
+                    panel_narration_text=sc.get("panel_narration_text", vis),
+                    synthesis_notes="Panel micro beat only",
+                    recommended_emotion="Neutral",
+                    recommended_speed=1.0,
+                    estimated_duration_sec=max(2.0, round(len(vis.split()) / 2.33, 1)),
+                    word_count=len(vis.split()),
+                    target_panel_time_sec=max(2.0, round(len(vis.split()) / 2.33, 1)),
+                )
+                beats.append(beat)
+            return NarrationDraftPlan(project_id=project_id, page_scripts=page_scripts, beats=beats)
 
         # -------------------------------------------------------------
         # TIER 3: Comparison & Harmonization Pass (Final Synced Script)
@@ -557,7 +649,13 @@ class StoryNarrationService:
 
                 harmonized_results_by_scene_id = {}
 
-                for p_seq, page_scenes in page_to_scenes.items():
+                for h_idx, (p_seq, page_scenes) in enumerate(page_to_scenes.items()):
+                    if is_cancelled and is_cancelled():
+                        raise asyncio.CancelledError("Narration generation cancelled by user")
+                    if progress_callback:
+                        pct = 0.65 + (0.30 * (h_idx / max(1, len(page_to_scenes))))
+                        progress_callback(pct, f"[3/3] Harmonizing script for Page #{p_seq} ({h_idx + 1}/{len(page_to_scenes)})...")
+
                     p_key = str(p_seq)
                     pg_script = page_scripts.get(p_key)
                     if not pg_script:
@@ -576,12 +674,20 @@ class StoryNarrationService:
                         roster_text=roster_summary,
                     )
 
-                    raw_harm = await prov.generate_text(
-                        prompt=harm_prompt,
-                        system_prompt="You are an expert video director harmonizing overarching page comedy & emotion with exact panel timing.",
-                        model=model_to_use,
-                    )
-                    raw_harm = raw_harm.strip()
+                    try:
+                        raw_harm = await asyncio.wait_for(
+                            prov.generate_text(
+                                prompt=harm_prompt,
+                                system_prompt="You are an expert video director harmonizing overarching page comedy & emotion with exact panel timing.",
+                                model=model_to_use,
+                            ),
+                            timeout=35.0,
+                        )
+                    except Exception as harm_err:
+                        logger.warning(f"Harmonization LLM call timed out/failed for page {p_seq}: {harm_err}")
+                        raw_harm = ""
+
+                    raw_harm = (raw_harm or "").strip()
                     s_idx = raw_harm.find("[")
                     e_idx = raw_harm.rfind("]")
                     if s_idx != -1 and e_idx != -1:
@@ -764,6 +870,9 @@ class StoryNarrationService:
                     target_panel_time_sec=est_dur,
                 )
                 beats.append(beat)
+
+        if progress_callback:
+            progress_callback(1.0, f"3-Tier narration draft complete: {len(beats)} beats ready.")
 
         return NarrationDraftPlan(
             project_id=project_id,

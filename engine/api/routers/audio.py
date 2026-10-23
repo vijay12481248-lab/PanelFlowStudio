@@ -410,9 +410,81 @@ async def draft_narration_plan(
             mode=getattr(req, "mode", "full") or "full",
             existing_page_scripts=getattr(req, "existing_page_scripts", None),
         )
+        if proj.workspace_path:
+            plan_path = Path(proj.workspace_path) / "story" / "narration_plan.json"
+            try:
+                plan_path.parent.mkdir(parents=True, exist_ok=True)
+                plan_path.write_text(plan.model_dump_json(indent=2), encoding="utf-8")
+            except Exception:
+                pass
         return plan.model_dump()
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Narration drafting failed: {e}")
+
+
+@router.post("/projects/{project_id}/narration/draft-job")
+def draft_narration_job_endpoint(
+    project_id: str,
+    req: DraftNarrationRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Submits a background tracked Job for 3-Tier Narration generation.
+    Returns a job_id with real-time percentage progress and cooperative cancellation.
+    """
+    from engine.database.models import ProjectRecord
+    from engine.jobs.workflow import enqueue_project_operation, build_operation
+    proj = db.query(ProjectRecord).filter(ProjectRecord.id == project_id).first()
+    if not proj:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+
+    job_input = {
+        "scenes": req.scenes,
+        "provider_id": req.provider_id,
+        "model_name": req.model_name,
+        "mode": getattr(req, "mode", "full") or "full",
+        "existing_page_scripts": getattr(req, "existing_page_scripts", None),
+    }
+    operation = build_operation("NARRATION_DRAFT", project_id, job_input)
+    if not operation:
+        raise HTTPException(status_code=500, detail="Narration draft operation factory unavailable")
+
+    job_id = enqueue_project_operation(
+        project_id=project_id,
+        job_type="NARRATION_DRAFT",
+        operation=operation,
+        job_input=job_input,
+        priority=15,
+    )
+    return {"job_id": job_id, "status": "QUEUED", "message": "3-Tier Narration generation job queued"}
+
+
+@router.get("/projects/{project_id}/narration/plan")
+def get_narration_plan_endpoint(
+    project_id: str,
+    db: Session = Depends(get_db),
+):
+    """
+    Retrieves the most recent persisted 3-tier narration plan for this project.
+    """
+    from engine.database.models import ProjectRecord
+    proj = db.query(ProjectRecord).filter(ProjectRecord.id == project_id).first()
+    if not proj:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+
+    if not proj.workspace_path:
+        raise HTTPException(status_code=404, detail="Workspace path not found")
+
+    plan_file = Path(proj.workspace_path) / "story" / "narration_plan.json"
+    if not plan_file.exists():
+        raise HTTPException(status_code=404, detail="No narration plan found for project")
+
+    try:
+        import json
+        data = json.loads(plan_file.read_text(encoding="utf-8"))
+        return data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to read narration plan: {e}")
 
 
 
@@ -465,6 +537,13 @@ async def harmonize_narration_endpoint(
             mode="harmonize",
             existing_page_scripts=req.page_scripts,
         )
+        if proj.workspace_path:
+            plan_path = Path(proj.workspace_path) / "story" / "narration_plan.json"
+            try:
+                plan_path.parent.mkdir(parents=True, exist_ok=True)
+                plan_path.write_text(plan.model_dump_json(indent=2), encoding="utf-8")
+            except Exception:
+                pass
         return plan.model_dump()
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Harmonization failed: {e}")

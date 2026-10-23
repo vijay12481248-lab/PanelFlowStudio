@@ -347,3 +347,100 @@ def build_retry_pages_operation(project_id: str, payload: dict):
 register_operation_factory("ACQUISITION", build_acquisition_operation)
 register_operation_factory("RETRY_PAGES", build_retry_pages_operation)
 
+
+def build_narration_draft_operation(project_id: str, payload: dict):
+    from pathlib import Path
+    scenes_data = payload.get("scenes", [])
+    provider_id = payload.get("provider_id")
+    model_name = payload.get("model_name")
+    mode = payload.get("mode", "full")
+    existing_page_scripts = payload.get("existing_page_scripts")
+
+    def operation(db, progress, is_cancelled):
+        from engine.database.models import (
+            ProjectRecord,
+            PanelRecord,
+            PageRecord,
+            CharacterRecord,
+        )
+        from engine.story.narration import story_narration_service
+
+        proj = db.query(ProjectRecord).filter(ProjectRecord.id == project_id).first()
+        if not proj:
+            raise ValueError(f"Project {project_id} not found")
+
+        progress(0.05, "Initializing 3-Tier Narration Pipeline...")
+        if is_cancelled():
+            raise ValueError("Narration draft cancelled by user")
+
+        db_pages = (
+            db.query(PageRecord)
+            .filter(PageRecord.project_id == project_id, PageRecord.status != "FAILED")
+            .order_by(PageRecord.sequence.asc())
+            .all()
+        )
+        db_characters = (
+            db.query(CharacterRecord)
+            .filter(CharacterRecord.project_id == project_id)
+            .all()
+        )
+        pages_data = [
+            {
+                "id": p.id,
+                "sequence": p.sequence,
+                "filename": p.filename,
+                "panels_count": p.panels_count or 1,
+            }
+            for p in db_pages
+        ]
+        characters_data = [
+            {
+                "id": c.id,
+                "name": c.display_name,
+                "canonical_name": c.canonical_name or c.display_name,
+                "role": c.role,
+                "description": c.description,
+            }
+            for c in db_characters
+        ]
+
+        def on_step_progress(pct: float, msg: str):
+            if is_cancelled():
+                raise ValueError("Narration draft cancelled by user")
+            progress(pct, msg)
+
+        async def run_draft():
+            return await story_narration_service.generate_narration_draft(
+                project_id=project_id,
+                scenes_data=scenes_data,
+                pages_data=pages_data,
+                characters_data=characters_data,
+                provider_id=provider_id,
+                model_name=model_name,
+                workspace_path=Path(proj.workspace_path) if proj.workspace_path else None,
+                mode=mode,
+                existing_page_scripts=existing_page_scripts,
+                progress_callback=on_step_progress,
+                is_cancelled=is_cancelled,
+            )
+
+        progress(0.10, "Starting 3-tier narration synthesis...")
+        plan = asyncio.run(run_draft())
+
+        # Persist narration plan to project story workspace
+        if proj.workspace_path:
+            plan_path = Path(proj.workspace_path) / "story" / "narration_plan.json"
+            try:
+                plan_path.parent.mkdir(parents=True, exist_ok=True)
+                plan_path.write_text(plan.model_dump_json(indent=2), encoding="utf-8")
+            except Exception:
+                pass
+
+        progress(1.0, "3-Tier narration generated successfully.")
+        return {"status": "SUCCEEDED", "plan": plan.model_dump()}
+
+    return operation
+
+
+register_operation_factory("NARRATION_DRAFT", build_narration_draft_operation)
+

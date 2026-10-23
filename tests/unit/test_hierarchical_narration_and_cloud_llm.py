@@ -268,3 +268,45 @@ async def test_three_tier_narration_generation_flow(monkeypatch):
     assert b1.word_count is not None and b1.word_count > 0
     assert b1.estimated_duration_sec is not None and b1.estimated_duration_sec > 0
 
+@pytest.mark.asyncio
+async def test_narration_draft_page_only_and_panel_only_modes(monkeypatch):
+    monkeypatch.setenv("PANELFLOW_ALLOW_MOCK_LLM", "true")
+
+    scenes = [
+        {"id": "sc_1", "sequence": 1, "page_sequence": 1, "visual_description": "Panel 1", "ocr_text": "Hey!"}
+    ]
+    pages = [{"id": "p_1", "sequence": 1, "filename": "p_1.jpg", "panels_count": 1}]
+    chars = [{"name": "Hero", "role": "PROTAGONIST"}]
+
+    # Test page_only mode
+    page_plan = await story_narration_service.generate_narration_draft(
+        project_id="proj_page_only",
+        scenes_data=scenes,
+        pages_data=pages,
+        characters_data=chars,
+        mode="page_only",
+    )
+    assert len(page_plan.page_scripts) >= 1
+    assert len(page_plan.beats) == 0  # Beats not generated in page_only
+
+    # Test panel_only mode
+    panel_plan = await story_narration_service.generate_narration_draft(
+        project_id="proj_panel_only",
+        scenes_data=scenes,
+        pages_data=pages,
+        characters_data=chars,
+        mode="panel_only",
+    )
+    assert len(panel_plan.beats) == 1
+    assert panel_plan.beats[0].panel_narration_text is not None
+
+
+def test_narration_draft_job_registration():
+    from engine.jobs.workflow import build_operation
+    op = build_operation(
+        "NARRATION_DRAFT",
+        "proj_test_job",
+        {"scenes": [{"id": "sc_1", "sequence": 1}], "mode": "page_only"},
+    )
+    assert callable(op)
+

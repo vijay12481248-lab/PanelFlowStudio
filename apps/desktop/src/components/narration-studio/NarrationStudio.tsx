@@ -90,6 +90,11 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
   const [isOllamaOnline, setIsOllamaOnline] = useState<boolean>(true);
   const [isDraftingNarration, setIsDraftingNarration] = useState<boolean>(false);
   const [generationStep, setGenerationStep] = useState<string>("");
+  const [elapsedSec, setElapsedSec] = useState<number>(0);
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  const [jobProgress, setJobProgress] = useState<{ percent: number; message: string; status: string } | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const timerIntervalRef = useRef<any>(null);
   const [showTierDropdown, setShowTierDropdown] = useState<boolean>(false);
   const [isSynthesizingAll, setIsSynthesizingAll] = useState<boolean>(false);
   const [showOllamaGuideModal, setShowOllamaGuideModal] = useState<boolean>(false);
@@ -100,6 +105,21 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
   const [selectedProviderId, setSelectedProviderId] = useState<string>("global");
   const [selectedModel, setSelectedModel] = useState<string>("");
   const [showProviderSettingsModal, setShowProviderSettingsModal] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (isDraftingNarration) {
+      setElapsedSec(0);
+      timerIntervalRef.current = setInterval(() => {
+        setElapsedSec((s) => s + 1);
+      }, 1000);
+    } else {
+      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+      setElapsedSec(0);
+    }
+    return () => {
+      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+    };
+  }, [isDraftingNarration]);
 
   useEffect(() => {
     let isMounted = true;
@@ -565,7 +585,216 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
     };
   }, [chapter]);
 
-  // 3-Tier AI Narration Generation (Page Recap 5-10 Lines -> Panel Micro -> Final Synced Script)
+  const buildScenesPayload = () => {
+    return (scenes && scenes.length > 0 ? scenes : chapter.segments).map(
+      (s: any, idx: number) => {
+        const matchingSegment = chapter.segments.find((seg) => seg.scene_id === s.id) || chapter.segments[idx];
+        const ocrText =
+          matchingSegment?.source_context?.raw_ocr_dialogue ||
+          s.ocr_text ||
+          matchingSegment?.narration_text ||
+          "";
+        const panelIds =
+          s.layers?.map((l: any) => l.source_panel_id).filter(Boolean) ||
+          matchingSegment?.source_context?.panel_ids ||
+          s.source_context?.panel_ids ||
+          [];
+        const speakerName = matchingSegment?.speaker_name || s.speaker || "The Narrator";
+        return {
+          id: s.id || `scene_${idx + 1}`,
+          sequence: s.sequence || idx + 1,
+          title: s.title || `Scene ${idx + 1}`,
+          visual_description:
+            s.layers?.[0]?.name || s.visual_description || `Scene ${idx + 1} manga visual framing`,
+          ocr_text: ocrText,
+          panel_ids: panelIds,
+          page_id: s.page_id || matchingSegment?.source_context?.page_id,
+          page_sequence: s.page_sequence || matchingSegment?.source_context?.page_number || 1,
+          speaker: speakerName,
+          characters: [speakerName],
+        };
+      }
+    );
+  };
+
+  const applyDraftResult = (draftResult: any) => {
+    if (!draftResult) return;
+    const nextScripts = {
+      ...(chapter.page_scripts || {}),
+      ...(draftResult.page_scripts || {}),
+    };
+
+    if (draftResult.beats && draftResult.beats.length > 0) {
+      const updatedSegments: NarrationSegment[] = draftResult.beats.map(
+        (beat: any, bIdx: number) => {
+          const matchingScene = scenes.find((sc) => sc.id === beat.scene_id) || scenes[bIdx];
+          const primaryLayer = matchingScene?.layers?.[0];
+          const text = beat.proposed_narration_text || "";
+          const emotion = beat.recommended_emotion || "Neutral";
+          const speed = beat.recommended_speed || 1.0;
+          const characterName = beat.character_name || beat.speaker || "The Narrator";
+          const estDuration =
+            beat.estimated_duration_sec ||
+            Math.max(2.0, Math.round(text.split(" ").filter(Boolean).length / 2.33));
+
+          return {
+            id: `narr_${beat.scene_id || bIdx + 1}`,
+            sequence: bIdx + 1,
+            scene_id: matchingScene?.id || beat.scene_id,
+            scene_title: matchingScene?.title || `Scene ${bIdx + 1}`,
+            linked_to_scene: !!matchingScene,
+            scene_offset_sec: 0.0,
+            speaker_id: "char_narrator",
+            speaker_name: characterName,
+            speaker_type: beat.speaker_type || "NARRATOR",
+            voice_profile_id: "voice_aria_female_narrator",
+            narration_text: text,
+            page_narration_text: beat.page_narration_text,
+            panel_narration_text: beat.panel_narration_text,
+            synthesis_notes: beat.synthesis_notes,
+            text_revision: 1,
+            content_hash: computeContentHash(text, emotion, speed, "short"),
+            source_context: {
+              page_id: primaryLayer?.source_page_id || `page_${bIdx + 1}`,
+              page_number: primaryLayer?.page_sequence || bIdx + 1,
+              panel_ids: beat.panel_ids?.length
+                ? beat.panel_ids
+                : primaryLayer?.source_panel_id
+                ? [primaryLayer.source_panel_id]
+                : [],
+              panel_labels: [primaryLayer?.name || `Panel #${bIdx + 1}`],
+              panel_preview_url: (projectId && (beat.panel_ids?.[0] || primaryLayer?.source_panel_id))
+                ? api.getPanelImageUrl(projectId, beat.panel_ids?.[0] || primaryLayer?.source_panel_id)
+                : primaryLayer?.image_url,
+              image_url: (projectId && (beat.panel_ids?.[0] || primaryLayer?.source_panel_id))
+                ? api.getPanelImageUrl(projectId, beat.panel_ids?.[0] || primaryLayer?.source_panel_id)
+                : primaryLayer?.image_url,
+              raw_ocr_dialogue: beat.observed_ocr_dialogue || "",
+              visual_description:
+                beat.observed_visual_evidence || primaryLayer?.name || `Scene ${bIdx + 1}`,
+              story_context: beat.inferred_subtext || `Story beat ${bIdx + 1}`,
+              page_context_summary: beat.page_context_summary,
+              character_name: characterName,
+              page_narration_text: beat.page_narration_text,
+              panel_narration_text: beat.panel_narration_text,
+              synthesis_notes: beat.synthesis_notes,
+              panel_duration_budget_sec: beat.target_panel_time_sec || estDuration,
+            },
+            delivery: {
+              emotion: emotion as any,
+              intensity: 0.6,
+              speech_speed: speed,
+              pause: { preset: "short", duration_ms: 300, placement: "after_first_sentence" },
+              performance_notes: beat.synthesis_notes || "Emotionally grounded manga narration.",
+              pronunciation_guide: [],
+            },
+            review_status: "DRAFT",
+            generation_status: "UNQUEUED",
+            generation_progress: 0,
+            audio_asset_uri: null,
+            previous_audio_asset_uri: null,
+            generated_audio_revision: null,
+            estimated_duration_sec: estDuration,
+            measured_duration_sec: null,
+            updated_at: new Date().toISOString(),
+          };
+        }
+      );
+
+      const nextChapter = {
+        ...chapter,
+        page_scripts: nextScripts,
+        segments: updatedSegments,
+        updated_at: new Date().toISOString(),
+      };
+      setChapter(nextChapter);
+      onChapterSave?.(nextChapter);
+      setSelectedSegmentId(updatedSegments[0]?.id || "");
+      setPostDraftPrompt(true);
+    } else if (Object.keys(nextScripts).length > 0) {
+      const nextChapter = {
+        ...chapter,
+        page_scripts: nextScripts,
+        updated_at: new Date().toISOString(),
+      };
+      setChapter(nextChapter);
+      onChapterSave?.(nextChapter);
+    }
+  };
+
+  const handleCancelDrafting = async () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    if (activeJobId) {
+      try {
+        await api.cancelJob(activeJobId);
+      } catch (err) {
+        console.warn("Cancel job notice:", err);
+      }
+      setActiveJobId(null);
+    }
+    setIsDraftingNarration(false);
+    setGenerationStep("");
+    setJobProgress(null);
+  };
+
+  // Trigger durable background job via JobManager
+  const handleTriggerJob = async (
+    mode: "full" | "page_only" | "panel_only" | "harmonize" = "full"
+  ) => {
+    if (!projectId && !chapter.segments.length) return;
+    setIsDraftingNarration(true);
+    setGenerationStep("Submitting background Narration Job...");
+    setJobProgress({ percent: 5, message: "Queuing in background job scheduler...", status: "QUEUED" });
+
+    try {
+      const scenesPayload = buildScenesPayload();
+      const jobRes = await api.draftNarrationJob(
+        projectId,
+        scenesPayload,
+        selectedProviderId === "global" ? undefined : selectedProviderId,
+        selectedModel || undefined,
+        mode,
+        undefined,
+        chapter.page_scripts
+      );
+
+      setActiveJobId(jobRes.job_id);
+      setGenerationStep("Job queued in background manager...");
+
+      const completedJob = await api.waitForWorkflowJob(jobRes.job_id, (job) => {
+        const pct = Math.round((job.progress || 0) * 100);
+        setJobProgress({
+          percent: pct,
+          message: job.message || "Processing narration...",
+          status: job.status,
+        });
+        setGenerationStep(`Job ${pct}%: ${job.message || "Processing..."}`);
+      });
+
+      const jobOutput = (completedJob as any).output || (completedJob as any).result;
+      if (jobOutput?.plan) {
+        applyDraftResult(jobOutput.plan);
+      } else {
+        const plan = await api.getNarrationPlan(projectId).catch(() => null);
+        if (plan) applyDraftResult(plan);
+      }
+    } catch (err: any) {
+      if (err.name !== "AbortError") {
+        console.error("Narration Job error:", err);
+        alert(`Narration Job: ${err.message || "Job execution failed"}`);
+      }
+    } finally {
+      setIsDraftingNarration(false);
+      setActiveJobId(null);
+      setJobProgress(null);
+      setGenerationStep("");
+    }
+  };
+
+  // 3-Tier AI Narration Generation (Interactive Direct Mode)
   const handleGenerateAiNarration = async (
     mode: "full" | "page_only" | "panel_only" | "harmonize" = "full"
   ) => {
@@ -581,37 +810,11 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
         : "Executing 3-Tier Narration Pipeline (Page -> Panel -> Harmonize)..."
     );
 
-    try {
-      const scenesPayload = (scenes && scenes.length > 0 ? scenes : chapter.segments).map(
-        (s: any, idx: number) => {
-          const matchingSegment = chapter.segments.find((seg) => seg.scene_id === s.id) || chapter.segments[idx];
-          const ocrText =
-            matchingSegment?.source_context?.raw_ocr_dialogue ||
-            s.ocr_text ||
-            matchingSegment?.narration_text ||
-            "";
-          const panelIds =
-            s.layers?.map((l: any) => l.source_panel_id).filter(Boolean) ||
-            matchingSegment?.source_context?.panel_ids ||
-            s.source_context?.panel_ids ||
-            [];
-          const speakerName = matchingSegment?.speaker_name || s.speaker || "The Narrator";
-          return {
-            id: s.id || `scene_${idx + 1}`,
-            sequence: s.sequence || idx + 1,
-            title: s.title || `Scene ${idx + 1}`,
-            visual_description:
-              s.layers?.[0]?.name || s.visual_description || `Scene ${idx + 1} manga visual framing`,
-            ocr_text: ocrText,
-            panel_ids: panelIds,
-            page_id: s.page_id || matchingSegment?.source_context?.page_id,
-            page_sequence: s.page_sequence || matchingSegment?.source_context?.page_number || 1,
-            speaker: speakerName,
-            characters: [speakerName],
-          };
-        }
-      );
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
 
+    try {
+      const scenesPayload = buildScenesPayload();
       const draftResult = await api.draftNarration(
         projectId,
         scenesPayload,
@@ -619,108 +822,22 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
         selectedModel || undefined,
         mode,
         undefined,
-        chapter.page_scripts
+        chapter.page_scripts,
+        controller.signal
       );
 
-      if (draftResult?.beats && draftResult.beats.length > 0) {
-        const nextScripts = {
-          ...(chapter.page_scripts || {}),
-          ...(draftResult.page_scripts || {}),
-        };
-
-        const updatedSegments: NarrationSegment[] = draftResult.beats.map(
-          (beat: any, bIdx: number) => {
-            const matchingScene = scenes.find((sc) => sc.id === beat.scene_id) || scenes[bIdx];
-            const primaryLayer = matchingScene?.layers?.[0];
-            const text = beat.proposed_narration_text || "";
-            const emotion = beat.recommended_emotion || "Neutral";
-            const speed = beat.recommended_speed || 1.0;
-            const characterName = beat.character_name || beat.speaker || "The Narrator";
-            const estDuration =
-              beat.estimated_duration_sec ||
-              Math.max(2.0, Math.round(text.split(" ").filter(Boolean).length / 2.33));
-
-            return {
-              id: `narr_${beat.scene_id || bIdx + 1}`,
-              sequence: bIdx + 1,
-              scene_id: matchingScene?.id || beat.scene_id,
-              scene_title: matchingScene?.title || `Scene ${bIdx + 1}`,
-              linked_to_scene: !!matchingScene,
-              scene_offset_sec: 0.0,
-              speaker_id: "char_narrator",
-              speaker_name: characterName,
-              speaker_type: beat.speaker_type || "NARRATOR",
-              voice_profile_id: "voice_aria_female_narrator",
-              narration_text: text,
-              page_narration_text: beat.page_narration_text,
-              panel_narration_text: beat.panel_narration_text,
-              synthesis_notes: beat.synthesis_notes,
-              text_revision: 1,
-              content_hash: computeContentHash(text, emotion, speed, "short"),
-              source_context: {
-                page_id: primaryLayer?.source_page_id || `page_${bIdx + 1}`,
-                page_number: primaryLayer?.page_sequence || bIdx + 1,
-                panel_ids: beat.panel_ids?.length
-                  ? beat.panel_ids
-                  : primaryLayer?.source_panel_id
-                  ? [primaryLayer.source_panel_id]
-                  : [],
-                panel_labels: [primaryLayer?.name || `Panel #${bIdx + 1}`],
-                panel_preview_url: (projectId && (beat.panel_ids?.[0] || primaryLayer?.source_panel_id))
-                  ? api.getPanelImageUrl(projectId, beat.panel_ids?.[0] || primaryLayer?.source_panel_id)
-                  : primaryLayer?.image_url,
-                image_url: (projectId && (beat.panel_ids?.[0] || primaryLayer?.source_panel_id))
-                  ? api.getPanelImageUrl(projectId, beat.panel_ids?.[0] || primaryLayer?.source_panel_id)
-                  : primaryLayer?.image_url,
-                raw_ocr_dialogue: beat.observed_ocr_dialogue || "",
-                visual_description:
-                  beat.observed_visual_evidence || primaryLayer?.name || `Scene ${bIdx + 1}`,
-                story_context: beat.inferred_subtext || `Story beat ${bIdx + 1}`,
-                page_context_summary: beat.page_context_summary,
-                character_name: characterName,
-                page_narration_text: beat.page_narration_text,
-                panel_narration_text: beat.panel_narration_text,
-                synthesis_notes: beat.synthesis_notes,
-                panel_duration_budget_sec: beat.target_panel_time_sec || estDuration,
-              },
-              delivery: {
-                emotion: emotion as any,
-                intensity: 0.6,
-                speech_speed: speed,
-                pause: { preset: "short", duration_ms: 300, placement: "after_first_sentence" },
-                performance_notes: beat.synthesis_notes || "Emotionally grounded manga narration.",
-                pronunciation_guide: [],
-              },
-              review_status: "DRAFT",
-              generation_status: "UNQUEUED",
-              generation_progress: 0,
-              audio_asset_uri: null,
-              previous_audio_asset_uri: null,
-              generated_audio_revision: null,
-              estimated_duration_sec: estDuration,
-              measured_duration_sec: null,
-              updated_at: new Date().toISOString(),
-            };
-          }
-        );
-
-        const nextChapter = {
-          ...chapter,
-          page_scripts: nextScripts,
-          segments: updatedSegments,
-          updated_at: new Date().toISOString(),
-        };
-        setChapter(nextChapter);
-        onChapterSave?.(nextChapter);
-        setSelectedSegmentId(updatedSegments[0]?.id || "");
-        setPostDraftPrompt(true);
-      }
+      applyDraftResult(draftResult);
     } catch (err: any) {
-      console.error("AI Narration generation failed:", err);
-      alert(`Narration Generation: ${err.message || "Failed to generate narration"}`);
+      if (err.name === "AbortError") {
+        console.log("Narration generation cancelled by user.");
+      } else {
+        console.error("AI Narration generation failed:", err);
+        alert(`Narration Generation: ${err.message || "Failed to generate narration"}`);
+      }
     } finally {
       setIsDraftingNarration(false);
       setGenerationStep("");
+      abortControllerRef.current = null;
     }
   };
 
@@ -889,39 +1006,75 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
 
           {/* 3-Tier AI Narration Multi-Action Generator */}
           <div className="relative flex items-center shrink-0">
-            <button
-              type="button"
-              onClick={() => handleGenerateAiNarration("full")}
-              disabled={isDraftingNarration}
-              className="text-xs h-8 px-3 rounded-l-lg bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-bold shadow-md shadow-indigo-600/30 flex items-center gap-1.5 transition-all active:scale-95 disabled:opacity-50 whitespace-nowrap shrink-0"
-              title="Execute full 3-tier narration workflow (Page Recap -> Panel Breakdown -> Harmonize & Sync)"
-            >
-              {isDraftingNarration ? (
-                <>
-                  <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin shrink-0" />
-                  <span className="whitespace-nowrap">{generationStep || "Drafting 3-Tier..."}</span>
-                </>
-              ) : (
-                <>
+            {isDraftingNarration ? (
+              <div className="flex items-center gap-1.5 bg-zinc-900 border border-indigo-500/60 rounded-lg p-1 pr-2 shadow-lg shadow-indigo-950/60">
+                <div className="flex items-center gap-2 px-2 py-0.5 text-xs text-indigo-300 font-medium">
+                  <span className="w-3 h-3 border-2 border-indigo-400/30 border-t-indigo-400 rounded-full animate-spin shrink-0" />
+                  <span className="whitespace-nowrap max-w-[260px] truncate" title={generationStep}>
+                    {generationStep || "Processing narration..."}
+                  </span>
+                  <span className="text-[11px] font-mono text-indigo-300 bg-indigo-950 px-1.5 py-0.5 rounded border border-indigo-800/80">
+                    ⏱️ {Math.floor(elapsedSec / 60)}:{(elapsedSec % 60).toString().padStart(2, "0")}
+                  </span>
+                  {jobProgress && (
+                    <span className="text-[10px] font-bold text-amber-300 bg-amber-950/80 px-1.5 py-0.5 rounded border border-amber-700/60">
+                      {jobProgress.percent}%
+                    </span>
+                  )}
+                </div>
+
+                {/* Switch to Background Job button if direct run is taking > 10s */}
+                {!activeJobId && elapsedSec >= 10 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleCancelDrafting();
+                      handleTriggerJob("full");
+                    }}
+                    className="text-[10px] h-6 px-2 rounded bg-indigo-800 hover:bg-indigo-700 border border-indigo-600 text-white font-bold transition-all active:scale-95 flex items-center gap-1 shrink-0"
+                    title="Move to background Job scheduler so you can monitor or continue working"
+                  >
+                    <Icons.Zap className="w-3 h-3 text-amber-300" />
+                    <span>Trigger Job</span>
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={handleCancelDrafting}
+                  className="text-[11px] h-6 px-2 rounded bg-rose-900/80 hover:bg-rose-800 border border-rose-700 text-rose-200 font-bold transition-all active:scale-95 flex items-center gap-1 shrink-0"
+                  title="Cancel active generation"
+                >
+                  <Icons.X className="w-3 h-3" />
+                  <span>Cancel</span>
+                </button>
+              </div>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => handleGenerateAiNarration("full")}
+                  className="text-xs h-8 px-3 rounded-l-lg bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-bold shadow-md shadow-indigo-600/30 flex items-center gap-1.5 transition-all active:scale-95 whitespace-nowrap shrink-0"
+                  title="Execute full 3-tier narration workflow (Page Recap -> Panel Breakdown -> Harmonize & Sync)"
+                >
                   <Icons.Sparkles className="w-3.5 h-3.5 text-indigo-200 shrink-0" />
                   <span className="whitespace-nowrap">Generate 3-Tier Narration</span>
-                </>
-              )}
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowTierDropdown((v) => !v)}
-              disabled={isDraftingNarration}
-              className="text-xs h-8 px-1.5 rounded-r-lg bg-violet-700 hover:bg-violet-600 border-l border-violet-500 text-white font-bold transition-all disabled:opacity-50 shrink-0"
-              title="Select specific narration stage"
-            >
-              <Icons.ChevronDown className="w-3 h-3" />
-            </button>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowTierDropdown((v) => !v)}
+                  className="text-xs h-8 px-1.5 rounded-r-lg bg-violet-700 hover:bg-violet-600 border-l border-violet-500 text-white font-bold transition-all shrink-0"
+                  title="Select specific narration stage or trigger background job"
+                >
+                  <Icons.ChevronDown className="w-3 h-3" />
+                </button>
+              </>
+            )}
 
             {/* Dropdown Menu */}
             {showTierDropdown && (
               <div
-                className="absolute right-0 top-10 w-64 rounded-xl bg-zinc-900 border border-zinc-700 shadow-2xl p-1.5 z-50 space-y-1 text-xs"
+                className="absolute right-0 top-10 w-72 rounded-xl bg-zinc-900 border border-zinc-700 shadow-2xl p-1.5 z-50 space-y-1 text-xs"
                 onClick={() => setShowTierDropdown(false)}
               >
                 <button
@@ -931,8 +1084,23 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
                 >
                   <Icons.Sparkles className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
                   <div>
-                    <span className="font-bold block">Run Full 3-Tier Workflow</span>
+                    <span className="font-bold block">Run Direct (Interactive)</span>
                     <span className="text-[10px] text-zinc-400">Page Story (5-10 lines) ➔ Panel Micro ➔ Harmonize</span>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleTriggerJob("full")}
+                  className="w-full text-left p-2 rounded-lg hover:bg-violet-950/80 text-violet-100 hover:text-violet-200 flex items-start gap-2 bg-violet-950/30 border border-violet-800/40"
+                >
+                  <Icons.Zap className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold block flex items-center gap-1.5">
+                      Trigger Background Job
+                      <span className="text-[9px] bg-amber-500/20 text-amber-300 px-1 rounded font-semibold">Recommended</span>
+                    </span>
+                    <span className="text-[10px] text-zinc-400">Tracked with real-time %, durable queue & cancel</span>
                   </div>
                 </button>
 
@@ -945,7 +1113,7 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
                 >
                   <Icons.BookOpen className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
                   <div>
-                    <span className="font-bold block">Tier 1: Page Stories (5-10 Lines)</span>
+                    <span className="font-bold block">Tier 1: Page Stories (5-10 Lines) Only</span>
                     <span className="text-[10px] text-zinc-400">Full page image analysis with witty recap</span>
                   </div>
                 </button>
@@ -969,7 +1137,7 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
                 >
                   <Icons.Layout className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
                   <div>
-                    <span className="font-bold block">Tier 3: Compare & Harmonize</span>
+                    <span className="font-bold block">Tier 3: Compare & Harmonize Only</span>
                     <span className="text-[10px] text-zinc-400">Sync witty page lines with panel durations</span>
                   </div>
                 </button>
@@ -1079,9 +1247,10 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
 
         <div className="flex items-center gap-2 shrink-0 whitespace-nowrap">
           {isDraftingNarration ? (
-            <div className="flex items-center gap-2 text-indigo-300 font-semibold text-xs whitespace-nowrap">
+            <div className="flex items-center gap-2 text-indigo-300 font-semibold text-xs whitespace-nowrap bg-indigo-950/60 px-2.5 py-1 rounded-lg border border-indigo-800/60">
               <span className="w-3 h-3 border-2 border-indigo-400/30 border-t-indigo-400 rounded-full animate-spin shrink-0" />
               <span>{generationStep || "Running 3-tier narration..."}</span>
+              <span className="font-mono text-indigo-400 font-bold">({elapsedSec}s)</span>
             </div>
           ) : (
             <span className="text-[11px] text-zinc-400 whitespace-nowrap">

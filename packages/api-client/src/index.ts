@@ -1290,10 +1290,12 @@ export class PanelFlowApiClient {
     modelName?: string,
     mode?: "full" | "page_only" | "panel_only" | "harmonize",
     targetPageSequence?: number,
-    existingPageScripts?: Record<string, any>
+    existingPageScripts?: Record<string, any>,
+    signal?: AbortSignal
   ): Promise<any> {
     return this.request<any>(`/api/projects/${projectId}/narration/draft`, {
       method: "POST",
+      signal,
       body: JSON.stringify({
         scenes,
         provider_id: providerId,
@@ -1303,6 +1305,35 @@ export class PanelFlowApiClient {
         existing_page_scripts: existingPageScripts,
       }),
     });
+  }
+
+  async draftNarrationJob(
+    projectId: string,
+    scenes: any[],
+    providerId?: string,
+    modelName?: string,
+    mode?: "full" | "page_only" | "panel_only" | "harmonize",
+    targetPageSequence?: number,
+    existingPageScripts?: Record<string, any>
+  ): Promise<{ job_id: string; status: string; message: string }> {
+    return this.request<{ job_id: string; status: string; message: string }>(
+      `/api/projects/${projectId}/narration/draft-job`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          scenes,
+          provider_id: providerId,
+          model_name: modelName,
+          mode: mode || "full",
+          target_page_sequence: targetPageSequence,
+          existing_page_scripts: existingPageScripts,
+        }),
+      }
+    );
+  }
+
+  async getNarrationPlan(projectId: string): Promise<any> {
+    return this.request<any>(`/api/projects/${projectId}/narration/plan`);
   }
 
   async harmonizeNarration(
