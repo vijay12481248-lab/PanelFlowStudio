@@ -73,7 +73,7 @@ DEFAULT_STAGE_TIMEOUTS: Dict[str, float] = {
     "script": 180.0,
     "audio": 600.0,
     "motion": 180.0,
-    "render": 900.0,
+    "render": 2400.0,
     "packaging": 180.0,
 }
 
@@ -119,7 +119,9 @@ def diagnose_error(stage_id: str, exc: Exception) -> AutoPilotErrorDetails:
             ]
         elif stage_id == "render":
             troubleshooting = [
-                "Video rendering timed out. Check FFmpeg installation and verify sufficient CPU/GPU and disk space.",
+                "Video rendering stalled or exceeded duration budget. Check FFmpeg installation and verify sufficient CPU/GPU and disk space.",
+                "Complex scenes with motion effects take ~0.3s per frame. The watchdog allows up to 40 minutes for complete chapters.",
+                "Click 'Resume Pipeline (Skip Finished)' to safely retry rendering.",
             ]
         else:
             troubleshooting = [
@@ -322,7 +324,7 @@ class AutoPilotRunner:
                     elif stage_id == "render":
                         se_scenes = (project.settings or {}).get("story_editor_state", {}).get("scenes", [])
                         scenes_count = len(se_scenes) or max(1, panels_count // 3)
-                        return max(900.0, float(scenes_count * 20.0 + 300.0))
+                        return max(2400.0, float(scenes_count * 180.0 + 600.0))
         except Exception as e:
             logger.warning("Could not calculate dynamic timeout for stage %s: %s", stage_id, e)
 
@@ -347,9 +349,14 @@ class AutoPilotRunner:
             return False
         except (asyncio.TimeoutError, TimeoutError) as t_exc:
             duration = round(time.monotonic() - start_t, 1)
-            timeout_msg = f"Stage '{stage_id}' timed out after {duration}s (limit: {int(timeout_sec)}s)."
+            detail = str(t_exc).strip()
+            if detail and detail != "TimeoutError" and detail != "":
+                timeout_msg = f"Stage '{stage_id}' timed out after {duration}s: {detail}"
+                err_diag = diagnose_error(stage_id, t_exc)
+            else:
+                timeout_msg = f"Stage '{stage_id}' timed out after {duration}s (limit: {int(timeout_sec)}s)."
+                err_diag = diagnose_error(stage_id, TimeoutError(timeout_msg))
             logger.warning("[AutoPilot:%s] %s", self.project_id, timeout_msg)
-            err_diag = diagnose_error(stage_id, TimeoutError(timeout_msg))
             self.status = "FAILED"
             self.error = timeout_msg
             self.error_details = err_diag
@@ -465,12 +472,16 @@ class AutoPilotRunner:
                     registry = get_default_registry()
                     job_id = project_service.start_acquisition_job(db, self.project_id, registry)
                     acq_start = time.monotonic()
-                    max_acq_wait = float(self.options.get("acquisition_timeout_sec", 180.0))
+                    max_acq_wait = max(600.0, float(self.options.get("acquisition_timeout_sec", 600.0)))
+                    stall_acq_timeout = 90.0
+                    last_acq_activity = time.monotonic()
+                    last_acq_prog = 0.0
                     while True:
                         if self.is_cancelled:
                             job_manager.cancel_job(job_id)
                             return
-                        if time.monotonic() - acq_start > max_acq_wait:
+                        now = time.monotonic()
+                        if now - acq_start > max_acq_wait:
                             job_manager.cancel_job(job_id)
                             raise TimeoutError(
                                 f"Page acquisition timed out after {int(max_acq_wait)}s. "
@@ -480,6 +491,16 @@ class AutoPilotRunner:
                         j = job_manager.get_job(job_id)
                         if not j:
                             break
+                        cur_p = float(j.get("progress") or 0.0)
+                        if cur_p > last_acq_prog:
+                            last_acq_prog = cur_p
+                            last_acq_activity = now
+                        elif now - last_acq_activity > stall_acq_timeout:
+                            job_manager.cancel_job(job_id)
+                            raise TimeoutError(
+                                f"Page acquisition stalled: no download progress for {int(stall_acq_timeout)}s. "
+                                f"Check chapter source URL ({source_loc}) or network connectivity."
+                            )
                         if j["status"] in ("SUCCEEDED", "COMPLETED"):
                             self.log("Page Stage: Chapter acquisition completed.")
                             break
@@ -1012,21 +1033,69 @@ class AutoPilotRunner:
                 self.log(f"Render Stage: Render job created: {job_id}")
 
                 render_start = time.monotonic()
-                max_render_wait = float(self.options.get("render_timeout_sec", 600.0))
+                # Compute stage timeout dynamically based on scene and frame count
+                max_render_wait = self._calculate_stage_timeout("render")
+                if "render_timeout_sec" in self.options:
+                    max_render_wait = max(max_render_wait, float(self.options["render_timeout_sec"]))
+
+                stall_timeout_sec = float(self.options.get("render_stall_timeout_sec", 300.0))
+                last_activity_time = time.monotonic()
+                last_frames_done = 0
+                last_progress = 0.0
+                last_file_size = 0
+                out_path_str = job_dict.get("output_path") or ""
+                out_path_obj = Path(out_path_str) if out_path_str else None
+
                 # Poll until complete
                 while not self.is_cancelled:
-                    if time.monotonic() - render_start > max_render_wait:
-                        raise TimeoutError(f"Video rendering timed out after {int(max_render_wait)}s.")
+                    now = time.monotonic()
+                    # Check absolute maximum ceiling
+                    if now - render_start > max_render_wait:
+                        raise TimeoutError(f"Video rendering exceeded maximum ceiling of {int(max_render_wait)}s.")
+
                     await asyncio.sleep(1.0)
                     db.expire_all()
                     job_info = render_service.get_render_job(db, job_id)
                     if not job_info:
                         continue
-                    current_prog = float(job_info.get("progress", 0.0) or 0.0)
+
+                    raw_prog = float(job_info.get("progress", 0.0) or 0.0)
+                    current_prog = raw_prog / 100.0 if raw_prog > 1.0 else raw_prog
+                    current_prog = max(0.0, min(1.0, current_prog))
+                    frames_done = int(job_info.get("frames_done", 0) or 0)
+                    frames_total = int(job_info.get("frames_total", 0) or 0)
+
+                    # Monitor output file size on disk as secondary heartbeat
+                    current_file_size = 0
+                    if out_path_obj and out_path_obj.exists():
+                        try:
+                            current_file_size = out_path_obj.stat().st_size
+                        except Exception:
+                            pass
+
+                    # Detect forward progress
+                    if (
+                        frames_done > last_frames_done
+                        or current_prog > (last_progress + 0.001)
+                        or current_file_size > last_file_size
+                    ):
+                        last_activity_time = now
+                        last_frames_done = frames_done
+                        last_progress = current_prog
+                        if current_file_size > 0:
+                            last_file_size = current_file_size
+
+                    # Check stall timeout (no activity for stall_timeout_sec)
+                    if now - last_activity_time > stall_timeout_sec:
+                        raise TimeoutError(
+                            f"Video rendering stalled: no progress or frame activity for {int(stall_timeout_sec)}s "
+                            f"(stuck at {frames_done}/{frames_total} frames, file size {last_file_size} bytes)."
+                        )
+
                     self.update_stage(
                         s_id,
                         progress=round(current_prog, 2),
-                        message=f"Rendering: {int(current_prog * 100)}% ({job_info.get('frames_done', 0)}/{job_info.get('frames_total', 0)} frames)",
+                        message=f"Rendering: {int(current_prog * 100)}% ({frames_done}/{frames_total} frames)",
                     )
                     status = job_info.get("status")
                     if status in ("COMPLETE", "SUCCEEDED"):

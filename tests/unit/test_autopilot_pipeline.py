@@ -261,3 +261,40 @@ async def test_autopilot_stage_error_diagnostics(autopilot_project):
         assert "EasyOCR model weights missing" in runner.error_details.message
         assert len(runner.error_details.troubleshooting) > 0
         assert runner.get_stage("ocr").status == "FAILED"
+
+
+@pytest.mark.asyncio
+async def test_autopilot_render_stage_stall_watchdog(autopilot_project):
+    runner = AutoPilotRunner(
+        project_id=autopilot_project,
+        options={
+            "render_stall_timeout_sec": 0.05,
+            "stage_timeouts": {"render": 10.0},
+        },
+    )
+
+    fake_job_dict = {"render_id": "job-test-123", "output_path": "/fake/test.mp4"}
+    stagnant_info = {
+        "status": "RUNNING",
+        "progress": 0.1,
+        "frames_done": 10,
+        "frames_total": 100,
+    }
+
+    with patch("engine.render.service.render_service.create_and_start_render_job", return_value=fake_job_dict), \
+         patch("engine.render.service.render_service.get_render_job", return_value=stagnant_info), \
+         patch.object(runner, "_run_stage_pages", new_callable=AsyncMock), \
+         patch.object(runner, "_run_stage_panels", new_callable=AsyncMock), \
+         patch.object(runner, "_run_stage_ocr", new_callable=AsyncMock), \
+         patch.object(runner, "_run_stage_story", new_callable=AsyncMock), \
+         patch.object(runner, "_run_stage_script", new_callable=AsyncMock), \
+         patch.object(runner, "_run_stage_audio", new_callable=AsyncMock), \
+         patch.object(runner, "_run_stage_motion", new_callable=AsyncMock), \
+         patch.object(runner, "_persist_status"):
+
+        await runner.execute()
+        assert runner.status == "FAILED"
+        assert runner.error_details is not None
+        assert runner.error_details.stage_id == "render"
+        assert runner.error_details.category == "TIMEOUT"
+        assert "stalled" in runner.error_details.message
