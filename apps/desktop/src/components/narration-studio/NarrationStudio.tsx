@@ -772,57 +772,67 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
   return (
     <div className="flex flex-col h-screen w-screen bg-zinc-950 text-zinc-100 font-sans antialiased overflow-hidden select-none">
       {/* Top Header Bar */}
-      <header className="h-13 border-b border-zinc-800 bg-zinc-950 px-4 flex items-center justify-between sticky top-0 z-40 shrink-0">
+      <header className="h-14 min-h-[56px] border-b border-zinc-800 bg-zinc-950 px-4 flex items-center justify-between sticky top-0 z-40 shrink-0">
         {/* Left: Branding & Chapter Breadcrumbs */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5 min-w-0 shrink">
           {onClose && (
             <Button
               variant="secondary"
               size="sm"
               onClick={onClose}
-              className="text-xs h-8 px-2.5 bg-zinc-900 border border-zinc-700 hover:bg-zinc-800 text-zinc-300 font-medium flex items-center gap-1.5"
+              className="text-xs h-8 px-2.5 bg-zinc-900 border border-zinc-700 hover:bg-zinc-800 text-zinc-300 font-medium flex items-center gap-1.5 whitespace-nowrap shrink-0"
               title="Return to Story Editor"
             >
-              <Icons.ArrowLeft className="w-3.5 h-3.5" />
-              Back to Story Editor
+              <Icons.ArrowLeft className="w-3.5 h-3.5 shrink-0" />
+              <span>Back to Story Editor</span>
             </Button>
           )}
 
           <div
             onClick={onClose}
-            className="flex items-center gap-2 cursor-pointer group"
+            className="flex items-center gap-2 cursor-pointer group shrink-0"
             title="Return to Story Editor"
           >
-            <div className="w-7 h-7 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-black text-sm shadow-md shadow-indigo-600/30 group-hover:bg-indigo-500 transition-colors">
+            <div className="w-7 h-7 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-black text-sm shadow-md shadow-indigo-600/30 group-hover:bg-indigo-500 transition-colors shrink-0">
               P
             </div>
-            <div>
-              <div className="font-extrabold text-sm text-white tracking-tight leading-none flex items-center gap-1.5">
-                <h1 className="text-sm font-extrabold text-white">Narration Studio</h1>
-                <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.2 rounded bg-indigo-950 text-indigo-400 border border-indigo-800">
+            <div className="flex flex-col justify-center">
+              <div className="font-extrabold text-sm text-white tracking-tight leading-none flex items-center gap-1.5 whitespace-nowrap">
+                <h1 className="text-sm font-extrabold text-white whitespace-nowrap">Narration Studio</h1>
+                <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-indigo-950 text-indigo-400 border border-indigo-800 whitespace-nowrap">
                   AI Storyteller
                 </span>
               </div>
-              <span className="text-[10px] text-zinc-400 font-medium leading-none block mt-0.5">
+              <span className="hidden xl:block text-[10px] text-zinc-400 font-medium leading-none mt-1 whitespace-nowrap">
                 Grounded Manga Narration & Emotional Voice Engine
               </span>
             </div>
           </div>
 
-          <div className="h-5 w-px bg-zinc-800 mx-1" />
+          <div className="h-5 w-px bg-zinc-800 mx-1 shrink-0 hidden md:block" />
 
           {/* Breadcrumb Path */}
-          <div className="flex items-center gap-1.5 text-xs text-zinc-400 font-medium">
-            <span className="text-zinc-400">{chapter.project_title}</span>
-            <span className="text-zinc-600">›</span>
-            <span className="text-indigo-400 font-semibold">{chapter.chapter_title}</span>
+          <div className="hidden md:flex items-center gap-1.5 text-xs text-zinc-400 font-medium min-w-0">
+            <span
+              className="text-zinc-400 truncate max-w-[120px] lg:max-w-[180px] whitespace-nowrap"
+              title={chapter.project_title}
+            >
+              {chapter.project_title}
+            </span>
+            <span className="text-zinc-600 shrink-0">›</span>
+            <span
+              className="text-indigo-400 font-semibold truncate max-w-[140px] lg:max-w-[200px] whitespace-nowrap"
+              title={chapter.chapter_title}
+            >
+              {chapter.chapter_title}
+            </span>
           </div>
         </div>
 
         {/* Center / Right: Live Ollama Selector & High-Utility Action Buttons */}
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2 shrink-0">
           {/* Save Status */}
-          <div className="flex items-center gap-1 text-xs font-medium mr-1">
+          <div className="flex items-center gap-1 text-xs font-medium mr-1 shrink-0 whitespace-nowrap">
             {saveStatus === "saving" ? (
               <span className="text-amber-400 flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
@@ -842,7 +852,7 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
           </div>
 
           {/* Undo / Redo */}
-          <div className="flex items-center gap-1 text-zinc-400">
+          <div className="flex items-center gap-1 text-zinc-400 shrink-0">
             <button
               type="button"
               onClick={handleUndo}
@@ -863,7 +873,7 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
             </button>
           </div>
 
-          <div className="h-4 w-px bg-zinc-800" />
+          <div className="h-4 w-px bg-zinc-800 shrink-0" />
 
           {/* Centralized Global & Flow-Wise LLM Selector */}
           <GlobalLLMSelector
@@ -878,23 +888,23 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
           />
 
           {/* 3-Tier AI Narration Multi-Action Generator */}
-          <div className="relative flex items-center">
+          <div className="relative flex items-center shrink-0">
             <button
               type="button"
               onClick={() => handleGenerateAiNarration("full")}
               disabled={isDraftingNarration}
-              className="text-xs h-8 px-3.5 rounded-l-lg bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-bold shadow-md shadow-indigo-600/30 flex items-center gap-1.5 transition-all active:scale-95 disabled:opacity-50"
+              className="text-xs h-8 px-3 rounded-l-lg bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-bold shadow-md shadow-indigo-600/30 flex items-center gap-1.5 transition-all active:scale-95 disabled:opacity-50 whitespace-nowrap shrink-0"
               title="Execute full 3-tier narration workflow (Page Recap -> Panel Breakdown -> Harmonize & Sync)"
             >
               {isDraftingNarration ? (
                 <>
-                  <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  <span>{generationStep || "Drafting 3-Tier..."}</span>
+                  <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin shrink-0" />
+                  <span className="whitespace-nowrap">{generationStep || "Drafting 3-Tier..."}</span>
                 </>
               ) : (
                 <>
-                  <Icons.Sparkles className="w-3.5 h-3.5 text-indigo-200" />
-                  <span>Generate 3-Tier Narration</span>
+                  <Icons.Sparkles className="w-3.5 h-3.5 text-indigo-200 shrink-0" />
+                  <span className="whitespace-nowrap">Generate 3-Tier Narration</span>
                 </>
               )}
             </button>
@@ -902,7 +912,7 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
               type="button"
               onClick={() => setShowTierDropdown((v) => !v)}
               disabled={isDraftingNarration}
-              className="text-xs h-8 px-1.5 rounded-r-lg bg-violet-700 hover:bg-violet-600 border-l border-violet-500 text-white font-bold transition-all disabled:opacity-50"
+              className="text-xs h-8 px-1.5 rounded-r-lg bg-violet-700 hover:bg-violet-600 border-l border-violet-500 text-white font-bold transition-all disabled:opacity-50 shrink-0"
               title="Select specific narration stage"
             >
               <Icons.ChevronDown className="w-3 h-3" />
@@ -972,18 +982,18 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
             type="button"
             onClick={handleSynthesizeAllVoices}
             disabled={isSynthesizingAll || chapter.segments.length === 0}
-            className="text-xs h-8 px-3.5 rounded-lg bg-zinc-900 border border-zinc-700/80 hover:border-cyan-500/50 hover:bg-zinc-800 text-zinc-100 font-semibold shadow-sm flex items-center gap-1.5 transition-all active:scale-95 disabled:opacity-50"
+            className="text-xs h-8 px-3 rounded-lg bg-zinc-900 border border-zinc-700/80 hover:border-cyan-500/50 hover:bg-zinc-800 text-zinc-100 font-semibold shadow-sm flex items-center gap-1.5 transition-all active:scale-95 disabled:opacity-50 whitespace-nowrap shrink-0"
             title="Synthesize audio for all segments via Chatterbox Turbo (MIT)"
           >
             {isSynthesizingAll ? (
               <>
-                <span className="w-3 h-3 border-2 border-cyan-400/30 border-t-cyan-400 rounded-full animate-spin" />
-                <span>Synthesizing...</span>
+                <span className="w-3 h-3 border-2 border-cyan-400/30 border-t-cyan-400 rounded-full animate-spin shrink-0" />
+                <span className="whitespace-nowrap">Synthesizing...</span>
               </>
             ) : (
               <>
-                <Icons.Mic className="w-3.5 h-3.5 text-cyan-400" />
-                <span>Generate Voices</span>
+                <Icons.Mic className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                <span className="whitespace-nowrap">Generate Voices</span>
               </>
             )}
           </button>
@@ -993,18 +1003,18 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
             type="button"
             onClick={() => setTimelineModalOpen(true)}
             disabled={chapter.segments.length === 0}
-            className="text-xs h-8 px-3.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold shadow-md shadow-emerald-600/30 flex items-center gap-1.5 transition-all active:scale-95 disabled:opacity-50"
+            className="text-xs h-8 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold shadow-md shadow-emerald-600/30 flex items-center gap-1.5 transition-all active:scale-95 disabled:opacity-50 whitespace-nowrap shrink-0"
             title="Confirm adding narration to video timeline"
           >
-            <Icons.Plus className="w-3.5 h-3.5" />
-            <span>Add to Timeline</span>
+            <Icons.Plus className="w-3.5 h-3.5 shrink-0" />
+            <span className="whitespace-nowrap">Add to Timeline</span>
           </button>
 
           {onClose && (
             <button
               type="button"
               onClick={onClose}
-              className="hover:text-rose-400 p-1 text-zinc-500 hover:bg-zinc-800 rounded-lg transition-colors ml-1"
+              className="hover:text-rose-400 p-1 text-zinc-500 hover:bg-zinc-800 rounded-lg transition-colors ml-1 shrink-0"
               title="Close Workspace"
             >
               <Icons.X className="w-4 h-4" />
@@ -1014,67 +1024,67 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
       </header>
 
       {/* 3-Tier Storyteller Workflow Progression Bar */}
-      <div className="bg-zinc-900/90 border-b border-zinc-800/80 px-4 py-2 flex items-center justify-between text-xs shrink-0 select-none">
-        <div className="flex items-center gap-3">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-400 bg-indigo-950/80 border border-indigo-800/60 px-2 py-0.5 rounded flex items-center gap-1">
+      <div className="bg-zinc-900/90 border-b border-zinc-800/80 px-4 py-2 flex items-center justify-between text-xs shrink-0 select-none overflow-x-auto no-scrollbar gap-4">
+        <div className="flex items-center gap-3 shrink-0">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-400 bg-indigo-950/80 border border-indigo-800/60 px-2 py-0.5 rounded flex items-center gap-1 whitespace-nowrap shrink-0">
             <Icons.Layers className="w-3 h-3" />
             3-Tier Storyteller Flow
           </span>
 
-          <div className="flex items-center gap-2 text-xs">
+          <div className="flex items-center gap-2 text-xs shrink-0">
             {/* Step 1 */}
-            <div className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border ${
+            <div className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border whitespace-nowrap shrink-0 ${
               Object.keys(chapter.page_scripts || {}).length > 0
                 ? "bg-amber-950/60 border-amber-800/80 text-amber-300 font-semibold"
                 : "bg-zinc-950 border-zinc-800 text-zinc-400"
             }`}>
-              <span className="w-3.5 h-3.5 rounded-full bg-amber-500/20 text-amber-300 font-mono text-[9px] flex items-center justify-center font-bold">1</span>
+              <span className="w-3.5 h-3.5 rounded-full bg-amber-500/20 text-amber-300 font-mono text-[9px] flex items-center justify-center font-bold shrink-0">1</span>
               <span>Page Story (5-10 Lines)</span>
               {Object.keys(chapter.page_scripts || {}).length > 0 && (
-                <Icons.Check className="w-3 h-3 text-amber-400" />
+                <Icons.Check className="w-3 h-3 text-amber-400 shrink-0" />
               )}
             </div>
 
-            <Icons.ArrowRight className="w-3 h-3 text-zinc-600" />
+            <Icons.ArrowRight className="w-3 h-3 text-zinc-600 shrink-0" />
 
             {/* Step 2 */}
-            <div className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border ${
+            <div className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border whitespace-nowrap shrink-0 ${
               chapter.segments.some((s) => s.panel_narration_text)
                 ? "bg-emerald-950/60 border-emerald-800/80 text-emerald-300 font-semibold"
                 : "bg-zinc-950 border-zinc-800 text-zinc-400"
             }`}>
-              <span className="w-3.5 h-3.5 rounded-full bg-emerald-500/20 text-emerald-300 font-mono text-[9px] flex items-center justify-center font-bold">2</span>
+              <span className="w-3.5 h-3.5 rounded-full bg-emerald-500/20 text-emerald-300 font-mono text-[9px] flex items-center justify-center font-bold shrink-0">2</span>
               <span>Panel Breakdown</span>
               {chapter.segments.some((s) => s.panel_narration_text) && (
-                <Icons.Check className="w-3 h-3 text-emerald-400" />
+                <Icons.Check className="w-3 h-3 text-emerald-400 shrink-0" />
               )}
             </div>
 
-            <Icons.ArrowRight className="w-3 h-3 text-zinc-600" />
+            <Icons.ArrowRight className="w-3 h-3 text-zinc-600 shrink-0" />
 
             {/* Step 3 */}
-            <div className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border ${
+            <div className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border whitespace-nowrap shrink-0 ${
               chapter.segments.some((s) => s.synthesis_notes || s.review_status === "APPROVED")
                 ? "bg-purple-950/60 border-purple-800/80 text-purple-300 font-semibold"
                 : "bg-zinc-950 border-zinc-800 text-zinc-400"
             }`}>
-              <span className="w-3.5 h-3.5 rounded-full bg-purple-500/20 text-purple-300 font-mono text-[9px] flex items-center justify-center font-bold">3</span>
+              <span className="w-3.5 h-3.5 rounded-full bg-purple-500/20 text-purple-300 font-mono text-[9px] flex items-center justify-center font-bold shrink-0">3</span>
               <span>Harmonized & Synced Script</span>
               {chapter.segments.some((s) => s.synthesis_notes || s.review_status === "APPROVED") && (
-                <Icons.Check className="w-3 h-3 text-purple-400" />
+                <Icons.Check className="w-3 h-3 text-purple-400 shrink-0" />
               )}
             </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0 whitespace-nowrap">
           {isDraftingNarration ? (
-            <div className="flex items-center gap-2 text-indigo-300 font-semibold text-xs">
-              <span className="w-3 h-3 border-2 border-indigo-400/30 border-t-indigo-400 rounded-full animate-spin" />
+            <div className="flex items-center gap-2 text-indigo-300 font-semibold text-xs whitespace-nowrap">
+              <span className="w-3 h-3 border-2 border-indigo-400/30 border-t-indigo-400 rounded-full animate-spin shrink-0" />
               <span>{generationStep || "Running 3-tier narration..."}</span>
             </div>
           ) : (
-            <span className="text-[11px] text-zinc-400">
+            <span className="text-[11px] text-zinc-400 whitespace-nowrap">
               {chapter.segments.length} panels • {Object.keys(chapter.page_scripts || {}).length} page stories ready
             </span>
           )}

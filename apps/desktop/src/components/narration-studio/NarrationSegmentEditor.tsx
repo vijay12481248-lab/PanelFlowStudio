@@ -578,33 +578,33 @@ export const NarrationSegmentEditor: React.FC<NarrationSegmentEditorProps> = ({
         <div className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2 pb-1 border-b border-zinc-800">
             {/* Tabs */}
-            <div className="flex items-center gap-1 bg-zinc-950 p-1 rounded-lg border border-zinc-800 text-xs">
+            <div className="flex items-center gap-1 bg-zinc-950 p-1 rounded-lg border border-zinc-800 text-xs overflow-x-auto no-scrollbar shrink-0">
               <button
                 type="button"
                 onClick={() => setActiveTab("final")}
-                className={`px-3 py-1.5 rounded-md font-semibold transition-all flex items-center gap-1.5 ${
+                className={`px-3 py-1.5 rounded-md font-semibold transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
                   activeTab === "final"
                     ? "bg-indigo-600 text-white shadow-sm"
                     : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900"
                 }`}
               >
-                <Icons.Sparkles className="w-3.5 h-3.5" />
-                <span>Final Synced Script</span>
+                <Icons.Sparkles className="w-3.5 h-3.5 shrink-0" />
+                <span className="whitespace-nowrap">Final Synced Script</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => setActiveTab("page")}
-                className={`px-3 py-1.5 rounded-md font-semibold transition-all flex items-center gap-1.5 ${
+                className={`px-3 py-1.5 rounded-md font-semibold transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
                   activeTab === "page"
                     ? "bg-amber-600 text-white shadow-sm"
                     : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900"
                 }`}
               >
-                <Icons.BookOpen className="w-3.5 h-3.5" />
-                <span>Page Story (5-10 Lines)</span>
+                <Icons.BookOpen className="w-3.5 h-3.5 shrink-0" />
+                <span className="whitespace-nowrap">Page Story (5-10 Lines)</span>
                 {pageLines.length > 0 && (
-                  <span className="text-[10px] bg-black/40 text-amber-200 px-1.5 py-0.2 rounded font-mono">
+                  <span className="text-[10px] bg-black/40 text-amber-200 px-1.5 py-0.2 rounded font-mono shrink-0">
                     {pageLines.length}
                   </span>
                 )}
@@ -613,27 +613,27 @@ export const NarrationSegmentEditor: React.FC<NarrationSegmentEditorProps> = ({
               <button
                 type="button"
                 onClick={() => setActiveTab("panel")}
-                className={`px-3 py-1.5 rounded-md font-semibold transition-all flex items-center gap-1.5 ${
+                className={`px-3 py-1.5 rounded-md font-semibold transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
                   activeTab === "panel"
                     ? "bg-emerald-600 text-white shadow-sm"
                     : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900"
                 }`}
               >
-                <Icons.Eye className="w-3.5 h-3.5" />
-                <span>Panel Micro Beat</span>
+                <Icons.Eye className="w-3.5 h-3.5 shrink-0" />
+                <span className="whitespace-nowrap">Panel Micro Beat</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => setActiveTab("compare")}
-                className={`px-3 py-1.5 rounded-md font-semibold transition-all flex items-center gap-1.5 ${
+                className={`px-3 py-1.5 rounded-md font-semibold transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
                   activeTab === "compare"
                     ? "bg-purple-600 text-white shadow-sm"
                     : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900"
                 }`}
               >
-                <Icons.Layout className="w-3.5 h-3.5" />
-                <span>Compare & Harmonize</span>
+                <Icons.Layout className="w-3.5 h-3.5 shrink-0" />
+                <span className="whitespace-nowrap">Compare & Harmonize</span>
               </button>
             </div>
 

@@ -143,17 +143,17 @@ export const GlobalLLMSelector: React.FC<GlobalLLMSelectorProps> = ({
 
   return (
     <div
-      className={`inline-flex items-center gap-1.5 bg-zinc-950/80 border border-zinc-800 rounded-lg px-2 py-1 shadow-inner ${className}`}
+      className={`inline-flex items-center gap-1.5 bg-zinc-950/80 border border-zinc-800 rounded-lg px-2 py-1 shadow-inner whitespace-nowrap shrink-0 ${className}`}
     >
       {/* Provider Selector */}
-      <div className="flex items-center gap-1">
-        <span className="text-xs" role="img" aria-label="provider-icon">
+      <div className="flex items-center gap-1 shrink-0">
+        <span className="text-xs shrink-0" role="img" aria-label="provider-icon">
           {selectedProviderId === "global" ? "🌐" : getProviderIcon(selectedProviderId)}
         </span>
         <select
           value={selectedProviderId}
           onChange={(e) => handleProviderChange(e.target.value)}
-          className="bg-transparent text-[11px] font-semibold text-zinc-200 focus:outline-none cursor-pointer border-r border-zinc-800/80 pr-1.5 mr-0.5"
+          className="bg-transparent text-[11px] font-semibold text-zinc-200 focus:outline-none cursor-pointer border-r border-zinc-800/80 pr-1.5 mr-0.5 max-w-[130px] sm:max-w-[155px] truncate"
           title="Select active LLM Provider (Inherit Global Default or Choose Flow Override)"
         >
           <option value="global" className="bg-zinc-900 text-zinc-200">
@@ -168,11 +168,11 @@ export const GlobalLLMSelector: React.FC<GlobalLLMSelectorProps> = ({
       </div>
 
       {/* Model Selector */}
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-1 shrink-0">
         <select
           value={selectedModel || (selectedProviderId === "global" ? "" : currentProviderObj?.default_model || "")}
           onChange={(e) => handleModelChange(e.target.value)}
-          className="bg-transparent text-xs text-zinc-300 font-mono focus:outline-none cursor-pointer max-w-[170px] truncate"
+          className="bg-transparent text-xs text-zinc-300 font-mono focus:outline-none cursor-pointer max-w-[110px] sm:max-w-[140px] truncate"
           title="Select LLM model for this operation"
         >
           {selectedProviderId === "global" && (
@@ -194,7 +194,7 @@ export const GlobalLLMSelector: React.FC<GlobalLLMSelectorProps> = ({
       </div>
 
       {/* Status indicator */}
-      <div className="flex items-center pl-0.5">
+      <div className="flex items-center pl-0.5 shrink-0">
         <span
           className={`w-1.5 h-1.5 rounded-full ${
             currentProviderObj?.is_healthy ? "bg-emerald-400" : "bg-amber-400"
@@ -208,7 +208,7 @@ export const GlobalLLMSelector: React.FC<GlobalLLMSelectorProps> = ({
         <button
           type="button"
           onClick={onOpenSettings}
-          className="ml-1 p-1 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 rounded transition-colors"
+          className="ml-0.5 p-1 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 rounded transition-colors shrink-0"
           title="Configure Global LLM Routing & Provider Endpoints"
         >
           <Icons.Settings className="w-3.5 h-3.5" />
