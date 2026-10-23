@@ -214,3 +214,50 @@ async def test_autopilot_audio_stage_synthesizes_and_attaches_bgm(autopilot_proj
         assert se_state["narration_clips"][0]["duration_sec"] == 1.0
         assert se_state["scenes"][0]["duration_sec"] == pytest.approx(1.35)
         assert se_state["narration_clips"][1]["start_time_sec"] == pytest.approx(1.35)
+
+@pytest.mark.asyncio
+async def test_autopilot_stage_timeout_diagnostics(autopilot_project):
+    import asyncio
+    runner = AutoPilotRunner(
+        project_id=autopilot_project,
+        options={
+            "stage_timeouts": {"panels": 0.05},
+        },
+    )
+
+    async def slow_panels(skip):
+        await asyncio.sleep(0.5)
+
+    with patch.object(runner, "_run_stage_pages", new_callable=AsyncMock), \
+         patch.object(runner, "_run_stage_panels", side_effect=slow_panels), \
+         patch.object(runner, "_persist_status"):
+
+        await runner.execute()
+        assert runner.status == "FAILED"
+        assert runner.error_details is not None
+        assert runner.error_details.stage_id == "panels"
+        assert runner.error_details.category == "TIMEOUT"
+        assert len(runner.error_details.troubleshooting) > 0
+        assert runner.get_stage("panels").status == "FAILED"
+
+
+@pytest.mark.asyncio
+async def test_autopilot_stage_error_diagnostics(autopilot_project):
+    runner = AutoPilotRunner(project_id=autopilot_project)
+
+    async def fail_ocr(skip):
+        raise RuntimeError("EasyOCR model weights missing from disk")
+
+    with patch.object(runner, "_run_stage_pages", new_callable=AsyncMock), \
+         patch.object(runner, "_run_stage_panels", new_callable=AsyncMock), \
+         patch.object(runner, "_run_stage_ocr", side_effect=fail_ocr), \
+         patch.object(runner, "_persist_status"):
+
+        await runner.execute()
+        assert runner.status == "FAILED"
+        assert runner.error_details is not None
+        assert runner.error_details.stage_id == "ocr"
+        assert runner.error_details.category == "OCR_ERROR"
+        assert "EasyOCR model weights missing" in runner.error_details.message
+        assert len(runner.error_details.troubleshooting) > 0
+        assert runner.get_stage("ocr").status == "FAILED"

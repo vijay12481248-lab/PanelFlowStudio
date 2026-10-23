@@ -805,6 +805,14 @@ export interface AutoPilotStageItem {
   duration_sec: number;
 }
 
+export interface AutoPilotErrorDetails {
+  stage_id: string;
+  category: string;
+  message: string;
+  troubleshooting: string[];
+  timestamp: string;
+}
+
 export interface AutoPilotStatusResponse {
   project_id: string;
   status: "IDLE" | "RUNNING" | "COMPLETED" | "CANCELLED" | "FAILED";
@@ -814,6 +822,7 @@ export interface AutoPilotStatusResponse {
   logs: string[];
   result: Record<string, any>;
   error?: string | null;
+  error_details?: AutoPilotErrorDetails | null;
   started_at?: string | null;
   completed_at?: string | null;
 }

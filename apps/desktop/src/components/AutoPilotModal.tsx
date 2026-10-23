@@ -34,6 +34,7 @@ export const AutoPilotModal: React.FC<AutoPilotModalProps> = ({
   const [loading, setLoading] = useState<boolean>(true);
   const [running, setRunning] = useState<boolean>(false);
   const [cancelling, setCancelling] = useState<boolean>(false);
+  const [copiedDiagnostics, setCopiedDiagnostics] = useState<boolean>(false);
 
   // Configuration options
   const [targetProfile, setTargetProfile] = useState<string>("standard_1080p");
@@ -276,13 +277,88 @@ export const AutoPilotModal: React.FC<AutoPilotModalProps> = ({
             </div>
           )}
 
-          {/* Error Banner */}
+          {/* Error Banner with Diagnostics & Actionable Troubleshooting */}
           {isFailed && (
-            <div className="p-4 bg-rose-950/40 border border-rose-800 rounded-xl flex items-start gap-3">
-              <Icons.XCircle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
-              <div className="space-y-1 text-xs">
-                <h4 className="font-bold text-rose-300">Pipeline Failed</h4>
-                <p className="text-rose-200 font-mono text-[11px]">{statusData?.error}</p>
+            <div className="p-4 bg-rose-950/40 border border-rose-800 rounded-xl space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-3">
+                  <Icons.XCircle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <h4 className="font-bold text-rose-300 text-sm">Pipeline Stopped</h4>
+                      {statusData?.error_details?.category && (
+                        <span className="text-[10px] font-mono font-bold uppercase px-2 py-0.5 rounded bg-rose-900/60 text-rose-200 border border-rose-700/50">
+                          {statusData.error_details.category}
+                        </span>
+                      )}
+                      {statusData?.error_details?.stage_id && (
+                        <span className="text-[10px] font-mono text-zinc-400">
+                          Stage: {statusData.error_details.stage_id.toUpperCase()}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-rose-200 font-mono text-xs break-words">
+                      {statusData?.error || statusData?.error_details?.message}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Troubleshooting Guidance */}
+              {statusData?.error_details?.troubleshooting && statusData.error_details.troubleshooting.length > 0 && (
+                <div className="p-3 bg-zinc-950/80 border border-zinc-800/80 rounded-lg space-y-2">
+                  <span className="text-[11px] font-bold text-zinc-300 flex items-center gap-1.5 uppercase tracking-wider">
+                    <Icons.AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+                    Recommended Troubleshooting Actions
+                  </span>
+                  <ul className="space-y-1.5 pl-1">
+                    {statusData.error_details.troubleshooting.map((tip, idx) => (
+                      <li key={idx} className="text-xs text-zinc-300 flex items-start gap-2">
+                        <span className="text-amber-400 font-bold shrink-0 mt-0.5">•</span>
+                        <span>{tip}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Action Buttons: Resume & Copy Diagnostics */}
+              <div className="flex items-center gap-2 pt-1">
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => {
+                    setSkipExisting(true);
+                    handleStartRun();
+                  }}
+                  disabled={running || loading}
+                  className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center gap-1.5"
+                >
+                  <Icons.Rotate className="w-3.5 h-3.5" />
+                  <span>Resume Pipeline (Skip Finished)</span>
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    const text = [
+                      `PanelFlow Pipeline Error Diagnostic`,
+                      `Project: ${project.title} (${project.id})`,
+                      `Stage: ${statusData?.error_details?.stage_id || statusData?.current_stage_id || "Unknown"}`,
+                      `Category: ${statusData?.error_details?.category || "ERROR"}`,
+                      `Message: ${statusData?.error || statusData?.error_details?.message}`,
+                      `Troubleshooting:`,
+                      ...(statusData?.error_details?.troubleshooting || []).map((t) => ` - ${t}`),
+                    ].join("\n");
+                    navigator.clipboard.writeText(text);
+                    setCopiedDiagnostics(true);
+                    setTimeout(() => setCopiedDiagnostics(false), 2500);
+                  }}
+                  className="text-xs flex items-center gap-1.5 border-zinc-700"
+                >
+                  <Icons.CheckCircle className={`w-3.5 h-3.5 ${copiedDiagnostics ? "text-emerald-400" : "text-zinc-400"}`} />
+                  <span>{copiedDiagnostics ? "Copied Diagnostics!" : "Copy Diagnostics"}</span>
+                </Button>
               </div>
             </div>
           )}

@@ -43,6 +43,14 @@ class AutoPilotStageItem(BaseModel):
     duration_sec: float = Field(default=0.0, ge=0.0)
 
 
+class AutoPilotErrorDetails(BaseModel):
+    stage_id: str
+    category: str
+    message: str
+    troubleshooting: List[str]
+    timestamp: str
+
+
 class AutoPilotStatusResponse(BaseModel):
     project_id: str
     status: str = Field(default="IDLE", pattern=r"^(IDLE|RUNNING|COMPLETED|CANCELLED|FAILED)$")
@@ -52,8 +60,125 @@ class AutoPilotStatusResponse(BaseModel):
     logs: List[str]
     result: Dict[str, Any] = Field(default_factory=dict)
     error: Optional[str] = None
+    error_details: Optional[AutoPilotErrorDetails] = None
     started_at: Optional[str] = None
     completed_at: Optional[str] = None
+
+
+DEFAULT_STAGE_TIMEOUTS: Dict[str, float] = {
+    "pages": 300.0,
+    "panels": 180.0,
+    "ocr": 240.0,
+    "story": 180.0,
+    "script": 120.0,
+    "audio": 300.0,
+    "motion": 120.0,
+    "render": 600.0,
+    "packaging": 180.0,
+}
+
+
+def diagnose_error(stage_id: str, exc: Exception) -> AutoPilotErrorDetails:
+    exc_msg = str(exc)
+    category = "SYSTEM_ERROR"
+    troubleshooting: List[str] = []
+
+    if isinstance(exc, (asyncio.TimeoutError, TimeoutError)) or "timed out" in exc_msg.lower():
+        category = "TIMEOUT"
+        if stage_id == "pages":
+            troubleshooting = [
+                "Verify chapter source URL is reachable in your web browser.",
+                "Check network connection or potential site rate-limiting.",
+                "Alternative: import downloaded chapter images directly from a local folder.",
+            ]
+        elif stage_id == "panels":
+            troubleshooting = [
+                "Panel detection exceeded time limit. Try running with 'Skip existing stages' or reduce image dimensions.",
+            ]
+        elif stage_id == "ocr":
+            troubleshooting = [
+                "OCR text extraction timed out. Check that OCR models (EasyOCR / Manga-OCR) are installed and not hanging.",
+            ]
+        elif stage_id == "story":
+            troubleshooting = [
+                "Narrative breakdown timed out. Check that your local LLM (Ollama) or API provider is responding quickly.",
+                "Ensure Ollama server is running with `ollama serve` if using local models.",
+            ]
+        elif stage_id == "script":
+            troubleshooting = [
+                "Script adaptation timed out. Check LLM provider response times.",
+            ]
+        elif stage_id == "audio":
+            troubleshooting = [
+                "Voice synthesis timed out. Ensure Chatterbox Turbo / local TTS has available GPU memory or enable CPU mode.",
+            ]
+        elif stage_id == "motion":
+            troubleshooting = [
+                "Motion planning timed out. Check project timeline data.",
+            ]
+        elif stage_id == "render":
+            troubleshooting = [
+                "Video rendering timed out. Check FFmpeg installation and verify sufficient CPU/GPU and disk space.",
+            ]
+        else:
+            troubleshooting = [
+                f"The '{stage_id}' stage exceeded maximum time budget.",
+                "Check CPU/GPU utilization and try restarting the stage.",
+            ]
+    elif stage_id == "pages":
+        category = "ACQUISITION_OR_NORMALIZATION"
+        troubleshooting = [
+            "Verify chapter source URL or folder path exists and contains valid manga images (JPG/PNG/WEBP).",
+            "Check that image files are not corrupted or 0 bytes.",
+        ]
+    elif stage_id == "panels":
+        category = "PANEL_DETECTION_ERROR"
+        troubleshooting = [
+            "Verify that pages are normalized to 1920px standard.",
+            "Adjust panel detection threshold if panels have unusual gutters or borders.",
+        ]
+    elif stage_id == "ocr":
+        category = "OCR_ERROR"
+        troubleshooting = [
+            "Ensure OCR dependencies and language models are downloaded.",
+            "Check that panel image crops exist and are readable.",
+        ]
+    elif stage_id == "story":
+        category = "NARRATIVE_IR_ERROR"
+        troubleshooting = [
+            "Verify LLM provider connectivity (Ollama / Anthropic / OpenAI / Mock).",
+            "Ensure at least one panel observation is available for story reconstruction.",
+        ]
+    elif stage_id == "script":
+        category = "SCRIPT_GENERATION_ERROR"
+        troubleshooting = [
+            "Verify narrative breakdown exists and has valid scenes before generating script.",
+        ]
+    elif stage_id == "audio":
+        category = "AUDIO_SYNTHESIS_ERROR"
+        troubleshooting = [
+            "Verify Chatterbox or TTS engine is installed under C:\\Tools or configured in settings.",
+            "Check that audio dialogue output directory is writable.",
+        ]
+    elif stage_id == "render":
+        category = "RENDER_ENCODING_ERROR"
+        troubleshooting = [
+            "Verify that FFmpeg is installed and accessible in the system PATH.",
+            "Ensure output directory has write permissions and sufficient disk space.",
+        ]
+    else:
+        troubleshooting = [
+            "Review the log console below for detailed error trace.",
+            "Enable 'Skip existing completed stages' and click 'Start Pipeline' to resume from the last successful stage.",
+        ]
+
+    return AutoPilotErrorDetails(
+        stage_id=stage_id,
+        category=category,
+        message=exc_msg,
+        troubleshooting=troubleshooting,
+        timestamp=datetime.now(timezone.utc).isoformat(),
+    )
 
 
 STAGE_DEFINITIONS = [
@@ -82,6 +207,8 @@ class AutoPilotRunner:
         self.logs: List[str] = []
         self.result: Dict[str, Any] = {}
         self.error: Optional[str] = None
+        self.error_details: Optional[AutoPilotErrorDetails] = None
+        self.stage_timeouts: Dict[str, float] = self.options.get("stage_timeouts", {})
         self.is_cancelled = False
         self.started_at: Optional[str] = None
         self.completed_at: Optional[str] = None
@@ -133,6 +260,7 @@ class AutoPilotRunner:
             logs=self.logs,
             result=self.result,
             error=self.error,
+            error_details=self.error_details,
             started_at=self.started_at,
             completed_at=self.completed_at,
         )
@@ -156,6 +284,49 @@ class AutoPilotRunner:
             self.update_stage(stage_id, progress=round(p, 2), message=msg)
         return _cb
 
+    async def _execute_stage(self, stage_id: str, stage_coro_fn) -> bool:
+        if self.is_cancelled:
+            return False
+
+        timeout_sec = float(self.stage_timeouts.get(stage_id, DEFAULT_STAGE_TIMEOUTS.get(stage_id, 300.0)))
+        self.current_stage_id = stage_id
+        start_t = time.monotonic()
+        try:
+            await asyncio.wait_for(stage_coro_fn(), timeout=timeout_sec)
+            if self.is_cancelled:
+                return False
+            return True
+        except asyncio.CancelledError:
+            self.is_cancelled = True
+            self.status = "CANCELLED"
+            self.log(f"Stage '{stage_id}' was cancelled.")
+            return False
+        except (asyncio.TimeoutError, TimeoutError) as t_exc:
+            duration = round(time.monotonic() - start_t, 1)
+            timeout_msg = f"Stage '{stage_id}' timed out after {duration}s (limit: {int(timeout_sec)}s)."
+            logger.warning("[AutoPilot:%s] %s", self.project_id, timeout_msg)
+            err_diag = diagnose_error(stage_id, TimeoutError(timeout_msg))
+            self.status = "FAILED"
+            self.error = timeout_msg
+            self.error_details = err_diag
+            self.update_stage(stage_id, status="FAILED", message=timeout_msg)
+            self.log(f"Auto-Pilot FAILED: {timeout_msg}")
+            for tip in err_diag.troubleshooting:
+                self.log(f"Troubleshooting: {tip}")
+            return False
+        except Exception as exc:
+            duration = round(time.monotonic() - start_t, 1)
+            err_diag = diagnose_error(stage_id, exc)
+            self.status = "FAILED"
+            self.error = str(exc)
+            self.error_details = err_diag
+            self.update_stage(stage_id, status="FAILED", message=str(exc))
+            self.log(f"Auto-Pilot FAILED in stage '{stage_id}': {exc}")
+            for tip in err_diag.troubleshooting:
+                self.log(f"Troubleshooting: {tip}")
+            logger.exception("Auto-Pilot failure in project %s stage %s", self.project_id, stage_id)
+            return False
+
     async def execute(self) -> None:
         self.status = "RUNNING"
         self.started_at = datetime.now(timezone.utc).isoformat()
@@ -166,47 +337,40 @@ class AutoPilotRunner:
 
         try:
             # 1. PAGE STAGE
-            await self._run_stage_pages(skip_existing)
-            if self.is_cancelled:
+            if not await self._execute_stage("pages", lambda: self._run_stage_pages(skip_existing)):
                 return
 
             # 2. PANEL STAGE
-            await self._run_stage_panels(skip_existing)
-            if self.is_cancelled:
+            if not await self._execute_stage("panels", lambda: self._run_stage_panels(skip_existing)):
                 return
 
             # 3. OCR STAGE
-            await self._run_stage_ocr(skip_existing)
-            if self.is_cancelled:
+            if not await self._execute_stage("ocr", lambda: self._run_stage_ocr(skip_existing)):
                 return
 
             # 4. STORY STAGE
-            await self._run_stage_story(skip_existing)
-            if self.is_cancelled:
+            if not await self._execute_stage("story", lambda: self._run_stage_story(skip_existing)):
                 return
 
             # 5. SCRIPT STAGE
-            await self._run_stage_script(skip_existing)
-            if self.is_cancelled:
+            if not await self._execute_stage("script", lambda: self._run_stage_script(skip_existing)):
                 return
 
             # 6. AUDIO STAGE
-            await self._run_stage_audio(skip_existing)
-            if self.is_cancelled:
+            if not await self._execute_stage("audio", lambda: self._run_stage_audio(skip_existing)):
                 return
 
             # 7. MOTION STAGE
-            await self._run_stage_motion(skip_existing)
-            if self.is_cancelled:
+            if not await self._execute_stage("motion", lambda: self._run_stage_motion(skip_existing)):
                 return
 
             # 8. RENDER STAGE
-            await self._run_stage_render(profile_name, skip_existing)
-            if self.is_cancelled:
+            if not await self._execute_stage("render", lambda: self._run_stage_render(profile_name, skip_existing)):
                 return
 
             # 9. PACKAGING & THUMBNAIL STAGE
-            await self._run_stage_packaging(profile_name)
+            if not await self._execute_stage("packaging", lambda: self._run_stage_packaging(profile_name)):
+                return
 
             self.status = "COMPLETED"
             self.overall_progress = 1.0
@@ -219,9 +383,13 @@ class AutoPilotRunner:
         except Exception as exc:
             self.status = "FAILED"
             self.error = str(exc)
+            diag = diagnose_error(self.current_stage_id or "general", exc)
+            self.error_details = diag
             if self.current_stage_id:
                 self.update_stage(self.current_stage_id, status="FAILED", message=str(exc))
             self.log(f"Auto-Pilot pipeline FAILED: {exc}")
+            for tip in diag.troubleshooting:
+                self.log(f"Troubleshooting: {tip}")
             logger.exception("Auto-Pilot failure in project %s", self.project_id)
         finally:
             self._persist_status()
@@ -252,15 +420,23 @@ class AutoPilotRunner:
                     from engine.acquisition.adapters.registry import get_default_registry
                     registry = get_default_registry()
                     job_id = project_service.start_acquisition_job(db, self.project_id, registry)
+                    acq_start = time.monotonic()
+                    max_acq_wait = float(self.options.get("acquisition_timeout_sec", 180.0))
                     while True:
                         if self.is_cancelled:
                             job_manager.cancel_job(job_id)
                             return
+                        if time.monotonic() - acq_start > max_acq_wait:
+                            job_manager.cancel_job(job_id)
+                            raise TimeoutError(
+                                f"Page acquisition timed out after {int(max_acq_wait)}s. "
+                                f"Please verify chapter source URL ({source_loc}) or network connectivity."
+                            )
                         await asyncio.sleep(0.5)
                         j = job_manager.get_job(job_id)
                         if not j:
                             break
-                        if j["status"] == "COMPLETED":
+                        if j["status"] in ("SUCCEEDED", "COMPLETED"):
                             self.log("Page Stage: Chapter acquisition completed.")
                             break
                         elif j["status"] in ("FAILED", "CANCELLED"):
@@ -773,8 +949,12 @@ class AutoPilotRunner:
                 job_id = job_dict.get("render_id") or job_dict.get("id")
                 self.log(f"Render Stage: Render job created: {job_id}")
 
+                render_start = time.monotonic()
+                max_render_wait = float(self.options.get("render_timeout_sec", 600.0))
                 # Poll until complete
                 while not self.is_cancelled:
+                    if time.monotonic() - render_start > max_render_wait:
+                        raise TimeoutError(f"Video rendering timed out after {int(max_render_wait)}s.")
                     await asyncio.sleep(1.0)
                     db.expire_all()
                     job_info = render_service.get_render_job(db, job_id)
@@ -787,7 +967,7 @@ class AutoPilotRunner:
                         message=f"Rendering: {int(current_prog * 100)}% ({job_info.get('frames_done', 0)}/{job_info.get('frames_total', 0)} frames)",
                     )
                     status = job_info.get("status")
-                    if status == "COMPLETE":
+                    if status in ("COMPLETE", "SUCCEEDED"):
                         render_job = (
                             db.query(RenderJobRecord)
                             .filter(RenderJobRecord.id == job_id)
@@ -891,6 +1071,11 @@ def get_autopilot_runner(project_id: str) -> AutoPilotRunner:
                         runner.logs = data.get("logs", [])
                         runner.result = data.get("result", {})
                         runner.error = data.get("error")
+                        if data.get("error_details"):
+                            try:
+                                runner.error_details = AutoPilotErrorDetails(**data["error_details"])
+                            except Exception:
+                                pass
                         runner.started_at = data.get("started_at")
                         runner.completed_at = data.get("completed_at")
                         for idx, s in enumerate(data.get("stages", [])):
