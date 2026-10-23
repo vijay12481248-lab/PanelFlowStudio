@@ -23,30 +23,55 @@ class OpenAICompatibleProvider(LLMProvider):
         model_name: str = "default",
         api_key: str = "local-no-key",
         timeout: float = 60.0,
+        provider_id: str = "openai_compatible",
+        display_name: str | None = None,
     ):
         self.endpoint_url = endpoint_url.rstrip("/")
         self.model_name = model_name
         self.api_key = api_key
         self.timeout = timeout
+        self._provider_id = provider_id
+        self._display_name = display_name or f"OpenAI-Compatible ({self.endpoint_url})"
 
     @property
     def provider_id(self) -> str:
-        return "openai_compatible"
+        return self._provider_id
 
     @property
     def display_name(self) -> str:
-        return f"OpenAI-Compatible ({self.endpoint_url})"
+        return self._display_name
 
     async def health_check(self) -> bool:
         try:
-            async with httpx.AsyncClient(timeout=2.0) as client:
+            headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
+            async with httpx.AsyncClient(timeout=5.0) as client:
                 res = await client.get(
                     f"{self.endpoint_url}/models",
-                    headers={"Authorization": f"Bearer {self.api_key}"},
+                    headers=headers,
                 )
                 return res.status_code == 200
         except Exception:
             return False
+
+    async def list_available_models(self) -> list[str]:
+        try:
+            headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
+            async with httpx.AsyncClient(timeout=8.0) as client:
+                res = await client.get(
+                    f"{self.endpoint_url}/models",
+                    headers=headers,
+                )
+                if res.status_code == 200:
+                    data = res.json()
+                    models = []
+                    for item in data.get("data", []):
+                        m_id = item.get("id")
+                        if m_id:
+                            models.append(m_id)
+                    return models
+        except Exception as e:
+            logger.warning(f"Failed to list models from {self.endpoint_url}: {e}")
+        return []
 
     async def generate_text(
         self,
@@ -61,8 +86,9 @@ class OpenAICompatibleProvider(LLMProvider):
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": prompt})
 
+        model_to_use = kwargs.get("model") or self.model_name
         payload = {
-            "model": self.model_name,
+            "model": model_to_use,
             "messages": messages,
             "temperature": temperature,
             "max_tokens": max_tokens,
@@ -108,8 +134,9 @@ class OpenAICompatibleProvider(LLMProvider):
                 {"role": "user", "content": current_prompt},
             ]
 
+            model_to_use = kwargs.get("model") or self.model_name
             payload = {
-                "model": self.model_name,
+                "model": model_to_use,
                 "messages": messages,
                 "temperature": temperature,
                 "response_format": {"type": "json_object"},
@@ -177,8 +204,9 @@ class OpenAICompatibleProvider(LLMProvider):
             ],
         })
 
+        model_to_use = kwargs.get("model") or self.model_name
         payload = {
-            "model": self.model_name,
+            "model": model_to_use,
             "messages": messages,
         }
 

@@ -109,6 +109,17 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
   } | null>(null);
 
   const imageContainerRef = useRef<HTMLDivElement>(null);
+  const [panelSelection, setPanelSelection] = useState<{ pageId: string; ids: string[] } | null>(null);
+  const selectionAnchor = useRef<string | null>(null);
+  const dragPreviewRef = useRef<HTMLElement | null>(null);
+  const dragCleanupRef = useRef<(() => void) | null>(null);
+  const clearDragPreview = () => {
+    dragCleanupRef.current?.();
+    dragCleanupRef.current = null;
+    dragPreviewRef.current?.remove();
+    dragPreviewRef.current = null;
+  };
+  useEffect(() => () => clearDragPreview(), []);
 
   const activePageIndex = pages.findIndex((p) => p.id === selectedPageId);
   const activePage = pages[activePageIndex >= 0 ? activePageIndex : 0] || null;
@@ -149,6 +160,25 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
   const pagePanels = activePage
     ? panels.filter((p) => p.page_id === activePage.id).sort((a, b) => a.page_sequence - b.page_sequence)
     : [];
+  const selectedPanelIds = panelSelection && panelSelection.pageId === activePage?.id
+    ? panelSelection.ids.filter(id => pagePanels.some(panel => panel.id === id))
+    : pagePanels.some(panel => panel.id === selectedPanelId) ? [selectedPanelId!] : [];
+  const selectPanel = (event: { ctrlKey?: boolean; metaKey?: boolean; shiftKey?: boolean }, panel: Panel) => {
+    if (!activePage) return;
+    const toggle = event.ctrlKey || event.metaKey;
+    let ids = [panel.id];
+    const anchor = pagePanels.findIndex(item => item.id === selectionAnchor.current);
+    const index = pagePanels.findIndex(item => item.id === panel.id);
+    if (event.shiftKey && anchor >= 0) {
+      const range = pagePanels.slice(Math.min(anchor, index), Math.max(anchor, index) + 1).map(item => item.id);
+      ids = toggle ? [...new Set([...selectedPanelIds, ...range])] : range;
+    } else {
+      if (toggle) ids = selectedPanelIds.includes(panel.id) ? selectedPanelIds.filter(id => id !== panel.id) : [...selectedPanelIds, panel.id];
+      selectionAnchor.current = panel.id;
+    }
+    setPanelSelection({ pageId: activePage.id, ids });
+    onSelectPanel(ids.includes(panel.id) ? panel : pagePanels.find(item => item.id === ids[0]) || null);
+  };
 
   const activeSelectedPanel =
     pagePanels.find((p) => p.id === selectedPanelId) ||
@@ -183,18 +213,77 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
   // Chapter 3: Drag panel onto composition canvas or timeline
   const handlePanelDragStart = (e: React.DragEvent, panel: Panel) => {
     if (!activePage) return;
-    const payload = {
+    e.stopPropagation?.();
+    const selected = selectedPanelIds.includes(panel.id) ? pagePanels.filter(item => selectedPanelIds.includes(item.id)) : [panel];
+    if (!selectedPanelIds.includes(panel.id)) {
+      setPanelSelection({ pageId: activePage.id, ids: [panel.id] });
+      selectionAnchor.current = panel.id;
+      onSelectPanel(panel);
+    }
+    const items = selected.map(panel => ({
       pageId: activePage.id,
       panelId: panel.id,
       pageSequence: panel.page_sequence,
+      cropFilename: panel.crop_filename,
       crop: { x: panel.x, y: panel.y, width: panel.width, height: panel.height },
-      imageUrl: hideEditingTools
-        ? `${api.getPanelImageUrl(projectId, panel.id)}?v=${encodeURIComponent(panel.crop_filename || "detected")}`
-        : api.getPageImageUrl(projectId, activePage.id),
+      imageUrl: api.getPageImageUrl(projectId, activePage.id),
       name: `Panel #${panel.page_sequence}`,
-    };
-    e.dataTransfer.setData("application/panelflow-panel", JSON.stringify(payload));
+    }));
+    const payload = items.length > 1 ? { ...items[0], panels: items } : items[0];
+    const jsonStr = JSON.stringify(payload);
+    e.dataTransfer.setData("application/panelflow-panel", jsonStr);
+    e.dataTransfer.setData("text/plain", jsonStr);
     e.dataTransfer.effectAllowed = "copy";
+    // Track viewport CSS coordinates ourselves; native WebView drag images can
+    // apply a different DPI scale to the bitmap and hotspot on Windows.
+    if (typeof document !== "undefined" && e.dataTransfer.setDragImage) {
+      clearDragPreview();
+      const preview = document.createElement("div");
+      const scale = Math.min(120 / Math.max(1, panel.width), 180 / Math.max(1, panel.height));
+      const width = Math.max(1, Math.round(panel.width * scale)), height = Math.max(1, Math.round(panel.height * scale));
+      preview.dataset.panelDragPreview = "true";
+      preview.setAttribute("aria-hidden", "true");
+      Object.assign(preview.style, { position: "fixed", width: `${width}px`, height: `${height}px`, overflow: "hidden", borderRadius: "6px", background: "#09090b", pointerEvents: "none", zIndex: "2147483647", boxShadow: "0 8px 24px #0008" });
+      const image = document.createElement("img");
+      image.src = api.getPageImageUrl(projectId, activePage.id);
+      image.draggable = false;
+      Object.assign(image.style, { position: "absolute", maxWidth: "none", width: `${(activePage.width || 1200) / panel.width * 100}%`, height: `${(activePage.height || 1800) / panel.height * 100}%`, left: `${-panel.x / panel.width * 100}%`, top: `${-panel.y / panel.height * 100}%` });
+      preview.appendChild(image);
+      const outline = document.createElement("div");
+      Object.assign(outline.style, { position: "absolute", inset: "0", border: "2px solid #67e8f9", borderRadius: "6px", boxSizing: "border-box", zIndex: "2" });
+      preview.appendChild(outline);
+      if (items.length > 1) {
+        const count = document.createElement("span");
+        count.textContent = `${items.length} panels`;
+        Object.assign(count.style, { position: "absolute", bottom: "2px", right: "2px", background: "#164e63", color: "white", padding: "3px 6px", font: "bold 12px sans-serif", zIndex: "3" });
+        preview.appendChild(count);
+      }
+      // Keep the preview in the native modal's top layer when dragging from it.
+      const previewHost = e.currentTarget?.closest?.("dialog[open]") || document.body;
+      previewHost.appendChild(preview);
+      dragPreviewRef.current = preview;
+      const rect = e.currentTarget?.getBoundingClientRect();
+      const grabX = rect?.width ? Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)) * width : width / 2;
+      const grabY = rect?.height ? Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height)) * height : height / 2;
+      const movePreview = (event: { clientX: number; clientY: number }) => {
+        preview.style.left = `${event.clientX - grabX}px`;
+        preview.style.top = `${event.clientY - grabY}px`;
+      };
+      movePreview(e);
+      const view = document.defaultView;
+      // Capture runs before the timeline consumes dragover/drop propagation.
+      view?.addEventListener("dragover", movePreview, true);
+      view?.addEventListener("drop", clearDragPreview, true);
+      view?.addEventListener("dragend", clearDragPreview, true);
+      dragCleanupRef.current = () => {
+        view?.removeEventListener("dragover", movePreview, true);
+        view?.removeEventListener("drop", clearDragPreview, true);
+        view?.removeEventListener("dragend", clearDragPreview, true);
+      };
+      const nativeImage = document.createElement("canvas");
+      nativeImage.width = nativeImage.height = 1;
+      e.dataTransfer.setDragImage(nativeImage, 0, 0);
+    }
   };
 
   // SVG Coordinates Helper
@@ -537,19 +626,24 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
           <div className="flex-1 overflow-auto p-3 grid grid-cols-2 gap-3 content-start">
             {pagePanels.length > 0 ? (
               pagePanels.map((p) => {
-                const isSelected = selectedPanelId === p.id;
+                const isSelected = selectedPanelIds.includes(p.id);
                 return (
                   <div
                     key={p.id}
                     draggable
+                    onDragEnd={clearDragPreview}
                     onDragStart={(e) => handlePanelDragStart(e, p)}
-                    onClick={() => onSelectPanel(p)}
-                    className={`p-2 rounded-lg border bg-zinc-900 flex flex-col gap-1.5 cursor-grab active:cursor-grabbing transition-all select-none ${
+                    onClick={(e) => selectPanel(e, p)}
+                    className={`relative p-2 rounded-lg border bg-zinc-900 flex flex-col gap-1.5 cursor-grab active:cursor-grabbing transition-all select-none ${
                       isSelected
-                        ? "border-indigo-500 ring-2 ring-indigo-500/40 bg-zinc-850"
+                        ? "border-cyan-300 ring-2 ring-cyan-400/50 bg-zinc-850"
                         : "border-zinc-800 hover:border-zinc-700 hover:bg-zinc-850/60"
                     }`}
                   >
+                    {isSelected && <span data-panel-selection-outline="true" aria-hidden="true"
+                      className="absolute inset-0 z-10 rounded-lg border-2 border-cyan-300 pointer-events-none">
+                      <span className="absolute top-0 left-0 rounded-br bg-cyan-300 px-1 text-[10px] font-bold text-zinc-950">✓</span>
+                    </span>}
                     <div className="flex items-center justify-between text-[11px] text-zinc-300 font-medium">
                       <span className="flex items-center gap-1 font-bold">
                         <span className="text-zinc-500">⠿</span>
@@ -1001,6 +1095,7 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
                 {activeSelectedPanel && (
                   <div
                     draggable
+                    onDragEnd={clearDragPreview}
                     onDragStart={(e) => handlePanelDragStart(e, activeSelectedPanel)}
                     style={{
                       left: `${(activeSelectedPanel.x / (activePage.width || 1200)) * 100}%`,
@@ -1353,11 +1448,18 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
 
   return (
     <>
-      <section aria-label="Source Pages" className="min-w-0 flex flex-col overflow-hidden rounded-xl border border-zinc-800 bg-[#0b0d15] text-zinc-200">
+      <section aria-label="Source Pages" className="min-w-0 flex-1 h-full flex flex-col overflow-hidden rounded-xl border border-zinc-800 bg-[#0b0d15] text-zinc-200">
         {header}
+        {subTab === "panels" && <div className="px-3 py-2 text-[10px] text-zinc-400 border-b border-zinc-800" aria-live="polite">
+          <span className="text-cyan-300">{selectedPanelIds.length} selected</span> · Ctrl/Cmd-click to select · Shift-click for a range
+          <div className="flex gap-3 mt-1">
+            <button type="button" className="text-violet-300 hover:text-white" onClick={() => { if (activePage) { setPanelSelection({ pageId: activePage.id, ids: pagePanels.map(p => p.id) }); selectionAnchor.current = pagePanels[0]?.id || null; } }}>Select all panels</button>
+            <button type="button" className="hover:text-white" onClick={() => { if (activePage) setPanelSelection({ pageId: activePage.id, ids: [] }); onSelectPanel(null); }}>Clear selection</button>
+          </div>
+        </div>}
         <div aria-label={subTab === "pages" ? "Source page thumbnails" : "Source panel thumbnails"}
-          className="grid grid-cols-4 gap-2 p-3 overflow-y-auto content-start"
-          style={{ maxHeight: 196, gridAutoRows: 80 }}>
+          className="grid grid-cols-4 gap-2 p-3 overflow-y-auto content-start flex-1"
+          style={{ gridAutoRows: 80 }}>
           {subTab === "pages" ? pages.map((page, index) => (
             <button key={page.id} type="button" aria-label={`Select page ${index + 1}`}
               aria-pressed={page.id === activePage?.id}
@@ -1367,26 +1469,35 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
               }}
               onDoubleClick={() => { onSelectPage(page.id); if (!hideEditingTools) { setSubTab("pages"); setExpanded(true); } }}
               title={`Page ${index + 1} — double-click to open workspace`}
-              className={`relative min-w-0 h-full rounded-md border overflow-hidden focus-visible:outline focus-visible:outline-2 focus-visible:outline-violet-400 ${page.id === activePage?.id ? "border-violet-500 ring-2 ring-violet-500/50" : "border-zinc-700 hover:border-violet-400"}`}>
-              <img src={api.getPageImageUrl(projectId, page.id)} alt={`Page ${page.sequence}`} loading="lazy" className="w-full h-full object-cover object-top" />
-              <span className="absolute top-1 right-1 rounded bg-black/80 px-1 text-[10px]">{index + 1}</span>
+              className={`relative min-w-0 h-full rounded-md border overflow-hidden focus-visible:outline focus-visible:outline-2 focus-visible:outline-violet-400 select-none ${page.id === activePage?.id ? "border-violet-500 ring-2 ring-violet-500/50" : "border-zinc-700 hover:border-violet-400"}`}>
+              <img src={api.getPageImageUrl(projectId, page.id)} alt={`Page ${page.sequence}`} loading="lazy" draggable={false} className="w-full h-full object-cover object-top pointer-events-none select-none" />
+              <span className="absolute top-1 right-1 rounded bg-black/80 px-1 text-[10px] pointer-events-none">{index + 1}</span>
             </button>
           )) : pagePanels.map((p) => (
-            <button key={p.id} type="button" draggable
-              aria-label={`Select panel ${p.page_sequence}`} aria-pressed={p.id === selectedPanelId}
-              onClick={() => onSelectPanel(p)} onDragStart={(e) => handlePanelDragStart(e, p)}
+            <div key={p.id} role="button" tabIndex={0} draggable
+              aria-label={`Select panel ${p.page_sequence}`} aria-pressed={selectedPanelIds.includes(p.id)}
+              onClick={(e) => selectPanel(e, p)}
+              onDragEnd={clearDragPreview}
+              onDragStart={(e) => {
+                e.stopPropagation?.();
+                handlePanelDragStart(e, p);
+              }}
               onDoubleClick={() => { if (!hideEditingTools) { setSubTab("pages"); setExpanded(true); } }}
               title={`Panel ${p.page_sequence} — drag to timeline or double-click to edit`}
-              className={`relative min-w-0 h-full rounded-md border overflow-hidden ${p.id === selectedPanelId ? "border-violet-500 ring-2 ring-violet-500/50" : "border-zinc-700 hover:border-violet-400"}`}>
+              className={`relative min-w-0 h-full rounded-md border overflow-hidden cursor-grab active:cursor-grabbing select-none transition-all ${selectedPanelIds.includes(p.id) ? "border-cyan-300 ring-2 ring-cyan-400/50 shadow-md" : "border-zinc-700 hover:border-violet-400"}`}>
               <img src={api.getPageImageUrl(projectId, activePage!.id)} alt={`Panel ${p.page_sequence}`}
-                loading="lazy" className="absolute max-w-none" style={{
+                loading="lazy" draggable={false} className="absolute max-w-none pointer-events-none select-none" style={{
                   width: `${((activePage!.width || 1200) / Math.max(1, p.width)) * 100}%`,
                   height: `${((activePage!.height || 1800) / Math.max(1, p.height)) * 100}%`,
                   left: `-${(p.x / Math.max(1, p.width)) * 100}%`,
                   top: `-${(p.y / Math.max(1, p.height)) * 100}%`,
                 }} />
-              <span className="absolute top-1 right-1 rounded bg-black/80 px-1 text-[10px]">{p.page_sequence}</span>
-            </button>
+              <span className="absolute top-1 right-1 rounded bg-black/80 px-1 text-[10px] pointer-events-none font-bold text-zinc-300">{p.page_sequence}</span>
+              {selectedPanelIds.includes(p.id) && <span data-panel-selection-outline="true" aria-hidden="true"
+                className="absolute inset-0 z-10 rounded-md border-2 border-cyan-300 pointer-events-none">
+                <span className="absolute top-0 left-0 rounded-br bg-cyan-300 px-1 text-[10px] font-bold text-zinc-950">✓</span>
+              </span>}
+            </div>
           ))}
           {(subTab === "pages" ? pages.length === 0 : pagePanels.length === 0) && (
             <p className="col-span-4 text-xs text-zinc-500 py-4 text-center">{subTab === "pages" ? "No pages available" : "No detected panels on this page"}</p>

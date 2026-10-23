@@ -76,12 +76,14 @@ def reconcile_story_editor_state_with_panels(
     if not isinstance(state, dict):
         return state
 
-    panels = {
-        panel.id: panel
-        for panel in db.query(PanelRecord)
+    db_panels = (
+        db.query(PanelRecord)
         .filter(PanelRecord.project_id == project_id)
+        .order_by(PanelRecord.sequence.asc())
         .all()
-    }
+    )
+    panels = {panel.id: panel for panel in db_panels}
+    current_panel_ids = [panel.id for panel in db_panels]
     
     # Track used panels for validation
     used_panels = set()
@@ -93,7 +95,7 @@ def reconcile_story_editor_state_with_panels(
     # Track which panels are referenced by scenes
     for scene in scenes:
         scene_layers = scene.get("layers", [])
-        # Filter out layers referencing deleted panels
+        # Keep missing-source layers so authored timing/motion can be repaired.
         active_layers = []
         for layer in scene_layers:
             panel_id = layer.get("source_panel_id")
@@ -129,43 +131,43 @@ def reconcile_story_editor_state_with_panels(
         
         scene["layers"] = active_layers
         
-        # Remove empty scenes
-        if not scene.get("layers"):
-            reconciled.get("panels_stale", False)
-    
-    # Detect panel changes by comparing panel count and order
-    current_panel_ids = sorted(panels.keys())
-    if state.get("scenes"):
-        # Extract panel IDs from state in order
-        state_panel_ids = []
-        for scene in state.get("scenes", []):
-            for layer in scene.get("layers", []):
-                pid = layer.get("source_panel_id")
-                if pid:
-                    state_panel_ids.append(pid)
-        
-        # Check if panels have been added/removed/reordered
-        if set(state_panel_ids) != set(current_panel_ids):
-            reconciled["panels_stale"] = True
-            reconciled["panel_sync_required"] = True
-        else:
-            # Check if order changed
-            # Only check order for panels that are still present
-            common_ids = [pid for pid in state_panel_ids if pid in panels]
-            if common_ids != sorted([pid for pid in current_panel_ids if pid in state_panel_ids], key=lambda x: panels[x].sequence):
-                reconciled["panels_stale"] = True
-                reconciled["panel_sync_required"] = True
-    
-    # Update panel metadata
+        # Empty scenes and page-only layers are intentional editor compositions.
+
+    # Scene membership/order belongs to the editor, not Panel Review. Compare
+    # authoritative inventories across reads instead; legacy states establish a
+    # baseline without guessing what their composition was intended to include.
+    previous_sync = reconciled.get("panel_review_sync")
+    previous_sync = previous_sync if isinstance(previous_sync, dict) else {}
+    previous_ids = previous_sync.get("panel_ids")
+    has_baseline = (
+        isinstance(previous_ids, list)
+        and all(isinstance(pid, str) and pid for pid in previous_ids)
+        and len(set(previous_ids)) == len(previous_ids)
+    )
+    inventory_changed = has_baseline and previous_ids != current_panel_ids
+    # Confirmation carries geometry changes even when no scene uses that panel.
+    # Pending changes stay pending until explicit alignment acknowledges them.
+    stale = bool(
+        inventory_changed
+        or removed_layers
+        or previous_sync.get("panels_stale")
+        or reconciled.get("panels_stale")
+        or reconciled.get("panel_sync_required")
+    )
+    reconciled["panels_stale"] = stale
+    reconciled["panel_sync_required"] = stale
+
     reconciled["panel_review_sync"] = {
+        **previous_sync,
         "synced_at": datetime.now(timezone.utc).isoformat(),
+        "panel_ids": current_panel_ids,
         "panel_count": len(panels),
         "used_panel_count": len(used_panels),
         "removed_layers_count": len(removed_layers),
         "removed_layers": removed_layers,
-        "panels_stale": reconciled.get("panels_stale", False),
+        "panels_stale": stale,
     }
-    
+
     return reconciled
 
 def align_panel_scenes(db: Session, project_id: str, state: dict) -> dict:
@@ -203,12 +205,16 @@ def align_panel_scenes(db: Session, project_id: str, state: dict) -> dict:
                 raise ValueError("A removed panel has linked narration. Reassign or remove that narration before alignment.")
             clip["start_time_sec"] = float(clip.get("start_time_sec", 0)) + surviving[scene_id]["start_time_sec"] - old_starts[scene_id]
     result["scenes"] = aligned
-    result["panels_stale"] = False
-    result["panel_sync_required"] = False
     result["selected_object"] = None
     result["is_playing"] = False
     result["playhead_sec"] = 0
-    return reconcile_story_editor_state_with_panels(db, project_id, result)
+    result = reconcile_story_editor_state_with_panels(db, project_id, result)
+    assert result is not None  # A dictionary input always reconciles to a dictionary.
+    # Only this explicit, eligibility-checked operation acknowledges source changes.
+    result["panels_stale"] = False
+    result["panel_sync_required"] = False
+    result["panel_review_sync"]["panels_stale"] = False
+    return result
 
 
 def utc_now():
@@ -1598,9 +1604,16 @@ class ProjectService:
             with SessionLocal() as worker_db:
                 ws_path = Path(record.workspace_path)
                 panels_dir = resolve_contained_path(ws_path, "panels")
-                total_panels = len(panels)
+                panel_id_list = [p.id for p in panels]
+                worker_panels = (
+                    worker_db.query(PanelRecord)
+                    .filter(PanelRecord.id.in_(panel_id_list))
+                    .order_by(PanelRecord.sequence.asc())
+                    .all()
+                )
+                total_panels = len(worker_panels)
 
-                for idx, panel in enumerate(panels, start=1):
+                for idx, panel in enumerate(worker_panels, start=1):
                     if cancel_token.is_cancelled:
                         break
 

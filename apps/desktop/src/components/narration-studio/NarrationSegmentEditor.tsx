@@ -503,6 +503,29 @@ export const NarrationSegmentEditor: React.FC<NarrationSegmentEditorProps> = ({
                       {segment.source_context.visual_description || "Visual framing ready for story generation."}
                     </p>
                   </div>
+
+                  {/* Page Macro Context & Character Focus */}
+                  {(segment.source_context.page_context_summary || segment.source_context.character_name) && (
+                    <div className="space-y-1">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1">
+                        <Icons.Sparkles className="w-3 h-3 text-amber-400" />
+                        Page Context & Character Focus
+                      </span>
+                      <div className="p-2 rounded-lg bg-zinc-950/80 border border-zinc-800 text-zinc-300 font-sans text-xs leading-relaxed space-y-1">
+                        {segment.source_context.character_name && (
+                          <div className="flex items-center gap-1.5 font-semibold text-zinc-200">
+                            <span className="text-zinc-500 font-normal">Focal Entity:</span>
+                            <span className="text-indigo-300">{segment.source_context.character_name}</span>
+                          </div>
+                        )}
+                        {segment.source_context.page_context_summary && (
+                          <p className="text-zinc-400 text-[11px]">
+                            {segment.source_context.page_context_summary}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 

@@ -41,6 +41,17 @@ import type {
   MusicDirectionPlan,
   MusicGenerationRequest,
   SFXCapabilityReport,
+  CloudLLMConfig,
+  CloudLLMTestRequest,
+  CloudLLMTestResponse,
+  AvailableLLMProvidersResponse,
+  GlobalLLMSettings,
+  SaveGlobalLLMSettingsRequest,
+  YouTubePackagingData,
+  YouTubePackagingGenerateRequest,
+  AutoPilotStatusResponse,
+  AutoPilotStartRequest,
+  AutoPilotStageItem,
 } from "@panelflow/shared-types";
 
 
@@ -178,6 +189,13 @@ export class PanelFlowApiClient {
     return this.request<Project>(`/api/projects/${projectId}`);
   }
 
+  async uploadBackgroundImage(projectId: string, file: Blob): Promise<{ image_url: string; width: number; height: number }> {
+    const result = await this.request<{ image_url: string; width: number; height: number }>(`/api/projects/${encodeURIComponent(projectId)}/backgrounds`, {
+      method: "POST", body: file, headers: { "Content-Type": file.type || "application/octet-stream" },
+    });
+    return { ...result, image_url: this.resourceUrl(result.image_url) };
+  }
+
   /** Restore only recognized project source references with this session's capability. */
   hydrateStoryEditorState<T>(projectId: string, state: T): T {
     return this.storyEditorStateImages(state, projectId, true);
@@ -199,6 +217,11 @@ export class PanelFlowApiClient {
         allowed.add(`${pagePath}/file`); allowed.add(`${pagePath}/normalized-file`);
       }
       if (typeof panelId === "string") allowed.add(`${projectPath}/panels/${encodeURIComponent(panelId)}/file`);
+      else if (Array.isArray(panelId)) {
+        for (const pid of panelId) {
+          if (typeof pid === "string") allowed.add(`${projectPath}/panels/${encodeURIComponent(pid)}/file`);
+        }
+      }
       try {
         const base = new URL(this.baseUrl);
         const url = new URL(imageUrl, base);
@@ -208,6 +231,8 @@ export class PanelFlowApiClient {
           url.protocol === base.protocol && url.port === base.port
         );
         const endpoint = url.pathname.replace(/;pf-token=[^/]*$/, "");
+        if (endpoint.startsWith(`${projectPath}/backgrounds/`) &&
+            /^[a-f\d]{32}\.png\/file$/.test(endpoint.slice(`${projectPath}/backgrounds/`.length))) allowed.add(endpoint);
         if (!sameEngine || url.username || url.password ||
             !allowed.has(endpoint)) return imageUrl;
         const credentialKeys = new Set(["token", "pf-token", "engine_token", "engine-token", "x-panelflow-token"]);
@@ -219,11 +244,14 @@ export class PanelFlowApiClient {
         return `${resource}${query ? `?${query}` : ""}`;
       } catch { return imageUrl; }
     };
+    const backgroundReference = (background: any) => background && typeof background === "object"
+      ? { ...background, ...(typeof background.custom_image_url === "string" ? { custom_image_url: imageReference(background.custom_image_url, null) } : {}) } : background;
     return {
       ...state,
+      ...(state.background_default ? { background_default: backgroundReference(state.background_default) } : {}),
       ...(Array.isArray(state.scenes) ? { scenes: state.scenes.map((scene: any) => {
         if (!scene || !Array.isArray(scene.layers)) return scene;
-        return { ...scene, layers: scene.layers.map((layer: any) => {
+        return { ...scene, ...(scene.background ? { background: backgroundReference(scene.background) } : {}), layers: scene.layers.map((layer: any) => {
           if (!layer || typeof layer.image_url !== "string") return layer;
           return { ...layer, image_url: imageReference(layer.image_url, layer.source_page_id, layer.source_panel_id) };
         }) };
@@ -234,7 +262,7 @@ export class PanelFlowApiClient {
           const context = segment?.source_context;
           if (!context || typeof context.panel_preview_url !== "string") return segment;
           return { ...segment, source_context: { ...context,
-            panel_preview_url: imageReference(context.panel_preview_url, context.page_id, context.panel_id),
+            panel_preview_url: imageReference(context.panel_preview_url, context.page_id, context.panel_id || context.panel_ids),
           } };
         }),
       } } : {}),
@@ -968,8 +996,12 @@ export class PanelFlowApiClient {
       aliases?: string[];
       description?: string;
       status?: string;
+      reference_asset_id?: string | null;
+      generation_params?: Record<string, unknown>;
+      proposed_changes?: Record<string, unknown>;
+      change_status?: "NONE" | "PENDING_REVIEW" | "APPROVED" | "REJECTED";
     }
-  ): Promise<any> {
+  ): Promise<CharacterEntity | undefined> {
     await this.executeProjectHistoryCommand(projectId, {
       type: "character.update",
       version: 1,
@@ -1524,6 +1556,42 @@ export class PanelFlowApiClient {
   }
 
   // ---------------------------------------------------------------------------
+  // Cloud & Free LLM Gateway (OpenRouter, Groq, Custom OpenAI-Compatible)
+  // ---------------------------------------------------------------------------
+  async getCloudLLMConfig(): Promise<CloudLLMConfig> {
+    return this.request<CloudLLMConfig>("/api/system/llm/cloud-config");
+  }
+
+  async saveCloudLLMConfig(config: CloudLLMConfig): Promise<CloudLLMConfig> {
+    return this.request<CloudLLMConfig>("/api/system/llm/cloud-config", {
+      method: "POST",
+      body: JSON.stringify(config),
+    });
+  }
+
+  async testCloudLLMConnection(params: CloudLLMTestRequest): Promise<CloudLLMTestResponse> {
+    return this.request<CloudLLMTestResponse>("/api/system/llm/cloud-test", {
+      method: "POST",
+      body: JSON.stringify(params),
+    });
+  }
+
+  async getAllAvailableLLMProviders(): Promise<AvailableLLMProvidersResponse> {
+    return this.request<AvailableLLMProvidersResponse>("/api/system/llm/providers/all");
+  }
+
+  async getGlobalLLMSettings(): Promise<GlobalLLMSettings> {
+    return this.request<GlobalLLMSettings>("/api/system/llm/global-settings");
+  }
+
+  async saveGlobalLLMSettings(settings: SaveGlobalLLMSettingsRequest): Promise<any> {
+    return this.request<any>("/api/system/llm/global-settings", {
+      method: "POST",
+      body: JSON.stringify(settings),
+    });
+  }
+
+  // ---------------------------------------------------------------------------
   // System Resource Telemetry & Concurrency
   // ---------------------------------------------------------------------------
   async getSystemResources(): Promise<SystemResourcesResponse> {
@@ -1681,6 +1749,40 @@ export class PanelFlowApiClient {
 
   getGeneratedAssetUrl(projectId: string, assetId: string): string {
     return this.resourceUrl(`/api/projects/${projectId}/assets/${assetId}/file`);
+  }
+
+  // YouTube Packaging & ComfyUI Thumbnail Research
+  async getYoutubePackaging(projectId: string, refresh = false, profileName?: string): Promise<YouTubePackagingData> {
+    const params = new URLSearchParams();
+    if (refresh) params.set("refresh", "true");
+    if (profileName) params.set("profile_name", profileName);
+    const query = params.toString() ? `?${params.toString()}` : "";
+    return this.request<YouTubePackagingData>(`/api/projects/${projectId}/youtube/packaging${query}`);
+  }
+
+  async generateYoutubePackaging(projectId: string, request: YouTubePackagingGenerateRequest): Promise<YouTubePackagingData> {
+    return this.request<YouTubePackagingData>(`/api/projects/${projectId}/youtube/packaging/generate`, {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
+  }
+
+  // End-to-End Pipeline Auto-Pilot
+  async startAutoPilot(projectId: string, request: AutoPilotStartRequest = {}): Promise<AutoPilotStatusResponse> {
+    return this.request<AutoPilotStatusResponse>(`/api/projects/${projectId}/autopilot/run`, {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
+  }
+
+  async getAutoPilotStatus(projectId: string): Promise<AutoPilotStatusResponse> {
+    return this.request<AutoPilotStatusResponse>(`/api/projects/${projectId}/autopilot/status`);
+  }
+
+  async cancelAutoPilot(projectId: string): Promise<{ cancelled: boolean; project_id: string }> {
+    return this.request<{ cancelled: boolean; project_id: string }>(`/api/projects/${projectId}/autopilot/cancel`, {
+      method: "POST",
+    });
   }
 
   // ---------------------------------------------------------------------------

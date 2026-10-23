@@ -203,3 +203,69 @@ test("default source browser preserves the existing full viewer and add actions"
   assert.match(html, /\+ Scene/);
   assert.doesNotMatch(html, /Expand source workspace/);
 });
+
+test("Ctrl selection and Shift range drag unique panels in reading order; unselected drag stays single", () => {
+  const panels = Array.from({ length: 4 }, (_, i) => ({ ...panel, id: `p${i + 1}`, page_sequence: i + 1 }));
+  const browser = mount({ panels, activeSubTab: "panels" });
+  const item = (n: number) => browser.find(e => e.props["aria-label"] === `Select panel ${n}`);
+  const drag = (n: number) => {
+    const data = new Map<string, string>();
+    const transfer = { setData: (k: string, v: string) => data.set(k, v), effectAllowed: "" };
+    item(n).props.onDragStart({ dataTransfer: transfer, stopPropagation() {} });
+    browser.render();
+    return JSON.parse(data.get("application/panelflow-panel")!);
+  };
+  item(1).props.onClick({}); browser.render();
+  item(3).props.onClick({ ctrlKey: true }); browser.render();
+  assert.equal(item(1).props["aria-pressed"], true);
+  assert.equal(item(3).props["aria-pressed"], true);
+  assert.equal(browser.all().filter(e => e.props["data-panel-selection-outline"]).length, 2);
+  assert.deepEqual(drag(3).panels.map((p: any) => p.panelId), ["p1", "p3"]);
+  item(4).props.onClick({ shiftKey: true }); browser.render();
+  assert.deepEqual(drag(4).panels.map((p: any) => p.panelId), ["p3", "p4"]);
+  assert.equal(drag(2).panelId, "p2");
+  assert.equal(drag(2).panels, undefined);
+});
+
+test("drag preview stays aligned to the grab point, shows crop/count, and clears on drop or cancel", async () => {
+  const { createRequire } = await import("node:module");
+  const { JSDOM } = createRequire(import.meta.url)("jsdom");
+  const dom = new JSDOM("<!doctype html><body></body>");
+  const previous = Object.getOwnPropertyDescriptor(globalThis, "document");
+  Object.defineProperty(globalThis, "document", { configurable: true, value: dom.window.document });
+  try {
+    const browser = mount({ activeSubTab: "panels", panels: [panel, { ...panel, id: "second", page_sequence: 2, x: 240 }] });
+    browser.find(e => e.props["aria-label"] === "Select panel 2").props.onClick({ metaKey: true }); browser.render();
+    let nativeImage: HTMLCanvasElement | undefined;
+    const thumb = browser.find(e => e.props["aria-label"] === "Select panel 2");
+    const start = () => thumb.props.onDragStart({ stopPropagation() {}, clientX: 240, clientY: 140,
+      currentTarget: { getBoundingClientRect: () => ({ left: 200, top: 100, width: 80, height: 80 }) }, dataTransfer: {
+      setData() {}, effectAllowed: "",
+      setDragImage(element: HTMLCanvasElement) { nativeImage = element; },
+    } });
+    start();
+    const preview = dom.window.document.querySelector('[data-panel-drag-preview]') as HTMLElement;
+    assert.ok(preview);
+    assert.equal(nativeImage!.width, 1, "suppress the OS ghost so it cannot drift from CSS coordinates");
+    assert.equal(nativeImage!.height, 1);
+    assert.equal(preview.style.pointerEvents, "none");
+    assert.equal(preview.style.left, "180px");
+    assert.equal(preview.style.top, "50px");
+    dom.window.dispatchEvent(new dom.window.MouseEvent("dragover", { clientX: 640, clientY: 540 }));
+    assert.equal(preview.style.left, "580px");
+    assert.equal(preview.style.top, "450px");
+    assert.equal(preview.querySelector("img")!.src, api.getPageImageUrl(props.projectId, pages[0].id));
+    assert.equal(preview.querySelector("img")!.style.left, "-120%");
+    assert.equal(preview.querySelector("img")!.style.width, "400%");
+    assert.match(preview.textContent!, /2 panels/);
+    dom.window.dispatchEvent(new dom.window.Event("drop"));
+    assert.equal(preview.isConnected, false);
+    start();
+    assert.ok(dom.window.document.querySelector('[data-panel-drag-preview]'));
+    dom.window.dispatchEvent(new dom.window.Event("dragend"));
+    assert.equal(dom.window.document.querySelector('[data-panel-drag-preview]'), null);
+  } finally {
+    dom.window.close();
+    if (previous) Object.defineProperty(globalThis, "document", previous); else delete (globalThis as any).document;
+  }
+});

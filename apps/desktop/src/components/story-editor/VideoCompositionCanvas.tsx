@@ -1,7 +1,10 @@
 import React, { useRef, useState, useEffect } from "react";
 import { Icons, Button } from "@panelflow/ui";
+import { api } from "@panelflow/api-client";
 import { fitCompositionFrame } from "./editorWorkspace";
 import { sceneAtTime, sceneTimelineDuration } from "./sceneTiming";
+import { resolveBackground } from "./backgroundSettings";
+import { BackgroundPreview, foregroundSize, resolveBackgroundSource } from "./BackgroundPreview";
 import type { VideoScene, VisualLayer, StoryEditorState } from "@panelflow/shared-types";
 import {
   evaluateLayerTransform,
@@ -15,6 +18,7 @@ interface VideoCompositionCanvasProps {
   state: StoryEditorState;
   onUpdateState: (updater: (prev: StoryEditorState) => StoryEditorState) => void;
   onSelectLayer: (layerId: string, sceneId: string) => void;
+  projectId?: string;
 }
 
 export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
@@ -22,12 +26,14 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
   onUpdateState,
   onSelectLayer,
   previewOnly = false,
+  projectId,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef<HTMLDivElement>(null);
   const [viewZoom, setViewZoom] = useState("fit");
   const [frameSize, setFrameSize] = useState({ width: 800, height: 450 });
   const [fullscreenError, setFullscreenError] = useState<string | null>(null);
+  const [imageSizes, setImageSizes] = useState<Record<string, { width: number; height: number }>>({});
   useEffect(() => {
     const frame = frameRef.current;
     if (!frame) return;
@@ -40,6 +46,14 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
   }, []);
   const [showSafeZones, setShowSafeZones] = useState<boolean>(false);
   const [playbackSpeed, setPlaybackSpeed] = useState<number>(1.0);
+
+  const getLayerImageUrl = (layer: VisualLayer): string => {
+    const projId = projectId || state.project_id;
+    if (projId && layer.source_panel_id && (!layer.image_url || layer.image_url.includes("/pages/"))) {
+      return `${api.getPanelImageUrl(projId, layer.source_panel_id)}?v=${encodeURIComponent(layer.crop_filename || "detected")}`;
+    }
+    return layer.image_url;
+  };
   type ResizeHandle = "nw" | "ne" | "se" | "sw" | "n" | "s" | "e" | "w" | "center" | "rotate";
 
   const [activeHandleDrag, setActiveHandleDrag] = useState<{
@@ -408,7 +422,11 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
     }
   };
 
-  const viewport = fitCompositionFrame(state.aspect_ratio, frameSize.width, frameSize.height, viewZoom === "fit" ? 100 : Number(viewZoom));
+  const viewport = fitCompositionFrame(state.aspect_ratio, frameSize.width, frameSize.height, viewZoom === "fit" ? 100 : Number(viewZoom), state.canvas_width, state.canvas_height);
+  const resolvedBackground = resolveBackground(state, activeScene);
+  const background = !state.background_preview_disabled && resolvedBackground?.enabled && resolvedBackground.preset !== "none" ? resolvedBackground : undefined;
+  const backgroundSource = activeScene && background ? resolveBackgroundSource(state, activeScene, background) : undefined;
+  const backgroundSourceUrl = background?.source_mode === "custom_image" ? background.custom_image_url : backgroundSource ? getLayerImageUrl(backgroundSource) : undefined;
   const selectedLayerObj =
     activeScene?.layers.find((l) => l.id === selectedLayerId) || activeScene?.layers[0] || null;
   const camera = activeScene ? evaluateCameraTransform(activeScene, state.playhead_sec) : { zoom: 1.0, panX: 0, panY: 0 };
@@ -439,6 +457,7 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
             }
           }}
         >
+          {activeScene && background && <BackgroundPreview key={`${activeScene.id}:${backgroundSourceUrl || "color"}`} settings={background} sourceUrl={backgroundSourceUrl} sourceLayer={backgroundSource} width={viewport.width} height={viewport.height} progress={(state.playhead_sec - activeScene.start_time_sec) / Math.max(.001, activeScene.duration_sec)} />}
           {/* Camera Viewport Stage (Separates camera zoom/pan from layer transforms) */}
           <div
             className="w-full h-full relative overflow-hidden"
@@ -457,6 +476,10 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
                 .map((layer) => {
                   const isSelected = selectedLayerId === layer.id;
                   const evaluated = evaluateLayerTransform(layer, activeScene, state.playhead_sec);
+                  if (layer.visible === false || (state.track_states?.Visuals ?? state.track_states?.visuals)?.visible === false || (activeScene.layers.indexOf(layer) > 0 && (state.track_states?.["Layer 2"] ?? state.track_states?.layer2)?.visible === false)) return null;
+                  const imageUrl = getLayerImageUrl(layer);
+                  const dimensions = imageSizes[imageUrl];
+                  const fitted = background && dimensions ? foregroundSize(dimensions.width, dimensions.height, viewport.width, viewport.height, background.foreground_fit) : undefined;
 
                   // Keep active layer or selected layer in paused mode
                   if (!evaluated.isActive && !(isSelected && !state.is_playing)) return null;
@@ -469,23 +492,26 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
                         previewOnly ? "" : isSelected ? "ring-2 ring-indigo-500 shadow-xl" : "hover:ring-1 hover:ring-white/40"
                       }`}
                       style={{
-                        left: `calc(50% + ${evaluated.x}%)`,
-                        top: `calc(50% + ${evaluated.y}%)`,
+                        left: `calc(${background ? background.foreground_x * 100 : 50}% + ${evaluated.x}%)`,
+                        top: `calc(${background ? background.foreground_y * 100 : 50}% + ${evaluated.y}%)`,
                         transform: `translate(-50%, -50%) scale(${evaluated.scale}) rotate(${evaluated.rotation}deg)`,
                         opacity: evaluated.opacity,
                         filter: evaluated.blur > 0 ? `blur(${evaluated.blur}px)` : "none",
                         zIndex: layer.transform.z_index,
-                        maxWidth: "90%",
-                        maxHeight: "90%",
+                        maxWidth: background ? "none" : "90%",
+                        maxHeight: background ? "none" : "90%",
+                        ...(fitted ?? {}),
+                        boxShadow: background?.edge_shadow ? `0 0 ${viewport.height * .04}px rgba(0,0,0,${background.edge_shadow})` : undefined,
                       }}
                     >
                       {/* Visual Layer Image with ClipPath support for rect/polygon/pen crops */}
                       <img
-                        src={layer.image_url}
+                        src={imageUrl}
+                        onLoad={event => { const image = event.currentTarget; if (image.naturalWidth && image.naturalHeight) setImageSizes(prev => prev[imageUrl]?.width === image.naturalWidth && prev[imageUrl]?.height === image.naturalHeight ? prev : { ...prev, [imageUrl]: { width: image.naturalWidth, height: image.naturalHeight } }); }}
                         alt={layer.name || "Scene Panel"}
                         className="block object-contain pointer-events-none rounded shadow-md max-w-full max-h-full"
                         style={{
-                          ...(previewOnly ? { maxWidth: viewport.width * .9, maxHeight: viewport.height * .9 } : {}),
+                          ...(fitted ? { width: fitted.width, height: fitted.height, maxWidth: "none", maxHeight: "none" } : background ? { maxWidth: viewport.width, maxHeight: viewport.height } : previewOnly ? { maxWidth: viewport.width * .9, maxHeight: viewport.height * .9 } : {}),
                           clipPath: layer.clip_path
                             ? layer.clip_path
                             : layer.polygon_points && layer.polygon_points.length >= 3

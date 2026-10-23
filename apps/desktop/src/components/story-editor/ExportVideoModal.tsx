@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { api } from "@panelflow/api-client";
 import type { Project, StoryEditorState, RenderJob } from "@panelflow/shared-types";
 import { Icons, Button, Badge, ProgressBar } from "@panelflow/ui";
+import { YouTubePackagingModal } from "./YouTubePackagingModal";
 
 interface ExportVideoModalProps {
   isOpen: boolean;
@@ -56,6 +57,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
   const [cancelling, setCancelling] = useState<boolean>(false);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [copiedPath, setCopiedPath] = useState<boolean>(false);
+  const [showPackagingModal, setShowPackagingModal] = useState<boolean>(false);
 
   const pollIntervalRef = useRef<any>(null);
 
@@ -565,6 +567,29 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
                 </div>
               </div>
 
+              {/* YouTube Thumbnail & Packaging Action Banner */}
+              <div className="p-4 bg-gradient-to-r from-red-950/40 via-zinc-900 to-indigo-950/40 border border-zinc-800/90 rounded-xl flex items-center justify-between gap-4">
+                <div className="space-y-0.5">
+                  <div className="text-xs font-bold text-zinc-100 flex items-center gap-1.5">
+                    <Icons.Sparkles className="w-4 h-4 text-rose-400" />
+                    <span>Next: YouTube Thumbnail & Video Packaging</span>
+                    <Badge variant="accent" className="text-[9px]">ComfyUI AI</Badge>
+                  </div>
+                  <p className="text-[11px] text-zinc-400">
+                    Generate an AI anime thumbnail via ComfyUI and copy SEO titles, chapter timestamps & tags.
+                  </p>
+                </div>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => setShowPackagingModal(true)}
+                  className="bg-red-600 hover:bg-red-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-red-600/30 shrink-0"
+                >
+                  <Icons.Sparkles className="w-3.5 h-3.5" />
+                  <span>Create Thumbnail & Metadata</span>
+                </Button>
+              </div>
+
               {/* Output Path Box */}
               {outputPath && (
                 <div className="p-3 bg-zinc-900/40 border border-zinc-800/80 rounded-xl flex items-center justify-between text-xs font-mono text-zinc-400">
@@ -635,10 +660,25 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
               >
                 Done
               </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setShowPackagingModal(true)}
+                className="text-xs flex items-center gap-1.5 border-zinc-700 text-zinc-200"
+              >
+                <Icons.Sparkles className="w-3.5 h-3.5 text-rose-400" />
+                <span>YouTube Packaging</span>
+              </Button>
             </div>
           )}
         </div>
       </div>
+      <YouTubePackagingModal
+        isOpen={showPackagingModal}
+        onClose={() => setShowPackagingModal(false)}
+        project={project}
+        profileName={selectedProfile}
+      />
     </div>
   );
 };

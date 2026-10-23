@@ -314,6 +314,10 @@ class CharacterRecord(Base):
     role = Column(String(32), default="UNKNOWN", nullable=False)
     first_panel_id = Column(String(36), nullable=True)
     reference_panel_ids = Column(JSON, default=list, nullable=False)
+    reference_asset_id = Column(String(36), nullable=True)
+    generation_params = Column(JSON, default=dict, nullable=False)
+    proposed_changes = Column(JSON, default=dict, nullable=False)
+    change_status = Column(String(32), default="NONE", nullable=False)
     status = Column(String(32), default="LIKELY", nullable=False)
     manual_override = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=utc_now, nullable=False)
@@ -527,6 +531,7 @@ class AssetRecord(Base):
     height = Column(Integer, default=0, nullable=False)
     byte_size = Column(BigInteger, default=0, nullable=False)
     sha256 = Column(String(64), default="", nullable=False, index=True)
+    provenance = Column(JSON, default=dict, nullable=False)
     status = Column(String(32), default="READY", nullable=False)
     created_at = Column(DateTime, default=utc_now, nullable=False)
 

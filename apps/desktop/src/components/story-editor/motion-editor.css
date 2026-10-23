@@ -15,9 +15,10 @@
 .pf-editor-main { gap: 10px; padding: 8px 10px 8px 0; }
 .pf-editor-sidebar {
   width: clamp(320px, 25vw, 410px);
-  display: grid;
-  grid-template-rows: minmax(145px, .88fr) minmax(180px, 1fr);
-  gap: 8px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
 }
 .pf-editor-source, .pf-editor-inspector {
   background: linear-gradient(135deg, #111520, #0c0f17);
@@ -66,6 +67,5 @@
 }
 @media (max-height: 740px) {
   .pf-editor-timeline-region { flex-basis: 215px; }
-  .pf-editor-sidebar { grid-template-rows: minmax(120px, .8fr) minmax(145px, 1fr); }
   .pf-editor-main { padding-top: 5px; padding-bottom: 5px; }
 }

@@ -4,7 +4,7 @@ import { historyShortcut } from "../../history/shortcuts";
 import { api } from "@panelflow/api-client";
 import { Icons } from "@panelflow/ui";
 import type { Page, Panel } from "@panelflow/shared-types";
-import { boundsOf, clamp, panelSelector, splitSelector, transformSelector, validPolygon } from "./selectorGeometry";
+import { addVertexToPolygon, boundsOf, clamp, convertPolygonToRect, convertRectToPolygon, panelSelector, removeVertexFromPolygon, splitSelector, transformSelector, validPolygon } from "./selectorGeometry";
 import type { Bounds, Handle, Point, Selector } from "./selectorGeometry";
 
 interface Props {
@@ -12,7 +12,16 @@ interface Props {
   pages?: Page[]; onSelectPage?: (pageId: string) => void;
   initialView?: SetupView;
   onSelectPanel: (panel: Panel) => void; onPanelSaved: (panel: Panel) => void;
-  onPanelsChanged?: (panels: Panel[]) => void; onAddPanel: (page: Page, panel: Panel) => void;
+  onPanelsChanged?: (panels: Panel[]) => void;
+  onAddPanel: (page: Page, panel: Panel, customCrop?: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    crop_type?: "rect" | "polygon" | "pen";
+    polygon_points?: Array<{ x: number; y: number }>;
+    clip_path?: string;
+  }) => void;
   drafts?: React.MutableRefObject<Record<string, SetupDraft>>;
   /** Called BEFORE any permanent panel modification (split/delete/save). 
    * The source component pushes a combined snapshot (scenes + panels via updateEditorState at the parent) for undo support. */
@@ -149,7 +158,12 @@ function SelectorEditor({ projectId, page, panel, panels, onPanelSaved, onPanels
   const [message, setMessage] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [parts, setParts] = useState(2);
-  const [history] = useState(() => new SnapshotHistory<Selector[]>({ clone: structuredClone }));
+  const [history] = useState(() => new SnapshotHistory<Selector[]>({
+    clone: (items) => items.map(s => ({
+      ...s,
+      points: s.points ? s.points.map(p => ({ x: p.x, y: p.y })) : undefined,
+    })),
+  }));
   const svg = useRef<SVGSVGElement>(null);
   const pageSvg = useRef<SVGSVGElement>(null);
   const pageScroll = useRef<HTMLDivElement>(null);
@@ -193,6 +207,7 @@ function SelectorEditor({ projectId, page, panel, panels, onPanelSaved, onPanels
   useEffect(() => { onScaleChange(Math.round((view === "pages" ? scales.page : scales.panel) * 100)); }, [view, scales.page, scales.panel, onScaleChange]);
   useEffect(() => { pageSvg.current?.querySelector('[data-selected-panel="true"]')?.scrollIntoView?.({ block: "nearest", inline: "nearest" }); }, [panel.id, view]);
   const serial = useRef(0);
+  const [selectedVertex, setSelectedVertex] = useState<number | null>(null);
   const drag = useRef<{ pointer: number; start: Point; selector?: Selector; handle?: Handle; vertex?: number; before: Selector[]; drawing?: "rect" | "pen" } | null>(null);
   const active = selectors.find(s => s.id === activeId);
   const dirty = JSON.stringify(selectors) !== JSON.stringify(initialSelectors);
@@ -224,6 +239,7 @@ function SelectorEditor({ projectId, page, panel, panels, onPanelSaved, onPanels
   const beginHandle = (event: React.PointerEvent, selector: Selector, handle: Handle, vertex?: number) => {
     if (busy || event.button !== 0 || tool !== "select") return;
     event.stopPropagation(); event.preventDefault(); setActiveId(selector.id);
+    if (vertex !== undefined) setSelectedVertex(vertex);
     lockedViewport.current = panelViewport;
     drag.current = { pointer: event.pointerId, start: point(event), selector, handle, vertex, before: selectors };
     capture(event);
@@ -278,16 +294,93 @@ function SelectorEditor({ projectId, page, panel, panels, onPanelSaved, onPanels
     if (!selectors.some(s => s.id === activeId && s.width >= 4 && s.height >= 4)) setActiveId(gesture.before[0]?.id || "");
     if (gesture.drawing) setTool("select");
   };
-  const save = async () => {
-    if (busy) return;
-    if (points.length || !selectors.length || selectors.length > 64) { setMessage("Finish or clear the unfinished shape; save between 1 and 64 selectors."); return; }
+
+  const handleConvertToPolygon = () => {
+    if (!active || busy) return;
+    onPreMutation?.();
+    try {
+      const converted = convertRectToPolygon(active);
+      remember(selectors.map(s => s.id === active.id ? converted : s));
+      setSelectedVertex(0);
+      setMessage("Converted to custom polygon. Drag vertices independently or click + to add vertices.");
+    } catch (err) {
+      setMessage((err as Error).message);
+    }
+  };
+
+  const handleConvertToRect = () => {
+    if (!active || busy) return;
+    onPreMutation?.();
+    try {
+      const converted = convertPolygonToRect(active);
+      remember(selectors.map(s => s.id === active.id ? converted : s));
+      setSelectedVertex(null);
+      setMessage("Reset to bounding rectangle.");
+    } catch (err) {
+      setMessage((err as Error).message);
+    }
+  };
+
+  const handleAddVertex = () => {
+    if (!active || busy) return;
+    onPreMutation?.();
+    try {
+      const targetIdx = selectedVertex !== null ? selectedVertex : undefined;
+      const updated = addVertexToPolygon(active, targetIdx);
+      remember(selectors.map(s => s.id === active.id ? updated : s));
+      const nextIdx = targetIdx !== undefined ? targetIdx + 1 : (updated.points?.length || 1) - 1;
+      setSelectedVertex(nextIdx);
+      setMessage(`Added vertex (${updated.points?.length || 0} vertices total). Drag to position.`);
+    } catch (err) {
+      setMessage((err as Error).message);
+    }
+  };
+
+  const handleAddVertexAtMidpoint = (edgeIndex: number) => {
+    if (!active || busy) return;
+    onPreMutation?.();
+    try {
+      const updated = addVertexToPolygon(active, edgeIndex);
+      remember(selectors.map(s => s.id === active.id ? updated : s));
+      setSelectedVertex(edgeIndex + 1);
+      setMessage(`Added vertex on edge (${updated.points?.length || 0} vertices total).`);
+    } catch (err) {
+      setMessage((err as Error).message);
+    }
+  };
+
+  const handleRemoveVertexAt = (vertexIndex: number) => {
+    if (!active || !active.points || active.points.length <= 3 || busy) {
+      setMessage("A polygon must have at least 3 vertices.");
+      return;
+    }
+    onPreMutation?.();
+    try {
+      const updated = removeVertexFromPolygon(active, vertexIndex);
+      remember(selectors.map(s => s.id === active.id ? updated : s));
+      setSelectedVertex(null);
+      setMessage(`Removed vertex (${updated.points?.length || 0} vertices remaining).`);
+    } catch (err) {
+      setMessage((err as Error).message);
+    }
+  };
+
+  const handleRemoveSelectedVertex = () => {
+    if (!active || !active.points) return;
+    const idx = selectedVertex !== null && selectedVertex < active.points.length ? selectedVertex : active.points.length - 1;
+    handleRemoveVertexAt(idx);
+  };
+
+  const save = async (): Promise<Panel | null> => {
+    if (busy) return null;
+    if (points.length || !selectors.length || selectors.length > 64) { setMessage("Finish or clear the unfinished shape; save between 1 and 64 selectors."); return null; }
     const payload = selectors.map(s => {
       const x = Math.floor(s.x), y = Math.floor(s.y);
       return { x, y, width: Math.ceil(s.x + s.width) - x, height: Math.ceil(s.y + s.height) - y,
         points: s.points?.map(p => [Math.round(p.x), Math.round(p.y)] as [number, number]) };
     });
     if (payload.some(s => s.width < 4 || s.height < 4 || (s.points && !validPolygon(s.points.map(([x, y]) => ({ x, y })))))) {
-      setMessage("Each selector must have usable bounds and a non-crossing shape."); return;
+      setMessage("Each selector must have usable bounds and a non-crossing shape."); return null;
     }
     setSaving(true); setMessage("");
     try {
@@ -300,8 +393,32 @@ function SelectorEditor({ projectId, page, panel, panels, onPanelSaved, onPanels
       if (drafts) delete drafts.current[draftKey];
       if (first) onPanelSaved(first);
       onPanelsChanged?.(all); setMessage("Selectors saved as panels.");
-    } catch (error) { setMessage(error instanceof Error ? error.message : "Could not save selectors. Please retry."); }
+      return first || null;
+    } catch (error) { setMessage(error instanceof Error ? error.message : "Could not save selectors. Please retry."); return null; }
     finally { setSaving(false); }
+  };
+
+  const handleAddActiveToTimeline = async () => {
+    let targetPanel = panel;
+    if (dirty) {
+      const saved = await save();
+      if (!saved) return;
+      targetPanel = saved;
+    }
+    const activeSelector = selectors.find(s => s.id === activeId);
+    const customCrop = activeSelector?.points && activeSelector.points.length >= 3 ? {
+      x: activeSelector.x,
+      y: activeSelector.y,
+      width: activeSelector.width,
+      height: activeSelector.height,
+      crop_type: "polygon" as const,
+      polygon_points: activeSelector.points.map(p => ({
+        x: Math.max(0, Math.min(100, Math.round(((p.x - activeSelector.x) / activeSelector.width) * 1000) / 10)),
+        y: Math.max(0, Math.min(100, Math.round(((p.y - activeSelector.y) / activeSelector.height) * 1000) / 10)),
+      })),
+      clip_path: `polygon(${activeSelector.points.map(p => `${Math.max(0, Math.min(100, Math.round(((p.x - activeSelector.x) / activeSelector.width) * 1000) / 10))}% ${Math.max(0, Math.min(100, Math.round(((p.y - activeSelector.y) / activeSelector.height) * 1000) / 10))}%`).join(", ")})`,
+    } : undefined;
+    onAddPanel(page, targetPanel, customCrop);
   };
   const deletePanel = async () => {
     setSaving(true); setMessage("");
@@ -326,6 +443,9 @@ function SelectorEditor({ projectId, page, panel, panels, onPanelSaved, onPanels
     ["s", active.x + active.width / 2, active.y + active.height], ["sw", active.x, active.y + active.height],
     ["w", active.x, active.y + active.height / 2], ["center", active.x + active.width / 2, active.y + active.height / 2],
   ] : [];
+  const activeHandles = !active ? [] : active.kind === "polygon"
+    ? handles.filter(([h]) => h === "center")
+    : handles;
   const renderSurface = (surface: "page" | "panel") => {
     const isPage = surface === "page", bounds = isPage ? pageBounds : panelViewport;
     const radius = 5 / (isPage ? scales.page : scales.panel);
@@ -363,7 +483,7 @@ function SelectorEditor({ projectId, page, panel, panels, onPanelSaved, onPanels
             <rect x={s.x} y={s.y} width={s.width} height={s.height} fill="rgba(99,102,241,.12)" stroke={activeId === s.id ? "#a5b4fc" : "#22d3ee"} strokeWidth={2} vectorEffect="non-scaling-stroke" />}
           <text x={s.x + radius} y={s.y + radius * 3} fontSize={radius * 2.5} fill="white" stroke="black" strokeWidth={1} paintOrder="stroke" pointerEvents="none">{index + 1}</text>
         </g>)}
-        {tool === "select" && handles.map(([handle, x, y]) => <g key={handle} role="button" tabIndex={busy ? -1 : 0} aria-label={`Selector ${handle} handle`}
+        {tool === "select" && activeHandles.map(([handle, x, y]) => <g key={handle} role="button" tabIndex={busy ? -1 : 0} aria-label={`Selector ${handle} handle`}
           onPointerDown={e => beginHandle(e, active!, handle)} onKeyDown={event => {
             if (busy || !active || !["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
             event.preventDefault(); const step = event.shiftKey ? 10 : 1;
@@ -375,8 +495,66 @@ function SelectorEditor({ projectId, page, panel, panels, onPanelSaved, onPanels
           {handle.length === 2 ? <><circle cx={x} cy={y} r={radius} fill="white" stroke="#6366f1" strokeWidth={2} vectorEffect="non-scaling-stroke" /><circle cx={x} cy={y} r={radius / 3} fill="#6366f1" /></> :
             <rect x={x - radius} y={y - radius / 1.3} width={radius * 2} height={radius * 1.54} rx={radius / 3} fill={handle === "center" ? "#22d3ee" : "white"} stroke="#6366f1" vectorEffect="non-scaling-stroke" />}
         </g>)}
-        {tool === "select" && active?.points?.map((p, index) => <circle key={index} cx={p.x} cy={p.y} r={radius * .75} fill="#22d3ee" stroke="white"
-          aria-label={`Polygon vertex ${index + 1}`} onPointerDown={e => beginHandle(e, active, "center", index)} className="cursor-move" />)}
+        {tool === "select" && active?.kind === "polygon" && active.points && <>
+          {/* Edge Midpoint "+" Handles to insert a vertex along any edge */}
+          {active.points.map((p, index) => {
+            const nextP = active.points![(index + 1) % active.points!.length];
+            const mx = (p.x + nextP.x) / 2;
+            const my = (p.y + nextP.y) / 2;
+            return <g key={`edge-mid-${index}`} role="button" tabIndex={busy ? -1 : 0}
+              aria-label={`Add vertex on edge ${index + 1}`}
+              onPointerDown={e => { e.stopPropagation(); handleAddVertexAtMidpoint(index); }}
+              className="cursor-pointer">
+              <circle cx={mx} cy={my} r={radius * 1.8} fill="transparent" />
+              <circle cx={mx} cy={my} r={radius * 0.75} fill="#10b981" stroke="#ffffff" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
+              <line x1={mx - radius * 0.35} y1={my} x2={mx + radius * 0.35} y2={my} stroke="#ffffff" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
+              <line x1={mx} y1={my - radius * 0.35} x2={mx} y2={my + radius * 0.35} stroke="#ffffff" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
+            </g>;
+          })}
+          {/* Draggable Independent Polygon Vertices */}
+          {active.points.map((p, index) => {
+            const isSelected = selectedVertex === index;
+            return <g key={`vertex-${index}`} role="button" tabIndex={busy ? -1 : 0}
+              aria-label={`Polygon vertex ${index + 1}`} className="cursor-move"
+              onPointerDown={e => beginHandle(e, active, "center", index)}
+              onClick={e => { e.stopPropagation(); setSelectedVertex(index); }}
+              onDoubleClick={e => { e.stopPropagation(); handleRemoveVertexAt(index); }}
+              onContextMenu={e => { e.preventDefault(); e.stopPropagation(); handleRemoveVertexAt(index); }}>
+              <circle cx={p.x} cy={p.y} r={radius * 2} fill="transparent" />
+              <circle cx={p.x} cy={p.y} r={radius * 1.15} fill={isSelected ? "#f59e0b" : "#22d3ee"} stroke="#ffffff" strokeWidth={2} vectorEffect="non-scaling-stroke" />
+              <circle cx={p.x} cy={p.y} r={radius * 0.45} fill={isSelected ? "#ffffff" : "#0e7490"} vectorEffect="non-scaling-stroke" />
+            </g>;
+          })}
+        </>}
+        {/* Floating action button directly below the active selector */}
+        {tool === "select" && active && <g className="pf-floating-box-controls" style={{ userSelect: "none" }}>
+          {active.kind === "rect" ? (
+            <g role="button" tabIndex={busy ? -1 : 0} aria-label="Add custom vertices to selector"
+              onClick={e => { e.stopPropagation(); handleConvertToPolygon(); }} className="cursor-pointer">
+              <rect x={active.x + active.width / 2 - radius * 12} y={active.y + active.height + radius * 2}
+                width={radius * 24} height={radius * 4} rx={radius * 2} fill="#18181b" stroke="#6366f1" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
+              <text x={active.x + active.width / 2} y={active.y + active.height + radius * 4.6} fontSize={radius * 1.8}
+                fontWeight="bold" fill="#c7d2fe" textAnchor="middle" pointerEvents="none">✦ Custom Vertices</text>
+            </g>
+          ) : (
+            <g>
+              <g role="button" tabIndex={busy ? -1 : 0} aria-label="Add vertex to polygon"
+                onClick={e => { e.stopPropagation(); handleAddVertex(); }} className="cursor-pointer">
+                <rect x={active.x + active.width / 2 - radius * 13} y={active.y + active.height + radius * 2}
+                  width={radius * 12} height={radius * 4} rx={radius * 2} fill="#18181b" stroke="#10b981" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
+                <text x={active.x + active.width / 2 - radius * 7} y={active.y + active.height + radius * 4.6} fontSize={radius * 1.7}
+                  fontWeight="bold" fill="#a7f3d0" textAnchor="middle" pointerEvents="none">+ Add Vertex</text>
+              </g>
+              <g role="button" tabIndex={busy ? -1 : 0} aria-label="Convert polygon to rectangle"
+                onClick={e => { e.stopPropagation(); handleConvertToRect(); }} className="cursor-pointer">
+                <rect x={active.x + active.width / 2 + radius * 0.5} y={active.y + active.height + radius * 2}
+                  width={radius * 12.5} height={radius * 4} rx={radius * 2} fill="#18181b" stroke="#71717a" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
+                <text x={active.x + active.width / 2 + radius * 6.75} y={active.y + active.height + radius * 4.6} fontSize={radius * 1.7}
+                  fontWeight="bold" fill="#d4d4d8" textAnchor="middle" pointerEvents="none">↺ To Rectangle</text>
+              </g>
+            </g>
+          )}
+        </g>}
         {points.length > 0 && <polyline points={points.map(p => `${p.x},${p.y}`).join(" ")} fill="rgba(34,211,238,.12)" stroke="#22d3ee" strokeWidth={2} vectorEffect="non-scaling-stroke" pointerEvents="none" />}
       </svg>;
   };
@@ -393,9 +571,30 @@ function SelectorEditor({ projectId, page, panel, panels, onPanelSaved, onPanels
   const renderPanel = () => surface("panel");
   return <div className="contents" onKeyDown={event => {
     const action = historyShortcut(event);
-    if (!action) return;
-    // The focused draft owns the shortcut even at its history boundary.
-    event.preventDefault(); event.stopPropagation(); restoreDraft(action);
+    if (action) {
+      event.preventDefault(); event.stopPropagation(); restoreDraft(action);
+      return;
+    }
+    if ((event.key === "Delete" || event.key === "Backspace") && active?.kind === "polygon" && selectedVertex !== null) {
+      if (active.points && active.points.length > 3) {
+        event.preventDefault(); event.stopPropagation();
+        handleRemoveVertexAt(selectedVertex);
+      }
+      return;
+    }
+    if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key) && active?.points && selectedVertex !== null) {
+      event.preventDefault(); event.stopPropagation();
+      const step = event.shiftKey ? 10 : 1;
+      const dx = event.key === "ArrowLeft" ? -step : event.key === "ArrowRight" ? step : 0;
+      const dy = event.key === "ArrowUp" ? -step : event.key === "ArrowDown" ? step : 0;
+      const nextPoints = active.points.map((p, i) => i === selectedVertex ? {
+        x: clamp(p.x + dx, editingBounds.x, editingBounds.x + editingBounds.width),
+        y: clamp(p.y + dy, editingBounds.y, editingBounds.y + editingBounds.height),
+      } : p);
+      const updated = { ...active, ...boundsOf(nextPoints), points: nextPoints };
+      remember(selectors.map(s => s.id === active.id ? updated : s));
+      return;
+    }
   }}>
     <div className="pf-setup-editing-body">
     <fieldset disabled={busy} aria-label="Setup tools" className="pf-setup-tools">
@@ -435,19 +634,63 @@ function SelectorEditor({ projectId, page, panel, panels, onPanelSaved, onPanels
         {(["vertical", "horizontal"] as const).map(direction => <button key={direction} className={control} type="button" disabled={!active || active.kind !== "rect"} onClick={() => {
           // IMMEDIATE undo snapshot before live selector mutation (split changes selectors locally)
           onPreMutation?.();
-          try { const split = splitSelector(active!, direction, parts); remember(selectors.flatMap(s => s.id === activeId ? split : [s])); setActiveId(split[0].id); }
+          try {
+            const split = splitSelector(active!, direction, parts);
+            remember(selectors.flatMap(s => s.id === activeId ? split : [s]));
+            setActiveId(split[0].id);
+            setMessage(`Split into ${parts} selectors. Click 'Save selectors' to create new panels in Source Pages.`);
+          }
           catch (error) { setMessage((error as Error).message); }
         }}>Split {direction === "vertical" ? "vertically" : "horizontally"}</button>)}
+        {active?.kind === "rect" ? (
+          <button className={control} type="button" onClick={handleConvertToPolygon}>Custom vertices</button>
+        ) : (
+          <>
+            <button className={control} type="button" onClick={handleAddVertex}>+ Add vertex</button>
+            <button className={control} type="button" disabled={!active?.points || active.points.length <= 3} onClick={handleRemoveSelectedVertex}>Remove vertex</button>
+            <button className={control} type="button" onClick={handleConvertToRect}>Convert to rectangle</button>
+          </>
+        )}
         <button className={control} type="button" disabled={!active || selectors.length <= 1} onClick={() => {
           // IMMEDIATE undo snapshot before live selector deletion
           onPreMutation?.();
-          const next = selectors.filter(s => s.id !== activeId); remember(next); setActiveId(next[0].id); 
+          try {
+            const next = selectors.filter(s => s.id !== activeId);
+            remember(next);
+            setActiveId(next[0].id);
+          } catch (error) {
+            setMessage((error as Error).message);
+          }
         }}>Delete selector</button>
         <button className={control} type="button" disabled={isNew} onClick={() => setConfirmDelete(true)}>Delete panel</button>
-        <span className="pf-setup-status" aria-live="polite">{dirty ? "Unsaved" : ""}</span>
-        <button className={`${control} pf-setup-save`} type="button" onClick={() => void save()} disabled={!dirty || !!points.length}>{busy ? "Saving…" : "Save selectors"}</button>
-        <button className={control} type="button" disabled={isNew || dirty || !!points.length} onClick={() => onAddPanel(page, panel)}>Add panel to timeline</button>
+        <span className="pf-setup-status text-amber-300 font-medium" aria-live="polite">{dirty ? (selectors.length > 1 ? `● Unsaved (${selectors.length} parts ready)` : "● Unsaved changes") : ""}</span>
+        <button
+          aria-label="Save selectors"
+          className={`${control} pf-setup-save ${dirty ? "bg-indigo-600 hover:bg-indigo-500 text-white font-semibold ring-2 ring-indigo-400/80 shadow" : ""}`}
+          type="button"
+          onClick={() => void save()}
+          disabled={!dirty || !!points.length}
+        >
+          {busy ? "Saving…" : "Save selectors"}
+        </button>
+        <button className={control} type="button" disabled={isNew || !!points.length || busy} onClick={() => void handleAddActiveToTimeline()}>Add panel to timeline</button>
       </fieldset>
+      {dirty && selectors.length > 1 && (
+        <div role="status" className="flex items-center justify-between gap-3 bg-indigo-950/80 border border-indigo-500/40 text-indigo-200 text-xs px-3 py-1.5 rounded mt-2">
+          <span className="flex items-center gap-1.5">
+            <span className="text-amber-400 font-bold">ℹ</span>
+            <span>Split created <strong>{selectors.length} selectors</strong> on canvas. Click <strong>Save selectors</strong> to apply and display them in the Source Pages panel gallery.</span>
+          </span>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void save()}
+            className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-2.5 py-1 rounded text-xs transition-colors shrink-0 shadow cursor-pointer"
+          >
+            {busy ? "Saving…" : "Save selectors now"}
+          </button>
+        </div>
+      )}
       {confirmDelete && <div role="alert" className="text-xs flex flex-wrap items-center gap-2">Delete this detected panel? Existing video scenes keep their saved composition.
         <button className={control} disabled={busy} onClick={() => void deletePanel()}>Confirm delete panel</button><button className={control} disabled={busy} onClick={() => setConfirmDelete(false)}>Cancel</button>
       </div>}

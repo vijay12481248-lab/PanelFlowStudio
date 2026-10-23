@@ -11,6 +11,6 @@
     "build": "npm run build --workspaces",
     "engine": "python -m uvicorn engine.api.app:app --host 127.0.0.1 --port 8765 --reload --no-access-log",
     "test:engine": "pytest tests -v",
-    "test": "npm --workspace=@panelflow/history test && npx tsx --test packages/api-client/src/history.test.ts apps/desktop/src/history/__tests__/shortcuts.test.ts"
+    "test": "npm --workspace=@panelflow/history test && npx tsx --test packages/api-client/src/history.test.ts apps/desktop/src/history/__tests__/shortcuts.test.ts apps/desktop/src/__tests__/desktopDragDrop.test.ts apps/desktop/src/components/story-editor/__tests__/panelDrag.test.ts apps/desktop/src/components/story-editor/__tests__/sourceBrowserReference.test.tsx apps/desktop/src/components/story-editor/__tests__/timelineInteractions.test.tsx apps/desktop/src/components/story-editor/__tests__/backgroundSettings.test.ts apps/desktop/src/components/story-editor/__tests__/backgroundUI.test.tsx apps/desktop/src/components/story-editor/__tests__/youtubePackaging.test.tsx apps/desktop/src/components/__tests__/autoPilotModal.test.tsx"
   }
 }

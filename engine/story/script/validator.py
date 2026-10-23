@@ -18,13 +18,6 @@ class ScriptFaithfulnessValidator:
         text_region_id_set = {u.text_region_id for u in narrative.utterances}
         known_character_ids = {c.character_id for c in narrative.characters} | {"NARRATOR", "SFX", "UNKNOWN"}
 
-        # Map of valid dialogue text in project
-        source_texts = [u.corrected_text.lower().strip() for u in narrative.utterances if u.corrected_text]
-        beat_summaries = [b.summary.lower().strip() for b in narrative.beats if b.summary]
-        event_descriptions = [e.description.lower().strip() for e in narrative.events if e.description]
-        visual_summaries = [o.visual_summary.lower().strip() for o in narrative.observations if o.visual_summary]
-        visual_summaries += [s.summary.lower().strip() for s in narrative.scenes if s.summary]
-
         supported_count = 0
         weakly_supported_count = 0
         unsupported_count = 0
@@ -51,6 +44,28 @@ class ScriptFaithfulnessValidator:
             has_direct_panels = len(ev.panel_ids) > 0
             has_direct_text = len(ev.text_region_ids) > 0
 
+            # Verify only the cited panels/regions. Chapter-wide word overlap
+            # can otherwise let an unrelated later event support this line.
+            cited_panels = set(ev.panel_ids)
+            cited_regions = set(ev.text_region_ids)
+            source_texts = [
+                (u.corrected_text or u.source_text).lower().strip()
+                for u in narrative.utterances
+                if u.panel_id in cited_panels and (not cited_regions or u.text_region_id in cited_regions)
+            ]
+            beat_summaries = [b.summary.lower().strip() for b in narrative.beats
+                              if b.panel_ids and set(b.panel_ids) <= cited_panels and b.summary]
+            event_descriptions = [e.description.lower().strip() for e in narrative.events
+                                  if e.panel_ids and set(e.panel_ids) <= cited_panels and e.description]
+            visual_summaries = [o.visual_summary.lower().strip() for o in narrative.observations
+                                if o.panel_id in cited_panels and o.visual_summary]
+            visual_summaries += [s.summary.lower().strip() for s in narrative.scenes
+                                 if s.scene_id == seg.scene_id and s.panel_start in cited_panels and s.summary]
+            wrong_regions = [rid for rid in ev.text_region_ids
+                             if not any(u.text_region_id == rid and u.panel_id in cited_panels for u in narrative.utterances)]
+            if wrong_regions:
+                seg_issues.append(f"Text evidence does not belong to cited panels: {wrong_regions}")
+
             # Content verification
             seg_text_clean = seg.text.lower().strip()
             STOP_WORDS = {"this", "that", "with", "from", "they", "them", "then", "have", "were", "been", "will", "would", "could", "should", "your", "what", "when", "where", "into", "their", "about", "there"}
@@ -69,10 +84,17 @@ class ScriptFaithfulnessValidator:
             )
 
             # Check if completely ungrounded (< 20% word overlap and no substring match)
-            if invalid_panels or invalid_regions or (seg.speaker_character_id and seg.speaker_character_id not in known_character_ids):
+            is_spoken = getattr(seg.type, "value", seg.type) in ("NARRATOR", "CHARACTER_DIALOGUE")
+            if not is_spoken:
+                # Structural timing and production cues may intentionally have no text.
+                seg.faithfulness_status = "SUPPORTED"
+                supported_count += 1
+            elif (invalid_panels or invalid_regions or wrong_regions
+                    or (is_spoken and not seg.text.strip())
+                    or (seg.speaker_character_id and seg.speaker_character_id not in known_character_ids)):
                 seg.faithfulness_status = "UNSUPPORTED"
                 unsupported_count += 1
-            elif not is_dialogue_match and not is_narrative_match and word_overlap < 0.20:
+            elif is_spoken and not is_dialogue_match and not is_narrative_match and word_overlap < 0.20:
                 seg.faithfulness_status = "UNSUPPORTED"
                 unsupported_count += 1
                 seg_issues.append("Line makes claims with negligible lexical or semantic grounding in source panels, text, or events.")
@@ -102,11 +124,6 @@ class ScriptFaithfulnessValidator:
                     unsupported_count += 1
                     seg_issues.append("Narrator line has no supporting panel or beat evidence.")
 
-            else:
-                # SFX / Pause / Transition
-                seg.faithfulness_status = "SUPPORTED"
-                supported_count += 1
-
             if seg_issues:
                 issues.append({
                     "segment_id": seg.segment_id,
@@ -117,7 +134,10 @@ class ScriptFaithfulnessValidator:
 
         total = len(script.segments)
         coverage_score = round(float(supported_count + (0.5 * weakly_supported_count)) / float(max(1, total)), 3)
-        passed = unsupported_count == 0
+        has_speech = any(s.type in ("NARRATOR", "CHARACTER_DIALOGUE") and s.text.strip() for s in script.segments)
+        passed = total > 0 and has_speech and unsupported_count == 0
+        if not has_speech:
+            issues.append({"status": "UNSUPPORTED", "reasons": ["Script contains no spoken content."]})
 
         # Update quality metrics on script
         script.quality_metrics = {

@@ -14,8 +14,9 @@ export function createEmptyEditorState(projectId: string): StoryEditorState {
 }
 
 // Viewport zoom changes only the workspace preview, never persisted layer transforms.
-export function fitCompositionFrame(ratio: StoryEditorState["aspect_ratio"], availableWidth: number, availableHeight: number, zoomPercent = 100) {
-  const aspect = ratio === "9:16" ? 9 / 16 : ratio === "1:1" ? 1 : 16 / 9;
+export function fitCompositionFrame(ratio: StoryEditorState["aspect_ratio"], availableWidth: number, availableHeight: number, zoomPercent = 100, customWidth = 1920, customHeight = 1080) {
+  const aspect = ratio === "custom" && Number.isFinite(customWidth) && Number.isFinite(customHeight) && customWidth > 0 && customHeight > 0
+    ? customWidth / customHeight : ratio === "4:5" ? 4 / 5 : ratio === "9:16" ? 9 / 16 : ratio === "1:1" ? 1 : 16 / 9;
   const width = Math.max(1, Number.isFinite(availableWidth) ? availableWidth : 1);
   const height = Math.max(1, Number.isFinite(availableHeight) ? availableHeight : 1);
   const zoom = Number.isFinite(zoomPercent) ? Math.max(25, Math.min(200, zoomPercent)) / 100 : 1;

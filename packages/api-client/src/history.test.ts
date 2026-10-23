@@ -304,12 +304,30 @@ test("story, character, scene, script and storyboard methods route through revis
 
     // updateCharacter
     calls.length = 0;
-    const updatedChar = await client.updateCharacter("p", "char-1", { display_name: "Hero" });
+    const updatedChar = await client.updateCharacter("p", "char-1", {
+      display_name: "Hero",
+      reference_asset_id: "asset-1",
+      generation_params: { seed: 123 },
+      proposed_changes: { description: "Updated" },
+      change_status: "PENDING_REVIEW",
+    });
     assert.equal(updatedChar.id, "char-1");
     const cmdUpdChar = calls.find(c => c.endpoint.endsWith("/history/commands"));
     assert.equal(cmdUpdChar.body.type, "character.update");
     assert.equal(cmdUpdChar.body.input.character_id, "char-1");
     assert.equal(cmdUpdChar.body.input.display_name, "Hero");
+    assert.equal(cmdUpdChar.body.input.reference_asset_id, "asset-1");
+    assert.deepEqual(cmdUpdChar.body.input.generation_params, { seed: 123 });
+    assert.deepEqual(cmdUpdChar.body.input.proposed_changes, { description: "Updated" });
+    assert.equal(cmdUpdChar.body.input.change_status, "PENDING_REVIEW");
+
+    // updateCharacter with explicit null unlinking
+    calls.length = 0;
+    await client.updateCharacter("p", "char-1", {
+      reference_asset_id: null,
+    });
+    const cmdUnlink = calls.find(c => c.endpoint.endsWith("/history/commands"));
+    assert.equal(cmdUnlink.body.input.reference_asset_id, null);
 
     // mergeCharacters
     calls.length = 0;

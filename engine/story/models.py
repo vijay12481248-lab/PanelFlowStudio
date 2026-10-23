@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from enum import Enum
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Literal
+from pydantic import ConfigDict, StrictBool, StrictStr, model_validator
 from pydantic import BaseModel, Field
 
 
@@ -233,6 +234,72 @@ class UtteranceEntity(BaseModel):
     provenance: ProvenanceReference = Field(default_factory=ProvenanceReference)
 
 
+class StateApproval(BaseModel):
+    """A recorded creator decision, never inferred from model confidence.
+
+    Frozen records must be replaced with a new decision rather than edited.
+    This data contract is not an authentication boundary; API callers still
+    need to authorize the creator before accepting an APPROVED decision.
+    """
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    status: Literal["PENDING", "APPROVED", "REJECTED"] = "PENDING"
+    approved_by: Optional[str] = None
+
+
+class StateValue(BaseModel):
+    """Absent knowledge is explicit; known None means no owner/location."""
+    model_config = ConfigDict(extra="forbid")
+    known: StrictBool = False
+    value: StrictStr | StrictBool | None = None
+
+    @model_validator(mode="after")
+    def reject_unknown_value(self):
+        if not self.known and self.value is not None:
+            raise ValueError("An unknown state value cannot contain a fact")
+        return self
+
+
+class StateChange(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    domain: Literal["POSSESSION", "LOCATION", "KNOWLEDGE"]
+    subject_id: str = Field(min_length=1)
+    fact_id: Optional[str] = None
+    before: StateValue
+    after: StateValue
+    evidence: ProvenanceReference = Field(default_factory=ProvenanceReference)
+    approval: StateApproval = Field(default_factory=StateApproval)
+
+    @model_validator(mode="after")
+    def validate_domain_values(self):
+        if self.domain == "KNOWLEDGE":
+            if not self.fact_id or not self.fact_id.strip():
+                raise ValueError("Knowledge changes require a fact_id")
+            if any(v.known and type(v.value) is not bool for v in (self.before, self.after)):
+                raise ValueError("Known knowledge values must be boolean")
+        else:
+            if self.fact_id is not None:
+                raise ValueError("Only knowledge changes have a fact_id")
+            if any(v.known and v.value is not None and type(v.value) is not str for v in (self.before, self.after)):
+                raise ValueError("Possession and location values must be IDs or explicit None")
+        return self
+
+
+class WorldState(BaseModel):
+    """Version 1 canonical facts. Missing keys mean unknown, never false/None.
+
+    Possessions map object IDs to owner character IDs (None = unowned).
+    Locations map character IDs to location IDs (None = explicitly nowhere).
+    Knowledge maps character IDs and proposition IDs to established truth.
+    """
+    model_config = ConfigDict(extra="forbid")
+    schema_version: Literal["1.0"] = "1.0"
+    possessions: Dict[str, Optional[StrictStr]] = Field(default_factory=dict)
+    locations: Dict[str, Optional[StrictStr]] = Field(default_factory=dict)
+    knowledge: Dict[str, Dict[str, StrictBool]] = Field(default_factory=dict)
+    evidence: ProvenanceReference = Field(default_factory=ProvenanceReference)
+    approval: StateApproval = Field(default_factory=StateApproval)
+
+
 class EventEntity(BaseModel):
     event_id: str
     event_type: EventType = EventType.OTHER
@@ -244,6 +311,9 @@ class EventEntity(BaseModel):
     description: str = ""
     confidence: float = 0.85
     evidence: ProvenanceReference = Field(default_factory=ProvenanceReference)
+    state_changes: List[StateChange] = Field(default_factory=list)
+    caused_by: List[str] = Field(default_factory=list)
+    enables: List[str] = Field(default_factory=list)
 
 
 class CharacterRelationshipEntity(BaseModel):
@@ -303,6 +373,7 @@ class NarrativeDocument(BaseModel):
     scenes: List[SceneEntity] = Field(default_factory=list)
     beats: List[StoryBeatEntity] = Field(default_factory=list)
     events: List[EventEntity] = Field(default_factory=list)
+    initial_world_state: WorldState = Field(default_factory=WorldState)
     utterances: List[UtteranceEntity] = Field(default_factory=list)
     speaker_attributions: List[SpeakerAttributionEntity] = Field(default_factory=list)
     observations: List[PanelObservationEntity] = Field(default_factory=list)

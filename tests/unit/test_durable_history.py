@@ -1106,14 +1106,29 @@ def test_script_segment_update_and_timing_undo_redo(history, tmp_path):
 
 
 def test_script_approve_undo_redo(history, tmp_path):
-    from engine.database.models import VideoScriptRecord
+    from engine.database.models import NarrativeRecord, ScriptSegmentRecord, VideoScriptRecord
+    from engine.story.models import NarrativeDocument, PanelObservationEntity
     from engine.projects.service import project_service
     engine, service, _ = history
     with Session(engine) as db:
-        script = VideoScriptRecord(id="script-app-1", project_id="p", status="DRAFT", estimated_duration=3.0)
         project = db.get(ProjectRecord, "p")
-        project.current_stage = "STORY_APPROVED"
+        script = VideoScriptRecord(id="script-app-1", project_id="p", status="DRAFT", estimated_duration=3.0)
         db.add(script)
+        db.flush()
+        segment = ScriptSegmentRecord(
+            id="segment-app-1", script_id="script-app-1", project_id="p", scene_id="scene-1",
+            sequence=1, type="NARRATOR", text="The hero reaches the gate.",
+            source_evidence={"panel_ids": ["panel-1"]}, estimated_duration=3.0,
+        )
+        narrative = NarrativeDocument(
+            project_id="p",
+            observations=[PanelObservationEntity(
+                panel_id="panel-1", sequence_global=1, visual_summary="The hero reaches the gate."
+            )],
+        )
+        db.add(NarrativeRecord(id="narrative-app-1", project_id="p", document=narrative.model_dump()))
+        db.add(segment)
+        project.current_stage = "STORY_APPROVED"
         db.commit()
         project_service._write_project_json(project)
 

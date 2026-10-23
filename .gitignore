@@ -36,6 +36,12 @@ ENV/
 # Scratch / debug artifacts
 scratch/*.wav
 scratch/*.png
+scratch/**/*.png
+scratch/**/*.jpg
+scratch/**/*.wav
+scratch/test_audio/
+scratch/panel-drag-investigation/
+scratch/*.json
 scratch/qa_screenshots/
 scratch/narration_test/
 scratch/tts_benchmark/

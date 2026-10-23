@@ -59,3 +59,131 @@ export function panelSelector(panel: Bounds & { id: string; polygon_json?: strin
   } catch { /* Older rectangular records have no contour. */ }
   return { id: panel.id, x: panel.x, y: panel.y, width: panel.width, height: panel.height, kind: points ? "polygon" : "rect", points };
 }
+
+export function convertRectToPolygon(selector: Selector): Selector {
+  const points: Point[] = [
+    { x: Math.round(selector.x), y: Math.round(selector.y) },
+    { x: Math.round(selector.x + selector.width), y: Math.round(selector.y) },
+    { x: Math.round(selector.x + selector.width), y: Math.round(selector.y + selector.height) },
+    { x: Math.round(selector.x), y: Math.round(selector.y + selector.height) },
+  ];
+  return {
+    ...selector,
+    kind: "polygon",
+    points,
+  };
+}
+
+export function convertPolygonToRect(selector: Selector): Selector {
+  const bounds = selector.points && selector.points.length >= 3 ? boundsOf(selector.points) : selector;
+  return {
+    ...selector,
+    x: bounds.x,
+    y: bounds.y,
+    width: bounds.width,
+    height: bounds.height,
+    kind: "rect",
+    points: undefined,
+  };
+}
+
+export function addVertexToPolygon(selector: Selector, targetIndex?: number, point?: Point): Selector {
+  const current = selector.kind !== "polygon" || !selector.points ? convertRectToPolygon(selector) : selector;
+  const pts = [...(current.points || [])];
+  if (pts.length < 3) return selector;
+
+  if (point && targetIndex !== undefined && targetIndex >= 0 && targetIndex <= pts.length) {
+    pts.splice(targetIndex, 0, point);
+  } else if (targetIndex !== undefined && targetIndex >= 0 && targetIndex < pts.length) {
+    const p1 = pts[targetIndex];
+    const p2 = pts[(targetIndex + 1) % pts.length];
+    const midPoint: Point = {
+      x: Math.round((p1.x + p2.x) / 2),
+      y: Math.round((p1.y + p2.y) / 2),
+    };
+    pts.splice(targetIndex + 1, 0, midPoint);
+  } else {
+    let maxDist = -1;
+    let bestIndex = 0;
+    for (let i = 0; i < pts.length; i++) {
+      const p1 = pts[i];
+      const p2 = pts[(i + 1) % pts.length];
+      const dist = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+      if (dist > maxDist) {
+        maxDist = dist;
+        bestIndex = i;
+      }
+    }
+    const p1 = pts[bestIndex];
+    const p2 = pts[(bestIndex + 1) % pts.length];
+    const midPoint: Point = {
+      x: Math.round((p1.x + p2.x) / 2),
+      y: Math.round((p1.y + p2.y) / 2),
+    };
+    pts.splice(bestIndex + 1, 0, midPoint);
+  }
+
+  const bounds = boundsOf(pts);
+  return {
+    ...current,
+    ...bounds,
+    kind: "polygon",
+    points: pts,
+  };
+}
+
+export function removeVertexFromPolygon(selector: Selector, index: number): Selector {
+  if (!selector.points || selector.points.length <= 3) return selector;
+  if (index < 0 || index >= selector.points.length) return selector;
+  const pts = selector.points.filter((_, i) => i !== index);
+  const bounds = boundsOf(pts);
+  return {
+    ...selector,
+    ...bounds,
+    points: pts,
+  };
+}
+
+export function insertVertexAlongEdge(selector: Selector, clickPoint: Point): { selector: Selector; insertedIndex: number } | null {
+  const current = selector.kind !== "polygon" || !selector.points ? convertRectToPolygon(selector) : selector;
+  const pts = [...(current.points || [])];
+  if (pts.length < 3) return null;
+
+  let minDist = Infinity;
+  let bestIndex = -1;
+  let bestPoint = clickPoint;
+
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i];
+    const b = pts[(i + 1) % pts.length];
+    const abx = b.x - a.x;
+    const aby = b.y - a.y;
+    const lenSq = abx * abx + aby * aby;
+    if (lenSq === 0) continue;
+    const apx = clickPoint.x - a.x;
+    const apy = clickPoint.y - a.y;
+    const t = clamp((apx * abx + apy * aby) / lenSq, 0, 1);
+    const projX = a.x + t * abx;
+    const projY = a.y + t * aby;
+    const dist = Math.hypot(clickPoint.x - projX, clickPoint.y - projY);
+    if (dist < minDist) {
+      minDist = dist;
+      bestIndex = i;
+      bestPoint = { x: Math.round(projX), y: Math.round(projY) };
+    }
+  }
+
+  if (bestIndex === -1) return null;
+  const insertAt = bestIndex + 1;
+  pts.splice(insertAt, 0, bestPoint);
+  const bounds = boundsOf(pts);
+  return {
+    selector: {
+      ...current,
+      ...bounds,
+      kind: "polygon",
+      points: pts,
+    },
+    insertedIndex: insertAt,
+  };
+}

@@ -17,7 +17,7 @@ from engine.security.local_api import (
     insecure_local_api_enabled,
 )
 from engine.api.routers import projects, pages, panels, ocr, jobs, adapters, system, story, audio, motion, render, music, comfyui
-from engine.api.routers import history
+from engine.api.routers import history, backgrounds, packaging, autopilot
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("panelflow.engine")
@@ -94,6 +94,7 @@ def create_app(
     app.include_router(system.router)
     app.include_router(projects.router)
     app.include_router(history.router)
+    app.include_router(backgrounds.router)
     app.include_router(pages.router)
     app.include_router(panels.router)
     app.include_router(ocr.router)
@@ -106,6 +107,8 @@ def create_app(
     app.include_router(render.router)
     app.include_router(comfyui.router)
     app.include_router(comfyui.project_router)
+    app.include_router(packaging.router)
+    app.include_router(autopilot.router)
 
     return app
 

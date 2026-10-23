@@ -10,6 +10,7 @@ import uuid
 
 from engine.acquisition.models import PipelineStage
 from engine.database.models import (
+    AssetRecord,
     AudioTimelineRecord,
     CharacterRecord,
     EventRecord,
@@ -75,18 +76,10 @@ def _validate_script(db, project_id: str, script_id: str) -> ScriptValidationRep
         raise KeyError(f"Script not found: {script_id}")
     narrative = _get_narrative(db, project_id)
     if not narrative:
-        return ScriptValidationReport(
-            script_id=script_id,
-            total_segments=len(s_rec.segments),
-            supported_segments=len(s_rec.segments),
-            weakly_supported_segments=0,
-            unsupported_segments=0,
-            coverage_score=1.0,
-            issues=[],
-            passed=True,
-        )
+        raise ValueError("Cannot validate script: No Narrative IR found for project.")
     script_doc = VideoScript(
         script_id=s_rec.id,
+        project_id=s_rec.project_id,
         adaptation_profile=s_rec.adaptation_profile,
         estimated_duration=s_rec.estimated_duration,
         segments=[
@@ -126,7 +119,9 @@ class StoryConfirmStrategy:
         if not narrative:
             raise HistoryFault("VALIDATION", "Cannot approve story: No Narrative IR exists for this project", 422)
 
-        error_warnings = [w for w in narrative.continuity_warnings if w.severity == "ERROR" and not w.resolved]
+        from engine.story.continuity import ContinuityAuditor
+        current_warnings = [*narrative.continuity_warnings, *ContinuityAuditor().audit(narrative)]
+        error_warnings = [w for w in current_warnings if w.severity == "ERROR" and not w.resolved]
         if error_warnings:
             raise HistoryFault(
                 "VALIDATION",
@@ -176,15 +171,43 @@ class StoryConfirmStrategy:
         RetainedAssetStore(project.workspace_path).restore(payload["operation_id"], "before" if forward else "after")
 
 
+VALID_CHANGE_STATUSES = ("NONE", "PENDING_REVIEW", "APPROVED", "REJECTED")
+
+
 class CharacterUpdateStrategy:
     """Update character display name, canonical name, role, aliases, description, or status."""
-    _fields = ("display_name", "canonical_name", "role", "aliases", "description", "status")
+    _fields = (
+        "display_name", "canonical_name", "role", "aliases", "description", "status",
+        "visual_traits", "reference_asset_id", "generation_params", "proposed_changes", "change_status",
+    )
 
     def prepare(self, db, project, input):
         if not isinstance(input, dict) or not isinstance(input.get("_history_operation_id"), str):
             raise HistoryFault("VALIDATION", "History operation is required", 422)
         if not isinstance(input.get("character_id"), str):
             raise HistoryFault("VALIDATION", "Character ID is required", 422)
+
+        if "change_status" in input and input["change_status"] is not None:
+            if input["change_status"] not in VALID_CHANGE_STATUSES:
+                raise HistoryFault("VALIDATION", f"Invalid change_status: {input['change_status']}", 422)
+        if "generation_params" in input and input["generation_params"] is not None:
+            if not isinstance(input["generation_params"], dict):
+                raise HistoryFault("VALIDATION", "generation_params must be an object", 422)
+        if "proposed_changes" in input and input["proposed_changes"] is not None:
+            if not isinstance(input["proposed_changes"], dict):
+                raise HistoryFault("VALIDATION", "proposed_changes must be an object", 422)
+
+        ref_asset = None
+        if "reference_asset_id" in input:
+            ref_id = input["reference_asset_id"]
+            if ref_id is not None:
+                if not isinstance(ref_id, str):
+                    raise HistoryFault("VALIDATION", "reference_asset_id must be a string", 422)
+                ref_asset = db.query(AssetRecord).filter(
+                    AssetRecord.id == ref_id, AssetRecord.project_id == project.id
+                ).first()
+                if not ref_asset:
+                    raise HistoryFault("VALIDATION", f"Reference asset {ref_id} does not exist in project {project.id}", 422)
 
         char = (
             db.query(CharacterRecord)
@@ -194,11 +217,32 @@ class CharacterUpdateStrategy:
         if char is None:
             raise HistoryFault("NOT_FOUND", "Character not found", 404)
 
+        effective_input = dict(input)
+        if ref_asset is not None and ref_asset.provenance:
+            if "generation_params" not in input or input.get("generation_params") is None:
+                asset_gen_params = ref_asset.provenance.get("generation_params")
+                if asset_gen_params and isinstance(asset_gen_params, dict):
+                    effective_input["generation_params"] = deepcopy(asset_gen_params)
+                elif isinstance(ref_asset.provenance, dict):
+                    effective_input["generation_params"] = deepcopy(ref_asset.provenance)
+
+        ch_status = effective_input.get("change_status")
+        if "proposed_changes" in effective_input and effective_input["proposed_changes"]:
+            if "change_status" not in effective_input:
+                effective_input["change_status"] = "PENDING_REVIEW"
+        if ch_status == "APPROVED" and char.proposed_changes:
+            for k, v in char.proposed_changes.items():
+                if hasattr(char, k) and k not in ("id", "project_id") and k not in effective_input:
+                    effective_input[k] = deepcopy(v)
+            effective_input["proposed_changes"] = {}
+        elif ch_status == "REJECTED":
+            effective_input["proposed_changes"] = {}
+
         before = {}
         after = {}
         for field in self._fields:
-            if field in input:
-                val = input[field]
+            if field in effective_input:
+                val = effective_input[field]
                 curr = getattr(char, field)
                 if curr != val:
                     before[field] = deepcopy(curr)
@@ -234,6 +278,16 @@ class CharacterUpdateStrategy:
         )
         if char is None:
             raise HistoryFault("CONFLICT", "Character was removed outside history", 409)
+
+        target_dict = payload["after"] if forward else payload["before"]
+        if "reference_asset_id" in target_dict:
+            ref_id = target_dict["reference_asset_id"]
+            if ref_id is not None:
+                asset = db.query(AssetRecord).filter(
+                    AssetRecord.id == ref_id, AssetRecord.project_id == project.id
+                ).first()
+                if not asset:
+                    raise HistoryFault("CONFLICT", f"Referenced asset {ref_id} no longer exists in project", 409)
 
         if forward:
             for field, value in payload["after"].items():
@@ -336,7 +390,12 @@ class CharacterMergeStrategy:
             # Recreate source
             existing_source = db.query(CharacterRecord).filter(CharacterRecord.project_id == project.id, CharacterRecord.id == source_id).first()
             if existing_source is None:
-                db.add(CharacterRecord(**payload["source"], created_at=utc_now(), updated_at=utc_now()))
+                source_data = dict(payload["source"])
+                source_data.setdefault("reference_asset_id", None)
+                source_data.setdefault("generation_params", {})
+                source_data.setdefault("proposed_changes", {})
+                source_data.setdefault("change_status", "NONE")
+                db.add(CharacterRecord(**source_data, created_at=utc_now(), updated_at=utc_now()))
 
             # Reassign back to source
             for rid in payload["reassigned_region_ids"]:
@@ -377,9 +436,40 @@ class CharacterSplitStrategy:
         if not isinstance(character_id, str) or not isinstance(new_name, str) or not new_name.strip():
             raise HistoryFault("VALIDATION", "Character ID and new name are required", 422)
 
+        if "change_status" in input and input["change_status"] is not None:
+            if input["change_status"] not in VALID_CHANGE_STATUSES:
+                raise HistoryFault("VALIDATION", f"Invalid change_status: {input['change_status']}", 422)
+        if "generation_params" in input and input["generation_params"] is not None:
+            if not isinstance(input["generation_params"], dict):
+                raise HistoryFault("VALIDATION", "generation_params must be an object", 422)
+        if "proposed_changes" in input and input["proposed_changes"] is not None:
+            if not isinstance(input["proposed_changes"], dict):
+                raise HistoryFault("VALIDATION", "proposed_changes must be an object", 422)
+
+        if "change_status" in input and input["change_status"] is not None:
+            if input["change_status"] not in VALID_CHANGE_STATUSES:
+                raise HistoryFault("VALIDATION", f"Invalid change_status: {input['change_status']}", 422)
+        if "generation_params" in input and input["generation_params"] is not None:
+            if not isinstance(input["generation_params"], dict):
+                raise HistoryFault("VALIDATION", "generation_params must be an object", 422)
+        if "proposed_changes" in input and input["proposed_changes"] is not None:
+            if not isinstance(input["proposed_changes"], dict):
+                raise HistoryFault("VALIDATION", "proposed_changes must be an object", 422)
+
         orig = db.query(CharacterRecord).filter(CharacterRecord.project_id == project.id, CharacterRecord.id == character_id).first()
         if orig is None:
             raise HistoryFault("NOT_FOUND", "Character not found", 404)
+
+        if "reference_asset_id" in input:
+            ref_id = input["reference_asset_id"]
+            if ref_id is not None:
+                if not isinstance(ref_id, str):
+                    raise HistoryFault("VALIDATION", "reference_asset_id must be a string", 422)
+                asset = db.query(AssetRecord).filter(
+                    AssetRecord.id == ref_id, AssetRecord.project_id == project.id
+                ).first()
+                if not asset:
+                    raise HistoryFault("VALIDATION", f"Reference asset {ref_id} does not exist in project {project.id}", 422)
 
         new_char_id = input.get("new_character_id") or f"char_{uuid.uuid4().hex[:8]}"
         new_char_data = {
@@ -393,6 +483,10 @@ class CharacterSplitStrategy:
             "role": orig.role,
             "first_panel_id": panel_ids[0] if panel_ids else None,
             "reference_panel_ids": panel_ids[:2] if panel_ids else [],
+            "reference_asset_id": input.get("reference_asset_id"),
+            "generation_params": input.get("generation_params") or {},
+            "proposed_changes": input.get("proposed_changes") or {},
+            "change_status": input.get("change_status") or "NONE",
             "status": "MANUAL",
             "manual_override": True,
         }
@@ -422,6 +516,14 @@ class CharacterSplitStrategy:
         orig_id = payload["orig_character_id"]
 
         if forward:
+            ref_id = payload["new_character"].get("reference_asset_id")
+            if ref_id is not None:
+                asset = db.query(AssetRecord).filter(
+                    AssetRecord.id == ref_id, AssetRecord.project_id == project.id
+                ).first()
+                if not asset:
+                    raise HistoryFault("CONFLICT", f"Referenced asset {ref_id} no longer exists in project", 409)
+
             existing = db.query(CharacterRecord).filter(CharacterRecord.id == new_char_id).first()
             if existing is not None:
                 raise HistoryFault("CONFLICT", "New character already exists", 409)
@@ -706,7 +808,7 @@ class ScriptApproveStrategy:
             raise HistoryFault("NOT_FOUND", "Script not found", 404)
 
         report = _validate_script(db, project.id, script_id)
-        if report.unsupported_segments > 0:
+        if not report.passed:
             raise HistoryFault(
                 "VALIDATION",
                 f"Cannot approve script: {report.unsupported_segments} statements have unsupported claims",

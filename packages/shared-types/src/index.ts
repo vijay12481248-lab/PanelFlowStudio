@@ -355,6 +355,8 @@ export type CharacterRole =
 
 export type CharacterStatus = "CONFIRMED" | "LIKELY" | "UNCERTAIN" | "MANUAL";
 
+export type CharacterChangeStatus = "NONE" | "PENDING_REVIEW" | "APPROVED" | "REJECTED";
+
 export interface ProvenanceReference {
   panel_ids: string[];
   text_region_ids: string[];
@@ -369,11 +371,17 @@ export interface CharacterEntity {
   aliases: string[];
   description: string;
   visual_traits: string[];
-  role: CharacterRole | string;
+  role: CharacterRole;
   first_panel_id?: string | null;
   reference_panel_ids: string[];
-  status: CharacterStatus | string;
+  status: CharacterStatus;
   manual_override: boolean;
+  reference_asset_id?: string | null;
+  generation_params?: Record<string, unknown>;
+  proposed_changes?: Record<string, unknown>;
+  change_status?: CharacterChangeStatus;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface LocationEntity {
@@ -557,6 +565,77 @@ export interface LLMProviderInfo {
   context_window?: number;
 }
 
+export interface CloudLLMConfig {
+  provider_type: "openrouter" | "groq" | "custom_openai" | string;
+  endpoint_url: string;
+  has_api_key?: boolean;
+  masked_api_key?: string;
+  api_key?: string;
+  model_name: string;
+  custom_models?: string[];
+  is_active?: boolean;
+}
+
+export interface CloudLLMTestRequest {
+  endpoint_url: string;
+  api_key?: string;
+  model_name?: string;
+}
+
+export interface CloudLLMTestResponse {
+  status: "HEALTHY" | "DEGRADED" | "ERROR";
+  connected: boolean;
+  latency_ms: number;
+  models_count: number;
+  models: string[];
+  error?: string | null;
+}
+
+export interface AvailableLLMProviderItem {
+  id: string;
+  name: string;
+  type: "local" | "cloud";
+  endpoint: string;
+  models: string[];
+  active_model: string;
+  is_healthy?: boolean;
+  is_configured?: boolean;
+  is_active?: boolean;
+}
+
+export interface AvailableLLMProvidersResponse {
+  providers: AvailableLLMProviderItem[];
+}
+
+export interface FlowOverrideConfig {
+  provider_id: string;
+  model_name?: string;
+}
+
+export interface ProviderCatalogItem {
+  id: string;
+  name: string;
+  type: "local" | "gateway" | "cloud" | "custom" | string;
+  is_configured: boolean;
+  is_healthy: boolean;
+  endpoint?: string;
+  models: string[];
+  default_model?: string;
+}
+
+export interface GlobalLLMSettings {
+  global_default_provider: string;
+  global_default_model: string;
+  flow_overrides: Record<string, FlowOverrideConfig>;
+  providers?: ProviderCatalogItem[];
+}
+
+export interface SaveGlobalLLMSettingsRequest {
+  global_default_provider: string;
+  global_default_model: string;
+  flow_overrides?: Record<string, FlowOverrideConfig>;
+}
+
 // ---------------------------------------------------------------------------
 // Milestone 6 & 8: Audio Director Interfaces
 // ---------------------------------------------------------------------------
@@ -676,6 +755,75 @@ export type RenderStatus =
   | "COMPLETE"
   | "FAILED"
   | "CANCELLED";
+
+export interface YouTubeThumbnailResearch {
+  aspect_ratio: "16:9" | "9:16" | "1:1";
+  recommended_width: number;
+  recommended_height: number;
+  prompt: string;
+  negative_prompt: string;
+  workflow_id: string;
+  seed: number;
+  text_hooks: string[];
+  composition_guidance: string;
+}
+
+export interface YouTubeChapter {
+  timestamp: string;
+  seconds: number;
+  title: string;
+}
+
+export interface YouTubePackagingData {
+  project_id: string;
+  titles: string[];
+  selected_title?: string;
+  description: string;
+  tags: string[];
+  tags_string: string;
+  hashtags: string[];
+  hashtags_string: string;
+  chapters: YouTubeChapter[];
+  thumbnail: YouTubeThumbnailResearch;
+  generated_at?: string;
+  source_profile?: string;
+}
+
+export interface YouTubePackagingGenerateRequest {
+  profile_name?: string;
+  focus_character?: string;
+  style_tone?: "dramatic" | "action" | "mysterious" | "hype" | "emotional";
+  custom_hook?: string;
+}
+
+export interface AutoPilotStageItem {
+  id: string;
+  name: string;
+  status: "PENDING" | "RUNNING" | "COMPLETED" | "SKIPPED" | "FAILED";
+  progress: number;
+  message: string;
+  duration_sec: number;
+}
+
+export interface AutoPilotStatusResponse {
+  project_id: string;
+  status: "IDLE" | "RUNNING" | "COMPLETED" | "CANCELLED" | "FAILED";
+  current_stage_id?: string | null;
+  overall_progress: number;
+  stages: AutoPilotStageItem[];
+  logs: string[];
+  result: Record<string, any>;
+  error?: string | null;
+  started_at?: string | null;
+  completed_at?: string | null;
+}
+
+export interface AutoPilotStartRequest {
+  target_profile?: string;
+  skip_existing_stages?: boolean;
+  voice_preset?: string;
+  enable_thumbnails?: boolean;
+}
 
 export interface RenderProfileConfig {
   name: string;
@@ -1086,6 +1234,7 @@ export interface VisualLayer {
   crop_type?: "rect" | "polygon" | "pen";
   clip_path?: string;
   polygon_points?: Array<{ x: number; y: number }>;
+  crop_filename?: string;
   // Chapter 3: Independent layer timing within scene
   start_offset_sec?: number; // Relative start offset in scene (default 0)
   duration_sec?: number;     // Active visible duration (default scene.duration_sec)
@@ -1103,6 +1252,38 @@ export type SceneTransitionType =
   | "impact_flash"
   | "dissolve";
 
+export type SmartBackgroundPreset = "none" | "solid" | "duplicate_blur" | "gradient" | "mirror" | "edge_stretch" | "custom_image";
+
+/** Versioned, non-destructive settings shared by preview and render compilation. */
+export interface SmartBackgroundSettings {
+  version: 1;
+  enabled: boolean;
+  preset: SmartBackgroundPreset;
+  source_mode: "follow_active_visual" | "pinned_layer" | "custom_image";
+  source_layer_id?: string;
+  custom_image_url?: string;
+  color: string;
+  color_secondary: string;
+  blur_sigma: number;
+  zoom: number;
+  focal_x: number;
+  focal_y: number;
+  brightness: number;
+  saturation: number;
+  tint: string;
+  tint_opacity: number;
+  opacity: number;
+  vignette: number;
+  edge_shadow: number;
+  glow: number;
+  motion: "none" | "slow_zoom" | "pan_left" | "pan_right";
+  motion_amount: number;
+  foreground_fit: "contain" | "cover";
+  foreground_x: number;
+  foreground_y: number;
+  auto_only_when_needed: boolean;
+}
+
 export interface VideoScene {
   id: string;
   sequence: number;
@@ -1115,6 +1296,8 @@ export interface VideoScene {
   transition_duration_sec?: number;
   camera?: SceneCameraConfig;
   camera_motion?: SceneCameraConfig;
+  /** Missing means inherit the project's default; enabled:false explicitly turns it off. */
+  background?: SmartBackgroundSettings;
 }
 
 export type NarrationEmotion =
@@ -1210,7 +1393,12 @@ export type EditorSelectedObject =
 export interface StoryEditorState {
   schema_version?: number; // Chapter 3 schema version (v2)
   project_id: string;
-  aspect_ratio: "16:9" | "9:16" | "1:1";
+  aspect_ratio: "16:9" | "9:16" | "1:1" | "4:5" | "custom";
+  canvas_width?: number;
+  canvas_height?: number;
+  background_default?: SmartBackgroundSettings;
+  /** Preview comparison only; the export compiler deliberately ignores this flag. */
+  background_preview_disabled?: boolean;
   mode: "simple" | "advanced";
   scenes: VideoScene[];
   narration_clips: NarrationClip[];

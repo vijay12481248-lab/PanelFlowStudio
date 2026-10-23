@@ -19,6 +19,7 @@ import { ComfyImageScreen } from "./screens/ComfyImageScreen";
 import { StoryEditorScreen } from "./screens/StoryEditorScreen";
 import { PipelineNavbar } from "./components/PipelineNavbar";
 import { ProviderHealthModal } from "./components/ProviderHealthModal";
+import { AutoPilotModal } from "./components/AutoPilotModal";
 import ProviderManagementScreen from "./components/ai-gateway/ProviderManagementScreen";
 import { DashboardShell } from "./components/dashboard";
 import { ErrorProvider, useError } from "./context/ErrorContext";
@@ -54,6 +55,7 @@ const DesktopAppContent: React.FC = () => {
   const [retrying, setRetrying] = useState<boolean>(false);
   const [restartingEngine, setRestartingEngine] = useState(false);
   const [startupGracePeriod, setStartupGracePeriod] = useState<boolean>(true);
+  const [autoPilotOpen, setAutoPilotOpen] = useState<boolean>(false);
 
   const checkEngine = async () => {
       if (restartingEngine) return;
@@ -312,6 +314,19 @@ const DesktopAppContent: React.FC = () => {
 
           {selectedProject && (
             <Button
+              variant="primary"
+              size="sm"
+              onClick={() => setAutoPilotOpen(true)}
+              className="text-xs bg-gradient-to-r from-amber-500 to-indigo-600 hover:from-amber-400 hover:to-indigo-500 text-white font-bold shadow-md shadow-indigo-950/40"
+              title="Run 1-Click End-to-End Pipeline Auto-Pilot"
+            >
+              <Icons.Zap className="w-4 h-4 mr-1.5 text-amber-300 animate-pulse" />
+              Auto-Pilot
+            </Button>
+          )}
+
+          {selectedProject && (
+            <Button
               variant="ghost"
               size="sm"
               onClick={() => setCurrentScreen("comfy_image")}
@@ -396,6 +411,7 @@ const DesktopAppContent: React.FC = () => {
                   currentScreen={currentScreen}
                   onNavigate={(stageKey) => setCurrentScreen(stageKey as ScreenMode)}
                   staleStages={selectedProject.stale_stages}
+                  onOpenAutoPilot={() => setAutoPilotOpen(true)}
                 />
               </div>
             )}
@@ -563,6 +579,23 @@ const DesktopAppContent: React.FC = () => {
           </>
         )}
       </main>
+
+      {/* Auto-Pilot 1-Click Orchestrator Modal */}
+      {selectedProject && (
+        <AutoPilotModal
+          isOpen={autoPilotOpen}
+          onClose={() => setAutoPilotOpen(false)}
+          project={selectedProject}
+          onOpenPackaging={() => {
+            setAutoPilotOpen(false);
+            setCurrentScreen("render");
+          }}
+          onOpenRenderScreen={() => {
+            setAutoPilotOpen(false);
+            setCurrentScreen("render");
+          }}
+        />
+      )}
 
       {/* Provider Health Modal */}
       <ProviderHealthModal

@@ -22,8 +22,10 @@ export class SnapshotHistory<S> {
   constructor(options: { limit?: number; clone?: (state: S) => S; equals?: (left: S, right: S) => boolean } = {}) {
     this.limit = options.limit ?? 100;
     if (!Number.isSafeInteger(this.limit) || this.limit < 1) throw new HistoryError('VALIDATION', 'Draft limit must be a positive integer');
-    this.clone = options.clone ?? cloneJson;
-    this.equals = options.equals ?? ((left, right) => JSON.stringify(left) === JSON.stringify(right));
+    const userClone = options.clone;
+    this.clone = userClone ? (state: S) => userClone(state) : cloneJson;
+    const userEquals = options.equals;
+    this.equals = userEquals ? (left: S, right: S) => userEquals(left, right) : ((left, right) => JSON.stringify(left) === JSON.stringify(right));
   }
 
   record(before: S, after: S): boolean {

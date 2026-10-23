@@ -75,9 +75,11 @@ async function mountTimeline(initial: StoryEditorState = fixture(), manualClock 
     const data = new Map<string, string>();
     return { setData: (key: string, value: string) => data.set(key, value), getData: (key: string) => data.get(key) || "", get types() { return [...data.keys()]; }, effectAllowed: "all", dropEffect: "none" };
   };
-  const dnd = async (target: HTMLElement, type: string, dataTransfer: ReturnType<typeof transfer>) => {
+  const dnd = async (target: HTMLElement, type: string, dataTransfer: ReturnType<typeof transfer>, clientX = 0, altKey = false) => {
     const event = new dom.window.Event(type, { bubbles: true, cancelable: true });
     Object.defineProperty(event, "dataTransfer", { value: dataTransfer });
+    Object.defineProperty(event, "clientX", { value: clientX });
+    Object.defineProperty(event, "altKey", { value: altKey });
     await act(async () => { target.dispatchEvent(event); });
     return event;
   };
@@ -406,5 +408,265 @@ test("linked narration drag retains its parent-relative offset and cannot move b
     assert.deepEqual([ui.state().narration_clips[0].start_time_sec, ui.state().narration_clips[0].scene_offset_sec], [7.5, 1.5]);
     await ui.drag(clip(), -1000);
     assert.deepEqual([ui.state().narration_clips[0].start_time_sec, ui.state().narration_clips[0].scene_offset_sec], [6, 0]);
+  } finally { await ui.close(); }
+});
+
+test("native scene drag/drop directly onto another scene swaps their timeline positions", async () => {
+  const ui = await mountTimeline();
+  try {
+    const data = ui.transfer();
+    // Drag Scene A (index 0) onto Scene B (index 1)
+    await ui.dnd(ui.find('[title="Scene A"]'), "dragstart", data);
+    await ui.dnd(ui.find('[title="Scene B"]'), "dragover", data);
+    await ui.dnd(ui.find('[title="Scene B"]'), "drop", data);
+    assert.deepEqual(ui.state().scenes.map(s => [s.id, s.start_time_sec, s.sequence]), [["b", 0, 1], ["a", 4, 2], ["c", 10, 3]]);
+    // Linked narration originally on Scene B shifts with Scene B
+    assert.equal(ui.state().narration_clips[0].start_time_sec, 0.5);
+  } finally { await ui.close(); }
+});
+
+test("dropping a source panel onto a scene inserts exactly once without replacing existing artwork", async () => {
+  const ui = await mountTimeline();
+  try {
+    const data = ui.transfer();
+    data.setData("application/panelflow-panel", JSON.stringify({
+      panelId: "replacement-panel-1",
+      pageId: "page-2",
+      pageSequence: 5,
+      imageUrl: "https://example.com/new-panel.png",
+      name: "New Hero Panel",
+      crop: { x: 10, y: 10, width: 100, height: 100 }
+    }));
+    await ui.dnd(ui.find('[title="Scene A"]'), "drop", data);
+    assert.equal(ui.state().scenes.length, 4);
+    assert.equal(ui.state().scenes[0].layers[0].source_panel_id, "replacement-panel-1");
+    assert.equal(ui.state().scenes.find(s => s.id === "a")!.layers[0].id, "layer-a");
+    assert.equal(ui.updates(), 1, "one drop is one undoable state change");
+  } finally { await ui.close(); }
+});
+
+test("Alt-dropping a panel onto an existing layer chip replaces only that layer's visual", async () => {
+  const ui = await mountTimeline();
+  try {
+    const data = ui.transfer();
+    data.setData("application/panelflow-panel", JSON.stringify({
+      panelId: "replaced-layer-panel",
+      pageId: "page-3",
+      imageUrl: "https://example.com/layer-replace.png",
+      name: "Replacement Layer Visual"
+    }));
+    // Drop directly onto the layer chip of Scene A
+    const layerChip = ui.lane("Layer 2").firstElementChild as HTMLElement;
+    await ui.dnd(layerChip, "drop", data, 0, true);
+    const ly = ui.state().scenes[0].layers[0];
+    assert.equal(ly.source_panel_id, "replaced-layer-panel");
+    assert.equal(ly.name, "Replacement Layer Visual");
+    assert.equal(ui.state().scenes.length, 3, "layer replacement does not also append scenes");
+    assert.equal(ui.updates(), 1);
+  } finally { await ui.close(); }
+});
+
+test("dropping a layer onto another layer swaps the two layers between scenes", async () => {
+  const ui = await mountTimeline();
+  try {
+    const data = ui.transfer();
+    // Drag layer-a from Scene A and drop onto layer-b in Scene B
+    const layerAChip = ui.lane("Layer 2").children[0] as HTMLElement;
+    const layerBChip = ui.lane("Layer 2").children[1] as HTMLElement;
+    await ui.dnd(layerAChip, "dragstart", data);
+    await ui.dnd(layerBChip, "drop", data);
+    // In Scene A, layer should now be layer-b
+    assert.equal(ui.state().scenes[0].layers[0].id, "layer-b");
+    // In Scene B, layer should now be layer-a
+    assert.equal(ui.state().scenes[1].layers[0].id, "layer-a");
+  } finally { await ui.close(); }
+});
+
+test("native narration drag/drop directly onto another narration clip swaps their positions", async () => {
+  const ui = await mountTimeline();
+  try {
+    const data = ui.transfer();
+    const narrClips = ui.lane("Narration").children;
+    // Drag narration clip 0 onto narration clip 1
+    await ui.dnd(narrClips[0] as HTMLElement, "dragstart", data);
+    await ui.dnd(narrClips[1] as HTMLElement, "dragover", data);
+    assert.equal(data.dropEffect, "move");
+    await ui.dnd(narrClips[1] as HTMLElement, "drop", data);
+    // Timing swapped: clip "linked" should now be at 9s, and clip "free" at 6.5s
+    const linkedNarr = ui.state().narration_clips.find(n => n.id === "linked")!;
+    const freeNarr = ui.state().narration_clips.find(n => n.id === "free")!;
+    assert.equal(linkedNarr.start_time_sec, 9);
+    assert.equal(freeNarr.start_time_sec, 6.5);
+  } finally { await ui.close(); }
+});
+
+test("dropping narration clip onto a scene attaches and aligns narration to that scene", async () => {
+  const ui = await mountTimeline();
+  try {
+    const data = ui.transfer();
+    data.setData("application/panelflow-narration-reorder", JSON.stringify({ narrationId: "free" }));
+    // Drop free narration onto Scene A (starts at 0s)
+    await ui.dnd(ui.find('[title="Scene A"]'), "drop", data);
+    const freeNarr = ui.state().narration_clips.find(n => n.id === "free")!;
+    assert.equal(freeNarr.scene_id, "a");
+    assert.equal(freeNarr.start_time_sec, 0);
+    assert.equal(freeNarr.linked_to_scene, true);
+    assert.equal(freeNarr.scene_offset_sec, 0);
+  } finally { await ui.close(); }
+});
+
+test("motion effect badge drag and drop transfers motion preset to target scene", async () => {
+  const initial = fixture();
+  initial.scenes[0].layers[0].motion_preset = "pan_right";
+  initial.scenes[1].layers[0].motion_preset = "none";
+  const ui = await mountTimeline(initial);
+  try {
+    const data = ui.transfer();
+    // Drag motion badge from Scene A
+    const motionBadge = ui.lane("Motion / FX").querySelector('[title^="Click to configure in Inspector; Drag"]') as HTMLElement;
+    assert.ok(motionBadge, "Motion badge should exist in Track 4");
+    await ui.dnd(motionBadge, "dragstart", data);
+    // Drop onto Scene B's motion slot in Track 4
+    const sceneBMotionSlot = ui.lane("Motion / FX").children[1] as HTMLElement;
+    await ui.dnd(sceneBMotionSlot, "drop", data);
+    // Scene B should now have pan_right motion
+    assert.equal(ui.state().scenes[1].layers[0].motion_preset, "pan_right");
+  } finally { await ui.close(); }
+});
+
+for (const [x, index] of [[0, 0], [160, 1], [300, 1], [380, 2], [900, 3]]) {
+  test(`source batch inserts once at pointer ${x} (index ${index})`, async () => {
+    const ui = await mountTimeline();
+    try {
+      const panels = ["p1", "p2"].map(panelId => ({ panelId, pageId: "page", imageUrl: `${panelId}.png` }));
+      const data = ui.transfer();
+      data.setData("application/panelflow-panel", JSON.stringify({ ...panels[0], panels: [...panels, panels[0]] }));
+      await ui.dnd(ui.lane("Visuals"), "dragover", data, x);
+      assert.ok(ui.container.querySelector('[aria-label="Panel insertion position"]'));
+      await ui.dnd(ui.lane("Visuals"), "drop", data, x);
+      assert.equal(ui.updates(), 1);
+      assert.equal(ui.state().scenes.length, 5);
+      assert.deepEqual(ui.state().scenes.slice(index, index + 2).map(s => s.layers[0].source_panel_id), ["p1", "p2"]);
+      assert.deepEqual(ui.state().scenes.map(s => s.sequence), [1, 2, 3, 4, 5]);
+      assert.equal(ui.container.querySelector('[aria-label="Panel insertion position"]'), null);
+      // A repeated source drop waits for explicit duplicate confirmation.
+      const ids = ui.state().scenes.slice(index, index + 2).map(s => s.id);
+      await ui.dnd(ui.lane("Visuals"), "drop", data, 900);
+      assert.equal(ui.state().scenes.length, 5);
+      assert.equal(ui.updates(), 1);
+      assert.ok(ui.find('[aria-label="Add duplicate panels?"]'));
+      await ui.mouse(ui.find('[data-confirm-duplicate-panels]'), "click", 0);
+      assert.equal(ui.state().scenes.length, 7);
+      assert.deepEqual(ui.state().scenes.slice(-2).map(s => s.layers[0].source_panel_id), ["p1", "p2"]);
+      assert.ok(ui.state().scenes.slice(-2).every(s => !ids.includes(s.id)));
+      assert.equal(ui.updates(), 2);
+    } finally { await ui.close(); }
+  });
+}
+
+test("source insertion honors requested boundary even with Ripple OFF and keeps linked narration aligned", async () => {
+  const initial = fixture(); initial.ripple_edit = false;
+  const ui = await mountTimeline(initial);
+  try {
+    const data = ui.transfer();
+    data.setData("application/panelflow-panel", JSON.stringify({ panelId: "new", imageUrl: "new.png" }));
+    await ui.dnd(ui.lane("Visuals"), "drop", data, 160);
+    assert.deepEqual(ui.state().scenes.map(s => s.start_time_sec), [0, 6, 10, 14]);
+    assert.equal(ui.state().narration_clips[0].start_time_sec, 10.5);
+    assert.equal(ui.state().narration_clips[1].start_time_sec, 9);
+  } finally { await ui.close(); }
+});
+
+test("empty timeline accepts one batch as a single update", async () => {
+  const initial = fixture(); initial.scenes = []; initial.narration_clips = [];
+  const ui = await mountTimeline(initial);
+  try {
+    const data = ui.transfer();
+    data.setData("application/panelflow-panel", JSON.stringify({ panels: [{ panelId: "a", imageUrl: "a.png" }, { panelId: "b", imageUrl: "b.png" }] }));
+    await ui.dnd(ui.lane("Visuals"), "drop", data, 0);
+    assert.deepEqual(ui.state().scenes.map(s => s.layers[0].source_panel_id), ["a", "b"]);
+    assert.equal(ui.updates(), 1);
+  } finally { await ui.close(); }
+});
+
+test("insertion uses scrolled ruler coordinates at the current zoom", async () => {
+  const initial = fixture(); initial.zoom_level = 200;
+  const ui = await mountTimeline(initial);
+  try {
+    const ruler = ui.lane("Visuals").parentElement!;
+    ruler.getBoundingClientRect = () => ({ left: -400, top: 0, width: 2400, height: 300, right: 2000, bottom: 300, x: -400, y: 0, toJSON() {} });
+    const data = ui.transfer();
+    data.setData("application/panelflow-panel", JSON.stringify({ panelId: "scrolled", imageUrl: "scroll.png" }));
+    await ui.dnd(ui.lane("Visuals"), "drop", data, 200); // (200 + 400) / 80 = 7.5 seconds
+    assert.equal(ui.state().scenes[1].layers[0].source_panel_id, "scrolled");
+    assert.equal(ui.state().scenes.length, 4);
+  } finally { await ui.close(); }
+});
+
+test("cancelling an existing panel drop preserves the entire timeline", async () => {
+  const initial = fixture(); initial.scenes[1].layers[0].source_panel_id = "existing";
+  initial.scenes[1].layers[0].motion_preset = "pan_right";
+  const ui = await mountTimeline(initial);
+  try {
+    const data = ui.transfer();
+    data.setData("application/panelflow-panel", JSON.stringify({ panelId: "existing", imageUrl: "existing.png" }));
+    await ui.dnd(ui.lane("Visuals"), "drop", data, 0);
+    assert.equal(ui.state().scenes.length, 3);
+    assert.ok(ui.find('[aria-label="Add duplicate panels?"]'));
+    assert.equal(ui.updates(), 0);
+    await ui.mouse(ui.find('[data-cancel-duplicate-panels]'), "click", 0);
+    assert.equal(ui.state(), initial);
+    assert.equal(ui.container.querySelector('[aria-label="Add duplicate panels?"]'), null);
+  } finally { await ui.close(); }
+});
+
+test("cancelling a source drag clears the insertion marker", async () => {
+  const ui = await mountTimeline();
+  try {
+    const data = ui.transfer();
+    data.setData("application/panelflow-panel", JSON.stringify({ panelId: "cancelled" }));
+    await ui.dnd(ui.lane("Visuals"), "dragover", data, 100);
+    assert.ok(ui.container.querySelector('[aria-label="Panel insertion position"]'));
+    const view = ui.container.ownerDocument.defaultView!;
+    await act(async () => { view.dispatchEvent(new view.Event("dragend")); });
+    assert.equal(ui.container.querySelector('[aria-label="Panel insertion position"]'), null);
+    assert.equal(ui.updates(), 0);
+  } finally { await ui.close(); }
+});
+
+test("mixed batch asks once and adds new copies in order only after confirmation", async () => {
+  const initial = fixture(); initial.scenes[1].layers[0].source_panel_id = "existing";
+  const ui = await mountTimeline(initial);
+  try {
+    const data = ui.transfer();
+    data.setData("application/panelflow-panel", JSON.stringify({ panels: [
+      { panelId: "new", imageUrl: "new.png" }, { panelId: "existing", imageUrl: "existing.png" }
+    ] }));
+    await ui.dnd(ui.lane("Visuals"), "drop", data, 160);
+    assert.equal(ui.state(), initial);
+    assert.equal(ui.container.querySelectorAll('[aria-label="Add duplicate panels?"]').length, 1);
+    await ui.mouse(ui.find('[data-confirm-duplicate-panels]'), "click", 0);
+    assert.deepEqual(ui.state().scenes.map(s => s.layers[0]?.source_panel_id), [undefined, "new", "existing", "existing", undefined]);
+    assert.equal(ui.state().scenes[3].id, "b", "existing scene remains present");
+    assert.equal(ui.state().narration_clips[0].start_time_sec, 14.5);
+    assert.equal(ui.updates(), 1, "whole batch is one undoable action");
+  } finally { await ui.close(); }
+});
+
+test("Escape cancels a duplicate drop; an unused panel does not prompt", async () => {
+  const initial = fixture(); initial.scenes[0].layers[0].source_panel_id = "existing";
+  const ui = await mountTimeline(initial);
+  try {
+    const data = ui.transfer();
+    data.setData("application/panelflow-panel", JSON.stringify({ panelId: "existing", imageUrl: "existing.png" }));
+    await ui.dnd(ui.lane("Visuals"), "drop", data);
+    assert.match(ui.find('dialog').textContent!, /Are you sure you want to add this duplicate panel to the timeline\?/);
+    await act(async () => { ui.find('dialog').dispatchEvent(new ui.container.ownerDocument.defaultView!.Event("cancel", { cancelable: true })); });
+    assert.equal(ui.state(), initial);
+    data.setData("application/panelflow-panel", JSON.stringify({ panelId: "unused", imageUrl: "unused.png" }));
+    await ui.dnd(ui.lane("Visuals"), "drop", data);
+    assert.equal(ui.container.querySelector('dialog'), null);
+    assert.equal(ui.state().scenes.length, 4);
+    assert.equal(ui.updates(), 1);
   } finally { await ui.close(); }
 });

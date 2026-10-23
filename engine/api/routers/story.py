@@ -1,5 +1,9 @@
-from typing import Optional, List, Dict, Any
-from fastapi import APIRouter, Depends, HTTPException, status
+from typing import Optional, List, Dict, Any, Literal
+from uuid import uuid4
+from fastapi import APIRouter, Depends, HTTPException, status, Query
+from engine.history.service import project_history, HistoryFault
+from engine.database.models import CharacterRecord
+from engine.history.models import HistoryRecord
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -23,6 +27,9 @@ class StoryAnalyzeRequest(BaseModel):
     provider_id: Optional[str] = None
 
 
+CharacterChangeStatus = Literal["NONE", "PENDING_REVIEW", "APPROVED", "REJECTED"]
+
+
 class CharacterUpdateRequest(BaseModel):
     display_name: Optional[str] = None
     canonical_name: Optional[str] = None
@@ -30,6 +37,10 @@ class CharacterUpdateRequest(BaseModel):
     aliases: Optional[List[str]] = None
     description: Optional[str] = None
     status: Optional[str] = None
+    reference_asset_id: Optional[str] = None
+    generation_params: Optional[Dict[str, Any]] = None
+    proposed_changes: Optional[Dict[str, Any]] = None
+    change_status: Optional[CharacterChangeStatus] = None
 
 
 class CharacterMergeRequest(BaseModel):
@@ -40,6 +51,10 @@ class CharacterMergeRequest(BaseModel):
 class CharacterSplitRequest(BaseModel):
     new_name: str
     panel_ids: List[str]
+    reference_asset_id: Optional[str] = None
+    generation_params: Optional[Dict[str, Any]] = None
+    proposed_changes: Optional[Dict[str, Any]] = None
+    change_status: Optional[CharacterChangeStatus] = None
 
 
 class SceneMergeRequest(BaseModel):
@@ -186,6 +201,10 @@ def list_characters(project_id: str, db: Session = Depends(get_db)):
             "role": c.role,
             "first_panel_id": c.first_panel_id,
             "reference_panel_ids": c.reference_panel_ids or [],
+            "reference_asset_id": c.reference_asset_id,
+            "generation_params": c.generation_params or {},
+            "proposed_changes": c.proposed_changes or {},
+            "change_status": c.change_status or "NONE",
             "status": c.status,
             "manual_override": c.manual_override,
             "created_at": c.created_at.isoformat() if c.created_at else "",
@@ -199,32 +218,52 @@ def update_character(
     project_id: str,
     character_id: str,
     req: CharacterUpdateRequest,
+    expected_revision: Optional[int] = Query(None),
     db: Session = Depends(get_db),
 ):
+    updates = req.model_dump(exclude_unset=True)
+    if not updates:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No fields provided for update")
+
+    head = db.get(HistoryRecord, project_id)
+    exp_rev = expected_revision if expected_revision is not None else (head.revision if head else 0)
     try:
-        c = story_service.update_character(
-            db=db,
-            project_id=project_id,
-            character_id=character_id,
-            display_name=req.display_name,
-            canonical_name=req.canonical_name,
-            role=req.role,
-            aliases=req.aliases,
-            description=req.description,
-            status=req.status,
+        project_history.execute(
+            db,
+            project_id,
+            operation_id=str(uuid4()),
+            expected_revision=exp_rev,
+            command_type="character.update",
+            version=1,
+            label=f"Update character {character_id}",
+            input={"character_id": character_id, **updates},
         )
-        return {
-            "id": c.id,
-            "display_name": c.display_name,
-            "canonical_name": c.canonical_name,
-            "aliases": c.aliases,
-            "description": c.description,
-            "role": c.role,
-            "status": c.status,
-            "manual_override": c.manual_override,
-        }
-    except KeyError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except HistoryFault as e:
+        raise HTTPException(status_code=e.status, detail=str(e))
+
+    c = (
+        db.query(CharacterRecord)
+        .filter(CharacterRecord.project_id == project_id, CharacterRecord.id == character_id)
+        .first()
+    )
+    if not c:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Character {character_id} not found")
+
+    return {
+        "id": c.id,
+        "display_name": c.display_name,
+        "canonical_name": c.canonical_name,
+        "aliases": c.aliases,
+        "description": c.description,
+        "visual_traits": c.visual_traits,
+        "role": c.role,
+        "status": c.status,
+        "reference_asset_id": c.reference_asset_id,
+        "generation_params": c.generation_params or {},
+        "proposed_changes": c.proposed_changes or {},
+        "change_status": c.change_status or "NONE",
+        "manual_override": c.manual_override,
+    }
 
 
 @router.post("/projects/{project_id}/characters/merge")
@@ -268,6 +307,12 @@ def split_character(
         return {
             "id": new_char.id,
             "display_name": new_char.display_name,
+            "canonical_name": new_char.canonical_name,
+            "role": new_char.role,
+            "reference_asset_id": new_char.reference_asset_id,
+            "generation_params": new_char.generation_params or {},
+            "proposed_changes": new_char.proposed_changes or {},
+            "change_status": new_char.change_status or "NONE",
             "message": "Character identity split successfully.",
         }
     except KeyError as e:

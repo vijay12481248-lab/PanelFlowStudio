@@ -139,3 +139,33 @@ test("saved Setup panel crops rotate capabilities and preserve crop versions onl
   assert.deepEqual(client.hydrateStoryEditorState("project", mismatch), mismatch);
   assert.match(state.scenes[0].layers[0].image_url, /expired/, "input is immutable");
 });
+
+test("background asset URLs survive history without storing launch capabilities", () => {
+  const client = new PanelFlowApiClient("http://127.0.0.1:8765", "new-session");
+  const path = "/api/projects/project/backgrounds/0123456789abcdef0123456789abcdef.png/file";
+  const state = { background_default: { custom_image_url: path + ";pf-token=old" }, scenes: [{ layers: [], background: { custom_image_url: path } }] };
+  const hydrated = client.hydrateStoryEditorState("project", state);
+  assert.equal(hydrated.background_default.custom_image_url, "http://127.0.0.1:8765" + path + ";pf-token=new-session");
+  assert.equal(hydrated.scenes[0].background.custom_image_url, hydrated.background_default.custom_image_url);
+  const sanitized = client.sanitizeStoryEditorState("project", hydrated);
+  assert.equal(sanitized.background_default.custom_image_url, path);
+  assert.equal(sanitized.scenes[0].background.custom_image_url, path);
+  assert.doesNotMatch(JSON.stringify(sanitized), /session|pf-token/);
+});
+
+test("custom background upload uses authenticated raw image bytes and returns signed resource URL", async () => {
+  const original = globalThis.fetch;
+  const file = new Blob(["png-bytes"], { type: "image/png" });
+  let body: unknown, headers: Headers | undefined;
+  globalThis.fetch = async (_url, options) => {
+    body = options?.body; headers = new Headers(options?.headers);
+    return new Response(JSON.stringify({ image_url: "/api/projects/project/backgrounds/0123456789abcdef0123456789abcdef.png/file", width: 20, height: 30 }));
+  };
+  try {
+    const client = new PanelFlowApiClient("http://127.0.0.1:8765", "fixture");
+    const result = await client.uploadBackgroundImage("project", file);
+    assert.equal(body, file);
+    assert.equal(headers?.get("X-PanelFlow-Token"), "fixture");
+    assert.match(result.image_url, /;pf-token=fixture$/);
+  } finally { globalThis.fetch = original; }
+});

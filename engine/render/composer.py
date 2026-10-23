@@ -5,7 +5,9 @@ Renders deterministic, broadcast-quality RGB frames from RenderPlan instructions
 from typing import Dict, List, Optional, Tuple, Any
 from pathlib import Path
 import math
-from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageEnhance, ImageChops
+from collections import OrderedDict
+import numpy as np
+from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageEnhance, ImageChops, ImageOps, ImageColor
 
 from engine.motion.camera.interpolator import interpolate_camera
 from engine.motion.models.camera import CameraState, NormalizedRect
@@ -16,6 +18,100 @@ from engine.motion.models.cues import CaptionCue
 from engine.render.models.render_plan import RenderPlan, RenderShotPlan
 from engine.render.models.enums import ScalePolicy, BackgroundFillPolicy
 from engine.render.clock import RenderFrameClock
+from engine.render.models.background import BackgroundSettings
+
+
+def crop_layer_source(source: Image.Image, layer: Dict[str, Any]) -> Image.Image:
+    """Crop once, before either branch; extracted panel files already contain their crop."""
+    crop = layer.get("crop")
+    if layer.get("already_cropped") or not isinstance(crop, dict):
+        return source
+    x, y = float(crop.get("x", 0)), float(crop.get("y", 0))
+    w, h = float(crop.get("width", 0)), float(crop.get("height", 0))
+    if w <= 0 or h <= 0:
+        return source
+    if w <= 1 and h <= 1:
+        box = (round(x * source.width), round(y * source.height), round((x + w) * source.width), round((y + h) * source.height))
+    else:
+        box = (round(x), round(y), round(x + w), round(y + h))
+    box = (max(0, box[0]), max(0, box[1]), min(source.width, box[2]), min(source.height, box[3]))
+    return source.crop(box) if box[2] > box[0] and box[3] > box[1] else source
+
+
+def background_sigma(sigma_1080: float, width: int, height: int) -> float:
+    """CSS-equivalent sigma normalized against the output height at 1080p."""
+    return sigma_1080 * height / 1080.0
+
+
+def build_background(source: Optional[Image.Image], settings: BackgroundSettings,
+                     size: Tuple[int, int], progress: float = 0, occupies_canvas: Optional[bool] = None) -> Image.Image:
+    """Pure canvas fill builder. Never reads a composed frame, captions, or scene camera."""
+    w, h = size
+    base = Image.new("RGBA", size, settings.color)
+    preset = settings.preset
+    if preset == "none":
+        return base
+    derived = preset in ("duplicate_blur", "mirror", "edge_stretch", "gradient")
+    if occupies_canvas is None:
+        occupies_canvas = (source is not None and abs(source.width / source.height - w / h) < .001)
+    if derived and source is not None and settings.auto_only_when_needed and occupies_canvas:
+
+        return base
+    if preset == "gradient":
+        first = np.array(ImageColor.getrgb(settings.color), dtype=np.float32)
+        second = np.array(ImageColor.getrgb(settings.color_secondary), dtype=np.float32)
+        t = np.linspace(0, 1, h, dtype=np.float32)[:, None, None]
+        rows = (first[None, None, :] * (1 - t) + second[None, None, :] * t).astype(np.uint8)
+        fill = Image.fromarray(np.repeat(rows, w, axis=1)).convert("RGBA")
+    elif preset == "solid" or source is None:
+        fill = Image.new("RGBA", size, settings.color)
+    else:
+        zoom, fx = settings.zoom, settings.focal_x
+        if settings.motion == "slow_zoom":
+            zoom *= 1 + settings.motion_amount * progress
+        elif settings.motion in ("pan_left", "pan_right"):
+            zoom *= 1 + settings.motion_amount
+            sign = 1 if settings.motion == "pan_right" else -1
+            fx = max(0, min(1, fx + sign * settings.motion_amount * (progress - .5)))
+        if preset == "edge_stretch":
+            sw, sh = max(w, round(w * zoom)), max(h, round(h * zoom))
+        else:
+            scale = max(w / source.width, h / source.height) * zoom
+            sw, sh = max(w, round(source.width * scale)), max(h, round(source.height * scale))
+        fill = source.resize((sw, sh), Image.Resampling.LANCZOS)
+        left, top = round((sw - w) * fx), round((sh - h) * settings.focal_y)
+        fill = fill.crop((left, top, left + w, top + h))
+        if preset == "mirror":
+            fill = ImageOps.mirror(fill)
+        # Flatten transparency before blur, so RGB in transparent PNG pixels cannot bleed.
+        flat = Image.new("RGBA", size, settings.color)
+        flat.alpha_composite(fill.convert("RGBA"))
+        fill = flat
+    sigma = background_sigma(settings.blur_sigma, w, h)
+    if sigma > 0:
+        fill = fill.filter(ImageFilter.GaussianBlur(sigma))
+    rgb = ImageEnhance.Color(fill.convert("RGB")).enhance(settings.saturation)
+    if settings.brightness:
+        offset = settings.brightness * 255
+        rgb = rgb.point(lambda value: max(0, min(255, round(value + offset))))
+    fill = rgb.convert("RGBA")
+    if settings.tint_opacity:
+        fill = Image.blend(fill, Image.new("RGBA", size, settings.tint), settings.tint_opacity)
+    if settings.glow:
+        light = fill.filter(ImageFilter.GaussianBlur(background_sigma(40, w, h)))
+        fill = Image.blend(fill, ImageChops.screen(fill, light), settings.glow)
+    if settings.vignette:
+        yy, xx = np.ogrid[-1:1:complex(h), -1:1:complex(w)]
+        amount = np.clip((xx * xx + yy * yy) / 2, 0, 1) * settings.vignette
+        dark = Image.new("RGBA", size, (0, 0, 0, 0))
+        dark.putalpha(Image.fromarray((amount * 255).astype(np.uint8)))
+        fill.alpha_composite(dark)
+    if settings.opacity < 1.0:
+        fill_r, fill_g, fill_b, fill_a = fill.split()
+        fill_a = fill_a.point(lambda value: int(round(value * max(0.0, settings.opacity))))
+        fill = Image.merge("RGBA", (fill_r, fill_g, fill_b, fill_a))
+    base.alpha_composite(fill)
+    return base
 
 
 class CameraRenderer:
@@ -563,26 +659,33 @@ class FrameComposer:
         self.layer_renderer = LayerStackRenderer()
         self.clock = RenderFrameClock(fps=30)
         self._image_cache: Dict[str, Image.Image] = {}
+        self._background_cache = OrderedDict()
+        self._background_cache_bytes = 0
 
-    def get_source_image(self, file_path: str, target_w: int, target_h: int) -> Image.Image:
-        if file_path in self._image_cache:
-            return self._image_cache[file_path]
+    def get_source_image(self, file_path: str, target_w: int, target_h: int, normalize_orientation: bool = False) -> Image.Image:
+        cache_key = file_path + "|oriented" if normalize_orientation else file_path
+        if cache_key in self._image_cache:
+            return self._image_cache[cache_key]
 
         p = Path(file_path)
         if p.exists() and p.is_file():
-            img = Image.open(p).convert("RGBA")
+            with Image.open(p) as opened:
+                img = (ImageOps.exif_transpose(opened) if normalize_orientation else opened).convert("RGBA")
         else:
             # Fallback canvas if missing
             img = Image.new("RGBA", (target_w, target_h), color=(40, 50, 70, 255))
 
-        self._image_cache[file_path] = img
+        self._image_cache[cache_key] = img
         return img
 
     def clear_cache(self, file_path: Optional[str] = None) -> None:
         if file_path:
             self._image_cache.pop(file_path, None)
+            self._image_cache.pop(file_path + "|oriented", None)
         else:
             self._image_cache.clear()
+        self._background_cache.clear()
+        self._background_cache_bytes = 0
 
     def compose_frame(
         self,
@@ -614,8 +717,11 @@ class FrameComposer:
             else:
                 return Image.new("RGB", (target_w, target_h), color=(0, 0, 0))
 
+        if shot.background and shot.background.enabled and shot.background.preset != "none":
+            timestamp_sec = frame_index / plan.profile.fps
+
         # Check if shot has rich multi-layer composition
-        if shot.scene_layers:
+        if shot.scene_layers or (shot.background and shot.background.enabled and shot.background.preset != "none"):
             canvas = self._compose_multi_layer_shot(shot, timestamp_sec, target_w, target_h, plan)
         else:
             canvas = self._compose_legacy_camera_shot(shot, frame_index, timestamp_sec, target_w, target_h, plan)
@@ -659,47 +765,81 @@ class FrameComposer:
         # Sort layers by z_index ascending
         sorted_layers = sorted(shot.scene_layers, key=lambda l: int((l.get("transform") or {}).get("z_index", 0)))
 
+        settings = shot.background
+        smart = bool(settings and settings.enabled and settings.preset != "none")
+        if smart:
+            # Selection follows editor layer order, not z sorting, and uses the exact timestamp.
+            source_layer = None
+            for candidate in shot.scene_layers:
+                if settings.source_mode == "pinned_layer" and candidate.get("id") != settings.source_layer_id:
+                    continue
+                if settings.source_mode == "pinned_layer" and candidate.get("disk_image_path"):
+                    source_layer = candidate
+                    break
+                if not candidate.get("visible", True) or not candidate.get("disk_image_path"):
+                    continue
+                tf = self.layer_renderer.evaluate_layer_transform(candidate, shot.duration, elapsed_in_scene)
+                start = float(candidate.get("start_offset_sec", 0))
+                end = start + float(candidate.get("duration_sec", shot.duration))
+                if start <= elapsed_in_scene < end and tf["is_active"] and tf["opacity"] > .005:
+                    source_layer = candidate
+                    break
+            source = None
+            source_key = None
+            if shot.background_image_path:
+                source_key = shot.background_image_path
+                source = self.get_source_image(source_key, target_w, target_h, True)
+            elif source_layer:
+                source_key = (source_layer["disk_image_path"], str(source_layer.get("crop")), source_layer.get("already_cropped"))
+                source = crop_layer_source(self.get_source_image(source_layer["disk_image_path"], target_w, target_h, True), source_layer)
+            progress = max(0, min(1, elapsed_in_scene / max(.001, shot.duration)))
+            occupies_canvas = False
+            if source_layer and source is not None:
+                source_tf = self.layer_renderer.evaluate_layer_transform(source_layer, shot.duration, elapsed_in_scene)
+                aspect_matches = abs((source.width / max(1, source.height)) - (target_w / max(1, target_h))) < 0.005
+                eff_scale = source_tf.get("scale", 1.0) * cam.get("zoom", 1.0)
+                is_centered = (abs(source_tf.get("x", 0.0) + cam.get("pan_x", 0.0)) < 0.5
+                               and abs(source_tf.get("y", 0.0) + cam.get("pan_y", 0.0)) < 0.5
+                               and abs(settings.foreground_x - 0.5) < 0.005
+                               and abs(settings.foreground_y - 0.5) < 0.005)
+                is_unrotated = abs(source_tf.get("rotation", 0.0)) < 0.1
+                is_opaque = source_tf.get("opacity", 1.0) >= 0.995
+                has_alpha = False
+                if source.mode in ("RGBA", "LA"):
+                    extrema = source.getextrema()
+                    if source.mode == "RGBA" and extrema[3][0] < 255:
+                        has_alpha = True
+                if aspect_matches and eff_scale >= 0.999 and is_centered and is_unrotated and is_opaque and not has_alpha:
+                    occupies_canvas = True
+            cache_key = (source_key, settings.model_dump_json(), target_w, target_h, occupies_canvas)
+            cached = self._background_cache.get(cache_key) if settings.motion == "none" else None
+            if cached is None:
+                canvas = build_background(source, settings, (target_w, target_h), progress, occupies_canvas=occupies_canvas)
+                if settings.motion == "none":
+                    self._background_cache[cache_key] = canvas.copy()
+                    self._background_cache_bytes += target_w * target_h * 4
+                    while self._background_cache and (len(self._background_cache) > 8 or self._background_cache_bytes > 64 * 1024 * 1024):
+                        _, evicted = self._background_cache.popitem(last=False)
+                        self._background_cache_bytes -= evicted.width * evicted.height * 4
+            else:
+                self._background_cache.move_to_end(cache_key)
+                canvas = cached.copy()
+
         for layer in sorted_layers:
             if layer.get("visible", True) is False:
                 continue
 
             tf = self.layer_renderer.evaluate_layer_transform(layer, shot.duration, elapsed_in_scene)
-            if not tf["is_active"] or tf["opacity"] <= 0.005:
+            exact_active = float(layer.get("start_offset_sec", 0)) <= elapsed_in_scene < float(layer.get("start_offset_sec", 0)) + float(layer.get("duration_sec", shot.duration))
+            if not tf["is_active"] or tf["opacity"] <= 0.005 or (smart and not exact_active):
                 continue
 
             # Load layer source image
             img_path = layer.get("disk_image_path", "")
             if not img_path:
                 continue
-            src_img = self.get_source_image(img_path, target_w, target_h)
-            src_w, src_h = src_img.size
-
-            # Crop if specified (only if not already an extracted panel asset)
-            crop_cfg = layer.get("crop")
-            if not layer.get("already_cropped") and crop_cfg and isinstance(crop_cfg, dict):
-                cx = float(crop_cfg.get("x", 0.0))
-                cy = float(crop_cfg.get("y", 0.0))
-                cw = float(crop_cfg.get("width", 0.0))
-                ch = float(crop_cfg.get("height", 0.0))
-
-                if cw > 0 and ch > 0:
-                    if cw <= 1.0 and ch <= 1.0:
-                        # Normalized coordinates [0.0, 1.0]
-                        box = (int(round(cx * src_w)), int(round(cy * src_h)), int(round((cx + cw) * src_w)), int(round((cy + ch) * src_h)))
-                    else:
-                        # Absolute pixel coordinates
-                        box = (int(round(cx)), int(round(cy)), int(round(cx + cw)), int(round(cy + ch)))
-
-                    # Clamp box
-                    box = (max(0, box[0]), max(0, box[1]), min(src_w, box[2]), min(src_h, box[3]))
-                    if box[2] > box[0] and box[3] > box[1]:
-                        working_img = src_img.crop(box)
-                    else:
-                        working_img = src_img
-                else:
-                    working_img = src_img
-            else:
-                working_img = src_img
+            src_img = self.get_source_image(img_path, target_w, target_h, smart)
+            working_img = crop_layer_source(src_img, layer)
 
             # Base fit inside 90% of canvas
             pw, ph = working_img.size
@@ -709,7 +849,10 @@ class FrameComposer:
             p_aspect = pw / max(1, ph)
             c_aspect = target_w / max(1, target_h)
 
-            if p_aspect >= c_aspect:
+            if smart:
+                fit_scale = (max if settings.foreground_fit == "cover" else min)(target_w / pw, target_h / ph)
+                base_w, base_h = pw * fit_scale, ph * fit_scale
+            elif p_aspect >= c_aspect:
                 base_w = target_w * 0.90
                 base_h = base_w / p_aspect
             else:
@@ -739,12 +882,18 @@ class FrameComposer:
                 scaled_img.putalpha(alpha)
 
             # Placement center: 50% + offset%
-            center_x = target_w / 2.0 + ((tf["x"] + cam["pan_x"]) / 100.0) * target_w
-            center_y = target_h / 2.0 + ((tf["y"] + cam["pan_y"]) / 100.0) * target_h
+            center_x = target_w * (settings.foreground_x if smart else .5) + ((tf["x"] + cam["pan_x"]) / 100.0) * target_w
+            center_y = target_h * (settings.foreground_y if smart else .5) + ((tf["y"] + cam["pan_y"]) / 100.0) * target_h
             paste_x = int(round(center_x - scaled_img.width / 2.0))
             paste_y = int(round(center_y - scaled_img.height / 2.0))
 
             # Alpha composite onto canvas
+            if smart and settings.edge_shadow:
+                shadow = Image.new("RGBA", scaled_img.size, (0, 0, 0, 0))
+                shadow.putalpha(scaled_img.getchannel("A").point(lambda value: round(value * settings.edge_shadow)))
+                padded = Image.new("RGBA", (target_w, target_h), (0, 0, 0, 0))
+                padded.alpha_composite(shadow, (paste_x, paste_y))
+                canvas.alpha_composite(padded.filter(ImageFilter.GaussianBlur(background_sigma(24, target_w, target_h))))
             canvas.alpha_composite(scaled_img, (paste_x, paste_y))
 
         # Scene Transitions (fade, fade_from_black, fade_to_black, impact_flash)

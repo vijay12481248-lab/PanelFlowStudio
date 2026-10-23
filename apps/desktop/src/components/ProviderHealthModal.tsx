@@ -1,11 +1,21 @@
 import React, { useEffect, useState } from "react";
 import { api } from "@panelflow/api-client";
-import type { ProviderHealth, SystemProvidersResponse, HardwareDiagnostics } from "@panelflow/shared-types";
+import type {
+  ProviderHealth,
+  SystemProvidersResponse,
+  HardwareDiagnostics,
+  CloudLLMConfig,
+  CloudLLMTestResponse,
+  GlobalLLMSettings,
+  FlowOverrideConfig,
+  ProviderCatalogItem,
+} from "@panelflow/shared-types";
 import { Button, Card, Badge, ProgressBar, Icons } from "@panelflow/ui";
 
 interface ProviderHealthModalProps {
   open: boolean;
   onClose: () => void;
+  initialTab?: "global" | "cloud_llm" | "ollama" | "system";
 }
 
 const statusColor: Record<string, string> = {
@@ -60,12 +70,60 @@ const providerGuidance: Record<string, string> = {
   playwright: "Optional: Run 'playwright install chromium' to crawl SPA reader websites.",
 };
 
-export const ProviderHealthModal: React.FC<ProviderHealthModalProps> = ({ open, onClose }) => {
-  const [activeTab, setActiveTab] = useState<"system" | "ollama">("system");
+export const ProviderHealthModal: React.FC<ProviderHealthModalProps> = ({ open, onClose, initialTab = "global" }) => {
+  const [activeTab, setActiveTab] = useState<"global" | "cloud_llm" | "ollama" | "system">(initialTab);
   const [data, setData] = useState<SystemProvidersResponse | null>(null);
   const [hardware, setHardware] = useState<HardwareDiagnostics | null>(null);
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
+
+  // Centralized Global LLM Routing State
+  const [globalSettings, setGlobalSettings] = useState<GlobalLLMSettings | null>(null);
+  const [selectedGlobalProvider, setSelectedGlobalProvider] = useState<string>("ollama");
+  const [selectedGlobalModel, setSelectedGlobalModel] = useState<string>("qwen3.5:9b");
+  const [flowOverrides, setFlowOverrides] = useState<Record<string, FlowOverrideConfig>>({
+    story_narration: { provider_id: "global", model_name: "" },
+    story_script: { provider_id: "global", model_name: "" },
+    character_analysis: { provider_id: "global", model_name: "" },
+    vision_inspection: { provider_id: "global", model_name: "" },
+  });
+  const [savingGlobalSettings, setSavingGlobalSettings] = useState<boolean>(false);
+  const [globalSaveMessage, setGlobalSaveMessage] = useState<string | null>(null);
+
+  const loadGlobalSettings = async () => {
+    try {
+      const res = await api.getGlobalLLMSettings();
+      if (res) {
+        setGlobalSettings(res);
+        setSelectedGlobalProvider(res.global_default_provider || "ollama");
+        setSelectedGlobalModel(res.global_default_model || "qwen3.5:9b");
+        if (res.flow_overrides) {
+          setFlowOverrides(res.flow_overrides);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to load global LLM settings:", err);
+    }
+  };
+
+  const handleSaveGlobalSettings = async () => {
+    setSavingGlobalSettings(true);
+    setGlobalSaveMessage(null);
+    try {
+      await api.saveGlobalLLMSettings({
+        global_default_provider: selectedGlobalProvider,
+        global_default_model: selectedGlobalModel,
+        flow_overrides: flowOverrides,
+      });
+      setGlobalSaveMessage("Global LLM Routing & Defaults saved successfully!");
+      setTimeout(() => setGlobalSaveMessage(null), 3500);
+      loadGlobalSettings();
+    } catch (err: any) {
+      alert(`Failed to save global settings: ${err.message}`);
+    } finally {
+      setSavingGlobalSettings(false);
+    }
+  };
 
   // Ollama & Resources State
   const [ollamaConfig, setOllamaConfig] = useState<any>(null);
@@ -89,6 +147,108 @@ export const ProviderHealthModal: React.FC<ProviderHealthModalProps> = ({ open, 
   const [pullingModel, setPullingModel] = useState(false);
   const [pullModelInput, setPullModelInput] = useState("qwen2.5:7b");
   const [pullStatus, setPullStatus] = useState<any>(null);
+
+  // Cloud & Free LLM State
+  const [cloudConfig, setCloudConfig] = useState<CloudLLMConfig | null>(null);
+  const [cloudProviderType, setCloudProviderType] = useState<string>("openrouter");
+  const [cloudEndpointUrl, setCloudEndpointUrl] = useState<string>("https://openrouter.ai/api/v1");
+  const [cloudApiKey, setCloudApiKey] = useState<string>("");
+  const [cloudShowApiKey, setCloudShowApiKey] = useState<boolean>(false);
+  const [cloudModelName, setCloudModelName] = useState<string>("meta-llama/llama-3.3-70b-instruct:free");
+  const [cloudTesting, setCloudTesting] = useState<boolean>(false);
+  const [cloudTestResult, setCloudTestResult] = useState<CloudLLMTestResponse | null>(null);
+  const [cloudSaving, setCloudSaving] = useState<boolean>(false);
+  const [cloudSaveMessage, setCloudSaveMessage] = useState<string | null>(null);
+
+  const loadCloudConfig = async () => {
+    try {
+      const cfg = await api.getCloudLLMConfig();
+      if (cfg) {
+        setCloudConfig(cfg);
+        setCloudProviderType(cfg.provider_type || "openrouter");
+        setCloudEndpointUrl(cfg.endpoint_url || "https://openrouter.ai/api/v1");
+        setCloudModelName(cfg.model_name || "meta-llama/llama-3.3-70b-instruct:free");
+        if (cfg.has_api_key && cfg.masked_api_key) {
+          setCloudApiKey(cfg.masked_api_key);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to load cloud LLM config:", err);
+    }
+  };
+
+  const handleApplyPreset = (preset: "openrouter" | "groq" | "freellmapi" | "custom") => {
+    setCloudProviderType(preset);
+    setCloudTestResult(null);
+    setCloudSaveMessage(null);
+    if (preset === "openrouter") {
+      setCloudEndpointUrl("https://openrouter.ai/api/v1");
+      setCloudModelName("meta-llama/llama-3.3-70b-instruct:free");
+    } else if (preset === "groq") {
+      setCloudEndpointUrl("https://api.groq.com/openai/v1");
+      setCloudModelName("llama-3.3-70b-versatile");
+    } else if (preset === "freellmapi") {
+      setCloudEndpointUrl("http://localhost:3001/v1");
+      setCloudModelName("gemini-2.0-flash");
+    } else {
+      setCloudEndpointUrl("http://127.0.0.1:1234/v1");
+      setCloudModelName("default");
+    }
+  };
+
+  const handleTestCloudConnection = async () => {
+    setCloudTesting(true);
+    setCloudTestResult(null);
+    try {
+      const res = await api.testCloudLLMConnection({
+        endpoint_url: cloudEndpointUrl,
+        api_key: cloudApiKey,
+        model_name: cloudModelName,
+      });
+      setCloudTestResult(res);
+    } catch (err: any) {
+      setCloudTestResult({
+        status: "ERROR",
+        connected: false,
+        latency_ms: 0,
+        models_count: 0,
+        models: [],
+        error: err.message,
+      });
+    } finally {
+      setCloudTesting(false);
+    }
+  };
+
+  const handleSaveCloudConfig = async () => {
+    setCloudSaving(true);
+    setCloudSaveMessage(null);
+    try {
+      const res = await api.saveCloudLLMConfig({
+        provider_type: cloudProviderType,
+        endpoint_url: cloudEndpointUrl,
+        api_key: cloudApiKey,
+        model_name: cloudModelName,
+        custom_models: cloudConfig?.custom_models || [
+          "meta-llama/llama-3.3-70b-instruct:free",
+          "google/gemini-2.0-flash-exp:free",
+          "deepseek/deepseek-r1:free",
+          "qwen/qwen-2.5-vl-72b-instruct:free",
+          "google/gemini-2.0-pro-exp-02-05:free",
+          "llama-3.3-70b-versatile",
+          "llama-3.1-8b-instant",
+        ],
+        is_active: true,
+      });
+      setCloudConfig(res);
+      setCloudSaveMessage("Cloud LLM configuration saved and activated successfully!");
+      await loadHealth();
+    } catch (err: any) {
+      setCloudSaveMessage(`Save failed: ${err.message}`);
+    } finally {
+      setCloudSaving(false);
+    }
+  };
 
   const handleLocateFfmpeg = async () => {
     setLocatingFfmpeg(true);
@@ -283,10 +443,13 @@ export const ProviderHealthModal: React.FC<ProviderHealthModalProps> = ({ open, 
 
   useEffect(() => {
     if (open) {
+      if (initialTab) setActiveTab(initialTab);
+      loadGlobalSettings();
       loadHealth();
       loadOllamaAndResources();
+      loadCloudConfig();
     }
-  }, [open]);
+  }, [open, initialTab]);
 
   if (!open) return null;
 
@@ -300,8 +463,8 @@ export const ProviderHealthModal: React.FC<ProviderHealthModalProps> = ({ open, 
               <Icons.ShieldCheck className="w-4 h-4 text-indigo-400" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-zinc-100">System Diagnostics & Ollama Orchestration</h2>
-              <p className="text-[11px] text-zinc-400">Hardware telemetry, model capability discovery & multi-project admission control</p>
+              <h2 className="text-lg font-bold text-zinc-100">LLM Provider Orchestration & System Diagnostics</h2>
+              <p className="text-[11px] text-zinc-400">Configure global default models, per-workflow routing, FreeLLMAPI/Cloud keys, and local GPU acceleration</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -312,31 +475,273 @@ export const ProviderHealthModal: React.FC<ProviderHealthModalProps> = ({ open, 
         </div>
 
         {/* Navigation Tabs */}
-        <div className="flex border-b border-zinc-800 px-6 bg-zinc-950/60">
+        <div className="flex border-b border-zinc-800 px-6 bg-zinc-950/60 overflow-x-auto">
           <button
-            onClick={() => setActiveTab("system")}
-            className={`py-2.5 px-4 text-xs font-bold border-b-2 transition-colors ${
-              activeTab === "system"
+            onClick={() => setActiveTab("global")}
+            className={`py-2.5 px-4 text-xs font-bold border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap ${
+              activeTab === "global"
                 ? "border-indigo-500 text-indigo-300"
                 : "border-transparent text-zinc-400 hover:text-zinc-200"
             }`}
           >
-            System Dependencies & Hardware
+            <Icons.Sliders className="w-3.5 h-3.5 text-indigo-400" />
+            Global Routing & Workflow Defaults
+          </button>
+          <button
+            onClick={() => setActiveTab("cloud_llm")}
+            className={`py-2.5 px-4 text-xs font-bold border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap ${
+              activeTab === "cloud_llm"
+                ? "border-indigo-500 text-indigo-300"
+                : "border-transparent text-zinc-400 hover:text-zinc-200"
+            }`}
+          >
+            <Icons.Sparkles className="w-3.5 h-3.5 text-amber-400" />
+            Cloud & Free LLM APIs (FreeLLMAPI, OpenRouter, Groq)
           </button>
           <button
             onClick={() => setActiveTab("ollama")}
-            className={`py-2.5 px-4 text-xs font-bold border-b-2 transition-colors ${
+            className={`py-2.5 px-4 text-xs font-bold border-b-2 transition-colors whitespace-nowrap ${
               activeTab === "ollama"
                 ? "border-indigo-500 text-indigo-300"
                 : "border-transparent text-zinc-400 hover:text-zinc-200"
             }`}
           >
-            Ollama Models & GPU Admission
+            Local Ollama Models & GPU
+          </button>
+          <button
+            onClick={() => setActiveTab("system")}
+            className={`py-2.5 px-4 text-xs font-bold border-b-2 transition-colors whitespace-nowrap ${
+              activeTab === "system"
+                ? "border-indigo-500 text-indigo-300"
+                : "border-transparent text-zinc-400 hover:text-zinc-200"
+            }`}
+          >
+            System Dependencies
           </button>
         </div>
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto p-6 space-y-4">
+          {activeTab === "global" && (
+            <div className="space-y-4">
+              {/* Header Guidance */}
+              <div className="flex items-center justify-between p-3.5 bg-gradient-to-r from-indigo-950/40 via-zinc-900 to-zinc-950 rounded-xl border border-indigo-900/40">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-indigo-600/20 flex items-center justify-center text-indigo-400">
+                    <Icons.Sliders className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-zinc-100">Centralized LLM Provider & Routing Cockpit</h3>
+                    <p className="text-[11px] text-zinc-400">
+                      Configure your default provider and assign specialized models per workflow (Narration, Script, Characters, Vision).
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={handleSaveGlobalSettings}
+                  disabled={savingGlobalSettings}
+                  className="text-xs"
+                >
+                  {savingGlobalSettings ? "Saving Settings..." : "Save Global Configuration"}
+                </Button>
+              </div>
+
+              {globalSaveMessage && (
+                <div className="p-2.5 bg-emerald-950/40 border border-emerald-800/80 rounded-lg text-xs font-semibold text-emerald-300">
+                  ✓ {globalSaveMessage}
+                </div>
+              )}
+
+              {/* Global Default Section */}
+              <Card className="p-4 bg-zinc-950 border-zinc-800 space-y-3">
+                <div className="flex items-center justify-between border-b border-zinc-800/80 pb-2">
+                  <div>
+                    <h4 className="text-xs font-bold text-zinc-200 uppercase tracking-wider">
+                      1. Application-Wide Default LLM Provider
+                    </h4>
+                    <p className="text-[11px] text-zinc-400">
+                      Used by all features unless an explicit flow override is configured.
+                    </p>
+                  </div>
+                  <Badge variant="success">
+                    Active Default: {selectedGlobalProvider} ({selectedGlobalModel})
+                  </Badge>
+                </div>
+
+                {/* Provider Selector Cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 pt-1">
+                  {[
+                    { id: "ollama", name: "Local Ollama", icon: "🖥️", note: "Offline Local GPU", tag: "Local" },
+                    { id: "freellmapi", name: "FreeLLMAPI", icon: "⚡", note: "Multi-Provider Gateway", tag: "Gateway" },
+                    { id: "openrouter", name: "OpenRouter", icon: "☁️", note: "Free Llama 3.3 & Gemini", tag: "Free Tier" },
+                    { id: "groq", name: "Groq Cloud", icon: "🚀", note: "Ultra-Fast LPU", tag: "Free Tier" },
+                    { id: "custom", name: "Custom API", icon: "💻", note: "OpenAI-Compatible", tag: "Custom" },
+                  ].map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => setSelectedGlobalProvider(p.id)}
+                      className={`p-2.5 rounded-xl border text-left transition-all ${
+                        selectedGlobalProvider === p.id
+                          ? "border-indigo-500 bg-indigo-950/30 shadow-sm shadow-indigo-500/20"
+                          : "border-zinc-800 bg-zinc-900/60 hover:border-zinc-700"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-bold text-zinc-100 flex items-center gap-1">
+                          <span>{p.icon}</span> {p.name}
+                        </span>
+                        <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-zinc-800 text-zinc-300">
+                          {p.tag}
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-zinc-400 leading-tight">{p.note}</p>
+                    </button>
+                  ))}
+                </div>
+
+                {/* Global Default Model Selection */}
+                <div className="space-y-1 pt-2">
+                  <label className="text-zinc-400 font-semibold text-xs">Global Default Model Name</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={selectedGlobalModel}
+                      onChange={(e) => setSelectedGlobalModel(e.target.value)}
+                      placeholder="e.g. qwen3.5:9b, gemini-2.0-flash, meta-llama/llama-3.3-70b-instruct:free"
+                      className="flex-1 bg-zinc-900 border border-zinc-700 rounded px-2.5 py-1.5 font-mono text-zinc-200 text-xs focus:outline-none focus:border-indigo-500"
+                    />
+                    <select
+                      onChange={(e) => {
+                        if (e.target.value) setSelectedGlobalModel(e.target.value);
+                      }}
+                      className="bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-zinc-200 text-xs focus:outline-none focus:border-indigo-500 cursor-pointer"
+                      value=""
+                    >
+                      <option value="">Quick Presets...</option>
+                      <option value="qwen3.5:9b">Local Ollama: qwen3.5:9b</option>
+                      <option value="qwen3.8:27b">Local Ollama: qwen3.8:27b</option>
+                      <option value="gemini-2.0-flash">FreeLLMAPI: Gemini 2.0 Flash</option>
+                      <option value="cerebras/llama3.1-70b">FreeLLMAPI: Cerebras Llama 3.1 70B</option>
+                      <option value="meta-llama/llama-3.3-70b-instruct:free">OpenRouter: Llama 3.3 70B (Free)</option>
+                      <option value="google/gemini-2.0-flash-exp:free">OpenRouter: Gemini 2.0 Flash (Free)</option>
+                      <option value="deepseek/deepseek-r1:free">OpenRouter: DeepSeek R1 (Free)</option>
+                      <option value="llama-3.3-70b-versatile">Groq: Llama 3.3 70B Versatile</option>
+                    </select>
+                  </div>
+                </div>
+              </Card>
+
+              {/* Per-Workflow Routing Matrix Card */}
+              <Card className="p-4 bg-zinc-950 border-zinc-800 space-y-3">
+                <div className="border-b border-zinc-800/80 pb-2">
+                  <h4 className="text-xs font-bold text-zinc-200 uppercase tracking-wider">
+                    2. Per-Workflow Routing Matrix (Freedom & Fine Control)
+                  </h4>
+                  <p className="text-[11px] text-zinc-400">
+                    Set whether each workflow inherits the Global Default or routes to a specialized model.
+                  </p>
+                </div>
+
+                <div className="space-y-3">
+                  {[
+                    {
+                      key: "story_narration",
+                      label: "🎬 Story Narration (Narration Studio)",
+                      desc: "Full-page macro scene analysis and panel-level audio narration drafting.",
+                      defaultModel: "gemini-2.0-flash",
+                    },
+                    {
+                      key: "story_script",
+                      label: "📜 Screenplay & Scriptwriting",
+                      desc: "Scene dialogue extraction, cinematic timing, and action beat generation.",
+                      defaultModel: "llama-3.3-70b-versatile",
+                    },
+                    {
+                      key: "character_analysis",
+                      label: "👥 Character Roster & Profiling",
+                      desc: "Detecting character identities, visual traits, and naming continuity.",
+                      defaultModel: "qwen3.5:9b",
+                    },
+                    {
+                      key: "vision_inspection",
+                      label: "👁️ Visual Panel & OCR Inspection",
+                      desc: "Multimodal inspection of uncropped manga pages and speech bubbles.",
+                      defaultModel: "llama3.2-vision",
+                    },
+                  ].map((flow) => {
+                    const currentFlowConfig = flowOverrides[flow.key] || { provider_id: "global", model_name: "" };
+                    return (
+                      <div
+                        key={flow.key}
+                        className="p-3 bg-zinc-900/60 rounded-xl border border-zinc-800/80 flex flex-col md:flex-row md:items-center justify-between gap-3"
+                      >
+                        <div className="space-y-0.5 max-w-sm">
+                          <span className="text-xs font-bold text-zinc-200">{flow.label}</span>
+                          <p className="text-[11px] text-zinc-400">{flow.desc}</p>
+                        </div>
+
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <select
+                            value={currentFlowConfig.provider_id || "global"}
+                            onChange={(e) => {
+                              const newPid = e.target.value;
+                              setFlowOverrides({
+                                ...flowOverrides,
+                                [flow.key]: {
+                                  provider_id: newPid,
+                                  model_name: newPid === "global" ? "" : (currentFlowConfig.model_name || flow.defaultModel),
+                                },
+                              });
+                            }}
+                            className="bg-zinc-950 border border-zinc-700 rounded px-2.5 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500 font-medium"
+                          >
+                            <option value="global">🌐 Use Global Default</option>
+                            <option value="ollama">🖥️ Local Ollama</option>
+                            <option value="freellmapi">⚡ FreeLLMAPI Gateway</option>
+                            <option value="openrouter">☁️ OpenRouter Free</option>
+                            <option value="groq">🚀 Groq Cloud Free</option>
+                            <option value="custom">💻 Custom OpenAI</option>
+                          </select>
+
+                          {currentFlowConfig.provider_id && currentFlowConfig.provider_id !== "global" && (
+                            <input
+                              type="text"
+                              value={currentFlowConfig.model_name || ""}
+                              onChange={(e) =>
+                                setFlowOverrides({
+                                  ...flowOverrides,
+                                  [flow.key]: {
+                                    ...currentFlowConfig,
+                                    model_name: e.target.value,
+                                  },
+                                })
+                              }
+                              placeholder={flow.defaultModel}
+                              className="bg-zinc-950 border border-zinc-700 rounded px-2.5 py-1.5 text-xs font-mono text-zinc-200 w-44 focus:outline-none focus:border-indigo-500"
+                            />
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="flex justify-end pt-2">
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={handleSaveGlobalSettings}
+                    disabled={savingGlobalSettings}
+                  >
+                    Save Routing Matrix
+                  </Button>
+                </div>
+              </Card>
+            </div>
+          )}
           {activeTab === "system" ? (
             <>
               {/* Hardware Diagnostics Card */}
@@ -943,6 +1348,278 @@ export const ProviderHealthModal: React.FC<ProviderHealthModalProps> = ({ open, 
                     </select>
                   </div>
                 </div>
+              </Card>
+            </div>
+          )}
+
+          {activeTab === "cloud_llm" && (
+            <div className="space-y-4">
+              {/* Preset Selector Card */}
+              <Card className="p-4 bg-zinc-950 border-zinc-800 space-y-3">
+                <div className="flex items-center justify-between border-b border-zinc-800/80 pb-3">
+                  <div className="flex items-center gap-2">
+                    <Icons.Sparkles className="w-4 h-4 text-amber-400" />
+                    <h3 className="text-sm font-bold text-zinc-100">Select Provider or Preset</h3>
+                  </div>
+                  <Badge variant={cloudConfig?.is_active && cloudConfig?.has_api_key ? "success" : "neutral"}>
+                    {cloudConfig?.is_active && cloudConfig?.has_api_key ? "Active & Configured" : "Configuration Needed"}
+                  </Badge>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => handleApplyPreset("openrouter")}
+                    className={`p-3 rounded-xl border text-left transition-all ${
+                      cloudProviderType === "openrouter"
+                        ? "border-indigo-500 bg-indigo-950/20 shadow-sm shadow-indigo-500/20"
+                        : "border-zinc-800 bg-zinc-900/60 hover:border-zinc-700"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-bold text-zinc-100">OpenRouter (Free)</span>
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Free Models</span>
+                    </div>
+                    <p className="text-[11px] text-zinc-400 leading-relaxed">
+                      Llama 3.3 70B, Gemini 2.0 Flash, DeepSeek R1 with 0 cost.
+                    </p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleApplyPreset("groq")}
+                    className={`p-3 rounded-xl border text-left transition-all ${
+                      cloudProviderType === "groq"
+                        ? "border-cyan-500 bg-cyan-950/20 shadow-sm shadow-cyan-500/20"
+                        : "border-zinc-800 bg-zinc-900/60 hover:border-zinc-700"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-bold text-zinc-100">Groq Cloud (Free)</span>
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">Ultra-Fast</span>
+                    </div>
+                    <p className="text-[11px] text-zinc-400 leading-relaxed">
+                      Instant LPU inference on Llama 3.3 70B Versatile and Llama 3.1 8B.
+                    </p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleApplyPreset("freellmapi")}
+                    className={`p-3 rounded-xl border text-left transition-all ${
+                      cloudProviderType === "freellmapi"
+                        ? "border-emerald-500 bg-emerald-950/20 shadow-sm shadow-emerald-500/20"
+                        : "border-zinc-800 bg-zinc-900/60 hover:border-zinc-700"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-bold text-zinc-100">FreeLLMAPI</span>
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Gateway</span>
+                    </div>
+                    <p className="text-[11px] text-zinc-400 leading-relaxed">
+                      Aggregates Gemini, Groq, Cerebras & Mistral via http://localhost:3001/v1.
+                    </p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleApplyPreset("custom")}
+                    className={`p-3 rounded-xl border text-left transition-all ${
+                      cloudProviderType === "custom"
+                        ? "border-violet-500 bg-violet-950/20 shadow-sm shadow-violet-500/20"
+                        : "border-zinc-800 bg-zinc-900/60 hover:border-zinc-700"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-bold text-zinc-100">Custom OpenAI</span>
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300">Custom</span>
+                    </div>
+                    <p className="text-[11px] text-zinc-400 leading-relaxed">
+                      Any OpenAI endpoint (LM Studio, vLLM, DeepSeek, Mistral).
+                    </p>
+                  </button>
+                </div>
+
+                {/* Free API Key Guide Banner */}
+                <div className="p-3 bg-zinc-900/80 rounded-xl border border-zinc-800/80 text-xs text-zinc-300 space-y-1">
+                  <p className="font-semibold text-amber-300 flex items-center gap-1.5">
+                    <Icons.Info className="w-3.5 h-3.5" />
+                    How to get and configure your Free API:
+                  </p>
+                  <ul className="list-disc list-inside space-y-0.5 text-[11px] text-zinc-400 pl-1">
+                    {cloudProviderType === "openrouter" && (
+                      <>
+                        <li>Sign up at <span className="font-mono text-indigo-300">openrouter.ai</span> and generate a free API key under Account Settings.</li>
+                        <li>Models with the <span className="font-mono text-emerald-400">:free</span> tag (e.g. Llama 3.3 70B, Gemini 2.0 Flash) have zero usage charges.</li>
+                      </>
+                    )}
+                    {cloudProviderType === "groq" && (
+                      <>
+                        <li>Sign up at <span className="font-mono text-cyan-300">console.groq.com</span> and generate a free API key.</li>
+                        <li>Generous free daily rate limits for rapid screenplay and dialogue drafting.</li>
+                      </>
+                    )}
+                    {cloudProviderType === "freellmapi" && (
+                      <>
+                        <li>Run FreeLLMAPI (<span className="font-mono text-emerald-300">github.com/tashfeenahmed/freellmapi</span>) locally via Docker or Node at <span className="font-mono text-indigo-300">http://localhost:3001</span>.</li>
+                        <li>FreeLLMAPI unites free keys from Google Gemini, Groq, Cerebras, Mistral, and GitHub Models into a single OpenAI-compatible <span className="font-mono text-emerald-300">/v1</span> endpoint.</li>
+                        <li>Paste your FreeLLMAPI Master API Key below (or leave blank if authentication is not set), then click <strong className="text-zinc-200">Test Connection</strong> to discover all aggregated models!</li>
+                      </>
+                    )}
+                    {cloudProviderType === "custom" && (
+                      <>
+                        <li>Point to any OpenAI-compatible base URL ending in <span className="font-mono text-violet-300">/v1</span> (e.g. local LM Studio on port 1234 or remote server).</li>
+                      </>
+                    )}
+                  </ul>
+                </div>
+              </Card>
+
+              {/* Endpoint & Key Configuration Form */}
+              <Card className="p-4 bg-zinc-950 border-zinc-800 space-y-3">
+                <h4 className="text-xs font-bold text-zinc-300 uppercase tracking-wider">API Connection Parameters</h4>
+                
+                <div className="space-y-3 text-xs">
+                  <div className="space-y-1">
+                    <label className="text-zinc-400 font-semibold">Endpoint Base URL (OpenAI /v1 format)</label>
+                    <input
+                      type="text"
+                      value={cloudEndpointUrl}
+                      onChange={(e) => setCloudEndpointUrl(e.target.value)}
+                      placeholder="https://openrouter.ai/api/v1"
+                      className="w-full bg-zinc-900 border border-zinc-700 rounded px-2.5 py-1.5 font-mono text-zinc-200 text-xs focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <label className="text-zinc-400 font-semibold">API Secret Key</label>
+                      <button
+                        type="button"
+                        onClick={() => setCloudShowApiKey(!cloudShowApiKey)}
+                        className="text-[11px] text-indigo-400 hover:text-indigo-300"
+                      >
+                        {cloudShowApiKey ? "Hide Key" : "Show Key"}
+                      </button>
+                    </div>
+                    <input
+                      type={cloudShowApiKey ? "text" : "password"}
+                      value={cloudApiKey}
+                      onChange={(e) => setCloudApiKey(e.target.value)}
+                      placeholder="sk-or-v1-... or your secret key"
+                      className="w-full bg-zinc-900 border border-zinc-700 rounded px-2.5 py-1.5 font-mono text-zinc-200 text-xs focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-zinc-400 font-semibold">Model Name</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={cloudModelName}
+                        onChange={(e) => setCloudModelName(e.target.value)}
+                        placeholder="meta-llama/llama-3.3-70b-instruct:free"
+                        className="flex-1 bg-zinc-900 border border-zinc-700 rounded px-2.5 py-1.5 font-mono text-zinc-200 text-xs focus:outline-none focus:border-indigo-500"
+                      />
+                      <select
+                        onChange={(e) => {
+                          if (e.target.value) setCloudModelName(e.target.value);
+                        }}
+                        className="bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-zinc-200 text-xs focus:outline-none focus:border-indigo-500 cursor-pointer"
+                        value=""
+                      >
+                        <option value="">Quick Presets...</option>
+                        <option value="meta-llama/llama-3.3-70b-instruct:free">Llama 3.3 70B (Free)</option>
+                        <option value="google/gemini-2.0-flash-exp:free">Gemini 2.0 Flash (Free)</option>
+                        <option value="deepseek/deepseek-r1:free">DeepSeek R1 (Free)</option>
+                        <option value="qwen/qwen-2.5-vl-72b-instruct:free">Qwen 2.5 VL 72B (Free Multimodal)</option>
+                        <option value="llama-3.3-70b-versatile">Groq Llama 3.3 70B Versatile</option>
+                        <option value="llama-3.1-8b-instant">Groq Llama 3.1 8B Instant</option>
+                        <option value="gemini-2.0-flash">Gemini 2.0 Flash (FreeLLMAPI)</option>
+                        <option value="cerebras/llama3.1-70b">Cerebras Llama 3.1 70B (FreeLLMAPI)</option>
+                        <option value="mistralai/mistral-large">Mistral Large (FreeLLMAPI)</option>
+                      </select>
+                    </div>
+                    {cloudTestResult?.models && cloudTestResult.models.length > 0 && (
+                      <div className="flex items-center gap-1.5 flex-wrap pt-1.5">
+                        <span className="text-[10px] text-zinc-400 font-medium">Discovered from endpoint:</span>
+                        {cloudTestResult.models.slice(0, 8).map((m) => (
+                          <button
+                            key={m}
+                            type="button"
+                            onClick={() => setCloudModelName(m)}
+                            className={`px-1.5 py-0.5 rounded text-[10px] font-mono border transition-colors ${
+                              cloudModelName === m
+                                ? "bg-indigo-600/30 text-indigo-200 border-indigo-500"
+                                : "bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-zinc-200 hover:border-zinc-700"
+                            }`}
+                          >
+                            {m}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Actions & Test Result */}
+                <div className="pt-2 flex flex-wrap items-center justify-between gap-2 border-t border-zinc-800/80">
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={handleTestCloudConnection}
+                      disabled={cloudTesting || !cloudEndpointUrl}
+                      className="text-xs"
+                    >
+                      {cloudTesting ? (
+                        <>
+                          <span className="w-3 h-3 border-2 border-zinc-400/30 border-t-zinc-400 rounded-full animate-spin mr-1.5" />
+                          Testing Endpoint...
+                        </>
+                      ) : (
+                        <>
+                          <Icons.Activity className="w-3.5 h-3.5 mr-1.5 text-indigo-400" />
+                          Test Connection
+                        </>
+                      )}
+                    </Button>
+
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onClick={handleSaveCloudConfig}
+                      disabled={cloudSaving || !cloudEndpointUrl}
+                      className="text-xs"
+                    >
+                      {cloudSaving ? "Saving..." : "Save Configuration"}
+                    </Button>
+                  </div>
+
+                  {cloudTestResult && (
+                    <div className="flex items-center gap-2 text-xs">
+                      <Badge variant={cloudTestResult.connected ? "success" : "danger"}>
+                        {cloudTestResult.connected ? `Connected (${cloudTestResult.latency_ms}ms)` : "Failed"}
+                      </Badge>
+                      {cloudTestResult.models_count > 0 && (
+                        <span className="text-zinc-400 font-mono text-[11px]">
+                          {cloudTestResult.models_count} models discovered
+                        </span>
+                      )}
+                      {cloudTestResult.error && (
+                        <span className="text-rose-400 max-w-[240px] truncate" title={cloudTestResult.error}>
+                          {cloudTestResult.error}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {cloudSaveMessage && (
+                  <p className="text-xs font-semibold text-emerald-400 pt-1">
+                    {cloudSaveMessage}
+                  </p>
+                )}
               </Card>
             </div>
           )}

@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { api } from "@panelflow/api-client";
 import { SourceSetupCanvas } from "../SourceSetupCanvas";
-import { splitSelector, transformSelector, validPolygon } from "../selectorGeometry";
+import { addVertexToPolygon, convertPolygonToRect, convertRectToPolygon, removeVertexFromPolygon, splitSelector, transformSelector, validPolygon } from "../selectorGeometry";
 import type { Handle, Selector } from "../selectorGeometry";
 import type { Page, Panel } from "@panelflow/shared-types";
 const { JSDOM } = createRequire(import.meta.url)("jsdom");
@@ -270,4 +270,131 @@ test("an empty page supports real manual selector creation before Auto Detect", 
     assert.equal(editor.latest().length, 0);
     assert.equal(editor.button("Save selectors").disabled, true, "a completed page draft must not return after deleting its saved panel");
   } finally { await editor.close(); }
+});
+
+test("selectorGeometry supports rect to polygon conversion, vertex addition, and removal", () => {
+  const rect: Selector = { id: "s1", kind: "rect", x: 10, y: 20, width: 100, height: 200 };
+  const poly = convertRectToPolygon(rect);
+  assert.equal(poly.kind, "polygon");
+  assert.equal(poly.points?.length, 4);
+  assert.deepEqual(poly.points, [{ x: 10, y: 20 }, { x: 110, y: 20 }, { x: 110, y: 220 }, { x: 10, y: 220 }]);
+  assert.equal(validPolygon(poly.points!), true);
+
+  const withVertex = addVertexToPolygon(poly);
+  assert.equal(withVertex.points?.length, 5);
+  assert.equal(validPolygon(withVertex.points!), true);
+
+  const removed = removeVertexFromPolygon(withVertex, 1);
+  assert.equal(removed.points?.length, 4);
+  assert.equal(validPolygon(removed.points!), true);
+
+  // Minimum 3 vertices constraint
+  const tri = removeVertexFromPolygon(removed, 0);
+  assert.equal(tri.points?.length, 3);
+  const cantRemove = removeVertexFromPolygon(tri, 0);
+  assert.equal(cantRemove.points?.length, 3);
+
+  const backToRect = convertPolygonToRect(poly);
+  assert.equal(backToRect.kind, "rect");
+  assert.equal(backToRect.points, undefined);
+  assert.equal(backToRect.width, 100);
+  assert.equal(backToRect.height, 200);
+});
+
+test("Custom vertices allows independent vertex dragging, adding vertices, and persisting polygon contour", async () => {
+  const editor = await mount();
+  try {
+    // Initial selector is rect with 4 corners and center
+    assert.equal(editor.container.querySelector('[aria-label="Add custom vertices to selector"]') !== null, true);
+    await editor.click("Custom vertices");
+
+    // After conversion: selector is polygon with 4 vertex handles and midpoint + handles
+    assert.ok(editor.container.querySelector('[aria-label="Polygon vertex 1"]'));
+    assert.ok(editor.container.querySelector('[aria-label="Polygon vertex 4"]'));
+    assert.ok(editor.container.querySelector('[aria-label="Add vertex on edge 1"]'));
+    assert.ok(editor.button("+ Add vertex"));
+    assert.ok(editor.button("Remove vertex"));
+
+    // Drag vertex 1 independently to a non-rectangular slanted coordinate
+    await editor.pointer("pointerdown", 20, 30, editor.container.querySelector('[aria-label="Polygon vertex 1"]'));
+    await editor.pointer("pointermove", 60, 80);
+    await editor.pointer("pointerup", 60, 80);
+
+    // Add a 5th vertex
+    await editor.click("+ Add vertex");
+    assert.equal(editor.container.querySelectorAll('[aria-label^="Polygon vertex"]').length, 5);
+
+    // Save and verify payload has points
+    await editor.click("Save selectors");
+    assert.equal(editor.latest().length, 1);
+    assert.ok(editor.latest()[0].polygon_json);
+    const parsed = JSON.parse(editor.latest()[0].polygon_json!);
+    assert.equal(parsed.length, 5);
+  } finally { await editor.close(); }
+});
+
+test("Add panel to timeline passes polygon points and clip path to timeline", async () => {
+  let addedPanel: any = null;
+  let addedCustomCrop: any = null;
+  const dom = new JSDOM("<!doctype html><div id='root'></div>", { url: "http://localhost/", pretendToBeVisual: true });
+  const keys = ["window", "document", "navigator", "HTMLElement", "HTMLInputElement", "SVGElement", "IS_REACT_ACT_ENVIRONMENT"];
+  const previous = new Map(keys.map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const key of keys) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value: key === "IS_REACT_ACT_ENVIRONMENT" ? true : dom.window[key] });
+  const { createRoot } = await import("react-dom/client");
+  const container = dom.window.document.getElementById("root")!;
+  const root = createRoot(container);
+  const originalSave = api.savePanelSelections;
+  api.savePanelSelections = async (...args) => (args[2] as any[]).map((s, i) => ({
+    ...panel,
+    ...s,
+    id: panel.id,
+    crop_filename: "saved.png",
+    polygon_json: s.points ? JSON.stringify(s.points) : null,
+  }));
+  try {
+    function Host() {
+      const [panels, setPanels] = React.useState([panel]);
+      return <SourceSetupCanvas projectId="project" page={page} panels={panels} selectedPanelId={panel.id}
+        onSelectPanel={() => {}} onPanelSaved={() => {}}
+        onPanelsChanged={setPanels}
+        onAddPanel={(pg, pnl, crop) => { addedPanel = pnl; addedCustomCrop = crop; }} />;
+    }
+    await act(async () => root.render(<Host />));
+    const btn = Array.from(container.querySelectorAll("button")).find(b => b.textContent?.trim() === "Custom vertices");
+    assert.ok(btn);
+    await act(async () => btn.click());
+    const addBtn = Array.from(container.querySelectorAll("button")).find(b => b.textContent?.trim() === "Add panel to timeline");
+    assert.ok(addBtn);
+    await act(async () => addBtn.click());
+    assert.ok(addedCustomCrop);
+    assert.equal(addedCustomCrop.crop_type, "polygon");
+    assert.ok(addedCustomCrop.polygon_points?.length >= 4);
+    assert.ok(addedCustomCrop.clip_path.startsWith("polygon("));
+  } finally {
+    api.savePanelSelections = originalSave;
+    await act(async () => root.unmount());
+    dom.window.close();
+    for (const [key, descriptor] of previous) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else delete (globalThis as any)[key]; }
+  }
+});
+
+test("split vertically prompts user with save banner and updates panels list upon saving", async () => {
+  const editor = await mount();
+  try {
+    await editor.click("Split vertically");
+    // Verify notice banner and message appear to explain why split panels require saving
+    assert.match(editor.container.textContent!, /Split created 2 selectors on canvas/);
+    assert.match(editor.container.textContent!, /Unsaved \(2 parts ready\)/);
+    const saveNowBtn = Array.from(editor.container.querySelectorAll("button")).find(b => b.textContent?.trim() === "Save selectors now");
+    assert.ok(saveNowBtn, "Save selectors now button should be present in the callout banner");
+    
+    // Save via the prompt button
+    await act(async () => saveNowBtn.click());
+    // Once saved, new panels are committed, latest panels list has 2 panels, and unsaved state is cleared
+    assert.equal(editor.latest().length, 2);
+    assert.deepEqual(editor.latest().map(p => [p.x, p.width]), [[20, 100], [120, 100]]);
+    assert.doesNotMatch(editor.container.textContent!, /Unsaved/);
+  } finally {
+    await editor.close();
+  }
 });

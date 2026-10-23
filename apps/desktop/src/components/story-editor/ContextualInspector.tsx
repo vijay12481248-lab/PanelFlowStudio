@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
+import { BackgroundInspector } from "./BackgroundInspector";
 import { resetLayerTransform } from "./editorWorkspace";
 import { Icons, Button, Badge } from "@panelflow/ui";
 import { api } from "@panelflow/api-client";
@@ -34,7 +35,7 @@ import {
   duplicateAudioClip,
 } from "./audioAdapter";
 
-export type InspectorTab = "image" | "motion" | "effects" | "timing" | "audio";
+export type InspectorTab = "image" | "background" | "motion" | "effects" | "timing" | "audio";
 
 interface ContextualInspectorProps {
   state: StoryEditorState;
@@ -46,6 +47,7 @@ interface ContextualInspectorProps {
   onSelectTab?: (tab: InspectorTab) => void;
   onOpenNarrationStudio?: (segmentId?: string) => void;
   onOpenAudioLibrary?: (initialType?: "music" | "sfx") => void;
+  projectId?: string;
 }
 
 export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
@@ -58,6 +60,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
   onSelectTab,
   onOpenNarrationStudio,
   onOpenAudioLibrary,
+  projectId,
 }) => {
   const [expanded, setExpanded] = useState(false);
   useEffect(() => {
@@ -101,6 +104,14 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
   }
 
   // Audio preview & generation state for narration, bgm, and sfx inspector
+  const getLayerImageUrl = (layer: VisualLayer | null): string => {
+    if (!layer) return "";
+    const projId = projectId || state.project_id;
+    if (projId && layer.source_panel_id && (!layer.image_url || layer.image_url.includes("/pages/"))) {
+      return `${api.getPanelImageUrl(projId, layer.source_panel_id)}?v=${encodeURIComponent(layer.crop_filename || "detected")}`;
+    }
+    return layer.image_url;
+  };
   const [playingTake, setPlayingTake] = useState<string | null>(null);
   const [isGeneratingTake, setIsGeneratingTake] = useState<boolean>(false);
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
@@ -576,8 +587,8 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
 
       {/* Tab Navigation: Image | Motion | Effects | Timing (only for layers/scenes) */}
       {!selectedNarration && !selectedBgm && !selectedSfx && (
-        <div className="flex items-center border-b border-zinc-800 bg-zinc-950/40 px-2 pt-1 gap-1 shrink-0">
-          {(["image", "motion", "effects", "timing"] as InspectorTab[]).map((tab) => {
+        <div className="flex flex-wrap items-center border-b border-zinc-800 bg-zinc-950/40 px-2 pt-1 gap-1 shrink-0">
+          {(["image", "background", "motion", "effects", "timing"] as InspectorTab[]).map((tab) => {
             const isActive = activeTab === tab;
             return (
               <button
@@ -603,7 +614,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
         <div className="p-3 bg-zinc-950/60 border-b border-zinc-800/80 flex items-center gap-3 shrink-0">
           <div className="w-12 h-12 rounded-lg bg-zinc-900 border border-zinc-700/80 overflow-hidden shrink-0 shadow-md">
             <img
-              src={selectedLayer.image_url}
+              src={getLayerImageUrl(selectedLayer)}
               alt="Layer thumb"
               className="w-full h-full object-cover"
             />
@@ -616,13 +627,20 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
               From Page {selectedLayer.page_sequence}
             </span>
           </div>
-          {onDeleteLayer && selectedScene && (
+          {(onDeleteLayer || onDeleteScene) && selectedScene && (
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => onDeleteLayer(selectedLayer.id, selectedScene.id)}
-              className="text-rose-400 hover:text-rose-300 p-1.5 h-7"
-              title="Remove layer"
+              onClick={() => {
+                if (selectedScene.layers.length <= 1 && onDeleteScene) {
+                  onDeleteScene(selectedScene.id);
+                } else if (onDeleteLayer) {
+                  onDeleteLayer(selectedLayer.id, selectedScene.id);
+                }
+              }}
+              className="text-rose-400 hover:text-rose-300 hover:bg-rose-500/20 p-1.5 h-7"
+              title="Delete panel from timeline (Del)"
+              aria-label="Delete panel from timeline"
             >
               <Icons.Trash className="w-3.5 h-3.5" />
             </Button>
@@ -1645,6 +1663,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
           </div>
         ) : selectedLayer || selectedScene ? (
           <>
+            {activeTab === "background" && selectedScene && <BackgroundInspector state={state} scene={selectedScene} onUpdateState={onUpdateState} projectId={projectId} />}
             {/* TAB 1: Image & Transform */}
             {activeTab === "image" && selectedLayer && (
               <div className="space-y-4">
@@ -1781,7 +1800,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                     </button>
                     <div className="h-10 w-16 rounded overflow-hidden border border-zinc-700">
                       <img
-                        src={selectedLayer.image_url}
+                        src={getLayerImageUrl(selectedLayer)}
                         alt="Crop preview"
                         className="w-full h-full object-cover"
                       />
@@ -1816,6 +1835,27 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                     </Button>
                   </div>
                 </div>
+
+                {/* Remove Panel from Timeline Action */}
+                {(onDeleteLayer || onDeleteScene) && selectedScene && (
+                  <div className="pt-3 border-t border-zinc-800">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (selectedScene.layers.length <= 1 && onDeleteScene) {
+                          onDeleteScene(selectedScene.id);
+                        } else if (onDeleteLayer) {
+                          onDeleteLayer(selectedLayer.id, selectedScene.id);
+                        }
+                      }}
+                      className="w-full py-2 px-3 rounded-lg border border-rose-800/60 bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 hover:text-white flex items-center justify-center gap-2 text-xs font-semibold transition-all shadow-sm"
+                      title="Delete this panel from timeline (Del)"
+                    >
+                      <Icons.Trash className="w-3.5 h-3.5 text-rose-400" />
+                      <span>Remove Panel from Timeline</span>
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
@@ -2559,6 +2599,21 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                     </div>
                   </div>
                 )}
+
+                {/* Delete Scene / Panel Action */}
+                {onDeleteScene && selectedScene && (
+                  <div className="pt-4 border-t border-zinc-800">
+                    <button
+                      type="button"
+                      onClick={() => onDeleteScene(selectedScene.id)}
+                      className="w-full py-2 px-3 rounded-lg border border-rose-800/60 bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 hover:text-white flex items-center justify-center gap-2 text-xs font-semibold transition-all shadow-sm"
+                      title="Delete this scene from timeline (Del)"
+                    >
+                      <Icons.Trash className="w-3.5 h-3.5 text-rose-400" />
+                      <span>Delete Scene from Timeline</span>
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
@@ -2717,6 +2772,21 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                         </div>
                       </div>
                     </div>
+                  </div>
+                )}
+
+                {/* Delete Scene / Panel Action */}
+                {onDeleteScene && selectedScene && (
+                  <div className="pt-4 border-t border-zinc-800">
+                    <button
+                      type="button"
+                      onClick={() => onDeleteScene(selectedScene.id)}
+                      className="w-full py-2 px-3 rounded-lg border border-rose-800/60 bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 hover:text-white flex items-center justify-center gap-2 text-xs font-semibold transition-all shadow-sm"
+                      title="Delete this scene from timeline (Del)"
+                    >
+                      <Icons.Trash className="w-3.5 h-3.5 text-rose-400" />
+                      <span>Delete Scene from Timeline</span>
+                    </button>
                   </div>
                 )}
               </div>

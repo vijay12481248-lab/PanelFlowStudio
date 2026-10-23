@@ -50,3 +50,10 @@ test("the bootstrap does not install a second job monitor outside App's error pr
   const source = readFileSync(new URL("../../../main.tsx", import.meta.url), "utf8");
   assert.doesNotMatch(source, /<ErrorProvider>/);
 });
+
+test("composition fits 4:5 and explicit custom canvas dimensions without changing source transforms", () => {
+  const portrait = fitCompositionFrame("4:5", 1000, 500);
+  assert.equal(portrait.width / portrait.height, .8);
+  const custom = fitCompositionFrame("custom", 1000, 500, 100, 1410, 789);
+  assert.ok(Math.abs(custom.width / custom.height - 1410 / 789) < .0001);
+});
