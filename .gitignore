@@ -34,7 +34,7 @@ venv/
 ENV/
 
 # Scratch / debug artifacts
-scratch/*.wav
+scratch/
 scratch/*.png
 scratch/**/*.png
 scratch/**/*.jpg

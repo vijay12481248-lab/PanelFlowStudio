@@ -13,9 +13,9 @@ from engine.ocr.providers.base import OCREngine, RawOCRResult, OCRRegion, OCRPro
 WINSDK_AVAILABLE = False
 if sys.platform == "win32":
     try:
-        from winsdk.windows.media.ocr import OcrEngine
-        from winsdk.windows.storage import StorageFile, FileAccessMode
-        from winsdk.windows.graphics.imaging import BitmapDecoder
+        from winrt.windows.media.ocr import OcrEngine
+        from winrt.windows.storage import StorageFile, FileAccessMode
+        from winrt.windows.graphics.imaging import BitmapDecoder
         WINSDK_AVAILABLE = True
     except Exception:
         WINSDK_AVAILABLE = False

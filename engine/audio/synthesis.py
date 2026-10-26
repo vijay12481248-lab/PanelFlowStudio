@@ -352,8 +352,7 @@ class LocalSpeechSynthesizer:
             logger.info(f"Mapping requested speech provider '{provider_id}' to verified local 'chatterbox_turbo'")
             provider_id = "chatterbox_turbo"
 
-        if not self.python_exe.exists():
-            raise ValueError(f"Chatterbox virtual environment not found at {self.python_exe}")
+        # If Chatterbox venv is not present, will fall back to neural synthesizer below
 
         prepared_tasks = []
         results = []
@@ -419,6 +418,67 @@ class LocalSpeechSynthesizer:
             })
 
         if not prepared_tasks:
+            return results
+
+        if not self.python_exe.exists():
+            # Neural TTS Fallback (high quality Microsoft Neural edge-tts)
+            import edge_tts
+            import asyncio
+            import concurrent.futures
+
+            async def _synth_edge_all():
+                for pt in prepared_tasks:
+                    v_name = "en-US-AriaNeural" if any(k in pt["voice"].lower() for k in ("aria", "female", "girl", "woman")) else "en-US-ChristopherNeural"
+                    tmp_mp3 = Path(pt["target_path"]).with_suffix(".tmp.mp3")
+                    comm = edge_tts.Communicate(pt["text"], v_name)
+                    await comm.save(str(tmp_mp3))
+                    subprocess.run(["ffmpeg", "-y", "-i", str(tmp_mp3), "-ar", "24000", "-ac", "1", pt["target_path"]], check=True, capture_output=True)
+                    tmp_mp3.unlink(missing_ok=True)
+
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                loop = None
+
+            if loop and loop.is_running():
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                    pool.submit(lambda: asyncio.run(_synth_edge_all())).result()
+            else:
+                asyncio.run(_synth_edge_all())
+
+            for pt in prepared_tasks:
+                temporary_wav = Path(pt["target_path"])
+                target_wav = Path(pt["authoritative_path"])
+                if temporary_wav.exists() and temporary_wav.stat().st_size > 0:
+                    clean_info = postprocess_speech_audio(temporary_wav)
+                    root = target_wav.parents[2]
+                    promote_contained_file(root, temporary_wav, target_wav)
+                    write_contained_json(root, Path(pt["meta_path"]), {
+                        "text": pt["raw_text"],
+                        "formatted_text": pt["text"],
+                        "voice": pt["voice"],
+                        "emotion": pt["emotion"],
+                        "duration": clean_info["duration"],
+                        "sample_rate": clean_info["sample_rate"],
+                        "channels": clean_info["channels"],
+                        "provider": "edge_tts_neural",
+                        "text_revision": pt["text_revision"],
+                        "created_at": time.time(),
+                    })
+                    results.append({
+                        "id": pt["id"],
+                        "success": True,
+                        "audio_path": str(target_wav),
+                        "duration": clean_info["duration"],
+                        "cached": False,
+                        "emotion": pt["emotion"],
+                    })
+                else:
+                    results.append({
+                        "id": pt["id"],
+                        "success": False,
+                        "error": "Synthesis failed",
+                    })
             return results
 
         # Run batch synthesis script via Chatterbox virtual environment
