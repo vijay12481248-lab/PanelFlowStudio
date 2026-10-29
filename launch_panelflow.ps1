@@ -6,7 +6,7 @@
 param([switch]$EngineOnly, [switch]$CancelJobs)
 
 $ErrorActionPreference = "Stop"
-$rootDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$rootDir = if ($PSScriptRoot) { $PSScriptRoot } elseif ($MyInvocation.MyCommand.Path) { Split-Path -Parent $MyInvocation.MyCommand.Path } else { (Get-Location).Path }
 Set-Location $rootDir
 $tokenFile = Join-Path $env:LOCALAPPDATA 'PanelFlow Studio\engine.token'
 $engineWasRunning = $false
@@ -136,24 +136,28 @@ if (-not $healthy) {
     $localExe = Join-Path $rootDir "engine_runtime\panelflow-engine.exe"
 
     $sourceEntry = Join-Path $rootDir 'run_engine.py'
-    $sourcePython = Get-Command python.exe -ErrorAction SilentlyContinue
     $venvPython = Join-Path $rootDir '.venv\Scripts\python.exe'
-    if ((Test-Path $sourceEntry) -and ((Test-Path $venvPython) -or $sourcePython)) {
-        $pythonPath = if (Test-Path $venvPython) { $venvPython } else { $sourcePython.Source }
-        Write-Host "  -> Launching updated source engine." -ForegroundColor Cyan
-        Start-Process -FilePath $pythonPath -ArgumentList 'run_engine.py' -WorkingDirectory $rootDir -WindowStyle Hidden
+    $sourcePython = Get-Command python.exe -ErrorAction SilentlyContinue
+    $engineProcess = $null
+    if ((Test-Path $sourceEntry) -and (Test-Path $venvPython)) {
+        Write-Host "  -> Launching updated source engine (venv: Python 3.14)." -ForegroundColor Cyan
+        $engineProcess = Start-Process -FilePath $venvPython -ArgumentList 'run_engine.py' -WorkingDirectory $rootDir -WindowStyle Hidden -PassThru
+    } elseif ((Test-Path $sourceEntry) -and $sourcePython) {
+        Write-Host "  -> Launching updated source engine (system Python)." -ForegroundColor Cyan
+        $engineProcess = Start-Process -FilePath $sourcePython.Source -ArgumentList 'run_engine.py' -WorkingDirectory $rootDir -WindowStyle Hidden -PassThru
     } elseif (Test-Path $standaloneExe) {
         Write-Host "  -> Launching standalone engine: $standaloneExe" -ForegroundColor Cyan
-        Start-Process -FilePath $standaloneExe -WorkingDirectory (Split-Path $standaloneExe) -WindowStyle Hidden
+        $engineProcess = Start-Process -FilePath $standaloneExe -WorkingDirectory (Split-Path $standaloneExe) -WindowStyle Hidden -PassThru
     } elseif (Test-Path $resourceExe) {
         Write-Host "  -> Launching packaged engine: $resourceExe" -ForegroundColor Cyan
-        Start-Process -FilePath $resourceExe -WorkingDirectory (Split-Path $resourceExe) -WindowStyle Hidden
+        $engineProcess = Start-Process -FilePath $resourceExe -WorkingDirectory (Split-Path $resourceExe) -WindowStyle Hidden -PassThru
     } elseif (Test-Path $localExe) {
         Write-Host "  -> Launching local engine: $localExe" -ForegroundColor Cyan
-        Start-Process -FilePath $localExe -WorkingDirectory (Split-Path $localExe) -WindowStyle Hidden
+        $engineProcess = Start-Process -FilePath $localExe -WorkingDirectory (Split-Path $localExe) -WindowStyle Hidden -PassThru
     } else {
-        Write-Host "  -> Standalone engine not found. Launching via Python run_engine.py..." -ForegroundColor Cyan
-        Start-Process -FilePath "python.exe" -ArgumentList "run_engine.py" -WorkingDirectory $rootDir -WindowStyle Hidden
+        $py = if (Test-Path $venvPython) { $venvPython } else { "python.exe" }
+        Write-Host "  -> Launching via $py run_engine.py..." -ForegroundColor Cyan
+        $engineProcess = Start-Process -FilePath $py -ArgumentList "run_engine.py" -WorkingDirectory $rootDir -WindowStyle Hidden -PassThru
     }
 
     # Poll for health check
@@ -183,7 +187,7 @@ if ($EngineOnly) { return }
 
 # 2. Check ACE-Step Music Server
 if (Test-Path "C:\Tools\ACE-Step-1.5\.venv\Scripts\python.exe") {
-    Write-Host "[2/3] Checking ACE-Step music engine on port 8001..." -ForegroundColor Yellow
+    Write-Host "[2/4] Checking ACE-Step music engine on port 8001..." -ForegroundColor Yellow
     $aceHealthy = $false
     try {
         $aceResp = Invoke-RestMethod -Uri "http://127.0.0.1:8001/health" -TimeoutSec 1 -UseBasicParsing -ErrorAction Stop
@@ -198,27 +202,93 @@ if (Test-Path "C:\Tools\ACE-Step-1.5\.venv\Scripts\python.exe") {
         Start-Process -FilePath "C:\Tools\ACE-Step-1.5\.venv\Scripts\python.exe" -ArgumentList "-m acestep.api_server --host 127.0.0.1 --port 8001" -WorkingDirectory "C:\Tools\ACE-Step-1.5" -WindowStyle Hidden
     }
 } else {
-    Write-Host "[2/3] ACE-Step neural model optional. Procedural synthesizer fallback active." -ForegroundColor Gray
+    Write-Host "[2/4] ACE-Step neural model optional. Procedural synthesizer fallback active." -ForegroundColor Gray
 }
 
-# 3. Launch Desktop Application
-Write-Host "[3/3] Launching PanelFlow Studio Desktop..." -ForegroundColor Yellow
-
-$portableCandidates = Get-ChildItem -Path (Join-Path $rootDir "release") -Filter "PanelFlow-Studio-*-Portable.exe" -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending
-$portableApp = if ($portableCandidates) { $portableCandidates[0].FullName } else { $null }
-$releaseApp = Join-Path $rootDir "apps\desktop\src-tauri\target\release\panelflow-desktop.exe"
-$debugApp = Join-Path $rootDir "apps\desktop\src-tauri\target\debug\panelflow-desktop.exe"
-
-$sideBySideApps = @(Get-ChildItem -Path (Join-Path $rootDir 'apps\desktop\src-tauri\target\release') -Filter 'panelflow-desktop*.exe' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName)
-$newestApp = (@($portableApp, $releaseApp, $debugApp) + $sideBySideApps) | Where-Object { $_ -and (Test-Path -LiteralPath $_) } | ForEach-Object { Get-Item -LiteralPath $_ } | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-if ($newestApp) {
-    Write-Host "  -> Starting newest desktop build: $($newestApp.FullName)" -ForegroundColor Green
-    Start-Process -FilePath $newestApp.FullName -WorkingDirectory $rootDir
+# 3. Check Ollama Local AI Engine
+$ollamaExe = Join-Path $env:LOCALAPPDATA 'Programs\Ollama\ollama.exe'
+if (Test-Path $ollamaExe) {
+    Write-Host "[3/4] Checking Ollama AI engine on port 11434..." -ForegroundColor Yellow
+    $ollamaHealthy = $false
+    try {
+        $tags = Invoke-RestMethod -Uri "http://127.0.0.1:11434/api/tags" -TimeoutSec 1 -UseBasicParsing -ErrorAction Stop
+        if ($tags) { $ollamaHealthy = $true }
+    } catch {
+        $ollamaHealthy = $false
+    }
+    if ($ollamaHealthy) {
+        $modelNames = ($tags.models | ForEach-Object { $_.name }) -join ', '
+        Write-Host "  -> Ollama is running on http://127.0.0.1:11434 ($modelNames)." -ForegroundColor Green
+    } else {
+        Write-Host "  -> Starting Ollama service in background..." -ForegroundColor Cyan
+        Start-Process -FilePath $ollamaExe -ArgumentList "serve" -WindowStyle Hidden
+    }
 } else {
-    Write-Host "  -> Pre-compiled binary not found. Launching dev desktop..." -ForegroundColor Cyan
-    Start-Process -FilePath "npm.cmd" -ArgumentList "run", "dev:desktop" -WorkingDirectory $rootDir
+    Write-Host "[3/4] Ollama local engine optional. Cloud AI fallback active." -ForegroundColor Gray
 }
 
-Write-Host ""
-Write-Host "PanelFlow Studio is ready!" -ForegroundColor Green
-Start-Sleep -Seconds 2
+# 4. Launch Desktop Application from current source.
+Write-Host "[4/4] Launching PanelFlow Studio Desktop in development mode..." -ForegroundColor Yellow
+Write-Host "  -> Serving the latest local UI code." -ForegroundColor Cyan
+Write-Host "  -> Keep this window open while using PanelFlow Studio." -ForegroundColor Cyan
+
+$cargoCmd = Get-Command cargo.exe -ErrorAction SilentlyContinue
+$debugApp = Join-Path $rootDir "apps\desktop\src-tauri\target\debug\panelflow-desktop.exe"
+$releaseApp = Join-Path $rootDir "apps\desktop\src-tauri\target\release\deps\panelflow_desktop.exe"
+$desktopExe = if (Test-Path -LiteralPath $debugApp) { $debugApp } elseif (Test-Path -LiteralPath $releaseApp) { $releaseApp } else { $null }
+
+if ($cargoCmd) {
+    & npm.cmd --workspace=@panelflow/desktop run tauri -- dev
+    if ($LASTEXITCODE -ne 0) {
+        throw "PanelFlow desktop development command failed with exit code $LASTEXITCODE."
+    }
+} else {
+    Write-Host "  -> Rust toolchain (cargo) not detected. Using pre-built desktop shell + live Vite server." -ForegroundColor Yellow
+    # Start Vite dev server in background process
+    $viteProcess = Start-Process -FilePath "npm.cmd" -ArgumentList "--workspace=@panelflow/desktop", "run", "dev" -WorkingDirectory $rootDir -PassThru
+    
+    # Wait for Vite dev server on port 5173
+    $viteReady = $false
+    for ($i = 0; $i -lt 15; $i++) {
+        Start-Sleep -Milliseconds 500
+        try {
+            $tcp = Get-NetTCPConnection -LocalPort 5173 -State Listen -ErrorAction SilentlyContinue
+            if ($tcp) { $viteReady = $true; break }
+        } catch {}
+    }
+    
+    if (-not $viteReady) {
+        Write-Host "  -> Waiting for Vite server..." -ForegroundColor Cyan
+        Start-Sleep -Seconds 2
+    }
+
+    # Launch standalone application window via Edge/Chrome app mode with live code & hot reload
+    $browserCandidates = @(
+        "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+        "C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+        "C:\Program Files\Google\Chrome\Application\chrome.exe",
+        "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"
+    )
+    $browserApp = $browserCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+    $appUrl = if ($env:PANELFLOW_ENGINE_TOKEN) { "http://localhost:5173?token=$($env:PANELFLOW_ENGINE_TOKEN)" } else { "http://localhost:5173" }
+    $profileDir = Join-Path $env:LOCALAPPDATA 'PanelFlow Studio\desktop_profile'
+    New-Item -ItemType Directory -Force -Path $profileDir | Out-Null
+
+    if ($browserApp) {
+        Write-Host "  -> Launching PanelFlow Studio standalone desktop window..." -ForegroundColor Green
+        $desktopProcess = Start-Process -FilePath $browserApp -ArgumentList "--app=$appUrl", "--user-data-dir=`"$profileDir`"", "--window-size=1360,900" -PassThru
+        $desktopProcess.WaitForExit()
+    } else {
+        Write-Host "  -> Opening PanelFlow Studio at $appUrl..." -ForegroundColor Green
+        Start-Process $appUrl
+        $viteProcess.WaitForExit()
+    }
+
+    # Clean up background services when desktop window closes
+    if ($viteProcess -and -not $viteProcess.HasExited) {
+        Stop-Process -Id $viteProcess.Id -Force -ErrorAction SilentlyContinue
+    }
+    if ($engineProcess -and -not $engineProcess.HasExited) {
+        Stop-Process -Id $engineProcess.Id -Force -ErrorAction SilentlyContinue
+    }
+}

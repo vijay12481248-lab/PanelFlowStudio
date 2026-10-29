@@ -132,7 +132,8 @@ async def test_autopilot_runner_cancellation(autopilot_project):
 
 
 @pytest.mark.asyncio
-async def test_autopilot_audio_stage_synthesizes_and_attaches_bgm(autopilot_project):
+@pytest.mark.parametrize("concurrent_edit", [False, True])
+async def test_autopilot_audio_stage_synthesizes_and_attaches_bgm(autopilot_project, concurrent_edit):
     with SessionLocal() as db:
         p = db.query(ProjectRecord).filter(ProjectRecord.id == autopilot_project).first()
         workspace_path = p.workspace_path
@@ -193,8 +194,25 @@ async def test_autopilot_audio_stage_synthesizes_and_attaches_bgm(autopilot_proj
     # Deliberately incorrect provider duration: timing must come from the WAV.
     batch_results = [{"id": cid, "success": True, "audio_path": str(mock_wav), "duration": 99}
                      for cid in ("c1", "c2")]
-    with patch("engine.audio.synthesis.local_synthesizer.synthesize_batch", return_value=batch_results), \
+    def generate(*args, **kwargs):
+        if concurrent_edit:
+            with SessionLocal() as editing_db:
+                edited = editing_db.get(ProjectRecord, autopilot_project)
+                settings = json.loads(json.dumps(edited.settings))
+                settings["story_editor_state"]["scenes"][0]["duration_sec"] = 7.0
+                edited.settings = settings
+                editing_db.commit()
+        return batch_results
+    with patch("engine.audio.synthesis.local_synthesizer.synthesize_batch", side_effect=generate), \
          patch("engine.audio.service.audio_service.approve_audio"):
+        if concurrent_edit:
+            with pytest.raises(ValueError, match="timeline changed during voice generation"):
+                await runner._run_stage_audio(skip_existing=True)
+            with SessionLocal() as checking_db:
+                saved = checking_db.get(ProjectRecord, autopilot_project).settings["story_editor_state"]
+                assert saved["scenes"][0]["duration_sec"] == 7.0
+                assert saved["narration_clips"][0]["audio_url"] is None
+            return
         await runner._run_stage_audio(skip_existing=True)
 
     stage = runner.get_stage("audio")
@@ -298,3 +316,35 @@ async def test_autopilot_render_stage_stall_watchdog(autopilot_project):
         assert runner.error_details.stage_id == "render"
         assert runner.error_details.category == "TIMEOUT"
         assert "stalled" in runner.error_details.message
+
+@pytest.mark.asyncio
+async def test_autopilot_does_not_fall_back_to_mock(autopilot_project):
+    runner = AutoPilotRunner(autopilot_project, {})
+    with patch('engine.llm.registry.llm_registry.get_active_provider', new_callable=AsyncMock, side_effect=RuntimeError('Model offline')), patch('engine.story.service.story_service.analyze_story_project') as analyze:
+        with pytest.raises(RuntimeError, match='Model offline'):
+            await runner._run_stage_story(False)
+        analyze.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_autopilot_rejects_saved_mock_story(autopilot_project):
+    from types import SimpleNamespace
+    with SessionLocal() as db:
+        project = db.get(ProjectRecord, autopilot_project)
+        project.settings = {'story_editor_state': {'scenes': [{'id': 'saved-scene'}]}}
+        db.commit()
+    runner = AutoPilotRunner(autopilot_project, {})
+    with patch('engine.story.service.story_service.get_narrative', return_value=SimpleNamespace(analysis_metadata={'provider': 'mock_llm'})), patch('engine.story.service.story_service.confirm_story') as confirm:
+        with pytest.raises(ValueError, match='mock provider'):
+            await runner._run_stage_story(True)
+        confirm.assert_not_called()
+
+
+def test_legacy_script_enum_labels():
+    from engine.story.models import EmotionType, MotionIntent
+    assert EmotionType('MYSTERIOUS') == EmotionType.TENSE
+    assert EmotionType('SUSPENSEFUL') == EmotionType.TENSE
+    assert EmotionType('SERIOUS') == EmotionType.NEUTRAL
+    assert MotionIntent('SLOW_PAN') == MotionIntent.PAN
+    with pytest.raises(ValueError):
+        MotionIntent('INVALID_MOTION')

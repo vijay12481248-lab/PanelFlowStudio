@@ -33,6 +33,12 @@ def preview_blur_box(image: Image.Image, x: int, y: int, width: int, height: int
                      blur_radius: int = 24, feather: int = 4) -> Image.Image:
     """Shared in-memory blur used for previews and committed cleanup."""
     result = image.convert("RGB").copy()
+    return _blur_box_in_place(result, x, y, width, height, blur_radius, feather)
+
+
+def _blur_box_in_place(result: Image.Image, x: int, y: int, width: int, height: int,
+                       blur_radius: int, feather: int) -> Image.Image:
+    """Mutate only a working RGB canvas, never an input image used for preview."""
     w, h = result.size
     x1, y1 = max(0, min(x, w - 1)), max(0, min(y, h - 1))
     x2, y2 = max(x1 + 1, min(x + width, w)), max(y1 + 1, min(y + height, h))
@@ -78,7 +84,14 @@ def blur_image_box(
     Applies a smooth Gaussian blur over a rectangular box in the image.
     Backs up the original image before first modification.
     """
-    if not image_path.exists() or width <= 0 or height <= 0:
+    return blur_image_boxes(image_path, [(x, y, width, height)], blur_radius, feather, backup)
+
+
+def blur_image_boxes(image_path: Path, boxes: list[Tuple[int, int, int, int]],
+                     blur_radius: int = 24, feather: int = 4, backup: bool = True) -> bool:
+    """Decode, back up and encode once for all matching regions in a panel."""
+    boxes = [box for box in boxes if box[2] > 0 and box[3] > 0]
+    if not image_path.exists() or not boxes:
         return False
 
     if backup:
@@ -87,7 +100,9 @@ def blur_image_box(
     from engine.security.paths import read_contained_bytes
     with Image.open(io.BytesIO(read_contained_bytes(image_path.parent.parent, image_path))) as img:
         # Use the same implementation as the non-mutating preview.
-        img_rgb = preview_blur_box(img, x, y, width, height, blur_radius, feather)
+        img_rgb = img.convert("RGB")
+        for x, y, width, height in boxes:
+            _blur_box_in_place(img_rgb, x, y, width, height, blur_radius, feather)
         # Save back in original format
         fmt = "JPEG" if image_path.suffix.lower() in (".jpg", ".jpeg") else "PNG"
         buffer = io.BytesIO()

@@ -511,6 +511,11 @@ class PanelConfirmStrategy:
             raise HistoryFault("VALIDATION", "History operation is required", 422)
         if not db.query(PanelRecord).filter(PanelRecord.project_id == project.id).count():
             raise HistoryFault("VALIDATION", "Cannot confirm panel review with zero panels", 422)
+        from engine.imaging.content_cleanup import require_cleanup_review
+        try:
+            require_cleanup_review(db, project.id)
+        except ValueError as error:
+            raise HistoryFault("VALIDATION", str(error), 422) from error
         settings = deepcopy(project.settings or {})
         state = settings.get("story_editor_state")
         if isinstance(state, dict):

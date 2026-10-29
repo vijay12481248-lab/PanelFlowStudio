@@ -37,8 +37,8 @@ class RenderShotPlan(BaseModel):
     motion_type: MotionType = MotionType.STATIC_HOLD
     frame_region: NormalizedRect = Field(default_factory=lambda: NormalizedRect(x=0.0, y=0.0, width=1.0, height=1.0))
 
-    scale_policy: ScalePolicy = ScalePolicy.COVER
-    fill_policy: BackgroundFillPolicy = BackgroundFillPolicy.BLACK
+    scale_policy: ScalePolicy = ScalePolicy.CONTAIN
+    fill_policy: BackgroundFillPolicy = BackgroundFillPolicy.BLURRED_SOURCE
 
     layers: List[LayerInstruction] = Field(default_factory=list)
     scene_layers: List[Dict[str, Any]] = Field(default_factory=list)

@@ -153,6 +153,7 @@ class VisualStoryEngine:
                     bbox=p_bbox,
                     ocr_text=" ".join(supplemental),
                     vision_summary=result.visual_summary,
+                    story_content_present=result.content_kind.lower() == "story",
                     is_first_on_first_page=(index == 0),
                     is_last_on_last_page=(index == len(ordered) - 1),
                 )

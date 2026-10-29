@@ -21,6 +21,8 @@ import numpy as np
 import soundfile as sf
 from types import SimpleNamespace
 
+from engine.audio.process import check_cancelled, run_speech_process, await_speech_operation
+
 logger = logging.getLogger("panelflow.audio.synthesis")
 
 from engine.system.setup import get_voice_reference_dir
@@ -358,6 +360,7 @@ class LocalSpeechSynthesizer:
         results = []
 
         for t in tasks:
+            check_cancelled(cancelled_cb)
             raw_text = t["text"].strip()
             if not raw_text:
                 continue
@@ -428,58 +431,70 @@ class LocalSpeechSynthesizer:
 
             async def _synth_edge_all():
                 for pt in prepared_tasks:
+                    check_cancelled(cancelled_cb)
                     v_name = "en-US-AriaNeural" if any(k in pt["voice"].lower() for k in ("aria", "female", "girl", "woman")) else "en-US-ChristopherNeural"
                     tmp_mp3 = Path(pt["target_path"]).with_suffix(".tmp.mp3")
                     comm = edge_tts.Communicate(pt["text"], v_name)
-                    await comm.save(str(tmp_mp3))
-                    subprocess.run(["ffmpeg", "-y", "-i", str(tmp_mp3), "-ar", "24000", "-ac", "1", pt["target_path"]], check=True, capture_output=True)
+                    await await_speech_operation(comm.save(str(tmp_mp3)), cancelled_cb)
+                    run_speech_process(["ffmpeg", "-y", "-i", str(tmp_mp3), "-ar", "24000", "-ac", "1", pt["target_path"]], timeout=180, cancelled=cancelled_cb).check_returncode()
                     tmp_mp3.unlink(missing_ok=True)
 
             try:
-                loop = asyncio.get_running_loop()
-            except RuntimeError:
-                loop = None
+                try:
+                    loop = asyncio.get_running_loop()
+                except RuntimeError:
+                    loop = None
 
-            if loop and loop.is_running():
-                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-                    pool.submit(lambda: asyncio.run(_synth_edge_all())).result()
-            else:
-                asyncio.run(_synth_edge_all())
-
-            for pt in prepared_tasks:
-                temporary_wav = Path(pt["target_path"])
-                target_wav = Path(pt["authoritative_path"])
-                if temporary_wav.exists() and temporary_wav.stat().st_size > 0:
-                    clean_info = postprocess_speech_audio(temporary_wav)
-                    root = target_wav.parents[2]
-                    promote_contained_file(root, temporary_wav, target_wav)
-                    write_contained_json(root, Path(pt["meta_path"]), {
-                        "text": pt["raw_text"],
-                        "formatted_text": pt["text"],
-                        "voice": pt["voice"],
-                        "emotion": pt["emotion"],
-                        "duration": clean_info["duration"],
-                        "sample_rate": clean_info["sample_rate"],
-                        "channels": clean_info["channels"],
-                        "provider": "edge_tts_neural",
-                        "text_revision": pt["text_revision"],
-                        "created_at": time.time(),
-                    })
-                    results.append({
-                        "id": pt["id"],
-                        "success": True,
-                        "audio_path": str(target_wav),
-                        "duration": clean_info["duration"],
-                        "cached": False,
-                        "emotion": pt["emotion"],
-                    })
+                if loop and loop.is_running():
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                        pool.submit(lambda: asyncio.run(_synth_edge_all())).result()
                 else:
-                    results.append({
-                        "id": pt["id"],
-                        "success": False,
-                        "error": "Synthesis failed",
-                    })
-            return results
+                    asyncio.run(_synth_edge_all())
+
+                for pt in prepared_tasks:
+                    check_cancelled(cancelled_cb)
+                    temporary_wav = Path(pt["target_path"])
+                    target_wav = Path(pt["authoritative_path"])
+                    if temporary_wav.exists() and temporary_wav.stat().st_size > 0:
+                        clean_info = postprocess_speech_audio(temporary_wav)
+                        root = target_wav.parents[2]
+                        check_cancelled(cancelled_cb)
+                        promote_contained_file(root, temporary_wav, target_wav)
+                        write_contained_json(root, Path(pt["meta_path"]), {
+                            "text": pt["raw_text"],
+                            "formatted_text": pt["text"],
+                            "voice": pt["voice"],
+                            "emotion": pt["emotion"],
+                            "duration": clean_info["duration"],
+                            "sample_rate": clean_info["sample_rate"],
+                            "channels": clean_info["channels"],
+                            "provider": "edge_tts_neural",
+                            "text_revision": pt["text_revision"],
+                            "created_at": time.time(),
+                        })
+                        results.append({
+                            "id": pt["id"],
+                            "success": True,
+                            "audio_path": str(target_wav),
+                            "duration": clean_info["duration"],
+                            "cached": False,
+                            "emotion": pt["emotion"],
+                        })
+                    else:
+                        results.append({
+                            "id": pt["id"],
+                            "success": False,
+                            "error": "Synthesis failed",
+                        })
+                return results
+            finally:
+                for pt in prepared_tasks:
+                    temporary = Path(pt["target_path"])
+                    for path in (temporary, temporary.with_suffix(".tmp.mp3")):
+                        try:
+                            unlink_contained_file(temporary.parents[2], path)
+                        except FileNotFoundError:
+                            pass
 
         # Run batch synthesis script via Chatterbox virtual environment
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, encoding="utf-8") as f_in:
@@ -539,11 +554,8 @@ with open({repr(batch_output_path)}, 'w', encoding='utf-8') as f:
         try:
             if progress_cb:
                 progress_cb(0.15, "Loading Chatterbox Turbo on GPU...")
-            res = subprocess.run(
-                [str(self.python_exe), runner_py_path],
-                capture_output=True,
-                text=True,
-                timeout=180,
+            res = run_speech_process(
+                [str(self.python_exe), runner_py_path], timeout=180, cancelled=cancelled_cb,
             )
             if res.returncode != 0:
                 logger.error(f"Chatterbox batch error: {res.stderr}")
@@ -553,14 +565,17 @@ with open({repr(batch_output_path)}, 'w', encoding='utf-8') as f:
                 raise ValueError("Chatterbox produced no output payload")
 
             batch_results = json.loads(Path(batch_output_path).read_text(encoding="utf-8"))
+            tasks_by_id = {pt["id"]: pt for pt in prepared_tasks}
             for br in batch_results:
-                matched_task = next((pt for pt in prepared_tasks if pt["id"] == br["id"]), None)
+                check_cancelled(cancelled_cb)
+                matched_task = tasks_by_id.get(br["id"])
                 if br.get("success") and matched_task:
                     # Apply conservative postprocessing & cleanup
                     temporary_wav = Path(br["audio_path"])
                     target_wav = Path(matched_task["authoritative_path"])
                     clean_info = postprocess_speech_audio(temporary_wav)
                     root = target_wav.parents[2]
+                    check_cancelled(cancelled_cb)
                     promote_contained_file(root, temporary_wav, target_wav)
                     br["audio_path"] = str(target_wav)
                     br["duration"] = clean_info["duration"]
@@ -583,6 +598,12 @@ with open({repr(batch_output_path)}, 'w', encoding='utf-8') as f:
             Path(batch_input_path).unlink(missing_ok=True)
             Path(batch_output_path).unlink(missing_ok=True)
             Path(runner_py_path).unlink(missing_ok=True)
+            for pt in prepared_tasks:
+                temporary = Path(pt["target_path"])
+                try:
+                    unlink_contained_file(temporary.parents[2], temporary)
+                except FileNotFoundError:
+                    pass
 
         return results
 

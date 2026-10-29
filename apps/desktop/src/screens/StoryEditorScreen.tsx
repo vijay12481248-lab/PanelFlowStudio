@@ -322,7 +322,7 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
         setLoading(true);
         const [loadedPages, loadedPanels, loadedScript, loadedStoryboard, loadedCharacters, loadedTextRegions] = await Promise.all([
           api.listPages(project.id).catch(() => []),
-          api.listPanels(project.id).catch(() => []),
+          api.listPanels(project.id).then(items => items.filter(p => p.status !== "IGNORED")).catch(() => []),
           api.getScript(project.id).catch(() => null),
           api.getStoryboard(project.id).catch(() => null),
           api.listCharacters(project.id).catch(() => []),

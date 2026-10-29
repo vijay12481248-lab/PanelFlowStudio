@@ -4,10 +4,49 @@ type HealthClient = Pick<typeof api, "checkHealth" | "setEngineToken">;
 type TokenReader = () => Promise<string>;
 
 function desktopTokenReader(): TokenReader | undefined {
-  if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window || "__TAURI__" in window)) return undefined;
+  if (typeof window === "undefined") return undefined;
+  if ("__TAURI_INTERNALS__" in window || "__TAURI__" in window) {
+    return async () => {
+      const { invoke } = await import("@tauri-apps/api/core");
+      return invoke<string>("get_engine_token_cmd");
+    };
+  }
+
+  // Standalone / Browser development mode token reader
   return async () => {
-    const { invoke } = await import("@tauri-apps/api/core");
-    return invoke<string>("get_engine_token_cmd");
+    // 1. Vite build/dev injected environment variable
+    const envToken = (import.meta as any).env?.VITE_PANELFLOW_ENGINE_TOKEN;
+    if (envToken && typeof envToken === "string" && envToken.trim()) return envToken.trim();
+
+    // 2. Query param (?token=...)
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const queryToken = params.get("token");
+      if (queryToken && queryToken.trim()) {
+        try { localStorage.setItem("panelflow_engine_token", queryToken.trim()); } catch {}
+        return queryToken.trim();
+      }
+    } catch {}
+
+    // 3. Persisted in localStorage
+    try {
+      const stored = localStorage.getItem("panelflow_engine_token");
+      if (stored && stored.trim()) return stored.trim();
+    } catch {}
+
+    // 4. Vite dev server endpoint
+    try {
+      const res = await fetch("/__engine_token");
+      if (res.ok) {
+        const text = await res.text();
+        if (text.trim()) {
+          try { localStorage.setItem("panelflow_engine_token", text.trim()); } catch {}
+          return text.trim();
+        }
+      }
+    } catch {}
+
+    return "";
   };
 }
 

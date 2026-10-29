@@ -1,6 +1,11 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { api } from "@panelflow/api-client";
-import type { ComfyWorkflowInfo, GeneratedAsset } from "@panelflow/api-client";
+import type {
+  BrowserBridgeResult,
+  BrowserBridgeStatus,
+  ComfyWorkflowInfo,
+  GeneratedAsset,
+} from "@panelflow/api-client";
 import type { Job, Project } from "@panelflow/shared-types";
 import { Badge, Button, Card, Icons, ProgressBar } from "@panelflow/ui";
 import { useError } from "../context/ErrorContext";
@@ -10,31 +15,65 @@ export interface ComfyImageScreenProps {
   onBack: () => void;
 }
 
+type GenerationMode = "web_ai" | "comfy_local";
+
+const PRESETS = [
+  { id: "chatgpt", name: "ChatGPT / DALL-E", url: "https://chatgpt.com" },
+  { id: "gemini", name: "Google Gemini / Imagen", url: "https://gemini.google.com" },
+  { id: "meta_ai", name: "Meta AI / Imagine", url: "https://www.meta.ai" },
+  { id: "claude", name: "Anthropic Claude", url: "https://claude.ai" },
+  { id: "custom", name: "Custom Web Tool", url: "" },
+];
+
+const SAMPLE_PROMPTS = [
+  "Original manga panel: a celestial martial emperor descending with golden lightning, dynamic perspective, sharp ink lines, expressive face, cinematic manga composition",
+  "Heroic swordswoman in flowing robes standing on a mountain peak at sunset, cel shaded anime aesthetic, highly detailed, clean lines",
+  "Dramatic anime confrontation in a rain-soaked neon cyberpunk alley, volumetric lighting, rich color palette, wallpaper quality",
+];
+
 export const ComfyImageScreen: React.FC<ComfyImageScreenProps> = ({ project, onBack }) => {
   const { reportError } = useError();
+  const [mode, setMode] = useState<GenerationMode>("web_ai");
+
+  // Web AI Bridge state
+  const [selectedPreset, setSelectedPreset] = useState("chatgpt");
+  const [webUrl, setWebUrl] = useState("https://chatgpt.com");
+  const [webPrompt, setWebPrompt] = useState(SAMPLE_PROMPTS[0]);
+  const [extractType, setExtractType] = useState<"images" | "text" | "all">("all");
+  const [headless, setHeadless] = useState(true);
+  const [webSubmitting, setWebSubmitting] = useState(false);
+  const [webStep, setWebStep] = useState<string | null>(null);
+  const [webResult, setWebResult] = useState<BrowserBridgeResult | null>(null);
+  const [bridgeStatus, setBridgeStatus] = useState<BrowserBridgeStatus | null>(null);
+  const [copiedText, setCopiedText] = useState(false);
+
+  // Local ComfyUI state
   const [workflows, setWorkflows] = useState<ComfyWorkflowInfo[]>([]);
   const [assets, setAssets] = useState<GeneratedAsset[]>([]);
   const [workflowId, setWorkflowId] = useState("manga_image_generation");
-  const [prompt, setPrompt] = useState(
-    "Original manga panel, a young adult swordswoman on a mountain bridge at sunset, flowing teal hair, crimson and ivory robes, clean ink lines, cel shading, expressive face, cinematic composition, no text, no logo, no watermark"
-  );
+  const [comfyPrompt, setComfyPrompt] = useState(SAMPLE_PROMPTS[1]);
   const [negativePrompt, setNegativePrompt] = useState("photorealism, 3D render, blurry, malformed hands, text, watermark, logo, gore");
   const [width, setWidth] = useState(512);
   const [height, setHeight] = useState(768);
   const [seed, setSeed] = useState(20261019);
   const [activeJob, setActiveJob] = useState<Job | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
+  const [comfyLoading, setComfyLoading] = useState(true);
+  const [comfySubmitting, setComfySubmitting] = useState(false);
 
   const loadAssets = useCallback(async () => {
-    const result = await api.listGeneratedAssets(project.id);
-    setAssets(result.assets);
+    try {
+      const result = await api.listGeneratedAssets(project.id);
+      setAssets(result.assets);
+    } catch {
+      // Ignored if offline
+    }
   }, [project.id]);
 
   useEffect(() => {
+    // Load ComfyUI registry & assets
     Promise.all([api.listApprovedComfyWorkflows(), loadAssets()])
       .then(([registry]) => {
-        setWorkflows(registry.workflows.filter((workflow) => workflow.available && workflow.purpose === "text_to_image"));
+        setWorkflows(registry.workflows.filter((w) => w.available && w.purpose === "text_to_image"));
       })
       .catch((error: any) => {
         reportError({
@@ -46,15 +85,74 @@ export const ComfyImageScreen: React.FC<ComfyImageScreenProps> = ({ project, onB
           rawDetails: error,
         });
       })
-      .finally(() => setLoading(false));
+      .finally(() => setComfyLoading(false));
+
+    // Load Browser Bridge status
+    api.getBrowserBridgeStatus()
+      .then((st) => setBridgeStatus(st))
+      .catch(() => {});
   }, [loadAssets, project.id, reportError]);
 
-  const handleGenerate = async () => {
-    setSubmitting(true);
+  const handleSelectPreset = (preset: typeof PRESETS[0]) => {
+    setSelectedPreset(preset.id);
+    if (preset.url) {
+      setWebUrl(preset.url);
+    }
+  };
+
+  const handleOpenBrowserSession = async () => {
+    try {
+      await api.openBrowserBridgeSession(webUrl || "https://chatgpt.com");
+    } catch (err: any) {
+      reportError({
+        title: "Could Not Launch Browser Session",
+        message: err.message || "Unable to open interactive browser session.",
+        severity: "error",
+        source: "pipeline",
+        projectId: project.id,
+      });
+    }
+  };
+
+  const handleExecuteWebAI = async () => {
+    if (!webUrl || !webPrompt.trim()) return;
+    setWebSubmitting(true);
+    setWebResult(null);
+    setWebStep("Connecting to browser session...");
+
+    try {
+      setWebStep(`Navigating to ${webUrl}...`);
+      const res = await api.executeBrowserBridgePrompt({
+        url: webUrl,
+        prompt: webPrompt,
+        extract_type: extractType,
+        project_id: project.id,
+        headless,
+        timeout_sec: 120.0,
+      });
+      setWebResult(res);
+      await loadAssets();
+    } catch (err: any) {
+      reportError({
+        title: "Web AI Prompt Execution Failed",
+        message: err.message || "The browser AI interaction encountered an error.",
+        severity: "error",
+        source: "pipeline",
+        projectId: project.id,
+        rawDetails: err,
+      });
+    } finally {
+      setWebSubmitting(false);
+      setWebStep(null);
+    }
+  };
+
+  const handleComfyGenerate = async () => {
+    setComfySubmitting(true);
     try {
       const queued = await api.generateComfyImage(project.id, {
         workflow_id: workflowId,
-        prompt,
+        prompt: comfyPrompt,
         negative_prompt: negativePrompt,
         width,
         height,
@@ -75,8 +173,14 @@ export const ComfyImageScreen: React.FC<ComfyImageScreenProps> = ({ project, onB
         rawDetails: error,
       });
     } finally {
-      setSubmitting(false);
+      setComfySubmitting(false);
     }
+  };
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedText(true);
+    setTimeout(() => setCopiedText(false), 2000);
   };
 
   const latestAsset = assets[0];
@@ -84,11 +188,15 @@ export const ComfyImageScreen: React.FC<ComfyImageScreenProps> = ({ project, onB
 
   return (
     <div className="space-y-6">
+      {/* Top Header */}
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-xs uppercase tracking-widest text-indigo-400">Milestone 1</p>
-          <h1 className="text-2xl font-bold text-zinc-100">Generate Original Image</h1>
-          <p className="text-sm text-zinc-400 mt-1">Project: {project.title}</p>
+          <div className="flex items-center gap-2">
+            <p className="text-xs uppercase tracking-widest text-indigo-400 font-semibold">AI Creation Studio</p>
+            <Badge variant="neutral" className="text-[10px]">Playwright Connected</Badge>
+          </div>
+          <h1 className="text-2xl font-bold text-zinc-100 mt-0.5">Generate Original Images & Panels</h1>
+          <p className="text-sm text-zinc-400">Project: {project.title}</p>
         </div>
         <Button variant="ghost" onClick={onBack}>
           <Icons.ArrowLeft className="w-4 h-4 mr-2" />
@@ -96,65 +204,340 @@ export const ComfyImageScreen: React.FC<ComfyImageScreenProps> = ({ project, onB
         </Button>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(300px,420px)]">
-        <Card className="p-5 space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="font-semibold text-zinc-100">Approved workflow</h2>
-            <Badge variant={workflows.length ? "success" : "danger"}>{workflows.length ? "READY" : "UNAVAILABLE"}</Badge>
-          </div>
-          <select
-            value={workflowId}
-            onChange={(event) => setWorkflowId(event.target.value)}
-            className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100"
-            disabled={loading || submitting}
-          >
-            {workflows.map((workflow) => (
-              <option key={workflow.id} value={workflow.id}>{workflow.id}</option>
-            ))}
-          </select>
-          <label className="block text-sm text-zinc-300">
-            Prompt
-            <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} rows={7} className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100" disabled={submitting} />
-          </label>
-          <label className="block text-sm text-zinc-300">
-            Negative prompt
-            <textarea value={negativePrompt} onChange={(event) => setNegativePrompt(event.target.value)} rows={3} className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100" disabled={submitting} />
-          </label>
-          <div className="grid grid-cols-3 gap-3">
-            <label className="text-sm text-zinc-300">Width<input type="number" min={256} max={2048} value={width} onChange={(event) => setWidth(Number(event.target.value))} className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm" disabled={submitting} /></label>
-            <label className="text-sm text-zinc-300">Height<input type="number" min={256} max={2048} value={height} onChange={(event) => setHeight(Number(event.target.value))} className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm" disabled={submitting} /></label>
-            <label className="text-sm text-zinc-300">Seed<input type="number" min={0} value={seed} onChange={(event) => setSeed(Number(event.target.value))} className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm" disabled={submitting} /></label>
-          </div>
-          {activeJob && (
-            <div className="space-y-2 rounded-lg border border-zinc-800 bg-zinc-950/60 p-3">
-              <div className="flex justify-between text-xs text-zinc-400"><span>{activeJob.message || activeJob.status}</span><span>{Math.round(progress * 100)}%</span></div>
-              <ProgressBar progress={progress} />
-            </div>
-          )}
-          <Button variant="primary" onClick={handleGenerate} disabled={submitting || !workflows.length || prompt.trim().length < 10}>
-            <Icons.Sparkles className="w-4 h-4 mr-2" />
-            {submitting ? "Generating..." : "Generate image"}
-          </Button>
-        </Card>
-
-        <Card className="p-5 space-y-4">
-          <h2 className="font-semibold text-zinc-100">Latest generated asset</h2>
-          {latestAsset ? (
-            <>
-              <img src={api.getGeneratedAssetUrl(project.id, latestAsset.id)} alt="Latest generated manga asset" className="w-full rounded-lg border border-zinc-700 bg-zinc-950" />
-              <div className="text-xs text-zinc-400 space-y-1">
-                <p>{latestAsset.width} × {latestAsset.height} · {latestAsset.byte_size.toLocaleString()} bytes</p>
-                <p className="font-mono break-all">SHA-256: {latestAsset.sha256}</p>
-                <p>Asset status: <span className="text-emerald-400">{latestAsset.status}</span></p>
-              </div>
-            </>
-          ) : (
-            <div className="min-h-64 rounded-lg border border-dashed border-zinc-700 flex items-center justify-center text-sm text-zinc-500 text-center px-6">
-              Generated assets will appear here after verification.
-            </div>
-          )}
-        </Card>
+      {/* Mode Switcher Tabs */}
+      <div className="flex border-b border-zinc-800 gap-2">
+        <button
+          type="button"
+          onClick={() => setMode("web_ai")}
+          className={`flex items-center gap-2 px-4 py-2.5 font-medium text-sm border-b-2 transition-colors ${
+            mode === "web_ai"
+              ? "border-indigo-500 text-indigo-400 bg-indigo-500/10 rounded-t-lg"
+              : "border-transparent text-zinc-400 hover:text-zinc-200"
+          }`}
+        >
+          <Icons.Globe className="w-4 h-4" />
+          Web AI Browser Tool (ChatGPT, Gemini, Meta AI)
+        </button>
+        <button
+          type="button"
+          onClick={() => setMode("comfy_local")}
+          className={`flex items-center gap-2 px-4 py-2.5 font-medium text-sm border-b-2 transition-colors ${
+            mode === "comfy_local"
+              ? "border-indigo-500 text-indigo-400 bg-indigo-500/10 rounded-t-lg"
+              : "border-transparent text-zinc-400 hover:text-zinc-200"
+          }`}
+        >
+          <Icons.Sparkles className="w-4 h-4" />
+          Local ComfyUI Pipeline
+        </button>
       </div>
+
+      {/* Mode 1: Web AI Browser Tool */}
+      {mode === "web_ai" && (
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(320px,460px)]">
+          {/* Left: Input & Control Panel */}
+          <Card className="p-5 space-y-5">
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-400 mb-2">
+                1. Target AI Platform Preset
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {PRESETS.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => handleSelectPreset(p)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                      selectedPreset === p.id
+                        ? "bg-indigo-600 border-indigo-500 text-white shadow-sm"
+                        : "bg-zinc-900 border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+                    }`}
+                  >
+                    {p.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
+                  Target Website URL
+                </label>
+                <button
+                  type="button"
+                  onClick={handleOpenBrowserSession}
+                  className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1 font-medium underline"
+                  title="Opens a visible browser with your persistent session profile so you can log into your account"
+                >
+                  Sign In / Manage Session ↗
+                </button>
+              </div>
+              <input
+                type="url"
+                value={webUrl}
+                onChange={(e) => setWebUrl(e.target.value)}
+                placeholder="https://chatgpt.com or https://gemini.google.com"
+                className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 focus:border-indigo-500 focus:outline-none"
+                disabled={webSubmitting}
+              />
+              <p className="text-[11px] text-zinc-500 mt-1">
+                Your login cookies & session are saved persistently so future generations execute automatically.
+              </p>
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
+                  Prompt
+                </label>
+                <span className="text-[11px] text-zinc-500">{webPrompt.length} chars</span>
+              </div>
+              <textarea
+                value={webPrompt}
+                onChange={(e) => setWebPrompt(e.target.value)}
+                rows={5}
+                placeholder="Enter prompt for the AI to execute..."
+                className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 focus:border-indigo-500 focus:outline-none"
+                disabled={webSubmitting}
+              />
+
+              {/* Quick sample prompt chips */}
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                <span className="text-[11px] text-zinc-500 self-center mr-1">Suggestions:</span>
+                {SAMPLE_PROMPTS.map((sample, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => setWebPrompt(sample)}
+                    className="text-[11px] px-2 py-0.5 rounded bg-zinc-800/80 text-zinc-300 hover:bg-zinc-700 border border-zinc-700/60"
+                  >
+                    Sample {idx + 1}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Execution Options */}
+            <div className="grid grid-cols-2 gap-4 pt-1 border-t border-zinc-800">
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-400 mb-1">
+                  Extract Type
+                </label>
+                <select
+                  value={extractType}
+                  onChange={(e) => setExtractType(e.target.value as any)}
+                  className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-100"
+                  disabled={webSubmitting}
+                >
+                  <option value="all">All (Images & Text Response)</option>
+                  <option value="images">Images Only</option>
+                  <option value="text">Text Response Only</option>
+                </select>
+              </div>
+
+              <div className="flex items-center pt-5">
+                <label className="flex items-center gap-2 cursor-pointer text-xs text-zinc-300">
+                  <input
+                    type="checkbox"
+                    checked={headless}
+                    onChange={(e) => setHeadless(e.target.checked)}
+                    className="rounded border-zinc-700 text-indigo-600 focus:ring-0"
+                    disabled={webSubmitting}
+                  />
+                  <span>Run Headless (Background)</span>
+                </label>
+              </div>
+            </div>
+
+            {/* Live Progress Bar when executing */}
+            {webSubmitting && (
+              <div className="space-y-2 rounded-lg border border-indigo-900/60 bg-indigo-950/40 p-3">
+                <div className="flex items-center justify-between text-xs text-indigo-300 font-medium">
+                  <span className="animate-pulse">{webStep || "Executing prompt on web tool..."}</span>
+                  <Badge variant="neutral" className="text-[10px]">Processing</Badge>
+                </div>
+                <div className="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                  <div className="h-full bg-indigo-500 animate-pulse rounded-full w-2/3" />
+                </div>
+              </div>
+            )}
+
+            {/* Submit Action */}
+            <Button
+              variant="primary"
+              onClick={handleExecuteWebAI}
+              disabled={webSubmitting || !webUrl || webPrompt.trim().length < 2}
+              className="w-full justify-center py-2.5 font-semibold text-sm"
+            >
+              <Icons.Sparkles className="w-4 h-4 mr-2" />
+              {webSubmitting ? "Executing & Extracting Results..." : "Execute Prompt on Web AI"}
+            </Button>
+          </Card>
+
+          {/* Right: Extracted Result Panel */}
+          <div className="space-y-4">
+            <Card className="p-5 space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="font-semibold text-zinc-100">Extracted Results</h2>
+                {webResult && (
+                  <Badge variant={webResult.success ? "success" : "danger"}>
+                    {webResult.success ? `Done (${webResult.execution_time_sec}s)` : "Failed"}
+                  </Badge>
+                )}
+              </div>
+
+              {/* If webResult has error */}
+              {webResult && !webResult.success && (
+                <div className="p-3 bg-red-950/50 border border-red-800 rounded-lg text-xs text-red-300 space-y-1">
+                  <p className="font-bold">Execution Error</p>
+                  <p className="break-words">{webResult.error}</p>
+                  <p className="text-zinc-400 mt-2">
+                    Tip: If login is required, click <span className="text-indigo-400 font-medium">Sign In / Manage Session</span> above to log in to your account.
+                  </p>
+                </div>
+              )}
+
+              {/* Extracted Images Gallery */}
+              {webResult && webResult.images && webResult.images.length > 0 && (
+                <div className="space-y-3">
+                  <p className="text-xs font-semibold text-zinc-300">
+                    Generated Images ({webResult.images.length})
+                  </p>
+                  <div className="grid gap-3">
+                    {webResult.images.map((img, i) => (
+                      <div key={i} className="rounded-lg border border-zinc-700 bg-zinc-950 overflow-hidden space-y-2 p-2">
+                        <img
+                          src={img.url.startsWith("/api") ? api.resourceUrl(img.url) : img.url}
+                          alt={`Extracted result ${i + 1}`}
+                          className="w-full max-h-80 object-contain rounded bg-black/40"
+                        />
+                        <div className="flex items-center justify-between text-[11px] text-zinc-400 px-1">
+                          <span>{img.width} × {img.height} · {(img.byte_size / 1024).toFixed(0)} KB</span>
+                          <span className="text-emerald-400 font-medium">Saved as Asset</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Extracted Text */}
+              {webResult && webResult.text_response && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-semibold text-zinc-300">Response Text</p>
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(webResult.text_response)}
+                      className="text-[11px] text-indigo-400 hover:text-indigo-300 underline"
+                    >
+                      {copiedText ? "Copied!" : "Copy Text"}
+                    </button>
+                  </div>
+                  <div className="max-h-48 overflow-y-auto p-3 rounded-lg border border-zinc-800 bg-zinc-950 text-xs text-zinc-200 whitespace-pre-wrap font-sans leading-relaxed">
+                    {webResult.text_response}
+                  </div>
+                </div>
+              )}
+
+              {/* Empty state when no result yet */}
+              {!webResult && (
+                <div className="min-h-64 rounded-lg border border-dashed border-zinc-700 flex flex-col items-center justify-center text-sm text-zinc-500 text-center px-6 space-y-2">
+                  <Icons.Globe className="w-8 h-8 text-zinc-600 mb-1" />
+                  <p className="font-medium text-zinc-400">No Web AI Output Yet</p>
+                  <p className="text-xs text-zinc-500 max-w-xs">
+                    Choose a website, enter a prompt, and click execute. The tool will input the prompt, wait for generation, and collect the images & text here automatically.
+                  </p>
+                </div>
+              )}
+            </Card>
+
+            {/* Existing Project Assets */}
+            <Card className="p-4 space-y-2">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">Project Assets ({assets.length})</h3>
+              {latestAsset ? (
+                <div className="flex items-center gap-3 p-2 rounded-lg bg-zinc-900 border border-zinc-800">
+                  <img
+                    src={api.getGeneratedAssetUrl(project.id, latestAsset.id)}
+                    alt="Latest asset thumbnail"
+                    className="w-12 h-12 object-cover rounded border border-zinc-700 bg-black"
+                  />
+                  <div className="text-xs text-zinc-400 overflow-hidden">
+                    <p className="text-zinc-200 font-medium truncate">{latestAsset.filename}</p>
+                    <p>{latestAsset.width} × {latestAsset.height} · {latestAsset.asset_type}</p>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-zinc-500">No previous project assets recorded.</p>
+              )}
+            </Card>
+          </div>
+        </div>
+      )}
+
+      {/* Mode 2: Local ComfyUI Pipeline */}
+      {mode === "comfy_local" && (
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(300px,420px)]">
+          <Card className="p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="font-semibold text-zinc-100">Approved workflow</h2>
+              <Badge variant={workflows.length ? "success" : "danger"}>{workflows.length ? "READY" : "UNAVAILABLE"}</Badge>
+            </div>
+            <select
+              value={workflowId}
+              onChange={(event) => setWorkflowId(event.target.value)}
+              className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100"
+              disabled={comfyLoading || comfySubmitting}
+            >
+              {workflows.map((workflow) => (
+                <option key={workflow.id} value={workflow.id}>{workflow.id}</option>
+              ))}
+            </select>
+            <label className="block text-sm text-zinc-300">
+              Prompt
+              <textarea value={comfyPrompt} onChange={(event) => setComfyPrompt(event.target.value)} rows={6} className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100" disabled={comfySubmitting} />
+            </label>
+            <label className="block text-sm text-zinc-300">
+              Negative prompt
+              <textarea value={negativePrompt} onChange={(event) => setNegativePrompt(event.target.value)} rows={3} className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100" disabled={comfySubmitting} />
+            </label>
+            <div className="grid grid-cols-3 gap-3">
+              <label className="text-sm text-zinc-300">Width<input type="number" min={256} max={2048} value={width} onChange={(event) => setWidth(Number(event.target.value))} className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm" disabled={comfySubmitting} /></label>
+              <label className="text-sm text-zinc-300">Height<input type="number" min={256} max={2048} value={height} onChange={(event) => setHeight(Number(event.target.value))} className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm" disabled={comfySubmitting} /></label>
+              <label className="text-sm text-zinc-300">Seed<input type="number" min={0} value={seed} onChange={(event) => setSeed(Number(event.target.value))} className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm" disabled={comfySubmitting} /></label>
+            </div>
+            {activeJob && (
+              <div className="space-y-2 rounded-lg border border-zinc-800 bg-zinc-950/60 p-3">
+                <div className="flex justify-between text-xs text-zinc-400"><span>{activeJob.message || activeJob.status}</span><span>{Math.round(progress * 100)}%</span></div>
+                <ProgressBar progress={progress} />
+              </div>
+            )}
+            <Button variant="primary" onClick={handleComfyGenerate} disabled={comfySubmitting || !workflows.length || comfyPrompt.trim().length < 10}>
+              <Icons.Sparkles className="w-4 h-4 mr-2" />
+              {comfySubmitting ? "Generating..." : "Generate image with ComfyUI"}
+            </Button>
+          </Card>
+
+          <Card className="p-5 space-y-4">
+            <h2 className="font-semibold text-zinc-100">Latest generated asset</h2>
+            {latestAsset ? (
+              <>
+                <img src={api.getGeneratedAssetUrl(project.id, latestAsset.id)} alt="Latest generated manga asset" className="w-full rounded-lg border border-zinc-700 bg-zinc-950" />
+                <div className="text-xs text-zinc-400 space-y-1">
+                  <p>{latestAsset.width} × {latestAsset.height} · {latestAsset.byte_size.toLocaleString()} bytes</p>
+                  <p className="font-mono break-all">SHA-256: {latestAsset.sha256}</p>
+                  <p>Asset status: <span className="text-emerald-400">{latestAsset.status}</span></p>
+                </div>
+              </>
+            ) : (
+              <div className="min-h-64 rounded-lg border border-dashed border-zinc-700 flex items-center justify-center text-sm text-zinc-500 text-center px-6">
+                Generated assets will appear here after verification.
+              </div>
+            )}
+          </Card>
+        </div>
+      )}
     </div>
   );
 };

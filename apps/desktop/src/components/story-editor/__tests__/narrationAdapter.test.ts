@@ -572,3 +572,25 @@ describe("Audio Overlap Prevention & Ripple Synchronization", () => {
     assert.ok(clips[1].start_time_sec >= clips[0].start_time_sec + clips[0].duration_sec);
   });
 });
+
+
+test("regenerated speech extends its scene and ripples subsequent linked clips precisely", async () => {
+  const { fitGeneratedNarration } = await import("../narrationAdapter.ts");
+  const scenes = [
+    { id: "a", start_time_sec: 0, duration_sec: 2 },
+    { id: "b", start_time_sec: 2, duration_sec: 3 },
+  ] as VideoScene[];
+  const clips = [
+    { id: "one", scene_id: "a", start_time_sec: 0, duration_sec: 2.347 },
+    { id: "two", scene_id: "a", start_time_sec: 1, duration_sec: 1.126 },
+    { id: "three", scene_id: "b", start_time_sec: 2, duration_sec: 1 },
+    { id: "free", scene_id: "b", linked_to_scene: false, start_time_sec: 8, duration_sec: 1 },
+  ] as NarrationClip[];
+  const result = fitGeneratedNarration(scenes, clips);
+  assert.ok(Math.abs(result.scenes[0].duration_sec - 3.473) < 1e-9);
+  assert.equal(result.narration_clips[1].start_time_sec, 2.347);
+  assert.equal(result.narration_clips[2].start_time_sec, result.scenes[1].start_time_sec);
+  assert.equal(result.narration_clips[3].start_time_sec, 8);
+  assert.equal(scenes[0].duration_sec, 2);
+  assert.equal(clips[1].start_time_sec, 1);
+});

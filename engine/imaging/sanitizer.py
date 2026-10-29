@@ -241,3 +241,13 @@ def auto_sanitize_project_panels(
     finally:
         if close_db:
             db.close()
+
+
+def matches_label(text: str, labels: List[str]) -> bool:
+    """Literal, case-insensitive labels tolerate OCR whitespace and punctuation."""
+    import re
+    import unicodedata
+    def normalize(value):
+        return re.sub(r"[\W_]+", "", unicodedata.normalize("NFKC", value).casefold())
+    normalized = normalize(text)
+    return any(needle and needle in normalized for needle in map(normalize, labels))

@@ -75,29 +75,82 @@ def preview_text_blur(project_id: str, panel_id: str, region_id: str,
         raise HTTPException(status_code=404, detail="Panel image unavailable")
 
 
+from pydantic import BaseModel, Field
+
+
+from engine.imaging.content_cleanup import CleanupRules, load_rules, save_rules
+
+
+@router.get("/content-cleanup-rules")
+def get_cleanup_rules(project_id: str, db: Session = Depends(get_db)):
+    if not db.get(ProjectRecord, project_id):
+        raise HTTPException(status_code=404, detail="Project not found")
+    return load_rules().model_dump()
+
+
+@router.put("/content-cleanup-rules")
+def update_cleanup_rules(project_id: str, req: CleanupRules, db: Session = Depends(get_db)):
+    if not db.get(ProjectRecord, project_id):
+        raise HTTPException(status_code=404, detail="Project not found")
+    save_rules(req)
+    return req.model_dump()
+
+
+@router.get("/content-cleanup-report")
+def get_cleanup_report(project_id: str, db: Session = Depends(get_db)):
+    project = db.get(ProjectRecord, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return (project.settings or {}).get("content_cleanup_report", {"panels": {}})
+
+
+class PromotionalLabelsRequest(BaseModel):
+    labels: list[str] = Field(default_factory=list, max_length=200)
+
+
+@router.put("/panel-content-labels")
+def save_content_labels(project_id: str, req: PromotionalLabelsRequest, db: Session = Depends(get_db)):
+    from engine.imaging.sanitizer import save_blur_keywords_for_project
+    if not db.query(ProjectRecord).filter(ProjectRecord.id == project_id).first():
+        raise HTTPException(status_code=404, detail="Project not found")
+    labels = list(dict.fromkeys(label.strip() for label in req.labels if label.strip()))
+    if any(len(label) > 200 for label in labels):
+        raise HTTPException(status_code=422, detail="Each label must be at most 200 characters")
+    save_blur_keywords_for_project(project_id, labels, db=db)
+    return {"labels": labels}
+
+
 @router.get("/panel-content-suggestions")
 def panel_content_suggestions(project_id: str, db: Session = Depends(get_db)):
     """Localize promotional text using existing OCR; never alter source images."""
     from engine.database.models import TextRegionRecord
     from engine.imaging.panels.classification import PROMO_PATTERNS
-    if not db.query(ProjectRecord).filter(ProjectRecord.id == project_id).first():
+    project = db.query(ProjectRecord).filter(ProjectRecord.id == project_id).first()
+    if not project:
         raise HTTPException(status_code=404, detail="Project not found")
+    labels = (project.settings or {}).get("blur_keywords", [])
+    effective_labels = load_rules().labels + labels
+    from engine.imaging.sanitizer import matches_label
     regions = db.query(TextRegionRecord).filter(
         TextRegionRecord.project_id == project_id,
-        TextRegionRecord.status != "IGNORED",
+        TextRegionRecord.status.notin_(["IGNORED", "BLURRED"]),
     ).order_by(TextRegionRecord.sequence_global).all()
+    excluded = {p.id for p in db.query(PanelRecord).filter(
+        PanelRecord.project_id == project_id, PanelRecord.status == "IGNORED").all()}
     suggestions = []
     for region in regions:
+        if region.panel_id in excluded:
+            continue
         text = region.corrected_text.strip() or region.raw_text.strip()
         match = next((pattern for pattern in PROMO_PATTERNS if pattern.search(text)), None)
-        if match:
+        if match or matches_label(text, effective_labels):
             suggestions.append({
                 "region_id": region.id, "panel_id": region.panel_id,
                 "page_id": region.page_id, "text": text,
                 "bbox": [region.x, region.y, region.width, region.height],
                 "reason": "Website, credits, or promotional wording detected in OCR",
             })
-    return {"suggestions": suggestions, "regions_checked": len(regions),
+    return {"labels": labels, "suggestions": suggestions, "regions_checked": len(regions),
             "ocr_required": not any(r.raw_text.strip() or r.corrected_text.strip() for r in regions)}
 
 def format_panel_response(p: PanelRecord, project_id: str) -> PanelResponse:

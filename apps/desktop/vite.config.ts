@@ -1,10 +1,48 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
+import fs from "fs";
+
+const rootDir = path.resolve(__dirname, "../..");
+const localAppData = process.env.LOCALAPPDATA || "";
+const appDataTokenFile = path.resolve(localAppData, "PanelFlow Studio", "engine.token");
+const rootTokenFile = path.resolve(rootDir, ".engine_token");
+
+const getEngineToken = () => {
+  if (process.env.PANELFLOW_ENGINE_TOKEN) return process.env.PANELFLOW_ENGINE_TOKEN.trim();
+  if (localAppData && fs.existsSync(appDataTokenFile)) {
+    try {
+      return fs.readFileSync(appDataTokenFile, "utf-8").trim();
+    } catch {}
+  }
+  if (fs.existsSync(rootTokenFile)) {
+    try {
+      return fs.readFileSync(rootTokenFile, "utf-8").trim();
+    } catch {}
+  }
+  return "";
+};
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    {
+      name: "panelflow-engine-token",
+      configureServer(server) {
+        server.middlewares.use("/__engine_token", (_req, res) => {
+          res.setHeader("Content-Type", "text/plain");
+          res.end(getEngineToken());
+        });
+      },
+    },
+  ],
   clearScreen: false,
+  define: {
+    "import.meta.env.VITE_PANELFLOW_ENGINE_TOKEN": JSON.stringify(getEngineToken()),
+  },
+  optimizeDeps: {
+    entries: ['index.html'],
+  },
   server: {
     port: 5173,
     strictPort: true,

@@ -17,6 +17,16 @@ dependencies = [
   "soundfile",
   "sqlalchemy",
   "uvicorn[standard]",
+  "torch",
+  "kokoro>=0.8.4",
+  "edge-tts",
+  "faster-whisper",
+  "winrt-windows-media-ocr; sys_platform == 'win32'",
+  "winrt-windows-graphics-imaging; sys_platform == 'win32'",
+  "winrt-windows-storage; sys_platform == 'win32'",
+  "winrt-windows-globalization; sys_platform == 'win32'",
+  "pytest",
+  "pytest-asyncio",
 ]
 
 [project.optional-dependencies]

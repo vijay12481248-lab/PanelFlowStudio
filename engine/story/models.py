@@ -58,6 +58,12 @@ class EmotionType(str, Enum):
     SARCASTIC = "SARCASTIC"
     UNKNOWN = "UNKNOWN"
 
+    @classmethod
+    def _missing_(cls, value):
+        # Older narration presets used these names in persisted script segments.
+        return {"MYSTERIOUS": cls.TENSE, "SUSPENSEFUL": cls.TENSE,
+                "SERIOUS": cls.NEUTRAL}.get(value)
+
 
 class EventType(str, Enum):
     MOVE = "MOVE"
@@ -148,6 +154,10 @@ class MotionIntent(str, Enum):
     REVEAL = "REVEAL"
     PAN = "PAN"
     STATIC = "STATIC"
+
+    @classmethod
+    def _missing_(cls, value):
+        return cls.PAN if value == "SLOW_PAN" else None
 
 
 class AnalysisStatus(str, Enum):

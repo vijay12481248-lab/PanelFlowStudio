@@ -223,6 +223,15 @@ class RenderService:
         if timeline_data and timeline_data.get("scenes"):
             from engine.projects.service import reconcile_story_editor_state_with_panels
             timeline_data = reconcile_story_editor_state_with_panels(db, project_id, timeline_data)
+            if not timeline_data.get("background_default") and not any(sc.get("background") for sc in timeline_data.get("scenes", [])):
+                timeline_data["background_default"] = {
+                    "enabled": True,
+                    "preset": "duplicate_blur",
+                    "blur_sigma": 24.0,
+                    "brightness": 0.45,
+                    "foreground_fit": "contain",
+                    "edge_shadow": 0.6,
+                }
             from engine.render.compiler import timeline_compiler
             plan = timeline_compiler.compile(
                 state=timeline_data,

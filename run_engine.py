@@ -16,31 +16,78 @@ if sys.platform == "win32":
             pass
     _ProactorBasePipeTransport._call_connection_lost = _safe_call_connection_lost
 
-    try:
-        # Ensure stdout and stderr handles exist when launched in background or no-window mode
-        local_app_data = os.environ.get("LOCALAPPDATA")
-        log_dir = Path(local_app_data) / "PanelFlow Studio" / "logs" if local_app_data else Path.home() / ".panelflow" / "logs"
-        log_dir.mkdir(parents=True, exist_ok=True)
-        log_file = log_dir / "engine.log"
+class TeeLogger:
+    def __init__(self, original_stream, log_file):
+        self.orig = original_stream
+        self.file = log_file
 
-        need_redirect = False
-        if sys.stdout is None or not hasattr(sys.stdout, "write"):
-            need_redirect = True
-        else:
+    def write(self, data):
+        if self.orig:
             try:
-                sys.stdout.flush()
+                self.orig.write(data)
+                self.orig.flush()
             except Exception:
-                need_redirect = True
+                pass
+        if self.file:
+            try:
+                self.file.write(data)
+                self.file.flush()
+            except Exception:
+                pass
 
-        if need_redirect:
-            f = open(log_file, "a", encoding="utf-8", buffering=1)
-            sys.stdout = f
-            sys.stderr = f
-    except Exception:
-        pass
+    def flush(self):
+        if self.orig:
+            try: self.orig.flush()
+            except Exception: pass
+        if self.file:
+            try: self.file.flush()
+            except Exception: pass
+
+    def isatty(self):
+        return getattr(self.orig, "isatty", lambda: False)()
+
+try:
+    local_app_data = os.environ.get("LOCALAPPDATA")
+    log_dir = Path(local_app_data) / "PanelFlow Studio" / "logs" if local_app_data else Path.home() / ".panelflow" / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_file = log_dir / "engine.log"
+    log_handle = open(log_file, "a", encoding="utf-8", buffering=1)
+    sys.stdout = TeeLogger(sys.stdout, log_handle)
+    sys.stderr = TeeLogger(sys.stderr, log_handle)
+except Exception:
+    pass
 
 if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
     sys.path.insert(0, getattr(sys, "_MEIPASS"))
+
+# Ensure PANELFLOW_ENGINE_TOKEN is loaded or generated so local API authentication succeeds
+if not os.environ.get("PANELFLOW_ENGINE_TOKEN"):
+    local_app_data = os.environ.get("LOCALAPPDATA")
+    token_candidates = [
+        Path(local_app_data) / "PanelFlow Studio" / "engine.token" if local_app_data else None,
+        Path(__file__).parent / ".engine_token",
+    ]
+    loaded_token = ""
+    for cand in token_candidates:
+        if cand and cand.exists():
+            try:
+                content = cand.read_text(encoding="utf-8").strip()
+                if content:
+                    loaded_token = content
+                    break
+            except Exception:
+                pass
+    if not loaded_token:
+        import secrets
+        loaded_token = secrets.token_hex(32)
+    os.environ["PANELFLOW_ENGINE_TOKEN"] = loaded_token
+    for cand in token_candidates:
+        if cand:
+            try:
+                cand.parent.mkdir(parents=True, exist_ok=True)
+                cand.write_text(loaded_token, encoding="utf-8")
+            except Exception:
+                pass
 
 import uvicorn
 from engine.config.settings import settings
@@ -64,7 +111,14 @@ if __name__ == "__main__":
         server.should_exit = True
 
     app.state.request_restart = request_restart
-    server.run()
+    try:
+        server.run()
+    except Exception as exc:
+        print(f"[FATAL] Engine server crashed: {exc}", file=sys.stderr)
+        import traceback
+        traceback.print_exc(file=sys.stderr)
+        raise
+
     if restart_requested:
         # Re-execute only after Uvicorn releases the listener and runs shutdown.
         args = [sys.executable, *sys.argv[1:]] if getattr(sys, "frozen", False) else [sys.executable, str(Path(__file__).resolve())]

@@ -78,6 +78,21 @@ export const PanelReviewScreen: React.FC<PanelReviewScreenProps> = ({
   const [batchPreset, setBatchPreset] = useState<"TOP_WATERMARK" | "BOTTOM_SUBSCRIBE" | "ALL_TEXT_REGIONS" | "ENTIRE_PANEL">("TOP_WATERMARK");
   const [batchHeight, setBatchHeight] = useState<number>(80);
   const [contentReview, setContentReview] = useState<Awaited<ReturnType<typeof api.getPanelContentSuggestions>> | null>(null);
+  const [cleanupRules, setCleanupRules] = useState<{ enabled: boolean; labels: string[] } | null>(null);
+  const [cleanupLabels, setCleanupLabels] = useState("");
+  const [cleanupMessage, setCleanupMessage] = useState("");
+  const [cleanupSaving, setCleanupSaving] = useState(false);
+  const [cleanupReport, setCleanupReport] = useState<Awaited<ReturnType<typeof api.getContentCleanupReport>> | null>(null);
+  useEffect(() => {
+    let active = true;
+    api.getContentCleanupRules(project.id).then(rules => {
+      if (active) { setCleanupRules(rules); setCleanupLabels(rules.labels.join("\n")); }
+    }).catch(error => { if (active) setCleanupMessage(error.message || "Could not load cleanup rules."); });
+    api.getContentCleanupReport(project.id).then(report => { if (active) setCleanupReport(report); })
+      .catch(error => { if (active) setCleanupMessage(error.message || "Could not load cleanup report."); });
+    return () => { active = false; };
+  }, [project.id, detecting]);
+  const [contentLabels, setContentLabels] = useState<string | null>(null);
   const [contentBusy, setContentBusy] = useState(false);
   const [contentError, setContentError] = useState("");
   const [smartProgress, setSmartProgress] = useState("");
@@ -108,7 +123,10 @@ export const PanelReviewScreen: React.FC<PanelReviewScreenProps> = ({
         setSmartProgress(`Reading text ${index + 1} of ${pending.length}…`);
         await api.ocrSingleRegion(project.id, pending[index].id, engine.engine_id);
       }
-      setContentReview(await api.getPanelContentSuggestions(project.id));
+      const review = await api.getPanelContentSuggestions(project.id);
+      setContentReview(review);
+      setCleanupReport(await api.getContentCleanupReport(project.id));
+      setContentLabels(review.labels.join("\n"));
       setCacheBuster(Date.now());
     } catch (error: any) { setContentError(error.message || "Detect & Review failed."); }
     finally { setContentBusy(false); setSmartProgress(""); }
@@ -118,7 +136,10 @@ export const PanelReviewScreen: React.FC<PanelReviewScreenProps> = ({
     setContentBusy(true);
     setContentError("");
     try {
-      setContentReview(await api.getPanelContentSuggestions(project.id));
+      const review = await api.getPanelContentSuggestions(project.id);
+      setContentReview(review);
+      setCleanupReport(await api.getContentCleanupReport(project.id));
+      setContentLabels(review.labels.join("\n"));
     } catch (error: any) {
       setContentError(error.message || "Could not inspect OCR regions.");
     } finally {
@@ -871,6 +892,33 @@ export const PanelReviewScreen: React.FC<PanelReviewScreenProps> = ({
             Batch Watermarks...
           </Button>
 
+          <details className="basis-full rounded-lg border border-zinc-700 p-3">
+            <summary className="cursor-pointer font-semibold">Automatic promotional cleanup · all episodes</summary>
+            <p className="text-xs text-zinc-400 my-2">Saved rules apply whenever new panels are detected, including future episodes. Clear promotional banners are excluded; localized matching text is blurred with originals retained. Uncertain matches stay for review. OCR is required.</p>
+            {cleanupRules && <>
+              <label className="flex gap-2 items-center text-sm"><input type="checkbox" checked={cleanupRules.enabled}
+                onChange={e => setCleanupRules({ ...cleanupRules, enabled: e.target.checked })} />Automatically clean new panels</label>
+              <label className="block text-sm mt-2">Shared exclusion labels (one per line)
+                <textarea aria-label="Shared exclusion labels" className="block w-full bg-zinc-950 border border-zinc-700 rounded p-2 my-2" rows={5}
+                  value={cleanupLabels} onChange={e => setCleanupLabels(e.target.value)} />
+              </label>
+              <Button size="sm" disabled={cleanupSaving} onClick={async () => {
+                setCleanupSaving(true); setCleanupMessage("");
+                try {
+                  const saved = await api.saveContentCleanupRules(project.id, { enabled: cleanupRules.enabled, labels: cleanupLabels.split("\n") });
+                  setCleanupRules(saved); setCleanupLabels(saved.labels.join("\n"));
+                  setCleanupMessage("Saved for all episodes. Existing edited panels are preserved.");
+                } catch (error: any) { setCleanupMessage(error.message || "Could not save shared rules."); }
+                finally { setCleanupSaving(false); }
+              }}>Save for all episodes</Button>
+            </>}
+            {cleanupMessage && <p role="status" className="text-sm mt-2">{cleanupMessage}</p>}
+            {cleanupReport && <div className="text-sm mt-2">
+              <p>Automatic cleanup: {Object.values(cleanupReport.panels).filter(p => p.action === "EXCLUDE").length} excluded, {Object.values(cleanupReport.panels).filter(p => p.action === "BLUR").length} cleaned, {Object.values(cleanupReport.panels).filter(p => p.action === "REVIEW").length} need review.</p>
+              {Object.values(cleanupReport.panels).filter(p => p.action === "REVIEW").map(p => <p key={p.panel_id}>Panel {p.sequence}: {p.reason}</p>)}
+            </div>}
+          </details>
+
           <Button variant="outline" size="sm" onClick={scanPromotionalText} loading={contentBusy}>
             Review promotional text
           </Button>
@@ -884,6 +932,20 @@ export const PanelReviewScreen: React.FC<PanelReviewScreenProps> = ({
                 <h3 className="font-semibold">Promotional text review</h3>
                 <button type="button" onClick={() => { setContentReview(null); setContentError(""); }}>Close</button>
               </div>
+              <label className="block text-sm">Labels to exclude (one per line)
+                <textarea aria-label="Labels to exclude" className="block w-full bg-zinc-950 border border-zinc-700 rounded p-2 mt-2" rows={4}
+                  placeholder={"ManhuuPlus.com\nRead on ManhuuPlus.com\nWatch on ManhuuPlus.com"}
+                  value={contentLabels ?? ""} onChange={e => setContentLabels(e.target.value)} />
+              </label>
+              <p className="text-xs text-zinc-400">Matches ignore case, spacing and punctuation. Save, then review matching text to blur it or exclude an entire promotional panel. For an existing timeline, use panel alignment after excluding panels.</p>
+              <Button size="sm" disabled={contentBusy} onClick={async () => {
+                setContentBusy(true); setContentError("");
+                try {
+                  await api.savePanelContentLabels(project.id, (contentLabels ?? "").split("\n"));
+                  setContentReview(await api.getPanelContentSuggestions(project.id));
+                } catch (error: any) { setContentError(error.message || "Could not save labels."); }
+                finally { setContentBusy(false); }
+              }}>Save labels &amp; scan</Button>
               {contentError && <p role="alert" className="text-rose-300">{contentError}</p>}
               {contentReview?.ocr_required && <p>Run OCR &amp; Text Review first, then scan again to locate website links and credits.</p>}
               {contentReview && !contentReview.ocr_required && <p className="text-xs text-zinc-400">Checked {contentReview.regions_checked} text regions. {contentReview.suggestions.length} suggestions. Review each crop before blurring; source originals are backed up.</p>}
@@ -912,6 +974,17 @@ export const PanelReviewScreen: React.FC<PanelReviewScreenProps> = ({
                       } catch (error: any) { setContentError(error.message || "Could not blur selected text."); }
                       finally { setContentBusy(false); }
                     }}>Blur this text</Button>
+                    <Button size="sm" variant="outline" disabled={contentBusy} onClick={async () => {
+                      const panel = panels.find(p => p.id === item.panel_id);
+                      if (!panel) return;
+                      setContentBusy(true); setContentError("");
+                      try {
+                        await api.updatePanel(project.id, panel.id, panel.x, panel.y, panel.width, panel.height, "IGNORED");
+                        setPanels(await api.listPanels(project.id));
+                        setContentReview(prev => prev ? { ...prev, suggestions: prev.suggestions.filter(s => s.panel_id !== panel.id) } : prev);
+                      } catch (error: any) { setContentError(error.message || "Could not exclude panel."); }
+                      finally { setContentBusy(false); }
+                    }}>Exclude promotional panel</Button>
                   </div>
                 ))}
               </div>

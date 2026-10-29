@@ -18,7 +18,7 @@ from engine.security.local_api import (
     insecure_local_api_enabled,
 )
 from engine.api.routers import projects, pages, panels, ocr, jobs, adapters, system, story, audio, motion, render, music, comfyui
-from engine.api.routers import history, backgrounds, packaging, autopilot
+from engine.api.routers import history, backgrounds, packaging, autopilot, series, browser_bridge
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("panelflow.engine")
@@ -77,18 +77,18 @@ def create_app(
     # Browser access is restricted to the desktop webview and explicitly opted-in
     # development origins. Token validation is performed by the security middleware.
     app.add_middleware(
-        CORSMiddleware,
-        allow_origins=sorted(origins),
-        allow_credentials=False,
-        allow_methods=["*"],
-        allow_headers=["Accept", "Content-Type", "X-PanelFlow-Control", "X-PanelFlow-Token"],
-    )
-    app.add_middleware(
         LocalApiSecurityMiddleware,
         engine_token=token,
         allowed_origins=origins,
         api_port=settings.api_port,
         allow_insecure=insecure,
+    )
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=sorted(origins),
+        allow_credentials=False,
+        allow_methods=["*"],
+        allow_headers=["Accept", "Content-Type", "X-PanelFlow-Control", "X-PanelFlow-Token"],
     )
 
     # Include routers
@@ -110,6 +110,8 @@ def create_app(
     app.include_router(comfyui.project_router)
     app.include_router(packaging.router)
     app.include_router(autopilot.router)
+    app.include_router(series.router)
+    app.include_router(browser_bridge.router)
 
     @app.exception_handler(Exception)
     async def global_exception_handler(request: Request, exc: Exception):

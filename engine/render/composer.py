@@ -187,16 +187,20 @@ class CameraRenderer:
             return fitted
 
         elif shot_plan.scale_policy == ScalePolicy.CONTAIN:
-            # Maintain aspect ratio, letterbox / pillarbox if needed
+            # Maintain aspect ratio, letterbox / pillarbox with safe margins
             crop_w, crop_h = r_px - l_px, b_px - t_px
             crop_aspect = crop_w / max(1, crop_h)
 
-            if crop_aspect >= target_aspect:
-                scaled_w = target_w
-                scaled_h = int(round(target_w / crop_aspect))
+            safe_margin = 0.94
+            avail_w = int(target_w * safe_margin)
+            avail_h = int(target_h * safe_margin)
+
+            if crop_aspect >= (avail_w / max(1, avail_h)):
+                scaled_w = avail_w
+                scaled_h = int(round(avail_w / crop_aspect))
             else:
-                scaled_h = target_h
-                scaled_w = int(round(target_h * crop_aspect))
+                scaled_h = avail_h
+                scaled_w = int(round(avail_h * crop_aspect))
 
             scaled_img = source_img.resize((max(1, scaled_w), max(1, scaled_h)), Image.Resampling.LANCZOS, box=source_box)
 
@@ -204,7 +208,23 @@ class CameraRenderer:
             canvas = self._create_background_fill(source_img, shot_plan.fill_policy, target_w, target_h)
             paste_x = (target_w - scaled_w) // 2
             paste_y = (target_h - scaled_h) // 2
-            canvas.paste(scaled_img, (paste_x, paste_y))
+
+            # Add subtle soft shadow behind foreground panel if ambient background is active
+            if shot_plan.fill_policy == BackgroundFillPolicy.BLURRED_SOURCE:
+                shadow_w, shadow_h = scaled_w + 32, scaled_h + 32
+                shadow = Image.new("RGBA", (shadow_w, shadow_h), (0, 0, 0, 0))
+                shadow_inner = Image.new("RGBA", (scaled_w, scaled_h), (0, 0, 0, 160))
+                shadow.paste(shadow_inner, (16, 16))
+                shadow = shadow.filter(ImageFilter.GaussianBlur(10))
+                if canvas.mode != "RGBA":
+                    canvas = canvas.convert("RGBA")
+                canvas.alpha_composite(shadow, (paste_x - 16, paste_y - 16))
+
+            if scaled_img.mode != "RGBA":
+                scaled_img = scaled_img.convert("RGBA")
+            if canvas.mode != "RGBA":
+                canvas = canvas.convert("RGBA")
+            canvas.alpha_composite(scaled_img, (paste_x, paste_y))
             if canvas.mode != "RGB":
                 canvas = canvas.convert("RGB")
             return canvas
@@ -223,12 +243,18 @@ class CameraRenderer:
         target_h: int,
     ) -> Image.Image:
         if fill_policy == BackgroundFillPolicy.BLURRED_SOURCE:
-            # Blurred expansion of source image
-            bg = source_img.resize((target_w, target_h), Image.Resampling.BILINEAR)
-            bg = bg.filter(ImageFilter.GaussianBlur(radius=25))
+            # Aspect-ratio preserving cover before blur to prevent unnatural image squashing/stretching
+            src_w, src_h = source_img.size
+            scale = max(target_w / max(1, src_w), target_h / max(1, src_h))
+            sw, sh = max(target_w, round(src_w * scale)), max(target_h, round(src_h * scale))
+            bg = source_img.resize((sw, sh), Image.Resampling.BILINEAR)
+            left = (sw - target_w) // 2
+            top = (sh - target_h) // 2
+            bg = bg.crop((left, top, left + target_w, top + target_h))
+            bg = bg.filter(ImageFilter.GaussianBlur(radius=28))
             # Dim slightly to enhance contrast with foreground
             enhancer = ImageEnhance.Brightness(bg)
-            return enhancer.enhance(0.5)
+            return enhancer.enhance(0.45)
 
         elif fill_policy == BackgroundFillPolicy.SOLID_COLOR:
             return Image.new("RGB", (target_w, target_h), color=(20, 22, 28))
@@ -663,19 +689,26 @@ class FrameComposer:
     Main frame synthesis engine. Combines camera views, multi-layer stacks, parallax, effects, transitions, and captions.
     """
 
-    def __init__(self):
+    def __init__(self, source_cache_bytes: int = 256 * 1024 * 1024,
+                 raster_cache_bytes: int = 64 * 1024 * 1024):
         self.camera_renderer = CameraRenderer()
         self.effect_renderer = EffectRenderer()
         self.caption_renderer = CaptionRenderer()
         self.layer_renderer = LayerStackRenderer()
         self.clock = RenderFrameClock(fps=30)
-        self._image_cache: Dict[str, Image.Image] = {}
+        self._image_cache = OrderedDict()
+        self._image_cache_bytes = 0
+        self._source_cache_limit = max(0, source_cache_bytes)
+        self._raster_cache = OrderedDict()
+        self._raster_cache_bytes = 0
+        self._raster_cache_limit = max(0, raster_cache_bytes)
         self._background_cache = OrderedDict()
         self._background_cache_bytes = 0
 
     def get_source_image(self, file_path: str, target_w: int, target_h: int, normalize_orientation: bool = False) -> Image.Image:
         cache_key = file_path + "|oriented" if normalize_orientation else file_path
         if cache_key in self._image_cache:
+            self._image_cache.move_to_end(cache_key)
             return self._image_cache[cache_key]
 
         p = Path(file_path)
@@ -684,19 +717,53 @@ class FrameComposer:
                 img = (ImageOps.exif_transpose(opened) if normalize_orientation else opened).convert("RGBA")
         else:
             # Fallback canvas if missing
-            img = Image.new("RGBA", (target_w, target_h), color=(40, 50, 70, 255))
+            return Image.new("RGBA", (target_w, target_h), color=(40, 50, 70, 255))
 
-        self._image_cache[cache_key] = img
+        size = img.width * img.height * 4
+        if size <= self._source_cache_limit:
+            while self._image_cache and (self._image_cache_bytes + size > self._source_cache_limit or len(self._image_cache) >= 32):
+                _, evicted = self._image_cache.popitem(last=False)
+                self._image_cache_bytes -= evicted.width * evicted.height * 4
+            self._image_cache[cache_key] = img
+            self._image_cache_bytes += size
         return img
 
     def clear_cache(self, file_path: Optional[str] = None) -> None:
         if file_path:
-            self._image_cache.pop(file_path, None)
-            self._image_cache.pop(file_path + "|oriented", None)
+            for key in (file_path, file_path + "|oriented"):
+                evicted = self._image_cache.pop(key, None)
+                if evicted is not None:
+                    self._image_cache_bytes -= evicted.width * evicted.height * 4
         else:
             self._image_cache.clear()
+            self._image_cache_bytes = 0
+        self._raster_cache.clear()
+        self._raster_cache_bytes = 0
         self._background_cache.clear()
         self._background_cache_bytes = 0
+
+    def _prepare_layer_raster(self, working_img, key, width, height, rotation, blur, opacity):
+        """Reuse exact raster transforms; translation still happens for every frame."""
+        key = (key, width, height, rotation, blur, opacity)
+        cached = self._raster_cache.get(key)
+        if cached is not None:
+            self._raster_cache.move_to_end(key)
+            return cached
+        image = working_img.resize((width, height), Image.Resampling.BICUBIC)
+        if abs(rotation) > 0.05:
+            image = image.rotate(-rotation, resample=Image.Resampling.BICUBIC, expand=True)
+        if blur > 0.5:
+            image = image.filter(ImageFilter.GaussianBlur(radius=blur))
+        if opacity < 0.995:
+            image.putalpha(image.getchannel("A").point(lambda value: int(round(value * opacity))))
+        size = image.width * image.height * 4
+        if size <= self._raster_cache_limit:
+            while self._raster_cache and (self._raster_cache_bytes + size > self._raster_cache_limit or len(self._raster_cache) >= 64):
+                _, evicted = self._raster_cache.popitem(last=False)
+                self._raster_cache_bytes -= evicted.width * evicted.height * 4
+            self._raster_cache[key] = image
+            self._raster_cache_bytes += size
+        return image
 
     def compose_frame(
         self,
@@ -850,8 +917,10 @@ class FrameComposer:
                 continue
 
             tf = self.layer_renderer.evaluate_layer_transform(layer, shot.duration, elapsed_in_scene)
-            exact_active = float(layer.get("start_offset_sec", 0)) <= elapsed_in_scene < float(layer.get("start_offset_sec", 0)) + float(layer.get("duration_sec", shot.duration))
-            if not tf["is_active"] or tf["opacity"] <= 0.005 or (smart and not exact_active):
+            l_start = float(layer.get("start_offset_sec", 0))
+            l_dur = float(layer.get("duration_sec", shot.duration))
+            exact_active = (l_start <= elapsed_in_scene < (l_start + l_dur)) or (elapsed_in_scene >= shot.duration - 0.001 and (l_start + l_dur) >= shot.duration - 0.001)
+            if not tf["is_active"] or tf["opacity"] <= 0.005 or not exact_active:
                 continue
 
             # Load layer source image
@@ -870,7 +939,8 @@ class FrameComposer:
             c_aspect = target_w / max(1, target_h)
 
             if smart:
-                fit_scale = (max if settings.foreground_fit == "cover" else min)(target_w / pw, target_h / ph)
+                safe_margin = 0.94 if settings.foreground_fit == "contain" else 1.0
+                fit_scale = (max if settings.foreground_fit == "cover" else min)((target_w * safe_margin) / pw, (target_h * safe_margin) / ph)
                 base_w, base_h = pw * fit_scale, ph * fit_scale
             elif p_aspect >= c_aspect:
                 base_w = target_w * 0.90
@@ -884,22 +954,9 @@ class FrameComposer:
             final_w = max(1, int(round(base_w * eff_scale)))
             final_h = max(1, int(round(base_h * eff_scale)))
 
-            scaled_img = working_img.resize((final_w, final_h), Image.Resampling.BICUBIC)
-
-            # Apply Rotation
-            if abs(tf["rotation"]) > 0.05:
-                # Rotate with expansion to avoid clipping corners
-                scaled_img = scaled_img.rotate(-tf["rotation"], resample=Image.Resampling.BICUBIC, expand=True)
-
-            # Apply Blur
-            if tf["blur"] > 0.5:
-                scaled_img = scaled_img.filter(ImageFilter.GaussianBlur(radius=tf["blur"]))
-
-            # Apply Opacity to Alpha
-            if tf["opacity"] < 0.995:
-                alpha = scaled_img.split()[-1]
-                alpha = alpha.point(lambda p: int(round(p * tf["opacity"])))
-                scaled_img.putalpha(alpha)
+            raster_key = (img_path, smart, str(layer.get("crop")), layer.get("already_cropped"))
+            scaled_img = self._prepare_layer_raster(working_img, raster_key, final_w, final_h,
+                                                   tf["rotation"], tf["blur"], tf["opacity"])
 
             # Placement center: 50% + offset%
             center_x = target_w * (settings.foreground_x if smart else .5) + ((tf["x"] + cam["pan_x"]) / 100.0) * target_w

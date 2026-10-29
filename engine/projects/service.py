@@ -1044,6 +1044,10 @@ class ProjectService:
                         overall_seq += 1
 
                     inner_db.commit()
+                    from engine.imaging.content_cleanup import cleanup_detected_panels
+                    progress_cb(p_idx / total_pages, f"Checking promotional text on page {p_idx}/{total_pages}")
+                    cleanup_detected_panels(inner_db, project_id, [box.id for box in detected_boxes],
+                                            cancelled=lambda: cancel_token.is_cancelled)
 
                 progress_cb(p_idx / total_pages, f"Detected panels on page {p_idx}/{total_pages}")
 
@@ -1140,6 +1144,8 @@ class ProjectService:
             db.add(pr)
 
         db.commit()
+        from engine.imaging.content_cleanup import cleanup_detected_panels
+        cleanup_detected_panels(db, project_id, [box.id for box in detected_boxes])
         self._resequence_project_panels(db, project_id)
         self._sync_panels_json(db, project_id)
         return db.query(PanelRecord).filter(PanelRecord.page_id == page_id).order_by(PanelRecord.page_sequence.asc()).all()
@@ -1522,6 +1528,9 @@ class ProjectService:
         if not record:
             raise KeyError(f"Project not found: {project_id}")
 
+        from engine.imaging.content_cleanup import require_cleanup_review
+        require_cleanup_review(db, project_id)
+
         panels_count = db.query(PanelRecord).filter(PanelRecord.project_id == project_id).count()
         if panels_count == 0:
             raise ValueError("Cannot confirm panel review with zero panels.")
@@ -1620,7 +1629,7 @@ class ProjectService:
         if not record:
             raise KeyError(f"Project not found: {project_id}")
 
-        panel_query = db.query(PanelRecord).filter(PanelRecord.project_id == project_id)
+        panel_query = db.query(PanelRecord).filter(PanelRecord.project_id == project_id, PanelRecord.status != "IGNORED")
         if panel_ids:
             panel_query = panel_query.filter(PanelRecord.id.in_(panel_ids))
         panels = panel_query.order_by(PanelRecord.sequence).all()
@@ -1755,6 +1764,7 @@ class ProjectService:
                     region_ids = [row.id for row in worker_db.query(TextRegionRecord).filter(
                         TextRegionRecord.project_id == project_id,
                         TextRegionRecord.panel_id == panel.id,
+                        TextRegionRecord.detection_method != "AUTO_CLEANUP",
                     ).all()]
                     for region_id in region_ids:
                         if cancel_token.is_cancelled:
@@ -1907,7 +1917,7 @@ class ProjectService:
         from engine.imaging.text_regions import ClassicalTextRegionDetector
         detector = ClassicalTextRegionDetector()
 
-        query = db.query(PanelRecord).filter(PanelRecord.project_id == project_id)
+        query = db.query(PanelRecord).filter(PanelRecord.project_id == project_id, PanelRecord.status != "IGNORED")
         if page_id:
             query = query.filter(PanelRecord.page_id == page_id)
         panels = query.order_by(PanelRecord.sequence).all()
@@ -1942,21 +1952,27 @@ class ProjectService:
 
             # Preserve OCR and corrections during repeated Detect & Review runs.
             existing_regions = db.query(TextRegionRecord).filter(TextRegionRecord.panel_id == panel.id).all()
-            if any(r.raw_text or r.corrected_text or r.detection_method == "MANUAL" for r in existing_regions):
+            if any((r.raw_text or r.corrected_text or r.detection_method == "MANUAL") and r.detection_method != "AUTO_CLEANUP" for r in existing_regions):
                 created_records.extend(existing_regions)
                 global_seq += len(existing_regions)
                 continue
             # Replace only unreviewed regions that have no OCR yet.
             db.query(TextRegionRecord).filter(
                 TextRegionRecord.panel_id == panel.id,
-                TextRegionRecord.detection_method != "MANUAL",
+                TextRegionRecord.detection_method.notin_(["MANUAL", "AUTO_CLEANUP"]),
             ).delete()
 
             from PIL import Image
             import hashlib
             import io
             with Image.open(io.BytesIO(read_contained_bytes(ws_path, crop_path))) as p_img:
+                cleanup_regions = [r for r in existing_regions if r.detection_method == "AUTO_CLEANUP"]
+                created_records.extend(cleanup_regions)
                 for box in detected_boxes:
+                    if any(max(0, min(box.x+box.width, r.x+r.width)-max(box.x, r.x)) *
+                           max(0, min(box.y+box.height, r.y+r.height)-max(box.y, r.y)) > box.width*box.height*0.5
+                           for r in cleanup_regions):
+                        continue
                     rx1 = max(0, min(box.x, p_img.width - 1))
                     ry1 = max(0, min(box.y, p_img.height - 1))
                     rx2 = max(rx1 + 1, min(box.x + box.width, p_img.width))

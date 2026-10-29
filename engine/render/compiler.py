@@ -391,7 +391,14 @@ class TimelineCompiler:
             validated_background = BackgroundSettings.model_validate(raw_background) if raw_background is not None else None
             background_active = bool(validated_background and validated_background.enabled and validated_background.preset != "none")
 
-            for ly in layers:
+            # Distribute layers sequentially if they all share default 0.0 offset and full duration
+            unsequenced = len(layers) > 1 and all(
+                float(ly.get("start_offset_sec", 0.0)) == 0.0 and float(ly.get("duration_sec", duration)) == duration
+                for ly in layers
+            )
+            panel_dur = duration / max(1, len(layers)) if unsequenced else duration
+
+            for ly_idx, ly in enumerate(layers):
                 img_path, already_cropped = self._resolve_image_path(
                     ly.get("image_url", ""),
                     ly.get("source_panel_id"),
@@ -402,7 +409,10 @@ class TimelineCompiler:
 
                 # Ensure crop has default
                 raw_crop = ly.get("crop") or {"x": 0, "y": 0, "width": 100, "height": 100}
-                raw_tf = ly.get("transform") or {"x": 0, "y": 0, "scale": 1.0, "rotation": 0, "opacity": 1.0, "z_index": 0}
+                raw_tf = ly.get("transform") or {"x": 0, "y": 0, "scale": 1.0, "rotation": 0, "opacity": 1.0, "z_index": ly_idx if unsequenced else 0}
+
+                layer_start = round(ly_idx * panel_dur, 3) if unsequenced else float(ly.get("start_offset_sec", 0.0))
+                layer_duration = round(panel_dur, 3) if unsequenced else float(ly.get("duration_sec", duration))
 
                 layer_data = {
                     "id": ly.get("id", f"layer_{len(compiled_layers) + 1}"),
@@ -417,10 +427,10 @@ class TimelineCompiler:
                         "scale": float(raw_tf.get("scale", 1.0)),
                         "rotation": float(raw_tf.get("rotation", 0.0)),
                         "opacity": float(raw_tf.get("opacity", 1.0)),
-                        "z_index": int(raw_tf.get("z_index", 0)),
+                        "z_index": int(raw_tf.get("z_index", ly_idx if unsequenced else 0)),
                     },
-                    "start_offset_sec": float(ly.get("start_offset_sec", 0.0)),
-                    "duration_sec": float(ly.get("duration_sec", duration)),
+                    "start_offset_sec": layer_start,
+                    "duration_sec": layer_duration,
                     "motion_preset": ly.get("motion_preset") or "none",
                     "motion_direction": ly.get("motion_direction", "right"),
                     "motion_intensity": float(ly.get("motion_intensity", 1.0)),

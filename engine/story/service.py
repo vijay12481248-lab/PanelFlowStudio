@@ -217,6 +217,9 @@ class StoryService:
         if not project:
             raise KeyError(f"Project not found: {project_id}")
 
+        from engine.imaging.content_cleanup import require_cleanup_review
+        require_cleanup_review(db, project_id)
+
         visual_mode = bool((project.settings or {}).get("visual_storytelling"))
         previous_review = self.get_narrative(db, project_id)
         allowed_stages = (
@@ -406,17 +409,8 @@ class StoryService:
                             "--- UNTRUSTED SOURCE CONTENT ---\n" +
                             "\n".join(panels_text)
                         )
-                        char_res: CharacterDiscoveryResponse = await adapter_factory.execute_request(
-                            CapabilityType.TEXT_STRUCTURED,
-                            NormalizedRequest(
-                                request_id=f"char-{uuid.uuid4().hex[:8]}",
-                                workflow_job_id="",
-                                project_id="",
-                                capability=CapabilityType.TEXT_STRUCTURED,
-                                prompt=char_prompt,
-                                system_prompt=None,
-                                output_schema=CharacterDiscoveryResponse.model_json_schema(),
-                            ),
+                        char_res: CharacterDiscoveryResponse = await provider.generate_structured(
+                            prompt=char_prompt, response_model=CharacterDiscoveryResponse
                         )
                         for c in char_res.characters:
                             char_id = f"char_{uuid.uuid4().hex[:8]}"
@@ -597,17 +591,8 @@ class StoryService:
                             "\n".join(panels_text) +
                             f"\nCharacters: {[c.display_name for c in characters]}"
                         )
-                        event_res: EventExtractionResponse = await adapter_factory.execute_request(
-                            CapabilityType.TEXT_STRUCTURED,
-                            NormalizedRequest(
-                                request_id=f"event-{uuid.uuid4().hex[:8]}",
-                                workflow_job_id="",
-                                project_id="",
-                                capability=CapabilityType.TEXT_STRUCTURED,
-                                prompt=events_prompt,
-                                system_prompt=None,
-                                output_schema=EventExtractionResponse.model_json_schema(),
-                            ),
+                        event_res: EventExtractionResponse = await provider.generate_structured(
+                            prompt=events_prompt, response_model=EventExtractionResponse
                         )
                         for e in event_res.events:
                             p_id = e.panel_id if e.panel_id in valid_p_ids else inner_panels[0].id
@@ -666,17 +651,8 @@ class StoryService:
                             "Partition these comic panels into scenes and story beats:\n" +
                             "\n".join(panels_text)
                         )
-                        scene_res: SceneSegmentationResponse = await adapter_factory.execute_request(
-                            CapabilityType.TEXT_STRUCTURED,
-                            NormalizedRequest(
-                                request_id=f"scene-{uuid.uuid4().hex[:8]}",
-                                workflow_job_id="",
-                                project_id="",
-                                capability=CapabilityType.TEXT_STRUCTURED,
-                                prompt=scene_prompt,
-                                system_prompt=None,
-                                output_schema=SceneSegmentationResponse.model_json_schema(),
-                            ),
+                        scene_res: SceneSegmentationResponse = await provider.generate_structured(
+                            prompt=scene_prompt, response_model=SceneSegmentationResponse
                         )
                         for idx, s in enumerate(scene_res.scenes, start=1):
                             p_start = s.panel_start if s.panel_start in valid_p_ids else inner_panels[0].id

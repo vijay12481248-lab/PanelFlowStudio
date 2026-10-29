@@ -147,4 +147,18 @@ def synchronize_narration(scenes: list[dict[str, Any]], clips: list[dict[str, An
             cursor += float(clip["duration_sec"])
         if grouped[scene["id"]]:
             scene["duration_sec"] = round(cursor - running_time + 0.35, 6)
+
+        # Retime visual layers evenly across the scene duration so panels advance sequentially
+        layers = scene.get("layers", [])
+        if layers:
+            dur = float(scene["duration_sec"])
+            panel_dur = dur / len(layers)
+            for idx, ly in enumerate(layers):
+                ly["start_offset_sec"] = round(idx * panel_dur, 3)
+                ly["duration_sec"] = round(panel_dur, 3)
+                if "transform" not in ly or not isinstance(ly["transform"], dict):
+                    ly["transform"] = {"x": 0, "y": 0, "scale": 1, "rotation": 0, "opacity": 1, "z_index": idx}
+                else:
+                    ly["transform"]["z_index"] = idx
+
         running_time += float(scene["duration_sec"])

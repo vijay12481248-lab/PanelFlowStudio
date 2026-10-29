@@ -325,10 +325,20 @@ def get_providers_status():
         import playwright
         from playwright.sync_api import sync_playwright
         with sync_playwright() as p:
-            b = p.chromium.launch(headless=True)
-            pw_version = b.version
-            b.close()
-            pw_status = "HEALTHY"
+            b = None
+            for launch_opts in [{"headless": True}, {"channel": "chrome", "headless": True}, {"channel": "msedge", "headless": True}]:
+                try:
+                    b = p.chromium.launch(**launch_opts)
+                    break
+                except Exception:
+                    pass
+            if b is not None:
+                pw_version = b.version
+                b.close()
+                pw_status = "HEALTHY"
+            else:
+                pw_status = "BROWSER_RUNTIME_MISSING"
+                pw_version = "CLI Available, Browser Binaries Required"
     except Exception as e:
         pw_status = "BROWSER_RUNTIME_MISSING"
         pw_version = "CLI Available, Browser Binaries Required"

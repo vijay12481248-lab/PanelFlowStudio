@@ -114,3 +114,13 @@ def test_narration_can_be_grounded_in_visual_observations_without_ocr():
     assert script_validator.validate(script, narrative).passed
     script.segments[0].source_evidence.panel_ids = ["invented_panel"]
     assert not script_validator.validate(script, narrative).passed
+
+def test_mixed_story_panel_is_not_discarded_for_watermark():
+    from engine.imaging.panels.classification import PanelClassifier, PanelClassificationKind
+    item = PanelClassifier.classify_panel('mixed', 4, 'mixed.png', [0, 0, 1200, 1800],
+        ocr_text='Read at ManhuaPlus.com. Master, here is the map.',
+        vision_summary='A disciple hands a scroll to his master.', story_content_present=True)
+    assert item.classification == PanelClassificationKind.STORY_PANEL
+    banner = PanelClassifier.classify_panel('ad', 5, 'ad.png', [0, 0, 1200, 100],
+        ocr_text='Read at ManhuaPlus.com', story_content_present=False)
+    assert banner.classification == PanelClassificationKind.NON_STORY_CONTENT

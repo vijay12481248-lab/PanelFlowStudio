@@ -8,7 +8,27 @@ from engine.imaging.redaction import (
     restore_image_backup,
     blur_image_box,
     blur_entire_image,
+    blur_image_boxes,
 )
+
+
+def test_batch_blur_matches_sequential_png_and_encodes_once(tmp_path, monkeypatch):
+    first, second = tmp_path / "first.png", tmp_path / "second.png"
+    _create_sample_image(first)
+    second.write_bytes(first.read_bytes())
+    boxes = [(50, 50, 100, 100), (200, 50, 150, 70)]
+    for box in boxes:
+        blur_image_box(first, *box, feather=0)
+    original_save = Image.Image.save
+    saves = []
+    def counting_save(image, *args, **kwargs):
+        saves.append(1)
+        return original_save(image, *args, **kwargs)
+    monkeypatch.setattr(Image.Image, "save", counting_save)
+    assert blur_image_boxes(second, boxes, feather=0)
+    assert len(saves) == 1
+    with Image.open(first) as sequential, Image.open(second) as batched:
+        assert sequential.tobytes() == batched.tobytes()
 
 
 def _create_sample_image(path: Path, width: int = 400, height: int = 300) -> Path:

@@ -27,6 +27,7 @@ import {
   unlinkClipFromScene,
   estimateReadingDuration,
   rippleShiftLinkedNarration,
+  fitGeneratedNarration,
 } from "./narrationAdapter";
 import {
   updateBgmClip,
@@ -198,7 +199,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
       onUpdateState((prev) => {
         const currentClip = prev.narration_clips.find((c) => c.id === clipId);
         // Stale revision protection: discard if text changed during generation
-        if (!currentClip || currentClip.text_revision !== targetRevision) {
+        if (!currentClip || (currentClip.text_revision || 1) !== targetRevision) {
           console.warn("Stale synthesis discarded in inspector:", {
             currentRevision: currentClip?.text_revision,
             targetRevision,
@@ -227,7 +228,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
           };
         }
 
-        return {
+        const next = {
           ...prev,
           narration_clips: prev.narration_clips.map((c) => {
             if (c.id !== clipId) return c;
@@ -259,6 +260,17 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                 }),
               }
             : prev.narration_chapter,
+        };
+        const fitted = fitGeneratedNarration(next.scenes, next.narration_clips);
+        return {
+          ...next, ...fitted,
+          narration_chapter: next.narration_chapter ? {
+            ...next.narration_chapter,
+            segments: next.narration_chapter.segments.map((segment: any) => {
+              const clip = fitted.narration_clips.find(c => c.id === segment.id);
+              return clip ? { ...segment, scene_offset_sec: clip.scene_offset_sec } : segment;
+            }),
+          } : next.narration_chapter,
         };
       });
     } catch (err: any) {

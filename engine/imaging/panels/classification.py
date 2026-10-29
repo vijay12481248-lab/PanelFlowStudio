@@ -101,6 +101,7 @@ class PanelClassifier:
         vision_summary: Optional[str] = None,
         is_first_on_first_page: bool = False,
         is_last_on_last_page: bool = False,
+        story_content_present: bool = False,
     ) -> PanelCoverageItem:
         x, y, w, h = bbox
         aspect = round(float(w) / max(1.0, float(h)), 2)
@@ -144,6 +145,17 @@ class PanelClassifier:
 
         # 2. Text / OCR Pattern Checks
         combined_text = f"{ocr_text} {vision_summary or ''}".lower()
+        if story_content_present and h > 300 and aspect < 3:
+            # A watermark inside a story image is not evidence that the whole
+            # panel is an advertisement. Region cleanup handles the overlay.
+            return PanelCoverageItem(
+                panel_id=panel_id, reading_order=reading_order, source_image=source_image,
+                bbox=bbox, width=w, height=h, aspect_ratio=aspect,
+                classification=PanelClassificationKind.STORY_PANEL,
+                subtype=NonStorySubtype.NONE, confidence=0.8,
+                exclusion_reason=None, ocr_snippets=[ocr_text] if ocr_text else [],
+                vision_description=vision_summary,
+            )
         for pattern in PROMO_PATTERNS:
             if pattern.search(combined_text):
                 subtype = (

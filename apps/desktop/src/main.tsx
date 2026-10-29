@@ -1,13 +1,24 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { App } from "./App";
+import { getAuthenticatedEngineHealth } from "./engineConnection";
 
 import "./index.css";
 
-document.getElementById("bootstrap-status")?.remove();
+async function bootstrap() {
+  try {
+    await getAuthenticatedEngineHealth();
+  } catch (err) {
+    console.warn("[PanelFlow] Initial engine connection:", err);
+  }
 
-ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
-);
+  document.getElementById("bootstrap-status")?.remove();
+
+  ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
+    <React.StrictMode>
+      <App />
+    </React.StrictMode>
+  );
+}
+
+bootstrap();

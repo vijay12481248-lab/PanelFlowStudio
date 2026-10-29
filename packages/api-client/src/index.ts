@@ -94,6 +94,54 @@ export interface GeneratedAsset {
   created_at: string | null;
 }
 
+export interface BrowserBridgePreset {
+  id: string;
+  name: string;
+  default_url: string;
+}
+
+export interface BrowserBridgeStatus {
+  playwright_installed: boolean;
+  chrome_detected: boolean;
+  edge_detected: boolean;
+  preferred_channel: string;
+  profile_dir: string;
+  presets: BrowserBridgePreset[];
+}
+
+export interface BrowserBridgeExtractedImage {
+  asset_id: string;
+  filename: string;
+  file_path: string;
+  url: string;
+  width: number;
+  height: number;
+  byte_size: number;
+  mime_type: string;
+  sha256: string;
+}
+
+export interface BrowserBridgeResult {
+  success: boolean;
+  platform: string;
+  url: string;
+  prompt: string;
+  text_response: string;
+  images: BrowserBridgeExtractedImage[];
+  execution_time_sec: number;
+  error?: string;
+  metadata?: Record<string, any>;
+}
+
+export interface BrowserBridgeExecuteRequest {
+  url: string;
+  prompt: string;
+  extract_type?: "images" | "text" | "all";
+  project_id?: string;
+  headless?: boolean;
+  timeout_sec?: number;
+}
+
 export interface CreateProjectParams {
   title: string;
   source_type: SourceType;
@@ -124,7 +172,7 @@ export class PanelFlowApiClient {
     this.engineToken = engineToken;
   }
 
-  private resourceUrl(endpoint: string): string {
+  resourceUrl(endpoint: string): string {
     const suffix = this.engineToken ? `;pf-token=${encodeURIComponent(this.engineToken)}` : "";
     return `${this.baseUrl}${endpoint}${suffix}`;
   }
@@ -579,8 +627,25 @@ export class PanelFlowApiClient {
     return this.resourceUrl(`/api/projects/${projectId}/panels/${panelId}/file`);
   }
 
+  async getContentCleanupRules(projectId: string): Promise<{ enabled: boolean; labels: string[] }> {
+    return this.request(`/api/projects/${projectId}/content-cleanup-rules`);
+  }
+
+  async saveContentCleanupRules(projectId: string, rules: { enabled: boolean; labels: string[] }): Promise<{ enabled: boolean; labels: string[] }> {
+    return this.request(`/api/projects/${projectId}/content-cleanup-rules`, { method: "PUT", body: JSON.stringify(rules) });
+  }
+
+  async getContentCleanupReport(projectId: string): Promise<{ panels: Record<string, { panel_id: string; sequence: number; action: string; reason: string }> }> {
+    return this.request(`/api/projects/${projectId}/content-cleanup-report`);
+  }
+
+  async savePanelContentLabels(projectId: string, labels: string[]): Promise<{ labels: string[] }> {
+    return this.request(`/api/projects/${projectId}/panel-content-labels`, { method: "PUT", body: JSON.stringify({ labels }) });
+  }
+
   async getPanelContentSuggestions(projectId: string): Promise<{
     suggestions: Array<{ region_id: string; panel_id: string; page_id: string; text: string; bbox: number[]; reason: string }>;
+    labels: string[];
     regions_checked: number;
     ocr_required: boolean;
   }> {
@@ -1831,6 +1896,25 @@ export class PanelFlowApiClient {
 
   getGeneratedAssetUrl(projectId: string, assetId: string): string {
     return this.resourceUrl(`/api/projects/${projectId}/assets/${assetId}/file`);
+  }
+
+  // Browser AI Bridge (ChatGPT, Gemini, Meta AI, Claude, and Custom Web Tools)
+  async getBrowserBridgeStatus(): Promise<BrowserBridgeStatus> {
+    return this.request<BrowserBridgeStatus>("/api/browser-bridge/status");
+  }
+
+  async openBrowserBridgeSession(url = "https://chatgpt.com"): Promise<{ success: boolean; message: string; profile_dir: string; url: string }> {
+    return this.request<{ success: boolean; message: string; profile_dir: string; url: string }>("/api/browser-bridge/open-session", {
+      method: "POST",
+      body: JSON.stringify({ url }),
+    });
+  }
+
+  async executeBrowserBridgePrompt(request: BrowserBridgeExecuteRequest): Promise<BrowserBridgeResult> {
+    return this.request<BrowserBridgeResult>("/api/browser-bridge/execute", {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
   }
 
   // YouTube Packaging & ComfyUI Thumbnail Research

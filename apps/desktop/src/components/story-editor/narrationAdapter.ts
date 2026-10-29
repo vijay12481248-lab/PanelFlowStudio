@@ -321,7 +321,7 @@ export function syncChapterToTimelineClips(
       speed: segment.delivery.speech_speed,
       status: segment.generation_status as NarrationClip["status"],
       start_time_sec: startTimeSec,
-      duration_sec: Math.round(duration * 10) / 10,
+      duration_sec: duration,
       audio_url: segment.audio_asset_uri || undefined,
       linked_to_scene: isLinked,
       speaker_id: segment.speaker_id,
@@ -427,7 +427,7 @@ export function synchronizeChapterWithTimeline(
         speed: seg.delivery.speech_speed || 1.0,
         status: seg.generation_status as NarrationClip["status"],
         start_time_sec: clipStart,
-        duration_sec: Math.round(duration * 10) / 10,
+        duration_sec: duration,
         audio_url: seg.audio_asset_uri || undefined,
         linked_to_scene: true,
         speaker_id: seg.speaker_id,
@@ -480,7 +480,7 @@ export function synchronizeChapterWithTimeline(
       speed: seg.delivery.speech_speed || 1.0,
       status: seg.generation_status as NarrationClip["status"],
       start_time_sec: clipStart,
-      duration_sec: Math.round(duration * 10) / 10,
+      duration_sec: duration,
       audio_url: seg.audio_asset_uri || undefined,
       linked_to_scene: false,
       speaker_id: seg.speaker_id,
@@ -692,7 +692,7 @@ export function syncTimelineContractToState(
       speed: clip.speed,
       status: clip.generation_status as NarrationClip["status"],
       start_time_sec: Math.round(startTime * 100) / 100,
-      duration_sec: Math.round(duration * 10) / 10,
+      duration_sec: duration,
       audio_url: clip.audio_asset_uri || undefined,
       linked_to_scene: isLinked,
       scene_offset_sec: clip.scene_offset_sec || 0,
@@ -750,7 +750,7 @@ export function applyGeneratedAudioResult(
     ...clip,
     status: "READY",
     audio_url: jobResult.audio_asset_uri,
-    duration_sec: Math.round(measuredDur * 10) / 10,
+    duration_sec: measuredDur,
     generated_audio_revision: jobResult.target_revision,
   };
 
@@ -766,7 +766,7 @@ export function applyGeneratedAudioResult(
           generation_status: "READY" as JobStatus,
           audio_asset_uri: jobResult.audio_asset_uri,
           generated_audio_revision: jobResult.target_revision,
-          measured_duration_sec: Math.round(measuredDur * 10) / 10,
+          measured_duration_sec: measuredDur,
           generation_error: null,
           updated_at: new Date().toISOString(),
         };
@@ -779,4 +779,28 @@ export function applyGeneratedAudioResult(
     updatedClip,
     updatedChapter,
   };
+}
+
+/** Keep measured speech inside its scene and ripple later scenes without quantizing audio. */
+export function fitGeneratedNarration(scenes: VideoScene[], clips: NarrationClip[]): {
+  scenes: VideoScene[]; narration_clips: NarrationClip[];
+} {
+  const updatedClips = clips.map(clip => ({ ...clip }));
+  let shift = 0;
+  const updatedScenes = scenes.map(scene => {
+    const start = scene.start_time_sec + shift;
+    const linked = updatedClips.filter(clip => clip.scene_id === scene.id && clip.linked_to_scene !== false)
+      .sort((a, b) => a.start_time_sec - b.start_time_sec);
+    let end = start;
+    for (const clip of linked) {
+      const offset = Math.max(0, clip.scene_offset_sec ?? (clip.start_time_sec - scene.start_time_sec));
+      clip.start_time_sec = Math.max(start + offset, end);
+      clip.scene_offset_sec = clip.start_time_sec - start;
+      end = clip.start_time_sec + clip.duration_sec;
+    }
+    const duration = Math.max(scene.duration_sec, end - start);
+    shift += duration - scene.duration_sec;
+    return { ...scene, start_time_sec: start, duration_sec: duration };
+  });
+  return { scenes: updatedScenes, narration_clips: updatedClips };
 }
