@@ -1,4 +1,4 @@
-﻿"""Project the locked timeline into the editor state and a new VideoScript."""
+"""Project the locked timeline into the editor state and a new VideoScript."""
 from __future__ import annotations
 
 import os

@@ -1,4 +1,4 @@
-﻿"""The shared default-BGM helper returns exactly what legacy autopilot used to inline."""
+"""The shared default-BGM helper returns exactly what legacy autopilot used to inline."""
 from engine.audio.bgm_defaults import default_bgm_tracks
 
 # Copied verbatim from the legacy autopilot block before it was extracted.

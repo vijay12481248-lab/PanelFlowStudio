@@ -107,7 +107,10 @@ def test_cli_approve_prints_version(tmp_path, monkeypatch, capsys):
     assert capsys.readouterr().out.splitlines() == ["bible version: 1", "video script: vs-1"]
     assert cli.main(["review", "approve", str(res.run_dir)]) == 0  # stranded (no timeline yet): goes straight to continue
     assert capsys.readouterr().out.splitlines() == ["bible version: 1", "video script: vs-1"]
-    (res.run_dir / "timeline.json").write_text("{}", encoding="utf-8")
+    (res.run_dir / "timeline.json").write_text("{}", encoding="utf-8")  # continue died after the timeline: still retried
+    assert cli.main(["review", "approve", str(res.run_dir)]) == 0
+    capsys.readouterr()
+    (res.run_dir / "continued.json").write_text('"vs-1"', encoding="utf-8")
     assert cli.main(["review", "approve", str(res.run_dir)]) == 1
 
 

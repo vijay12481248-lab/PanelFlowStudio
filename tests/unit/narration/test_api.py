@@ -147,6 +147,55 @@ def test_action_returns_inspector_shape_with_fresh_checks(env):
     assert insp == out
 
 
+def _lines(client, res):
+    return {ln["line_id"]: ln for ln in client.get(f"/api/narration/runs/proj-test/{res.run_id}").json()["lines"]}
+
+
+def test_inspector_keeps_judge_verdicts_for_unchanged_lines(env):
+    client, res, *_ = env
+    p = res.run_dir / "critique.json"
+    report = json.loads(p.read_text(encoding="utf-8"))
+    next(lc for lc in report["lines"] if lc["line_id"] == "L002")["checks"].append(
+        {"rule": "grounded", "passed": False, "severity": "block", "reason": "invents a sword"})
+    p.write_text(json.dumps(report), encoding="utf-8")
+    grounded = [c for c in _lines(client, res)["L002"]["checks"] if c["rule"] == "grounded"]
+    assert grounded == [{"rule": "grounded", "passed": False, "severity": "block", "reason": "invents a sword"}]
+    url = f"/api/narration/runs/proj-test/{res.run_id}/lines/L002"
+    edited = client.post(url, json={"action": "edit", "text": "He walks through the quiet hall slowly"}).json()
+    assert not [c for c in edited["checks"] if c["rule"] == "grounded"]  # a new text has no verdict yet
+
+
+def test_inspector_without_review_json_still_has_facts_and_beat_sheet(env):
+    client, res, *_ = env
+    (res.run_dir / "review.json").unlink()  # a passed run
+    body = client.get(f"/api/narration/runs/proj-test/{res.run_id}").json()
+    assert body["review"] is None and body["beat_sheet"] and body["beat_sheet"]["scenes"]
+    assert all(ln["facts"] for ln in body["lines"])
+
+
+def test_approved_run_with_timeline_but_no_continued_is_retried(env):
+    client, res, jobs, _ = env
+    base = f"/api/narration/runs/proj-test/{res.run_id}"
+    assert client.post(f"{base}/approve").status_code == 200
+    (res.run_dir / "timeline.json").write_text("{}", encoding="utf-8")  # continue died after the timeline was written
+    again = client.post(f"{base}/approve")
+    assert again.status_code == 200 and again.json()["job_id"] == "job-2" and len(jobs) == 2
+
+
+def test_take_audio_route(env):
+    client, res, _, tmp_path = env
+    wav = tmp_path / "ws" / "take.wav"
+    wav.write_bytes(b"RIFF")
+    outside = tmp_path / "outside.wav"
+    outside.write_bytes(b"RIFF")
+    takes = [{"line_id": "L002", "audio_path": str(wav)}, {"line_id": "L003", "audio_path": str(outside)}]
+    (res.run_dir / "takes.json").write_text(json.dumps(takes), encoding="utf-8")
+    base = f"/api/narration/runs/proj-test/{res.run_id}/takes"
+    assert client.get(f"{base}/L002/audio").status_code == 200
+    assert client.get(f"{base}/L999/audio").status_code == 404  # not in takes.json
+    assert client.get(f"{base}/L003/audio").status_code == 404  # outside the workspace
+
+
 def test_missing_panel_facts_degrade_to_empty(env):
     client, res, *_ = env
     p = res.run_dir / "panel_facts.json"

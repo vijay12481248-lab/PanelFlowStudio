@@ -1,4 +1,4 @@
-﻿"""Review queue: chapters parked at gate `review`, line actions that write new script revisions, approval."""
+"""Review queue: chapters parked at gate `review`, line actions that write new script revisions, approval."""
 from __future__ import annotations
 
 import asyncio
@@ -113,9 +113,10 @@ def edit_line(run_dir: Path, line_id: str, text: str, bibles: BibleStore | None 
     failed = [f"{c.rule}: {c.reason}" for c in checks if not c.passed and c.severity == "block"]
     if failed:
         raise ValueError("; ".join(failed))
-    record_pair("edit", _line(script, line_id).text, new.lines[[x.line_id for x in new.lines].index(line_id)].text,
-                _pair_facts(run_dir, facts, line_id, script, bibles), [])
-    return _save(run_dir, new)
+    pair = ("edit", _line(script, line_id).text, _line(new, line_id).text, _pair_facts(run_dir, facts, line_id, script, bibles), [])
+    _save(run_dir, new)
+    record_pair(*pair, _item(run_dir).series_key)  # only a saved edit is a preference
+    return new
 
 
 def accept_line(run_dir: Path, line_id: str) -> ScriptIR:
@@ -167,8 +168,10 @@ async def regenerate_line(run_dir: Path, line_id: str, hint: str, client: ModelC
     new = revise(script, {line_id: dict(text=" ".join(draft.text.split()), facts_used=used, status="repaired")})
     checks = rule_checks(new, facts, [x.panel_id for x in new.lines], bible)[line_id]
     if not any(not c.passed and c.severity == "block" for c in checks):
-        record_pair("regenerate", ln.text, new.lines[i].text, _pair_facts(run_dir, facts, line_id, script, bibles), failures)
-        return _save(run_dir, new)
+        pair = ("regenerate", ln.text, new.lines[i].text, _pair_facts(run_dir, facts, line_id, script, bibles), failures)
+        _save(run_dir, new)
+        record_pair(*pair, item.series_key)
+        return new
     # a block rule failed: keep the text for the reviewer, but never call it repaired; the reasons go into critique.json
     new = revise(script, {line_id: dict(text=new.lines[i].text, facts_used=used, status="needs_review")})
     fresh = {c.rule for c in checks}

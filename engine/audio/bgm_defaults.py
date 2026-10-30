@@ -1,4 +1,4 @@
-﻿"""Default background music, shared by legacy autopilot and the narration projection."""
+"""Default background music, shared by legacy autopilot and the narration projection."""
 from __future__ import annotations
 
 

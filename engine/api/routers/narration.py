@@ -16,10 +16,12 @@ from engine.database.models import ProjectRecord
 from engine.database.session import get_db
 from engine.jobs.workflow import enqueue_project_operation, register_operation_factory
 from engine.narration import review
-from engine.narration.artifacts import CritiqueReport
+from engine.narration.artifacts import CritiqueReport, ScriptIR, SeriesBible
 from engine.narration.bible.store import BibleStore
+from engine.narration.steps.critique.judges import JUDGES
 from engine.narration.steps.critique.rules import rule_checks
 from engine.narration.steps.factview import char_names, cues_of, panel_line
+from engine.security.paths import contained_file_response, resolve_contained_path
 
 router = APIRouter(prefix="/api/narration", tags=["narration"])
 
@@ -83,6 +85,7 @@ def list_runs(project_id: str, db: Session = Depends(get_db)) -> list[dict]:
 def _context(run_dir: Path, item) -> dict:
     """Everything a line view needs. Checks are recomputed from the current text; critique.json is the fallback."""
     ctx = {"sheet": None, "facts": None, "names": None, "takes": {}, "checks": {}}
+    report = None
     try:
         report = CritiqueReport.model_validate_json((run_dir / "critique.json").read_text(encoding="utf-8"))
         ctx["checks"] = {lc.line_id: [c.model_dump(mode="json") for c in lc.checks] for lc in report.lines}
@@ -95,11 +98,27 @@ def _context(run_dir: Path, item) -> dict:
         pass
     try:
         sheet, facts = review._sheet(run_dir), review._facts(run_dir)
-        bible = _bibles().load(item.series_key if item else "")
+        try:
+            bible = _bibles().load(item.series_key if item else "")
+        except ValueError:  # a passed run has no review.json, so no series key: names fall back to ids and descriptions
+            bible = SeriesBible(series_key="unknown")
         ctx.update(sheet=sheet, facts=facts, names=char_names(bible, sheet, cues_of(facts.values())))
+    except (ValueError, KeyError, OSError):
+        return ctx
+    try:
         script = review._latest(run_dir)
         fresh = rule_checks(script, facts, [ln.panel_id for ln in script.lines], bible)
-        ctx["checks"] = {k: [c.model_dump(mode="json") for c in v] for k, v in fresh.items()}
+        checks = {k: [c.model_dump(mode="json") for c in v] for k, v in fresh.items()}
+        # judge verdicts cannot be recomputed: keep them for lines whose text is unchanged since that critique
+        if report is not None:
+            old = {lc.line_id: lc for lc in report.lines}
+            was = {ln.line_id: ln.text for ln in ScriptIR.model_validate_json(
+                (run_dir / f"script_r{report.revision}.json").read_text(encoding="utf-8")).lines}
+            for ln in script.lines:
+                if ln.line_id in old and was.get(ln.line_id) == ln.text:
+                    checks.setdefault(ln.line_id, []).extend(
+                        c.model_dump(mode="json") for c in old[ln.line_id].checks if c.rule in JUDGES)
+        ctx["checks"] = checks
     except (ValueError, KeyError, OSError):
         pass
     return ctx
@@ -139,6 +158,18 @@ def inspect_run(project_id: str, run_id: str, db: Session = Depends(get_db)) -> 
                                   "last_panel_id": s.last_panel_id} for s in sheet.scenes]}
     return {"run": run, "lines": lines, "beat_sheet": beat_sheet,
             "review": item.model_dump(mode="json") if item else None}
+
+
+@router.get("/runs/{project_id}/{run_id}/takes/{line_id}/audio")
+def take_audio(project_id: str, run_id: str, line_id: str, db: Session = Depends(get_db)):
+    run_dir = _run_dir(db, project_id, run_id)
+    workspace = Path(db.get(ProjectRecord, project_id).workspace_path)
+    try:  # the path comes from takes.json, never from the client
+        audio = next(t["audio_path"] for t in _json(run_dir / "takes.json") if t["line_id"] == line_id)
+        p = resolve_contained_path(workspace, audio, must_be_file=True)
+        return contained_file_response(workspace, p, media_type="audio/wav", filename=p.name)
+    except (StopIteration, KeyError, TypeError, ValueError, OSError):
+        raise HTTPException(404, "Take audio not found")
 
 
 # ---- background jobs: the same durable job manager autopilot uses; handlers never wait on models ----
@@ -206,7 +237,7 @@ def approve_run(project_id: str, run_id: str, db: Session = Depends(get_db)) -> 
     run_dir = _run_dir(db, project_id, run_id)
     try:
         item = review._item(run_dir)
-        if item.status == "approved" and not (run_dir / "timeline.json").exists():
+        if item.status == "approved":
             # a stranded approve: the proposals are already applied, so only the continue job is missing
             if (run_dir / "continued.json").exists():
                 raise ValueError("run is already finished")

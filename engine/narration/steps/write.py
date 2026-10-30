@@ -78,7 +78,7 @@ async def write_chapter(
     common = dict(
         style="; ".join(voice.style_notes) or "plain, vivid recap voice",
         banned=", ".join(voice.banned_phrases) or "(none)",
-        examples="\n".join(f"facts: {r['facts']}\nline: {r['line']}" for r in [*user_fewshot(), *load_fewshot()][:6]),
+        examples="\n".join(f"facts: {r['facts']}\nline: {r['line']}" for r in [*user_fewshot(bible.series_key), *load_fewshot()][:6]),
     )
 
     async def cached(step: str, sha: str, text: str, schema: type[BaseModel]):

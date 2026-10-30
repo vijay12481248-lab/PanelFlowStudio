@@ -98,7 +98,7 @@ def _review(args) -> int:
         return 1
     try:
         item = review.ReviewItem.model_validate_json((run_dir / "review.json").read_text(encoding="utf-8"))
-        if item.status == "approved" and not (run_dir / "timeline.json").exists():
+        if item.status == "approved" and not (run_dir / "continued.json").exists():
             approval = review.Approval(BibleStore().load(item.series_key), True)  # stranded approve: only continue is missing
         else:
             approval = review.approve(run_dir, BibleStore())
@@ -159,7 +159,9 @@ def main(argv: list[str] | None = None) -> int:
     rv.add_parser("list")
     rv.add_parser("approve").add_argument("run_dir")
     fs = sub.add_parser("fewshot").add_subparsers(dest="action", required=True)
-    fs.add_parser("refresh")
+    fr = fs.add_parser("refresh")
+    fr.add_argument("series_key", nargs="?")
+    fr.add_argument("--all", action="store_true", help="refresh every series that has recorded pairs")
     gd = sub.add_parser("gold").add_subparsers(dest="action", required=True)
     add = gd.add_parser("add")
     add.add_argument("project_id")
@@ -173,8 +175,17 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "fewshot":
         from engine.narration import learning
 
-        path = learning.refresh_fewshot()
-        print(path if path else f"not enough edits yet ({len(learning._usable_pairs())}/5)")
+        keys = learning._series_keys() if args.all else [args.series_key]
+        if not keys or keys == [None]:
+            print("give a series_key or --all")
+            return 1
+        for key in keys:
+            try:
+                path = learning.refresh_fewshot(key)
+            except ValueError as exc:
+                print(str(exc))
+                return 1
+            print(path if path else f"{key}: not enough edits yet ({len(learning._usable_pairs(key))}/5)")
         return 0
     if args.cmd == "gold":
         return _gold(args)

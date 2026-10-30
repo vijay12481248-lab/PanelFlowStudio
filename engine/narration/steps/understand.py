@@ -181,7 +181,8 @@ def _proposals(
         # a new person must be named on the page; descriptive inventions are dropped
         if name.casefold() not in page or not all(w in text for w in name.casefold().split()):
             continue
-        claimed.update(ids)
+        if name.split()[-1].casefold() not in PLACE_WORDS:  # a place is not a person: it must not take the unknowns
+            claimed.update(ids)
         if name.casefold() in proposed:  # same person listed twice: keep one proposal, merge its unknowns
             proposed[name.casefold()]["unknown_ids"] += ids
             continue
