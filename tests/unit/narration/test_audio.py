@@ -62,3 +62,12 @@ def test_normalize_sub_frame_input_still_pads():
     assert len(out) == 100 + 2 * int(SR * 0.08)
     with pytest.raises(ValueError):
         normalize_silence(np.zeros(100, np.float32))
+
+
+def test_to_16k_resamples_wav(tmp_path):
+    import numpy as np
+    from engine.narration.runtime.audio import to_16k, write_wav_atomic
+    p = tmp_path / "a.wav"
+    write_wav_atomic(p, np.ones(24000, dtype=np.float32) * 0.5)
+    out = to_16k(p)
+    assert out.dtype == np.float32 and abs(out.size - 16000) <= 1 and abs(float(out.mean()) - 0.5) < 1e-3

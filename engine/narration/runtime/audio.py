@@ -52,10 +52,23 @@ class WhisperStt:
 
             cfg = load_stt_config()
             _whisper = WhisperModel(cfg.model, device=cfg.device, compute_type=cfg.compute_type)
-        segments, _ = _whisper.transcribe(str(wav_path), word_timestamps=True, language="en")
+        # pass samples, not a path: faster-whisper's file decoder breaks on the installed PyAV version
+        segments, _ = _whisper.transcribe(to_16k(wav_path), word_timestamps=True, language="en")
         words = [Word(text=w.word.strip(), start=w.start, end=max(w.end, w.start))
                  for s in segments for w in (s.words or []) if w.word.strip()]
         return " ".join(w.text for w in words), words
+
+
+def to_16k(wav_path: Path) -> np.ndarray:
+    """Mono float32 samples at Whisper's 16 kHz (linear resampling is enough for speech recognition)."""
+    import soundfile as sf
+
+    audio, sr = sf.read(str(wav_path), dtype="float32", always_2d=True)
+    audio = audio.mean(axis=1)
+    if sr == 16000 or audio.size == 0:
+        return audio.astype(np.float32)
+    n = max(1, round(audio.size * 16000 / sr))
+    return np.interp(np.linspace(0, audio.size - 1, n), np.arange(audio.size), audio).astype(np.float32)
 
 
 def release_audio_models() -> None:
