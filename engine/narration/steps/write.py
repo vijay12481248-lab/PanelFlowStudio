@@ -9,6 +9,7 @@ from engine.narration.artifacts import (
     BeatSheet, PanelFacts, ScriptIR, ScriptLine, SeriesBible, check_script_ids,
 )
 from engine.narration.cache import ArtifactCache
+from engine.narration.learning import user_fewshot
 from engine.narration.runtime.client import ModelClient
 from engine.narration.runtime.prompts import load_prompt
 from engine.narration.runtime.scheduler import ModelScheduler
@@ -77,7 +78,7 @@ async def write_chapter(
     common = dict(
         style="; ".join(voice.style_notes) or "plain, vivid recap voice",
         banned=", ".join(voice.banned_phrases) or "(none)",
-        examples="\n".join(f"facts: {r['facts']}\nline: {r['line']}" for r in load_fewshot()[:6]),
+        examples="\n".join(f"facts: {r['facts']}\nline: {r['line']}" for r in [*user_fewshot(), *load_fewshot()][:6]),
     )
 
     async def cached(step: str, sha: str, text: str, schema: type[BaseModel]):

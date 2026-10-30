@@ -157,6 +157,9 @@ def _line(text: str) -> str:
     return " ".join(text.split())
 
 
+PLACE_WORDS = {"manor", "sect", "hall", "palace", "pavilion", "mountain", "peak", "city", "falls", "valley", "temple", "clan", "school"}
+
+
 def _proposals(
     merge: MergeDraft, bible: SeriesBible, unknowns: dict[str, str], facts: list[PanelFacts],
 ) -> tuple[list[BibleProposal], dict[str, str]]:
@@ -188,7 +191,15 @@ def _proposals(
         payload = proposed[name.casefold()] = {"id": f"c_{n}", "name": name, "unknown_ids": ids}
         if nc.description.strip():
             payload["appearance_cues"] = [_line(nc.description)]
-    out = [BibleProposal(kind="add_character", payload=p) for p in proposed.values()]
+    people = [p for p in proposed.values() if p["name"].split()[-1].casefold() not in PLACE_WORDS]
+    out = [BibleProposal(kind="add_character", payload=p) for p in people]
+    taken_loc = {x.id for x in bible.locations}
+    for p in (p for p in proposed.values() if p not in people):  # a name ending in a place word is a place, not a person
+        k = 1
+        while f"l_{k}" in taken_loc:
+            k += 1
+        taken_loc.add(f"l_{k}")
+        out.append(BibleProposal(kind="add_location", payload={"id": f"l_{k}", "name": p["name"]}))
     seen = set(bible.open_threads)
     for t in merge.new_threads:
         text = _line(t.text)

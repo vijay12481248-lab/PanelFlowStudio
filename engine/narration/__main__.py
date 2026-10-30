@@ -158,6 +158,8 @@ def main(argv: list[str] | None = None) -> int:
     rv = sub.add_parser("review").add_subparsers(dest="action", required=True)
     rv.add_parser("list")
     rv.add_parser("approve").add_argument("run_dir")
+    fs = sub.add_parser("fewshot").add_subparsers(dest="action", required=True)
+    fs.add_parser("refresh")
     gd = sub.add_parser("gold").add_subparsers(dest="action", required=True)
     add = gd.add_parser("add")
     add.add_argument("project_id")
@@ -168,6 +170,12 @@ def main(argv: list[str] | None = None) -> int:
     ev.add_argument("--baseline")
     ev.add_argument("--out")
     args = ap.parse_args(argv)
+    if args.cmd == "fewshot":
+        from engine.narration import learning
+
+        path = learning.refresh_fewshot()
+        print(path if path else f"not enough edits yet ({len(learning._usable_pairs())}/5)")
+        return 0
     if args.cmd == "gold":
         return _gold(args)
     if args.cmd == "eval":

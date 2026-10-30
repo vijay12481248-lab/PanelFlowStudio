@@ -17,6 +17,7 @@ from engine.narration.compiler import _write_json
 from engine.database.models import ProjectRecord
 from engine.database.session import SessionLocal
 from engine.narration.inputs import ChapterInputs
+from engine.narration.learning import record_pair
 from engine.narration.project import apply_to_project
 from engine.narration.runtime.client import ModelClient
 from engine.narration.runtime.prompts import load_prompt
@@ -95,6 +96,11 @@ def _line(script: ScriptIR, line_id: str):
     raise ValueError(f"unknown line: {line_id}")
 
 
+def _pair_facts(run_dir: Path, facts: dict[str, PanelFacts], line_id: str, script: ScriptIR, bibles: BibleStore) -> str:
+    names = char_names(bibles.load(_item(run_dir).series_key), _sheet(run_dir), cues_of(facts.values()))
+    return panel_line(1, facts[_line(script, line_id).panel_id], names).split(" | ", 1)[1]  # few-shot rows carry no P<k> prefix
+
+
 def edit_line(run_dir: Path, line_id: str, text: str, bibles: BibleStore | None = None) -> ScriptIR:
     run_dir, bibles = Path(run_dir), bibles or BibleStore()
     _open(run_dir)
@@ -107,6 +113,8 @@ def edit_line(run_dir: Path, line_id: str, text: str, bibles: BibleStore | None 
     failed = [f"{c.rule}: {c.reason}" for c in checks if not c.passed and c.severity == "block"]
     if failed:
         raise ValueError("; ".join(failed))
+    record_pair("edit", _line(script, line_id).text, new.lines[[x.line_id for x in new.lines].index(line_id)].text,
+                _pair_facts(run_dir, facts, line_id, script, bibles), [])
     return _save(run_dir, new)
 
 
@@ -159,6 +167,7 @@ async def regenerate_line(run_dir: Path, line_id: str, hint: str, client: ModelC
     new = revise(script, {line_id: dict(text=" ".join(draft.text.split()), facts_used=used, status="repaired")})
     checks = rule_checks(new, facts, [x.panel_id for x in new.lines], bible)[line_id]
     if not any(not c.passed and c.severity == "block" for c in checks):
+        record_pair("regenerate", ln.text, new.lines[i].text, _pair_facts(run_dir, facts, line_id, script, bibles), failures)
         return _save(run_dir, new)
     # a block rule failed: keep the text for the reviewer, but never call it repaired; the reasons go into critique.json
     new = revise(script, {line_id: dict(text=new.lines[i].text, facts_used=used, status="needs_review")})
