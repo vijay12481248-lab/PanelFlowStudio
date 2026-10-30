@@ -51,3 +51,10 @@ def test_proposed_names_and_cues_describe_unknowns():
     assert display_name("unknown_1", names) == "Yulin"
     assert display_name("unknown_2", names) == "the blue-skinned bald man"
     assert display_name("unknown_3", names) == "a stranger"
+
+
+def test_cue_description_drops_dangling_connector():
+    from engine.narration.steps.factview import _short
+    assert _short("blue-skinned bald man with pink eyes") == "blue-skinned bald man"
+    assert _short("A man with sword and cape") == "man"
+    assert _short("winged figure in black hooded outfit") == "winged figure"
