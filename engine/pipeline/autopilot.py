@@ -231,6 +231,7 @@ from engine.database.models import (
 
 
 from engine.database.session import SessionLocal
+from engine.config.settings import settings as app_settings
 
 
 
@@ -5151,6 +5152,9 @@ class AutoPilotRunner:
 
 
     async def _run_stage_story(self, skip_existing: bool) -> None:
+        if app_settings.narration_engine == "compiler":  # the narration compiler writes the script in the audio stage
+            self.log("skipped: narration compiler")
+            return self.update_stage("story", status="SKIPPED", progress=1.0, message="skipped: narration compiler")
 
 
 
@@ -5551,6 +5555,9 @@ class AutoPilotRunner:
 
 
     async def _run_stage_script(self, skip_existing: bool) -> None:
+        if app_settings.narration_engine == "compiler":  # the narration compiler writes the script in the audio stage
+            self.log("skipped: narration compiler")
+            return self.update_stage("script", status="SKIPPED", progress=1.0, message="skipped: narration compiler")
 
 
 
@@ -5783,6 +5790,12 @@ class AutoPilotRunner:
 
 
     async def _run_stage_audio(self, skip_existing: bool) -> None:
+        if app_settings.narration_engine == "compiler":  # a review gate raises, which fails this stage with the reasons
+            from engine.narration.autopilot_stage import run_compiler_stage
+            self.current_stage_id = "audio"
+            self.update_stage("audio", status="RUNNING", progress=0.1, message="Compiling narration locally...")
+            await run_compiler_stage(self.project_id)
+            return self.update_stage("audio", status="COMPLETED", progress=1.0, message="Narration compiled and applied")
 
 
 
