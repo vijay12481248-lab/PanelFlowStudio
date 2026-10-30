@@ -1,6 +1,7 @@
 import os
 import sys
 from pathlib import Path
+from typing import Literal
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
 
@@ -25,6 +26,9 @@ class Settings(BaseSettings):
         default_factory=lambda: Path(os.getenv("PANELFLOW_WORKSPACE_ROOT", str(_get_default_app_data() / "projects")))
     )
     database_url: str | None = None
+
+    # "compiler" makes autopilot use the local narration compiler (PANELFLOW_NARRATION_ENGINE)
+    narration_engine: Literal["legacy", "compiler"] = "legacy"
     
     # Engine Network & API
     api_host: str = "127.0.0.1"

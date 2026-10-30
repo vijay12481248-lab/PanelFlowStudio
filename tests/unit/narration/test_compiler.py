@@ -1,5 +1,6 @@
-import asyncio
+﻿import asyncio
 import json
+import re
 
 from engine.narration.artifacts import Beat, BeatSheet, Scene, SeriesBible
 from engine.narration.bible.store import BibleStore
@@ -11,12 +12,14 @@ from engine.narration.runtime.scheduler import ModelScheduler
 from engine.narration.steps import understand
 from engine.narration.steps.perceive import PanelFactsDraft
 from engine.narration.steps.critique.judges import PairVerdict, Verdict
+from engine.narration.steps.perform import MarksDraft, SceneMarksDraft
 from engine.narration.steps.repair import RepairDraft
 from engine.narration.steps.write import CandidatesDraft, LineDraft, SceneLinesDraft
 from engine.narration.steps.understand import (
     MergeDraft, WindowBeatDraft, WindowDraft, WindowSceneDraft,
 )
 from tests.unit.narration.fakes import FakeModelClient, RecordingUnloader, make_chapter_inputs
+from tests.unit.narration.test_voice import FakeStt, FakeTts
 
 
 def _draft(is_story=True):
@@ -34,13 +37,13 @@ def _merge():
     return MergeDraft(hook="h", chapter_summary="s", character_resolutions={}, plot_update="Kai arrives in town.")
 
 
-def _compiler(tmp_path, responses):
+def _compiler(tmp_path, responses, tts=None, stt=None, unloader=None):
     client = FakeModelClient(responses)
     roles = {r: RoleConfig(model="qwen3.5:9b", temperature=0.1, max_tokens=512, concurrency=1)
              for r in ("vision", "planner", "writer", "judge")}
-    sched = ModelScheduler(roles, RecordingUnloader())
-    comp = NarrationCompiler(client, sched, ArtifactCache(tmp_path / "cache"), BibleStore(tmp_path / "bibles"))
-    return comp
+    sched = ModelScheduler(roles, unloader or RecordingUnloader())
+    return NarrationCompiler(client, sched, ArtifactCache(tmp_path / "cache"), BibleStore(tmp_path / "bibles"),
+                             tts, stt)
 
 
 def _go(tmp_path, comp, **kw):
@@ -116,6 +119,9 @@ def test_failed_understand_step_is_recorded_in_run_log(tmp_path):
     assert steps["understand"]["status"] == "failed" and steps["understand"]["seconds"] >= 0
 
 def _writer(prompt):
+    if "You direct the voice-over" in prompt:
+        return SceneMarksDraft(lines=[MarksDraft(line=int(k), emotion="calm", energy="med")
+                                      for k in re.findall(r"^P(\d+) \|", prompt, re.M)])
     if "exactly 3 candidates" in prompt:
         return CandidatesDraft(candidates=["one two three four five", "six seven eight nine ten", "red blue green gold grey"])
     if "Failed checks" in prompt:
@@ -206,3 +212,60 @@ def test_rerun_of_passed_chapter_does_not_apply_bible_twice(tmp_path):
     assert _go(tmp_path, comp, stop_after="write").gate == "pass"
     again = _go(tmp_path, _compiler(tmp_path, _write_responses()), stop_after="write")
     assert again.gate == "pass" and comp.bibles.load("test-series").version == 1
+
+
+class _Echo:
+    """Hears exactly what the last TTS call said."""
+
+    def __init__(self, tts):
+        self.tts = tts
+
+    def words(self, wav_path):
+        return FakeStt([self.tts.calls[-1][0]]).words(wav_path)
+
+
+def _audio(tmp_path, stt=None, unloader=None):
+    tts = FakeTts()
+    return tts, _compiler(tmp_path, _write_responses(), tts, stt or _Echo(tts), unloader)
+
+
+def test_full_run_to_timeline_with_fake_audio(tmp_path):
+    tts, comp = _audio(tmp_path)
+    result = _go(tmp_path, comp, stop_after="timeline")
+    assert result.gate == "pass" and result.reasons == []
+    assert list(_steps(result)) == ["perceive", "understand", "write", "critique", "repair", "perform", "voice", "timeline"]
+    assert _steps(result)["voice"]["model"] == _steps(result)["timeline"]["model"]
+    for name in ("performance.json", "takes.json", "timeline.json", "sync.json"):
+        assert (result.run_dir / name).exists()
+    assert len(result.timeline.panels) == 3 and len(result.takes) == 3 and result.plan is not None
+    assert json.loads((result.run_dir / "sync.json").read_text(encoding="utf-8")) == result.sync
+    assert len(list((tmp_path / "ws" / "narration" / "voice").glob("*.wav"))) == 2  # hook and cliffhanger share text, so one take
+    assert comp.bibles.load("test-series").version == 1
+    again = _go(tmp_path, _compiler(tmp_path, _write_responses(), tts, _Echo(tts)), stop_after="timeline")
+    assert again.gate == "pass" and len(tts.calls) == 2  # the second run re-uses every WAV
+
+
+def test_llm_released_before_voice(tmp_path):
+    unloader = RecordingUnloader()
+    seen = []
+
+    class _Tts(FakeTts):
+        def synth(self, text, voice, rate):
+            seen.append(list(unloader.unloaded))
+            return super().synth(text, voice, rate)
+
+    tts = _Tts()
+    result = _go(tmp_path, _compiler(tmp_path, _write_responses(), tts, _Echo(tts), unloader), stop_after="timeline")
+    assert result.gate == "pass" and seen and all(s == ["qwen3.5:9b"] for s in seen)
+
+
+def test_voice_review_gate(tmp_path):
+    _, comp = _audio(tmp_path, stt=FakeStt(["zzz"]))
+    result = _go(tmp_path, comp, stop_after="timeline")
+    assert result.gate == "review" and "failed the speech check" in result.reasons[0]
+    assert result.timeline is None and (result.run_dir / "takes.json").exists()
+    assert not (result.run_dir / "timeline.json").exists()
+    assert _steps(result)["voice"]["status"] == "review" and "timeline" not in _steps(result)
+    assert comp.bibles.load("test-series").version == 0
+    review = json.loads((result.run_dir / "review.json").read_text(encoding="utf-8"))
+    assert review["line_ids"] and {t.line_id for t in result.takes if t.flagged} <= set(review["line_ids"])

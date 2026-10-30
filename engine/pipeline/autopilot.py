@@ -231,6 +231,7 @@ from engine.database.models import (
 
 
 from engine.database.session import SessionLocal
+from engine.config.settings import settings as app_settings
 
 
 
@@ -644,6 +645,11 @@ DEFAULT_STAGE_TIMEOUTS: Dict[str, float] = {
 
 
 
+
+
+def audio_stage_timeout(panels: int, compiler: bool) -> float:
+    """The compiler also perceives, writes and speaks the script in this stage, so it needs more time per panel."""
+    return max(3600.0, float(panels * 45.0 + 1200.0)) if compiler else max(3600.0, float(panels * 10.0 + 600.0))
 
 
 def diagnose_error(stage_id: str, exc: Exception) -> AutoPilotErrorDetails:
@@ -2582,7 +2588,7 @@ class AutoPilotRunner:
 
 
 
-                        return max(3600.0, float(panels_count * 10.0 + 600.0))
+                        return audio_stage_timeout(panels_count, app_settings.narration_engine == "compiler")
 
 
 
@@ -5151,6 +5157,9 @@ class AutoPilotRunner:
 
 
     async def _run_stage_story(self, skip_existing: bool) -> None:
+        if app_settings.narration_engine == "compiler":  # the narration compiler writes the script in the audio stage
+            self.log("skipped: narration compiler")
+            return self.update_stage("story", status="SKIPPED", progress=1.0, message="skipped: narration compiler")
 
 
 
@@ -5551,6 +5560,9 @@ class AutoPilotRunner:
 
 
     async def _run_stage_script(self, skip_existing: bool) -> None:
+        if app_settings.narration_engine == "compiler":  # the narration compiler writes the script in the audio stage
+            self.log("skipped: narration compiler")
+            return self.update_stage("script", status="SKIPPED", progress=1.0, message="skipped: narration compiler")
 
 
 
@@ -5783,6 +5795,12 @@ class AutoPilotRunner:
 
 
     async def _run_stage_audio(self, skip_existing: bool) -> None:
+        if app_settings.narration_engine == "compiler":  # a review gate raises, which fails this stage with the reasons
+            from engine.narration.autopilot_stage import run_compiler_stage
+            self.current_stage_id = "audio"
+            self.update_stage("audio", status="RUNNING", progress=0.1, message="Compiling narration locally...")
+            await run_compiler_stage(self.project_id)
+            return self.update_stage("audio", status="COMPLETED", progress=1.0, message="Narration compiled and applied")
 
 
 

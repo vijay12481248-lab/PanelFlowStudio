@@ -1,4 +1,4 @@
-"""CLI: python -m engine.narration run <project_id> [--stop-after perceive|understand|write]"""
+"""CLI: python -m engine.narration run <project_id> [--stop-after perceive|understand|write|perform|voice|timeline] [--apply]"""
 from __future__ import annotations
 
 import argparse
@@ -13,6 +13,7 @@ from engine.narration.bible.store import BibleStore
 from engine.narration.cache import ArtifactCache
 from engine.narration.compiler import NarrationCompiler
 from engine.narration.inputs import load_chapter_inputs
+from engine.narration.project import apply_to_project
 from engine.narration.runtime.client import ProviderModelClient
 from engine.narration.runtime.roles import load_roles
 from engine.narration.runtime.scheduler import ModelScheduler, ollama_unloader
@@ -38,7 +39,7 @@ def _make_compiler(provider, cache_dir: Path, bibles: BibleStore) -> NarrationCo
     )
 
 
-async def _run(project_id: str, stop_after: str) -> int:
+async def _run(project_id: str, stop_after: str, apply: bool = False) -> int:
     try:
         with SessionLocal() as db:
             inputs = load_chapter_inputs(db, project_id)
@@ -68,6 +69,16 @@ async def _run(project_id: str, stop_after: str) -> int:
         print(f"fallbacks: {sum(ln.status == 'fallback' for ln in res.script.lines)}")
     if res.critique is not None:
         print(f"coverage: {res.critique.coverage:.2f}")
+    if res.sync is not None:
+        met = res.sync["targets_met"]
+        for k, v in res.sync.items():
+            if k != "targets_met":
+                print(f"sync {k}: {v:.3g}")
+        for k, ok in met.items():
+            print(f"target {k}: {'met' if ok else 'not met'}")
+    if apply and res.gate == "pass":
+        with SessionLocal() as db:
+            print(f"video script: {apply_to_project(db, project_id, res.timeline, res.script, res.beat_sheet, res.takes, workspace, res.plan)}")
     return _EXIT[res.gate]
 
 
@@ -135,7 +146,8 @@ def main(argv: list[str] | None = None) -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
     run = sub.add_parser("run")
     run.add_argument("project_id")
-    run.add_argument("--stop-after", choices=["perceive", "understand", "write"], default="write")
+    run.add_argument("--stop-after", choices=["perceive", "understand", "write", "perform", "voice", "timeline"])
+    run.add_argument("--apply", action="store_true", help="project the locked timeline into the project (runs to timeline)")
     rv = sub.add_parser("review").add_subparsers(dest="action", required=True)
     rv.add_parser("list")
     rv.add_parser("approve").add_argument("run_dir")
@@ -155,7 +167,10 @@ def main(argv: list[str] | None = None) -> int:
         return asyncio.run(_eval(args))
     if args.cmd == "review":
         return _review(args)
-    return asyncio.run(_run(args.project_id, args.stop_after))
+    if args.apply and args.stop_after not in (None, "timeline"):
+        print("--apply needs the full run: use --stop-after timeline or leave it out")
+        return 1
+    return asyncio.run(_run(args.project_id, "timeline" if args.apply else args.stop_after or "write", args.apply))
 
 
 if __name__ == "__main__":

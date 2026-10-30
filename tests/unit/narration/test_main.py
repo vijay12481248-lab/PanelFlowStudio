@@ -1,4 +1,4 @@
-from contextlib import nullcontext
+﻿from contextlib import nullcontext
 from types import SimpleNamespace
 
 import pytest
@@ -69,3 +69,36 @@ def test_cli_prints_line_stats(monkeypatch, capsys):
     out = capsys.readouterr().out
     assert seen["stop_after"] == "write"
     assert "lines: 3" in out and "fallbacks: 1" in out and "coverage: 0.67" in out
+
+
+def test_cli_apply_projects(monkeypatch, capsys):
+    from pathlib import Path
+
+    from engine.narration.compiler import CompileResult
+
+    _patch(monkeypatch, _Provider(True))
+    sync = {"speech_rate": 2.75, "cut_median": 2.0, "targets_met": {"speech_rate": True, "wer_max": False}}
+    seen = {}
+
+    class _Compiler:
+        def __init__(self, *a):
+            pass
+
+        async def run(self, inputs, workspace, stop_after):
+            seen["stop_after"] = stop_after
+            return CompileResult("r", "pass", [], Path("."), None, SimpleNamespace(scenes=[]), SimpleNamespace(lines=[]), None, "tl", sync, "plan", ["take"])
+
+    def apply(db, pid, tl, script, sheet, takes, workspace, plan):
+        seen["apply"] = (pid, tl, script, sheet, takes, plan)
+        return "vs-1"
+
+    monkeypatch.setattr(cli, "NarrationCompiler", _Compiler)
+    monkeypatch.setattr(cli, "load_roles", lambda: {})
+    monkeypatch.setattr(cli, "ProviderModelClient", lambda *a: None)
+    monkeypatch.setattr(cli, "ModelScheduler", lambda *a: None)
+    monkeypatch.setattr(cli, "apply_to_project", apply)
+    assert cli.main(["run", "abc", "--apply"]) == 0
+    out = capsys.readouterr().out
+    assert seen["stop_after"] == "timeline" and seen["apply"] == ("abc", "tl", seen["apply"][2], seen["apply"][3], ["take"], "plan")
+    assert "video script: vs-1" in out and "speech_rate: 2.75" in out and "wer_max: not met" in out
+    assert cli.main(["run", "abc", "--apply", "--stop-after", "write"]) == 1

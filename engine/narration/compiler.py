@@ -13,13 +13,17 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-from engine.narration.artifacts import BeatSheet, CritiqueReport, PanelFacts, ReviewItem, ScriptIR
+from engine.narration.artifacts import (
+    BeatSheet, CritiqueReport, LockedTimeline, PanelFacts, PerformancePlan, ReviewItem, ScriptIR, VoiceTake,
+)
 from engine.narration.bible.store import BibleStore, apply_once
 from engine.narration.cache import ArtifactCache
 from engine.narration.inputs import ChapterInputs
+from engine.narration.runtime.audio import KokoroTts, Stt, Tts, WhisperStt, release_audio_models
 from engine.narration.runtime.client import ModelClient, StepModelError
+from engine.narration.runtime.roles import load_stt_config, load_tts_config
 from engine.narration.runtime.scheduler import ModelScheduler
-from engine.narration.steps import perceive, repair, understand, write
+from engine.narration.steps import perceive, perform, repair, timeline, understand, voice, write
 from engine.narration.steps.critique import judges
 from engine.narration.steps.factview import char_names, cues_of, panel_line
 from engine.narration.steps.understand import NeedsReview
@@ -64,6 +68,10 @@ class CompileResult:
     beat_sheet: BeatSheet | None
     script: ScriptIR | None = None
     critique: CritiqueReport | None = None
+    timeline: LockedTimeline | None = None
+    sync: dict | None = None
+    plan: PerformancePlan | None = None
+    takes: list[VoiceTake] | None = None
 
 
 class _CountingCache:
@@ -101,11 +109,12 @@ def _recorded(log: RunLog, step: str, model: str, version: str, counter: "_Count
 
 class NarrationCompiler:
     def __init__(self, client: ModelClient, scheduler: ModelScheduler, cache: ArtifactCache,
-                 bibles: BibleStore):
+                 bibles: BibleStore, tts: Tts | None = None, stt: Stt | None = None):
         self.client, self.scheduler, self.cache, self.bibles = client, scheduler, cache, bibles
+        self.tts, self.stt = tts, stt
 
     async def run(self, inputs: ChapterInputs, workspace: Path,
-                  stop_after: Literal["perceive", "understand", "write"] = "write",
+                  stop_after: Literal["perceive", "understand", "write", "perform", "voice", "timeline"] = "timeline",
                   facts_override: list[PanelFacts] | None = None) -> CompileResult:
         now = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
         run_id = f"{now}-{hashlib.sha256((inputs.project_id + now).encode()).hexdigest()[:6]}"
@@ -115,16 +124,21 @@ class NarrationCompiler:
         sheet: BeatSheet | None = None
         script: ScriptIR | None = None
         report: CritiqueReport | None = None
+        plan: PerformancePlan | None = None
+        takes: list[VoiceTake] | None = None
+        tl: LockedTimeline | None = None
+        sync: dict | None = None
 
         def result(gate: Gate, reasons: list[str]) -> CompileResult:
             log.finish(gate, reasons)
             if gate == "review":
                 blocked = {lc.line_id for lc in report.lines if lc.blocked} if report else set()
+                blocked |= {t.line_id for t in takes or [] if t.flagged}
                 ids = [ln.line_id for ln in script.lines if ln.line_id in blocked or ln.status in ("fallback", "needs_review")] if script else []
                 _write_json(run_dir / "review.json", ReviewItem(
                     run_id=run_id, project_id=inputs.project_id, series_key=inputs.series_key, run_dir=str(run_dir),
                     reasons=list(reasons), line_ids=ids).model_dump(mode="json"))
-            return CompileResult(run_id, gate, reasons, run_dir, facts, sheet, script, report)
+            return CompileResult(run_id, gate, reasons, run_dir, facts, sheet, script, report, tl, sync, plan, takes)
 
         try:
             bible = self.bibles.load(inputs.series_key)
@@ -188,10 +202,42 @@ class NarrationCompiler:
             _write_json(run_dir / "critique.json", report.model_dump(mode="json"))
             if fixed.gate == "review":
                 return result("review", fixed.reasons)
-            bible2, applied = apply_once(bible, sheet.bible_proposals, inputs.project_id)
-            if applied:
-                self.bibles.save(bible2, inputs.project_id, applied)
-            return result("pass", [])
+
+            def passed() -> CompileResult:  # the chapter is approved only now, so only now does the bible learn from it
+                bible2, applied = apply_once(bible, sheet.bible_proposals, inputs.project_id)
+                if applied:
+                    self.bibles.save(bible2, inputs.project_id, applied)
+                return result("pass", [])
+
+            if stop_after == "write":
+                return passed()
+
+            counter = _CountingCache(self.cache)
+            with _recorded(log, "perform", self.client.model_for("writer"), perform.PERFORM_PROMPT_VERSION, counter):
+                plan = await perform.perform(script, sheet, facts, bible, self.client, self.scheduler, counter)
+            _write_json(run_dir / "performance.json", plan.model_dump(mode="json"))
+            if stop_after == "perform":
+                return passed()
+
+            await self.scheduler.release()  # the LLM leaves the GPU before Kokoro arrives
+            tts_cfg = load_tts_config()
+            audio_model = f"{tts_cfg.model} + {load_stt_config().model}"
+            with _recorded(log, "voice", audio_model, "-", _CountingCache(self.cache)):
+                takes, reasons = await voice.voice_lines(
+                    script, plan, bible, self.tts or KokoroTts(), self.stt or WhisperStt(),
+                    Path(workspace) / "narration" / "voice", tts_cfg.voice, facts)
+                _write_json(run_dir / "takes.json", [t.model_dump(mode="json") for t in takes])
+                if reasons:
+                    raise NeedsReview(reasons)
+            if stop_after == "voice":
+                return passed()
+
+            with _recorded(log, "timeline", audio_model, "-", _CountingCache(self.cache)):
+                tl = timeline.lock_timeline(script, plan, takes, sheet, story_ids)
+                sync = timeline.sync_metrics(tl, takes, script)
+            _write_json(run_dir / "timeline.json", tl.model_dump(mode="json"))
+            _write_json(run_dir / "sync.json", sync)
+            return passed()
         except NeedsReview as exc:
             return result("review", exc.reasons)
         except StepModelError as exc:
@@ -201,3 +247,4 @@ class NarrationCompiler:
             raise
         finally:
             await self.scheduler.release()
+            release_audio_models()

@@ -3,3 +3,5 @@ roles:
   planner: {model: "qwen3.5:9b", temperature: 0.2, max_tokens: 4096, num_ctx: 8192, concurrency: 1, timeout_s: 180}
   writer:  {model: "qwen3.5:9b", temperature: 0.7, top_p: 0.9, max_tokens: 2048, num_ctx: 8192, concurrency: 1, timeout_s: 180}
   judge:   {model: "qwen3.5:9b", temperature: 0.0, max_tokens: 1024, num_ctx: 8192, concurrency: 1, timeout_s: 120}
+tts: {model: "kokoro-82m", voice: "am_michael"}
+stt: {model: "base", device: "cpu", compute_type: "int8"}
