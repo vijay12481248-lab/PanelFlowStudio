@@ -13,7 +13,7 @@ from engine.narration.runtime.client import ModelClient
 from engine.narration.runtime.prompts import load_prompt
 from engine.narration.runtime.scheduler import ModelScheduler
 from engine.narration.steps._cached import cached_call
-from engine.narration.steps.factview import FACT_REF, load_fewshot, normalize_facts, panel_line
+from engine.narration.steps.factview import FACT_REF, char_names, cues_of, load_fewshot, normalize_facts, panel_line
 from engine.narration.steps.understand import NeedsReview
 
 WRITE_PROMPT_VERSION = "v1"
@@ -72,8 +72,7 @@ async def write_chapter(
     if not story:
         raise NeedsReview(["no story panels"])
     pos = {f.panel_id: i for i, f in enumerate(story)}
-    names = {c.id: c.name for c in bible.characters}
-    names.update({u: names[c] for u, c in sheet.character_resolutions.items() if c in names})
+    names = char_names(bible, sheet, cues_of(facts))
     voice = bible.narrator_voice
     common = dict(
         style="; ".join(voice.style_notes) or "plain, vivid recap voice",

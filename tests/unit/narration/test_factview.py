@@ -40,3 +40,14 @@ def test_panel_line_dialogue_verbatim():
     out = panel_line(1, f, {})
     assert "said: You're TOO slow! / Hmph... | sfx: CLANG" in out
     assert display_name("zzz", {}) == "zzz"
+
+
+def test_proposed_names_and_cues_describe_unknowns():
+    from engine.narration.artifacts import Beat, BeatSheet, BibleProposal, Scene, SeriesBible
+    sheet = BeatSheet(project_id="p", hook="h", chapter_summary="s", scenes=[Scene(scene_id='s0', first_panel_id='p1', last_panel_id='p1', goal='g', conflict='c', turn='t', beats=[Beat(beat_id='b', panel_ids=['p1'], what_happens='w', function='setup', intensity=0.5)])], bible_proposals=[
+        BibleProposal(kind="add_character", payload={"id": "c_1", "name": "Yulin", "unknown_ids": ["unknown_1"]})])
+    cues = {"unknown_1": "blue skinned man", "unknown_2": "The blue-skinned bald man"}
+    names = factview.char_names(SeriesBible(series_key="s"), sheet, cues)
+    assert display_name("unknown_1", names) == "Yulin"
+    assert display_name("unknown_2", names) == "the blue-skinned bald man"
+    assert display_name("unknown_3", names) == "a stranger"

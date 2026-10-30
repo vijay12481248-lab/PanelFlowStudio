@@ -21,7 +21,7 @@ from engine.narration.runtime.client import ModelClient, StepModelError
 from engine.narration.runtime.scheduler import ModelScheduler
 from engine.narration.steps import perceive, repair, understand, write
 from engine.narration.steps.critique import judges
-from engine.narration.steps.factview import char_names, panel_line
+from engine.narration.steps.factview import char_names, cues_of, panel_line
 from engine.narration.steps.understand import NeedsReview
 
 Gate = Literal["pass", "review", "failed"]
@@ -153,7 +153,7 @@ class NarrationCompiler:
             story_ids = [f.panel_id for f in facts if f.is_story]
             if not story_ids:
                 return result("review", ["no story panels to narrate"])
-            names = char_names(bible, sheet)
+            names = char_names(bible, sheet, cues_of(facts))
             args = (by_id, story_ids, sheet, bible, self.client, self.scheduler)
 
             counter = _CountingCache(self.cache)

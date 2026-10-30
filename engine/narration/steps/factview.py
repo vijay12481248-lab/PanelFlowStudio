@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
+from typing import Iterable
 
 from engine.narration.artifacts import BeatSheet, PanelFacts, SeriesBible
 
@@ -31,9 +32,18 @@ def load_fewshot(pack: str = "recap_v1") -> list[dict]:
     return rows
 
 
-def char_names(bible: SeriesBible, sheet: BeatSheet) -> dict[str, str]:
+def cues_of(facts: Iterable[PanelFacts]) -> dict[str, str]:
+    return {u: c for f in facts for u, c in f.unknown_cues.items()}
+
+
+def char_names(bible: SeriesBible, sheet: BeatSheet, cues: dict[str, str]) -> dict[str, str]:
+    """id -> display name. Unknowns get, in rising priority: 'the <cue>', a name proposed this chapter, a bible match."""
     names = {c.id: c.name for c in bible.characters}
-    return names | {u: names[c] for u, c in sheet.character_resolutions.items() if c in names}
+    described = {u: "the " + " ".join(re.sub(r"^(?:the|a|an)\s+", "", " ".join(c.split()), flags=re.I).split()[:4])
+                 for u, c in cues.items() if c.strip()}
+    proposed = {u: p.payload["name"] for p in sheet.bible_proposals if p.kind == "add_character"
+                for u in p.payload.get("unknown_ids", [])}
+    return described | proposed | names | {u: names[c] for u, c in sheet.character_resolutions.items() if c in names}
 
 
 def display_name(char_id: str, names: dict[str, str]) -> str:

@@ -8,7 +8,7 @@ from engine.narration.artifacts import LineCheck, PanelFacts, ScriptIR, SeriesBi
 
 DEFAULT_BANNED = ("in this panel", "the image shows", "in the image", "we see", "this scene shows", "the panel shows")
 WORDS_PER_SECOND = 2.75
-_STOP = {"i", "i'm", "i've", "i'll", "i'd", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday",
+_STOP = {"the", "a", "an", "i", "i'm", "i've", "i'll", "i'd", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday",
          "sunday", "january", "february", "march", "april", "may", "june", "july", "august", "september",
          "october", "november", "december"}
 _WORD = re.compile(r"[A-Za-z][A-Za-z'\u2019]*")

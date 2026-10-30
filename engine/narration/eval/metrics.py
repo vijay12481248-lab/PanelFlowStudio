@@ -17,7 +17,7 @@ from engine.narration.runtime.prompts import load_prompt
 from engine.narration.steps._cached import cached_call
 from engine.narration.steps.critique.judges import PairVerdict, Verdict
 from engine.narration.steps.critique.rules import _WORD
-from engine.narration.steps.factview import char_names, display_name, panel_line
+from engine.narration.steps.factview import char_names, cues_of, display_name, panel_line
 
 PAIR_STEP = "eval_pair"
 GROUNDED_STEP = "eval_grounded"
@@ -129,7 +129,7 @@ async def run_eval(slugs: list[str] | None, compiler_factory) -> EvalReport:
             continue
         n = len(res.script.lines)
         by_id = {f.panel_id: f for f in facts}
-        names = char_names(bible, res.beat_sheet)
+        names = char_names(bible, res.beat_sheet, cues_of(facts))
         crit = {lc.line_id: lc for lc in res.critique.lines}
         items = [(ln, jprompt.render(panel=panel_line(1, by_id[ln.panel_id], names), line=ln.text))
                  for ln in res.script.lines]

@@ -16,7 +16,7 @@ from engine.narration.runtime.prompts import load_prompt
 from engine.narration.runtime.scheduler import ModelScheduler
 from engine.narration.steps._cached import cached_call
 from engine.narration.steps.critique.judges import JUDGES, critique
-from engine.narration.steps.factview import FACT_REF, char_names, display_name, normalize_facts, panel_line
+from engine.narration.steps.factview import FACT_REF, char_names, cues_of, display_name, normalize_facts, panel_line
 
 REPAIR_PROMPT_VERSION = "v1"
 REPAIR_STEP = "repair_line"
@@ -67,7 +67,7 @@ async def repair_loop(
     script: ScriptIR, report: CritiqueReport, facts: dict[str, PanelFacts], story_ids: list[str], sheet: BeatSheet,
     bible: SeriesBible, client: ModelClient, scheduler: ModelScheduler, cache: ArtifactCache,
 ) -> RepairResult:
-    names = char_names(bible, sheet)
+    names = char_names(bible, sheet, cues_of(facts.values()))
     voice = bible.narrator_voice
     prompt = load_prompt(REPAIR_STEP, REPAIR_PROMPT_VERSION)
     common = dict(banned=", ".join(voice.banned_phrases) or "(none)",

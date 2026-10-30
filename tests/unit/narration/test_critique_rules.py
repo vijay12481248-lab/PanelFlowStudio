@@ -97,3 +97,8 @@ def test_unknown_name_trusts_names_in_panel_facts():
     res = rc(script, facts, ["p1", "p2"], SeriesBible(series_key="s", characters=[BibleCharacter(id="c1", name="Kai")]))
     assert not _failed(res, "L001", "unknown_name")
     assert _failed(res, "L002", "unknown_name")
+
+
+def test_article_plus_cue_description_is_not_an_unknown_name():
+    from engine.narration.steps.critique.rules import _unknown_names
+    assert _unknown_names("He faces The blue-skinned bald man", {"blue", "skinned", "bald", "man", "he", "faces"} | {"the"}) == []

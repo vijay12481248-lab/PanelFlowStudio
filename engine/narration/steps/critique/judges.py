@@ -15,7 +15,7 @@ from engine.narration.runtime.prompts import load_prompt
 from engine.narration.runtime.scheduler import ModelScheduler
 from engine.narration.steps._cached import cached_call
 from engine.narration.steps.critique.rules import chapter_stats, rule_checks
-from engine.narration.steps.factview import panel_line
+from engine.narration.steps.factview import char_names, cues_of, panel_line
 
 CRITIQUE_PROMPT_VERSION = "v1"
 PAIR_STEP = "critique_pair"
@@ -38,8 +38,7 @@ async def judge_lines(
     script: ScriptIR, line_ids: list[str] | None, facts: dict[str, PanelFacts], sheet: BeatSheet,
     bible: SeriesBible, client: ModelClient, scheduler: ModelScheduler, cache: ArtifactCache,
 ) -> dict[str, list[LineCheck]]:
-    names = {c.id: c.name for c in bible.characters}
-    names.update({u: names[c] for u, c in sheet.character_resolutions.items() if c in names})
+    names = char_names(bible, sheet, cues_of(facts.values()))
     beat_of = {p: b.what_happens for s in sheet.scenes for b in s.beats for p in b.panel_ids}
     style = "; ".join(bible.narrator_voice.style_notes) or "plain, vivid recap voice"
     prompts = {n: load_prompt(f"critique_{n}", CRITIQUE_PROMPT_VERSION) for n in JUDGES}
