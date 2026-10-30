@@ -1017,12 +1017,14 @@ class FrameComposer:
                 base_w = base_h * p_aspect
 
             # Recap-style framing for tall strips: fitting the whole height leaves an unreadable sliver,
-            # so widen the panel (capped at 2.5 screens tall to keep scroll speed readable) and scroll it.
+            # so widen the panel and scroll it. Zoom is capped so the scroll never travels faster than
+            # 0.2 screen-heights per second over the panel's time on screen; faster reads as a blur.
             scroll_tall = (layer.get("motion_preset") == "cinematic_vertical_pan"
                            and not (layer.get("animation") or {}).get("enabled")
                            and base_w < target_w * 0.42)
             if scroll_tall:
-                grow = min(target_w * 0.42 / base_w, target_h * 2.5 / base_h)
+                max_h = target_h * (1.0 + 0.2 * max(0.0, l_dur))
+                grow = max(1.0, min(target_w * 0.42 / base_w, max_h / base_h))
                 base_w, base_h = base_w * grow, base_h * grow
                 scroll_tall = base_h > target_h
 
@@ -1031,16 +1033,9 @@ class FrameComposer:
             final_w = max(1, int(round(base_w * eff_scale)))
             final_h = max(1, int(round(base_h * eff_scale)))
 
-            # Smooth layer transitions between consecutive layers in the same scene
+            # Hard cuts between panels: the old fade-out/fade-in dipped to the background for 0.8s
+            # and showed each panel ~0.25s after its narration line had started.
             layer_opacity = tf["opacity"]
-            fade_dur = 0.40  # 400ms smooth crossfade
-            if len(sorted_layers) > 1 and l_dur > 1.0:
-                time_in_layer = elapsed_in_scene - l_start
-                time_left_in_layer = (l_start + l_dur) - elapsed_in_scene
-                if l_idx > 0 and 0.0 <= time_in_layer < fade_dur:
-                    layer_opacity *= (time_in_layer / fade_dur)
-                if l_idx < len(sorted_layers) - 1 and 0.0 <= time_left_in_layer < fade_dur:
-                    layer_opacity *= max(0.0, time_left_in_layer / fade_dur)
 
             raster_key = (img_path, smart, str(layer.get("crop")), layer.get("already_cropped"), round(layer_opacity, 2))
             scaled_img = self._prepare_layer_raster(working_img, raster_key, final_w, final_h,

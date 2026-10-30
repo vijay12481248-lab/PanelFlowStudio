@@ -47,6 +47,18 @@ def test_recap_lines_cut_on_their_panel_even_with_repeats():
     assert abs(sum(l["duration_sec"] for l in scenes[0]["layers"]) - scenes[0]["duration_sec"]) < 1e-6
 
 
+def test_short_line_carrying_many_uncited_panels_gets_a_pause_not_a_strobe():
+    # TDG 536.1 opening: one 2.75s line, then four panels with no line before the next cited panel.
+    from engine.pipeline.narration import MIN_PANEL_HOLD_SEC
+    scenes = [{"id": "s", "duration_sec": 1, "layers": [{"source_panel_id": p} for p in "abcdef"]}]
+    clips = [{"id": "1", "scene_id": "s", "duration_sec": 2.75, "source_evidence": {"panel_ids": ["a"]}},
+             {"id": "2", "scene_id": "s", "duration_sec": 2.5, "source_evidence": {"panel_ids": ["f"]}}]
+    synchronize_narration(scenes, clips)
+    layers = scenes[0]["layers"]
+    assert min(l["duration_sec"] for l in layers) >= MIN_PANEL_HOLD_SEC - 1e-6
+    assert clips[1]["start_time_sec"] == layers[5]["start_offset_sec"] == 5 * MIN_PANEL_HOLD_SEC  # cut still lands on its line
+
+
 def test_single_panel_per_clip_follows_measured_audio():
     scenes = [{"id": "s", "duration_sec": 10, "layers": [{"source_panel_id": p} for p in ['a', 'b']]}]
     clips = [{"id": p, "scene_id": "s", "duration_sec": d, "source_evidence": {"panel_ids": [p]}}

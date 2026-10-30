@@ -7,6 +7,28 @@ class SemanticStorySync:
                  scene_cushion_sec=0.35):
         self.scene_cushion = scene_cushion_sec
 
+    @staticmethod
+    def cut_layers(layer_panel_ids, clips):
+        """Layer index each clip cuts to, or None when the clip keeps the current shot.
+
+        A clip cuts when its cited panel moves forward in reading order; the first clip
+        always opens on the first layer. Clips citing the same, an earlier, or no panel
+        keep the current shot.
+        """
+        cuts, last = [], 0
+        for i, clip in enumerate(clips):
+            cited = (clip.get("source_evidence") or {}).get("panel_ids", [])
+            positions = [layer_panel_ids.index(pid) for pid in cited if pid in layer_panel_ids]
+            anchor = min(positions) if positions else None
+            if i == 0:
+                cuts.append(0)
+            elif anchor is not None and anchor > last:
+                cuts.append(anchor)
+                last = anchor
+            else:
+                cuts.append(None)
+        return cuts
+
     def synchronize_scenes_to_narration(self, scenes, narration_clips,
                                        panel_map=None, ignored_panel_ids=None):
         ignored = ignored_panel_ids or set()
@@ -20,25 +42,15 @@ class SemanticStorySync:
             origin = float(scene.get("start_time_sec", 0))
             duration = float(scene["duration_sec"])
             ids = [layer.get("source_panel_id") for layer in layers]
-            anchors = []
-            for clip in clips:
-                cited = (clip.get("source_evidence") or {}).get("panel_ids", [])
-                positions = [ids.index(pid) for pid in cited if pid in ids]
-                anchors.append(min(positions) if positions else None)
-            # Each clip whose cited panel moves forward in reading order starts a
-            # cut at that clip's start. Clips citing the same, an earlier, or no
-            # panel keep the current shot on screen. Uncited panels between two
-            # cuts share that span; they must never disappear. Timing is
-            # clip-level, not word-level.
-            cuts = []  # (first layer index, start offset in scene)
+            # Uncited panels between two cuts share that span; they must never
+            # disappear. Timing is clip-level, not word-level.
+            cuts = [(0, 0.0)]  # (first layer index, start offset in scene)
             cursor = origin
-            for clip, anchor in zip(clips, anchors):
+            for clip, layer_index in zip(clips, self.cut_layers(ids, clips)):
                 start = float(clip.get("start_time_sec", cursor))
                 cursor = start + float(clip["duration_sec"])
-                if anchor is not None and (not cuts or anchor > cuts[-1][0]):
-                    cuts.append((anchor, start - origin))
-            # The opening shot always begins with the first panel at scene start.
-            cuts = [(0, 0.0)] + [c for c in cuts if c[0] > 0 and c[1] > 0]
+                if layer_index and start - origin > 0:
+                    cuts.append((layer_index, start - origin))
             groups = [(first, nxt[0] if nxt else len(layers), start, nxt[1] if nxt else duration)
                       for (first, start), nxt in zip(cuts, cuts[1:] + [None])]
             for first, last, start, end in groups:

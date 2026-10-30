@@ -6159,6 +6159,9 @@ class AutoPilotRunner:
 
 
             excluded_panel_ids = {p.id for p in project.panels or [] if p.status == "IGNORED"}
+            # Credits/ads the story step classified as non-story are never narrated or shown.
+            non_story = ((narrative.analysis_metadata or {}) if narrative else {}).get("non_story_panels") or []
+            excluded_panel_ids |= {item.get("panel_id") for item in non_story if isinstance(item, dict)}
 
 
 

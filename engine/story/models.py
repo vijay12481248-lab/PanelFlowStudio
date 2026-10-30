@@ -418,7 +418,8 @@ class ScriptSegment(BaseModel):
     motion_intent: Optional[MotionIntent] = None
     delivery_style: str = "CALM_NARRATION"  # CALM_NARRATION, SUSPENSE, WONDER, DANGER, CLIFFHANGER
     vocal_energy: str = "medium"
-    target_pace: float = 1.30
+    # TTS speed. 1.3 gave ~3.6 words/s, far faster than recap narrators (~2.75 words/s).
+    target_pace: float = 1.0
     trailing_pause: float = 0.35
     evidence_summary: str = ""
     faithfulness_status: str = "SUPPORTED"  # SUPPORTED, WEAKLY_SUPPORTED, UNSUPPORTED

@@ -22,6 +22,7 @@ from typing import Any
 
 
 
+from engine.pipeline.semantic_sync import SemanticStorySync
 from engine.story.models import NarrativeDocument, SegmentType, VideoScript
 
 
@@ -242,6 +243,9 @@ def reconcile_narration_clips(
 
 
 
+MIN_PANEL_HOLD_SEC = 1.2  # recap channels never cut faster than ~1.1s
+
+
 def synchronize_narration(scenes: list[dict[str, Any]], clips: list[dict[str, Any]]) -> None:
 
     """Retime speech sequentially within each scene, with one 0.1s cushion.
@@ -292,12 +296,28 @@ def synchronize_narration(scenes: list[dict[str, Any]], clips: list[dict[str, An
 
         cursor = running_time
 
-        for clip in grouped[scene["id"]]:
+        # Each cut must hold every panel it carries (its cited panel plus uncited ones after it)
+        # for MIN_PANEL_HOLD_SEC; a line too short for that gets a narration-free pause after it
+        # instead of flashing panels by.
+        layer_ids = [layer.get("source_panel_id") for layer in scene.get("layers", [])]
+        cut_at = SemanticStorySync.cut_layers(layer_ids, grouped[scene["id"]])
+        bounds = [c for c in cut_at if c is not None] + [len(layer_ids)]
+        group, group_start = -1, cursor
+
+        for clip, cut in zip(grouped[scene["id"]], cut_at):
+
+            if cut is not None:
+                if group >= 0:
+                    cursor = max(cursor, group_start + MIN_PANEL_HOLD_SEC * (bounds[group + 1] - bounds[group]))
+                group, group_start = group + 1, cursor
 
             clip["start_time_sec"] = round(cursor, 6)
             clip["scene_offset_sec"] = round(cursor - running_time, 6)
 
             cursor += float(clip["duration_sec"])
+
+        if group >= 0:
+            cursor = max(cursor, group_start + MIN_PANEL_HOLD_SEC * (bounds[group + 1] - bounds[group]))
 
         if grouped[scene["id"]]:
 
@@ -328,7 +348,6 @@ def synchronize_narration(scenes: list[dict[str, Any]], clips: list[dict[str, An
 
             if aligned:
 
-                from engine.pipeline.semantic_sync import SemanticStorySync
                 SemanticStorySync().synchronize_scenes_to_narration([scene], scene_clips)
 
             # Fallback / normalization for layers

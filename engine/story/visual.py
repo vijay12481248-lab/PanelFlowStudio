@@ -475,6 +475,9 @@ class VisualStoryEngine:
         )
 
         raw_beats = [b.model_dump() for b in response.segments]
+        # Sync cuts on a line's first panel only; extra citations would hide uncovered panels from the coverage pass.
+        for beat in raw_beats:
+            beat["panel_ids"] = beat.get("panel_ids", [])[:1]
         excluded = [p.get("panel_id") for p in narrative.analysis_metadata.get("non_story_panels", [])]
         raw_beats = await self._cover_unnarrated_panels(narrative, provider, raw_beats, set(excluded))
 
