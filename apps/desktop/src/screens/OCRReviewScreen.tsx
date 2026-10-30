@@ -38,7 +38,8 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
   const [reviewFlagged, setReviewFlagged] = useState(false);
 
   const [engines, setEngines] = useState<OCREngineInfo[]>([]);
-  const [selectedEngine, setSelectedEngine] = useState<string>("mock_ocr");
+  // Empty = let the engine pick the best real OCR; mock text must be an explicit choice.
+  const [selectedEngine, setSelectedEngine] = useState<string>("");
 
   const [loading, setLoading] = useState<boolean>(true);
   const [extracting, setExtracting] = useState<boolean>(false);
@@ -195,8 +196,7 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
       setEngines(engineList);
       if (engineList.length > 0) {
         const preferred = engineList.find((e) => e.engine_id === "windows_media" && e.is_available)
-          || engineList.find((e) => e.is_available)
-          || engineList[0];
+          || engineList.find((e) => e.is_available && e.engine_id !== "mock_ocr");
         if (preferred) {
           setSelectedEngine(preferred.engine_id);
         }
@@ -354,7 +354,7 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
     setProgressMsg("Queuing OCR extraction job...");
 
     try {
-      const res = await api.extractOCR(project.id, selectedEngine, "en");
+      const res = await api.extractOCR(project.id, selectedEngine || undefined, "en");
       const jobId = res.job_id;
 
       for (let i = 0; i < 40; i++) {
@@ -394,7 +394,7 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
     setSingleOcrLoading(true);
     try {
       pushUndo(textRegions);
-      const updated = await api.ocrSingleRegion(project.id, regionId, selectedEngine, "en");
+      const updated = await api.ocrSingleRegion(project.id, regionId, selectedEngine || undefined, "en");
       setTextRegions((prev) => prev.map((tr) => (tr.id === regionId ? updated : tr)));
       setEditForm((prev) => ({
         ...prev,
@@ -667,7 +667,7 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
       );
       let finalRegion = newRegion;
       try {
-        finalRegion = await api.ocrSingleRegion(project.id, newRegion.id, selectedEngine, "en");
+        finalRegion = await api.ocrSingleRegion(project.id, newRegion.id, selectedEngine || undefined, "en");
       } catch (e) {
         // Fall back to un-transcribed manual region
       }
@@ -1017,6 +1017,7 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
               onChange={(e) => setSelectedEngine(e.target.value)}
               className="bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500"
             >
+              <option value="">Best available (auto)</option>
               {engines.map((e) => (
                 <option key={e.engine_id} value={e.engine_id}>
                   {e.display_name} [{e.status_label || (e.is_available ? "Available" : "Configuration required")}]

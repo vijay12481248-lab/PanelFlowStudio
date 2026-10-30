@@ -17,6 +17,7 @@ accurate motion-comic narration using a Three-Tier Hierarchical Workflow:
 """
 from typing import List, Dict, Any, Optional, Callable
 from pydantic import BaseModel, Field
+import asyncio
 import json
 import logging
 import os
@@ -488,7 +489,9 @@ class StoryNarrationService:
                     except Exception as p_err:
                         logger.warning(f"Tier 1 Page analysis notice/timeout for page {pg_seq}: {p_err}")
 
-                # Deterministic High-Grade Human Fallback for Page Narration (5 to 8 lines)
+                # Canned lines below describe no real page; only the test provider may use them.
+                if not page_script_generated and getattr(prov, "provider_id", None) != "mock_llm":
+                    raise ValueError(f"Page {pg_seq} narration failed (no working AI provider or an unreadable reply); refusing to insert placeholder lines.")
                 if not page_script_generated:
                     char_lead = primary_char_name or "our protagonist"
                     fallback_lines = [

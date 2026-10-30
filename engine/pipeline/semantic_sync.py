@@ -25,28 +25,22 @@ class SemanticStorySync:
                 cited = (clip.get("source_evidence") or {}).get("panel_ids", [])
                 positions = [ids.index(pid) for pid in cited if pid in ids]
                 anchors.append(min(positions) if positions else None)
-            # Ordered clip anchors divide the full reading sequence into groups.
-            # Uncited panels remain visible; they must never disappear just because
-            # a summary cites only selected evidence. Multi-panel groups have only
-            # clip-level timing, not word-level alignment.
-            ordered = (bool(clips) and all(a is not None for a in anchors)
-                       and all(a < b for a, b in zip(anchors, anchors[1:])))
-            clip_starts = []
+            # Each clip whose cited panel moves forward in reading order starts a
+            # cut at that clip's start. Clips citing the same, an earlier, or no
+            # panel keep the current shot on screen. Uncited panels between two
+            # cuts share that span; they must never disappear. Timing is
+            # clip-level, not word-level.
+            cuts = []  # (first layer index, start offset in scene)
             cursor = origin
-            for clip in clips:
+            for clip, anchor in zip(clips, anchors):
                 start = float(clip.get("start_time_sec", cursor))
-                clip_starts.append(start - origin)
                 cursor = start + float(clip["duration_sec"])
-            groups = []
-            if ordered:
-                bounds = [0] + anchors[1:] + [len(layers)]
-                for i, clip in enumerate(clips):
-                    start = 0.0 if i == 0 else clip_starts[i]
-                    end = (clip_starts[i + 1]
-                           if i + 1 < len(clips) else duration)
-                    groups.append((bounds[i], bounds[i + 1], start, end))
-            else:
-                groups = [(0, len(layers), 0.0, duration)]
+                if anchor is not None and (not cuts or anchor > cuts[-1][0]):
+                    cuts.append((anchor, start - origin))
+            # The opening shot always begins with the first panel at scene start.
+            cuts = [(0, 0.0)] + [c for c in cuts if c[0] > 0 and c[1] > 0]
+            groups = [(first, nxt[0] if nxt else len(layers), start, nxt[1] if nxt else duration)
+                      for (first, start), nxt in zip(cuts, cuts[1:] + [None])]
             for first, last, start, end in groups:
                 if end <= start or last <= first:
                     raise ValueError("Invalid narration timing or panel ordering")

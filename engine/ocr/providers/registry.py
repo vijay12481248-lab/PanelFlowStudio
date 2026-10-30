@@ -39,6 +39,16 @@ class OCRRegistry:
         # Fallback to Mock / built-in OCR
         return self._engines.get("mock_ocr", list(self._engines.values())[0])
 
+    def resolve(self, engine_id: str | None) -> OCREngine:
+        """The named engine, or the best real one. Never falls back to mock text silently."""
+        if engine_id:
+            return self.get_engine(engine_id)
+        engine = self.get_default_engine()
+        if engine.engine_id == "mock_ocr":
+            # Mock OCR returns canned dialogue; narrating it can never match the panels.
+            raise ValueError("No real OCR engine is available (Windows OCR / PaddleOCR). Install one or pick an engine explicitly.")
+        return engine
+
 def get_default_ocr_registry() -> OCRRegistry:
     registry = OCRRegistry()
     registry.register(MockOCREngine())

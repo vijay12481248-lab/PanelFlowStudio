@@ -800,7 +800,7 @@ export class PanelFlowApiClient {
 
   async extractOCR(
     projectId: string,
-    engineId: string = "mock_ocr",
+    engineId?: string,
     language: string = "en"
   ): Promise<{ job_id: string; message: string }> {
     return this.request<{ job_id: string; message: string }>(
@@ -953,7 +953,7 @@ export class PanelFlowApiClient {
   async ocrSingleRegion(
     projectId: string,
     regionId: string,
-    engineId: string = "mock_ocr",
+    engineId?: string,
     language: string = "en"
   ): Promise<TextRegion> {
     return this.request<TextRegion>(`/api/projects/${projectId}/text-regions/${regionId}/ocr`, {

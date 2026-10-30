@@ -634,7 +634,10 @@ class SmartBatchVideoProducer:
 
                 RenderJobRecord.project_id == project_id,
 
-                RenderJobRecord.status.in_(("COMPLETED", "COMPLETE"))
+                RenderJobRecord.status.in_(("COMPLETED", "COMPLETE")),
+
+                # A draft preview from the editor must never stand in for the chapter.
+                RenderJobRecord.output_profile == config.video_profile,
 
             ).order_by(RenderJobRecord.created_at.desc()).first()
 
@@ -644,13 +647,13 @@ class SmartBatchVideoProducer:
 
                 # Check workspace renders folder
 
-                renders = list((workspace_dir / "renders").glob("*.mp4"))
+                renders = list((workspace_dir / "renders").glob(f"*_{config.video_profile}_*.mp4"))
 
                 if not renders:
 
-                    raise RuntimeError(f"No rendered MP4 found for {project_title}")
+                    raise RuntimeError(f"No {config.video_profile} render found for {project_title}")
 
-                rendered_mp4 = renders[0]
+                rendered_mp4 = max(renders, key=lambda p: p.stat().st_mtime)
 
             else:
 
@@ -734,7 +737,8 @@ class SmartBatchVideoProducer:
 
                 "-i", str(list_file),
 
-                "-c", "copy",
+                # Copying AAC across joins accumulates priming gaps; resync audio to video timestamps.
+                "-c:v", "copy", "-af", "aresample=async=1:first_pts=0", "-c:a", "aac", "-b:a", "192k",
 
                 "-movflags", "+faststart",
 

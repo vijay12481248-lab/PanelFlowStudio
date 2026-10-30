@@ -274,7 +274,7 @@ def build_ocr_operation(project_id: str, payload: dict):
         runner = project_service.extract_ocr_project(
             db,
             project_id,
-            engine_id=payload.get("engine_id", "mock_ocr"),
+            engine_id=payload.get("engine_id"),
             language=payload.get("language", "en"),
             panel_ids=panel_ids,
             operation_only=True,

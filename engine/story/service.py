@@ -612,8 +612,8 @@ class StoryService:
                     except Exception as e:
                         logger.warning(f"Real LLM event extraction failed: {e}. Falling back to baseline.")
 
-                # Fallback if mock or empty
-                if not events:
+                # Canned events are test fixtures only; with a real provider, no events beats invented ones.
+                if not events and provider.provider_id == "mock_llm":
                     evt_1 = EventEntity(
                         event_id=f"evt_{uuid.uuid4().hex[:8]}",
                         event_type=EventType.ENTER,
@@ -694,6 +694,9 @@ class StoryService:
                         logger.warning(f"Real LLM scene extraction failed: {e}. Falling back to baseline.")
 
                 # Fallback if mock or empty
+                if not scenes and provider.provider_id != "mock_llm":
+                    # The canned story below would be narrated as if it were this chapter.
+                    raise ValueError("Story scene segmentation failed; refusing to substitute a placeholder story. Retry the story stage.")
                 if not scenes:
                     half = max(1, len(inner_panels) // 2)
                     scene_1 = SceneEntity(

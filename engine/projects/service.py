@@ -1628,7 +1628,7 @@ class ProjectService:
         self,
         db: Session,
         project_id: str,
-        engine_id: str = "mock_ocr",
+        engine_id: str | None = None,
         language: str = "en",
         panel_ids: list[str] | None = None,
         operation_only: bool = False,
@@ -1650,7 +1650,7 @@ class ProjectService:
 
         from engine.ocr.providers.registry import get_default_ocr_registry
         ocr_registry = get_default_ocr_registry()
-        ocr_engine = ocr_registry.get_engine(engine_id)
+        ocr_engine = ocr_registry.resolve(engine_id)
 
         job_id = None
         if not operation_only:
@@ -2174,7 +2174,7 @@ class ProjectService:
         db: Session,
         project_id: str,
         region_id: str,
-        engine_id: str = "mock_ocr",
+        engine_id: str | None = None,
         language: str = "en",
     ) -> TextRegionRecord:
         tr = self.get_text_region(db, project_id, region_id)
@@ -2205,6 +2205,7 @@ class ProjectService:
         from engine.ocr.cache import compute_ocr_cache_key, get_cached_ocr, store_cached_ocr
         from engine.ocr.providers.registry import ocr_registry
 
+        engine_id = ocr_registry.resolve(engine_id).engine_id
         cache_key, settings_hash = compute_ocr_cache_key(
             crop_sha256=tr.crop_sha256,
             engine_id=engine_id,

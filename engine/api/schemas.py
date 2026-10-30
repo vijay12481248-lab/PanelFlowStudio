@@ -176,7 +176,7 @@ class OCREngineInfo(BaseModel):
 
 
 class OCRExtractRequest(BaseModel):
-    engine_id: str = "mock_ocr"
+    engine_id: str | None = None
     language: str = "en"
 
 

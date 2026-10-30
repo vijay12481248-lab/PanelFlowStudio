@@ -101,6 +101,7 @@ async def test_generate_narration_draft_fallback_with_character_name(monkeypatch
         scenes_data=scenes,
         pages_data=pages,
         characters_data=chars,
+        provider_id="mock_llm",
     )
 
     assert plan.project_id == "test_proj_123"
@@ -249,6 +250,7 @@ async def test_three_tier_narration_generation_flow(monkeypatch):
         scenes_data=scenes,
         pages_data=pages,
         characters_data=chars,
+        provider_id="mock_llm",
     )
 
     assert plan.project_id == "test_3tier_proj"
@@ -284,6 +286,7 @@ async def test_narration_draft_page_only_and_panel_only_modes(monkeypatch):
         scenes_data=scenes,
         pages_data=pages,
         characters_data=chars,
+        provider_id="mock_llm",
         mode="page_only",
     )
     assert len(page_plan.page_scripts) >= 1
@@ -295,6 +298,7 @@ async def test_narration_draft_page_only_and_panel_only_modes(monkeypatch):
         scenes_data=scenes,
         pages_data=pages,
         characters_data=chars,
+        provider_id="mock_llm",
         mode="panel_only",
     )
     assert len(panel_plan.beats) == 1

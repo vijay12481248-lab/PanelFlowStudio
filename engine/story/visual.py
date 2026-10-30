@@ -16,6 +16,7 @@ from engine.story.models import (
 from engine.story.script.duration import estimate_segment_duration
 from engine.imaging.panels.classification import PanelClassifier, PanelClassificationKind, NonStorySubtype
 from engine.story.script.editorial import NarrativeEditor, NarrativeEditorialReport
+from engine.story.script.validator import script_validator
 
 
 class PanelVision(BaseModel):
@@ -400,15 +401,18 @@ class VisualStoryEngine:
         valid_panel_ids = [o.panel_id for o in narrative.observations]
 
         prompt = (
-            "Write an ORIGINAL, cinematic storyteller recap of this understood comic/manga chapter.\n"
-            "STORYTELLER DIRECTIVES:\n"
-            "1. Output 8 to 14 concise, connected narration beats covering the complete narrative arc from beginning to end.\n"
-            "2. Each beat must contain 15 to 35 words (1-2 sentences) explaining character motivations, tensions, and emotional stakes.\n"
-            "3. DO NOT write single monolithic paragraphs for an entire scene. Subdivide scenes into distinct story beats.\n"
-            "4. Cite 1 to 3 actual story panel IDs per beat that directly illustrate that moment.\n"
-            "5. Never output raw image captions or OCR reads ('in this panel', 'the drawing depicts', 'speech bubble says', 'Opening.').\n"
-            "6. Seamlessly transition between scenes, tracking the progression from opening conflict to escalating climax and resolution.\n"
-            "7. Group beats by dramatic progression: ESTABLISHING, TENSION, DISCOVERY, CLIMAX, CLIFFHANGER.\n\n"
+            "Write an ORIGINAL YouTube manga recap narration of this understood comic/manga chapter, "
+            "the fast, continuous storyteller voice of a recap channel.\n"
+            "RECAP DIRECTIVES:\n"
+            "1. Walk through the Valid Panel IDs in their listed reading order and write one narration line for each story panel. "
+            "Skip only panels with nothing to show (blank, credits, ads).\n"
+            "2. Each line is 6 to 16 words: what happens in THAT panel, spoken in about 2 to 4 seconds.\n"
+            "3. Lines must read as one continuous retelling when spoken back to back; a sentence may continue on the next line.\n"
+            "4. Cite exactly ONE panel ID per line: the panel the viewer sees while that line is spoken. "
+            "A key moment may get two consecutive lines on the same panel; never cite a panel earlier than the previous line's panel.\n"
+            "5. Third person, present tense, use character names, add stakes and personality; no filler like 'in this panel', "
+            "'the drawing depicts', 'speech bubble says', 'Opening.'.\n"
+            "6. Set scene_id to the scene that contains the cited panel.\n\n"
             "--- CHAPTER STORY GROUNDING ---\n"
             f"Chapter Overview: {chapter_summary}\n\n"
             f"Characters Present: {char_list or 'Characters from scene context'}\n"
@@ -420,7 +424,8 @@ class VisualStoryEngine:
         )
         response = await provider.generate_structured(
             prompt=prompt,
-            response_model=ChapterNarration, max_tokens=8192, num_ctx=32768,
+            # One line per panel: long webtoon chapters reach 250+ lines.
+            response_model=ChapterNarration, max_tokens=16384, num_ctx=32768,
         )
 
         # Editorial Refinement Pass
@@ -485,7 +490,7 @@ class VisualStoryEngine:
             ))
             elapsed += duration
 
-        return VideoScript(
+        script = VideoScript(
             script_id=f"script_{uuid.uuid4().hex[:12]}", project_id=narrative.project_id,
             language=narrative.language, adaptation_profile=profile, segments=segments,
             estimated_duration=round(elapsed, 3), status="DRAFT",
@@ -496,3 +501,11 @@ class VisualStoryEngine:
                 "panel_coverage_pct": edit_report.panel_coverage_pct,
             },
         )
+        # Audio accepts only fully grounded lines, so one loose line would fail the whole chapter.
+        # Dropping it is safe: sync keeps that panel on screen under the previous line.
+        script_validator.validate(script, narrative)
+        script.segments = [s for s in script.segments if s.faithfulness_status == "SUPPORTED"]
+        if not script.segments:
+            raise ValueError("No narration line is grounded in this chapter's panels; regenerate the story.")
+        script.estimated_duration = round(sum(s.estimated_duration for s in script.segments), 3)
+        return script

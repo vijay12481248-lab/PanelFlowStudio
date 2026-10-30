@@ -323,7 +323,9 @@ def synchronize_narration(scenes: list[dict[str, Any]], clips: list[dict[str, An
 
             )
 
-            if has_evidence and len(layers) > 1:
+            aligned = has_evidence and len(layers) > 1
+
+            if aligned:
 
                 from engine.pipeline.semantic_sync import SemanticStorySync
                 SemanticStorySync().synchronize_scenes_to_narration([scene], scene_clips)
@@ -336,13 +338,16 @@ def synchronize_narration(scenes: list[dict[str, Any]], clips: list[dict[str, An
 
                 panel_dur = dur / len(final_layers)
 
+                # Spoken scenes were just retimed; offsets from the pre-TTS estimate are stale.
+                retime = bool(scene_clips) and not aligned
+
                 for idx, ly in enumerate(final_layers):
 
-                    if "start_offset_sec" not in ly:
+                    if retime or "start_offset_sec" not in ly:
 
                         ly["start_offset_sec"] = round(idx * panel_dur, 3)
 
-                    if "duration_sec" not in ly:
+                    if retime or "duration_sec" not in ly:
 
                         ly["duration_sec"] = round(panel_dur, 3)
 

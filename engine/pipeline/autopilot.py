@@ -6379,7 +6379,7 @@ class AutoPilotRunner:
 
 
 
-                        motion_pr = "cinematic_vertical_pan" if is_tall else "none"
+                        motion_pr = "cinematic_vertical_pan" if is_tall else "slow_zoom_in"
 
 
 
@@ -8262,7 +8262,8 @@ class AutoPilotRunner:
 
 
 
-                        ly["motion_preset"] = "cinematic_vertical_pan" if is_tall else "none"
+                        # Recap style: every panel keeps moving; a static hold reads as a frozen video.
+                        ly["motion_preset"] = "cinematic_vertical_pan" if is_tall else "slow_zoom_in"
 
 
 

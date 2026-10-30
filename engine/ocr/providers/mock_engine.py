@@ -17,7 +17,7 @@ class MockOCREngine(OCREngine):
 
     @property
     def display_name(self) -> str:
-        return "Standard Comic OCR (Built-in)"
+        return "Test OCR (fake placeholder text)"
 
     @property
     def description(self) -> str:
