@@ -66,6 +66,12 @@ import type {
   MotionPreviewResponse,
   MotionRenderRequest,
   MotionRenderResponse,
+  NarrationReviewItem,
+  NarrationRunSummary,
+  NarrationRunDetail,
+  NarrationLine,
+  NarrationLineActionRequest,
+  NarrationApproveResponse,
 } from "@panelflow/shared-types";
 
 export type {
@@ -1280,6 +1286,39 @@ export class PanelFlowApiClient {
   // ---------------------------------------------------------------------------
   // Audio Director (Milestone 6 & 8)
   // ---------------------------------------------------------------------------
+  async listNarrationReview(): Promise<NarrationReviewItem[]> {
+    return this.request<NarrationReviewItem[]>("/api/narration/review");
+  }
+
+  async listNarrationRuns(projectId: string): Promise<NarrationRunSummary[]> {
+    return this.request<NarrationRunSummary[]>(`/api/narration/runs/${encodeURIComponent(projectId)}`);
+  }
+
+  async getNarrationRun(projectId: string, runId: string): Promise<NarrationRunDetail> {
+    return this.request<NarrationRunDetail>(
+      `/api/narration/runs/${encodeURIComponent(projectId)}/${encodeURIComponent(runId)}`
+    );
+  }
+
+  async narrationLineAction(
+    projectId: string,
+    runId: string,
+    lineId: string,
+    body: NarrationLineActionRequest
+  ): Promise<NarrationLine | { job_id: string }> {
+    return this.request<NarrationLine | { job_id: string }>(
+      `/api/narration/runs/${encodeURIComponent(projectId)}/${encodeURIComponent(runId)}/lines/${encodeURIComponent(lineId)}`,
+      { method: "POST", body: JSON.stringify(body) }
+    );
+  }
+
+  async approveNarrationRun(projectId: string, runId: string): Promise<NarrationApproveResponse> {
+    return this.request<NarrationApproveResponse>(
+      `/api/narration/runs/${encodeURIComponent(projectId)}/${encodeURIComponent(runId)}/approve`,
+      { method: "POST" }
+    );
+  }
+
   async getAudioTimeline(projectId: string): Promise<AudioTimelineResponse> {
     return this.request<AudioTimelineResponse>(`/api/projects/${projectId}/audio/timeline`);
   }

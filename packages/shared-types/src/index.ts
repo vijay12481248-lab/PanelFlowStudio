@@ -690,6 +690,62 @@ export interface MasterAudioTimeline {
   bgm_file_path?: string;
 }
 
+export interface NarrationReviewItem {
+  project_id: string;
+  project_title: string;
+  run_id: string;
+  reasons: string[];
+  line_ids: string[];
+  created: string;
+}
+
+export interface NarrationRunSummary {
+  run_id: string;
+  gate: string | null;
+  created: string;
+  steps: { step: string; status: string; seconds: number; model_calls: number }[];
+}
+
+export interface NarrationLineCheck {
+  rule: string;
+  passed: boolean;
+  severity: "block" | "warn";
+  reason: string;
+}
+
+export interface NarrationLine {
+  line_id: string;
+  panel_id: string;
+  text: string;
+  status: string;
+  kind: string;
+  checks: NarrationLineCheck[];
+  facts: string;
+  take: { wer: number; flagged: boolean; stt_text: string } | null;
+}
+
+export interface NarrationRunDetail {
+  run: Record<string, unknown>;
+  lines: NarrationLine[];
+  beat_sheet: {
+    hook: string;
+    chapter_summary: string;
+    scenes: { scene_id: string; goal: string; first_panel_id: string; last_panel_id: string }[];
+  } | null;
+  review: { run_id: string; project_id: string; series_key: string; run_dir: string; reasons: string[]; line_ids: string[]; status: "pending" | "approved" } | null;
+}
+
+export interface NarrationLineActionRequest {
+  action: "accept" | "edit" | "fallback" | "regenerate";
+  text?: string;
+  hint?: string;
+}
+
+export interface NarrationApproveResponse {
+  bible_version: number;
+  job_id: string | null;
+}
+
 export interface AudioTimelineResponse {
   warnings?: string[];
   id: string;
