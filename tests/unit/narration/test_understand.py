@@ -139,7 +139,7 @@ def test_invalid_window_fixed_on_reask_returns_sheet(tmp_path):
 
 
 def test_merge_resolutions_only_accept_bible_ids(tmp_path):
-    facts = [_facts(1, characters_visible=["unknown_1", "unknown_2"],
+    facts = [_facts(1, characters_visible=["unknown_1", "unknown_2"], names_mentioned=["The Masked Man"],
                     unknown_cues={"unknown_1": "masked man", "unknown_2": "old monk"})]
     merge = _merge(character_resolutions={"unknown_1": "c1", "unknown_2": "not-a-bible-id", "unknown_9": "c1"})
     sheet, client = _run(tmp_path, facts, [WindowDraft(scenes=[_scene(1, 1)]), merge])
@@ -186,7 +186,7 @@ def test_reask_is_cached_and_never_overwrites_the_first_answer(tmp_path):
 
 
 def test_merge_draft_becomes_typed_bible_proposals(tmp_path):
-    facts = [_facts(1, characters_visible=["unknown_1", "unknown_2"],
+    facts = [_facts(1, characters_visible=["unknown_1", "unknown_2"], names_mentioned=["The Masked Man"],
                     unknown_cues={"unknown_1": "masked man", "unknown_2": "man in mask"})]
     merge = _merge(
         new_characters=[
@@ -227,6 +227,28 @@ def test_duplicate_new_character_merges_unknown_ids():
             {"name": "masked man ", "description": "", "unknown_ids": ["unknown_2"]},
         ],
     })
-    out, _ = _proposals(merge, SeriesBible(series_key="s"), {"unknown_1": "a", "unknown_2": "b"})
+    out, _ = _proposals(merge, SeriesBible(series_key="s"), {"unknown_1": "a", "unknown_2": "b"},
+                        [_facts(1, names_mentioned=["Masked Man"])])
     assert len(out) == 1
     assert out[0].payload["unknown_ids"] == ["unknown_1", "unknown_2"]
+
+
+def test_new_character_names_must_be_read_off_the_page():
+    from engine.narration.steps.understand import MergeDraft, _proposals
+    merge = MergeDraft.model_validate({
+        "hook": "h", "chapter_summary": "s", "character_resolutions": {},
+        "new_characters": [
+            {"name": "Blue-skinned Invulnerable Opponent", "unknown_ids": ["unknown_1"]},
+            {"name": "yulin", "unknown_ids": ["unknown_2"]},
+        ],
+    })
+    out, _ = _proposals(merge, SeriesBible(series_key="s"), {"unknown_1": "a", "unknown_2": "b"},
+                        [_facts(1, names_mentioned=["Yulin"], action="Blue man holds a map")])
+    assert [p.payload["name"] for p in out] == ["yulin"]
+
+
+def test_merge_prompt_lists_names_on_the_unknowns_panels(tmp_path):
+    facts = [_facts(1, characters_visible=["unknown_1"], unknown_cues={"unknown_1": "bald man"},
+                    names_mentioned=["Yulin", "Feixiong"]), _facts(2, characters_visible=["unknown_1"])]
+    _, client = _run(tmp_path, facts, [WindowDraft(scenes=[_scene(1, 2)]), _merge()])
+    assert "unknown_1: bald man | panels P1, P2 | names on those panels: Yulin, Feixiong" in client.calls[-1][1]

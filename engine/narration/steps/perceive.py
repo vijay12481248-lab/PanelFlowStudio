@@ -29,6 +29,7 @@ class PanelFactsDraft(BaseModel):
     is_story: bool
     shot: Literal["wide", "medium", "close", "insert"]
     characters_visible: list[str]
+    names_mentioned: list[str] = Field(default_factory=list)
     action: str
     emotion: str
     speakers: list[SpeakerGuess]
@@ -79,11 +80,12 @@ def _facts(panel: PanelInput, d: PanelFactsDraft, namer: _Namer) -> PanelFacts:
         )
         for r in panel.ocr
     ]
+    names = list(dict.fromkeys(n.strip() for n in d.names_mentioned if n.strip()))[:6]
     # Only allowed coercion: over-long action is cut to its first 20 words.
     action = " ".join(d.action.split()[:20]) if len(d.action.split()) > 20 else d.action
     return PanelFacts(
         panel_id=panel.panel_id, order=panel.order, is_story=d.is_story or (bool(guesses) and not credits), shot=d.shot,
-        characters_visible=visible, unknown_cues=cues, action=action, emotion=d.emotion,
+        characters_visible=visible, unknown_cues=cues, names_mentioned=names, action=action, emotion=d.emotion,
         dialogue=dialogue, sfx=list(dict.fromkeys([*d.sfx, *panel.sfx])), setting=d.setting, importance=d.importance,
         confidence=d.confidence, needs_review=d.confidence < 0.5,
     )

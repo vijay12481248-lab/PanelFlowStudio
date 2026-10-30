@@ -94,7 +94,7 @@ def _known(bible: SeriesBible, inputs, facts: list[PanelFacts], names: dict[str,
     texts += [loc.name for loc in bible.locations] + list(bible.glossary)
     texts += [r.text for p in inputs.panels for r in p.ocr] + [s for p in inputs.panels for s in p.sfx]
     texts += [display_name(c, names) for f in facts for c in (*f.characters_visible, *(d.speaker_id for d in f.dialogue if d.speaker_id))]
-    texts += [t for f in facts for t in (f.action, f.setting)]  # same rule as the pipeline: a name in the gold facts is not invented
+    texts += [t for f in facts for t in (f.action, f.setting, *f.names_mentioned, *f.unknown_cues.values())]  # same rule as the pipeline: a name in the gold facts is not invented
     return _words(texts) | _STOP
 
 

@@ -148,3 +148,8 @@ def test_oversized_vision_prompt_fails_loudly_without_calling_model(tmp_path):
     with pytest.raises(StepModelError, match="vision") as e:
         _run(tmp_path, [_draft()], {}, client=client)
     assert "prompt" in str(e.value) and client.calls == []
+
+def test_names_mentioned_are_cleaned_deduped_and_capped(tmp_path):
+    d = _draft(names_mentioned=[" Yulin ", "", "Yulin", "A", "B", "C", "D", "E", "F"])
+    facts, _ = _run(tmp_path, [d], {1: ["x"]})
+    assert facts[0].names_mentioned == ["Yulin", "A", "B", "C", "D", "E"]

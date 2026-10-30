@@ -30,6 +30,7 @@ class PanelFacts(_Strict):
     shot: Literal["wide", "medium", "close", "insert"]
     characters_visible: list[str] = Field(default_factory=list)
     unknown_cues: dict[str, str] = Field(default_factory=dict)
+    names_mentioned: list[str] = Field(default_factory=list)  # proper names written in this panel's text
     action: str
     emotion: str
     dialogue: list[OcrDialogue] = Field(default_factory=list)

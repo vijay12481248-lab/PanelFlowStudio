@@ -158,12 +158,14 @@ def _line(text: str) -> str:
 
 
 def _proposals(
-    merge: MergeDraft, bible: SeriesBible, unknowns: dict[str, str],
+    merge: MergeDraft, bible: SeriesBible, unknowns: dict[str, str], facts: list[PanelFacts],
 ) -> tuple[list[BibleProposal], dict[str, str]]:
     """Typed draft -> BibleProposals with code-made ids; also unknowns the draft re-found in the bible."""
     by_name = {_line(n).casefold(): c.id for c in bible.characters for n in (c.name, *c.aliases)}
     taken, claimed, proposed, found, out = {c.id for c in bible.characters}, set(), {}, {}, []
     n = 0
+    page = {_line(x).casefold() for f in facts for x in f.names_mentioned}
+    text = ' '.join(f'{f.action} {f.setting} ' + ' '.join(f.names_mentioned) + ' ' + ' '.join(d.text for d in f.dialogue) for f in facts).casefold()
     for nc in merge.new_characters:
         name = _line(nc.name)
         if not name:
@@ -172,6 +174,9 @@ def _proposals(
         if name.casefold() in by_name:  # already known: its unknowns resolve to that existing id
             found.update({u: by_name[name.casefold()] for u in ids})
             claimed.update(ids)
+            continue
+        # a new person must be named on the page; descriptive inventions are dropped
+        if name.casefold() not in page or not all(w in text for w in name.casefold().split()):
             continue
         claimed.update(ids)
         if name.casefold() in proposed:  # same person listed twice: keep one proposal, merge its unknowns
@@ -260,6 +265,13 @@ async def understand_chapter(
             raise NeedsReview(errors)
 
     unknowns: dict[str, str] = {}
+    where: dict[str, list[str]] = {}  # unknown label -> its story panels, and the names written on them
+    named: dict[str, list[str]] = {}
+    for k, f in enumerate(story, start=1):
+        for label in {*f.characters_visible, *(d.speaker_id for d in f.dialogue)}:
+            if label and label.startswith('unknown_'):
+                where.setdefault(label, []).append(f'P{k}')
+                named.setdefault(label, []).extend(f.names_mentioned)
     for f in facts:
         for label, cue in f.unknown_cues.items():
             unknowns.setdefault(label, cue)
@@ -273,10 +285,12 @@ async def understand_chapter(
         characters="\n".join(
             f"{c.id}: {c.name} - {', '.join(c.aliases) or '-'} - {'; '.join(c.appearance_cues) or '-'}"
             for c in bible.characters) or "(none)",
-        unknowns="\n".join(f"{k}: {_line(v)}" for k, v in unknowns.items()) or "(none)",
+        unknowns="\n".join(
+            f"{k}: {_line(v)} | panels {', '.join(where.get(k, [])) or '-'} | names on those panels: "
+            f"{', '.join(dict.fromkeys(named.get(k, []))) or '-'}" for k, v in unknowns.items()) or "(none)",
     )
     merge = (await scheduler.map("planner", [mtext], lambda t: cached(MERGE_STEP, mprompt.sha256, t, MergeDraft)))[0]
-    proposals, found = _proposals(merge, bible, unknowns)
+    proposals, found = _proposals(merge, bible, unknowns, facts)
     resolutions = {k: v for k, v in merge.character_resolutions.items() if k in unknowns and v in names}
     return BeatSheet(
         project_id=project_id, scenes=scenes, hook=merge.hook, chapter_summary=merge.chapter_summary,
