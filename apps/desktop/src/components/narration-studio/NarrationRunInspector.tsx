@@ -36,8 +36,8 @@ export const NarrationRunInspector: React.FC<NarrationRunInspectorProps> = ({
             <tr><th>Step</th><th>Status</th><th>Seconds</th><th>Model calls</th></tr>
           </thead>
           <tbody>
-            {steps.map((s) => (
-              <tr key={s.step} className="border-t border-zinc-800">
+            {steps.map((s, i) => (
+              <tr key={`${i}:${s.step}`}className="border-t border-zinc-800">
                 <td>{s.step}</td><td>{s.status}</td><td>{s.seconds}</td><td>{s.model_calls}</td>
               </tr>
             ))}

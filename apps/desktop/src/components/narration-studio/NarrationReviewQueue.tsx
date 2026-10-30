@@ -15,6 +15,9 @@ export interface NarrationReviewQueueProps {
   selected: { projectId: string; runId: string } | null;
   run: NarrationRunDetail | null;
   imageUrl: (projectId: string, panelId: string) => string;
+  audioUrl: (projectId: string, runId: string, lineId: string) => string;
+  /** shown when the queue or run could not be loaded */
+  loadError?: string | null;
   onSelectRun: (projectId: string, runId: string) => void;
   onLineAction: (line: NarrationLine, request: NarrationLineActionRequest) => void;
   onApprove: () => void;
@@ -29,10 +32,11 @@ export interface NarrationReviewQueueProps {
 const LineCard: React.FC<{
   line: NarrationLine;
   imageUrl: string;
+  audioSrc: string | null;
   errors: string[];
   regenerating: boolean;
   onAction: (request: NarrationLineActionRequest) => void;
-}> = ({ line, imageUrl, errors, regenerating, onAction }) => {
+}> = ({ line, imageUrl, audioSrc, errors, regenerating, onAction }) => {
   const [draft, setDraft] = useState(line.text);
   const [hint, setHint] = useState("");
   return (
@@ -63,6 +67,12 @@ const LineCard: React.FC<{
           ))}
         </ul>
         <p className="text-[11px] text-zinc-500 font-mono">{line.facts}</p>
+        {audioSrc && (
+          <div className="flex items-center gap-2 text-[11px] text-zinc-400">
+            <audio controls preload="none" src={audioSrc} aria-label={`Listen to ${line.line_id}`} />
+            {line.take?.flagged && <span className="text-amber-400">flagged: heard “{line.take.stt_text}”</span>}
+          </div>
+        )}
         <div className="flex flex-wrap items-center gap-2">
           <Button size="sm" variant="secondary" aria-label={`Accept ${line.line_id}`} onClick={() => onAction({ action: "accept" })}>Accept</Button>
           <Button size="sm" variant="secondary" aria-label={`Save edit for ${line.line_id}`} onClick={() => onAction({ action: "edit", text: draft })}>Edit</Button>
@@ -84,11 +94,13 @@ const LineCard: React.FC<{
 };
 
 export const NarrationReviewQueue: React.FC<NarrationReviewQueueProps> = ({
-  items, selected, run, imageUrl, onSelectRun, onLineAction, onApprove, errors, busy, approveProgress,
+  items, selected, run, imageUrl, audioUrl, loadError, onSelectRun, onLineAction, onApprove, errors, busy, approveProgress,
 }) => {
   const byProject = new Map<string, NarrationReviewItem[]>();
   for (const it of items) byProject.set(it.project_id, [...(byProject.get(it.project_id) ?? []), it]);
-  const lines = run?.lines.filter((l) => l.status !== "passed" && l.status !== "repaired") ?? [];
+  const flagged = new Set(run?.review?.line_ids ?? []);
+  // blocked lines, plus passed lines the owner should hear first (a flagged take or a review reason)
+  const lines = run?.lines.filter((l) => (l.status !== "passed" && l.status !== "repaired") || l.take?.flagged || flagged.has(l.line_id)) ?? [];
   const blocked = (run?.lines ?? []).some((l) => !RESOLVED.has(l.status));
 
   return (
@@ -117,6 +129,7 @@ export const NarrationReviewQueue: React.FC<NarrationReviewQueueProps> = ({
         ))}
       </nav>
       <div className="flex-1 min-w-0 overflow-y-auto p-4 space-y-3">
+        {loadError && <p role="alert" className="text-xs text-red-400">{loadError}</p>}
         {run ? (
           <>
             <div className="flex items-center gap-3">
@@ -131,12 +144,18 @@ export const NarrationReviewQueue: React.FC<NarrationReviewQueueProps> = ({
               </Button>
               {approveProgress != null && <ProgressBar progress={approveProgress} label="Continuing" className="max-w-xs" />}
             </div>
+            {(errors.approve ?? []).length > 0 && (
+              <ul role="alert" aria-label="Approve errors" className="text-xs text-red-400 list-disc pl-4">
+                {errors.approve.map((r) => <li key={r}>{r}</li>)}
+              </ul>
+            )}
             <ul className="space-y-3">
               {lines.map((l) => (
                 <LineCard
-                  key={l.line_id}
+                  key={`${l.line_id}:${l.text}`}
                   line={l}
                   imageUrl={imageUrl(selected!.projectId, l.panel_id)}
+                  audioSrc={l.take ? audioUrl(selected!.projectId, selected!.runId, l.line_id) : null}
                   errors={errors[l.line_id] ?? []}
                   regenerating={!!busy[l.line_id]}
                   onAction={(req) => onLineAction(l, req)}

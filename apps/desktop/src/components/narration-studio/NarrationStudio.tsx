@@ -35,16 +35,26 @@ const ReviewQueueTab: React.FC = () => {
   const [busy, setBusy] = useState<Record<string, boolean>>({});
   const [progress, setProgress] = useState<number | null>(null);
 
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const token = useRef(0); // a run response that arrives after another run was picked is dropped
+
   const reload = useCallback(async (sel: { projectId: string; runId: string } | null) => {
+    const mine = ++token.current;
     setItems(await api.listNarrationReview());
-    if (sel) setRun(await api.getNarrationRun(sel.projectId, sel.runId));
+    if (sel) {
+      const detail = await api.getNarrationRun(sel.projectId, sel.runId);
+      if (mine === token.current) setRun(detail);
+    }
   }, []);
-  useEffect(() => { void reload(null).catch(() => {}); }, [reload]);
+  const fail = (what: string) => (e: unknown) => setLoadError(`Could not load the ${what}: ${e instanceof Error ? e.message : String(e)}`);
+  useEffect(() => { void reload(null).catch(fail("review queue")); }, [reload]);
 
   const onSelectRun = (projectId: string, runId: string) => {
+    const mine = ++token.current;
     setSelected({ projectId, runId });
     setErrors({});
-    void api.getNarrationRun(projectId, runId).then(setRun).catch(() => {});
+    setLoadError(null);
+    void api.getNarrationRun(projectId, runId).then((d) => { if (mine === token.current) setRun(d); }).catch(fail("run"));
   };
   const onLineAction: React.ComponentProps<typeof NarrationReviewQueue>["onLineAction"] = async (line, req) => {
     if (!selected) return;
@@ -62,6 +72,7 @@ const ReviewQueueTab: React.FC = () => {
   };
   const onApprove = async () => {
     if (!selected) return;
+    setErrors((x) => ({ ...x, approve: [] }));
     try {
       const res = await api.approveNarrationRun(selected.projectId, selected.runId);
       if (res.job_id) {
@@ -72,12 +83,13 @@ const ReviewQueueTab: React.FC = () => {
       setRun(null);
       await reload(null);
     } catch (e) {
-      setErrors({ approve: [e instanceof Error ? e.message : String(e)] });
+      setErrors((x) => ({ ...x, approve: [e instanceof Error ? e.message : String(e)] }));
     }
   };
   return (
     <NarrationReviewQueue
       items={items} selected={selected} run={run} imageUrl={(p, q) => api.getPanelImageUrl(p, q)}
+      audioUrl={(p, r, l) => api.getNarrationTakeAudioUrl(p, r, l)} loadError={loadError}
       onSelectRun={onSelectRun} onLineAction={onLineAction} onApprove={onApprove}
       errors={errors} busy={busy} approveProgress={progress}
     />
@@ -90,19 +102,27 @@ const RunInspectorTab: React.FC = () => {
   const [runs, setRuns] = useState<NarrationRunSummary[]>([]);
   const [runId, setRunId] = useState<string | null>(null);
   const [run, setRun] = useState<NarrationRunDetail | null>(null);
-  useEffect(() => { void api.listProjects().then(setProjects).catch(() => {}); }, []);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const token = useRef(0); // a response for a project or run that is no longer selected is dropped
+  const fail = (what: string) => (e: unknown) => setLoadError(`Could not load the ${what}: ${e instanceof Error ? e.message : String(e)}`);
+  useEffect(() => { void api.listProjects().then(setProjects).catch(fail("projects")); }, []);
   return (
-    <NarrationRunInspector
-      projects={projects} projectId={projectId} runs={runs} runId={runId} run={run}
-      onSelectProject={(id) => {
-        setProjectId(id || null); setRunId(null); setRun(null); setRuns([]);
-        if (id) void api.listNarrationRuns(id).then(setRuns).catch(() => {});
-      }}
-      onSelectRun={(id) => {
-        setRunId(id || null); setRun(null);
-        if (id && projectId) void api.getNarrationRun(projectId, id).then(setRun).catch(() => {});
-      }}
-    />
+    <>
+      {loadError && <p role="alert" className="px-4 pt-2 text-xs text-red-400">{loadError}</p>}
+      <NarrationRunInspector
+        projects={projects} projectId={projectId} runs={runs} runId={runId} run={run}
+        onSelectProject={(id) => {
+          const mine = ++token.current;
+          setProjectId(id || null); setRunId(null); setRun(null); setRuns([]); setLoadError(null);
+          if (id) void api.listNarrationRuns(id).then((r) => { if (mine === token.current) setRuns(r); }).catch(fail("runs"));
+        }}
+        onSelectRun={(id) => {
+          const mine = ++token.current;
+          setRunId(id || null); setRun(null); setLoadError(null);
+          if (id && projectId) void api.getNarrationRun(projectId, id).then((d) => { if (mine === token.current) setRun(d); }).catch(fail("run"));
+        }}
+      />
+    </>
   );
 };
 

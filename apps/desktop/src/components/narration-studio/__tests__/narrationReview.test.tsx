@@ -21,6 +21,7 @@ const queue = (run: NarrationRunDetail | null, extra: Record<string, unknown> = 
     <NarrationReviewQueue
       items={items} selected={run ? { projectId: "p1", runId: items[0].run_id } : null} run={run}
       imageUrl={(p, q) => `/img/${p}/${q}`}
+      audioUrl={(p, r, l) => `/audio/${p}/${r}/${l}`}
       onSelectRun={noop} onLineAction={noop} onApprove={noop} errors={{}} busy={{}} {...extra}
     />,
   );
@@ -63,4 +64,48 @@ test("inspector renders steps and lines", () => {
   assert.match(html, /3\.5/);
   assert.match(html, /He draws his sword\./);
   assert.match(html, /needs_review/);
+});
+
+test("approve error is shown under the button and line errors survive", () => {
+  const html = queue(detail([line()]), { errors: { approve: ["lines still need review: L1"], L1: ["still bad"] } });
+  assert.match(html, /aria-label="Approve errors"[^>]*>.*lines still need review: L1/);
+  assert.match(html, /still bad/);
+});
+
+test("load error is rendered in the tab", () => {
+  assert.match(queue(null, { loadError: "Could not load the review queue: boom" }), /Could not load the review queue: boom/);
+});
+
+test("a flagged passed line is listed with its audio and approve stays enabled", () => {
+  const flagged = line({ status: "passed", checks: [], take: { wer: 0.5, flagged: true, stt_text: "heard it wrong" } });
+  const html = queue(detail([flagged, line({ line_id: "L2", status: "passed", checks: [] })]));
+  assert.match(html, /<audio controls[^>]*src="\/audio\/p1\/20261031T101010-abc123\/L1"/);
+  assert.doesNotMatch(html, /Edit text for L2/);
+  assert.match(html, /heard it wrong/);
+  assert.doesNotMatch(html.match(/<button[^>]*aria-label="Approve chapter"[^>]*>/)![0], /disabled=""/);
+  const listed = queue({ ...detail([line({ status: "passed", checks: [] })]), review: { run_id: "r", project_id: "p1", series_key: "s", run_dir: "x", reasons: [], line_ids: ["L1"], status: "pending" } });
+  assert.match(listed, /Edit text for L1/);
+});
+
+test("new line text replaces a stale draft", async () => {
+  const { JSDOM } = await import("jsdom");
+  const { createRoot } = await import("react-dom/client");
+  const { act } = React as any;
+  const dom = new JSDOM("<div id=root></div>");
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true, window: dom.window, document: dom.window.document });
+  const root = createRoot(dom.window.document.getElementById("root")!);
+  const el = (text: string) => (
+    <NarrationReviewQueue
+      items={items} selected={{ projectId: "p1", runId: items[0].run_id }} run={detail([line({ text })])}
+      imageUrl={() => "/i"} audioUrl={() => "/a"} onSelectRun={noop} onLineAction={noop} onApprove={noop} errors={{}} busy={{}}
+    />
+  );
+  await act(async () => { root.render(el("first text")); });
+  const area = () => dom.window.document.querySelector("textarea")!.value;
+  assert.equal(area(), "first text");
+  await act(async () => { root.render(el("regenerated text")); });
+  assert.equal(area(), "regenerated text");
+  await act(async () => { root.unmount(); });
+  delete (globalThis as any).window;
+  delete (globalThis as any).document;
 });

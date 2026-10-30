@@ -703,7 +703,7 @@ export interface NarrationRunSummary {
   run_id: string;
   gate: string | null;
   created: string;
-  steps: { step: string; status: string; seconds: number; model_calls: number }[];
+  steps: { step: string; status: string; seconds: number | null; model_calls: number | null }[];
 }
 
 export interface NarrationLineCheck {

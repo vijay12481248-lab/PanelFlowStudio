@@ -656,7 +656,13 @@ export class PanelFlowApiClient {
   }
 
   getPanelImageUrl(projectId: string, panelId: string): string {
-    return this.resourceUrl(`/api/projects/${projectId}/panels/${panelId}/file`);
+    return this.resourceUrl(`/api/projects/${encodeURIComponent(projectId)}/panels/${encodeURIComponent(panelId)}/file`);
+  }
+
+  getNarrationTakeAudioUrl(projectId: string, runId: string, lineId: string): string {
+    return this.resourceUrl(
+      `/api/narration/runs/${encodeURIComponent(projectId)}/${encodeURIComponent(runId)}/takes/${encodeURIComponent(lineId)}/audio`
+    );
   }
 
   async getContentCleanupRules(projectId: string): Promise<{ enabled: boolean; labels: string[] }> {
