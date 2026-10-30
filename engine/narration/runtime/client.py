@@ -62,8 +62,8 @@ class ProviderModelClient:
 
     def params_for(self, role: str) -> dict:
         r = self._roles[role]
-        return {"temperature": r.temperature, "top_p": r.top_p,
-                "max_tokens": r.max_tokens, "num_ctx": r.num_ctx}
+        return {"temperature": r.temperature, "max_tokens": r.max_tokens, "num_ctx": r.num_ctx,
+                **({"top_p": r.top_p} if r.top_p is not None else {})}
 
     async def _with_backoff(self, role: str, call: Callable[[], Awaitable]):
         timeout = self._roles[role].timeout_s
@@ -86,7 +86,7 @@ class ProviderModelClient:
                 return await self._with_backoff(role, lambda: self._provider.generate_structured(
                     prompt, schema, system_prompt=system, temperature=cfg.temperature,
                     max_repair_retries=1, model=cfg.model, max_tokens=cfg.max_tokens,
-                    num_ctx=cfg.num_ctx))
+                    num_ctx=cfg.num_ctx, **({"top_p": cfg.top_p} if cfg.top_p is not None else {})))
             except GenerationLimitError as e:
                 raise StepModelError(role, e) from e
             except ValueError as e:  # provider exhausted its own repair retry

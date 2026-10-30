@@ -509,6 +509,7 @@ class OllamaProvider(LLMProvider):
                     "think": False,
                     "thinking": False,
                     "num_predict": kwargs.get("max_tokens", 1536),
+                    **({"top_p": kwargs["top_p"]} if kwargs.get("top_p") is not None else {}),
                 },
             }
 

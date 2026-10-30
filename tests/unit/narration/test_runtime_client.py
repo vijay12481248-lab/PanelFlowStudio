@@ -131,3 +131,25 @@ def test_vision_generation_limit_retries_once_then_fails():
     with pytest.raises(StepModelError):
         asyncio.run(client(p).structured("vision", "look", Out, image=b"i"))
     assert len(p.calls) == 2
+
+def test_writer_top_p_reaches_provider():
+    roles = {**ROLES, "writer": RoleConfig(model="w:1", temperature=0.7, top_p=0.9, max_tokens=500)}
+    p = StubProvider([Out(x=1), Out(x=1)])
+    c = ProviderModelClient(p, roles, backoff_s=(0, 0))
+    asyncio.run(c.structured("writer", "hi", Out))
+    asyncio.run(c.structured("planner", "hi", Out))
+    assert p.calls[0][1]["top_p"] == 0.9 and "top_p" not in p.calls[1][1]
+    assert c.params_for("writer")["top_p"] == 0.9
+
+
+def test_ollama_text_path_sends_top_p(monkeypatch):
+    from engine.llm.providers.ollama import OllamaProvider
+    prov, sent = OllamaProvider(), []
+
+    async def fake(payload, **kw):
+        sent.append(payload)
+        return '{"x": 1}'
+    monkeypatch.setattr(prov, "_generate_response", fake)
+    asyncio.run(prov.generate_structured("hi", Out, top_p=0.9))
+    asyncio.run(prov.generate_structured("hi", Out))
+    assert sent[0]["options"]["top_p"] == 0.9 and "top_p" not in sent[1]["options"]
