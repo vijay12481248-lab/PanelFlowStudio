@@ -77,3 +77,20 @@ def test_apply_threads_add_and_close():
         _prop("close_thread", text="Who stole the sword?"),
     ])
     assert out.open_threads == [] and len(applied) == 2
+
+@pytest.mark.parametrize("bad", [None, 5, "", "  "])
+def test_apply_threads_skip_non_string_or_blank_text(bad):
+    bible = SeriesBible(series_key="s", open_threads=["keep"])
+    out, applied = apply_proposals(bible, [
+        _prop("add_thread", text=bad),
+        _prop("close_thread", text=bad),
+    ])
+    assert out.open_threads == ["keep"] and applied == []
+
+
+def test_store_rejects_path_escaping_keys(tmp_path):
+    store = BibleStore(tmp_path)
+    with pytest.raises(ValueError):
+        store.load("../x")
+    with pytest.raises(ValueError):
+        store.save(SeriesBible(series_key="../x"), "p", [])

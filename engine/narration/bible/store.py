@@ -26,6 +26,14 @@ def series_key_for(title: str, source_metadata: dict | None) -> str:
     return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
 
 
+_KEY_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+
+
+def _check_key(series_key: str) -> None:
+    if not isinstance(series_key, str) or not _KEY_RE.match(series_key):
+        raise ValueError(f"invalid series_key: {series_key!r}")
+
+
 def _write_atomic(path: Path, bible: SeriesBible) -> None:
     tmp = path.with_name(path.name + ".tmp")
     tmp.write_text(json.dumps(bible.model_dump(mode="json"), ensure_ascii=False), encoding="utf-8")
@@ -50,11 +58,15 @@ def apply_proposals(bible: SeriesBible, proposals: list[BibleProposal]) -> tuple
                 applied.append("update_plot")
             elif p.kind == "add_thread":
                 text = p.payload["text"]
+                if not isinstance(text, str) or not text.strip():
+                    continue
                 if text not in out.open_threads:
                     out.open_threads.append(text)
                     applied.append(f"add_thread: {text}")
             elif p.kind == "close_thread":
                 text = p.payload["text"]
+                if not isinstance(text, str) or not text.strip():
+                    continue
                 if text in out.open_threads:
                     out.open_threads.remove(text)
                     applied.append(f"close_thread: {text}")
@@ -70,12 +82,14 @@ class BibleStore:
     apply_proposals = staticmethod(apply_proposals)
 
     def load(self, series_key: str) -> SeriesBible:
+        _check_key(series_key)
         path = self.root / series_key / "bible.json"
         if not path.exists():
             return SeriesBible(series_key=series_key)
         return SeriesBible.model_validate(json.loads(path.read_text(encoding="utf-8")))
 
     def save(self, bible: SeriesBible, project_id: str, applied: list[str]) -> SeriesBible:
+        _check_key(bible.series_key)
         version = bible.version + 1
         new = bible.model_copy(deep=True, update={
             "version": version,
