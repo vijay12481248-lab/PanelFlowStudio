@@ -1,4 +1,4 @@
-﻿"""Step 6 PERFORM: delivery marks per narration line, mapped in code to a TTS rate and pauses."""
+"""Step 6 PERFORM: delivery marks per narration line, mapped in code to a TTS rate and pauses."""
 from __future__ import annotations
 
 import re
@@ -91,8 +91,8 @@ async def perform(script: ScriptIR, sheet: BeatSheet, facts: list[PanelFacts], b
             nxt = script.lines[i + 1].panel_id if i < last else None
             rate, pause = marks_to_tts(d, func.get(ln.panel_id, "setup"), i == g[-1], i == last,
                                        nxt is not None and func.get(nxt, "setup") == "reveal")
-            words = [w for w in dict.fromkeys(d.emphasis_words)
-                     if re.search(rf"\b{re.escape(w.strip())}\b", ln.text, re.I) and w.strip()]
+            stripped = (w.strip(" \t.,;:!?\"'()") for w in d.emphasis_words)
+            words = [w for w in dict.fromkeys(stripped) if w and re.search(rf"\b{re.escape(w)}\b", ln.text, re.I)]
             # the last line's 0 ms pause is stored as the 150 ms floor the artifact allows
             marks[i] = LineMarks(line_id=ln.line_id, emotion=d.emotion, energy=d.energy, rate=rate,
                                  pause_after_ms=max(150, pause), emphasis_words=words)

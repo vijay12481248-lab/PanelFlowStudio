@@ -126,3 +126,17 @@ def test_timeline_clip_inside_its_panel():
     for clips in ([("p1", 0.1, 2.1)], [("p1", 0.1, 1.5), ("p2", 1.4, 3)], [("p9", 0, 1)]):
         with pytest.raises(ValidationError):
             _tl(panels, clips)
+
+
+def test_timeline_clip_overlap_and_tolerance():
+    panels = [("p1", 0, 2), ("p2", 2, 4)]
+    with pytest.raises(ValidationError, match="overlaps"):
+        _tl(panels, [("p1", 0.1, 1.5), ("p1", 1.0, 1.9)])
+    _tl(panels, [("p1", 0.1, 2 + 1e-9)])
+    with pytest.raises(ValidationError):
+        _tl(panels, [("p1", 0.1, 2.001)])
+
+
+def test_timeline_rejects_duplicate_panel_ids():
+    with pytest.raises(ValidationError, match="unique"):
+        _tl([("p1", 0, 2), ("p1", 2, 4)], [])

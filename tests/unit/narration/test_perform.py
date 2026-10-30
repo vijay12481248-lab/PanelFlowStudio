@@ -1,4 +1,4 @@
-﻿import asyncio
+import asyncio
 import re
 
 import pytest
@@ -87,3 +87,19 @@ def test_rerun_zero_calls(tmp_path):
     first, _ = _run(tmp_path, [_answer] * 2)
     second, client = _run(tmp_path, [])
     assert client.calls == [] and second == first
+
+
+def test_emphasis_punctuation_trimmed(tmp_path):
+    plan, _ = _run(tmp_path, [lambda p: _answer(p, emph=("sword.", "Kai,", "sword"))] * 2)
+    assert plan.lines[0].emphasis_words == ["sword", "Kai"]
+
+
+def test_stray_line_joins_scene_before_it(tmp_path):
+    sheet = _sheet()
+    sheet.scenes[1].last_panel_id = "p3"  # p4 is now in no scene
+    client = FakeModelClient({"writer": [_answer] * 2})
+    role = RoleConfig(model="w", temperature=0.7, max_tokens=512, concurrency=1)
+    plan = asyncio.run(perform(_script(), sheet, [_facts(k) for k in range(1, 5)], SeriesBible(series_key="s"),
+                               client, ModelScheduler({"writer": role}, RecordingUnloader()), ArtifactCache(tmp_path / "c")))
+    assert len(plan.lines) == 4 and len(client.calls) == 2
+    assert "P2 | Kai draws the sword now 4" in client.calls[1][1]

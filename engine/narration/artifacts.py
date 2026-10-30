@@ -303,6 +303,8 @@ class LockedTimeline(_Strict):
 
     @model_validator(mode="after")
     def _consistent(self) -> "LockedTimeline":
+        if len({p.panel_id for p in self.panels}) != len(self.panels):
+            raise ValueError("panel_id values must be unique")
         eps, t = 1e-6, 0.0
         for p in self.panels:
             if abs(p.start - t) > eps or p.end < p.start:
