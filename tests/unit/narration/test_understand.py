@@ -10,7 +10,7 @@ from engine.narration.runtime.roles import RoleConfig
 from engine.narration.runtime.scheduler import ModelScheduler
 from engine.narration.steps.understand import (
     MergeDraft, NeedsReview, WindowBeatDraft, WindowDraft, WindowSceneDraft,
-    check_beat_sheet, stitch_windows, understand_chapter, windows,
+    check_beat_sheet, normalize_beats, stitch_windows, understand_chapter, windows,
 )
 from tests.unit.narration.fakes import FakeModelClient, RecordingUnloader
 
@@ -59,8 +59,32 @@ def test_stitch_cuts_overlap_at_midpoint():
     d1 = WindowDraft(scenes=[_scene(26, 40, [[26, 27], [28, 40]])])
     out = stitch_windows([(0, 30), (25, 55)], [d0, d1])
     assert [(s.first, s.last) for s in out] == [(20, 27), (28, 40)]
-    assert [b.panels for b in out[0].beats] == [[20, 25], [26]]
-    assert [b.panels for b in out[1].beats] == [[28, 40]]
+    assert [b.panels for b in out[0].beats] == [list(range(20, 26)), [26, 27]]
+    assert [b.panels for b in out[1].beats] == [list(range(28, 41))]
+
+
+_INTERLEAVED = [[21, 23], [22, 24], [25, 26], [27, 28], [29, 30]]
+
+
+def test_normalize_beats_makes_interleaved_beats_contiguous():
+    s = _scene(21, 30, _INTERLEAVED)
+    s.beats[1].what_happens = "second"
+    out = normalize_beats(s)
+    assert [b.panels for b in out.beats] == [[21], [22, 23, 24], [25, 26], [27, 28], [29, 30]]
+    assert out.beats[1].what_happens == "second"
+
+
+def test_normalize_beats_clamps_beat_starting_before_scene():
+    out = normalize_beats(_scene(21, 25, [[24, 25], [19, 20, 23]]))
+    assert [b.panels for b in out.beats] == [[21, 22, 23], [24, 25]]
+
+
+def test_interleaved_window_draft_needs_no_reask(tmp_path):
+    facts = [_facts(k) for k in range(1, 31)]
+    draft = WindowDraft(scenes=[_scene(1, 20), _scene(21, 30, _INTERLEAVED)])
+    sheet, client = _run(tmp_path, facts, [draft, _merge()])
+    assert len(client.calls) == 2  # one window call + merge
+    assert sheet.scenes[1].beats[0].panel_ids == ["p21"]
 
 
 def test_check_beat_sheet_reports_gap_and_double_cover():

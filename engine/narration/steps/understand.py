@@ -75,8 +75,21 @@ def stitch_windows(
             beats = [b.model_copy(update={"panels": kept}) for b in s.beats
                      if (kept := [p for p in b.panels if first <= p <= last])]
             if first <= last and beats:
-                out.append(s.model_copy(update={"first": first, "last": last, "beats": beats}))
+                out.append(normalize_beats(s.model_copy(update={"first": first, "last": last, "beats": beats})))
     return sorted(out, key=lambda s: s.first)
+
+
+def normalize_beats(scene: WindowSceneDraft) -> WindowSceneDraft:
+    """Small models interleave beat panels; make beats contiguous ranges in reading order."""
+    starts = [min(max(min(b.panels), scene.first), scene.last) for b in scene.beats]
+    order = sorted(range(len(scene.beats)), key=lambda i: starts[i])  # stable: ties keep model order
+    beats = []
+    for n, i in enumerate(order):
+        lo = scene.first if n == 0 else starts[i]
+        hi = scene.last if n == len(order) - 1 else starts[order[n + 1]] - 1
+        if lo <= hi:
+            beats.append(scene.beats[i].model_copy(update={"panels": list(range(lo, hi + 1))}))
+    return scene.model_copy(update={"beats": beats})
 
 
 def _problems(
