@@ -558,7 +558,8 @@ class OllamaProvider(LLMProvider):
             "images": [b64_img],
             "stream": False,
             "think": False,
-            "options": {"num_ctx": self.num_ctx, "num_predict": kwargs.get("max_tokens", 2048), "temperature": 0.1},
+            "options": {"num_ctx": kwargs.get("num_ctx", self.num_ctx), "num_predict": kwargs.get("max_tokens", 2048),
+                        "temperature": kwargs.get("temperature", 0.1)},
         }
         if kwargs.get("format_schema"):
             payload["format"] = kwargs["format_schema"]

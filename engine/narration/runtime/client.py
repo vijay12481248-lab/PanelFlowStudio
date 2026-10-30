@@ -9,10 +9,16 @@ import httpx
 from pydantic import BaseModel, ValidationError
 
 from engine.llm.providers.base import LLMProvider
+from engine.llm.errors import GenerationLimitError
 from engine.narration.runtime.roles import RoleConfig
+from engine.narration.runtime.scheduler import _is_oom
 
 T = TypeVar("T", bound=BaseModel)
 _TRANSIENT = (TimeoutError, httpx.HTTPError, ConnectionError)
+
+
+def _transient(exc: Exception) -> bool:
+    return isinstance(exc, _TRANSIENT) or (isinstance(exc, RuntimeError) and " HTTP 5" in str(exc))
 
 
 class StepModelError(RuntimeError):
@@ -53,8 +59,12 @@ class ProviderModelClient:
         for delay in (*self._backoff_s, None):
             try:
                 return await asyncio.wait_for(call(), timeout)
-            except _TRANSIENT as e:
-                if delay is None:
+            except (GenerationLimitError, StepModelError):
+                raise
+            except Exception as e:
+                if _is_oom(e):  # the scheduler unloads and retries on OOM
+                    raise
+                if delay is None or not _transient(e):
                     raise StepModelError(role, e) from e
                 await asyncio.sleep(delay)
 
@@ -66,17 +76,20 @@ class ProviderModelClient:
                     prompt, schema, system_prompt=system, temperature=cfg.temperature,
                     max_repair_retries=1, model=cfg.model, max_tokens=cfg.max_tokens,
                     num_ctx=cfg.num_ctx))
+            except GenerationLimitError as e:
+                raise StepModelError(role, e) from e
             except ValueError as e:  # provider exhausted its own repair retry
                 raise StepModelError(role, e) from e
 
         current = prompt
         for attempt in range(2):
-            text = await self._with_backoff(role, lambda: self._provider.analyze_vision(
-                image, current, system_prompt=system, model=cfg.model,
-                max_tokens=cfg.max_tokens, format_schema=schema.model_json_schema()))
             try:
+                text = await self._with_backoff(role, lambda: self._provider.analyze_vision(
+                    image, current, system_prompt=system, model=cfg.model, max_tokens=cfg.max_tokens,
+                    num_ctx=cfg.num_ctx, temperature=cfg.temperature,
+                    format_schema=schema.model_json_schema()))
                 return schema.model_validate_json(text)
-            except ValidationError as e:
+            except (ValidationError, GenerationLimitError) as e:
                 if attempt == 1:
                     raise StepModelError(role, e) from e
                 current = (f"{prompt}\n\nYour previous reply failed validation: "

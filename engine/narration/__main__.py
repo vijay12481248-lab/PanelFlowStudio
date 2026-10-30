@@ -21,10 +21,20 @@ _EXIT = {"pass": 0, "review": 2, "failed": 1}
 
 
 async def _run(project_id: str, stop_after: str) -> int:
-    with SessionLocal() as db:
-        inputs = load_chapter_inputs(db, project_id)
-        workspace = Path(db.get(ProjectRecord, project_id).workspace_path)
-    provider = await llm_registry.get_active_provider("ollama")
+    try:
+        with SessionLocal() as db:
+            inputs = load_chapter_inputs(db, project_id)
+            workspace = Path(db.get(ProjectRecord, project_id).workspace_path)
+    except KeyError:
+        print(f"project not found: {project_id}")
+        return 1
+    except ValueError as exc:
+        print(str(exc))
+        return 1
+    provider = llm_registry.get_ollama_provider()  # local-only: never falls through to cloud or mock
+    if not await provider.health_check():
+        print(f"Ollama is not reachable at {provider.endpoint_url}")
+        return 1
     roles = load_roles()
     compiler = NarrationCompiler(
         ProviderModelClient(provider, roles),

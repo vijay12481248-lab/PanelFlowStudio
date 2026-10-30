@@ -75,3 +75,59 @@ def test_timeout_then_success_returns_result():
     p = StubProvider([httpx.ReadTimeout("slow"), Out(x=3)])
     assert asyncio.run(client(p).structured("planner", "hi", Out)) == Out(x=3)
     assert len(p.calls) == 2
+
+
+def test_vision_call_passes_role_num_ctx_and_temperature():
+    p = StubProvider(['{"x": 1}'])
+    asyncio.run(client(p).structured("vision", "look", Out, image=b"img"))
+    kw = p.calls[0][1]
+    assert kw["num_ctx"] == 8192 and kw["temperature"] == 0.1 and kw["max_tokens"] == 500
+
+
+def test_ollama_vision_honours_num_ctx_and_temperature(monkeypatch):
+    from engine.llm.providers.ollama import OllamaProvider
+
+    prov, sent = OllamaProvider(), []
+
+    async def fake(payload, **kw):
+        sent.append(payload["options"])
+        return "{}"
+
+    monkeypatch.setattr(prov, "_generate_response", fake)
+    asyncio.run(prov.analyze_vision(b"x", "p", num_ctx=4096, temperature=0.3))
+    asyncio.run(prov.analyze_vision(b"x", "p"))
+    assert sent[0]["num_ctx"] == 4096 and sent[0]["temperature"] == 0.3
+    assert sent[1]["num_ctx"] == prov.num_ctx and sent[1]["temperature"] == 0.1
+
+
+@pytest.mark.parametrize("kind", ["text", "vision"])
+def test_provider_error_becomes_step_model_error_with_role(kind):
+    p = StubProvider([RuntimeError("Ollama generation failed: HTTP 400: bad")])
+    args = ("planner", "hi", Out) if kind == "text" else ("vision", "look", Out)
+    with pytest.raises(StepModelError) as e:
+        asyncio.run(client(p).structured(*args, **({"image": b"i"} if kind == "vision" else {})))
+    assert e.value.role == args[0] and len(p.calls) == 1
+
+
+def test_http_5xx_is_transient_and_retried():
+    p = StubProvider([RuntimeError("Ollama generation failed: HTTP 503: busy"), Out(x=4)])
+    assert asyncio.run(client(p).structured("planner", "hi", Out)) == Out(x=4)
+    assert len(p.calls) == 2
+
+
+def test_out_of_memory_error_passes_through_for_the_scheduler():
+    p = StubProvider([RuntimeError("model failed: Out Of Memory")])
+    with pytest.raises(RuntimeError, match="(?i)out of memory") as e:
+        asyncio.run(client(p).structured("planner", "hi", Out))
+    assert not isinstance(e.value, StepModelError)
+
+
+def test_vision_generation_limit_retries_once_then_fails():
+    from engine.llm.errors import GenerationLimitError
+
+    p = StubProvider([GenerationLimitError("length"), '{"x": 5}'])
+    assert asyncio.run(client(p).structured("vision", "look", Out, image=b"i")) == Out(x=5)
+    p = StubProvider([GenerationLimitError("length")] * 2)
+    with pytest.raises(StepModelError):
+        asyncio.run(client(p).structured("vision", "look", Out, image=b"i"))
+    assert len(p.calls) == 2
