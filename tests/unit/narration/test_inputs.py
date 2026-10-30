@@ -29,10 +29,10 @@ def _project(tmp_path, panels, regions=(), title="Test - Chapter 1", meta=None):
             db.add(PanelRecord(id=panel_id, project_id=pid, page_id=page_id, sequence=seq, page_sequence=i + 1,
                                x=0, y=0, width=4, height=4, crop_filename=name, status=status))
         db.flush()
-        for pi, seq, raw, corrected, status in regions:
+        for pi, seq, raw, corrected, status, *rtype in regions:
             db.add(TextRegionRecord(project_id=pid, page_id=page_id, panel_id=ids[pi], sequence_global=seq,
                                     x=0, y=0, width=1, height=1, raw_text=raw, corrected_text=corrected,
-                                    status=status))
+                                    status=status, region_type=rtype[0] if rtype else "SPEECH"))
         db.commit()
     return pid, ids
 
@@ -71,3 +71,16 @@ def test_unknown_project_raises_key_error():
     init_db()
     with pytest.raises(KeyError):
         load_chapter_inputs(SessionLocal(), "missing")
+
+
+def test_redacted_blurred_and_sfx_regions_are_filtered(tmp_path):
+    pid, _ = _project(tmp_path, [(1, "DETECTED")], [
+        (0, 1, "Hi", "", "DETECTED"),
+        (0, 2, "x", "[BLURRED / REDACTED]", "BLURRED", "REDACTED"),
+        (0, 3, "secret", "", "DETECTED", "REDACTED"),
+        (0, 4, "blurred", "", "BLURRED"),
+        (0, 5, "BOOM", "", "DETECTED", "SFX"),
+    ])
+    panel = load_chapter_inputs(SessionLocal(), pid).panels[0]
+    assert [r.text for r in panel.ocr] == ["Hi"] and panel.ocr[0].region_type == "SPEECH"
+    assert panel.sfx == ["BOOM"]

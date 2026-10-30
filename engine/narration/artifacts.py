@@ -20,7 +20,7 @@ class OcrDialogue(_Strict):
     region_id: str
     text: str
     speaker_id: str | None = None
-    speaker_confidence: float = 0.0
+    speaker_confidence: float | None = Field(default=None, ge=0, le=1)
 
 
 class PanelFacts(_Strict):

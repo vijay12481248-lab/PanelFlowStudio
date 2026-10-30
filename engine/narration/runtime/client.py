@@ -28,6 +28,17 @@ class StepModelError(RuntimeError):
         self.cause = cause
 
 
+def guard_prompt(client: "ModelClient", role: str, text: str, images: int = 0) -> None:
+    """Fail loudly instead of letting Ollama silently truncate an over-long prompt (estimate: 3 chars/token)."""
+    p = client.params_for(role)
+    if "num_ctx" not in p or "max_tokens" not in p:
+        return
+    est, budget = len(text) // 3 + 800 * images, p["num_ctx"] - p["max_tokens"]
+    if est > budget:
+        raise StepModelError(role, f"prompt is about {est} tokens, over the {budget} available "
+                                   f"(num_ctx {p['num_ctx']} minus max_tokens {p['max_tokens']})")
+
+
 class ModelClient(Protocol):
     def model_for(self, role: str) -> str: ...
 

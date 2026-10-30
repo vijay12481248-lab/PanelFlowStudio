@@ -9,7 +9,8 @@ from pydantic import BaseModel, Field
 from engine.narration.artifacts import OcrDialogue, PanelFacts, SeriesBible
 from engine.narration.cache import ArtifactCache, cache_key
 from engine.narration.inputs import ChapterInputs, PanelInput
-from engine.narration.runtime.client import ModelClient
+from engine.imaging.panel_quality_reviewer import AD_KEYWORDS
+from engine.narration.runtime.client import ModelClient, guard_prompt
 from engine.narration.runtime.prompts import load_prompt
 from engine.narration.runtime.scheduler import ModelScheduler
 
@@ -21,6 +22,7 @@ _START = "(chapter start)"
 class SpeakerGuess(BaseModel):
     region_id: str
     speaker: str
+    confidence: float | None = Field(default=None, ge=0, le=1)
 
 
 class PanelFactsDraft(BaseModel):
@@ -64,22 +66,25 @@ class _Namer:
 
 def _facts(panel: PanelInput, d: PanelFactsDraft, namer: _Namer) -> PanelFacts:
     cues: dict[str, str] = {}
-    visible = [namer.map(n, cues) for n in d.characters_visible]
-    guesses = {g.region_id: namer.map(g.speaker, cues) for g in d.speakers if g.region_id in {r.region_id for r in panel.ocr}}
+    visible = list(dict.fromkeys(namer.map(n, cues) for n in d.characters_visible if n.strip()))
+    region_ids = {r.region_id for r in panel.ocr}
+    guesses = {g.region_id: g for g in d.speakers if g.region_id in region_ids and g.speaker.strip()}
+    speaker = {rid: namer.map(g.speaker, cues) for rid, g in guesses.items()}
+    credits = any(k in r.text.casefold() for r in panel.ocr for k in AD_KEYWORDS)
     dialogue = [
         OcrDialogue(
             region_id=r.region_id, text=r.text,
-            speaker_id=guesses.get(r.region_id),
-            speaker_confidence=0.8 if r.region_id in guesses else 0.0,
+            speaker_id=speaker.get(r.region_id),
+            speaker_confidence=guesses[r.region_id].confidence if r.region_id in guesses else None,
         )
         for r in panel.ocr
     ]
     # Only allowed coercion: over-long action is cut to its first 20 words.
     action = " ".join(d.action.split()[:20]) if len(d.action.split()) > 20 else d.action
     return PanelFacts(
-        panel_id=panel.panel_id, order=panel.order, is_story=d.is_story, shot=d.shot,
+        panel_id=panel.panel_id, order=panel.order, is_story=d.is_story or (bool(guesses) and not credits), shot=d.shot,
         characters_visible=visible, unknown_cues=cues, action=action, emotion=d.emotion,
-        dialogue=dialogue, sfx=d.sfx, setting=d.setting, importance=d.importance,
+        dialogue=dialogue, sfx=list(dict.fromkeys([*d.sfx, *panel.sfx])), setting=d.setting, importance=d.importance,
         confidence=d.confidence, needs_review=d.confidence < 0.5,
     )
 
@@ -109,6 +114,7 @@ async def perceive_chapter(
             previous=previous, characters=characters,
             ocr_lines="\n".join(f"[{i}] {t}" for i, t in ocr) or "(no text)",
         )
+        guard_prompt(client, "vision", text, images=1)
         draft = await client.structured("vision", text, PanelFactsDraft, image=panel.image_path)
         cache.put(STEP, key, draft)
         return draft

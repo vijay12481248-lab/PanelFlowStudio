@@ -1,7 +1,7 @@
 """Load a chapter's panels and OCR text from the project DB as narration-compiler inputs."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from sqlalchemy.orm import Session
@@ -24,6 +24,7 @@ class PanelInput:
     order: int
     image_path: Path
     ocr: list[OcrRegionInput]
+    sfx: list[str] = field(default_factory=list)  # SFX regions: never dialogue
 
 
 @dataclass(frozen=True)
@@ -50,17 +51,19 @@ def load_chapter_inputs(db: Session, project_id: str) -> ChapterInputs:
     for order, row in enumerate(rows, start=1):
         regions = (
             db.query(TextRegionRecord)
-            .filter(TextRegionRecord.panel_id == row.id, TextRegionRecord.status != "IGNORED")
+            .filter(TextRegionRecord.panel_id == row.id, TextRegionRecord.status.notin_(("IGNORED", "BLURRED")),
+                    TextRegionRecord.region_type != "REDACTED")
             .order_by(TextRegionRecord.sequence_global)
             .all()
         )
-        ocr = []
+        ocr, sfx = [], []
         for r in regions:
             text = (r.corrected_text or "").strip() or (r.raw_text or "").strip()
             if text:
-                ocr.append(OcrRegionInput(r.id, text, r.region_type))
+                (sfx if r.region_type == "SFX" else ocr).append(
+                    text if r.region_type == "SFX" else OcrRegionInput(r.id, text, r.region_type))
         image = resolve_contained_path(panels_dir, row.crop_filename, must_be_file=True)
-        panels.append(PanelInput(row.id, order, image, ocr))
+        panels.append(PanelInput(row.id, order, image, ocr, sfx))
     key = series_key_for(project.title, project.source_metadata)
     if not key:  # BibleStore rejects empty keys
         key = "project-" + "".join(c for c in project_id.lower() if c.isalnum())[:8]

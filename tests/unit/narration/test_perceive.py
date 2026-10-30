@@ -1,7 +1,10 @@
 import asyncio
 
+import pytest
+
 from engine.narration.artifacts import BibleCharacter, SeriesBible
 from engine.narration.cache import ArtifactCache
+from engine.narration.runtime.client import StepModelError
 from engine.narration.runtime.roles import RoleConfig
 from engine.narration.runtime.scheduler import ModelScheduler
 from engine.narration.steps.perceive import PanelFactsDraft, SpeakerGuess, perceive_chapter
@@ -38,14 +41,14 @@ def test_dialogue_text_is_copied_from_ocr_verbatim(tmp_path):
     facts, _ = _run(tmp_path, [d], {1: ["You dare?!"]})
     assert facts[0].dialogue[0].text == "You dare?!"
     assert facts[0].dialogue[0].speaker_id == "c1"
-    assert facts[0].dialogue[0].speaker_confidence == 0.8
+    assert facts[0].dialogue[0].speaker_confidence is None  # the draft gave none
 
 
 def test_speakers_for_unknown_regions_are_ignored(tmp_path):
     d = _draft(speakers=[SpeakerGuess(region_id="r-not-in-panel", speaker="Yulin")])
     facts, _ = _run(tmp_path, [d], {1: ["a", "b"]})
     assert len(facts[0].dialogue) == 2
-    assert all(x.speaker_id is None and x.speaker_confidence == 0.0 for x in facts[0].dialogue)
+    assert all(x.speaker_id is None and x.speaker_confidence is None for x in facts[0].dialogue)
 
 
 def test_bible_names_map_to_ids_and_others_become_stable_unknowns(tmp_path):
@@ -90,3 +93,58 @@ def test_second_run_uses_cache_and_calls_no_model(tmp_path):
     second = asyncio.run(perceive_chapter(inputs, _bible(), client, _sched(), cache))
     assert len(client.calls) == n
     assert second == first
+
+
+def test_speaker_confidence_comes_from_the_draft():
+    from pydantic import ValidationError
+
+    assert SpeakerGuess(region_id="r", speaker="s", confidence=0.7).confidence == 0.7
+    with pytest.raises(ValidationError):
+        SpeakerGuess(region_id="r", speaker="s", confidence=1.5)
+
+
+def test_speaker_attribution_forces_story_even_if_model_said_no(tmp_path):
+    d = _draft(is_story=False, speakers=[SpeakerGuess(region_id="p1-r1", speaker="Yulin", confidence=0.9)])
+    facts, _ = _run(tmp_path, [d], {1: ["You dare?!"]})
+    assert facts[0].is_story is True and facts[0].dialogue[0].speaker_confidence == 0.9
+
+
+def test_ocr_text_or_visible_characters_alone_do_not_force_story(tmp_path):
+    d = _draft(is_story=False, characters_visible=["Yulin"])
+    facts, _ = _run(tmp_path, [d], {1: ["You dare?!"]})
+    assert facts[0].is_story is False
+
+
+def test_credits_text_stays_non_story_even_with_a_speaker(tmp_path):
+    d = _draft(is_story=False, speakers=[SpeakerGuess(region_id="p1-r1", speaker="Yulin")])
+    facts, _ = _run(tmp_path, [d], {1: ["Join our Discord for faster updates"]})
+    assert facts[0].is_story is False
+
+
+def test_blank_names_are_skipped_and_repeats_deduped(tmp_path):
+    d = _draft(characters_visible=["  ", "masked man", "Masked Man", "Yulin", "c1", ""],
+               speakers=[SpeakerGuess(region_id="p1-r1", speaker=" ")])
+    facts, _ = _run(tmp_path, [d], {1: ["hi"]})
+    assert facts[0].characters_visible == ["unknown_1", "c1"]
+    assert facts[0].unknown_cues == {"unknown_1": "masked man"}
+    assert facts[0].dialogue[0].speaker_id is None
+
+
+def test_ocr_sfx_regions_join_panel_sfx(tmp_path):
+    inputs = make_chapter_inputs(tmp_path, 1, {})
+    inputs.panels[0].sfx.extend(["BOOM", "crash"])
+    client = FakeModelClient({"vision": [_draft(sfx=["crash", "whoosh"])]})
+    facts = asyncio.run(perceive_chapter(inputs, _bible(), client, _sched(), ArtifactCache(tmp_path / "cache")))
+    assert facts[0].sfx == ["crash", "whoosh", "BOOM"]
+
+
+def test_prompt_label_is_earlier_panel(tmp_path):
+    _, client = _run(tmp_path, [_draft()], {})
+    assert "Earlier panel:" in client.calls[0][1] and "Previous panel" not in client.calls[0][1]
+
+
+def test_oversized_vision_prompt_fails_loudly_without_calling_model(tmp_path):
+    client = FakeModelClient({"vision": [_draft()]}, params={"num_ctx": 1000, "max_tokens": 500})
+    with pytest.raises(StepModelError, match="vision") as e:
+        _run(tmp_path, [_draft()], {}, client=client)
+    assert "prompt" in str(e.value) and client.calls == []
