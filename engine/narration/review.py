@@ -1,9 +1,11 @@
 """Review queue: chapters parked at gate `review`, line actions that write new script revisions, approval."""
 from __future__ import annotations
 
+import asyncio
+import json
 import re
 from pathlib import Path
-from typing import Literal
+from typing import Literal, NamedTuple
 
 from engine.narration.artifacts import (
     BeatSheet, CritiqueReport, PanelFacts, ReviewItem, ScriptIR, SeriesBible,
@@ -11,6 +13,10 @@ from engine.narration.artifacts import (
 from engine.narration.bible.store import BibleStore, apply_once
 from engine.narration.cache import ArtifactCache
 from engine.narration.compiler import _write_json
+from engine.database.models import ProjectRecord
+from engine.database.session import SessionLocal
+from engine.narration.inputs import ChapterInputs
+from engine.narration.project import apply_to_project
 from engine.narration.runtime.client import ModelClient
 from engine.narration.runtime.prompts import load_prompt
 from engine.narration.runtime.scheduler import ModelScheduler
@@ -18,6 +24,7 @@ from engine.narration.steps._cached import cached_call
 from engine.narration.steps.critique.rules import rule_checks
 from engine.narration.steps.factview import FACT_REF, char_names, cues_of, normalize_facts, panel_line
 from engine.narration.steps.repair import REPAIR_PROMPT_VERSION, REPAIR_STEP, RepairDraft, fallback_text, revise
+from engine.security.paths import resolve_contained_path
 
 _OK = {"passed", "repaired", "fallback"}
 
@@ -161,7 +168,12 @@ async def regenerate_line(run_dir: Path, line_id: str, hint: str, client: ModelC
     return _save(run_dir, new)
 
 
-def approve(run_dir: Path, bibles: BibleStore) -> SeriesBible:
+class Approval(NamedTuple):
+    bible: SeriesBible
+    needs_continue: bool  # False when the run already has its locked timeline
+
+
+def approve(run_dir: Path, bibles: BibleStore) -> Approval:
     run_dir = Path(run_dir)
     item = _open(run_dir)
     script = _latest(run_dir)
@@ -172,4 +184,64 @@ def approve(run_dir: Path, bibles: BibleStore) -> SeriesBible:
     new, applied = apply_once(bible, _sheet(run_dir).bible_proposals, item.project_id)
     # approved first: a crash after this can never re-apply the proposals
     _write_json(run_dir / "review.json", item.model_copy(update={"status": "approved"}).model_dump(mode="json"))
-    return bibles.save(new, item.project_id, applied) if applied else bible
+    bible = bibles.save(new, item.project_id, applied) if applied else bible
+    return Approval(bible, not (run_dir / "timeline.json").exists())
+
+
+_RUN_ID = re.compile(r"\d{8}T\d{6}-[0-9a-f]{6}")
+
+
+def resolve_run_dir(db, project_id: str, run_id: str) -> Path:
+    """The only way a request reaches a run: <workspace>/narration/<run_id>, never a client path."""
+    if not _RUN_ID.fullmatch(run_id):
+        raise ValueError("invalid run id")
+    project = db.get(ProjectRecord, project_id)
+    if project is None:
+        raise KeyError(project_id)
+    run_dir = resolve_contained_path(Path(project.workspace_path), Path("narration") / run_id)
+    if not run_dir.is_dir():
+        raise FileNotFoundError(run_id)
+    return run_dir
+
+
+async def _build_compiler(workspace: Path):  # tests replace this with a fake-model compiler
+    from engine.narration.__main__ import _local_provider, _make_compiler
+
+    provider = await _local_provider()
+    if provider is None:
+        raise RuntimeError("Ollama is not reachable")
+    return _make_compiler(provider, workspace / "narration" / "cache", BibleStore())
+
+
+async def continue_after_approval(project_id: str, run_id: str) -> str:
+    """Finish an approved run (perform, voice, timeline, projection) once; returns the VideoScript id."""
+    with SessionLocal() as db:
+        run_dir = resolve_run_dir(db, project_id, run_id)
+        workspace = Path(db.get(ProjectRecord, project_id).workspace_path)
+    done = run_dir / "continued.json"
+    if done.exists():
+        return json.loads(done.read_text(encoding="utf-8"))
+    item = _item(run_dir)
+    if item.project_id != project_id:
+        raise ValueError("run belongs to another project")
+    if item.status != "approved":
+        raise ValueError("run is not approved")
+    try:
+        lock = open(run_dir / "continue.lock", "x")
+    except FileExistsError:
+        raise ValueError("continue already running") from None
+    lock.close()
+    try:
+        if done.exists():  # a concurrent call finished between the first check and the lock
+            return json.loads(done.read_text(encoding="utf-8"))
+        compiler = await _build_compiler(workspace)
+        res = await compiler.continue_run(run_dir, ChapterInputs(project_id, item.series_key, []), workspace)
+        if res.gate != "pass":
+            raise ValueError("; ".join(res.reasons) or f"continue ended with gate {res.gate}")
+        with SessionLocal() as db:
+            script_id = apply_to_project(db, project_id, res.timeline, res.script, res.beat_sheet, res.takes,
+                                         workspace, res.plan)
+        _write_json(done, script_id)
+        return script_id
+    finally:
+        (run_dir / "continue.lock").unlink(missing_ok=True)

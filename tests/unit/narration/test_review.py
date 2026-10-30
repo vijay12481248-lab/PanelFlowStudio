@@ -1,4 +1,4 @@
-import asyncio
+﻿import asyncio
 import json
 
 import pytest
@@ -74,7 +74,7 @@ def test_regenerate_line_marks_repaired_and_uses_hint(tmp_path):
 def test_approve_applies_bible_once(tmp_path):
     comp, res = _parked(tmp_path)
     assert comp.bibles.load("test-series").version == 0
-    bible = review.approve(res.run_dir, comp.bibles)
+    bible = review.approve(res.run_dir, comp.bibles).bible
     assert bible.version == 1 and bible.plot_so_far == "Kai arrives in town."
     with pytest.raises(ValueError):
         review.approve(res.run_dir, comp.bibles)
@@ -97,8 +97,14 @@ def _cli(tmp_path, monkeypatch, comp):
 def test_cli_approve_prints_version(tmp_path, monkeypatch, capsys):
     comp, res = _parked(tmp_path)
     cli = _cli(tmp_path, monkeypatch, comp)
+
+    async def fake_continue(project_id, run_id):
+        assert (project_id, run_id) == ("proj-test", res.run_id)
+        return "vs-1"
+
+    monkeypatch.setattr(review, "continue_after_approval", fake_continue)
     assert cli.main(["review", "approve", str(res.run_dir)]) == 0
-    assert capsys.readouterr().out.strip() == "bible version: 1"
+    assert capsys.readouterr().out.splitlines() == ["bible version: 1", "video script: vs-1"]
     assert cli.main(["review", "approve", str(res.run_dir)]) == 1
 
 
@@ -194,3 +200,129 @@ def test_regenerate_line_runs_rules(tmp_path):
     assert any(c["rule"] == "unknown_name" and not c["passed"] and "Zorg" in c["reason"] for c in checks)
     with pytest.raises(ValueError, match="L002"):
         review.approve(res.run_dir, comp.bibles)
+
+
+# ---- finishing an approved review (perform, voice, timeline, projection) ----
+import uuid
+
+from engine.database.models import ProjectRecord, VideoScriptRecord
+from engine.database.session import SessionLocal, init_db
+from tests.unit.narration.test_compiler import _Echo
+from tests.unit.narration.test_voice import FakeStt, FakeTts
+
+
+def _adopt(tmp_path, comp, res, monkeypatch):
+    """Give the parked run a real project row and make continue_after_approval use the fake compiler."""
+    init_db()
+    pid = str(uuid.uuid4())
+    with SessionLocal() as db:
+        db.add(ProjectRecord(id=pid, title="T", source_type="LOCAL_FOLDER", workspace_path=str(tmp_path / "ws")))
+        db.commit()
+    p = res.run_dir / "review.json"
+    item = ReviewItem.model_validate_json(p.read_text(encoding="utf-8"))
+    p.write_text(item.model_copy(update={"project_id": pid}).model_dump_json(), encoding="utf-8")
+
+    async def build(workspace):
+        return comp
+
+    monkeypatch.setattr(review, "_build_compiler", build)
+    return pid
+
+
+def _park_at_critique(tmp_path, monkeypatch):
+    tts = FakeTts()
+    comp = _compiler(tmp_path, _write_responses(bad="number 2"), tts, _Echo(tts))
+    res = _go(tmp_path, comp, stop_after="timeline")
+    assert res.gate == "review" and not (res.run_dir / "takes.json").exists()
+    return tts, comp, res, _adopt(tmp_path, comp, res, monkeypatch)
+
+
+def _steps_of(run_dir):
+    return [s["step"] for s in json.loads((run_dir / "run.json").read_text(encoding="utf-8"))["steps"]]
+
+
+def test_continue_after_critique_review_runs_perform_voice_timeline(tmp_path, monkeypatch):
+    tts, comp, res, pid = _park_at_critique(tmp_path, monkeypatch)
+    assert review.approve(res.run_dir, comp.bibles).needs_continue is True
+    script_id = asyncio.run(review.continue_after_approval(pid, res.run_id))
+    assert _steps_of(res.run_dir)[-3:] == ["perform", "voice", "timeline"]
+    assert _steps_of(res.run_dir)[:5] == ["perceive", "understand", "write", "critique", "repair"]
+    for name in ("performance.json", "takes.json", "timeline.json", "sync.json"):
+        assert (res.run_dir / name).exists()
+    assert json.loads((res.run_dir / "continued.json").read_text(encoding="utf-8")) == script_id
+    assert not (res.run_dir / "continue.lock").exists()
+    with SessionLocal() as db:
+        assert db.get(VideoScriptRecord, script_id).status == "APPROVED"
+        assert len(db.get(ProjectRecord, pid).settings["story_editor_state"]["narration_clips"]) == 3
+    assert comp.bibles.load("test-series").version == 1  # approve applied it; continue did not apply it again
+
+
+def test_continue_after_voice_review_reuses_takes_unflagged(tmp_path, monkeypatch):
+    tts = FakeTts()
+    comp = _compiler(tmp_path, _write_responses(), tts, FakeStt(["zzz"]))
+    res = _go(tmp_path, comp, stop_after="timeline")
+    assert res.gate == "review" and any(t.flagged for t in res.takes)
+    pid = _adopt(tmp_path, comp, res, monkeypatch)
+    heard = len(tts.calls)
+    assert review.approve(res.run_dir, comp.bibles).needs_continue is True
+    script_id = asyncio.run(review.continue_after_approval(pid, res.run_id))
+    assert len(tts.calls) == heard  # not re-voiced
+    takes = json.loads((res.run_dir / "takes.json").read_text(encoding="utf-8"))
+    assert takes and not any(t["flagged"] for t in takes)
+    assert (res.run_dir / "timeline.json").exists() and _steps_of(res.run_dir)[-1] == "timeline" and script_id
+
+
+def test_continue_is_idempotent(tmp_path, monkeypatch):
+    tts, comp, res, pid = _park_at_critique(tmp_path, monkeypatch)
+    review.approve(res.run_dir, comp.bibles)
+    first = asyncio.run(review.continue_after_approval(pid, res.run_id))
+    calls, steps = len(tts.calls), _steps_of(res.run_dir)
+    assert asyncio.run(review.continue_after_approval(pid, res.run_id)) == first
+    assert len(tts.calls) == calls and _steps_of(res.run_dir) == steps
+    with SessionLocal() as db:
+        assert db.query(VideoScriptRecord).filter_by(project_id=pid).count() == 1
+
+
+def test_concurrent_continue_rejected(tmp_path, monkeypatch):
+    tts, comp, res, pid = _park_at_critique(tmp_path, monkeypatch)
+    review.approve(res.run_dir, comp.bibles)
+    (res.run_dir / "continue.lock").write_text("busy", encoding="utf-8")
+    with pytest.raises(ValueError, match="continue already running"):
+        asyncio.run(review.continue_after_approval(pid, res.run_id))
+    assert (res.run_dir / "continue.lock").exists() and not tts.calls  # the other job's lock is left alone
+    with SessionLocal() as db:
+        assert db.query(VideoScriptRecord).filter_by(project_id=pid).count() == 0
+
+
+def test_continue_refuses_unapproved_run(tmp_path, monkeypatch):
+    tts, comp, res, pid = _park_at_critique(tmp_path, monkeypatch)
+    with pytest.raises(ValueError, match="not approved"):
+        asyncio.run(review.continue_after_approval(pid, res.run_id))
+    assert not (res.run_dir / "continue.lock").exists()
+
+
+def test_approve_reports_needs_continue(tmp_path):
+    comp, res = _parked(tmp_path)
+    assert review.approve(res.run_dir, comp.bibles).needs_continue is True
+    (tmp_path / "again").mkdir()
+    comp, res = _parked(tmp_path / "again")
+    (res.run_dir / "timeline.json").write_text("{}", encoding="utf-8")
+    assert review.approve(res.run_dir, comp.bibles).needs_continue is False
+
+
+def test_resolve_run_dir_rejects_crafted_ids(tmp_path):
+    init_db()
+    pid = str(uuid.uuid4())
+    good = "20261031T101500-abc123"
+    (tmp_path / "narration" / good).mkdir(parents=True)
+    with SessionLocal() as db:
+        db.add(ProjectRecord(id=pid, title="T", source_type="LOCAL_FOLDER", workspace_path=str(tmp_path)))
+        db.commit()
+        assert review.resolve_run_dir(db, pid, good) == (tmp_path / "narration" / good).resolve()
+        for bad in ("..\\..\\x", str(tmp_path), good + "\n", "20261031T101500-ABC123", "../" + good):
+            with pytest.raises(ValueError):
+                review.resolve_run_dir(db, pid, bad)
+        with pytest.raises(FileNotFoundError):
+            review.resolve_run_dir(db, pid, "20261031T101500-000000")
+        with pytest.raises(KeyError):
+            review.resolve_run_dir(db, "nope", good)

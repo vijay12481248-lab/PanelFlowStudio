@@ -53,6 +53,14 @@ class RunLog:
                                     "seconds": round(seconds, 3), "status": status})
         _write_json(self.path, self._data)
 
+    @classmethod
+    def resume(cls, path: Path) -> "RunLog":
+        """Re-open a finished run's log so later steps append to it."""
+        log = cls.__new__(cls)
+        log.path = Path(path)
+        log._data = json.loads(log.path.read_text(encoding="utf-8"))
+        return log
+
     def finish(self, gate: Gate, reasons: list[str]) -> None:
         self._data["gate"], self._data["reasons"] = gate, list(reasons)
         _write_json(self.path, self._data)
@@ -112,6 +120,68 @@ class NarrationCompiler:
                  bibles: BibleStore, tts: Tts | None = None, stt: Stt | None = None):
         self.client, self.scheduler, self.cache, self.bibles = client, scheduler, cache, bibles
         self.tts, self.stt = tts, stt
+
+    async def continue_run(self, run_dir: Path, inputs: ChapterInputs, workspace: Path) -> CompileResult:
+        """Finish an approved review run: perform, voice, timeline. The bible was already applied by approve."""
+        run_dir = Path(run_dir)
+        log = RunLog.resume(run_dir / "run.json")
+        script = ScriptIR.model_validate_json((run_dir / "script.json").read_text(encoding="utf-8"))
+        sheet = BeatSheet.model_validate_json((run_dir / "beat_sheet.json").read_text(encoding="utf-8"))
+        facts = [PanelFacts.model_validate(f) for f in json.loads((run_dir / "panel_facts.json").read_text(encoding="utf-8"))]
+        story_ids = [f.panel_id for f in facts if f.is_story]
+        plan = takes = tl = sync = None
+
+        def result(gate: Gate, reasons: list[str]) -> CompileResult:
+            log.finish(gate, reasons)
+            return CompileResult(run_dir.name, gate, reasons, run_dir, facts, sheet, script, None, tl, sync, plan, takes)
+
+        try:
+            bible = self.bibles.load(inputs.series_key)
+            if (run_dir / "performance.json").exists():  # a voice review already has its plan
+                plan = PerformancePlan.model_validate_json((run_dir / "performance.json").read_text(encoding="utf-8"))
+            else:
+                counter = _CountingCache(self.cache)
+                with _recorded(log, "perform", self.client.model_for("writer"), perform.PERFORM_PROMPT_VERSION, counter):
+                    plan = await perform.perform(script, sheet, facts, bible, self.client, self.scheduler, counter)
+                _write_json(run_dir / "performance.json", plan.model_dump(mode="json"))
+
+            await self.scheduler.release()  # the LLM leaves the GPU before Kokoro arrives
+            tts_cfg = load_tts_config()
+            audio_model = f"{tts_cfg.model} + {load_stt_config().model}"
+            if (run_dir / "takes.json").exists():  # voice review: the owner listened, so the flagged takes stand
+                raw = json.loads((run_dir / "takes.json").read_text(encoding="utf-8"))
+                takes = [VoiceTake.model_validate({**t, "flagged": False}) for t in raw]
+            else:
+                with _recorded(log, "voice", audio_model, "-", _CountingCache(self.cache)):
+                    takes, reasons = await voice.voice_lines(
+                        script, plan, bible, self.tts or KokoroTts(), self.stt or WhisperStt(),
+                        Path(workspace) / "narration" / "voice", tts_cfg.voice, facts)
+                    _write_json(run_dir / "takes.json", [t.model_dump(mode="json") for t in takes])
+                    if reasons:
+                        raise NeedsReview(reasons)
+            _write_json(run_dir / "takes.json", [t.model_dump(mode="json") for t in takes])
+
+            with _recorded(log, "timeline", audio_model, "-", _CountingCache(self.cache)):
+                tl = timeline.lock_timeline(script, plan, takes, sheet, story_ids)
+                sync = timeline.sync_metrics(tl, takes, script)
+            _write_json(run_dir / "timeline.json", tl.model_dump(mode="json"))
+            _write_json(run_dir / "sync.json", sync)
+            return result("pass", [])
+        except NeedsReview as exc:  # voiced now and still bad: park it again for another look
+            flagged = {t.line_id for t in takes or [] if t.flagged}
+            _write_json(run_dir / "review.json", ReviewItem(
+                run_id=run_dir.name, project_id=inputs.project_id, series_key=inputs.series_key, run_dir=str(run_dir),
+                reasons=list(exc.reasons), line_ids=[ln.line_id for ln in script.lines if ln.line_id in flagged],
+            ).model_dump(mode="json"))
+            return result("review", exc.reasons)
+        except StepModelError as exc:
+            return result("failed", [f"{exc.role}: {exc.cause}"])
+        except Exception as exc:
+            log.finish("failed", [str(exc)])
+            raise
+        finally:
+            await self.scheduler.release()
+            release_audio_models()
 
     async def run(self, inputs: ChapterInputs, workspace: Path,
                   stop_after: Literal["perceive", "understand", "write", "perform", "voice", "timeline"] = "timeline",
