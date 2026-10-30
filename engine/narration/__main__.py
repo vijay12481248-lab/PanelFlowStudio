@@ -20,6 +20,24 @@ from engine.narration.runtime.scheduler import ModelScheduler, ollama_unloader
 _EXIT = {"pass": 0, "review": 2, "failed": 1}
 
 
+async def _local_provider():
+    provider = llm_registry.get_ollama_provider()  # local-only: never falls through to cloud or mock
+    if not await provider.health_check():
+        print(f"Ollama is not reachable at {provider.endpoint_url}")
+        return None
+    return provider
+
+
+def _make_compiler(provider, cache_dir: Path, bibles: BibleStore) -> NarrationCompiler:
+    roles = load_roles()
+    return NarrationCompiler(
+        ProviderModelClient(provider, roles),
+        ModelScheduler(roles, ollama_unloader(provider.endpoint_url)),
+        ArtifactCache(cache_dir),
+        bibles,
+    )
+
+
 async def _run(project_id: str, stop_after: str) -> int:
     try:
         with SessionLocal() as db:
@@ -31,17 +49,10 @@ async def _run(project_id: str, stop_after: str) -> int:
     except ValueError as exc:
         print(str(exc))
         return 1
-    provider = llm_registry.get_ollama_provider()  # local-only: never falls through to cloud or mock
-    if not await provider.health_check():
-        print(f"Ollama is not reachable at {provider.endpoint_url}")
+    provider = await _local_provider()
+    if provider is None:
         return 1
-    roles = load_roles()
-    compiler = NarrationCompiler(
-        ProviderModelClient(provider, roles),
-        ModelScheduler(roles, ollama_unloader(provider.endpoint_url)),
-        ArtifactCache(workspace / "narration" / "cache"),
-        BibleStore(),
-    )
+    compiler = _make_compiler(provider, workspace / "narration" / "cache", BibleStore())
     res = await compiler.run(inputs, workspace, stop_after=stop_after)
     print(f"gate: {res.gate}")
     for r in res.reasons:
@@ -82,6 +93,39 @@ def _review(args) -> int:
     return 0
 
 
+def _gold(args) -> int:
+    from engine.narration.eval.gold import add_gold
+
+    try:
+        print(add_gold(args.project_id, args.slug))
+    except (KeyError, ValueError, FileExistsError) as exc:
+        print(str(exc))
+        return 1
+    return 0
+
+
+async def _eval(args) -> int:
+    from datetime import datetime
+
+    from engine.narration.eval import gold
+    from engine.narration.eval.metrics import EvalReport, compare, run_eval
+    from engine.narration.eval.report import write_report
+
+    provider = await _local_provider()
+    if provider is None:
+        return 1
+    work = gold.gold_root() / "_work"  # own cache and bibles: never touches real series bibles
+    report = await run_eval(args.slug, lambda: _make_compiler(provider, work / "cache", BibleStore(work / "bibles")))
+    out = Path(args.out) if args.out else gold.gold_root() / "_reports" / datetime.now().strftime("%Y%m%dT%H%M%S")
+    print(f"report: {write_report(report, out)[1]}")
+    if not args.baseline:
+        return 0
+    regressions = compare(report, EvalReport.model_validate_json(Path(args.baseline).read_text(encoding="utf-8")))
+    for r in regressions:
+        print(f"regression: {r}")
+    return 2 if regressions else 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="python -m engine.narration")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -91,7 +135,19 @@ def main(argv: list[str] | None = None) -> int:
     rv = sub.add_parser("review").add_subparsers(dest="action", required=True)
     rv.add_parser("list")
     rv.add_parser("approve").add_argument("run_dir")
+    gd = sub.add_parser("gold").add_subparsers(dest="action", required=True)
+    add = gd.add_parser("add")
+    add.add_argument("project_id")
+    add.add_argument("slug")
+    ev = sub.add_parser("eval")
+    ev.add_argument("--slug", action="append")
+    ev.add_argument("--baseline")
+    ev.add_argument("--out")
     args = ap.parse_args(argv)
+    if args.cmd == "gold":
+        return _gold(args)
+    if args.cmd == "eval":
+        return asyncio.run(_eval(args))
     if args.cmd == "review":
         return _review(args)
     return asyncio.run(_run(args.project_id, args.stop_after))

@@ -105,7 +105,8 @@ class NarrationCompiler:
         self.client, self.scheduler, self.cache, self.bibles = client, scheduler, cache, bibles
 
     async def run(self, inputs: ChapterInputs, workspace: Path,
-                  stop_after: Literal["perceive", "understand", "write"] = "write") -> CompileResult:
+                  stop_after: Literal["perceive", "understand", "write"] = "write",
+                  facts_override: list[PanelFacts] | None = None) -> CompileResult:
         now = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
         run_id = f"{now}-{hashlib.sha256((inputs.project_id + now).encode()).hexdigest()[:6]}"
         run_dir = Path(workspace) / "narration" / run_id
@@ -128,10 +129,13 @@ class NarrationCompiler:
         try:
             bible = self.bibles.load(inputs.series_key)
 
-            counter = _CountingCache(self.cache)
-            with _recorded(log, "perceive", self.client.model_for("vision"),
-                           perceive.PERCEIVE_PROMPT_VERSION, counter):
-                facts = await perceive.perceive_chapter(inputs, bible, self.client, self.scheduler, counter)
+            if facts_override is not None:  # gold eval: hand-corrected facts replace step 1
+                facts = list(facts_override)
+            else:
+                counter = _CountingCache(self.cache)
+                with _recorded(log, "perceive", self.client.model_for("vision"),
+                               perceive.PERCEIVE_PROMPT_VERSION, counter):
+                    facts = await perceive.perceive_chapter(inputs, bible, self.client, self.scheduler, counter)
             _write_json(run_dir / "panel_facts.json", [f.model_dump(mode="json") for f in facts])
             if stop_after == "perceive":
                 return result("pass", [])

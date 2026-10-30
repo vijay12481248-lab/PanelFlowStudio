@@ -1,7 +1,9 @@
-"""Load a chapter's panels and OCR text from the project DB as narration-compiler inputs."""
+﻿"""Load a chapter's panels and OCR text from the project DB as narration-compiler inputs."""
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+import json
+import shutil
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from sqlalchemy.orm import Session
@@ -68,3 +70,26 @@ def load_chapter_inputs(db: Session, project_id: str) -> ChapterInputs:
     if not key:  # BibleStore rejects empty keys
         key = "project-" + "".join(c for c in project_id.lower() if c.isalnum())[:8]
     return ChapterInputs(project_id, key, panels)
+
+
+def dump_chapter_inputs(inputs: ChapterInputs, dest: Path) -> None:
+    """Write inputs.json plus panels/*.png under dest; image paths are stored relative to dest/panels."""
+    panels_dir = Path(dest) / "panels"
+    panels_dir.mkdir(parents=True, exist_ok=True)
+    rows = []
+    for p in inputs.panels:
+        name = f"{p.order:04d}{p.image_path.suffix}"
+        shutil.copyfile(p.image_path, panels_dir / name)
+        rows.append({"panel_id": p.panel_id, "order": p.order, "image": name, "sfx": p.sfx,
+                     "ocr": [asdict(r) for r in p.ocr]})
+    (Path(dest) / "inputs.json").write_text(json.dumps(
+        {"project_id": inputs.project_id, "series_key": inputs.series_key, "panels": rows},
+        ensure_ascii=False, indent=1), encoding="utf-8")
+
+
+def load_chapter_inputs_from_dir(src: Path) -> ChapterInputs:
+    src = Path(src)
+    data = json.loads((src / "inputs.json").read_text(encoding="utf-8"))
+    panels = [PanelInput(r["panel_id"], r["order"], src / "panels" / r["image"],
+                         [OcrRegionInput(**o) for o in r["ocr"]], r.get("sfx", [])) for r in data["panels"]]
+    return ChapterInputs(data["project_id"], data["series_key"], panels)
