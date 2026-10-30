@@ -23,7 +23,88 @@ import { NarrationJobQueue } from "./NarrationJobQueue";
 import { historyShortcut } from "../../history/shortcuts";
 import { ProviderHealthModal } from "../ProviderHealthModal";
 import { GlobalLLMSelector } from "../GlobalLLMSelector";
-import type { CloudLLMConfig } from "@panelflow/shared-types";
+import type { CloudLLMConfig, NarrationReviewItem, NarrationRunDetail, NarrationRunSummary, Project } from "@panelflow/shared-types";
+import { NarrationReviewQueue } from "./NarrationReviewQueue";
+import { NarrationRunInspector } from "./NarrationRunInspector";
+
+const ReviewQueueTab: React.FC = () => {
+  const [items, setItems] = useState<NarrationReviewItem[]>([]);
+  const [selected, setSelected] = useState<{ projectId: string; runId: string } | null>(null);
+  const [run, setRun] = useState<NarrationRunDetail | null>(null);
+  const [errors, setErrors] = useState<Record<string, string[]>>({});
+  const [busy, setBusy] = useState<Record<string, boolean>>({});
+  const [progress, setProgress] = useState<number | null>(null);
+
+  const reload = useCallback(async (sel: { projectId: string; runId: string } | null) => {
+    setItems(await api.listNarrationReview());
+    if (sel) setRun(await api.getNarrationRun(sel.projectId, sel.runId));
+  }, []);
+  useEffect(() => { void reload(null).catch(() => {}); }, [reload]);
+
+  const onSelectRun = (projectId: string, runId: string) => {
+    setSelected({ projectId, runId });
+    setErrors({});
+    void api.getNarrationRun(projectId, runId).then(setRun).catch(() => {});
+  };
+  const onLineAction: React.ComponentProps<typeof NarrationReviewQueue>["onLineAction"] = async (line, req) => {
+    if (!selected) return;
+    setErrors((e) => ({ ...e, [line.line_id]: [] }));
+    try {
+      const res = await api.narrationLineAction(selected.projectId, selected.runId, line.line_id, req);
+      if ("job_id" in res) {
+        setBusy((b) => ({ ...b, [line.line_id]: true }));
+        try { await api.waitForWorkflowJob(res.job_id); } finally { setBusy((b) => ({ ...b, [line.line_id]: false })); }
+      }
+      await reload(selected);
+    } catch (e) {
+      setErrors((x) => ({ ...x, [line.line_id]: [e instanceof Error ? e.message : String(e)] }));
+    }
+  };
+  const onApprove = async () => {
+    if (!selected) return;
+    try {
+      const res = await api.approveNarrationRun(selected.projectId, selected.runId);
+      if (res.job_id) {
+        setProgress(0);
+        try { await api.waitForWorkflowJob(res.job_id, (j) => setProgress(j.progress ?? 0)); } finally { setProgress(null); }
+      }
+      setSelected(null);
+      setRun(null);
+      await reload(null);
+    } catch (e) {
+      setErrors({ approve: [e instanceof Error ? e.message : String(e)] });
+    }
+  };
+  return (
+    <NarrationReviewQueue
+      items={items} selected={selected} run={run} imageUrl={(p, q) => api.getPanelImageUrl(p, q)}
+      onSelectRun={onSelectRun} onLineAction={onLineAction} onApprove={onApprove}
+      errors={errors} busy={busy} approveProgress={progress}
+    />
+  );
+};
+
+const RunInspectorTab: React.FC = () => {
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [projectId, setProjectId] = useState<string | null>(null);
+  const [runs, setRuns] = useState<NarrationRunSummary[]>([]);
+  const [runId, setRunId] = useState<string | null>(null);
+  const [run, setRun] = useState<NarrationRunDetail | null>(null);
+  useEffect(() => { void api.listProjects().then(setProjects).catch(() => {}); }, []);
+  return (
+    <NarrationRunInspector
+      projects={projects} projectId={projectId} runs={runs} runId={runId} run={run}
+      onSelectProject={(id) => {
+        setProjectId(id || null); setRunId(null); setRun(null); setRuns([]);
+        if (id) void api.listNarrationRuns(id).then(setRuns).catch(() => {});
+      }}
+      onSelectRun={(id) => {
+        setRunId(id || null); setRun(null);
+        if (id && projectId) void api.getNarrationRun(projectId, id).then(setRun).catch(() => {});
+      }}
+    />
+  );
+};
 
 export const NarrationStudio: React.FC<NarrationStudioProps> = ({
   initialChapter,
@@ -72,6 +153,7 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
   });
 
   // Center Column View Mode: "editor" | "quality_review"
+  const [studioTab, setStudioTab] = useState<"script" | "review" | "inspector">("script");
   const [centerMode, setCenterMode] = useState<"editor" | "quality_review">("editor");
 
   // Right Column Inspector Tab: "delivery" | "casting"
@@ -1304,8 +1386,26 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
         </div>
       )}
 
+      <div role="tablist" aria-label="Narration Studio views" className="flex gap-1 px-4 pt-2 border-b border-zinc-800 shrink-0">
+        {([["script", "Script"], ["review", "Review queue"], ["inspector", "Run inspector"]] as const).map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            role="tab"
+            aria-selected={studioTab === id}
+            aria-label={label}
+            onClick={() => setStudioTab(id)}
+            className={`px-3 py-1.5 text-xs font-semibold rounded-t-lg ${studioTab === id ? "bg-zinc-800 text-white" : "text-zinc-400 hover:text-zinc-200"}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {studioTab === "review" && <div className="flex-1 min-h-0 overflow-hidden"><ReviewQueueTab /></div>}
+      {studioTab === "inspector" && <div className="flex-1 min-h-0 overflow-hidden"><RunInspectorTab /></div>}
+
       {/* Main Professional 3-Column Narration Workspace */}
-      <div className="flex-1 grid grid-cols-12 min-h-0 overflow-hidden">
+      <div className={studioTab === "script" ? "flex-1 grid grid-cols-12 min-h-0 overflow-hidden" : "hidden"}>
         {/* Left Column: Story & Source Context (3 cols / ~25%) */}
         <div className="col-span-12 md:col-span-3 min-h-0 h-full overflow-hidden">
           <NarrationStoryPanel
