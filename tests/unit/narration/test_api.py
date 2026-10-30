@@ -122,6 +122,37 @@ def test_approve_starts_continue_job(env):
     ok = client.post(f"{base}/approve")
     assert ok.status_code == 200 and ok.json()["job_id"] == "job-1" and isinstance(ok.json()["bible_version"], int)
     assert jobs[0][:2] == ("proj-test", "NARRATION_CONTINUE") and jobs[0][2]["job_input"] == {"run_id": res.run_id}
-    again = client.post(f"{base}/approve")
-    assert again.status_code == 400 and len(jobs) == 1  # approving twice starts nothing
     assert client.get("/api/narration/review").json() == []
+    again = client.post(f"{base}/approve")  # stranded: approved, no timeline yet, so the continue job is queued again
+    assert again.status_code == 200 and again.json()["job_id"] == "job-2" and len(jobs) == 2
+    assert again.json()["bible_version"] == ok.json()["bible_version"]
+    (res.run_dir / "continued.json").write_text('"script-1"', encoding="utf-8")
+    done = client.post(f"{base}/approve")
+    assert done.status_code == 400 and "already finished" in done.json()["detail"] and len(jobs) == 2
+
+
+def test_regenerate_unknown_line_is_400_without_job(env):
+    client, res, jobs, _ = env
+    r = client.post(f"/api/narration/runs/proj-test/{res.run_id}/lines/L999", json={"action": "regenerate"})
+    assert r.status_code == 400 and not jobs
+
+
+def test_action_returns_inspector_shape_with_fresh_checks(env):
+    client, res, *_ = env
+    base = f"/api/narration/runs/proj-test/{res.run_id}"
+    out = client.post(f"{base}/lines/L002", json={"action": "edit", "text": "He walks through the quiet hall slowly"}).json()
+    assert set(out) == {"line_id", "panel_id", "text", "status", "kind", "checks", "facts", "take"}
+    assert out["checks"] and "action:" in out["facts"]
+    insp = next(ln for ln in client.get(base).json()["lines"] if ln["line_id"] == "L002")
+    assert insp == out
+
+
+def test_missing_panel_facts_degrade_to_empty(env):
+    client, res, *_ = env
+    p = res.run_dir / "panel_facts.json"
+    facts = json.loads(p.read_text(encoding="utf-8"))
+    gone = next(ln for ln in client.get(f"/api/narration/runs/proj-test/{res.run_id}").json()["lines"] if ln["line_id"] == "L002")["panel_id"]
+    p.write_text(json.dumps([f for f in facts if f["panel_id"] != gone]), encoding="utf-8")
+    r = client.get(f"/api/narration/runs/proj-test/{res.run_id}")
+    assert r.status_code == 200
+    assert next(ln for ln in r.json()["lines"] if ln["line_id"] == "L002")["facts"] == ""

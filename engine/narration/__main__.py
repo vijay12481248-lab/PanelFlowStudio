@@ -97,10 +97,13 @@ def _review(args) -> int:
         print(f"not inside a known project workspace: {args.run_dir}")
         return 1
     try:
-        approval = review.approve(run_dir, BibleStore())
+        item = review.ReviewItem.model_validate_json((run_dir / "review.json").read_text(encoding="utf-8"))
+        if item.status == "approved" and not (run_dir / "timeline.json").exists():
+            approval = review.Approval(BibleStore().load(item.series_key), True)  # stranded approve: only continue is missing
+        else:
+            approval = review.approve(run_dir, BibleStore())
         print(f"bible version: {approval.bible.version}")
         if approval.needs_continue:
-            item = review.ReviewItem.model_validate_json((run_dir / "review.json").read_text(encoding="utf-8"))
             print(f"video script: {asyncio.run(review.continue_after_approval(item.project_id, run_dir.name))}")
     except (ValueError, OSError, KeyError, RuntimeError) as exc:
         print(str(exc))

@@ -41,7 +41,8 @@ test("run inspector parses the typed payload", async () => {
 });
 
 test("line actions and approve POST the right bodies", async () => {
-  const edit = await call({ line_id: "L1" }, (c) => c.narrationLineAction("p", "r1", "L1", { action: "edit", text: "new" }));
+  const edit = await call({ line_id: "L1", panel_id: "x", text: "new", status: "passed", kind: "beat", checks: [], facts: "P1 | chars: -", take: null }, (c) => c.narrationLineAction("p", "r1", "L1", { action: "edit", text: "new" }));
+  assert.deepEqual(Object.keys(edit.result as object).sort(), ["checks", "facts", "kind", "line_id", "panel_id", "status", "take", "text"]);
   assert.match(edit.calls[0].url, /\/api\/narration\/runs\/p\/r1\/lines\/L1$/);
   assert.equal(edit.calls[0].method, "POST");
   assert.deepEqual(edit.calls[0].body, { action: "edit", text: "new" });

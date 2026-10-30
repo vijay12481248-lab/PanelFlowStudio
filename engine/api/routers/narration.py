@@ -18,6 +18,7 @@ from engine.jobs.workflow import enqueue_project_operation, register_operation_f
 from engine.narration import review
 from engine.narration.artifacts import CritiqueReport
 from engine.narration.bible.store import BibleStore
+from engine.narration.steps.critique.rules import rule_checks
 from engine.narration.steps.factview import char_names, cues_of, panel_line
 
 router = APIRouter(prefix="/api/narration", tags=["narration"])
@@ -79,6 +80,40 @@ def list_runs(project_id: str, db: Session = Depends(get_db)) -> list[dict]:
     return sorted(out, key=lambda r: r["created"], reverse=True)
 
 
+def _context(run_dir: Path, item) -> dict:
+    """Everything a line view needs. Checks are recomputed from the current text; critique.json is the fallback."""
+    ctx = {"sheet": None, "facts": None, "names": None, "takes": {}, "checks": {}}
+    try:
+        report = CritiqueReport.model_validate_json((run_dir / "critique.json").read_text(encoding="utf-8"))
+        ctx["checks"] = {lc.line_id: [c.model_dump(mode="json") for c in lc.checks] for lc in report.lines}
+    except (ValueError, OSError):
+        pass
+    try:
+        ctx["takes"] = {t["line_id"]: {"wer": t["wer"], "flagged": t["flagged"], "stt_text": t["stt_text"]}
+                        for t in _json(run_dir / "takes.json")}
+    except (ValueError, KeyError, TypeError, OSError):
+        pass
+    try:
+        sheet, facts = review._sheet(run_dir), review._facts(run_dir)
+        bible = _bibles().load(item.series_key if item else "")
+        ctx.update(sheet=sheet, facts=facts, names=char_names(bible, sheet, cues_of(facts.values())))
+        script = review._latest(run_dir)
+        fresh = rule_checks(script, facts, [ln.panel_id for ln in script.lines], bible)
+        ctx["checks"] = {k: [c.model_dump(mode="json") for c in v] for k, v in fresh.items()}
+    except (ValueError, KeyError, OSError):
+        pass
+    return ctx
+
+
+def _line_view(ln, ctx: dict) -> dict:
+    """The NarrationLine shape, shared by the inspector and the line-action responses."""
+    try:
+        facts = panel_line(1, ctx["facts"][ln.panel_id], ctx["names"])
+    except (KeyError, TypeError):
+        facts = ""  # panel missing from panel_facts.json
+    return {"line_id": ln.line_id, "panel_id": ln.panel_id, "text": ln.text, "status": ln.status, "kind": ln.kind,
+            "checks": ctx["checks"].get(ln.line_id, []), "facts": facts, "take": ctx["takes"].get(ln.line_id)}
+
 @router.get("/runs/{project_id}/{run_id}")
 def inspect_run(project_id: str, run_id: str, db: Session = Depends(get_db)) -> dict:
     run_dir = _run_dir(db, project_id, run_id)
@@ -90,32 +125,13 @@ def inspect_run(project_id: str, run_id: str, db: Session = Depends(get_db)) -> 
         item = review._item(run_dir)
     except (ValueError, OSError):
         item = None
-    checks: dict = {}
-    try:
-        report = CritiqueReport.model_validate_json((run_dir / "critique.json").read_text(encoding="utf-8"))
-        checks = {lc.line_id: [c.model_dump(mode="json") for c in lc.checks] for lc in report.lines}
-    except (ValueError, OSError):
-        pass
-    takes = {}
-    try:
-        takes = {t["line_id"]: {"wer": t["wer"], "flagged": t["flagged"], "stt_text": t["stt_text"]}
-                 for t in _json(run_dir / "takes.json")}
-    except (ValueError, KeyError, TypeError, OSError):
-        pass
-    sheet = facts = names = None
-    try:
-        sheet, facts = review._sheet(run_dir), review._facts(run_dir)
-        names = char_names(_bibles().load(item.series_key if item else ""), sheet, cues_of(facts.values()))
-    except (ValueError, OSError):
-        pass
+    ctx = _context(run_dir, item)
     try:
         script_lines = review._latest(run_dir).lines
     except ValueError:
         script_lines = []  # the run stopped before write
-    lines = [{"line_id": ln.line_id, "panel_id": ln.panel_id, "text": ln.text, "status": ln.status, "kind": ln.kind,
-              "checks": checks.get(ln.line_id, []),
-              "facts": panel_line(1, facts[ln.panel_id], names) if facts and ln.panel_id in facts else "",
-              "take": takes.get(ln.line_id)} for ln in script_lines]
+    sheet = ctx["sheet"]
+    lines = [_line_view(ln, ctx) for ln in script_lines]
     beat_sheet = None
     if sheet is not None:
         beat_sheet = {"hook": sheet.hook, "chapter_summary": sheet.chapter_summary,
@@ -168,6 +184,7 @@ def line_action(project_id: str, run_id: str, line_id: str, body: LineAction, db
     try:
         if body.action == "regenerate":
             review._open(run_dir)  # fail fast (400) instead of inside the job
+            review._line(review._latest(run_dir), line_id)
             payload = {"run_id": run_id, "line_id": line_id, "hint": body.hint or ""}
             return {"job_id": enqueue_project_operation(
                 project_id, "NARRATION_REGENERATE", _regenerate_operation(project_id, payload), job_input=payload)}
@@ -181,15 +198,22 @@ def line_action(project_id: str, run_id: str, line_id: str, body: LineAction, db
             script = review.fallback_line(run_dir, line_id, _bibles())
     except ValueError as exc:
         raise HTTPException(400, str(exc))
-    return next(ln for ln in script.lines if ln.line_id == line_id).model_dump(mode="json")
+    return _line_view(next(ln for ln in script.lines if ln.line_id == line_id), _context(run_dir, review._item(run_dir)))
 
 
 @router.post("/runs/{project_id}/{run_id}/approve")
 def approve_run(project_id: str, run_id: str, db: Session = Depends(get_db)) -> dict:
     run_dir = _run_dir(db, project_id, run_id)
     try:
-        approval = review.approve(run_dir, _bibles())
-    except ValueError as exc:
+        item = review._item(run_dir)
+        if item.status == "approved" and not (run_dir / "timeline.json").exists():
+            # a stranded approve: the proposals are already applied, so only the continue job is missing
+            if (run_dir / "continued.json").exists():
+                raise ValueError("run is already finished")
+            approval = review.Approval(_bibles().load(item.series_key), True)
+        else:
+            approval = review.approve(run_dir, _bibles())
+    except (ValueError, OSError) as exc:
         raise HTTPException(400, str(exc))
     job_id = None
     if approval.needs_continue:
