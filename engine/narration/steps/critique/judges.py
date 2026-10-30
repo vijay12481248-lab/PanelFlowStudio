@@ -39,7 +39,6 @@ async def judge_lines(
     bible: SeriesBible, client: ModelClient, scheduler: ModelScheduler, cache: ArtifactCache,
 ) -> dict[str, list[LineCheck]]:
     names = char_names(bible, sheet, cues_of(facts.values()))
-    beat_of = {p: b.what_happens for s in sheet.scenes for b in s.beats for p in b.panel_ids}
     style = "; ".join(bible.narrator_voice.style_notes) or "plain, vivid recap voice"
     prompts = {n: load_prompt(f"critique_{n}", CRITIQUE_PROMPT_VERSION) for n in JUDGES}
     want = set(line_ids) if line_ids is not None else None
@@ -50,8 +49,7 @@ async def judge_lines(
             continue
         prev = script.lines[i - 1].text if i else "(none)"
         values = {
-            "grounded": dict(line=ln.text, panel=panel_line(1, facts[ln.panel_id], names),
-                             beat=beat_of.get(ln.panel_id, "(none)")),
+            "grounded": dict(line=ln.text, panel=panel_line(1, facts[ln.panel_id], names)),
             "clear": dict(previous=prev, line=ln.text),
             "voice": dict(style=style, line=ln.text),
             "flow": dict(previous=prev, line=ln.text),

@@ -42,7 +42,7 @@ def test_judge_sees_only_its_inputs(tmp_path):
     _, client = _run(tmp_path, _yes, lambda c, s, ca: critique(script, facts, ids, sheet, bible, c, s, ca, line_ids=["L002"]))
     prompts = [p for _, p, _ in client.calls]
     grounded = [p for p in prompts if "unique action 2" in p]
-    assert len(grounded) == 1 and "beat text 2" in grounded[0] and TEXTS[1] in grounded[0]
+    assert len(grounded) == 1 and TEXTS[1] in grounded[0]
     assert all("unique action 1" not in p and "unique action 3" not in p and "beat text 1" not in p for p in prompts)
     clear = [p for p in prompts if TEXTS[0] in p and TEXTS[1] in p]
     assert len(clear) == 2 and all("unique action" not in p for p in clear)  # clear + flow
@@ -108,3 +108,10 @@ def test_coverage_with_no_story_ids_is_zero(tmp_path):
     script, facts, _, sheet, bible = _setup()
     rep, _ = _run(tmp_path, _yes, lambda c, s, ca: critique(script, facts, [], sheet, bible, c, s, ca, line_ids=[]))
     assert rep.coverage == 0.0
+
+
+def test_grounded_prompt_has_no_beat_text(tmp_path):
+    script, facts, ids, sheet, bible = _setup()
+    _, client = _run(tmp_path, _yes, lambda c, s, ca: critique(script, facts, ids, sheet, bible, c, s, ca, line_ids=["L002"]))
+    grounded = [p for _, p, _ in client.calls if "unique action 2" in p]
+    assert grounded and all("beat text" not in p for p in grounded)
