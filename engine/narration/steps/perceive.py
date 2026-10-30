@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -65,6 +66,24 @@ class _Namer:
         return label
 
 
+_NAME_RUN = re.compile(r"\b[A-Z][a-z]+(?:[ -][A-Z][a-z]+)*\b")
+_NOT_NAMES = {"A", "An", "The", "He", "She", "They", "His", "Her", "Their", "It", "Man", "Woman", "Young", "Red",
+              "Two", "One", "Another", "Someone", "Figure", "Demon", "Master"}
+
+
+def names_in(text: str) -> list[str]:
+    """Capitalised runs in a sentence, minus the sentence-initial word unless it starts a multi-word run."""
+    out = []
+    for m in _NAME_RUN.finditer(text):
+        run = m.group().split()
+        while run and run[0] in _NOT_NAMES:
+            run = run[1:]
+        if not run or (m.start() == 0 and len(run) == 1 and run == m.group().split()):
+            continue  # a lone capitalised first word is just the sentence start
+        out.append(" ".join(run))
+    return out
+
+
 def _facts(panel: PanelInput, d: PanelFactsDraft, namer: _Namer) -> PanelFacts:
     cues: dict[str, str] = {}
     visible = list(dict.fromkeys(namer.map(n, cues) for n in d.characters_visible if n.strip()))
@@ -80,7 +99,8 @@ def _facts(panel: PanelInput, d: PanelFactsDraft, namer: _Namer) -> PanelFacts:
         )
         for r in panel.ocr
     ]
-    names = list(dict.fromkeys(n.strip() for n in d.names_mentioned if n.strip()))[:6]
+    # small models often leave names_mentioned empty but still write read-off names into the action
+    names = list(dict.fromkeys([*(n.strip() for n in d.names_mentioned if n.strip()), *names_in(d.action)]))[:6]
     # Only allowed coercion: over-long action is cut to its first 20 words.
     action = " ".join(d.action.split()[:20]) if len(d.action.split()) > 20 else d.action
     return PanelFacts(

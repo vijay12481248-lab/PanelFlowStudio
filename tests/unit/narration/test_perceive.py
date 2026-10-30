@@ -153,3 +153,11 @@ def test_names_mentioned_are_cleaned_deduped_and_capped(tmp_path):
     d = _draft(names_mentioned=[" Yulin ", "", "Yulin", "A", "B", "C", "D", "E", "F"])
     facts, _ = _run(tmp_path, [d], {1: ["x"]})
     assert facts[0].names_mentioned == ["Yulin", "A", "B", "C", "D", "E"]
+
+
+def test_names_in_action_text():
+    from engine.narration.steps.perceive import names_in
+    assert names_in("Man holds map while thinking about Shangguan Feixiong and Yulin.") == ["Shangguan Feixiong", "Yulin"]
+    assert names_in("Young man speaks to master about seeking the Soaring Sword.") == ["Soaring Sword"]
+    assert names_in("Red demon greets young master with a mocking laugh.") == []
+    assert names_in("Yulin draws his sword.") == []  # sentence-initial single word is ambiguous; left to names_mentioned
