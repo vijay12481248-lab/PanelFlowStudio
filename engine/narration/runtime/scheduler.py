@@ -12,7 +12,9 @@ from engine.narration.runtime.roles import RoleConfig
 log = logging.getLogger(__name__)
 T = TypeVar("T")
 R = TypeVar("R")
-_OOM = object()
+class _Oom:
+    def __init__(self, exc: BaseException):
+        self.exc = exc
 
 
 def _is_oom(exc: BaseException) -> bool:
@@ -35,17 +37,27 @@ class ModelScheduler:
 
     async def _pass(self, items, fn, limit: int) -> list:
         sem = asyncio.Semaphore(limit)
+        stop = asyncio.Event()  # set on a non-OOM failure so queued items never start
 
         async def one(item):
             async with sem:
+                if stop.is_set():
+                    raise asyncio.CancelledError
                 try:
                     return await fn(item)
                 except Exception as exc:  # non-OOM errors propagate immediately
                     if _is_oom(exc):
-                        return _OOM
+                        return _Oom(exc)
+                    stop.set()
                     raise
 
-        return list(await asyncio.gather(*(one(i) for i in items)))
+        tasks = [asyncio.ensure_future(one(i)) for i in items]
+        try:
+            return list(await asyncio.gather(*tasks))
+        finally:  # a failure must stop queued siblings from calling fn
+            for t in tasks:
+                t.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
 
     async def map(self, role: str, items: Sequence[T], fn: Callable[[T], Awaitable[R]]) -> list[R]:
         cfg = self.roles[role]
@@ -53,13 +65,13 @@ class ModelScheduler:
             await self.release()
             self._loaded = cfg.model
         results = await self._pass(items, fn, cfg.concurrency)
-        failed = [i for i, r in enumerate(results) if r is _OOM]
+        failed = [i for i, r in enumerate(results) if isinstance(r, _Oom)]
         if failed:
             await self._unload(cfg.model)
             retried = await self._pass([items[i] for i in failed], fn, max(1, cfg.concurrency // 2))
             for i, r in zip(failed, retried):
-                if r is _OOM:  # second OOM propagates
-                    raise RuntimeError(f"out of memory on model {cfg.model} after retry")
+                if isinstance(r, _Oom):  # second OOM propagates the original error
+                    raise r.exc
                 results[i] = r
         return results
 

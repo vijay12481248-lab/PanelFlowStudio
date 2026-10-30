@@ -4,7 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import yaml
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from engine.config.settings import settings
 
@@ -20,7 +20,7 @@ class RoleConfig(BaseModel):
     top_p: float | None = None
     max_tokens: int
     num_ctx: int = 8192
-    concurrency: int = 1
+    concurrency: int = Field(default=1, ge=1)
     timeout_s: float = 120.0
 
 

@@ -60,9 +60,10 @@ def test_same_model_across_roles_does_not_unload():
 def test_out_of_memory_halves_concurrency_and_retries_once():
     unl = RecordingUnloader()
     sched = ModelScheduler({"vision": _role("qwen", 4)}, unl)
-    state = {"now": 0, "max": 0, "failed": set()}
+    state = {"now": 0, "max": 0, "failed": set(), "calls": {}}
 
     async def fn(x):
+        state["calls"][x] = state["calls"].get(x, 0) + 1
         retry = x in state["failed"]
         if x < 4 and not retry:  # items 0-3 hit OOM on the first pass
             state["failed"].add(x)
@@ -76,7 +77,8 @@ def test_out_of_memory_halves_concurrency_and_retries_once():
 
     assert asyncio.run(sched.map("vision", list(range(8)), fn)) == [x * 10 for x in range(8)]
     assert unl.unloaded == ["qwen"]
-    assert state["max"] <= 2
+    assert state["max"] == 2
+    assert [state["calls"][x] for x in range(8)] == [2, 2, 2, 2, 1, 1, 1, 1]
 
 
 def test_second_out_of_memory_propagates():
@@ -85,5 +87,21 @@ def test_second_out_of_memory_propagates():
     async def fn(x):
         raise RuntimeError("Out Of Memory")
 
-    with pytest.raises(RuntimeError):
+    with pytest.raises(RuntimeError, match="Out Of Memory"):
         asyncio.run(sched.map("vision", [1, 2], fn))
+
+
+def test_non_oom_error_propagates_and_stops_queued_items():
+    sched = ModelScheduler({"vision": _role("qwen", 1)}, RecordingUnloader())
+    entered = []
+
+    async def fn(x):
+        entered.append(x)
+        await asyncio.sleep(0.01)
+        if x == 0:
+            raise ValueError("boom")
+        return x
+
+    with pytest.raises(ValueError, match="boom"):
+        asyncio.run(sched.map("vision", [0, 1, 2, 3], fn))
+    assert entered == [0]

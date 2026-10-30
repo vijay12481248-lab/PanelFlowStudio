@@ -1,9 +1,10 @@
 import pytest
+from pydantic import ValidationError
 
 from engine.config.settings import settings
 from engine.narration.runtime import prompts
 from engine.narration.runtime.prompts import PromptAsset, load_prompt
-from engine.narration.runtime.roles import load_roles
+from engine.narration.runtime.roles import RoleConfig, load_roles
 
 
 def test_default_roles_match_spec():
@@ -49,3 +50,8 @@ def test_prompt_render_and_hash(tmp_path, monkeypatch):
 def test_render_missing_variable_raises():
     with pytest.raises(KeyError):
         PromptAsset(step="s", version="v1", text="$a $b", sha256="0" * 64).render(a="1")
+
+
+def test_zero_concurrency_rejected():
+    with pytest.raises(ValidationError):
+        RoleConfig(model="m", temperature=0, max_tokens=1, concurrency=0)
