@@ -13,6 +13,7 @@ dependencies = [
   "psutil",
   "pydantic",
   "pydantic-settings",
+  "pyyaml",
   "scipy",
   "soundfile",
   "sqlalchemy",
