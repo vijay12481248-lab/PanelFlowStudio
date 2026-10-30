@@ -104,3 +104,14 @@ def test_apply_add_character_accepts_cluster_unknown_ids():
 def test_store_key_must_fully_match(tmp_path):
     with pytest.raises(ValueError):
         BibleStore(tmp_path).load("abc\n")
+
+
+@pytest.mark.parametrize("title,key", [
+    ("Magic Emperor Chapter 927", "magic-emperor"),
+    ("Magic Emperor - Ch. 12", "magic-emperor"),
+    ("Log Into The Future Episode 5", "log-into-the-future"),
+    ("Solo Leveling", "solo-leveling"),
+    ("Return of the Mount Hua Sect - chapter 3", "return-of-the-mount-hua-sect"),
+])
+def test_series_key_for_chapter_variants(title, key):
+    assert series_key_for(title, None) == key

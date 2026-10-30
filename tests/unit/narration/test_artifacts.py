@@ -1,4 +1,4 @@
-﻿import pytest
+import pytest
 from pydantic import ValidationError
 
 from engine.narration.artifacts import (
@@ -33,3 +33,44 @@ def test_extra_fields_are_rejected():
 def test_assert_known_ids_names_every_unknown():
     with pytest.raises(ArtifactIdError, match=r"scene s1.*p9.*p10"):
         assert_known_ids(["p1", "p9", "p10"], {"p1"}, "scene s1")
+
+
+from engine.narration.artifacts import (
+    LineCheck, LineCritique, ScriptIR, ScriptLine, check_script_ids,
+)
+
+
+def _line(pid, lid=None, **kw):
+    return ScriptLine(line_id=lid or f"l_{pid}", panel_id=pid, text="He draws.", facts_used=["action"],
+                      kind="narration", **kw)
+
+
+def test_script_line_rejects_bad_fact_ref():
+    with pytest.raises(ValidationError):
+        ScriptLine(line_id="l1", panel_id="a", text="x", facts_used=["vibes"], kind="narration")
+    with pytest.raises(ValidationError):
+        ScriptLine(line_id="l1", panel_id="a", text="  ", facts_used=[], kind="narration")
+    ScriptLine(line_id="l1", panel_id="a", text="x", facts_used=["beat:b_1", "dialogue"], kind="hook")
+
+
+def test_script_ir_rejects_duplicate_line_ids():
+    with pytest.raises(ValidationError):
+        ScriptIR(project_id="p", lines=[_line("a", "l1"), _line("b", "l1")])
+
+
+def test_check_script_ids_reports_order_and_count():
+    def probs(ids):
+        return check_script_ids(ScriptIR(project_id="p", lines=[_line(i) for i in ids]), ["a", "b", "c"])
+    assert len(probs(["a", "c"])) == 1 and "count" in probs(["a", "c"])[0]
+    assert len(probs(["b", "a", "c"])) == 1 and "order" in probs(["b", "a", "c"])[0]
+    assert any("z" in p for p in probs(["a", "z", "c"]))
+    assert probs(["a", "b", "c"]) == []
+
+
+def test_critique_blocked_property():
+    warn = LineCheck(rule="pace", passed=False, severity="warn")
+    block = LineCheck(rule="names", passed=False, severity="block")
+    assert not LineCritique(line_id="l", checks=[warn]).blocked
+    assert LineCritique(line_id="l", checks=[warn, block]).blocked
+    with pytest.raises(ValidationError):
+        LineCritique(line_id="l", checks=[], scores={"bogus": True})

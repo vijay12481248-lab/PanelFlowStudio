@@ -18,11 +18,13 @@ from engine.narration.artifacts import (
 )
 
 
+_CHAPTER_RE = re.compile(r"\s*[-–:|]?\s*\b(?:chapter|ch\.?|episode|ep\.?)\s*\d", re.I)
+
+
 def series_key_for(title: str, source_metadata: dict | None) -> str:
     name = ((source_metadata or {}).get("series_title") or "").strip()
     if not name:
-        i = title.lower().find(" - chapter")
-        name = title if i < 0 else title[:i]
+        name = _CHAPTER_RE.split(title)[0]
     return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
 
 
