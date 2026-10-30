@@ -93,6 +93,8 @@ class LocalApiSecurityMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         supplied = request.headers.get(TOKEN_HEADER, "") or resource_token
+        if not supplied and request.headers.get("Authorization", "").startswith("Bearer "):
+            supplied = request.headers.get("Authorization", "").split(" ", 1)[1].strip()
         if not self.engine_token or not hmac.compare_digest(supplied, self.engine_token):
             return JSONResponse(
                 {"detail": "Missing or invalid local engine token."},

@@ -54,7 +54,29 @@ import type {
   AutoPilotStatusResponse,
   AutoPilotStartRequest,
   AutoPilotStageItem,
+  SeriesInspectResponse,
+  SeriesChapterInfo,
+  BatchGenerateParams,
+  BatchJobStatusInfo,
+  AnimeInspectResponse,
+  AnimeReviewConfigParams,
+  AnimeJobStatusInfo,
+  MotionPresetInfo,
+  MotionPreviewRequest,
+  MotionPreviewResponse,
+  MotionRenderRequest,
+  MotionRenderResponse,
 } from "@panelflow/shared-types";
+
+export type {
+  SeriesInspectResponse,
+  SeriesChapterInfo,
+  BatchGenerateParams,
+  BatchJobStatusInfo,
+  AnimeInspectResponse,
+  AnimeReviewConfigParams,
+  AnimeJobStatusInfo,
+};
 
 
 export interface ComfyWorkflowInfo {
@@ -198,6 +220,10 @@ export class PanelFlowApiClient {
     });
 
     if (!response.ok) {
+      if (response.status === 401 && typeof window !== "undefined") {
+        try { localStorage.removeItem("panelflow_engine_token"); } catch {}
+        window.dispatchEvent(new CustomEvent("panelflow:token-invalid"));
+      }
       let errorMsg = `HTTP Error ${response.status}: ${response.statusText}`;
       let errorCode: string | undefined;
       try {
@@ -1570,6 +1596,9 @@ export class PanelFlowApiClient {
       dialogueGainDb?: number;
       isDraft?: boolean;
       timelineData?: any;
+      minPanelDuration?: number;
+      panelZoomMode?: "fit" | "motion" | "cover";
+      narrationSpeed?: number;
     } = {}
   ): Promise<RenderJob> {
     return this.request<RenderJob>(`/api/projects/${projectId}/render/jobs`, {
@@ -1582,7 +1611,38 @@ export class PanelFlowApiClient {
         dialogue_gain_db: options.dialogueGainDb ?? 0.0,
         is_draft: options.isDraft ?? false,
         timeline_data: options.timelineData,
+        min_panel_duration: options.minPanelDuration ?? 4.0,
+        panel_zoom_mode: options.panelZoomMode || "fit",
+        narration_speed: options.narrationSpeed ?? 1.0,
       }),
+    });
+  }
+
+  async getQuickDestinations(projectId?: string): Promise<{
+    destinations: Array<{ id: string; label: string; path: string; exists: boolean; is_default?: boolean }>;
+    default_directory: string;
+  }> {
+    const url = projectId
+      ? `/api/system/quick-destinations?project_id=${encodeURIComponent(projectId)}`
+      : `/api/system/quick-destinations`;
+    return this.request(url);
+  }
+
+  async pickDirectoryNative(initialDir?: string, title?: string): Promise<{ selected: boolean; path: string | null }> {
+    return this.request(`/api/system/pick-directory`, {
+      method: "POST",
+      body: JSON.stringify({ initial_dir: initialDir, title }),
+    });
+  }
+
+  async pickSaveFileNative(
+    initialDir?: string,
+    defaultFilename?: string,
+    title?: string
+  ): Promise<{ selected: boolean; path: string | null }> {
+    return this.request(`/api/system/pick-save-file`, {
+      method: "POST",
+      body: JSON.stringify({ initial_dir: initialDir, default_filename: defaultFilename, title }),
     });
   }
 
@@ -1985,6 +2045,81 @@ export class PanelFlowApiClient {
 
   async getOllamaPullStatus(): Promise<{ status: string; model_name: string; status_text: string; completed_bytes: number; total_bytes: number; percent: number; error_message: string | null }> {
     return this.request<{ status: string; model_name: string; status_text: string; completed_bytes: number; total_bytes: number; percent: number; error_message: string | null }>("/api/system/ollama/pull/status");
+  }
+
+  // ---------------------------------------------------------------------------
+  // Series & Multi-Chapter Batch Video Generation API
+  // ---------------------------------------------------------------------------
+  async inspectSeries(sourceUrl: string): Promise<SeriesInspectResponse> {
+    return this.request<SeriesInspectResponse>("/api/series/inspect", {
+      method: "POST",
+      body: JSON.stringify({ source_url: sourceUrl }),
+    });
+  }
+
+  async startBatchGeneration(params: BatchGenerateParams): Promise<{ job_id: string; status: string; message: string }> {
+    return this.request<{ job_id: string; status: string; message: string }>("/api/series/batch-generate", {
+      method: "POST",
+      body: JSON.stringify(params),
+    });
+  }
+
+  async getBatchJobStatus(jobId: string): Promise<BatchJobStatusInfo> {
+    return this.request<BatchJobStatusInfo>(`/api/series/batch-status/${jobId}`);
+  }
+
+  async listBatchJobs(): Promise<BatchJobStatusInfo[]> {
+    return this.request<BatchJobStatusInfo[]>("/api/series/batch-jobs");
+  }
+
+  // ---------------------------------------------------------------------------
+  // Anime & Video Review Pipeline API
+  // ---------------------------------------------------------------------------
+  async inspectAnimeVideo(videoPath: string, seriesTitle = "Anime Series", episodeNumber = 1.0): Promise<AnimeInspectResponse> {
+    return this.request<AnimeInspectResponse>("/api/anime/inspect", {
+      method: "POST",
+      body: JSON.stringify({ video_path: videoPath, series_title: seriesTitle, episode_number: episodeNumber }),
+    });
+  }
+
+  async startAnimeReview(config: AnimeReviewConfigParams): Promise<{ job_id: string; status: string; message: string }> {
+    return this.request<{ job_id: string; status: string; message: string }>("/api/anime/generate-review", {
+      method: "POST",
+      body: JSON.stringify(config),
+    });
+  }
+
+  async getAnimeJobStatus(jobId: string): Promise<AnimeJobStatusInfo> {
+    return this.request<AnimeJobStatusInfo>(`/api/anime/status/${jobId}`);
+  }
+
+  async listAnimeJobs(): Promise<AnimeJobStatusInfo[]> {
+    return this.request<AnimeJobStatusInfo[]>("/api/anime/jobs");
+  }
+
+  // ---------------------------------------------------------------------------
+  // Super Motion Graphics API
+  // ---------------------------------------------------------------------------
+  async getMotionPresets(): Promise<MotionPresetInfo[]> {
+    return this.request<MotionPresetInfo[]>("/api/motion-graphics/presets");
+  }
+
+  async getMotionPreset(presetId: string): Promise<MotionPresetInfo> {
+    return this.request<MotionPresetInfo>(`/api/motion-graphics/presets/${presetId}`);
+  }
+
+  async previewMotionFrame(req: MotionPreviewRequest): Promise<MotionPreviewResponse> {
+    return this.request<MotionPreviewResponse>("/api/motion-graphics/preview", {
+      method: "POST",
+      body: JSON.stringify(req),
+    });
+  }
+
+  async renderMotionGraphic(req: MotionRenderRequest): Promise<MotionRenderResponse> {
+    return this.request<MotionRenderResponse>("/api/motion-graphics/render", {
+      method: "POST",
+      body: JSON.stringify(req),
+    });
   }
 }
 

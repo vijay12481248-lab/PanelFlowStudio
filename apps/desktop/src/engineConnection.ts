@@ -14,9 +14,17 @@ function desktopTokenReader(): TokenReader | undefined {
 
   // Standalone / Browser development mode token reader
   return async () => {
-    // 1. Vite build/dev injected environment variable
-    const envToken = (import.meta as any).env?.VITE_PANELFLOW_ENGINE_TOKEN;
-    if (envToken && typeof envToken === "string" && envToken.trim()) return envToken.trim();
+    // 1. Vite dev server endpoint (checks live token from disk first)
+    try {
+      const res = await fetch("/__engine_token");
+      if (res.ok) {
+        const text = await res.text();
+        if (text.trim()) {
+          try { localStorage.setItem("panelflow_engine_token", text.trim()); } catch {}
+          return text.trim();
+        }
+      }
+    } catch {}
 
     // 2. Query param (?token=...)
     try {
@@ -28,22 +36,14 @@ function desktopTokenReader(): TokenReader | undefined {
       }
     } catch {}
 
-    // 3. Persisted in localStorage
+    // 3. Vite build/dev injected environment variable
+    const envToken = (import.meta as any).env?.VITE_PANELFLOW_ENGINE_TOKEN;
+    if (envToken && typeof envToken === "string" && envToken.trim()) return envToken.trim();
+
+    // 4. Persisted in localStorage
     try {
       const stored = localStorage.getItem("panelflow_engine_token");
       if (stored && stored.trim()) return stored.trim();
-    } catch {}
-
-    // 4. Vite dev server endpoint
-    try {
-      const res = await fetch("/__engine_token");
-      if (res.ok) {
-        const text = await res.text();
-        if (text.trim()) {
-          try { localStorage.setItem("panelflow_engine_token", text.trim()); } catch {}
-          return text.trim();
-        }
-      }
     } catch {}
 
     return "";

@@ -30,6 +30,17 @@ export const RenderScreen: React.FC<RenderScreenProps> = ({
   const [bgmVolumeDb, setBgmVolumeDb] = useState<number>(-10.0);
   const [dialogueGainDb, setDialogueGainDb] = useState<number>(0.0);
 
+  // Panel Pacing, Framing & Voice Speed
+  const [minPanelDuration, setMinPanelDuration] = useState<number>(4.0);
+  const [panelZoomMode, setPanelZoomMode] = useState<"fit" | "motion" | "cover">("fit");
+  const [narrationSpeed, setNarrationSpeed] = useState<number>(1.0);
+
+  // Custom Output Save Destination
+  const [saveLocation, setSaveLocation] = useState<string>("");
+  const [quickDestinations, setQuickDestinations] = useState<
+    Array<{ id: string; label: string; path: string; exists: boolean; is_default?: boolean }>
+  >([]);
+
   // Visual QA & Media Tabs
   const [activeMediaTab, setActiveMediaTab] = useState<"video" | "contact_sheet" | "audit_samples">("video");
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -76,6 +87,42 @@ export const RenderScreen: React.FC<RenderScreenProps> = ({
     loadHistory();
   }, [loadHistory]);
 
+  useEffect(() => {
+    api.getQuickDestinations(project.id)
+      .then((res: any) => {
+        if (res && res.destinations) {
+          setQuickDestinations(res.destinations);
+          if (!saveLocation && res.default_directory) {
+            setSaveLocation(res.default_directory);
+          }
+        }
+      })
+      .catch((err: any) => console.warn("Failed to load quick destinations in RenderScreen:", err));
+  }, [project.id]);
+
+  const handleBrowseFolder = async () => {
+    try {
+      const res = await api.pickDirectoryNative(saveLocation || undefined, "Select Video Destination Folder");
+      if (res && res.selected && res.path) {
+        setSaveLocation(res.path);
+      }
+    } catch (e) {
+      console.warn("Folder picker error:", e);
+    }
+  };
+
+  const handleBrowseSaveFile = async () => {
+    try {
+      const defaultName = `${project.title.replace(/\s+/g, "_").toLowerCase()}_${selectedProfile}.mp4`;
+      const res = await api.pickSaveFileNative(saveLocation || undefined, defaultName, "Save Rendered Video As");
+      if (res && res.selected && res.path) {
+        setSaveLocation(res.path);
+      }
+    } catch (e) {
+      console.warn("Save file picker error:", e);
+    }
+  };
+
   // Polling for active render progress
   useEffect(() => {
     if (rendering && activeJob && activeJob.status !== "COMPLETE" && activeJob.status !== "FAILED" && activeJob.status !== "CANCELLED") {
@@ -120,10 +167,14 @@ export const RenderScreen: React.FC<RenderScreenProps> = ({
     try {
       const job = await api.startRender(project.id, {
         profileName: selectedProfile,
+        customOutputPath: saveLocation.trim() || undefined,
         subtitleEnabled: subtitlesEnabled,
         bgmVolumeDb,
         dialogueGainDb,
         isDraft: selectedProfile === "draft_720p",
+        minPanelDuration,
+        panelZoomMode,
+        narrationSpeed,
       });
       setActiveJob(job);
       await loadHistory();
@@ -255,12 +306,186 @@ export const RenderScreen: React.FC<RenderScreenProps> = ({
 
       {/* Render Configuration Settings Card */}
       {!isJobRunning && (
-        <Card className="p-5 bg-zinc-900 border-zinc-800 space-y-4">
-          <h2 className="text-sm font-bold text-zinc-100 uppercase tracking-wider">
-            Output Configuration
-          </h2>
+        <Card className="p-5 bg-zinc-900 border-zinc-800 space-y-5">
+          <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+            <h2 className="text-sm font-bold text-zinc-100 uppercase tracking-wider">
+              Output Configuration & Custom Controls
+            </h2>
+            <span className="text-xs text-zinc-400">Configure save location, panel reading speed, and voice pace</span>
+          </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          {/* 1. Destination Save Location */}
+          <div className="bg-zinc-950/60 border border-zinc-800/80 rounded-xl p-3.5 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-zinc-300 flex items-center gap-1.5">
+                <Icons.Folder className="w-4 h-4 text-indigo-400" />
+                <span>Video Save Destination</span>
+              </label>
+              <span className="text-[11px] text-zinc-400">Choose destination folder or exact output file</span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={saveLocation}
+                onChange={(e) => setSaveLocation(e.target.value)}
+                placeholder="Choose or paste output directory / file path..."
+                className="flex-1 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-xs text-zinc-200 font-mono focus:outline-none focus:border-indigo-500"
+              />
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={handleBrowseFolder}
+                className="text-xs shrink-0 flex items-center gap-1.5 border-zinc-700 hover:border-indigo-500"
+              >
+                <Icons.Folder className="w-3.5 h-3.5 text-indigo-400" />
+                <span>Browse Folder...</span>
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={handleBrowseSaveFile}
+                className="text-xs shrink-0 flex items-center gap-1.5 border-zinc-700 hover:border-emerald-500"
+              >
+                <Icons.Film className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Save As File...</span>
+              </Button>
+            </div>
+
+            {/* Quick preset buttons */}
+            <div className="flex items-center gap-2 pt-1 overflow-x-auto">
+              <span className="text-[10px] uppercase font-bold text-zinc-400 shrink-0">Quick Folders:</span>
+              {quickDestinations.map((d) => (
+                <button
+                  key={d.id}
+                  type="button"
+                  onClick={() => setSaveLocation(d.path)}
+                  className={`text-[11px] px-2.5 py-1 rounded-md border transition-all shrink-0 font-medium ${
+                    saveLocation === d.path
+                      ? "bg-indigo-950/70 text-indigo-300 border-indigo-500/80 shadow-sm"
+                      : "bg-zinc-900 text-zinc-400 hover:text-zinc-200 border-zinc-800 hover:border-zinc-700"
+                  }`}
+                  title={d.path}
+                >
+                  {d.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* 2. Pacing, Framing & Voice Speed */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Panel Pacing Floor */}
+            <div className="bg-zinc-950/60 border border-zinc-800/80 rounded-xl p-3.5 space-y-2.5">
+              <div className="flex justify-between items-center">
+                <div>
+                  <span className="font-semibold text-zinc-200 block text-xs">Panel Display Time (Pacing)</span>
+                  <span className="text-[11px] text-zinc-400">Guarantees each panel stays on screen long enough</span>
+                </div>
+                <span className="font-mono font-bold text-indigo-400 text-xs bg-indigo-950/60 border border-indigo-800/50 px-2 py-0.5 rounded">
+                  {minPanelDuration.toFixed(1)}s / panel
+                </span>
+              </div>
+
+              <div className="grid grid-cols-4 gap-1.5">
+                {[
+                  { label: "Brisk", dur: 2.0 },
+                  { label: "Standard", dur: 3.0 },
+                  { label: "Comfortable", dur: 4.0 },
+                  { label: "Relaxed", dur: 5.5 },
+                ].map((preset) => (
+                  <button
+                    key={preset.dur}
+                    type="button"
+                    onClick={() => setMinPanelDuration(preset.dur)}
+                    className={`py-1 px-1.5 rounded-lg border text-center transition-all ${
+                      minPanelDuration === preset.dur
+                        ? "bg-indigo-950/80 border-indigo-500 text-indigo-300 font-bold"
+                        : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200"
+                    }`}
+                  >
+                    <div className="text-[11px]">{preset.label}</div>
+                    <div className="text-[9px] text-zinc-400 font-mono">{preset.dur}s</div>
+                  </button>
+                ))}
+              </div>
+
+              <input
+                type="range"
+                min={1.5}
+                max={8.0}
+                step={0.5}
+                value={minPanelDuration}
+                onChange={(e) => setMinPanelDuration(parseFloat(e.target.value))}
+                className="w-full accent-indigo-500 cursor-pointer mt-1"
+              />
+            </div>
+
+            {/* Framing Mode & Narration Speed */}
+            <div className="bg-zinc-950/60 border border-zinc-800/80 rounded-xl p-3.5 space-y-2.5">
+              <div className="flex justify-between items-center">
+                <span className="font-semibold text-zinc-200 text-xs">Framing & Speech Speed</span>
+                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider ${
+                  panelZoomMode === "fit" ? "bg-emerald-950 text-emerald-400 border border-emerald-800/50" : "bg-indigo-950 text-indigo-400 border border-indigo-800/50"
+                }`}>
+                  {panelZoomMode === "fit" ? "Fit Entire Panel" : "Cinematic Zoom"}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPanelZoomMode("fit")}
+                  className={`p-2 rounded-lg border text-left transition-all ${
+                    panelZoomMode === "fit"
+                      ? "bg-emerald-950/40 border-emerald-500 text-emerald-300 font-bold"
+                      : "bg-zinc-900 border-zinc-800 text-zinc-400"
+                  }`}
+                >
+                  <div className="text-xs">Fit Entire Artwork</div>
+                  <div className="text-[10px] text-zinc-400 font-normal">No crop; dialog never cut off</div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPanelZoomMode("motion")}
+                  className={`p-2 rounded-lg border text-left transition-all ${
+                    panelZoomMode === "motion"
+                      ? "bg-indigo-950/40 border-indigo-500 text-indigo-300 font-bold"
+                      : "bg-zinc-900 border-zinc-800 text-zinc-400"
+                  }`}
+                >
+                  <div className="text-xs">Cinematic Zoom</div>
+                  <div className="text-[10px] text-zinc-400 font-normal">15% slow cinematic zoom</div>
+                </button>
+              </div>
+
+              {/* Narration speed pills */}
+              <div className="flex items-center justify-between pt-1 border-t border-zinc-800/80">
+                <span className="text-[11px] text-zinc-400">Narration Pace:</span>
+                <div className="flex items-center gap-1">
+                  {[0.85, 0.92, 1.0, 1.1, 1.2].map((r) => (
+                    <button
+                      key={r}
+                      type="button"
+                      onClick={() => setNarrationSpeed(r)}
+                      className={`px-2 py-0.5 rounded text-[11px] font-mono border transition-all ${
+                        narrationSpeed === r
+                          ? "bg-indigo-600 text-white border-indigo-500 font-bold"
+                          : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200"
+                      }`}
+                    >
+                      {r.toFixed(2)}x
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 3. Standard Profile & Audio Mix Controls */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 pt-1">
             {/* Output Profile */}
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-zinc-400">Profile</label>

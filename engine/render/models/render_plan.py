@@ -50,6 +50,7 @@ class RenderShotPlan(BaseModel):
     transition_in: TransitionInstruction = Field(default_factory=TransitionInstruction.hard_cut)
     transition_out: TransitionInstruction = Field(default_factory=TransitionInstruction.hard_cut)
     captions: List[CaptionCue] = Field(default_factory=list)
+    motion_graphic: Optional[Dict[str, Any]] = None
 
 
 class RenderAudioTrack(BaseModel):

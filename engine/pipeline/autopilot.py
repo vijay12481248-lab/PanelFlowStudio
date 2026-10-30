@@ -1,1300 +1,10616 @@
 """PanelFlow Studio End-to-End Autonomous Pipeline Orchestrator (Auto-Pilot)."""
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 from __future__ import annotations
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 import asyncio
+
+
+
+
+
+
+
 import json
+
+
+
+
+
+
+
 import logging
+
+
+
+
+
+
+
 import time
+
+
+
+
+
+
+
 from datetime import datetime, timezone
+
+
+
+
+
+
+
 from pathlib import Path
+
+
+
+
+
+
+
 from typing import Any, Callable, Dict, List, Optional
+
+
+
+
+
+
+
 import uuid
+
+
+
+
+
+
+
 from copy import deepcopy
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 from pydantic import BaseModel, Field
+
+
+
+
+
+
+
 from sqlalchemy.orm import Session
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 from engine.database.models import (
+
+
+
+
+
+
+
     AudioTimelineRecord,
+
+
+
+
+
+
+
     JobRecord,
+
+
+
+
+
+
+
     OCRRecord,
+
+
+
+
+
+
+
     PageRecord,
+
+
+
+
+
+
+
     PanelRecord,
+
+
+
+
+
+
+
     ProjectRecord,
+
+
+
+
+
+
+
     RenderJobRecord,
+
+
+
+
+
+
+
     SceneRecord,
+
+
+
+
+
+
+
     VideoScriptRecord,
+
+
+
+
+
+
+
     VisualTimelineRecord,
+
+
+
+
+
+
+
 )
+
+
+
+
+
+
+
 from engine.database.session import SessionLocal
+
+
+
+
+
+
+
 from engine.security.paths import resolve_contained_path
+
+
+
+
+
+
+
 from engine.jobs.manager import job_manager, PipelineCancellationToken
+
+
+
+
+
+
+
 from engine.story.packaging import generate_youtube_packaging
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 logger = logging.getLogger("panelflow.pipeline.autopilot")
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 class AutoPilotStageItem(BaseModel):
+
+
+
+
+
+
+
     id: str
+
+
+
+
+
+
+
     name: str
+
+
+
+
+
+
+
     status: str = Field(default="PENDING", pattern=r"^(PENDING|RUNNING|COMPLETED|SKIPPED|FAILED)$")
+
+
+
+
+
+
+
     progress: float = Field(default=0.0, ge=0.0, le=1.0)
+
+
+
+
+
+
+
     message: str = Field(default="")
+
+
+
+
+
+
+
     duration_sec: float = Field(default=0.0, ge=0.0)
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 class AutoPilotErrorDetails(BaseModel):
+
+
+
+
+
+
+
     stage_id: str
+
+
+
+
+
+
+
     category: str
+
+
+
+
+
+
+
     message: str
+
+
+
+
+
+
+
     troubleshooting: List[str]
+
+
+
+
+
+
+
     timestamp: str
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 class AutoPilotStatusResponse(BaseModel):
+
+
+
+
+
+
+
     project_id: str
+
+
+
+
+
+
+
     status: str = Field(default="IDLE", pattern=r"^(IDLE|RUNNING|COMPLETED|CANCELLED|FAILED)$")
+
+
+
+
+
+
+
     current_stage_id: Optional[str] = None
+
+
+
+
+
+
+
     overall_progress: float = Field(default=0.0, ge=0.0, le=1.0)
+
+
+
+
+
+
+
     stages: List[AutoPilotStageItem]
+
+
+
+
+
+
+
     logs: List[str]
+
+
+
+
+
+
+
     result: Dict[str, Any] = Field(default_factory=dict)
+
+
+
+
+
+
+
     error: Optional[str] = None
+
+
+
+
+
+
+
     error_details: Optional[AutoPilotErrorDetails] = None
+
+
+
+
+
+
+
     started_at: Optional[str] = None
+
+
+
+
+
+
+
     completed_at: Optional[str] = None
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 DEFAULT_STAGE_TIMEOUTS: Dict[str, float] = {
+
+
+
+
+
+
+
     "pages": 300.0,
+
+
+
+
+
+
+
     "panels": 180.0,
+
+
+
+
+
+
+
     "ocr": 300.0,
+
+
+
+
+
+
+
     "story": 900.0,
+
+
+
+
+
+
+
     "script": 180.0,
-    "audio": 600.0,
+
+
+
+
+
+
+
+    "audio": 3600.0,
+
+
+
+
+
+
+
     "motion": 180.0,
-    "render": 2400.0,
+
+
+
+
+
+
+
+    "render": 7200.0,
+
+
+
+
+
+
+
     "packaging": 180.0,
+
+
+
+
+
+
+
 }
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 def diagnose_error(stage_id: str, exc: Exception) -> AutoPilotErrorDetails:
+
+
+
+
+
+
+
     exc_msg = str(exc)
+
+
+
+
+
+
+
     category = "SYSTEM_ERROR"
+
+
+
+
+
+
+
     troubleshooting: List[str] = []
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     if isinstance(exc, (asyncio.TimeoutError, TimeoutError)) or "timed out" in exc_msg.lower():
+
+
+
+
+
+
+
         category = "TIMEOUT"
+
+
+
+
+
+
+
         if stage_id == "pages":
+
+
+
+
+
+
+
             troubleshooting = [
+
+
+
+
+
+
+
                 "Verify chapter source URL is reachable in your web browser.",
+
+
+
+
+
+
+
                 "Check network connection or potential site rate-limiting.",
+
+
+
+
+
+
+
                 "Alternative: import downloaded chapter images directly from a local folder.",
+
+
+
+
+
+
+
             ]
+
+
+
+
+
+
+
         elif stage_id == "panels":
+
+
+
+
+
+
+
             troubleshooting = [
+
+
+
+
+
+
+
                 "Panel detection exceeded time limit. Try running with 'Skip existing stages' or reduce image dimensions.",
+
+
+
+
+
+
+
             ]
+
+
+
+
+
+
+
         elif stage_id == "ocr":
+
+
+
+
+
+
+
             troubleshooting = [
+
+
+
+
+
+
+
                 "OCR text extraction timed out. Check that OCR models (EasyOCR / Manga-OCR) are installed and not hanging.",
+
+
+
+
+
+
+
             ]
+
+
+
+
+
+
+
         elif stage_id == "story":
+
+
+
+
+
+
+
             troubleshooting = [
+
+
+
+
+
+
+
                 "Narrative breakdown timed out. If visual storytelling is active, analyzing manga panels with a Vision LLM takes 5-7s per panel.",
+
+
+
+
+
+
+
                 "Completed panel checkpoints are safely cached on disk. Click 'Resume Pipeline' to resume from the latest checkpoint.",
+
+
+
+
+
+
+
                 "Ensure Ollama server is running with `ollama serve` and your GPU has sufficient memory.",
+
+
+
+
+
+
+
             ]
+
+
+
+
+
+
+
         elif stage_id == "script":
+
+
+
+
+
+
+
             troubleshooting = [
+
+
+
+
+
+
+
                 "Script adaptation timed out. Check LLM provider response times.",
+
+
+
+
+
+
+
             ]
+
+
+
+
+
+
+
         elif stage_id == "audio":
+
+
+
+
+
+
+
             troubleshooting = [
+
+
+
+
+
+
+
                 "Voice synthesis timed out. Ensure Chatterbox Turbo / local TTS has available GPU memory or enable CPU mode.",
+
+
+
+
+
+
+
             ]
+
+
+
+
+
+
+
         elif stage_id == "motion":
+
+
+
+
+
+
+
             troubleshooting = [
+
+
+
+
+
+
+
                 "Motion planning timed out. Check project timeline data.",
+
+
+
+
+
+
+
             ]
+
+
+
+
+
+
+
         elif stage_id == "render":
+
+
+
+
+
+
+
             troubleshooting = [
+
+
+
+
+
+
+
                 "Video rendering stalled or exceeded duration budget. Check FFmpeg installation and verify sufficient CPU/GPU and disk space.",
+
+
+
+
+
+
+
                 "Complex scenes with motion effects take ~0.3s per frame. The watchdog allows up to 40 minutes for complete chapters.",
+
+
+
+
+
+
+
                 "Click 'Resume Pipeline (Skip Finished)' to safely retry rendering.",
+
+
+
+
+
+
+
             ]
+
+
+
+
+
+
+
         else:
+
+
+
+
+
+
+
             troubleshooting = [
+
+
+
+
+
+
+
                 f"The '{stage_id}' stage exceeded maximum time budget.",
+
+
+
+
+
+
+
                 "Check CPU/GPU utilization and try restarting the stage.",
+
+
+
+
+
+
+
             ]
+
+
+
+
+
+
+
     elif stage_id == "pages":
+
+
+
+
+
+
+
         category = "ACQUISITION_OR_NORMALIZATION"
+
+
+
+
+
+
+
         troubleshooting = [
+
+
+
+
+
+
+
             "Verify chapter source URL or folder path exists and contains valid manga images (JPG/PNG/WEBP).",
+
+
+
+
+
+
+
             "Check that image files are not corrupted or 0 bytes.",
-        ]
-    elif stage_id == "panels":
-        category = "PANEL_DETECTION_ERROR"
-        troubleshooting = [
-            "Verify that pages are normalized to 1920px standard.",
-            "Adjust panel detection threshold if panels have unusual gutters or borders.",
-        ]
-    elif stage_id == "ocr":
-        category = "OCR_ERROR"
-        troubleshooting = [
-            "Ensure OCR dependencies and language models are downloaded.",
-            "Check that panel image crops exist and are readable.",
-        ]
-    elif stage_id == "story":
-        category = "NARRATIVE_IR_ERROR"
-        troubleshooting = [
-            "Verify LLM provider connectivity (Ollama / Anthropic / OpenAI / Mock).",
-            "Ensure at least one panel observation is available for story reconstruction.",
-        ]
-    elif stage_id == "script":
-        category = "SCRIPT_GENERATION_ERROR"
-        troubleshooting = [
-            "Verify narrative breakdown exists and has valid scenes before generating script.",
-        ]
-    elif stage_id == "audio":
-        category = "AUDIO_SYNTHESIS_ERROR"
-        troubleshooting = [
-            "Verify Chatterbox or TTS engine is installed under C:\\Tools or configured in settings.",
-            "Check that audio dialogue output directory is writable.",
-        ]
-    elif stage_id == "render":
-        category = "RENDER_ENCODING_ERROR"
-        troubleshooting = [
-            "Verify that FFmpeg is installed and accessible in the system PATH.",
-            "Ensure output directory has write permissions and sufficient disk space.",
-        ]
-    else:
-        troubleshooting = [
-            "Review the log console below for detailed error trace.",
-            "Enable 'Skip existing completed stages' and click 'Start Pipeline' to resume from the last successful stage.",
+
+
+
+
+
+
+
         ]
 
+
+
+
+
+
+
+    elif stage_id == "panels":
+
+
+
+
+
+
+
+        category = "PANEL_DETECTION_ERROR"
+
+
+
+
+
+
+
+        troubleshooting = [
+
+
+
+
+
+
+
+            "Verify that pages are normalized to 1920px standard.",
+
+
+
+
+
+
+
+            "Adjust panel detection threshold if panels have unusual gutters or borders.",
+
+
+
+
+
+
+
+        ]
+
+
+
+
+
+
+
+    elif stage_id == "ocr":
+
+
+
+
+
+
+
+        category = "OCR_ERROR"
+
+
+
+
+
+
+
+        troubleshooting = [
+
+
+
+
+
+
+
+            "Ensure OCR dependencies and language models are downloaded.",
+
+
+
+
+
+
+
+            "Check that panel image crops exist and are readable.",
+
+
+
+
+
+
+
+        ]
+
+
+
+
+
+
+
+    elif stage_id == "story":
+
+
+
+
+
+
+
+        category = "NARRATIVE_IR_ERROR"
+
+
+
+
+
+
+
+        troubleshooting = [
+
+
+
+
+
+
+
+            "Verify LLM provider connectivity (Ollama / Anthropic / OpenAI / Mock).",
+
+
+
+
+
+
+
+            "Ensure at least one panel observation is available for story reconstruction.",
+
+
+
+
+
+
+
+        ]
+
+
+
+
+
+
+
+    elif stage_id == "script":
+
+
+
+
+
+
+
+        category = "SCRIPT_GENERATION_ERROR"
+
+
+
+
+
+
+
+        troubleshooting = [
+
+
+
+
+
+
+
+            "Verify narrative breakdown exists and has valid scenes before generating script.",
+
+
+
+
+
+
+
+        ]
+
+
+
+
+
+
+
+    elif stage_id == "audio":
+
+
+
+
+
+
+
+        category = "AUDIO_SYNTHESIS_ERROR"
+
+
+
+
+
+
+
+        troubleshooting = [
+
+
+
+
+
+
+
+            "Verify Chatterbox or TTS engine is installed under C:\\Tools or configured in settings.",
+
+
+
+
+
+
+
+            "Check that audio dialogue output directory is writable.",
+
+
+
+
+
+
+
+        ]
+
+
+
+
+
+
+
+    elif stage_id == "render":
+
+
+
+
+
+
+
+        category = "RENDER_ENCODING_ERROR"
+
+
+
+
+
+
+
+        troubleshooting = [
+
+
+
+
+
+
+
+            "Verify that FFmpeg is installed and accessible in the system PATH.",
+
+
+
+
+
+
+
+            "Ensure output directory has write permissions and sufficient disk space.",
+
+
+
+
+
+
+
+        ]
+
+
+
+
+
+
+
+    else:
+
+
+
+
+
+
+
+        troubleshooting = [
+
+
+
+
+
+
+
+            "Review the log console below for detailed error trace.",
+
+
+
+
+
+
+
+            "Enable 'Skip existing completed stages' and click 'Start Pipeline' to resume from the last successful stage.",
+
+
+
+
+
+
+
+        ]
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     return AutoPilotErrorDetails(
+
+
+
+
+
+
+
         stage_id=stage_id,
+
+
+
+
+
+
+
         category=category,
+
+
+
+
+
+
+
         message=exc_msg,
+
+
+
+
+
+
+
         troubleshooting=troubleshooting,
+
+
+
+
+
+
+
         timestamp=datetime.now(timezone.utc).isoformat(),
+
+
+
+
+
+
+
     )
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 STAGE_DEFINITIONS = [
+
+
+
+
+
+
+
     ("pages", "1. Page Ingest & Normalization"),
+
+
+
+
+
+
+
     ("panels", "2. Panel Segmentation & Ordering"),
+
+
+
+
+
+
+
     ("ocr", "3. Speech Bubble & Text Extraction"),
+
+
+
+
+
+
+
     ("story", "4. Narrative & Scene Breakdown"),
+
+
+
+
+
+
+
     ("script", "5. Script & Dialogue Adaptation"),
+
+
+
+
+
+
+
     ("audio", "6. Master Audio & Voice Synthesis"),
+
+
+
+
+
+
+
     ("motion", "7. Motion Director Keyframing"),
+
+
+
+
+
+
+
     ("render", "8. Production Video Rendering (MP4)"),
+
+
+
+
+
+
+
     ("packaging", "9. YouTube Packaging & AI Thumbnail"),
+
+
+
+
+
+
+
 ]
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 class AutoPilotRunner:
+
+
+
+
+
+
+
     def __init__(self, project_id: str, options: dict[str, Any] | None = None) -> None:
+
+
+
+
+
+
+
         self.project_id = project_id
+
+
+
+
+
+
+
         self.options = options or {}
+
+
+
+
+
+
+
         self.status = "IDLE"
+
+
+
+
+
+
+
         self.current_stage_id: Optional[str] = None
+
+
+
+
+
+
+
         self.overall_progress = 0.0
+
+
+
+
+
+
+
         self.stages: List[AutoPilotStageItem] = [
+
+
+
+
+
+
+
             AutoPilotStageItem(id=sid, name=sname) for sid, sname in STAGE_DEFINITIONS
+
+
+
+
+
+
+
         ]
+
+
+
+
+
+
+
         self.logs: List[str] = []
+
+
+
+
+
+
+
         self.result: Dict[str, Any] = {}
+
+
+
+
+
+
+
         self.error: Optional[str] = None
+
+
+
+
+
+
+
         self.error_details: Optional[AutoPilotErrorDetails] = None
+
+
+
+
+
+
+
         self.stage_timeouts: Dict[str, float] = self.options.get("stage_timeouts", {})
+
+
+
+
+
+
+
         self.is_cancelled = False
+
+
+
+
+
+
+
         self.started_at: Optional[str] = None
+
+
+
+
+
+
+
         self.completed_at: Optional[str] = None
+
+
+
+
+
+
+
         self._task: Optional[asyncio.Task] = None
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     def log(self, message: str) -> None:
+
+
+
+
+
+
+
         now = datetime.now(timezone.utc).strftime("%H:%M:%S")
+
+
+
+
+
+
+
         entry = f"[{now}] {message}"
+
+
+
+
+
+
+
         self.logs.append(entry)
+
+
+
+
+
+
+
         if len(self.logs) > 500:
+
+
+
+
+
+
+
             self.logs = self.logs[-500:]
+
+
+
+
+
+
+
         logger.info("[AutoPilot:%s] %s", self.project_id, message)
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     def get_stage(self, stage_id: str) -> AutoPilotStageItem:
+
+
+
+
+
+
+
         for s in self.stages:
+
+
+
+
+
+
+
             if s.id == stage_id:
+
+
+
+
+
+
+
                 return s
+
+
+
+
+
+
+
         raise KeyError(stage_id)
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     def update_stage(
+
+
+
+
+
+
+
         self,
+
+
+
+
+
+
+
         stage_id: str,
+
+
+
+
+
+
+
         *,
+
+
+
+
+
+
+
         status: Optional[str] = None,
+
+
+
+
+
+
+
         progress: Optional[float] = None,
+
+
+
+
+
+
+
         message: Optional[str] = None,
+
+
+
+
+
+
+
     ) -> None:
+
+
+
+
+
+
+
         stage = self.get_stage(stage_id)
+
+
+
+
+
+
+
         if status:
+
+
+
+
+
+
+
             stage.status = status
+
+
+
+
+
+
+
         if progress is not None:
+
+
+
+
+
+
+
             stage.progress = progress
+
+
+
+
+
+
+
         if message is not None:
+
+
+
+
+
+
+
             stage.message = message
+
+
+
+
+
+
+
         self._recompute_overall_progress()
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     def _recompute_overall_progress(self) -> None:
+
+
+
+
+
+
+
         total = len(self.stages)
+
+
+
+
+
+
+
         done = sum(1.0 if s.status in ("COMPLETED", "SKIPPED") else s.progress for s in self.stages)
+
+
+
+
+
+
+
         self.overall_progress = round(min(1.0, done / total), 3)
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     def snapshot(self) -> AutoPilotStatusResponse:
+
+
+
+
+
+
+
         return AutoPilotStatusResponse(
+
+
+
+
+
+
+
             project_id=self.project_id,
+
+
+
+
+
+
+
             status=self.status,
+
+
+
+
+
+
+
             current_stage_id=self.current_stage_id,
+
+
+
+
+
+
+
             overall_progress=self.overall_progress,
+
+
+
+
+
+
+
             stages=self.stages,
+
+
+
+
+
+
+
             logs=self.logs,
+
+
+
+
+
+
+
             result=self.result,
+
+
+
+
+
+
+
             error=self.error,
+
+
+
+
+
+
+
             error_details=self.error_details,
+
+
+
+
+
+
+
             started_at=self.started_at,
+
+
+
+
+
+
+
             completed_at=self.completed_at,
+
+
+
+
+
+
+
         )
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     def cancel(self) -> None:
+
+
+
+
+
+
+
         self.is_cancelled = True
+
+
+
+
+
+
+
         self.status = "CANCELLED"
+
+
+
+
+
+
+
         self.log("Auto-Pilot run was cancelled by user.")
+
+
+
+
+
+
+
         if self._task and not self._task.done():
+
+
+
+
+
+
+
             self._task.cancel()
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     def _create_cancel_token(self) -> PipelineCancellationToken:
+
+
+
+
+
+
+
         token = PipelineCancellationToken()
+
+
+
+
+
+
+
         if self.is_cancelled:
+
+
+
+
+
+
+
             token.cancel()
+
+
+
+
+
+
+
         return token
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     def _make_progress_cb(self, stage_id: str, start_pct: float, end_pct: float):
+
+
+
+
+
+
+
         last_log_t = [0.0]
+
+
+
+
+
+
+
         last_msg = [""]
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         def _cb(fraction: float, msg: str):
+
+
+
+
+
+
+
             p = start_pct + fraction * (end_pct - start_pct)
+
+
+
+
+
+
+
             self.update_stage(stage_id, progress=round(p, 2), message=msg)
+
+
+
+
+
+
+
             now = time.monotonic()
+
+
+
+
+
+
+
             if msg and msg != last_msg[0] and (now - last_log_t[0] > 3.0 or fraction >= 0.99):
+
+
+
+
+
+
+
                 last_log_t[0] = now
+
+
+
+
+
+
+
                 last_msg[0] = msg
+
+
+
+
+
+
+
                 stage_name = stage_id.capitalize()
+
+
+
+
+
+
+
                 self.log(f"{stage_name} Stage: {msg}")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
         return _cb
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     def _calculate_stage_timeout(self, stage_id: str) -> float:
+
+
+
+
+
+
+
         if stage_id in self.stage_timeouts:
+
+
+
+
+
+
+
             return float(self.stage_timeouts[stage_id])
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         try:
+
+
+
+
+
+
+
             with SessionLocal() as db:
+
+
+
+
+
+
+
                 project = db.query(ProjectRecord).filter(ProjectRecord.id == self.project_id).first()
+
+
+
+
+
+
+
                 if project:
+
+
+
+
+
+
+
                     panels_count = len(project.panels or [])
+
+
+
+
+
+
+
                     is_visual = bool((project.settings or {}).get("visual_storytelling"))
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
                     if stage_id == "story":
+
+
+
+
+
+
+
                         # In visual mode, allocate 16s per panel + 180s buffer for chapter breakdown
+
+
+
+
+
+
+
                         if is_visual and panels_count > 0:
+
+
+
+
+
+
+
                             return max(900.0, float(panels_count * 16.0 + 180.0))
+
+
+
+
+
+
+
                         elif panels_count > 0:
+
+
+
+
+
+
+
                             return max(300.0, float(panels_count * 4.0 + 120.0))
+
+
+
+
+
+
+
                     elif stage_id == "ocr":
+
+
+
+
+
+
+
                         if panels_count > 0:
+
+
+
+
+
+
+
                             return max(240.0, float(panels_count * 5.0 + 120.0))
+
+
+
+
+
+
+
                     elif stage_id == "audio":
+
+
+
+
+
+
+
                         se_scenes = (project.settings or {}).get("story_editor_state", {}).get("scenes", [])
+
+
+
+
+
+
+
                         scenes_count = len(se_scenes) or max(1, panels_count // 3)
-                        return max(600.0, float(scenes_count * 15.0 + 180.0))
+
+
+
+
+
+
+
+                        return max(3600.0, float(panels_count * 10.0 + 600.0))
+
+
+
+
+
+
+
                     elif stage_id == "render":
-                        se_scenes = (project.settings or {}).get("story_editor_state", {}).get("scenes", [])
-                        scenes_count = len(se_scenes) or max(1, panels_count // 3)
-                        return max(2400.0, float(scenes_count * 180.0 + 600.0))
+
+
+
+
+
+
+
+                        # Large manga chapters (e.g. 200+ pages, 50+ min cuts) require adequate render time.
+
+
+
+
+
+
+
+                        panels_timeout = float(panels_count * 25.0 + 3600.0)
+
+
+
+
+
+
+
+                        return max(7200.0, panels_timeout)
+
+
+
+
+
+
+
         except Exception as e:
+
+
+
+
+
+
+
             logger.warning("Could not calculate dynamic timeout for stage %s: %s", stage_id, e)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
         return DEFAULT_STAGE_TIMEOUTS.get(stage_id, 600.0)
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     async def _execute_stage(self, stage_id: str, stage_coro_fn) -> bool:
+
+
+
+
+
+
+
         if self.is_cancelled:
+
+
+
+
+
+
+
             return False
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
         timeout_sec = self._calculate_stage_timeout(stage_id)
+
+
+
+
+
+
+
         self.current_stage_id = stage_id
+
+
+
+
+
+
+
         start_t = time.monotonic()
+
+
+
+
+
+
+
         try:
+
+
+
+
+
+
+
             await asyncio.wait_for(stage_coro_fn(), timeout=timeout_sec)
+
+
+
+
+
+
+
             if self.is_cancelled:
+
+
+
+
+
+
+
                 return False
+
+
+
+
+
+
+
             return True
+
+
+
+
+
+
+
         except asyncio.CancelledError:
+
+
+
+
+
+
+
             self.is_cancelled = True
+
+
+
+
+
+
+
             self.status = "CANCELLED"
+
+
+
+
+
+
+
             self.log(f"Stage '{stage_id}' was cancelled.")
+
+
+
+
+
+
+
             return False
+
+
+
+
+
+
+
         except (asyncio.TimeoutError, TimeoutError) as t_exc:
+
+
+
+
+
+
+
             duration = round(time.monotonic() - start_t, 1)
+
+
+
+
+
+
+
             detail = str(t_exc).strip()
+
+
+
+
+
+
+
             if detail and detail != "TimeoutError" and detail != "":
+
+
+
+
+
+
+
                 timeout_msg = f"Stage '{stage_id}' timed out after {duration}s: {detail}"
+
+
+
+
+
+
+
                 err_diag = diagnose_error(stage_id, t_exc)
+
+
+
+
+
+
+
             else:
+
+
+
+
+
+
+
                 timeout_msg = f"Stage '{stage_id}' timed out after {duration}s (limit: {int(timeout_sec)}s)."
+
+
+
+
+
+
+
                 err_diag = diagnose_error(stage_id, TimeoutError(timeout_msg))
+
+
+
+
+
+
+
             logger.warning("[AutoPilot:%s] %s", self.project_id, timeout_msg)
+
+
+
+
+
+
+
             self.status = "FAILED"
+
+
+
+
+
+
+
             self.error = timeout_msg
+
+
+
+
+
+
+
             self.error_details = err_diag
+
+
+
+
+
+
+
             self.update_stage(stage_id, status="FAILED", message=timeout_msg)
+
+
+
+
+
+
+
             self.log(f"Auto-Pilot FAILED: {timeout_msg}")
+
+
+
+
+
+
+
             for tip in err_diag.troubleshooting:
+
+
+
+
+
+
+
                 self.log(f"Troubleshooting: {tip}")
+
+
+
+
+
+
+
             return False
+
+
+
+
+
+
+
         except Exception as exc:
+
+
+
+
+
+
+
             duration = round(time.monotonic() - start_t, 1)
+
+
+
+
+
+
+
             err_diag = diagnose_error(stage_id, exc)
+
+
+
+
+
+
+
             self.status = "FAILED"
+
+
+
+
+
+
+
             self.error = str(exc)
+
+
+
+
+
+
+
             self.error_details = err_diag
+
+
+
+
+
+
+
             self.update_stage(stage_id, status="FAILED", message=str(exc))
+
+
+
+
+
+
+
             self.log(f"Auto-Pilot FAILED in stage '{stage_id}': {exc}")
+
+
+
+
+
+
+
             for tip in err_diag.troubleshooting:
+
+
+
+
+
+
+
                 self.log(f"Troubleshooting: {tip}")
+
+
+
+
+
+
+
             logger.exception("Auto-Pilot failure in project %s stage %s", self.project_id, stage_id)
+
+
+
+
+
+
+
             return False
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     async def execute(self) -> None:
+
+
+
+
+
+
+
         self.status = "RUNNING"
+
+
+
+
+
+
+
         self.started_at = datetime.now(timezone.utc).isoformat()
+
+
+
+
+
+
+
         self.error = None
+
+
+
+
+
+
+
         self.error_details = None
+
+
+
+
+
+
+
         self.log(f"Starting End-to-End Auto-Pilot pipeline for project {self.project_id}")
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         profile_name = self.options.get("target_profile", "standard_1080p")
+
+
+
+
+
+
+
         skip_existing = self.options.get("skip_existing_stages", True)
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         try:
+
+
+
+
+
+
+
             # 1. PAGE STAGE
+
+
+
+
+
+
+
             if not await self._execute_stage("pages", lambda: self._run_stage_pages(skip_existing)):
+
+
+
+
+
+
+
                 return
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
             # 2. PANEL STAGE
+
+
+
+
+
+
+
             if not await self._execute_stage("panels", lambda: self._run_stage_panels(skip_existing)):
+
+
+
+
+
+
+
                 return
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
             # 3. OCR STAGE
+
+
+
+
+
+
+
             if not await self._execute_stage("ocr", lambda: self._run_stage_ocr(skip_existing)):
+
+
+
+
+
+
+
                 return
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
             # 4. STORY STAGE
+
+
+
+
+
+
+
             if not await self._execute_stage("story", lambda: self._run_stage_story(skip_existing and not self.options.get("regenerate_story", False))):
+
+
+
+
+
+
+
                 return
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
             # 5. SCRIPT STAGE
+
+
+
+
+
+
+
             if not await self._execute_stage("script", lambda: self._run_stage_script(skip_existing and not self.options.get("regenerate_story", False))):
+
+
+
+
+
+
+
                 return
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
             # 6. AUDIO STAGE
+
+
+
+
+
+
+
             if not await self._execute_stage("audio", lambda: self._run_stage_audio(skip_existing)):
+
+
+
+
+
+
+
                 return
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
             # 7. MOTION STAGE
+
+
+
+
+
+
+
             if not await self._execute_stage("motion", lambda: self._run_stage_motion(skip_existing)):
+
+
+
+
+
+
+
                 return
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
             # 8. RENDER STAGE
+
+
+
+
+
+
+
             if not await self._execute_stage("render", lambda: self._run_stage_render(
+
+
+
+
+
+
+
                     profile_name, skip_existing and not self.options.get("force_render", False))):
+
+
+
+
+
+
+
                 return
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
             # 9. PACKAGING & THUMBNAIL STAGE
+
+
+
+
+
+
+
             if self.options.get("video_only", False):
+
+
+
+
+
+
+
                 self.update_stage("packaging", status="SKIPPED", progress=1.0,
+
+
+
+
+
+
+
                                   message="Video-only run; release packaging not requested")
+
+
+
+
+
+
+
             elif not await self._execute_stage("packaging", lambda: self._run_stage_packaging(profile_name)):
+
+
+
+
+
+
+
                 return
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
             self.status = "COMPLETED"
+
+
+
+
+
+
+
             self.overall_progress = 1.0
+
+
+
+
+
+
+
             self.error = None
+
+
+
+
+
+
+
             self.error_details = None
+
+
+
+
+
+
+
             self.completed_at = datetime.now(timezone.utc).isoformat()
+
+
+
+
+
+
+
             self.log("Auto-Pilot completed all 9 stages. Review the rendered video before release.")
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         except asyncio.CancelledError:
+
+
+
+
+
+
+
             self.status = "CANCELLED"
+
+
+
+
+
+
+
             self.log("Auto-Pilot pipeline cancelled during execution.")
+
+
+
+
+
+
+
         except Exception as exc:
+
+
+
+
+
+
+
             self.status = "FAILED"
+
+
+
+
+
+
+
             self.error = str(exc)
+
+
+
+
+
+
+
             diag = diagnose_error(self.current_stage_id or "general", exc)
+
+
+
+
+
+
+
             self.error_details = diag
+
+
+
+
+
+
+
             if self.current_stage_id:
+
+
+
+
+
+
+
                 self.update_stage(self.current_stage_id, status="FAILED", message=str(exc))
+
+
+
+
+
+
+
             self.log(f"Auto-Pilot pipeline FAILED: {exc}")
+
+
+
+
+
+
+
             for tip in diag.troubleshooting:
+
+
+
+
+
+
+
                 self.log(f"Troubleshooting: {tip}")
+
+
+
+
+
+
+
             logger.exception("Auto-Pilot failure in project %s", self.project_id)
+
+
+
+
+
+
+
         finally:
+
+
+
+
+
+
+
             self._persist_status()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     # --- STAGE IMPLEMENTATIONS ---
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     async def _run_stage_pages(self, skip_existing: bool) -> None:
+
+
+
+
+
+
+
         s_id = "pages"
+
+
+
+
+
+
+
         self.current_stage_id = s_id
+
+
+
+
+
+
+
         start_t = time.monotonic()
+
+
+
+
+
+
+
         self.update_stage(s_id, status="RUNNING", progress=0.05, message="Inspecting pages...")
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         from engine.projects.service import project_service
+
+
+
+
+
+
+
         from engine.database.models import NormalizationRecord, PageRecord
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         with SessionLocal() as db:
+
+
+
+
+
+
+
             project = db.query(ProjectRecord).filter(ProjectRecord.id == self.project_id).first()
+
+
+
+
+
+
+
             if not project:
+
+
+
+
+
+
+
                 raise ValueError("Project not found")
+
+
+
+
+
+
+
             pages = list(project.pages or [])
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
             # 1. Automated Acquisition if project was newly created from URL without pages yet
+
+
+
+
+
+
+
             if not pages:
+
+
+
+
+
+
+
                 source_loc = project.source_url or (project.source_metadata or {}).get("path")
+
+
+
+
+
+
+
                 if source_loc:
+
+
+
+
+
+
+
                     self.log(f"Page Stage: No pages downloaded yet. Starting automated ingestion from {source_loc}...")
+
+
+
+
+
+
+
                     self.update_stage(s_id, progress=0.1, message="Connecting to chapter source...")
+
+
+
+
+
+
+
                     from engine.acquisition.adapters.registry import get_default_registry
+
+
+
+
+
+
+
                     registry = get_default_registry()
+
+
+
+
+
+
+
                     job_id = project_service.start_acquisition_job(db, self.project_id, registry)
+
+
+
+
+
+
+
                     acq_start = time.monotonic()
+
+
+
+
+
+
+
                     max_acq_wait = max(600.0, float(self.options.get("acquisition_timeout_sec", 600.0)))
+
+
+
+
+
+
+
                     stall_acq_timeout = 90.0
+
+
+
+
+
+
+
                     last_acq_activity = time.monotonic()
+
+
+
+
+
+
+
                     last_acq_prog = 0.0
+
+
+
+
+
+
+
                     while True:
+
+
+
+
+
+
+
                         if self.is_cancelled:
+
+
+
+
+
+
+
                             job_manager.cancel_job(job_id)
+
+
+
+
+
+
+
                             return
+
+
+
+
+
+
+
                         now = time.monotonic()
+
+
+
+
+
+
+
                         if now - acq_start > max_acq_wait:
+
+
+
+
+
+
+
                             job_manager.cancel_job(job_id)
+
+
+
+
+
+
+
                             raise TimeoutError(
+
+
+
+
+
+
+
                                 f"Page acquisition timed out after {int(max_acq_wait)}s. "
+
+
+
+
+
+
+
                                 f"Please verify chapter source URL ({source_loc}) or network connectivity."
+
+
+
+
+
+
+
                             )
+
+
+
+
+
+
+
                         await asyncio.sleep(0.5)
+
+
+
+
+
+
+
                         j = job_manager.get_job(job_id)
+
+
+
+
+
+
+
                         if not j:
+
+
+
+
+
+
+
                             break
+
+
+
+
+
+
+
                         cur_p = float(j.get("progress") or 0.0)
+
+
+
+
+
+
+
                         if cur_p > last_acq_prog:
+
+
+
+
+
+
+
                             last_acq_prog = cur_p
+
+
+
+
+
+
+
                             last_acq_activity = now
+
+
+
+
+
+
+
                         elif now - last_acq_activity > stall_acq_timeout:
+
+
+
+
+
+
+
                             job_manager.cancel_job(job_id)
+
+
+
+
+
+
+
                             raise TimeoutError(
+
+
+
+
+
+
+
                                 f"Page acquisition stalled: no download progress for {int(stall_acq_timeout)}s. "
+
+
+
+
+
+
+
                                 f"Check chapter source URL ({source_loc}) or network connectivity."
+
+
+
+
+
+
+
                             )
+
+
+
+
+
+
+
                         if j["status"] in ("SUCCEEDED", "COMPLETED"):
+
+
+
+
+
+
+
                             self.log("Page Stage: Chapter acquisition completed.")
+
+
+
+
+
+
+
                             break
+
+
+
+
+
+
+
                         elif j["status"] in ("FAILED", "CANCELLED"):
+
+
+
+
+
+
+
                             raise RuntimeError(f"Page acquisition failed: {j.get('error')}")
+
+
+
+
+
+
+
                         elif j.get("progress"):
+
+
+
+
+
+
+
                             self.update_stage(s_id, progress=0.1 + 0.3 * j["progress"], message=f"Downloading pages ({int(j['progress']*100)}%)...")
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
                     db.expire_all()
+
+
+
+
+
+
+
                     project = db.query(ProjectRecord).filter(ProjectRecord.id == self.project_id).first()
+
+
+
+
+
+
+
                     if not project:
+
+
+
+
+
+
+
                         raise ValueError(f"Project not found: {self.project_id}")
+
+
+
+
+
+
+
                     pages = list(project.pages or [])
+
+
+
+
+
+
+
                 if not pages:
+
+
+
+
+
+
+
                     raise ValueError("Project has no pages ingested")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
             self.log(f"Page Stage: Found {len(pages)} pages in project.")
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
             # 2. Confirm acquisition baseline
+
+
+
+
+
+
+
             try:
+
+
+
+
+
+
+
                 project_service.confirm_acquisition(db, self.project_id)
+
+
+
+
+
+
+
             except Exception as e:
+
+
+
+
+
+
+
                 self.log(f"Page confirmation note: {e}")
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
             # 3. Automated Normalization to 1920px standard
+
+
+
+
+
+
+
             norm_count = db.query(NormalizationRecord).filter(NormalizationRecord.project_id == self.project_id).count()
+
+
+
+
+
+
+
             if norm_count < len(pages) or not skip_existing:
+
+
+
+
+
+
+
                 self.log(f"Page Stage: Normalizing {len(pages)} pages to 1920px broadcast standard...")
+
+
+
+
+
+
+
                 self.update_stage(s_id, progress=0.45, message="Normalizing page resolution...")
+
+
+
+
+
+
+
                 norm_coro = project_service.normalize_project(db, self.project_id, target_width=1920, operation_only=True)
+
+
+
+
+
+
+
                 token = self._create_cancel_token()
+
+
+
+
+
+
+
                 cb = self._make_progress_cb(s_id, 0.45, 0.95)
+
+
+
+
+
+
+
                 await norm_coro(token, cb)
+
+
+
+
+
+
+
                 self.log(f"Page Stage: Successfully normalized {len(pages)} pages.")
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         self.get_stage(s_id).duration_sec = round(time.monotonic() - start_t, 2)
+
+
+
+
+
+
+
         self.update_stage(s_id, status="COMPLETED", progress=1.0, message=f"Verified & normalized {len(pages)} pages")
+
+
+
+
+
+
+
         self.log(f"Page Stage completed in {self.get_stage(s_id).duration_sec}s")
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     async def _run_stage_panels(self, skip_existing: bool) -> None:
+
+
+
+
+
+
+
         s_id = "panels"
+
+
+
+
+
+
+
         self.current_stage_id = s_id
+
+
+
+
+
+
+
         start_t = time.monotonic()
+
+
+
+
+
+
+
         self.update_stage(s_id, status="RUNNING", progress=0.1, message="Checking panel segmentation...")
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         from engine.projects.service import project_service
+
+
+
+
+
+
+
         from engine.database.models import PanelRecord
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         with SessionLocal() as db:
+
+
+
+
+
+
+
             project = db.query(ProjectRecord).filter(ProjectRecord.id == self.project_id).first()
+
+
+
+
+
+
+
             if not project:
+
+
+
+
+
+
+
                 raise ValueError("Project not found")
+
+
+
+
+
+
+
             panels = [p for p in project.panels or [] if p.status != "IGNORED"]
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
             if panels and skip_existing:
+
+
+
+
+
+
+
                 self.log(f"Panel Stage: Using {len(panels)} existing segmented panels.")
+
+
+
+
+
+
+
                 try:
+
+
+
+
+
+
+
                     project_service.confirm_panels(db, self.project_id)
+
+
+
+
+
+
+
                 except Exception:
+
+
+
+
+
+
+
                     pass
+
+
+
+
+
+
+
             else:
+
+
+
+
+
+
+
                 self.log("Panel Stage: Running panel detection algorithm...")
+
+
+
+
+
+
+
                 self.update_stage(s_id, progress=0.2, message="Detecting panels from pages...")
+
+
+
+
+
+
+
                 detect_coro = project_service.detect_panels_project(db, self.project_id, operation_only=True)
+
+
+
+
+
+
+
                 token = self._create_cancel_token()
+
+
+
+
+
+
+
                 cb = self._make_progress_cb(s_id, 0.2, 0.9)
+
+
+
+
+
+
+
                 await detect_coro(token, cb)
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
                 project_service.confirm_panels(db, self.project_id)
+
+
+
+
+
+
+
                 panels = db.query(PanelRecord).filter(PanelRecord.project_id == self.project_id, PanelRecord.status != "IGNORED").all()
+
+
+
+
+
+
+
                 self.log(f"Panel Stage: Successfully detected {len(panels)} panels.")
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         self.get_stage(s_id).duration_sec = round(time.monotonic() - start_t, 2)
+
+
+
+
+
+
+
         self.update_stage(s_id, status="COMPLETED", progress=1.0, message=f"{len(panels)} panels confirmed")
+
+
+
+
+
+
+
         self.log(f"Panel Stage completed in {self.get_stage(s_id).duration_sec}s")
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     async def _run_stage_ocr(self, skip_existing: bool) -> None:
+
+
+
+
+
+
+
         s_id = "ocr"
+
+
+
+
+
+
+
         self.current_stage_id = s_id
+
+
+
+
+
+
+
         start_t = time.monotonic()
+
+
+
+
+
+
+
         self.update_stage(s_id, status="RUNNING", progress=0.1, message="Processing text bubbles...")
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         from engine.projects.service import project_service
+
+
+
+
+
+
+
         from engine.database.models import OCRRecord, TextRegionRecord
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         with SessionLocal() as db:
+
+
+
+
+
+
+
             project = db.query(ProjectRecord).filter(ProjectRecord.id == self.project_id).first()
+
+
+
+
+
+
+
             if not project:
+
+
+
+
+
+
+
                 raise ValueError("Project not found")
+
+
+
+
+
+
+
             ocr_records = list(project.ocr_results or [])
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
             if ocr_records and skip_existing:
+
+
+
+
+
+
+
                 self.log(f"OCR Stage: {len(ocr_records)} panels already have OCR text.")
+
+
+
+
+
+
+
                 try:
+
+
+
+
+
+
+
                     project_service.confirm_ocr(db, self.project_id)
+
+
+
+
+
+
+
                 except Exception:
+
+
+
+
+
+
+
                     pass
+
+
+
+
+
+
+
             else:
+
+
+
+
+
+
+
                 self.log("OCR Stage: Extracting text regions & speech bubbles...")
+
+
+
+
+
+
+
                 self.update_stage(s_id, progress=0.2, message="Scanning speech bubbles...")
+
+
+
+
+
+
+
                 ocr_coro = project_service.extract_ocr_project(db, self.project_id, operation_only=True)
+
+
+
+
+
+
+
                 token = self._create_cancel_token()
+
+
+
+
+
+
+
                 cb = self._make_progress_cb(s_id, 0.2, 0.9)
+
+
+
+
+
+
+
                 await ocr_coro(token, cb)
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
                 # Auto-resolve any NEEDS_REVIEW text regions so automated pipeline never halts on unreviewed noise
+
+
+
+
+
+
+
                 unresolved = (
+
+
+
+
+
+
+
                     db.query(TextRegionRecord)
+
+
+
+
+
+
+
                     .filter(
+
+
+
+
+
+
+
                         TextRegionRecord.project_id == self.project_id,
+
+
+
+
+
+
+
                         TextRegionRecord.status == "NEEDS_REVIEW",
+
+
+
+
+
+
+
                         TextRegionRecord.detection_method != "AUTO_CLEANUP",
+
+
+
+
+
+
+
                     )
+
+
+
+
+
+
+
                     .all()
+
+
+
+
+
+
+
                 )
+
+
+
+
+
+
+
                 for tr in unresolved:
+
+
+
+
+
+
+
                     if not (tr.corrected_text or tr.raw_text or "").strip():
+
+
+
+
+
+
+
                         tr.status = "IGNORED"
+
+
+
+
+
+
+
                     else:
+
+
+
+
+
+
+
                         tr.status = "CONFIRMED"
+
+
+
+
+
+
+
                 if unresolved:
+
+
+
+
+
+
+
                     db.commit()
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
                 try:
+
+
+
+
+
+
+
                     project_service.confirm_ocr(db, self.project_id)
+
+
+
+
+
+
+
                 except Exception as e:
+
+
+
+
+
+
+
                     self.log(f"OCR note: {e} (proceeding with panel order baseline)")
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         self.get_stage(s_id).duration_sec = round(time.monotonic() - start_t, 2)
+
+
+
+
+
+
+
         self.update_stage(s_id, status="COMPLETED", progress=1.0, message="Text & OCR confirmed")
+
+
+
+
+
+
+
         self.log(f"OCR Stage completed in {self.get_stage(s_id).duration_sec}s")
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     async def _run_stage_story(self, skip_existing: bool) -> None:
+
+
+
+
+
+
+
         s_id = "story"
+
+
+
+
+
+
+
         self.current_stage_id = s_id
+
+
+
+
+
+
+
         start_t = time.monotonic()
+
+
+
+
+
+
+
         self.update_stage(s_id, status="RUNNING", progress=0.1, message="Analyzing narrative scenes...")
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         from engine.story.service import story_service
+
+
+
+
+
+
+
         from engine.database.models import SceneRecord
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         with SessionLocal() as db:
+
+
+
+
+
+
+
             project = db.query(ProjectRecord).filter(ProjectRecord.id == self.project_id).first()
+
+
+
+
+
+
+
             if not project:
+
+
+
+
+
+
+
                 raise ValueError("Project not found")
+
+
+
+
+
+
+
             se_scenes = (project.settings or {}).get("story_editor_state", {}).get("scenes", [])
+
+
+
+
+
+
+
             scenes = list(project.scenes or []) or se_scenes
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
             if scenes and skip_existing:
+
+
+
+
+
+
+
                 narrative = story_service.get_narrative(db, self.project_id)
+
+
+
+
+
+
+
                 if narrative and (narrative.analysis_metadata or {}).get("provider") in ("mock", "mock_llm"):
+
+
+
+
+
+
+
                     raise ValueError("Saved narrative was generated by a mock provider. Configure a real model and regenerate Story before automatic video generation.")
+
+
+
+
+
+
+
                 self.log(f"Story Stage: Using {len(scenes)} existing narrative scenes.")
+
+
+
+
+
+
+
                 try:
+
+
+
+
+
+
+
                     story_service.confirm_story(db, self.project_id)
+
+
+
+
+
+
+
                 except Exception:
+
+
+
+
+
+
+
                     pass
+
+
+
+
+
+
+
             else:
+
+
+
+
+
+
+
                 self.log("Story Stage: Performing narrative IR scene breakdown...")
+
+
+
+
+
+
+
                 self.update_stage(s_id, progress=0.2, message="Segmenting scenes & characters...")
+
+
+
+
+
+
+
                 from engine.llm.registry import llm_registry
+
+
+
+
+
+
+
                 pref_provider = self.options.get("preferred_llm_provider")
+
+
+
+
+
+
+
                 if not pref_provider:
+
+
+
+
+
+
+
                     active_p = await llm_registry.get_active_provider()
+
+
+
+
+
+
+
                     pref_provider = active_p.provider_id
+
+
+
+
+
+
+
                 if pref_provider in ("mock", "mock_llm"):
+
+
+
+
+
+
+
                     raise ValueError("Automatic video generation requires a real story model; mock providers are not supported.")
+
+
+
+
+
+
+
                 story_coro = story_service.analyze_story_project(
+
+
+
+
+
+
+
                     db, self.project_id, preferred_provider_id=pref_provider, operation_only=True
+
+
+
+
+
+
+
                 )
+
+
+
+
+
+
+
                 token = self._create_cancel_token()
+
+
+
+
+
+
+
                 cb = self._make_progress_cb(s_id, 0.2, 0.9)
+
+
+
+
+
+
+
                 await story_coro(token, cb)
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
                 story_service.confirm_story(db, self.project_id)
+
+
+
+
+
+
+
                 scenes = db.query(SceneRecord).filter(SceneRecord.project_id == self.project_id).all()
+
+
+
+
+
+
+
                 self.log(f"Story Stage: Created {len(scenes)} narrative scenes.")
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         self.get_stage(s_id).duration_sec = round(time.monotonic() - start_t, 2)
+
+
+
+
+
+
+
         self.update_stage(s_id, status="COMPLETED", progress=1.0, message=f"{len(scenes)} scenes confirmed")
+
+
+
+
+
+
+
         self.log(f"Story Stage completed in {self.get_stage(s_id).duration_sec}s")
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     async def _run_stage_script(self, skip_existing: bool) -> None:
+
+
+
+
+
+
+
         s_id = "script"
+
+
+
+
+
+
+
         self.current_stage_id = s_id
+
+
+
+
+
+
+
         start_t = time.monotonic()
+
+
+
+
+
+
+
         self.update_stage(s_id, status="RUNNING", progress=0.1, message="Generating script adaptation...")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
         from engine.story.service import story_service
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         with SessionLocal() as db:
+
+
+
+
+
+
+
             project = db.query(ProjectRecord).filter(ProjectRecord.id == self.project_id).first()
+
+
+
+
+
+
+
             if not project:
+
+
+
+
+
+
+
                 raise ValueError("Project not found")
+
+
+
+
+
+
+
             existing_script = story_service.get_script(db, self.project_id)
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
             if existing_script and existing_script.segments and skip_existing:
+
+
+
+
+
+
+
                 self.log(f"Script Stage: Using existing approved script with {len(existing_script.segments)} beats.")
+
+
+
+
+
+
+
                 story_service.approve_script(db, self.project_id, existing_script.script_id)
+
+
+
+
+
+
+
             else:
+
+
+
+
+
+
+
                 self.log("Script Stage: Generating cinematic dialogue & narration...")
+
+
+
+
+
+
+
                 self.update_stage(s_id, progress=0.5, message="Allocating dialogue beats...")
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
                 script = await asyncio.to_thread(story_service.generate_script, db, self.project_id)
+
+
+
+
+
+
+
                 story_service.approve_script(db, self.project_id, script.script_id)
+
+
+
+
+
+
+
                 self.log("Script Stage: Script generated and approved.")
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         self.get_stage(s_id).duration_sec = round(time.monotonic() - start_t, 2)
+
+
+
+
+
+
+
         self.update_stage(s_id, status="COMPLETED", progress=1.0, message="Script approved")
+
+
+
+
+
+
+
         self.log(f"Script Stage completed in {self.get_stage(s_id).duration_sec}s")
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     async def _run_stage_audio(self, skip_existing: bool) -> None:
+
+
+
+
+
+
+
         s_id = "audio"
+
+
+
+
+
+
+
         self.current_stage_id = s_id
+
+
+
+
+
+
+
         start_t = time.monotonic()
+
+
+
+
+
+
+
         self.update_stage(s_id, status="RUNNING", progress=0.1, message="Compiling audio master...")
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         with SessionLocal() as db:
+
+
+
+
+
+
+
             project = db.query(ProjectRecord).filter(ProjectRecord.id == self.project_id).first()
+
+
+
+
+
+
+
             if not project:
+
+
+
+
+
+
+
                 raise ValueError("Project not found")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
             workspace = Path(project.workspace_path)
+
+
+
+
+
+
+
             original_state = (project.settings or {}).get("story_editor_state") or {}
+
+
+
+
+
+
+
             state_before_synthesis = json.dumps(original_state, sort_keys=True)
+
+
+
+
+
+
+
             se_state = deepcopy(original_state)
+
+
+
+
+
+
+
             se_narration = se_state.get("narration_clips", [])
+
+
+
+
+
+
+
             audio_timelines = list(project.audio_timelines or [])
+
+
+
+
+
+
+
             from engine.audio.service import audio_service
+
+
+
+
+
+
+
             from engine.audio.synthesis import local_synthesizer
+
+
+
+
+
+
+
             import soundfile as sf
+
+
+
+
+
+
+
             from sqlalchemy.orm.attributes import flag_modified
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
             dialogue_dir = workspace / "audio" / "dialogue"
+
+
+
+
+
+
+
             dialogue_dir.mkdir(parents=True, exist_ok=True)
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
             # 1. Filter out empty/dummy clips
+
+
+
+
+
+
+
             active_clips = [
+
+
+
+
+
+
+
                 c for c in se_narration
+
+
+
+
+
+
+
                 if (c.get("text") or "").strip() and (c.get("text") or "").strip().lower() != "opening."
+
+
+
+
+
+
+
             ]
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
             # Every clip must correspond to the current approved Layer C script.
+
+
+
+
+
+
+
             from engine.story.service import story_service
+
+
+
+
+
+
+
             from engine.pipeline.narration import compile_narration_clips, reconcile_narration_clips
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
             narrative = story_service.get_narrative(db, self.project_id)
+
+
+
+
+
+
+
             script = story_service.get_script(db, self.project_id)
+
+
+
+
+
+
+
             if narrative is None or script is None:
+
+
+
+
+
+
+
                 raise ValueError("Audio requires an approved, source-grounded script and Narrative IR. Review the story and script first.")
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
             timeline_scenes = se_state.get("scenes", [])
+
+
+
+
+
+
+
             if self.options.get("regenerate_story", False):
+
+
+
+
+
+
+
                 # New story IDs/text invalidate the old scene and narration bindings.
+
+
+
+
+
+
+
                 # Keep the saved cut untouched until the replacement audio succeeds.
+
+
+
+
+
+
+
                 timeline_scenes = []
+
+
+
+
+
+
+
                 active_clips = []
+
+
+
+
+
+
+
             ordered_panel_ids = [p.id for p in sorted(project.panels or [], key=lambda x: getattr(x, "sequence", 0))]
+
+
+
+
+
+
+
             excluded_panel_ids = {p.id for p in project.panels or [] if p.status == "IGNORED"}
+
+
+
+
+
+
+
             panel_index = {pid: i for i, pid in enumerate(ordered_panel_ids)}
 
-            rebuild_timeline_scenes = False
-            if not timeline_scenes and narrative and narrative.scenes:
+
+
+
+
+
+
+            panel_obj_map = {p.id: p for p in (project.panels or [])}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+            narrative_scene_ids = {sc.scene_id for sc in narrative.scenes} if narrative and narrative.scenes else set()
+
+
+
+
+
+
+
+            existing_scene_ids = {sc.get("id") for sc in timeline_scenes}
+
+
+
+
+
+
+
+            expected_panel_ids = set(ordered_panel_ids) - excluded_panel_ids
+            current_panel_ids = [layer.get("source_panel_id")
+                                 for scene in timeline_scenes
+                                 for layer in scene.get("layers", [])]
+            rebuild_timeline_scenes = (set(current_panel_ids) != expected_panel_ids
+                                       or len(current_panel_ids) != len(expected_panel_ids))
+
+
+
+
+
+
+
+            if not timeline_scenes or (narrative_scene_ids and not (narrative_scene_ids <= existing_scene_ids)):
+
+
+
+
+
+
+
                 rebuild_timeline_scenes = True
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
             if rebuild_timeline_scenes and narrative and narrative.scenes:
+
+
+
+
+
+
+
                 timeline_scenes = []
+
+
+
+
+
+
+
                 time_cursor = 0.0
+
+
+
+
+
+
+
                 for idx, sc in enumerate(narrative.scenes):
+
+
+
+
+
+
+
                     s_idx = panel_index.get(sc.panel_start, 0)
+
+
+
+
+
+
+
                     e_idx = panel_index.get(sc.panel_end, s_idx)
+
+
+
+
+
+
+
                     if s_idx > e_idx:
+
+
+
+
+
+
+
                         s_idx, e_idx = e_idx, s_idx
+
+
+
+
+
+
+
                     scene_pids = ordered_panel_ids[s_idx : e_idx + 1] if ordered_panel_ids else []
+
+
+
+
+
+
+
                     scene_pids = [pid for pid in scene_pids if pid not in excluded_panel_ids]
+
+
+
+
+
+
+
                     p_count = max(1, len(scene_pids))
+
+
+
+
+
+
+
                     dur = max(4.0, p_count * 3.0)
+
+
+
+
+
+
+
                     p_dur = dur / p_count
-                    layers = [
-                        {
+
+
+
+
+
+
+
+                    layers = []
+
+
+
+
+
+
+
+                    for p_idx, pid in enumerate(scene_pids):
+
+
+
+
+
+
+
+                        p_rec = panel_obj_map.get(pid)
+
+
+
+
+
+
+
+                        is_tall = (p_rec.height / max(1, p_rec.width)) > 1.30 if (p_rec and p_rec.width and p_rec.height) else False
+
+
+
+
+
+
+
+                        motion_pr = "cinematic_vertical_pan" if is_tall else "none"
+
+
+
+
+
+
+
+                        layers.append({
+
+
+
+
+
+
+
                             "id": f"layer_{sc.scene_id}_{p_idx}",
+
+
+
+
+
+
+
                             "source_panel_id": pid,
+
+
+
+
+
+
+
                             "start_offset_sec": round(p_idx * p_dur, 3),
+
+
+
+
+
+
+
                             "duration_sec": round(p_dur, 3),
+
+
+
+
+
+
+
                             "visible": True,
+
+
+
+
+
+
+
                             "transform": {"x": 0, "y": 0, "scale": 1, "rotation": 0, "opacity": 1, "z_index": p_idx},
-                        }
-                        for p_idx, pid in enumerate(scene_pids)
-                    ] if scene_pids else [{
+
+
+
+
+
+
+
+                            "motion_preset": motion_pr,
+
+
+
+
+
+
+
+                        }) if scene_pids else [{
+
+
+
+
+
+
+
                         "id": f"layer_{sc.scene_id}_0",
+
+
+
+
+
+
+
                         "source_panel_id": "",
+
+
+
+
+
+
+
                         "start_offset_sec": 0.0,
+
+
+
+
+
+
+
                         "duration_sec": dur,
+
+
+
+
+
+
+
                         "visible": True,
+
+
+
+
+
+
+
                         "transform": {"x": 0, "y": 0, "scale": 1, "rotation": 0, "opacity": 1, "z_index": 0},
+
+
+
+
+
+
+
                     }]
+
+
+
+
+
+
+
                     timeline_scenes.append({
+
+
+
+
+
+
+
                         "id": sc.scene_id,
+
+
+
+
+
+
+
                         "start_time_sec": time_cursor,
+
+
+
+
+
+
+
                         "duration_sec": dur,
+
+
+
+
+
+
+
                         "layers": layers,
+
+
+
+
+
+
+
                         "background": {
+
+
+
+
+
+
+
                             "enabled": True,
+
+
+
+
+
+
+
                             "preset": "duplicate_blur",
+
+
+
+
+
+
+
                             "blur_sigma": 24.0,
+
+
+
+
+
+
+
                             "brightness": 0.45,
+
+
+
+
+
+
+
                             "foreground_fit": "contain",
+
+
+
+
+
+
+
                             "edge_shadow": 0.6,
+
+
+
+
+
+
+
                         },
+
+
+
+
+
+
+
                     })
+
+
+
+
+
+
+
                     time_cursor += dur
+
+
+
+
+
+
+
                 if not se_state:
+
+
+
+
+
+
+
                     se_state = {}
+
+
+
+
+
+
+
                 se_state["scenes"] = timeline_scenes
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
             if active_clips:
-                active_clips = reconcile_narration_clips(
-                    script, narrative, timeline_scenes, active_clips
-                )
-                self.log(f"Audio Stage: Reconciled {len(active_clips)} existing clips with the approved script.")
+
+
+
+                try:
+
+
+
+                    active_clips = reconcile_narration_clips(
+
+
+
+                        script, narrative, timeline_scenes, active_clips
+
+
+
+                    )
+
+
+
+                    self.log(f"Audio Stage: Reconciled {len(active_clips)} existing clips with the approved script.")
+
+
+
+                except Exception as e:
+
+
+
+                    self.log(f"Audio Stage: Existing narration clips differed ({e}). Re-compiling from approved script...")
+
+
+
+                    active_clips = compile_narration_clips(script, narrative, timeline_scenes)
+
+
+
             else:
+
+
+
+
+
+
+
                 active_clips = compile_narration_clips(script, narrative, timeline_scenes)
+
+
+
+
+
+
+
                 self.log(f"Audio Stage: Using {len(active_clips)} grounded script segments.")
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
             # 3. Check physical presence of synthesized audio files
+
+
+
+
+
+
+
             clips_to_synthesize = []
+
+
+
+
+
+
+
             for c in active_clips:
+
+
+
+
+
+
+
                 audio_url = c.get("audio_url")
+
+
+
+
+
+
+
                 has_file = False
+
+
+
+
+
+
+
                 if audio_url:
+
+
+
+
+
+
+
                     if "/audio/" in audio_url:
+
+
+
+
+
+
+
                         subpath = audio_url.split("/audio/")[-1]
+
+
+
+
+
+
+
                         fpath = workspace / "audio" / subpath
+
+
+
+
+
+
+
                     else:
+
+
+
+
+
+
+
                         fpath = workspace / audio_url
+
+
+
+
+
+
+
                     if fpath.exists() and fpath.stat().st_size > 1000:
+
+
+
+
+
+
+
                         has_file = True
+
+
+
+
+
+
+
                 if not has_file or not skip_existing:
+
+
+
+
+
+
+
                     clips_to_synthesize.append(c)
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
             if clips_to_synthesize:
+
+
+
+
+
+
+
                 self.log(f"Audio Stage: Synthesizing {len(clips_to_synthesize)} narration lines with Chatterbox Turbo...")
+
+
+
+
+
+
+
                 tasks = [
+
+
+
+
+
+
+
                     {
+
+
+
+
+
+
+
                         "id": c.get("id") or f"clip_{idx}",
+
+
+
+
+
+
+
                         "directory": str(dialogue_dir),
+
+
+
+
+
+
+
                         "text": c["text"],
+
+
+
+
+
+
+
                         "voice": c.get("voice", "Narrator"),
+
+
+
+
+
+
+
                         "emotion": c.get("emotion", "Engaging"),
+
+
+
+
+
+
+
                         "intensity": float(c.get("intensity", 0.7)),
+
+
+
+
+
+
+
                         "speed": float(c.get("speed", 1.05)),
+
+
+
+
+
+
+
                         "force": not skip_existing,
+
+
+
+
+
+
+
                     }
+
+
+
+
+
+
+
                     for idx, c in enumerate(clips_to_synthesize)
+
+
+
+
+
+
+
                 ]
+
+
+
+
+
+
+
                 try:
+
+
+
+
+
+
+
                     from engine.pipeline.speech_worker import synthesize_batch_async
+
+
+
+
+
+
+
                     batch_res = await synthesize_batch_async(
+
+
+
+
+
+
+
                         local_synthesizer, tasks, self._make_progress_cb(s_id, 0.15, 0.85),
+
+
+
+
+
+
+
                         cancelled=lambda: self.is_cancelled)
+
+
+
+
+
+
+
                     res_by_id = {r["id"]: r for r in batch_res if r.get("success")}
+
+
+
+
+
+
+
                     for clip in clips_to_synthesize:
+
+
+
+
+
+
+
                         cid = clip.get("id")
+
+
+
+
+
+
+
                         if cid in res_by_id:
+
+
+
+
+
+
+
                             r = res_by_id[cid]
+
+
+
+
+
+
+
                             clip["audio_url"] = f"/api/projects/{self.project_id}/audio/dialogue/{Path(r['audio_path']).name}"
+
+
+
+
+
+
+
                             clip["duration_sec"] = round(float(r.get("duration", 4.0)), 2)
+
+
+
+
+
+
+
                             clip["status"] = "APPROVED"
+
+
+
+
+
+
+
                             clip["review_status"] = "APPROVED"
+
+
+
+
+
+
+
                 except Exception as b_err:
+
+
+
+
+
+
+
                     self.log(f"Batch TTS fallback to sequential: {b_err}")
+
+
+
+
+
+
+
                     for idx, clip in enumerate(clips_to_synthesize):
+
+
+
+
+
+
+
                         try:
+
+
+
+
+
+
+
                             retry = await synthesize_batch_async(local_synthesizer, [dict(tasks[idx], force=False)],
+
+
+
+
+
+
+
                                                                  cancelled=lambda: self.is_cancelled)
+
+
+
+
+
+
+
                             result = next((item for item in retry if item.get("success")), None)
+
+
+
+
+
+
+
                             if not result:
+
+
+
+
+
+
+
                                 raise ValueError("Speech retry returned no audio")
+
+
+
+
+
+
+
                             wav_p = Path(result["audio_path"])
+
+
+
+
+
+
+
                             dur = round(float(sf.info(str(wav_p)).duration), 2)
+
+
+
+
+
+
+
                             clip["audio_url"] = f"/api/projects/{self.project_id}/audio/dialogue/{wav_p.name}"
+
+
+
+
+
+
+
                             clip["duration_sec"] = dur
+
+
+
+
+
+
+
                             clip["status"] = "APPROVED"
+
+
+
+
+
+
+
                             clip["review_status"] = "APPROVED"
+
+
+
+
+
+
+
                         except Exception as err:
+
+
+
+
+
+
+
                             self.log(f"Warning: TTS synthesis failed for line '{clip['text'][:30]}...': {err}")
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
             # Measure every actual file, including reused clips and batch results.
+
+
+
+
+
+
+
             # A partial TTS failure must never be promoted to an approved master.
+
+
+
+
+
+
+
             for clip in active_clips:
+
+
+
+
+
+
+
                 audio_url = clip.get("audio_url") or ""
+
+
+
+
+
+
+
                 if not audio_url:
+
+
+
+
+
+
+
                     raise ValueError(f"Narration synthesis produced no audio for {clip.get('id')}.")
+
+
+
+
+
+
+
                 relative = Path("audio") / audio_url.split("/audio/", 1)[1] if "/audio/" in audio_url else Path(audio_url)
+
+
+
+
+
+
+
                 audio_path = resolve_contained_path(workspace, relative, must_be_file=True)
+
+
+
+
+
+
+
                 info = sf.info(str(audio_path))
+
+
+
+
+
+
+
                 if info.frames <= 0 or info.samplerate <= 0:
+
+
+
+
+
+
+
                     raise ValueError(f"Narration audio is empty or invalid: {clip.get('id')}.")
+
+
+
+
+
+
+
                 clip["duration_sec"] = float(info.duration)
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
             if active_clips:
+
+
+
+
+
+
+
                 from engine.pipeline.narration import synchronize_narration
+
+
+
+
+
+
+
                 synchronize_narration(se_state.get("scenes", []), active_clips)
+                rendered_ids = [layer.get("source_panel_id")
+                                for scene in se_state.get("scenes", [])
+                                for layer in scene.get("layers", [])]
+                if (set(rendered_ids) != expected_panel_ids
+                        or len(rendered_ids) != len(expected_panel_ids)):
+                    raise ValueError("Automatic timeline must include every retained panel exactly once; review narrative scene ranges.")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
             # 5. Ensure atmospheric background music (BGM) is attached
+
+
+
+
+
+
+
             bgm_tracks = se_state.get("bgm_tracks", [])
+
+
+
+
+
+
+
             if not bgm_tracks:
+
+
+
+
+
+
+
                 se_state["bgm_tracks"] = [
+
+
+
+
+
+
+
                     {
+
+
+
+
+
+
+
                         "id": "bgm_default",
+
+
+
+
+
+
+
                         "audio_url": "/assets/demo/crystal_resonance_bgm.mp3",
+
+
+
+
+
+
+
                         "volume": 0.35,
+
+
+
+
+
+
+
                         "ducking": -14.0,
+
+
+
+
+
+
+
                     }
+
+
+
+
+
+
+
                 ]
+
+
+
+
+
+
+
                 self.log("Audio Stage: Attached cinematic BGM track (crystal_resonance_bgm.mp3).")
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
             # 6. Persist updated audio configuration to story_editor_state
+
+
+
+
+
+
+
             db.refresh(project)
+
+
+
+
+
+
+
             current_state = (project.settings or {}).get("story_editor_state") or {}
+
+
+
+
+
+
+
             if json.dumps(current_state, sort_keys=True) != state_before_synthesis:
+
+
+
+
+
+
+
                 raise ValueError("The timeline changed during voice generation. Retry audio generation to use the current edit; generated audio was not applied.")
+
+
+
+
+
+
+
             if active_clips:
+
+
+
+
+
+
+
                 se_state["narration_clips"] = active_clips
+
+
+
+
+
+
+
             if project.settings is None:
+
+
+
+
+
+
+
                 project.settings = {}
+
+
+
+
+
+
+
             project.settings["story_editor_state"] = se_state
+
+
+
+
+
+
+
             flag_modified(project, "settings")
+
+
+
+
+
+
+
             db.commit()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
             # Approve audio in service
+
+
+
+
+
+
+
             try:
+
+
+
+
+
+
+
                 audio_service.approve_audio(db, self.project_id)
+
+
+
+
+
+
+
             except Exception:
+
+
+
+
+
+
+
                 pass
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         self.get_stage(s_id).duration_sec = round(time.monotonic() - start_t, 2)
+
+
+
+
+
+
+
         self.update_stage(s_id, status="COMPLETED", progress=1.0, message="Audio master approved")
+
+
+
+
+
+
+
         self.log(f"Audio Stage completed in {self.get_stage(s_id).duration_sec}s")
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     async def _run_stage_motion(self, skip_existing: bool) -> None:
+
+
+
+
+
+
+
         s_id = "motion"
+
+
+
+
+
+
+
         self.current_stage_id = s_id
+
+
+
+
+
+
+
         start_t = time.monotonic()
+
+
+
+
+
+
+
         self.update_stage(s_id, status="RUNNING", progress=0.1, message="Planning camera motion...")
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         with SessionLocal() as db:
+
+
+
+
+
+
+
             project = db.query(ProjectRecord).filter(ProjectRecord.id == self.project_id).first()
+
+
+
+
+
+
+
             if not project:
+
+
+
+
+
+
+
                 raise ValueError("Project not found")
+
+
+
+
+
+
+
             se_state = (project.settings or {}).get("story_editor_state") or {}
+
+
+
+
+
+
+
             se_scenes = se_state.get("scenes", [])
+
+
+
+
+
+
+
             from engine.motion.service import motion_service
+
+
+
+
+
+
+
             from sqlalchemy.orm.attributes import flag_modified
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
             # Enforce clean, cinematic presentation: eliminate jitter/shakiness while providing motivated camera paths
+
+
+
+
+
+
+
             for idx, sc in enumerate(se_scenes):
+
+
+
+
+
+
+
                 dur = float(sc.get("duration_sec", 4.0))
+
+
+
+
+
+
+
                 shot_mod = idx % 4
+
+
+
+
+
+
+
                 if shot_mod == 0:
+
+
+
+
+
+
+
                     cam_preset = "custom"
+
+
+
+
+
+
+
                     z_start, z_end = 1.0, 1.045
+
+
+
+
+
+
+
                     px_start, px_end = 0.0, 0.0
+
+
+
+
+
+
+
                 elif shot_mod == 1:
+
+
+
+
+
+
+
                     cam_preset = "static"
+
+
+
+
+
+
+
                     z_start, z_end = 1.0, 1.0
+
+
+
+
+
+
+
                     px_start, px_end = 0.0, 0.0
+
+
+
+
+
+
+
                 elif shot_mod == 2:
+
+
+
+
+
+
+
                     cam_preset = "custom"
+
+
+
+
+
+
+
                     z_start, z_end = 1.025, 1.025
+
+
+
+
+
+
+
                     px_start, px_end = -2.5, 2.5
+
+
+
+
+
+
+
                 else:
+
+
+
+
+
+
+
                     cam_preset = "custom"
+
+
+
+
+
+
+
                     z_start, z_end = 1.04, 1.0
+
+
+
+
+
+
+
                     px_start, px_end = 0.0, 0.0
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
                 sc["camera"] = {
+
+
+
+
+
+
+
                     "preset": cam_preset,
+
+
+
+
+
+
+
                     "zoom_start": z_start,
+
+
+
+
+
+
+
                     "zoom_end": z_end,
+
+
+
+
+
+
+
                     "pan_x_start": px_start,
+
+
+
+
+
+
+
                     "pan_x_end": px_end,
+
+
+
+
+
+
+
                     "pan_y_start": 0.0,
+
+
+
+
+
+
+
                     "pan_y_end": 0.0,
+
+
+
+
+
+
+
                     "easing": "ease_in_out",
+
+
+
+
+
+
+
                     "duration_sec": dur,
+
+
+
+
+
+
+
                 }
+
+
+
+
+
+
+
                 sc["transition_in"] = "none"
+
+
+
+
+
+
+
                 if "background" in sc and isinstance(sc["background"], dict):
+
+
+
+
+
+
+
                     sc["background"]["motion"] = "none"
+
+
+
+
+
+
+
                     sc["background"]["motion_amount"] = 0.0
+
+
+
+
+
+
+
                     if not sc["background"].get("foreground_fit"):
+
+
+
+
+
+
+
                         sc["background"]["foreground_fit"] = "contain"
+
+
+
+
+
+
+
                 else:
+
+
+
+
+
+
+
                     sc["background"] = {
+
+
+
+
+
+
+
                         "enabled": True,
+
+
+
+
+
+
+
                         "preset": "duplicate_blur",
+
+
+
+
+
+
+
                         "blur_sigma": 24.0,
+
+
+
+
+
+
+
                         "brightness": 0.45,
+
+
+
+
+
+
+
                         "foreground_fit": "contain",
+
+
+
+
+
+
+
                         "edge_shadow": 0.6,
+
+
+
+
+
+
+
                         "motion": "none",
+
+
+
+
+
+
+
                         "motion_amount": 0.0,
+
+
+
+
+
+
+
                     }
+
+
+
+
+
+
+
                 m_layers = sc.get("layers", [])
+
+
+
+
+
+
+
                 m_count = max(1, len(m_layers))
+
+
+
+
+
+
+
                 m_dur = dur / m_count
+
+
+
+
+
+
+
+                p_map_local = {p.id: p for p in (project.panels or [])}
+
+
+
+
+
+
+
                 for l_idx, ly in enumerate(m_layers):
-                    ly["motion_preset"] = "none"
+
+
+
+
+
+
+
+                    pid = ly.get("source_panel_id")
+
+
+
+
+
+
+
+                    p_rec = p_map_local.get(pid)
+
+
+
+
+
+
+
+                    is_tall = (p_rec.height / max(1, p_rec.width)) > 1.30 if (p_rec and p_rec.width and p_rec.height) else False
+
+
+
+
+
+
+
+                    existing_preset = ly.get("motion_preset", "none")
+
+
+
+
+
+
+
+                    if existing_preset not in ("cinematic_vertical_pan", "slow_zoom_in", "slow_zoom_out", "pan_up", "pan_down"):
+
+
+
+
+
+
+
+                        ly["motion_preset"] = "cinematic_vertical_pan" if is_tall else "none"
+
+
+
+
+
+
+
                     if "start_offset_sec" not in ly or "duration_sec" not in ly:
+
+
+
+
+
+
+
                         ly["start_offset_sec"] = round(l_idx * m_dur, 3)
+
+
+
+
+
+
+
                         ly["duration_sec"] = round(m_dur, 3)
-                    ly["transform"] = {"x": 0, "y": 0, "scale": 1, "rotation": 0, "opacity": 1, "z_index": l_idx}
+
+
+
+
+
+
+
+                    if "transform" not in ly or not isinstance(ly["transform"], dict):
+
+
+
+
+
+
+
+                        ly["transform"] = {"x": 0, "y": 0, "scale": 1, "rotation": 0, "opacity": 1, "z_index": l_idx}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+            # AI Quality Gate: Self-Review & Auto-Healing
+
+
+
+
+
+
+
+            try:
+
+
+
+
+
+
+
+                from engine.imaging.panel_quality_reviewer import PanelQualityReviewer
+
+
+
+
+
+
+
+                qc_report, healed_scenes = PanelQualityReviewer.audit_and_heal_timeline(
+
+
+
+
+
+
+
+                    se_state.get("scenes", []),
+
+
+
+
+
+
+
+                    se_state.get("narration_clips", []),
+
+
+
+
+
+
+
+                    auto_heal=False,
+
+
+
+
+
+
+
+                )
+
+
+
+
+
+
+
+                se_state["scenes"] = healed_scenes
+
+
+
+
+
+
+
+                self.log(f"AI Quality Gate: Score {qc_report.overall_quality_score}/100 (Healed: {qc_report.auto_healed}, Fast layers fixed: {qc_report.fast_switching_count}, Duplicates merged: {qc_report.duplicate_layer_count})")
+
+
+
+
+
+
+
+            except Exception as e:
+
+
+
+
+
+
+
+                self.log(f"AI Quality Gate notice: {e}")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
             if project.settings is None:
+
+
+
+
+
+
+
                 project.settings = {}
+
+
+
+
+
+
+
             project.settings["story_editor_state"] = se_state
+
+
+
+
+
+
+
             flag_modified(project, "settings")
+
+
+
+
+
+
+
             db.commit()
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
             try:
+
+
+
+
+
+
+
                 motion_service.approve_motion(db, self.project_id)
+
+
+
+
+
+
+
             except Exception:
+
+
+
+
+
+
+
                 pass
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         self.get_stage(s_id).duration_sec = round(time.monotonic() - start_t, 2)
+
+
+
+
+
+
+
         self.update_stage(s_id, status="COMPLETED", progress=1.0, message="Motion timeline approved (shakiness eliminated)")
+
+
+
+
+
+
+
         self.log(f"Motion Stage completed in {self.get_stage(s_id).duration_sec}s")
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     async def _run_stage_render(self, profile_name: str, skip_existing: bool) -> None:
+
+
+
+
+
+
+
         s_id = "render"
+
+
+
+
+
+
+
         self.current_stage_id = s_id
+
+
+
+
+
+
+
         start_t = time.monotonic()
+
+
+
+
+
+
+
         self.update_stage(s_id, status="RUNNING", progress=0.05, message=f"Starting {profile_name} render...")
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         with SessionLocal() as db:
+
+
+
+
+
+
+
             project = db.query(ProjectRecord).filter(ProjectRecord.id == self.project_id).first()
+
+
+
+
+
+
+
             if not project:
+
+
+
+
+
+
+
                 raise ValueError("Project not found")
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
             existing_renders = (
+
+
+
+
+
+
+
                 db.query(RenderJobRecord)
+
+
+
+
+
+
+
                 .filter(
+
+
+
+
+
+
+
                     RenderJobRecord.project_id == self.project_id,
+
+
+
+
+
+
+
                     RenderJobRecord.status == "COMPLETE",
+
+
+
+
+
+
+
                     RenderJobRecord.output_profile == profile_name,
+
+
+
+
+
+
+
                 )
+
+
+
+
+
+
+
                 .order_by(RenderJobRecord.created_at.desc())
+
+
+
+
+
+
+
                 .all()
+
+
+
+
+
+
+
             )
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
             from engine.render.service import render_service
+
+
+
+
+
+
+
             import subprocess
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
             valid_existing_render = None
+
+
+
+
+
+
+
             if existing_renders and skip_existing:
+
+
+
+
+
+
+
                 for candidate in existing_renders:
+
+
+
+
+
+
+
                     out_p = Path(candidate.output_path or "")
+
+
+
+
+
+
+
                     if out_p.exists() and out_p.stat().st_size > 100_000:
+
+
+
+
+
+
+
                         # Verify candidate MP4 has an audible audio stream
+
+
+
+
+
+
+
                         has_audio = False
+
+
+
+
+
+
+
                         try:
+
+
+
+
+
+
+
                             cmd = ["ffprobe", "-v", "error", "-select_streams", "a:0", "-show_entries", "stream=codec_type", "-of", "csv=p=0", str(out_p)]
+
+
+
+
+
+
+
                             probe = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+
+
+
+
+
+
+
                             if "audio" in probe.stdout.lower():
+
+
+
+
+
+
+
                                 has_audio = True
+
+
+
+
+
+
+
                         except Exception:
+
+
+
+
+
+
+
                             has_audio = True
+
+
+
+
+
+
+
                         if has_audio:
+
+
+
+
+
+
+
                             valid_existing_render = candidate
+
+
+
+
+
+
+
                             break
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
             if valid_existing_render:
+
+
+
+
+
+
+
                 render_job = valid_existing_render
+
+
+
+
+
+
+
                 self.log(f"Render Stage: Found existing verified MP4 render with audio: {render_job.output_path}")
+
+
+
+
+
+
+
             else:
+
+
+
+
+
+
+
                 self.log(f"Render Stage: Enqueuing production video render ({profile_name})...")
+
+
+
+
+
+
+
                 se_state = (project.settings or {}).get("story_editor_state") or {}
+
+
+
+
+
+
+
                 job_dict = render_service.create_and_start_render_job(
+
+
+
+
+
+
+
                     db=db,
+
+
+
+
+
+
+
                     project_id=self.project_id,
+
+
+
+
+
+
+
                     profile_name=profile_name,
+
+
+
+
+
+
+
                     subtitle_enabled=False,
+
+
+
+
+
+
+
                     timeline_data=se_state if (se_state and se_state.get("scenes")) else None,
+
+
+
+
+
+
+
                 )
+
+
+
+
+
+
+
                 job_id = job_dict.get("render_id") or job_dict.get("id")
+
+
+
+
+
+
+
                 self.log(f"Render Stage: Render job created: {job_id}")
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
                 render_start = time.monotonic()
+
+
+
+
+
+
+
                 # Compute stage timeout dynamically based on scene and frame count
+
+
+
+
+
+
+
                 max_render_wait = self._calculate_stage_timeout("render")
+
+
+
+
+
+
+
                 if "render_timeout_sec" in self.options:
+
+
+
+
+
+
+
                     max_render_wait = max(max_render_wait, float(self.options["render_timeout_sec"]))
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
                 stall_timeout_sec = float(self.options.get("render_stall_timeout_sec", 300.0))
+
+
+
+
+
+
+
                 last_activity_time = time.monotonic()
+
+
+
+
+
+
+
                 last_frames_done = 0
+
+
+
+
+
+
+
                 last_progress = 0.0
+
+
+
+
+
+
+
                 last_file_size = 0
+
+
+
+
+
+
+
                 out_path_str = job_dict.get("output_path") or ""
+
+
+
+
+
+
+
                 out_path_obj = Path(out_path_str) if out_path_str else None
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
                 # Poll until complete
+
+
+
+
+
+
+
                 while not self.is_cancelled:
+
+
+
+
+
+
+
                     now = time.monotonic()
+
+
+
+
+
+
+
                     # Check absolute maximum ceiling
+
+
+
+
+
+
+
                     if now - render_start > max_render_wait:
+
+
+
+
+
+
+
                         raise TimeoutError(f"Video rendering exceeded maximum ceiling of {int(max_render_wait)}s.")
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
                     await asyncio.sleep(1.0)
+
+
+
+
+
+
+
                     db.expire_all()
+
+
+
+
+
+
+
                     job_info = render_service.get_render_job(db, job_id)
+
+
+
+
+
+
+
                     if not job_info:
+
+
+
+
+
+
+
                         continue
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
                     raw_prog = float(job_info.get("progress", 0.0) or 0.0)
+
+
+
+
+
+
+
                     current_prog = raw_prog / 100.0 if raw_prog > 1.0 else raw_prog
+
+
+
+
+
+
+
                     current_prog = max(0.0, min(1.0, current_prog))
+
+
+
+
+
+
+
                     frames_done = int(job_info.get("frames_done", 0) or 0)
+
+
+
+
+
+
+
                     frames_total = int(job_info.get("frames_total", 0) or 0)
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
                     # Monitor output file size on disk as secondary heartbeat
+
+
+
+
+
+
+
                     current_file_size = 0
+
+
+
+
+
+
+
                     if out_path_obj and out_path_obj.exists():
+
+
+
+
+
+
+
                         try:
+
+
+
+
+
+
+
                             current_file_size = out_path_obj.stat().st_size
+
+
+
+
+
+
+
                         except Exception:
+
+
+
+
+
+
+
                             pass
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
                     # Detect forward progress
+
+
+
+
+
+
+
                     if (
+
+
+
+
+
+
+
                         frames_done > last_frames_done
+
+
+
+
+
+
+
                         or current_prog > (last_progress + 0.001)
+
+
+
+
+
+
+
                         or current_file_size > last_file_size
+
+
+
+
+
+
+
                     ):
+
+
+
+
+
+
+
                         last_activity_time = now
+
+
+
+
+
+
+
                         last_frames_done = frames_done
+
+
+
+
+
+
+
                         last_progress = current_prog
+
+
+
+
+
+
+
                         if current_file_size > 0:
+
+
+
+
+
+
+
                             last_file_size = current_file_size
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
                     # Check stall timeout (no activity for stall_timeout_sec)
+
+
+
+
+
+
+
                     if now - last_activity_time > stall_timeout_sec:
+
+
+
+
+
+
+
                         raise TimeoutError(
+
+
+
+
+
+
+
                             f"Video rendering stalled: no progress or frame activity for {int(stall_timeout_sec)}s "
+
+
+
+
+
+
+
                             f"(stuck at {frames_done}/{frames_total} frames, file size {last_file_size} bytes)."
+
+
+
+
+
+
+
                         )
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
                     self.update_stage(
+
+
+
+
+
+
+
                         s_id,
+
+
+
+
+
+
+
                         progress=round(current_prog, 2),
+
+
+
+
+
+
+
                         message=f"Rendering: {int(current_prog * 100)}% ({frames_done}/{frames_total} frames)",
+
+
+
+
+
+
+
                     )
+
+
+
+
+
+
+
                     status = job_info.get("status")
+
+
+
+
+
+
+
                     if status in ("COMPLETE", "SUCCEEDED"):
+
+
+
+
+
+
+
                         render_job = (
+
+
+
+
+
+
+
                             db.query(RenderJobRecord)
+
+
+
+
+
+
+
                             .filter(RenderJobRecord.id == job_id)
+
+
+
+
+
+
+
                             .first()
+
+
+
+
+
+
+
                         )
+
+
+
+
+
+
+
                         break
+
+
+
+
+
+
+
                     elif status in ("FAILED", "CANCELLED"):
+
+
+
+
+
+
+
                         err_msg = job_info.get("error_message") or "Video encoding failed"
+
+
+
+
+
+
+
                         raise RuntimeError(f"Render job {status}: {err_msg}")
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
             output_path = getattr(render_job, "output_path", "")
+
+
+
+
+
+
+
             self.result["output_mp4_path"] = output_path
+
+
+
+
+
+
+
             self.result["video_profile"] = profile_name
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         self.get_stage(s_id).duration_sec = round(time.monotonic() - start_t, 2)
+
+
+
+
+
+
+
         self.update_stage(s_id, status="COMPLETED", progress=1.0, message="Production MP4 certified")
+
+
+
+
+
+
+
         self.log(f"Render Stage completed in {self.get_stage(s_id).duration_sec}s. File: {output_path}")
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     async def _run_stage_packaging(self, profile_name: str) -> None:
+
+
+
+
+
+
+
         s_id = "packaging"
+
+
+
+
+
+
+
         self.current_stage_id = s_id
+
+
+
+
+
+
+
         start_t = time.monotonic()
+
+
+
+
+
+
+
         self.update_stage(s_id, status="RUNNING", progress=0.2, message="Generating YouTube metadata & thumbnail...")
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         with SessionLocal() as db:
+
+
+
+
+
+
+
             packaging_data = await generate_youtube_packaging(db, self.project_id, profile_name=profile_name)
+
+
+
+
+
+
+
             self.result["youtube_title"] = packaging_data.selected_title
+
+
+
+
+
+
+
             self.result["youtube_description"] = packaging_data.description
+
+
+
+
+
+
+
             self.result["youtube_tags"] = packaging_data.tags
+
+
+
+
+
+
+
             self.result["thumbnail_prompt"] = packaging_data.thumbnail.prompt
+
+
+
+
+
+
+
             self.result["thumbnail_aspect_ratio"] = packaging_data.thumbnail.aspect_ratio
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
             self.log(f"Packaging Stage: Researched title: '{packaging_data.selected_title}'")
+
+
+
+
+
+
+
             self.update_stage(s_id, progress=0.6, message="Crafting ComfyUI thumbnail art...")
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
             # ComfyUI Image Generation Check
+
+
+
+
+
+
+
             try:
+
+
+
+
+
+
+
                 from engine.comfyui.client import ComfyUIClient
+
+
+
+
+
+
+
                 client = ComfyUIClient()
+
+
+
+
+
+
+
                 cap = client.capabilities()
+
+
+
+
+
+
+
                 if cap.get("available"):
+
+
+
+
+
+
+
                     self.log("Packaging Stage: ComfyUI is online, generating AI thumbnail...")
+
+
+
+
+
+
+
                     from engine.comfyui.service import generate_image_operation
+
+
+
+
+
+
+
                     thumb_res = await asyncio.to_thread(
+
+
+
+
+
+
+
                         generate_image_operation,
+
+
+
+
+
+
+
                         db,
+
+
+
+
+
+
+
                         lambda p, m: self.update_stage(s_id, progress=0.6 + p * 0.35, message=m),
+
+
+
+
+
+
+
                         lambda: self.is_cancelled,
+
+
+
+
+
+
+
                         project_id=self.project_id,
+
+
+
+
+
+
+
                         workflow_id=packaging_data.thumbnail.workflow_id,
+
+
+
+
+
+
+
                         prompt=packaging_data.thumbnail.prompt,
+
+
+
+
+
+
+
                         negative_prompt=packaging_data.thumbnail.negative_prompt,
+
+
+
+
+
+
+
                         width=packaging_data.thumbnail.recommended_width,
+
+
+
+
+
+
+
                         height=packaging_data.thumbnail.recommended_height,
+
+
+
+
+
+
+
                         seed=packaging_data.thumbnail.seed,
+
+
+
+
+
+
+
                     )
+
+
+
+
+
+
+
                     self.result["thumbnail_asset_id"] = thumb_res.get("asset_id")
+
+
+
+
+
+
+
                     self.result["thumbnail_relative_path"] = thumb_res.get("relative_path")
+
+
+
+
+
+
+
                     self.log(f"Packaging Stage: ComfyUI thumbnail generated: {thumb_res.get('relative_path')}")
+
+
+
+
+
+
+
                 else:
+
+
+
+
+
+
+
                     self.log("Packaging Stage: ComfyUI offline or local instance not running; thumbnail prompt and research ready for 1-click generation.")
+
+
+
+
+
+
+
             except Exception as e:
+
+
+
+
+
+
+
                 self.log(f"Packaging Stage ComfyUI note: {e} (Prompt and metadata fully ready).")
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         self.get_stage(s_id).duration_sec = round(time.monotonic() - start_t, 2)
+
+
+
+
+
+
+
         self.update_stage(s_id, status="COMPLETED", progress=1.0, message="YouTube release bundle ready")
+
+
+
+
+
+
+
         self.log(f"Packaging Stage completed in {self.get_stage(s_id).duration_sec}s")
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     def _persist_status(self) -> None:
+
+
+
+
+
+
+
         try:
+
+
+
+
+
+
+
             with SessionLocal() as db:
+
+
+
+
+
+
+
                 project = db.query(ProjectRecord).filter(ProjectRecord.id == self.project_id).first()
+
+
+
+
+
+
+
                 if project:
+
+
+
+
+
+
+
                     workspace = Path(str(project.workspace_path))
+
+
+
+
+
+
+
                     gen_dir = resolve_contained_path(workspace, Path("generated"))
+
+
+
+
+
+
+
                     gen_dir.mkdir(parents=True, exist_ok=True)
+
+
+
+
+
+
+
                     target = resolve_contained_path(workspace, Path("generated") / "autopilot_status.json")
+
+
+
+
+
+
+
                     target.write_text(self.snapshot().model_dump_json(indent=2), encoding="utf-8")
+
+
+
+
+
+
+
         except Exception as exc:
+
+
+
+
+
+
+
             logger.warning("Could not persist autopilot status: %s", exc)
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 # In-memory registry of active runners
+
+
+
+
+
+
+
 _ACTIVE_RUNNERS: Dict[str, AutoPilotRunner] = {}
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 def get_autopilot_runner(project_id: str) -> AutoPilotRunner:
+
+
+
+
+
+
+
     if project_id not in _ACTIVE_RUNNERS:
+
+
+
+
+
+
+
         runner = AutoPilotRunner(project_id)
+
+
+
+
+
+
+
         # Attempt to rehydrate from persisted workspace status if present
+
+
+
+
+
+
+
         try:
+
+
+
+
+
+
+
             with SessionLocal() as db:
+
+
+
+
+
+
+
                 project = db.query(ProjectRecord).filter(ProjectRecord.id == project_id).first()
+
+
+
+
+
+
+
                 if project:
+
+
+
+
+
+
+
                     workspace = Path(str(project.workspace_path))
+
+
+
+
+
+
+
                     target = workspace / "generated" / "autopilot_status.json"
+
+
+
+
+
+
+
                     if target.is_file():
+
+
+
+
+
+
+
                         data = json.loads(target.read_text(encoding="utf-8"))
+
+
+
+
+
+
+
                         runner.status = data.get("status", "IDLE")
+
+
+
+
+
+
+
                         runner.overall_progress = data.get("overall_progress", 0.0)
+
+
+
+
+
+
+
                         runner.logs = data.get("logs", [])
+
+
+
+
+
+
+
                         runner.result = data.get("result", {})
+
+
+
+
+
+
+
                         runner.error = data.get("error")
+
+
+
+
+
+
+
                         if data.get("error_details"):
+
+
+
+
+
+
+
                             try:
+
+
+
+
+
+
+
                                 runner.error_details = AutoPilotErrorDetails(**data["error_details"])
+
+
+
+
+
+
+
                             except Exception:
+
+
+
+
+
+
+
                                 pass
+
+
+
+
+
+
+
                         runner.started_at = data.get("started_at")
+
+
+
+
+
+
+
                         runner.completed_at = data.get("completed_at")
+
+
+
+
+
+
+
                         for idx, s in enumerate(data.get("stages", [])):
+
+
+
+
+
+
+
                             if idx < len(runner.stages):
+
+
+
+
+
+
+
                                 runner.stages[idx].status = s.get("status", "PENDING")
+
+
+
+
+
+
+
                                 runner.stages[idx].progress = s.get("progress", 0.0)
+
+
+
+
+
+
+
                                 runner.stages[idx].message = s.get("message", "")
+
+
+
+
+
+
+
                                 runner.stages[idx].duration_sec = s.get("duration_sec", 0.0)
+
+
+
+
+
+
+
         except Exception:
+
+
+
+
+
+
+
             pass
+
+
+
+
+
+
+
         _ACTIVE_RUNNERS[project_id] = runner
+
+
+
+
+
+
+
     return _ACTIVE_RUNNERS[project_id]
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 async def start_autopilot_run(project_id: str, options: dict[str, Any] | None = None) -> AutoPilotStatusResponse:
+
+
+
+
+
+
+
     runner = get_autopilot_runner(project_id)
+
+
+
+
+
+
+
     if runner.status == "RUNNING":
+
+
+
+
+
+
+
         return runner.snapshot()
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     runner.options = options or {}
+
+
+
+
+
+
+
     runner.is_cancelled = False
+
+
+
+
+
+
+
     runner.error = None
+
+
+
+
+
+
+
     runner.status = "RUNNING"
+
+
+
+
+
+
+
     runner._task = asyncio.create_task(runner.execute())
+
+
+
+
+
+
+
     return runner.snapshot()
+
+
+
+
+
+
+

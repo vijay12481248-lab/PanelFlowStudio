@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { BackgroundInspector } from "./BackgroundInspector";
+import { MotionGraphicInspector } from "./MotionGraphicInspector";
 import { resetLayerTransform } from "./editorWorkspace";
 import { Icons, Button, Badge } from "@panelflow/ui";
 import { api } from "@panelflow/api-client";
@@ -36,7 +37,7 @@ import {
   duplicateAudioClip,
 } from "./audioAdapter";
 
-export type InspectorTab = "image" | "background" | "motion" | "effects" | "timing" | "audio";
+export type InspectorTab = "image" | "background" | "motion" | "effects" | "timing" | "audio" | "motion_graphic";
 
 interface ContextualInspectorProps {
   state: StoryEditorState;
@@ -600,7 +601,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
       {/* Tab Navigation: Image | Motion | Effects | Timing (only for layers/scenes) */}
       {!selectedNarration && !selectedBgm && !selectedSfx && (
         <div className="flex flex-wrap items-center border-b border-zinc-800 bg-zinc-950/40 px-2 pt-1 gap-1 shrink-0">
-          {(["image", "background", "motion", "effects", "timing"] as InspectorTab[]).map((tab) => {
+          {((((selectedScene as any)?.type === "motion_graphic" || (selectedScene as any)?.motion_preset_id) ? ["motion_graphic", "timing"] : ["image", "background", "motion", "effects", "timing"]) as InspectorTab[]).map((tab) => {
             const isActive = activeTab === tab;
             return (
               <button
@@ -1676,6 +1677,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
         ) : selectedLayer || selectedScene ? (
           <>
             {activeTab === "background" && selectedScene && <BackgroundInspector state={state} scene={selectedScene} onUpdateState={onUpdateState} projectId={projectId} />}
+            {activeTab === "motion_graphic" && selectedScene && <MotionGraphicInspector state={state} scene={selectedScene} onUpdateState={onUpdateState} />}
             {/* TAB 1: Image & Transform */}
             {activeTab === "image" && selectedLayer && (
               <div className="space-y-4">

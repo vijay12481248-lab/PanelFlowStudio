@@ -173,9 +173,19 @@ const DesktopAppContent: React.FC = () => {
     const intervalTime = engineConnected ? 8000 : 1500;
     const timer = setInterval(checkEngine, intervalTime);
 
+    const onTokenInvalid = () => {
+      checkEngine();
+    };
+    if (typeof window !== "undefined") {
+      window.addEventListener("panelflow:token-invalid", onTokenInvalid);
+    }
+
     return () => {
       clearTimeout(graceTimer);
       clearInterval(timer);
+      if (typeof window !== "undefined") {
+        window.removeEventListener("panelflow:token-invalid", onTokenInvalid);
+      }
     };
   }, [engineConnected, restartingEngine]);
 

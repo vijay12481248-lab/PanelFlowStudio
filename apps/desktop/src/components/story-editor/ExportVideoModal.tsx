@@ -45,6 +45,17 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
   const [bgmVolumeDb, setBgmVolumeDb] = useState<number>(-10.0);
   const [dialogueGainDb, setDialogueGainDb] = useState<number>(0.0);
 
+  // Panel Pacing, Framing & Voice Speed
+  const [minPanelDuration, setMinPanelDuration] = useState<number>(4.0);
+  const [panelZoomMode, setPanelZoomMode] = useState<"fit" | "motion" | "cover">("fit");
+  const [narrationSpeed, setNarrationSpeed] = useState<number>(1.0);
+
+  // Custom Output Save Destination
+  const [saveLocation, setSaveLocation] = useState<string>("");
+  const [quickDestinations, setQuickDestinations] = useState<
+    Array<{ id: string; label: string; path: string; exists: boolean; is_default?: boolean }>
+  >([]);
+
   // Preflight
   const [preflight, setPreflight] = useState<PreflightResult | null>(null);
   const [preflightLoading, setPreflightLoading] = useState<boolean>(true);
@@ -132,6 +143,44 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
 
   if (!isOpen) return null;
 
+  // Fetch quick system destinations when modal opens
+  useEffect(() => {
+    if (!isOpen) return;
+    api.getQuickDestinations(project.id)
+      .then((res: any) => {
+        if (res && res.destinations) {
+          setQuickDestinations(res.destinations);
+          if (!saveLocation && res.default_directory) {
+            setSaveLocation(res.default_directory);
+          }
+        }
+      })
+      .catch((err: any) => console.warn("Failed to load quick destinations:", err));
+  }, [isOpen, project.id]);
+
+  const handleBrowseFolder = async () => {
+    try {
+      const res = await api.pickDirectoryNative(saveLocation || undefined, "Select Video Destination Folder");
+      if (res && res.selected && res.path) {
+        setSaveLocation(res.path);
+      }
+    } catch (e) {
+      console.warn("Folder picker error:", e);
+    }
+  };
+
+  const handleBrowseSaveFile = async () => {
+    try {
+      const defaultName = `${project.title.replace(/\s+/g, "_").toLowerCase()}_${selectedProfile}.mp4`;
+      const res = await api.pickSaveFileNative(saveLocation || undefined, defaultName, "Save Rendered Video As");
+      if (res && res.selected && res.path) {
+        setSaveLocation(res.path);
+      }
+    } catch (e) {
+      console.warn("Save file picker error:", e);
+    }
+  };
+
   const handleStartRender = async () => {
     setRenderError(null);
     setRenderStep("rendering");
@@ -139,11 +188,15 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
     try {
       const job = await api.startRender(project.id, {
         profileName: selectedProfile,
+        customOutputPath: saveLocation.trim() || undefined,
         subtitleEnabled,
         bgmVolumeDb,
         dialogueGainDb,
         isDraft: selectedProfile === "draft_720p",
         timelineData: editorState,
+        minPanelDuration,
+        panelZoomMode,
+        narrationSpeed,
       });
 
       setActiveJob(job);
@@ -297,79 +350,311 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
                 </div>
               </div>
 
-              {/* Audio Mix & Captions Options */}
-              <div className="grid grid-cols-3 gap-4 pt-2 border-t border-zinc-800/60">
-                {/* Subtitles */}
-                <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-xl p-3 flex flex-col justify-between">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <span className="font-semibold text-zinc-200 block text-xs mb-1">Burn-In Subtitles</span>
-                      <span className="text-[11px] text-zinc-400 block">Render dialogue captions directly into the video stream</span>
-                    </div>
-                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider shrink-0 ${subtitleEnabled ? "bg-indigo-950 text-indigo-400 border border-indigo-800/60" : "bg-zinc-800 text-zinc-400"}`}>
-                      {subtitleEnabled ? "ON" : "OFF"}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2.5 mt-3">
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={subtitleEnabled}
-                      onClick={() => setSubtitleEnabled(!subtitleEnabled)}
-                      className={`relative inline-flex h-5 w-10 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                        subtitleEnabled ? "bg-indigo-600" : "bg-zinc-700"
-                      }`}
-                    >
-                      <span
-                        aria-hidden="true"
-                        className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
-                          subtitleEnabled ? "translate-x-5" : "translate-x-0"
-                        }`}
+              {/* 2. Save Location Selection */}
+              <div className="pt-2 border-t border-zinc-800/60">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="font-semibold text-zinc-300 text-xs uppercase tracking-wider block">
+                    2. Video Save Destination
+                  </label>
+                  <span className="text-[11px] text-zinc-400">
+                    MP4 video will be saved directly to this path
+                  </span>
+                </div>
+
+                <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-xl p-3.5 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <input
+                        type="text"
+                        value={saveLocation}
+                        onChange={(e) => setSaveLocation(e.target.value)}
+                        placeholder="Choose or paste output directory / file path..."
+                        className="w-full bg-zinc-950/80 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-200 font-mono focus:outline-none focus:border-indigo-500 transition-colors"
                       />
-                    </button>
-                    <span
-                      onClick={() => setSubtitleEnabled(!subtitleEnabled)}
-                      className="text-xs text-zinc-300 font-medium select-none cursor-pointer hover:text-white"
+                    </div>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      onClick={handleBrowseFolder}
+                      className="text-xs shrink-0 flex items-center gap-1.5 border-zinc-700 hover:border-indigo-500"
                     >
-                      Enable Subtitles (Default: Off)
-                    </span>
+                      <Icons.Folder className="w-3.5 h-3.5 text-indigo-400" />
+                      <span>Browse Folder...</span>
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      onClick={handleBrowseSaveFile}
+                      className="text-xs shrink-0 flex items-center gap-1.5 border-zinc-700 hover:border-emerald-500"
+                    >
+                      <Icons.Film className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Save As File...</span>
+                    </Button>
+                  </div>
+
+                  {/* Quick Preset Folders */}
+                  <div className="flex items-center gap-2 pt-1 overflow-x-auto">
+                    <span className="text-[10px] uppercase font-bold text-zinc-400 shrink-0">Quick Destinations:</span>
+                    {quickDestinations.map((d) => (
+                      <button
+                        key={d.id}
+                        type="button"
+                        onClick={() => setSaveLocation(d.path)}
+                        className={`text-[11px] px-2.5 py-1 rounded-md border transition-all shrink-0 font-medium ${
+                          saveLocation === d.path
+                            ? "bg-indigo-950/70 text-indigo-300 border-indigo-500/80 shadow-sm"
+                            : "bg-zinc-950/60 text-zinc-400 hover:text-zinc-200 border-zinc-800 hover:border-zinc-700"
+                        }`}
+                        title={d.path}
+                      >
+                        {d.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* 3. Pacing & Framing Options */}
+              <div className="pt-2 border-t border-zinc-800/60">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="font-semibold text-zinc-300 text-xs uppercase tracking-wider block">
+                    3. Panel Reading Pacing & Framing
+                  </label>
+                  <span className="text-[11px] text-zinc-400">
+                    Fixes fast-moving panels & prevents cropped dialog bubbles
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Panel Duration Floor (Pacing) */}
+                  <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-xl p-3.5 space-y-3">
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <span className="font-semibold text-zinc-200 block text-xs">Panel Display Time</span>
+                        <span className="text-[11px] text-zinc-400">Time each comic panel stays on screen</span>
+                      </div>
+                      <span className="font-mono font-bold text-indigo-400 text-xs bg-indigo-950/60 border border-indigo-800/50 px-2 py-0.5 rounded">
+                        {minPanelDuration.toFixed(1)}s / panel
+                      </span>
+                    </div>
+
+                    {/* Presets */}
+                    <div className="grid grid-cols-4 gap-1.5">
+                      {[
+                        { label: "Brisk", dur: 2.0, hint: "Fast" },
+                        { label: "Standard", dur: 3.0, hint: "Normal" },
+                        { label: "Comfortable", dur: 4.0, hint: "Default" },
+                        { label: "Relaxed", dur: 5.5, hint: "Detailed" },
+                      ].map((preset) => (
+                        <button
+                          key={preset.dur}
+                          type="button"
+                          onClick={() => setMinPanelDuration(preset.dur)}
+                          className={`py-1 px-1.5 rounded-lg border text-center transition-all ${
+                            minPanelDuration === preset.dur
+                              ? "bg-indigo-950/80 border-indigo-500 text-indigo-300 font-bold"
+                              : "bg-zinc-950/50 border-zinc-800/80 text-zinc-400 hover:text-zinc-200"
+                          }`}
+                        >
+                          <div className="text-[11px]">{preset.label}</div>
+                          <div className="text-[9px] text-zinc-400 font-mono">{preset.dur}s</div>
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Fine-tuning Slider */}
+                    <div className="pt-1">
+                      <div className="flex justify-between text-[10px] text-zinc-400 mb-1">
+                        <span>1.5s (Faster)</span>
+                        <span>Adjust Minimum Panel Hold Time</span>
+                        <span>8.0s (Slower)</span>
+                      </div>
+                      <input
+                        type="range"
+                        min={1.5}
+                        max={8.0}
+                        step={0.5}
+                        value={minPanelDuration}
+                        onChange={(e) => setMinPanelDuration(parseFloat(e.target.value))}
+                        className="w-full accent-indigo-500 cursor-pointer"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Panel Zoom & Framing Mode */}
+                  <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-xl p-3.5 space-y-3">
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <span className="font-semibold text-zinc-200 block text-xs">Framing & Zoom Mode</span>
+                        <span className="text-[11px] text-zinc-400">Controls artwork scaling & camera motion</span>
+                      </div>
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider ${
+                        panelZoomMode === "fit" ? "bg-emerald-950 text-emerald-400 border border-emerald-800/50" : "bg-indigo-950 text-indigo-400 border border-indigo-800/50"
+                      }`}>
+                        {panelZoomMode === "fit" ? "Full Art (No Crop)" : "Cinematic Zoom"}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 pt-1">
+                      <div
+                        onClick={() => setPanelZoomMode("fit")}
+                        className={`p-2.5 rounded-lg border cursor-pointer transition-all ${
+                          panelZoomMode === "fit"
+                            ? "bg-emerald-950/40 border-emerald-500 ring-1 ring-emerald-500/40"
+                            : "bg-zinc-950/50 border-zinc-800 hover:border-zinc-700"
+                        }`}
+                      >
+                        <div className="font-bold text-xs text-zinc-200 flex items-center gap-1.5 mb-1">
+                          <Icons.CheckCircle className={`w-3.5 h-3.5 ${panelZoomMode === "fit" ? "text-emerald-400" : "text-zinc-400"}`} />
+                          <span>Fit Entire Panel</span>
+                        </div>
+                        <p className="text-[10px] text-zinc-400 leading-tight">
+                          Shows 100% of manga panel with blurred background. Speech balloons are never cut off.
+                        </p>
+                      </div>
+
+                      <div
+                        onClick={() => setPanelZoomMode("motion")}
+                        className={`p-2.5 rounded-lg border cursor-pointer transition-all ${
+                          panelZoomMode === "motion"
+                            ? "bg-indigo-950/40 border-indigo-500 ring-1 ring-indigo-500/40"
+                            : "bg-zinc-950/50 border-zinc-800 hover:border-zinc-700"
+                        }`}
+                      >
+                        <div className="font-bold text-xs text-zinc-200 flex items-center gap-1.5 mb-1">
+                          <Icons.Film className={`w-3.5 h-3.5 ${panelZoomMode === "motion" ? "text-indigo-400" : "text-zinc-400"}`} />
+                          <span>Cinematic Zoom</span>
+                        </div>
+                        <p className="text-[10px] text-zinc-400 leading-tight">
+                          Fills canvas with 15% slow cinematic zoom. Best for splash arts and wide panoramas.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="text-[10px] text-zinc-400 bg-zinc-950/40 px-2 py-1 rounded border border-zinc-800/40">
+                      💡 Tip: "Fit Entire Panel" is recommended to ensure speech text and sound effects stay in view.
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 4. Narration Speed & Audio Mix */}
+              <div className="pt-2 border-t border-zinc-800/60">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="font-semibold text-zinc-300 text-xs uppercase tracking-wider block">
+                    4. Narration Speed & Audio Mix
+                  </label>
+                  <span className="text-[11px] text-zinc-400">
+                    Character speech rate and soundscape balance
+                  </span>
+                </div>
+
+                {/* Narration Speed Selector */}
+                <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-xl p-3.5 mb-3 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                  <div>
+                    <span className="font-semibold text-zinc-200 block text-xs">Narration & Dialogue Speed</span>
+                    <span className="text-[11px] text-zinc-400">Controls speech synthesis pacing for dialogue lines</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {[
+                      { rate: 0.85, label: "0.85x", hint: "Slow" },
+                      { rate: 0.92, label: "0.92x", hint: "Relaxed" },
+                      { rate: 1.00, label: "1.00x", hint: "Standard" },
+                      { rate: 1.10, label: "1.10x", hint: "Lively" },
+                      { rate: 1.20, label: "1.20x", hint: "Fast" },
+                    ].map((sp) => (
+                      <button
+                        key={sp.rate}
+                        type="button"
+                        onClick={() => setNarrationSpeed(sp.rate)}
+                        className={`px-2.5 py-1 rounded-lg border text-xs transition-all font-mono ${
+                          narrationSpeed === sp.rate
+                            ? "bg-indigo-600 text-white border-indigo-500 font-bold shadow-sm"
+                            : "bg-zinc-950/70 text-zinc-400 hover:text-zinc-200 border-zinc-800"
+                        }`}
+                        title={`${sp.hint} narration speech`}
+                      >
+                        {sp.label}
+                      </button>
+                    ))}
                   </div>
                 </div>
 
-                {/* BGM Volume */}
-                <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-xl p-3">
-                  <div className="flex justify-between items-center mb-1">
-                    <span className="font-semibold text-zinc-200 text-xs">Music Volume</span>
-                    <span className="font-mono text-zinc-400 text-[11px]">{bgmVolumeDb.toFixed(1)} dB</span>
+                <div className="grid grid-cols-3 gap-4">
+                  {/* Subtitles */}
+                  <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-xl p-3 flex flex-col justify-between">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <span className="font-semibold text-zinc-200 block text-xs mb-1">Burn-In Subtitles</span>
+                        <span className="text-[11px] text-zinc-400 block">Render dialogue captions directly into the video stream</span>
+                      </div>
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider shrink-0 ${subtitleEnabled ? "bg-indigo-950 text-indigo-400 border border-indigo-800/60" : "bg-zinc-800 text-zinc-400"}`}>
+                        {subtitleEnabled ? "ON" : "OFF"}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2.5 mt-3">
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={subtitleEnabled}
+                        onClick={() => setSubtitleEnabled(!subtitleEnabled)}
+                        className={`relative inline-flex h-5 w-10 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                          subtitleEnabled ? "bg-indigo-600" : "bg-zinc-700"
+                        }`}
+                      >
+                        <span
+                          aria-hidden="true"
+                          className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                            subtitleEnabled ? "translate-x-5" : "translate-x-0"
+                          }`}
+                        />
+                      </button>
+                      <span
+                        onClick={() => setSubtitleEnabled(!subtitleEnabled)}
+                        className="text-xs text-zinc-300 font-medium select-none cursor-pointer hover:text-white"
+                      >
+                        Enable Subtitles (Default: Off)
+                      </span>
+                    </div>
                   </div>
-                  <span className="text-[11px] text-zinc-400 block mb-3">Auto-ducks by -12 dB during voice speech</span>
-                  <input
-                    type="range"
-                    min={-24}
-                    max={0}
-                    step={0.5}
-                    value={bgmVolumeDb}
-                    onChange={(e) => setBgmVolumeDb(parseFloat(e.target.value))}
-                    className="w-full accent-indigo-500 cursor-pointer"
-                  />
-                </div>
 
-                {/* Dialogue Gain */}
-                <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-xl p-3">
-                  <div className="flex justify-between items-center mb-1">
-                    <span className="font-semibold text-zinc-200 text-xs">Dialogue Clarity</span>
-                    <span className="font-mono text-zinc-400 text-[11px]">+{dialogueGainDb.toFixed(1)} dB</span>
+                  {/* BGM Volume */}
+                  <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-xl p-3">
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="font-semibold text-zinc-200 text-xs">Music Volume</span>
+                      <span className="font-mono text-zinc-400 text-[11px]">{bgmVolumeDb.toFixed(1)} dB</span>
+                    </div>
+                    <span className="text-[11px] text-zinc-400 block mb-3">Auto-ducks by -12 dB during voice speech</span>
+                    <input
+                      type="range"
+                      min={-24}
+                      max={0}
+                      step={0.5}
+                      value={bgmVolumeDb}
+                      onChange={(e) => setBgmVolumeDb(parseFloat(e.target.value))}
+                      className="w-full accent-indigo-500 cursor-pointer"
+                    />
                   </div>
-                  <span className="text-[11px] text-zinc-400 block mb-3">Master vocal gain across character speech</span>
-                  <input
-                    type="range"
-                    min={-6}
-                    max={6}
-                    step={0.5}
-                    value={dialogueGainDb}
-                    onChange={(e) => setDialogueGainDb(parseFloat(e.target.value))}
-                    className="w-full accent-emerald-500 cursor-pointer"
-                  />
+
+                  {/* Dialogue Gain */}
+                  <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-xl p-3">
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="font-semibold text-zinc-200 text-xs">Dialogue Clarity</span>
+                      <span className="font-mono text-zinc-400 text-[11px]">+{dialogueGainDb.toFixed(1)} dB</span>
+                    </div>
+                    <span className="text-[11px] text-zinc-400 block mb-3">Master vocal gain across character speech</span>
+                    <input
+                      type="range"
+                      min={-6}
+                      max={6}
+                      step={0.5}
+                      value={dialogueGainDb}
+                      onChange={(e) => setDialogueGainDb(parseFloat(e.target.value))}
+                      className="w-full accent-emerald-500 cursor-pointer"
+                    />
+                  </div>
                 </div>
               </div>
 

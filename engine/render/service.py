@@ -171,6 +171,9 @@ class RenderService:
         dialogue_gain_db: float = 0.0,
         is_draft: bool = False,
         timeline_data: Optional[Dict[str, Any]] = None,
+        min_panel_duration: float = 4.0,
+        panel_zoom_mode: str = "fit",
+        narration_speed: float = 1.0,
     ) -> Dict[str, Any]:
         """
         Creates a new RenderJobRecord and kicks off background rendering.
@@ -205,6 +208,11 @@ class RenderService:
         renders_dir.mkdir(parents=True, exist_ok=True)
         render_id = str(uuid.uuid4())
 
+        # Fallback to project story_editor_state if timeline_data not explicitly provided
+        if not timeline_data:
+            settings_dict = proj.settings or {}
+            timeline_data = settings_dict.get("story_editor_state")
+
         # Resolve aspect ratio and profile
         aspect = "16:9"
         if timeline_data:
@@ -215,7 +223,13 @@ class RenderService:
         profile = editor_render_profile(chosen_profile_name, timeline_data)
 
         if custom_output_path:
-            out_file = Path(custom_output_path)
+            out_file = Path(custom_output_path).expanduser().resolve()
+            if out_file.is_dir() or (not out_file.suffix and not str(custom_output_path).lower().endswith(".mp4")):
+                out_file.mkdir(parents=True, exist_ok=True)
+                default_filename = f"{proj.title.replace(' ', '_').lower()}_{chosen_profile_name}_{render_id[:8]}.mp4"
+                out_file = out_file / default_filename
+            else:
+                out_file.parent.mkdir(parents=True, exist_ok=True)
         else:
             out_file = renders_dir / f"{proj.title.replace(' ', '_').lower()}_{chosen_profile_name}_{render_id[:8]}.mp4"
 
@@ -241,6 +255,9 @@ class RenderService:
                 subtitle_enabled=subtitle_enabled,
                 bgm_volume_db=bgm_volume_db,
                 dialogue_gain_db=dialogue_gain_db,
+                min_panel_duration=min_panel_duration,
+                panel_zoom_mode=panel_zoom_mode,
+                narration_speed_multiplier=narration_speed,
             )
             vt_hash = f"story_editor_v2_{render_id[:8]}"
             mat_hash = f"audio_story_editor_{render_id[:8]}"

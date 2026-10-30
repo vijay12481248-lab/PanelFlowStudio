@@ -63,7 +63,8 @@ class VoiceVideoSyncEngine:
 
             if not wav_path.exists() or wav_path.stat().st_size < 1000:
                 logger.info(f"Synthesizing {beat.beat_id}: '{beat.voiceover_text[:40]}...'")
-                generator = pipeline(beat.voiceover_text, voice=v_name, speed=1.0)
+                speed = float(getattr(beat, "voice_speed", 1.0) or getattr(beat, "speed", 1.0) or 1.0)
+                generator = pipeline(beat.voiceover_text, voice=v_name, speed=speed)
                 chunks = [audio for _, _, audio in generator]
                 if not chunks:
                     raise RuntimeError(f"Kokoro failed to generate audio for {beat.beat_id}")

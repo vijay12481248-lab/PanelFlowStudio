@@ -473,6 +473,14 @@ fn get_engine_status_cmd(mgr: State<EngineManager>) -> bool {
 
 #[tauri::command]
 fn get_engine_token_cmd(mgr: State<EngineManager>) -> String {
+    if let Some(path) = engine_token_file() {
+        if let Ok(content) = std::fs::read_to_string(path) {
+            let t = content.trim();
+            if t.len() >= 32 {
+                return t.to_string();
+            }
+        }
+    }
     mgr.token.as_str().to_owned()
 }
 

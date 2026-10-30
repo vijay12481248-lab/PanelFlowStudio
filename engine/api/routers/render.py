@@ -26,6 +26,9 @@ class CreateRenderRequest(BaseModel):
     dialogue_gain_db: float = 0.0
     is_draft: bool = False
     timeline_data: Optional[Dict[str, Any]] = None
+    min_panel_duration: float = 4.0
+    panel_zoom_mode: str = "fit"
+    narration_speed: float = 1.0
 
 
 @router.get("/render/profiles")
@@ -115,6 +118,9 @@ def create_render_job(
             dialogue_gain_db=req.dialogue_gain_db,
             is_draft=req.is_draft,
             timeline_data=req.timeline_data,
+            min_panel_duration=req.min_panel_duration,
+            panel_zoom_mode=req.panel_zoom_mode,
+            narration_speed=req.narration_speed,
         )
         return job
     except ValueError as e:

@@ -3,26 +3,43 @@
     PanelFlow Studio Unified Launcher (PowerShell)
     Restarts the backend engine and launches the desktop app.
 #>
-param([switch]$EngineOnly, [switch]$CancelJobs)
+param([switch]$EngineOnly, [switch]$CancelJobs, [switch]$Dev)
 
 $ErrorActionPreference = "Stop"
 $rootDir = if ($PSScriptRoot) { $PSScriptRoot } elseif ($MyInvocation.MyCommand.Path) { Split-Path -Parent $MyInvocation.MyCommand.Path } else { (Get-Location).Path }
 Set-Location $rootDir
+$venvPython = Join-Path $rootDir '.venv\Scripts\python.exe'
+if (Test-Path -LiteralPath $venvPython) {
+    $env:PANELFLOW_PYTHON = $venvPython
+}
 $tokenFile = Join-Path $env:LOCALAPPDATA 'PanelFlow Studio\engine.token'
+$rootTokenFile = Join-Path $rootDir '.engine_token'
 $engineWasRunning = $false
 try {
     $probe = Invoke-RestMethod -Uri 'http://127.0.0.1:8765/api/system/health' -TimeoutSec 1 -UseBasicParsing
     $engineWasRunning = $probe.app -eq 'PanelFlow Studio'
 } catch {}
-if ($engineWasRunning -and (Test-Path -LiteralPath $tokenFile)) {
-    $env:PANELFLOW_ENGINE_TOKEN = (Get-Content -LiteralPath $tokenFile -Raw).Trim()
-} else {
+
+if (Test-Path -LiteralPath $tokenFile) {
+    $existing = (Get-Content -LiteralPath $tokenFile -Raw).Trim()
+    if ($existing.Length -ge 32) {
+        $env:PANELFLOW_ENGINE_TOKEN = $existing
+    }
+}
+if (-not $env:PANELFLOW_ENGINE_TOKEN -and (Test-Path -LiteralPath $rootTokenFile)) {
+    $existing = (Get-Content -LiteralPath $rootTokenFile -Raw).Trim()
+    if ($existing.Length -ge 32) {
+        $env:PANELFLOW_ENGINE_TOKEN = $existing
+    }
+}
+if (-not $env:PANELFLOW_ENGINE_TOKEN) {
     $tokenBytes = New-Object byte[] 32
     [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($tokenBytes)
     $env:PANELFLOW_ENGINE_TOKEN = ([System.BitConverter]::ToString($tokenBytes)).Replace('-', '').ToLowerInvariant()
-    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $tokenFile) | Out-Null
-    [System.IO.File]::WriteAllText($tokenFile, $env:PANELFLOW_ENGINE_TOKEN)
 }
+New-Item -ItemType Directory -Force -Path (Split-Path -Parent $tokenFile) | Out-Null
+[System.IO.File]::WriteAllText($tokenFile, $env:PANELFLOW_ENGINE_TOKEN)
+[System.IO.File]::WriteAllText($rootTokenFile, $env:PANELFLOW_ENGINE_TOKEN)
 $authHeaders = @{ 'X-PanelFlow-Token' = $env:PANELFLOW_ENGINE_TOKEN }
 
 function Invoke-PanelFlowJsonGet {
@@ -227,23 +244,35 @@ if (Test-Path $ollamaExe) {
     Write-Host "[3/4] Ollama local engine optional. Cloud AI fallback active." -ForegroundColor Gray
 }
 
-# 4. Launch Desktop Application from current source.
-Write-Host "[4/4] Launching PanelFlow Studio Desktop in development mode..." -ForegroundColor Yellow
-Write-Host "  -> Serving the latest local UI code." -ForegroundColor Cyan
-Write-Host "  -> Keep this window open while using PanelFlow Studio." -ForegroundColor Cyan
+# 4. Launch Desktop Application
+Write-Host "[4/4] Launching PanelFlow Studio Desktop..." -ForegroundColor Yellow
 
-$cargoCmd = Get-Command cargo.exe -ErrorAction SilentlyContinue
-$debugApp = Join-Path $rootDir "apps\desktop\src-tauri\target\debug\panelflow-desktop.exe"
-$releaseApp = Join-Path $rootDir "apps\desktop\src-tauri\target\release\deps\panelflow_desktop.exe"
-$desktopExe = if (Test-Path -LiteralPath $debugApp) { $debugApp } elseif (Test-Path -LiteralPath $releaseApp) { $releaseApp } else { $null }
+$releaseApp = Join-Path $rootDir "apps\desktop\src-tauri\target\release\panelflow-desktop.exe"
+$portableCandidates = Get-ChildItem -Path (Join-Path $rootDir "release") -Filter "PanelFlow-Studio-*-Portable.exe" -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending
+$portableApp = if ($portableCandidates) { $portableCandidates[0].FullName } else { $null }
 
-if ($cargoCmd) {
-    & npm.cmd --workspace=@panelflow/desktop run tauri -- dev
-    if ($LASTEXITCODE -ne 0) {
-        throw "PanelFlow desktop development command failed with exit code $LASTEXITCODE."
+$candidateApps = @($releaseApp, $portableApp) | Where-Object { $_ -and (Test-Path -LiteralPath $_) } | ForEach-Object { Get-Item -LiteralPath $_ }
+$nativeApp = $candidateApps | Select-Object -First 1
+
+if (-not $Dev -and $nativeApp) {
+    # Clean up leftover orphaned WebView2 processes from previous sessions
+    Get-CimInstance Win32_Process -Filter "name = 'msedgewebview2.exe'" -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -like "*panelflow*" } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+
+    Write-Host "  -> Launching native desktop application: $($nativeApp.Name)" -ForegroundColor Green
+    Write-Host "  -> Keep this window open while using PanelFlow Studio." -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "PanelFlow Studio is ready!" -ForegroundColor Green
+    $desktopProcess = Start-Process -FilePath $nativeApp.FullName -WorkingDirectory $rootDir -PassThru
+    $desktopProcess.WaitForExit()
+
+    # Clean up backend engine when desktop window closes
+    if ($engineProcess -and -not $engineProcess.HasExited) {
+        Stop-Process -Id $engineProcess.Id -Force -ErrorAction SilentlyContinue
     }
 } else {
-    Write-Host "  -> Rust toolchain (cargo) not detected. Using pre-built desktop shell + live Vite server." -ForegroundColor Yellow
+    Write-Host "  -> Launching in development mode (Vite live reload)..." -ForegroundColor Cyan
+    Write-Host "  -> Keep this window open while using PanelFlow Studio." -ForegroundColor Cyan
+
     # Start Vite dev server in background process
     $viteProcess = Start-Process -FilePath "npm.cmd" -ArgumentList "--workspace=@panelflow/desktop", "run", "dev" -WorkingDirectory $rootDir -PassThru
     
@@ -262,7 +291,7 @@ if ($cargoCmd) {
         Start-Sleep -Seconds 2
     }
 
-    # Launch standalone application window via Edge/Chrome app mode with live code & hot reload
+    # Launch standalone application window via Edge/Chrome app mode
     $browserCandidates = @(
         "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
         "C:\Program Files\Microsoft\Edge\Application\msedge.exe",
@@ -275,7 +304,7 @@ if ($cargoCmd) {
     New-Item -ItemType Directory -Force -Path $profileDir | Out-Null
 
     if ($browserApp) {
-        Write-Host "  -> Launching PanelFlow Studio standalone desktop window..." -ForegroundColor Green
+        Write-Host "  -> Launching PanelFlow Studio standalone window..." -ForegroundColor Green
         $desktopProcess = Start-Process -FilePath $browserApp -ArgumentList "--app=$appUrl", "--user-data-dir=`"$profileDir`"", "--window-size=1360,900" -PassThru
         $desktopProcess.WaitForExit()
     } else {
@@ -284,7 +313,7 @@ if ($cargoCmd) {
         $viteProcess.WaitForExit()
     }
 
-    # Clean up background services when desktop window closes
+    # Clean up background services when window closes
     if ($viteProcess -and -not $viteProcess.HasExited) {
         Stop-Process -Id $viteProcess.Id -Force -ErrorAction SilentlyContinue
     }

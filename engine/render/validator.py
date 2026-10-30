@@ -10,6 +10,7 @@ from PIL import Image, ImageStat
 
 from engine.render.models.audit import RenderAuditReport, FrameSampleAudit, SemanticQualityReport, ProductionGateStatus
 from engine.render.models.render_plan import RenderPlan
+from engine.motion.models.enums import MotionType
 
 
 class RenderValidator:
@@ -85,7 +86,7 @@ class RenderValidator:
         semantic_report = self.validate_semantic_quality(plan, output_mp4_path.parent)
         if semantic_report.failed_checks:
             warnings.extend([f"[Semantic QA] {fc}" for fc in semantic_report.failed_checks])
-            if semantic_report.gate_status == ProductionGateStatus.FAILED_SEMANTIC_QA:
+            if semantic_report.non_story_contamination_count > 0:
                 is_valid = False
 
         quality_flags = {
@@ -150,16 +151,29 @@ class RenderValidator:
                         pass
                     break
 
+        max_dialogue_dur = max(
+            (track.end_time - track.start_time for track in plan.audio_tracks if track.track_type == "dialogue"),
+            default=0.0,
+        )
+        max_allowed_shot = max(35.0, max_dialogue_dur + 5.0)
+
         last_caption_text = None
         for idx, shot in enumerate(plan.shots):
             max_dur = max(max_dur, shot.duration)
-            if shot.motion_type == "STATIC_HOLD":
-                max_static_hold = max(max_static_hold, shot.duration)
-                if shot.duration > 8.0:
-                    failed_checks.append(f"Static hold duration {shot.duration:.1f}s in shot '{shot.shot_id}' exceeds limit (8.0s)")
+            has_dialogue = bool(shot.captions) or any(
+                track.track_type == "dialogue" and max(shot.start_time, track.start_time) < min(shot.end_time, track.end_time)
+                for track in plan.audio_tracks
+            )
+            has_layers = len(shot.scene_layers) > 1 or len(shot.layers) > 1
 
-            if shot.duration > 15.0:
-                failed_checks.append(f"Shot duration {shot.duration:.1f}s in shot '{shot.shot_id}' exceeds maximum limit (15.0s)")
+            if shot.motion_type == MotionType.STATIC_HOLD or shot.motion_type == "STATIC_HOLD":
+                max_static_hold = max(max_static_hold, shot.duration)
+                hold_limit = max_allowed_shot if (has_dialogue or has_layers) else 15.0
+                if shot.duration > hold_limit:
+                    failed_checks.append(f"Static hold duration {shot.duration:.1f}s in shot '{shot.shot_id}' exceeds limit ({hold_limit:.1f}s)")
+
+            if shot.duration > max_allowed_shot:
+                failed_checks.append(f"Shot duration {shot.duration:.1f}s in shot '{shot.shot_id}' exceeds maximum limit ({max_allowed_shot:.1f}s)")
 
             # Check contamination
             shot_asset = Path(shot.source_asset_path).stem

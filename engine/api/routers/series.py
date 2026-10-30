@@ -1,3 +1,5 @@
+import uuid
+import time
 """
 FastAPI router for Manga Series Scraping, Chapter Discovery, and Batch Video Production.
 """
@@ -77,13 +79,25 @@ async def start_batch_generation(req: BatchGenerateRequest, background_tasks: Ba
         output_dir=req.output_dir,
     )
 
+    job_id = f"batch_{uuid.uuid4().hex[:10]}"
+    now = time.time()
+    active_batch_jobs[job_id] = BatchJobStatus(
+        job_id=job_id,
+        series_title="Queued...",
+        status="QUEUED",
+        progress=0.01,
+        created_at=now,
+        updated_at=now,
+    )
+
     # Launch background task
     async def _run_job():
-        await batch_producer.run_batch(config)
+        await batch_producer.run_batch(config, job_id=job_id)
 
     background_tasks.add_task(_run_job)
 
     return {
+        "job_id": job_id,
         "status": "QUEUED",
         "message": "Batch production job scheduled successfully",
         "source_url": req.source_url,

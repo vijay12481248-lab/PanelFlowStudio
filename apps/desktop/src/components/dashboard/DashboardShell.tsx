@@ -13,6 +13,7 @@ import { RecentActivityPanel } from "./RecentActivityPanel";
 import { DashboardPromoCard } from "./DashboardPromoCard";
 import { useError } from "../../context/ErrorContext";
 import { createDashboardLoader } from "./dashboardData";
+import { getAuthenticatedEngineHealth } from "../../engineConnection";
 
 export const DashboardShell: React.FC<DashboardShellProps> = ({
   engineConnected,
@@ -68,7 +69,14 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
   };
 
   const loaderRef = useRef<ReturnType<typeof createDashboardLoader> | null>(null);
-  const loadData = useCallback(() => loaderRef.current?.refresh(true) ?? Promise.resolve(), []);
+  const loadData = useCallback(async () => {
+    try {
+      await getAuthenticatedEngineHealth();
+    } catch (err) {
+      console.warn("[Dashboard] Engine re-auth check:", err);
+    }
+    return loaderRef.current?.refresh(true) ?? Promise.resolve();
+  }, []);
 
   // Authentication readiness is established by App before this flag becomes true.
   useEffect(() => {

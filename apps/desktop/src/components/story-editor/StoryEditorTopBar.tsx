@@ -206,6 +206,38 @@ export const StoryEditorTopBar: React.FC<StoryEditorTopBarProps> = ({
           </button>
         )}
 
+        {/* + Add Motion Scene Button */}
+        <button
+          type="button"
+          onClick={() => {
+            const newSceneId = `scene_mg_${Date.now()}`;
+            onUpdateState((s) => ({
+              ...s,
+              scenes: [
+                ...s.scenes,
+                {
+                  id: newSceneId,
+                  sequence: s.scenes.length + 1,
+                  type: "motion_graphic",
+                  motion_preset_id: "keynote_showcase",
+                  duration_sec: 6.0,
+                  motion_props: {
+                    headline: "SYNTHESIS ONE",
+                    subtitle: "The Next Generation Neural Presentation Architecture",
+                    badge_text: "GLOBAL KEYNOTE 2026",
+                  },
+                  layers: [],
+                } as any,
+              ],
+            }));
+          }}
+          className="text-xs h-8 px-3 rounded-lg border border-indigo-600/60 bg-indigo-950/40 text-indigo-300 hover:bg-indigo-900/60 hover:text-indigo-100 flex items-center gap-1.5 font-semibold transition-all shadow-sm shadow-indigo-950 active:scale-95"
+          title="Add a Procedural Motion Graphic Scene"
+        >
+          <Icons.Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+          <span>+ Motion Scene</span>
+        </button>
+
         {/* Preview Button */}
         <button
           type="button"

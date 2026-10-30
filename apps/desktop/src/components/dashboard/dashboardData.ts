@@ -70,7 +70,8 @@ export function createDashboardLoader(client: DashboardClient, updates: Dashboar
           // Display the cards before any page inventory or image request completes.
           updates.loading(false);
           for (const project of projects) loadCover(project);
-        } catch {
+        } catch (err: any) {
+          console.error("[Dashboard] Failed to list projects:", err);
           if (!disposed) updates.error("Could not load projects. Check the engine connection and retry.");
         } finally {
           if (!disposed) updates.loading(false);

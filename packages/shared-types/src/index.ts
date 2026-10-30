@@ -6,7 +6,12 @@ export type RightsStatus =
   | "USER_OWNED"
   | "EXPLICIT_PERMISSION";
 
-export type SourceType = "LOCAL_FOLDER" | "ZIP_ARCHIVE" | "AUTHORIZED_WEB";
+export type SourceType =
+  | "LOCAL_FOLDER"
+  | "ZIP_ARCHIVE"
+  | "AUTHORIZED_WEB"
+  | "MANGA_SERIES"
+  | "VIDEO_FILE";
 
 export type PipelineStage =
   | "NEW"
@@ -1324,6 +1329,9 @@ export interface VideoScene {
   camera_motion?: SceneCameraConfig;
   /** Missing means inherit the project's default; enabled:false explicitly turns it off. */
   background?: SmartBackgroundSettings;
+  type?: "standard" | "motion_graphic";
+  motion_preset_id?: string;
+  motion_props?: Record<string, any>;
 }
 
 export type NarrationEmotion =
@@ -1556,3 +1564,160 @@ export interface SFXCapabilityReport {
 
 
 
+
+export interface SeriesChapterInfo {
+  sequence: number;
+  title: string;
+  url: string;
+  date_released?: string;
+  page_count_estimate?: number;
+}
+
+export interface SeriesInspectResponse {
+  title: string;
+  series_url: string;
+  source_domain: string;
+  cover_image_url?: string;
+  description?: string;
+  total_chapters_detected: number;
+  chapters: SeriesChapterInfo[];
+  url_pattern?: string;
+  detected_range: [number, number];
+  discovery_strategy: string;
+}
+
+export interface BatchGenerateParams {
+  source_url: string;
+  compilation_mode?: "individual" | "compiled";
+  target_duration_minutes?: number;
+  chapter_start?: number;
+  chapter_end?: number;
+  chapter_urls?: string[];
+  max_chapters?: number;
+  tts_voice?: string;
+  video_profile?: string;
+  subtitles?: boolean;
+  output_dir?: string;
+}
+
+export interface BatchJobStatusInfo {
+  job_id: string;
+  series_title: string;
+  status: "QUEUED" | "RUNNING" | "COMPLETED" | "FAILED" | "CANCELLED";
+  progress: number;
+  total_chapters: number;
+  completed_chapters: number;
+  current_chapter?: string;
+  current_step?: string;
+  generated_videos: string[];
+  compilation_videos: string[];
+  errors: string[];
+  created_at: number;
+  updated_at: number;
+}
+
+export interface AnimeInspectResponse {
+  valid: boolean;
+  source_uri: string;
+  series_title: string;
+  episode_number: number;
+  duration_sec: number;
+  duration_formatted: string;
+  width: number;
+  height: number;
+  resolution: string;
+  fps: number;
+  has_audio: boolean;
+  audio_sample_rate: number;
+  estimated_cuts: number;
+  error?: string;
+}
+
+export interface AnimeReviewConfigParams {
+  source_video: string;
+  series_title: string;
+  episode_number?: number;
+  episode_title?: string;
+  target_review_duration_minutes?: number;
+  max_cut_length_sec?: number;
+  min_cut_length_sec?: number;
+  tts_voice?: string;
+  tts_speed?: number;
+  original_audio_duck_db?: number;
+  crop_to_1080p?: boolean;
+  anti_copyright_transform?: boolean;
+  output_dir?: string;
+  subtitles?: boolean;
+}
+
+export interface AnimeJobStatusInfo {
+  job_id: string;
+  series_title: string;
+  episode_number: number;
+  status: "QUEUED" | "RUNNING" | "COMPLETED" | "FAILED";
+  progress: number;
+  current_step: string;
+  result?: {
+    series_title: string;
+    episode_number: number;
+    output_video_path: string;
+    video_duration_sec: number;
+    total_scene_cuts: number;
+    total_review_beats: number;
+    voice_voiceover_duration_sec: number;
+    youtube_metadata_path?: string;
+  };
+  error?: string;
+  created_at: number;
+  updated_at: number;
+}
+
+
+export interface MotionPresetInfo {
+  id: string;
+  name: string;
+  category: string;
+  description: string;
+  default_duration: number;
+  aspect_ratios: string[];
+  default_props: Record<string, any>;
+  preview_description?: string;
+}
+
+export interface MotionPreviewRequest {
+  preset_id: string;
+  timestamp?: number;
+  duration_sec?: number;
+  props?: Record<string, any>;
+  aspect_ratio?: "16:9" | "9:16";
+  width?: number;
+  height?: number;
+}
+
+export interface MotionPreviewResponse {
+  preset_id: string;
+  timestamp: number;
+  image_base64: string;
+  width: number;
+  height: number;
+}
+
+export interface MotionRenderRequest {
+  preset_id: string;
+  duration_sec?: number;
+  props?: Record<string, any>;
+  fps?: number;
+  width?: number;
+  height?: number;
+  output_filename?: string;
+  audio_file_path?: string;
+}
+
+export interface MotionRenderResponse {
+  success: boolean;
+  preset_id: string;
+  output_path: string;
+  duration_sec: number;
+  file_size_mb: number;
+  message: string;
+}

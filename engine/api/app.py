@@ -18,7 +18,7 @@ from engine.security.local_api import (
     insecure_local_api_enabled,
 )
 from engine.api.routers import projects, pages, panels, ocr, jobs, adapters, system, story, audio, motion, render, music, comfyui
-from engine.api.routers import history, backgrounds, packaging, autopilot, series, browser_bridge
+from engine.api.routers import history, backgrounds, packaging, autopilot, series, browser_bridge, anime, motion_graphics
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("panelflow.engine")
@@ -111,7 +111,9 @@ def create_app(
     app.include_router(packaging.router)
     app.include_router(autopilot.router)
     app.include_router(series.router)
+    app.include_router(anime.router)
     app.include_router(browser_bridge.router)
+    app.include_router(motion_graphics.router)
 
     @app.exception_handler(Exception)
     async def global_exception_handler(request: Request, exc: Exception):

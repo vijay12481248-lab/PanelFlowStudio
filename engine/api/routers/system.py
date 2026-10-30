@@ -1216,3 +1216,124 @@ def update_global_llm_settings(req: GlobalLLMSettingsRequest):
         "flow_overrides": saved.get("flow_overrides"),
     }
 
+class PickDirectoryRequest(BaseModel):
+    initial_dir: Optional[str] = None
+    title: Optional[str] = "Select Destination Folder"
+
+
+class PickSaveFileRequest(BaseModel):
+    initial_dir: Optional[str] = None
+    default_filename: Optional[str] = "video.mp4"
+    title: Optional[str] = "Save Rendered Video As"
+
+
+@router.get("/quick-destinations")
+def get_quick_destinations(project_id: Optional[str] = None, db: Session = Depends(get_db)):
+    """
+    Returns quick common destination folders on the local system:
+    Project Renders, Videos, Desktop, Downloads, and Documents.
+    """
+    home = Path.home()
+    destinations = []
+
+    # Check project renders directory first
+    if project_id:
+        proj = project_service.get_project(db, project_id)
+        if proj and proj.workspace_path:
+            p_renders = Path(proj.workspace_path) / "renders"
+            p_renders.mkdir(parents=True, exist_ok=True)
+            destinations.append({
+                "id": "project_renders",
+                "label": f"Project Renders ({proj.title})",
+                "path": str(p_renders.resolve()),
+                "exists": True,
+                "is_default": True,
+            })
+
+    standard = [
+        {"id": "videos", "label": "Videos", "path": str(home / "Videos")},
+        {"id": "desktop", "label": "Desktop", "path": str(home / "Desktop")},
+        {"id": "downloads", "label": "Downloads", "path": str(home / "Downloads")},
+        {"id": "documents", "label": "Documents", "path": str(home / "Documents")},
+    ]
+    for s in standard:
+        p = Path(s["path"])
+        if p.exists():
+            destinations.append({
+                "id": s["id"],
+                "label": s["label"],
+                "path": str(p.resolve()),
+                "exists": True,
+                "is_default": False if destinations else True,
+            })
+
+    default_dir = destinations[0]["path"] if destinations else str(home)
+    return {
+        "destinations": destinations,
+        "default_directory": default_dir,
+    }
+
+
+@router.post("/pick-directory")
+def pick_directory(req: PickDirectoryRequest):
+    """
+    Pops up a native OS folder picker dialog on the host system.
+    """
+    code = (
+        "import sys, os, tkinter as tk; from tkinter import filedialog; "
+        "root = tk.Tk(); root.withdraw(); root.attributes('-topmost', True); "
+        "d = sys.argv[1] if len(sys.argv) > 1 and os.path.exists(sys.argv[1]) else None; "
+        "t = sys.argv[2] if len(sys.argv) > 2 else 'Select Destination Folder'; "
+        "res = filedialog.askdirectory(initialdir=d, title=t); "
+        "root.destroy(); "
+        "print(res if res else '', end='')"
+    )
+    cmd = [
+        sys.executable,
+        "-c",
+        code,
+        req.initial_dir or "",
+        req.title or "Select Destination Folder",
+    ]
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        chosen = proc.stdout.strip()
+        if chosen and os.path.exists(chosen):
+            return {"selected": True, "path": chosen}
+        return {"selected": False, "path": None}
+    except Exception as e:
+        return {"selected": False, "path": None, "error": str(e)}
+
+
+@router.post("/pick-save-file")
+def pick_save_file(req: PickSaveFileRequest):
+    """
+    Pops up a native OS Save-As file dialog on the host system.
+    """
+    code = (
+        "import sys, os, tkinter as tk; from tkinter import filedialog; "
+        "root = tk.Tk(); root.withdraw(); root.attributes('-topmost', True); "
+        "d = sys.argv[1] if len(sys.argv) > 1 and os.path.exists(sys.argv[1]) else None; "
+        "f = sys.argv[2] if len(sys.argv) > 2 else 'video.mp4'; "
+        "t = sys.argv[3] if len(sys.argv) > 3 else 'Save Rendered Video As'; "
+        "res = filedialog.asksaveasfilename(initialdir=d, initialfile=f, title=t, defaultextension='.mp4', filetypes=[('MP4 Video', '*.mp4'), ('All Files', '*.*')]); "
+        "root.destroy(); "
+        "print(res if res else '', end='')"
+    )
+    cmd = [
+        sys.executable,
+        "-c",
+        code,
+        req.initial_dir or "",
+        req.default_filename or "video.mp4",
+        req.title or "Save Rendered Video As",
+    ]
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        chosen = proc.stdout.strip()
+        if chosen:
+            return {"selected": True, "path": chosen}
+        return {"selected": False, "path": None}
+    except Exception as e:
+        return {"selected": False, "path": None, "error": str(e)}
+

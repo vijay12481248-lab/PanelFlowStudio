@@ -375,8 +375,9 @@ class LocalSpeechSynthesizer:
             emo_cfg = EMOTION_SETTINGS.get(emotion_raw, EMOTION_SETTINGS["neutral"])
 
             ref_path = resolve_voice_reference(voice)
+            pace = float(t.get("pace") or t.get("speed") or 1.0)
             content_key = hashlib.sha256(json.dumps([
-                "speech-v4", provider_id, cleaned_text, voice, emo_cfg["temperature"], emo_cfg["top_p"], emo_cfg.get("top_k", 50),
+                "speech-v5", provider_id, cleaned_text, voice, emo_cfg["temperature"], emo_cfg["top_p"], emo_cfg.get("top_k", 50), round(pace, 2),
             ], ensure_ascii=False).encode()).hexdigest()
 
             if t.get("force"):
@@ -417,6 +418,7 @@ class LocalSpeechSynthesizer:
                 "repetition_penalty": emo_cfg["repetition_penalty"],
                 "top_k": emo_cfg.get("top_k", 50),
                 "emotion": emotion_raw,
+                "pace": pace,
                 "text_revision": t.get("text_revision", 1),
             })
 
@@ -429,15 +431,55 @@ class LocalSpeechSynthesizer:
             import asyncio
             import concurrent.futures
 
-            async def _synth_edge_all():
-                for pt in prepared_tasks:
+            import threading
+            results_lock = threading.Lock()
+
+            async def _synth_edge_single(pt, sem):
+                async with sem:
                     check_cancelled(cancelled_cb)
                     v_name = "en-US-AriaNeural" if any(k in pt["voice"].lower() for k in ("aria", "female", "girl", "woman")) else "en-US-ChristopherNeural"
                     tmp_mp3 = Path(pt["target_path"]).with_suffix(".tmp.mp3")
-                    comm = edge_tts.Communicate(pt["text"], v_name)
+                    pace_val = float(pt.get("pace", 1.0) or 1.0)
+                    rate_pct = int(round((pace_val - 1.0) * 100))
+                    rate_str = f"{rate_pct:+d}%"
+                    comm = edge_tts.Communicate(pt["text"], v_name, rate=rate_str)
                     await await_speech_operation(comm.save(str(tmp_mp3)), cancelled_cb)
                     run_speech_process(["ffmpeg", "-y", "-i", str(tmp_mp3), "-ar", "24000", "-ac", "1", pt["target_path"]], timeout=180, cancelled=cancelled_cb).check_returncode()
                     tmp_mp3.unlink(missing_ok=True)
+
+                    temporary_wav = Path(pt["target_path"])
+                    target_wav = Path(pt["authoritative_path"])
+                    if temporary_wav.exists() and temporary_wav.stat().st_size > 0:
+                        clean_info = postprocess_speech_audio(temporary_wav)
+                        root = target_wav.parents[2]
+                        promote_contained_file(root, temporary_wav, target_wav)
+                        write_contained_json(root, Path(pt["meta_path"]), {
+                            "text": pt["raw_text"],
+                            "formatted_text": pt["text"],
+                            "voice": pt["voice"],
+                            "emotion": pt["emotion"],
+                            "duration": clean_info["duration"],
+                            "sample_rate": clean_info["sample_rate"],
+                            "channels": clean_info["channels"],
+                            "provider": "edge_tts_neural",
+                            "pace": pt.get("pace", 1.0),
+                            "text_revision": pt["text_revision"],
+                            "created_at": time.time(),
+                        })
+                        with results_lock:
+                            results.append({
+                                "id": pt["id"],
+                                "success": True,
+                                "audio_path": str(target_wav),
+                                "duration": clean_info["duration"],
+                                "cached": False,
+                                "emotion": pt["emotion"],
+                            })
+
+            async def _synth_edge_all():
+                sem = asyncio.Semaphore(8)
+                tasks = [_synth_edge_single(pt, sem) for pt in prepared_tasks]
+                await asyncio.gather(*tasks)
 
             try:
                 try:
@@ -450,42 +492,6 @@ class LocalSpeechSynthesizer:
                         pool.submit(lambda: asyncio.run(_synth_edge_all())).result()
                 else:
                     asyncio.run(_synth_edge_all())
-
-                for pt in prepared_tasks:
-                    check_cancelled(cancelled_cb)
-                    temporary_wav = Path(pt["target_path"])
-                    target_wav = Path(pt["authoritative_path"])
-                    if temporary_wav.exists() and temporary_wav.stat().st_size > 0:
-                        clean_info = postprocess_speech_audio(temporary_wav)
-                        root = target_wav.parents[2]
-                        check_cancelled(cancelled_cb)
-                        promote_contained_file(root, temporary_wav, target_wav)
-                        write_contained_json(root, Path(pt["meta_path"]), {
-                            "text": pt["raw_text"],
-                            "formatted_text": pt["text"],
-                            "voice": pt["voice"],
-                            "emotion": pt["emotion"],
-                            "duration": clean_info["duration"],
-                            "sample_rate": clean_info["sample_rate"],
-                            "channels": clean_info["channels"],
-                            "provider": "edge_tts_neural",
-                            "text_revision": pt["text_revision"],
-                            "created_at": time.time(),
-                        })
-                        results.append({
-                            "id": pt["id"],
-                            "success": True,
-                            "audio_path": str(target_wav),
-                            "duration": clean_info["duration"],
-                            "cached": False,
-                            "emotion": pt["emotion"],
-                        })
-                    else:
-                        results.append({
-                            "id": pt["id"],
-                            "success": False,
-                            "error": "Synthesis failed",
-                        })
                 return results
             finally:
                 for pt in prepared_tasks:

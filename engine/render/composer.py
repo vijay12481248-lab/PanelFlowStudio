@@ -30,9 +30,22 @@ def crop_layer_source(source: Image.Image, layer: Dict[str, Any]) -> Image.Image
     w, h = float(crop.get("width", 0)), float(crop.get("height", 0))
     if w <= 0 or h <= 0:
         return source
-    if w <= 1 and h <= 1:
+    # Full frame uncropped shortcuts (web UI 100% or normalized 1.0 or entire image)
+    if x == 0 and y == 0:
+        if (w == 100 and h == 100) or (w == 1.0 and h == 1.0) or (w >= source.width and h >= source.height):
+            return source
+    if w <= 1.0 and h <= 1.0:
         box = (round(x * source.width), round(y * source.height), round((x + w) * source.width), round((y + h) * source.height))
+    elif w <= 100.0 and h <= 100.0 and (x + w) <= 100.05 and (y + h) <= 100.05 and (source.width > 100 or source.height > 100):
+        # Percentage coordinates (0-100%) from web UI
+        box = (
+            round((x / 100.0) * source.width),
+            round((y / 100.0) * source.height),
+            round(((x + w) / 100.0) * source.width),
+            round(((y + h) / 100.0) * source.height),
+        )
     else:
+        # Absolute pixel coordinates
         box = (round(x), round(y), round(x + w), round(y + h))
     box = (max(0, box[0]), max(0, box[1]), min(source.width, box[2]), min(source.height, box[3]))
     return source.crop(box) if box[2] > box[0] and box[3] > box[1] else source
@@ -410,22 +423,23 @@ class CaptionRenderer:
             line_height = int(font_size * 1.35)
             total_text_h = len(lines) * line_height
 
-            # Bottom-safe positioning
-            bottom_margin = int(target_h * 0.08)
+            # Bottom-safe positioning: 4% margin places subtitle neatly in title-safe zone
+            # without colliding into diagram content or bottom formulas
+            bottom_margin = int(target_h * 0.04)
             box_bottom = target_h - bottom_margin
-            box_h = total_text_h + 24
+            box_h = total_text_h + 16
             box_top = box_bottom - box_h
 
-            box_w = max_line_w + 48
+            box_w = min(int(target_w * 0.90), max_line_w + 36)
             box_left = (target_w - box_w) // 2
             box_right = box_left + box_w
 
             # Semi-transparent dark pill background for guaranteed contrast
             draw.rounded_rectangle(
                 [(box_left, box_top), (box_right, box_bottom)],
-                radius=10,
-                fill=(12, 16, 24, 215),
-                outline=(255, 255, 255, 55),
+                radius=8,
+                fill=(12, 16, 24, 220),
+                outline=(255, 255, 255, 60),
                 width=1,
             )
 
@@ -562,6 +576,10 @@ class LayerStackRenderer:
                 final_y += (6.0 * (0.5 - progress) * intensity)
             elif preset == "pan_down":
                 final_y -= (6.0 * (0.5 - progress) * intensity)
+            elif preset in ("cinematic_vertical_pan", "cinematic_pan"):
+                # Smooth top-to-bottom cinematic glide for tall vertical panels
+                final_y += (20.0 * (0.5 - progress) * intensity)
+                final_scale *= (1.0 + 0.04 * progress)
             elif preset == "diagonal_pan":
                 final_x += (6.0 * (0.5 - progress) * intensity)
                 final_y += (4.0 * (0.5 - progress) * intensity)
@@ -729,6 +747,7 @@ class FrameComposer:
         return img
 
     def clear_cache(self, file_path: Optional[str] = None) -> None:
+        self._source_alpha_cache = OrderedDict()
         if file_path:
             for key in (file_path, file_path + "|oriented"):
                 evicted = self._image_cache.pop(key, None)
@@ -798,6 +817,24 @@ class FrameComposer:
         if shot.background and shot.background.enabled and shot.background.preset != "none":
             timestamp_sec = frame_index / plan.profile.fps
 
+        # Check if shot is a procedural motion graphic
+        if getattr(shot, "motion_graphic", None):
+            mg = shot.motion_graphic
+            from engine.render.motion.registry import MotionRegistry
+            if not hasattr(shot, "_instantiated_motion_scene") or shot._instantiated_motion_scene is None:
+                pid = mg.get("preset_id", "keynote_showcase")
+                props = mg.get("props", {})
+                shot._instantiated_motion_scene = MotionRegistry.create_scene(
+                    pid, props=props, duration_sec=shot.duration, bounds=(target_w, target_h)
+                )
+            time_in_shot = max(0.0, timestamp_sec - shot.start_time)
+            canvas = shot._instantiated_motion_scene.render_frame(time_in_shot)
+            if canvas.mode != "RGB":
+                canvas = canvas.convert("RGB")
+            if canvas.size != (target_w, target_h):
+                canvas = canvas.resize((target_w, target_h), Image.Resampling.LANCZOS)
+            return canvas
+
         # Check if shot has rich multi-layer composition
         if shot.scene_layers or (shot.background and shot.background.enabled and shot.background.preset != "none"):
             canvas = self._compose_multi_layer_shot(shot, timestamp_sec, target_w, target_h, plan)
@@ -805,7 +842,8 @@ class FrameComposer:
             canvas = self._compose_legacy_camera_shot(shot, frame_index, timestamp_sec, target_w, target_h, plan)
 
         # Apply Captions / Subtitles if present and enabled
-        if shot.captions and getattr(plan, "subtitle_enabled", False):
+        is_hud_motion = any(layer.get("type") == "motion_graphic" or bool(layer.get("motion_scene")) for layer in shot.scene_layers)
+        if shot.captions and getattr(plan, "subtitle_enabled", False) and not is_hud_motion:
             canvas = self.caption_renderer.render_captions(
                 canvas=canvas,
                 captions=shot.captions,
@@ -884,9 +922,13 @@ class FrameComposer:
                 is_opaque = source_tf.get("opacity", 1.0) >= 0.995
                 has_alpha = False
                 if source.mode in ("RGBA", "LA"):
-                    extrema = source.getextrema()
-                    if source.mode == "RGBA" and extrema[3][0] < 255:
-                        has_alpha = True
+                    if not hasattr(self, "_source_alpha_cache"):
+                        self._source_alpha_cache = OrderedDict()
+                    if source_key not in self._source_alpha_cache:
+                        self._source_alpha_cache[source_key] = source.getchannel("A").getextrema()[0] < 255
+                        if len(self._source_alpha_cache) > 64:
+                            self._source_alpha_cache.popitem(last=False)
+                    has_alpha = self._source_alpha_cache[source_key]
                 if aspect_matches and eff_scale >= 0.999 and is_centered and is_unrotated and is_opaque and not has_alpha:
                     occupies_canvas = True
             base_settings = settings.model_copy(update={"motion": "none"})
@@ -912,7 +954,7 @@ class FrameComposer:
             else:
                 canvas = cached_base.copy()
 
-        for layer in sorted_layers:
+        for l_idx, layer in enumerate(sorted_layers):
             if layer.get("visible", True) is False:
                 continue
 
@@ -923,12 +965,29 @@ class FrameComposer:
             if not tf["is_active"] or tf["opacity"] <= 0.005 or not exact_active:
                 continue
 
-            # Load layer source image
-            img_path = layer.get("disk_image_path", "")
-            if not img_path:
+            # Load layer source image or render procedural motion graphic
+            is_motion = layer.get('type') == 'motion_graphic' or bool(layer.get('motion_scene')) or bool(layer.get('motion_scene_data'))
+            if is_motion:
+                m_scene = layer.get('motion_scene') or layer.get('motion_scene_data')
+                time_in_layer = max(0.0, elapsed_in_scene - l_start)
+                if m_scene is not None and hasattr(m_scene, 'render_frame'):
+                    working_img = m_scene.render_frame(time_in_layer, (target_w, target_h))
+                else:
+                    continue
+                if working_img.mode != 'RGBA':
+                    working_img = working_img.convert('RGBA')
+                layer_op = tf['opacity']
+                if layer_op < 0.995:
+                    alpha = working_img.getchannel('A').point(lambda a: int(a * layer_op))
+                    working_img.putalpha(alpha)
+                canvas.alpha_composite(working_img, (0, 0))
                 continue
-            src_img = self.get_source_image(img_path, target_w, target_h, smart)
-            working_img = crop_layer_source(src_img, layer)
+            else:
+                img_path = layer.get("disk_image_path", "")
+                if not img_path:
+                    continue
+                src_img = self.get_source_image(img_path, target_w, target_h, smart)
+                working_img = crop_layer_source(src_img, layer)
 
             # Base fit inside 90% of canvas
             pw, ph = working_img.size
@@ -938,15 +997,23 @@ class FrameComposer:
             p_aspect = pw / max(1, ph)
             c_aspect = target_w / max(1, target_h)
 
+            # Aspect ratio matching: Widescreen presentations (16:9) should fill 100% full-bleed
+            # without an artificial 3% duplicate blur border
+            aspect_ratio_diff = abs(p_aspect - c_aspect)
+            is_widescreen_match = (aspect_ratio_diff < 0.05)
+
             if smart:
-                safe_margin = 0.94 if settings.foreground_fit == "contain" else 1.0
-                fit_scale = (max if settings.foreground_fit == "cover" else min)((target_w * safe_margin) / pw, (target_h * safe_margin) / ph)
+                if is_widescreen_match and settings.foreground_fit == "contain":
+                    fit_scale = min(target_w / pw, target_h / ph)
+                else:
+                    safe_margin = 0.94 if settings.foreground_fit == "contain" else 1.0
+                    fit_scale = (max if settings.foreground_fit == "cover" else min)((target_w * safe_margin) / pw, (target_h * safe_margin) / ph)
                 base_w, base_h = pw * fit_scale, ph * fit_scale
             elif p_aspect >= c_aspect:
-                base_w = target_w * 0.90
+                base_w = target_w if is_widescreen_match else (target_w * 0.90)
                 base_h = base_w / p_aspect
             else:
-                base_h = target_h * 0.90
+                base_h = target_h if is_widescreen_match else (target_h * 0.90)
                 base_w = base_h * p_aspect
 
             # Apply transform scale and camera zoom
@@ -954,15 +1021,42 @@ class FrameComposer:
             final_w = max(1, int(round(base_w * eff_scale)))
             final_h = max(1, int(round(base_h * eff_scale)))
 
-            raster_key = (img_path, smart, str(layer.get("crop")), layer.get("already_cropped"))
+            # Smooth layer transitions between consecutive layers in the same scene
+            layer_opacity = tf["opacity"]
+            fade_dur = 0.40  # 400ms smooth crossfade
+            if len(sorted_layers) > 1 and l_dur > 1.0:
+                time_in_layer = elapsed_in_scene - l_start
+                time_left_in_layer = (l_start + l_dur) - elapsed_in_scene
+                if l_idx > 0 and 0.0 <= time_in_layer < fade_dur:
+                    layer_opacity *= (time_in_layer / fade_dur)
+                if l_idx < len(sorted_layers) - 1 and 0.0 <= time_left_in_layer < fade_dur:
+                    layer_opacity *= max(0.0, time_left_in_layer / fade_dur)
+
+            raster_key = (img_path, smart, str(layer.get("crop")), layer.get("already_cropped"), round(layer_opacity, 2))
             scaled_img = self._prepare_layer_raster(working_img, raster_key, final_w, final_h,
-                                                   tf["rotation"], tf["blur"], tf["opacity"])
+                                                   tf["rotation"], tf["blur"], layer_opacity)
 
             # Placement center: 50% + offset%
             center_x = target_w * (settings.foreground_x if smart else .5) + ((tf["x"] + cam["pan_x"]) / 100.0) * target_w
             center_y = target_h * (settings.foreground_y if smart else .5) + ((tf["y"] + cam["pan_y"]) / 100.0) * target_h
+
+            # Subtitle collision avoidance: If active captions overlap this shot, raise center slightly
+            has_active_caption = getattr(plan, "subtitle_enabled", False) and any(
+                c.start_time <= timestamp_sec <= c.end_time for c in (shot.captions or [])
+            )
+            if has_active_caption and settings and settings.foreground_fit == "contain" and not is_widescreen_match:
+                center_y -= int(target_h * 0.035)
+
             paste_x = int(round(center_x - scaled_img.width / 2.0))
             paste_y = int(round(center_y - scaled_img.height / 2.0))
+
+            # VISUAL SAFETY GUARD: Prevent headers, titles, or footers from ever leaving the screen!
+            # If the image height fits on screen (e.g. 16:9 slides or standard panels),
+            # clamp paste_y so it is physically impossible to chop off titles at y < 0 or y > target_h!
+            if scaled_img.height <= target_h:
+                paste_y = max(0, min(target_h - scaled_img.height, paste_y))
+            if scaled_img.width <= target_w:
+                paste_x = max(0, min(target_w - scaled_img.width, paste_x))
 
             # Alpha composite onto canvas
             if smart and settings.edge_shadow:
