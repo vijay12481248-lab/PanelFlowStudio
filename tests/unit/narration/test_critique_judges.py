@@ -93,3 +93,8 @@ def test_judge_cache_rerun_zero_calls(tmp_path):
     first, c1 = _run(tmp_path, _yes, run)
     second, c2 = _run(tmp_path, _yes, run)
     assert len(c1.calls) == 12 and len(c2.calls) == 0 and second == first
+
+def test_coverage_with_no_story_ids_is_zero(tmp_path):
+    script, facts, _, sheet, bible = _setup()
+    rep, _ = _run(tmp_path, _yes, lambda c, s, ca: critique(script, facts, [], sheet, bible, c, s, ca, line_ids=[]))
+    assert rep.coverage == 0.0

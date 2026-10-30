@@ -97,6 +97,6 @@ async def critique(
     covered = {ln.panel_id for ln in script.lines if ln.status not in ("fallback", "needs_review")}
     pace, repetition = chapter_stats(script)
     return CritiqueReport(
-        revision=script.revision, lines=lines, coverage=len(covered & set(story_ids)) / len(story_ids),
+        revision=script.revision, lines=lines, coverage=len(covered & set(story_ids)) / max(len(story_ids), 1),
         pace_estimate=pace, repetition=repetition,
         gate="repair" if any(lc.blocked for lc in lines) else "pass")

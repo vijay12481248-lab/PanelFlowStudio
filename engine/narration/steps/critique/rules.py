@@ -52,7 +52,7 @@ def rule_checks(script: ScriptIR, facts: dict[str, PanelFacts], story_ids: list[
     out: dict[str, list[LineCheck]] = {}
     for ln, (opener, similar) in zip(script.lines, _warns(texts)):
         n, low = len(ln.text.split()), ln.text.lower()
-        hit = [p for p in banned if p in low]
+        hit = [p for p in banned if re.search(rf"\b{re.escape(p)}\b", low)]
         unknown = _unknown_names(ln.text, known)
         out[ln.line_id] = [
             LineCheck(rule="order", passed=not order, severity="block", reason="; ".join(order)),
@@ -70,5 +70,7 @@ def rule_checks(script: ScriptIR, facts: dict[str, PanelFacts], story_ids: list[
 def chapter_stats(script: ScriptIR) -> tuple[float, int]:
     """(pace_estimate in seconds per line, count of warn failures)."""
     texts = [ln.text for ln in script.lines]
+    if not texts:
+        return 0.0, 0
     pace = sum(len(t.split()) for t in texts) / len(texts) / WORDS_PER_SECOND
     return pace, sum(a + b for a, b in _warns(texts))

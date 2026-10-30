@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from engine.narration.artifacts import PanelFacts
+from engine.narration.artifacts import BeatSheet, PanelFacts, SeriesBible
 
 FEWSHOT_DIR = Path(__file__).resolve().parents[1] / "fewshot"
 
@@ -15,6 +15,11 @@ def load_fewshot(pack: str = "recap_v1") -> list[dict]:
         if not isinstance(r, dict) or "facts" not in r or "line" not in r:
             raise ValueError(f"few-shot pack {pack}: row needs 'facts' and 'line': {r!r}")
     return rows
+
+
+def char_names(bible: SeriesBible, sheet: BeatSheet) -> dict[str, str]:
+    names = {c.id: c.name for c in bible.characters}
+    return names | {u: names[c] for u, c in sheet.character_resolutions.items() if c in names}
 
 
 def display_name(char_id: str, names: dict[str, str]) -> str:

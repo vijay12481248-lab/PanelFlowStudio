@@ -78,3 +78,13 @@ def test_warn_rules_do_not_block():
     pace, rep = chapter_stats(script)
     assert rep == 3  # L002 opener+similar, L003 opener (two lines back)
     assert pace == pytest.approx((6 + 7 + 6) / 3 / 2.75)
+
+
+def test_banned_phrase_matches_whole_words_only():
+    _, res = _run(["Kai says we seek the gate now", "Kai says we see the gate now"])
+    assert not _failed(res, "L001", "banned_phrase")
+    assert _failed(res, "L002", "banned_phrase")
+
+
+def test_chapter_stats_empty_script_does_not_divide_by_zero():
+    assert chapter_stats(ScriptIR.model_construct(lines=[])) == (0.0, 0)
