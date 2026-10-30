@@ -38,7 +38,7 @@ class CandidatesDraft(BaseModel):
     candidates: list[str] = Field(min_length=3, max_length=3)
 
 
-def _problems(draft: SceneLinesDraft, n: int) -> list[str]:
+def _problems(draft: SceneLinesDraft, n: int, beat_ids: set[str]) -> list[str]:
     """Check a chunk answer against P1..Pn; panel ids here are the chunk-local labels."""
     if not draft.lines:
         return ["no lines returned"]
@@ -49,6 +49,10 @@ def _problems(draft: SceneLinesDraft, n: int) -> list[str]:
     except ValueError:
         return ["every line needs non-empty text"]
     out = check_script_ids(script, [f"P{k}" for k in range(1, n + 1)])
+    for d in draft.lines:
+        for f in d.facts_used:
+            if not _FACT_REF.match(f) or (f.startswith("beat:") and f[5:] not in beat_ids):
+                out.append(f"P{d.panel} facts_used {f!r} is not a fact of this scene")
     if out:
         got = {d.panel for d in draft.lines}
         out += [f"P{k} has no line" for k in range(1, n + 1) if k not in got]
@@ -85,14 +89,14 @@ async def write_chapter(
 
     sprompt = load_prompt(SCENE_STEP, WRITE_PROMPT_VERSION)
 
-    async def write_chunk(item: tuple[str, int]) -> SceneLinesDraft:
-        text, n = item
+    async def write_chunk(item: tuple[str, int, set[str]]) -> SceneLinesDraft:
+        text, n, beat_ids = item
         draft = await cached(SCENE_STEP, sprompt.sha256, text, SceneLinesDraft)
-        problems = _problems(draft, n)
+        problems = _problems(draft, n, beat_ids)
         if problems:  # the re-ask embeds its feedback, so it has its own cache key
             draft = await cached(SCENE_STEP, sprompt.sha256,
                                  text + "\n\nFix these problems: " + "; ".join(problems), SceneLinesDraft)
-            problems = _problems(draft, n)
+            problems = _problems(draft, n, beat_ids)
             if problems:
                 raise NeedsReview(problems)
         return draft
@@ -119,12 +123,14 @@ async def write_chapter(
                 n=str(len(idx)), goal=s.goal, turn=s.turn, beats="\n".join(beats) or "(none)",
                 previous="\n".join(prev) or "(none)",
                 panels="\n".join(panel_line(k, story[i], names) for k, i in enumerate(idx, start=1)),
-                **common), len(idx)))
+                **common), len(idx), {b.beat_id for b in s.beats}))
         for (s, idx), draft in zip(todo, await scheduler.map("writer", prompts, write_chunk)):
             for d in draft.lines:
                 i = idx[d.panel - 1]
+                if i in text_of:
+                    raise ValueError(f"scenes overlap at story panel {story[i].panel_id}")
                 text_of[i], kinds[i] = " ".join(d.text.split()), d.kind
-                used[i] = list(dict.fromkeys(f for f in d.facts_used if _FACT_REF.match(f)))
+                used[i] = list(dict.fromkeys(d.facts_used))
 
     lines = [ScriptLine(line_id=f"L{i + 1:03d}", panel_id=f.panel_id, text=text_of[i], facts_used=used[i],
                         kind="hook" if i == 0 else "cliffhanger" if i == len(story) - 1 else kinds[i])
