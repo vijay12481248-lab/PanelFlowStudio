@@ -148,18 +148,20 @@ class NarrationCompiler:
             await self.scheduler.release()  # the LLM leaves the GPU before Kokoro arrives
             tts_cfg = load_tts_config()
             audio_model = f"{tts_cfg.model} + {load_stt_config().model}"
-            if (run_dir / "takes.json").exists():  # voice review: the owner listened, so the flagged takes stand
-                raw = json.loads((run_dir / "takes.json").read_text(encoding="utf-8"))
-                takes = [VoiceTake.model_validate({**t, "flagged": False}) for t in raw]
-            else:
-                with _recorded(log, "voice", audio_model, "-", _CountingCache(self.cache)):
-                    takes, reasons = await voice.voice_lines(
-                        script, plan, bible, self.tts or KokoroTts(), self.stt or WhisperStt(),
-                        Path(workspace) / "narration" / "voice", tts_cfg.voice, facts)
-                    _write_json(run_dir / "takes.json", [t.model_dump(mode="json") for t in takes])
-                    if reasons:
-                        raise NeedsReview(reasons)
-            _write_json(run_dir / "takes.json", [t.model_dump(mode="json") for t in takes])
+            heard = {}  # voice review: takes the owner listened to; audio_path is keyed on the line text, so an edited line differs
+            if (run_dir / "takes.json").exists():
+                heard = {t["line_id"]: t["audio_path"] for t in json.loads((run_dir / "takes.json").read_text(encoding="utf-8"))}
+            with _recorded(log, "voice", audio_model, "-", _CountingCache(self.cache)):
+                takes, reasons = await voice.voice_lines(  # cached takes cost no synthesis; an edited line is voiced fresh
+                    script, plan, bible, self.tts or KokoroTts(), self.stt or WhisperStt(),
+                    Path(workspace) / "narration" / "voice", tts_cfg.voice, facts)
+                takes = [t.model_copy(update={"flagged": False}) if heard.get(t.line_id) == t.audio_path else t for t in takes]
+                if heard:
+                    n = sum(t.flagged for t in takes)
+                    reasons = [f"{n} of {len(takes)} takes failed the speech check"] if n > voice.FLAG_LIMIT * len(takes) else []
+                _write_json(run_dir / "takes.json", [t.model_dump(mode="json") for t in takes])
+                if reasons:
+                    raise NeedsReview(reasons)
 
             with _recorded(log, "timeline", audio_model, "-", _CountingCache(self.cache)):
                 tl = timeline.lock_timeline(script, plan, takes, sheet, story_ids)

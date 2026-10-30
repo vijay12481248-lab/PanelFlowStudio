@@ -203,6 +203,7 @@ def test_regenerate_line_runs_rules(tmp_path):
 
 
 # ---- finishing an approved review (perform, voice, timeline, projection) ----
+import time
 import uuid
 
 from engine.database.models import ProjectRecord, VideoScriptRecord
@@ -286,7 +287,7 @@ def test_continue_is_idempotent(tmp_path, monkeypatch):
 def test_concurrent_continue_rejected(tmp_path, monkeypatch):
     tts, comp, res, pid = _park_at_critique(tmp_path, monkeypatch)
     review.approve(res.run_dir, comp.bibles)
-    (res.run_dir / "continue.lock").write_text("busy", encoding="utf-8")
+    (res.run_dir / "continue.lock").write_text(json.dumps({"created": time.time() - 60}), encoding="utf-8")
     with pytest.raises(ValueError, match="continue already running"):
         asyncio.run(review.continue_after_approval(pid, res.run_id))
     assert (res.run_dir / "continue.lock").exists() and not tts.calls  # the other job's lock is left alone
@@ -326,3 +327,42 @@ def test_resolve_run_dir_rejects_crafted_ids(tmp_path):
             review.resolve_run_dir(db, pid, "20261031T101500-000000")
         with pytest.raises(KeyError):
             review.resolve_run_dir(db, "nope", good)
+
+
+def test_edited_line_is_revoiced_and_heard_lines_are_unflagged(tmp_path, monkeypatch):
+    tts = FakeTts()
+    comp = _compiler(tmp_path, _write_responses(), tts, FakeStt(["zzz"]))
+    res = _go(tmp_path, comp, stop_after="timeline")
+    assert res.gate == "review"
+    pid = _adopt(tmp_path, comp, res, monkeypatch)
+    review.edit_line(res.run_dir, "L002", "He walks through the quiet hall slowly", comp.bibles)
+    comp.stt = _Echo(tts)  # the new take hears itself, so it passes
+    heard = len(tts.calls)
+    review.approve(res.run_dir, comp.bibles)
+    asyncio.run(review.continue_after_approval(pid, res.run_id))
+    assert len(tts.calls) == heard + 1 and tts.calls[-1][0].startswith("He walks through")
+    takes = json.loads((res.run_dir / "takes.json").read_text(encoding="utf-8"))
+    assert [t["flagged"] for t in takes] == [False, False, False]
+
+
+def test_edited_line_that_fails_the_speech_check_keeps_its_flag(tmp_path, monkeypatch):
+    tts = FakeTts()
+    comp = _compiler(tmp_path, _write_responses(), tts, FakeStt(["zzz"]))
+    res = _go(tmp_path, comp, stop_after="timeline")
+    pid = _adopt(tmp_path, comp, res, monkeypatch)
+    review.edit_line(res.run_dir, "L002", "He walks through the quiet hall slowly", comp.bibles)
+    review.approve(res.run_dir, comp.bibles)
+    with pytest.raises(ValueError, match="failed the speech check"):  # 1 of 3 flagged is over the limit: parked again
+        asyncio.run(review.continue_after_approval(pid, res.run_id))
+    takes = {t["line_id"]: t for t in json.loads((res.run_dir / "takes.json").read_text(encoding="utf-8"))}
+    assert [takes[k]["flagged"] for k in ("L001", "L002", "L003")] == [False, True, False]
+    assert json.loads((res.run_dir / "review.json").read_text(encoding="utf-8"))["status"] == "pending"
+
+
+def test_stale_continue_lock_is_replaced(tmp_path, monkeypatch):
+    tts, comp, res, pid = _park_at_critique(tmp_path, monkeypatch)
+    review.approve(res.run_dir, comp.bibles)
+    (res.run_dir / "continue.lock").write_text(
+        json.dumps({"created": time.time() - review.LOCK_TTL - 5}), encoding="utf-8")
+    assert asyncio.run(review.continue_after_approval(pid, res.run_id))
+    assert not (res.run_dir / "continue.lock").exists()

@@ -1,9 +1,10 @@
-"""Review queue: chapters parked at gate `review`, line actions that write new script revisions, approval."""
+﻿"""Review queue: chapters parked at gate `review`, line actions that write new script revisions, approval."""
 from __future__ import annotations
 
 import asyncio
 import json
 import re
+import time
 from pathlib import Path
 from typing import Literal, NamedTuple
 
@@ -204,6 +205,26 @@ def resolve_run_dir(db, project_id: str, run_id: str) -> Path:
     return run_dir
 
 
+LOCK_TTL = 2 * 3600  # a continue job that died leaves its lock behind; after this it is replaced
+
+
+def _take_lock(path: Path) -> None:
+    for _ in range(2):
+        try:
+            with open(path, "x") as f:
+                f.write(json.dumps({"created": time.time()}))
+            return
+        except FileExistsError:
+            try:
+                created = json.loads(path.read_text(encoding="utf-8"))["created"]
+            except (ValueError, KeyError, TypeError, OSError):
+                created = path.stat().st_mtime if path.exists() else 0  # unreadable lock: its file time stands in
+            if time.time() - created <= LOCK_TTL:
+                break
+            path.unlink(missing_ok=True)
+    raise ValueError("continue already running")
+
+
 async def _build_compiler(workspace: Path):  # tests replace this with a fake-model compiler
     from engine.narration.__main__ import _local_provider, _make_compiler
 
@@ -226,11 +247,7 @@ async def continue_after_approval(project_id: str, run_id: str) -> str:
         raise ValueError("run belongs to another project")
     if item.status != "approved":
         raise ValueError("run is not approved")
-    try:
-        lock = open(run_dir / "continue.lock", "x")
-    except FileExistsError:
-        raise ValueError("continue already running") from None
-    lock.close()
+    _take_lock(run_dir / "continue.lock")
     try:
         if done.exists():  # a concurrent call finished between the first check and the lock
             return json.loads(done.read_text(encoding="utf-8"))
