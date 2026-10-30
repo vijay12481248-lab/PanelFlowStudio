@@ -23,3 +23,11 @@ class FakeModelClient:
         if isinstance(item, Exception):
             raise item
         return item(prompt) if callable(item) else item
+
+
+class RecordingUnloader:
+    def __init__(self):
+        self.unloaded: list[str] = []
+
+    async def __call__(self, model: str) -> None:
+        self.unloaded.append(model)
