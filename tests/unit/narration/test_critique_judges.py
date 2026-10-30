@@ -62,7 +62,9 @@ def test_pairwise_runs_both_orders(tmp_path):
 def test_gate_repair_when_any_block_fails(tmp_path):
     script, facts, ids, sheet, bible = _setup()
     rep, _ = _run(tmp_path, _yes, lambda c, s, ca: critique(script, facts, ids, sheet, bible, c, s, ca))
-    assert rep.gate == "pass" and rep.coverage == 1.0 and rep.lines[0].scores == dict(grounded=True, clear=True, voice=True, flow=True)
+    # the first line opens a scene, so it has no flow check
+    assert rep.gate == "pass" and rep.coverage == 1.0 and rep.lines[0].scores == dict(grounded=True, clear=True, voice=True)
+    assert rep.lines[1].scores == dict(grounded=True, clear=True, voice=True, flow=True)
     no = lambda p: Verdict(yes="Rain falls" not in p, reason="bad")
     rep, _ = _run(tmp_path / "b", no, lambda c, s, ca: critique(script, facts, ids, sheet, bible, c, s, ca))
     assert rep.gate == "repair" and [ln.blocked for ln in rep.lines] == [False, False, True]
@@ -92,7 +94,15 @@ def test_judge_cache_rerun_zero_calls(tmp_path):
     run = lambda c, s, ca: critique(script, facts, ids, sheet, bible, c, s, ca)
     first, c1 = _run(tmp_path, _yes, run)
     second, c2 = _run(tmp_path, _yes, run)
-    assert len(c1.calls) == 12 and len(c2.calls) == 0 and second == first
+    assert len(c1.calls) == 11 and len(c2.calls) == 0 and second == first
+
+
+def test_only_grounded_judge_blocks(tmp_path):
+    script, facts, ids, sheet, bible = _setup()
+    style_only = lambda p: Verdict(yes="one narration line against the facts" in p, reason="stiff")
+    rep, _ = _run(tmp_path, style_only, lambda c, s, ca: critique(script, facts, ids, sheet, bible, c, s, ca))
+    assert rep.gate == "pass" and not any(ln.blocked for ln in rep.lines)
+    assert all(c.severity == "warn" for ln in rep.lines for c in ln.checks if c.rule in ("clear", "voice", "flow"))
 
 def test_coverage_with_no_story_ids_is_zero(tmp_path):
     script, facts, _, sheet, bible = _setup()

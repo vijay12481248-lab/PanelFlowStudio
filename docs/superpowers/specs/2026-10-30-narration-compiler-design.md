@@ -191,7 +191,7 @@ Stored under `<workspace>/narration/<run_id>/<artifact>.json`. All ids are valid
   - Voice — "Does this match the narrator style notes?"
   - Flow — "Does it follow naturally from the previous line?"
 - **Pairwise judging** for hook / cliffhanger candidates and for eval preference, run in both orders to cancel position bias.
-- **Severity:** `block` = count/order, word budget, banned phrase, unknown name, unresolved `unknown_<n>`, and every judge check; `warn` = repeated openers and adjacent-line similarity (reported, sent to repair once, never gate on their own).
+- **Severity:** `block` = count/order, word budget, banned phrase, unknown name, unresolved `unknown_<n>`, and the grounded judge; `warn` = the clear, voice and flow judges, repeated openers and adjacent-line similarity (reported, never gate on their own). The flow judge skips each scene's first line. *(Revised in P2. In a real Ch927 run, a 9B judge passed only 34–50 % of lines on the style checks, often for wrong reasons, so gating on them forced most lines to fallback.)*
 - **Gate:** any line failing a `block` check → repair. After repair, > 15 % of lines still failing a `block` check → review queue. Otherwise pass.
 
 ### 4.5 ⑤ REPAIR — failed lines only, role `writer`

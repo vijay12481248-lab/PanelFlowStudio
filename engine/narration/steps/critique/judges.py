@@ -20,6 +20,8 @@ from engine.narration.steps.factview import panel_line
 CRITIQUE_PROMPT_VERSION = "v1"
 PAIR_STEP = "critique_pair"
 JUDGES = ("grounded", "clear", "voice", "flow")
+# Only grounding blocks: a 9B judge's style verdicts are too noisy to gate on (real Ch927 run: clear 38 %, flow 34 %).
+BLOCKING_JUDGES = {"grounded"}
 
 
 class Verdict(BaseModel):
@@ -42,6 +44,7 @@ async def judge_lines(
     style = "; ".join(bible.narrator_voice.style_notes) or "plain, vivid recap voice"
     prompts = {n: load_prompt(f"critique_{n}", CRITIQUE_PROMPT_VERSION) for n in JUDGES}
     want = set(line_ids) if line_ids is not None else None
+    scene_starts = {s.first_panel_id for s in sheet.scenes}
     items = []  # (line_id, judge name, rendered prompt)
     for i, ln in enumerate(script.lines):
         if want is not None and ln.line_id not in want:
@@ -54,7 +57,9 @@ async def judge_lines(
             "voice": dict(style=style, line=ln.text),
             "flow": dict(previous=prev, line=ln.text),
         }
-        items += [(ln.line_id, n, prompts[n].render(**values[n])) for n in JUDGES]
+        # a scene's first line is meant to jump; judging its flow against the last scene only adds noise
+        names_here = [n for n in JUDGES if not (n == "flow" and ln.panel_id in scene_starts)]
+        items += [(ln.line_id, n, prompts[n].render(**values[n])) for n in names_here]
 
     async def one(item: tuple[str, str, str]) -> Verdict:
         _, name, text = item
@@ -62,7 +67,8 @@ async def judge_lines(
 
     out: dict[str, list[LineCheck]] = {}
     for (line_id, name, _), v in zip(items, await scheduler.map("judge", items, one)):
-        out.setdefault(line_id, []).append(LineCheck(rule=name, passed=v.yes, severity="block", reason=v.reason))
+        out.setdefault(line_id, []).append(LineCheck(rule=name, passed=v.yes, reason=v.reason,
+                                                  severity="block" if name in BLOCKING_JUDGES else "warn"))
     return out
 
 

@@ -103,7 +103,8 @@ def test_repair_rejudges_only_changed_lines_and_their_successors(tmp_path):
     res, client = _go(tmp_path, script, *rest, _bad_if("Bad"), [_fix()])
     assert res.gate == "pass"
     judge = [p for r, p, _ in client.calls if r == "judge"]
-    assert len(judge) == 5 * 4 + 4 + 2  # full critique; L002 anew; L003 clear+flow (new previous line), grounded+voice cached
+    # full critique (L001 opens the scene: no flow); L002 anew; L003 clear+flow (new previous line), grounded+voice cached
+    assert len(judge) == 5 * 4 - 1 + 4 + 2
 
 
 def test_with_successors():
