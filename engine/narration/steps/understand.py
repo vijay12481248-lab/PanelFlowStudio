@@ -162,7 +162,7 @@ def _proposals(
 ) -> tuple[list[BibleProposal], dict[str, str]]:
     """Typed draft -> BibleProposals with code-made ids; also unknowns the draft re-found in the bible."""
     by_name = {_line(n).casefold(): c.id for c in bible.characters for n in (c.name, *c.aliases)}
-    taken, claimed, proposed, found, out = {c.id for c in bible.characters}, set(), set(), {}, []
+    taken, claimed, proposed, found, out = {c.id for c in bible.characters}, set(), {}, {}, []
     n = 0
     for nc in merge.new_characters:
         name = _line(nc.name)
@@ -173,17 +173,17 @@ def _proposals(
             found.update({u: by_name[name.casefold()] for u in ids})
             claimed.update(ids)
             continue
-        if name.casefold() in proposed:
-            continue
-        proposed.add(name.casefold())
         claimed.update(ids)
+        if name.casefold() in proposed:  # same person listed twice: keep one proposal, merge its unknowns
+            proposed[name.casefold()]["unknown_ids"] += ids
+            continue
         n += 1
         while f"c_{n}" in taken:
             n += 1
-        payload = {"id": f"c_{n}", "name": name, "unknown_ids": ids}
+        payload = proposed[name.casefold()] = {"id": f"c_{n}", "name": name, "unknown_ids": ids}
         if nc.description.strip():
             payload["appearance_cues"] = [_line(nc.description)]
-        out.append(BibleProposal(kind="add_character", payload=payload))
+    out = [BibleProposal(kind="add_character", payload=p) for p in proposed.values()]
     seen = set(bible.open_threads)
     for t in merge.new_threads:
         text = _line(t.text)

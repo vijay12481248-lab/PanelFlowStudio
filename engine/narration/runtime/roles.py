@@ -34,7 +34,7 @@ def load_roles(path: Path | None = None) -> dict[str, RoleConfig]:
     if path is None:
         user = settings.app_data_dir / "config" / "narration_models.yaml"
         if user.exists():
-            raw = {**raw, **{k: {**raw.get(k, {}), **v} for k, v in _read_roles(user).items()}}
+            raw = {**raw, **{k: {**raw.get(k, {}), **(v or {})} for k, v in _read_roles(user).items()}}
     missing = [r for r in REQUIRED_ROLES if r not in raw]
     if missing:
         raise ValueError(f"narration models config missing roles: {', '.join(missing)}")

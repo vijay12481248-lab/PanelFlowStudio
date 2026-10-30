@@ -216,3 +216,17 @@ def test_oversized_window_prompt_fails_loudly_without_calling_model(tmp_path):
     with pytest.raises(StepModelError, match="planner"):
         _run(tmp_path, [_facts(1)], [], client=client)
     assert client.calls == []
+
+def test_duplicate_new_character_merges_unknown_ids():
+    from engine.narration.artifacts import SeriesBible
+    from engine.narration.steps.understand import MergeDraft, _proposals
+    merge = MergeDraft.model_validate({
+        "hook": "h", "chapter_summary": "s", "character_resolutions": {},
+        "new_characters": [
+            {"name": "Masked Man", "description": "", "unknown_ids": ["unknown_1"]},
+            {"name": "masked man ", "description": "", "unknown_ids": ["unknown_2"]},
+        ],
+    })
+    out, _ = _proposals(merge, SeriesBible(series_key="s"), {"unknown_1": "a", "unknown_2": "b"})
+    assert len(out) == 1
+    assert out[0].payload["unknown_ids"] == ["unknown_1", "unknown_2"]
