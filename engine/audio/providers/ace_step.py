@@ -80,6 +80,12 @@ class ACEStepProvider:
 
         logger.info("ACE-Step daemon is offline. Attempting automatic start...")
         try:
+            env = os.environ.copy()
+            env["PYTHONPATH"] = str(ACE_STEP_DIR)
+            creationflags = 0
+            if os.name == "nt":
+                creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
+
             self._daemon_process = subprocess.Popen(
                 [
                     str(ACE_STEP_PYTHON),
@@ -89,20 +95,22 @@ class ACEStepProvider:
                     "127.0.0.1",
                     "--port",
                     "8001",
+                    "--no-init",
                 ],
                 cwd=str(ACE_STEP_DIR),
+                env=env,
+                stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
+                creationflags=creationflags,
             )
-            # Poll up to 60 seconds for startup and model initialization
+            # Poll up to 60 seconds for startup
             for _ in range(60):
                 time.sleep(1.0)
                 h = self.check_health(timeout=1.0)
-                if h["available"] and h.get("models_initialized", False):
-                    logger.info("ACE-Step daemon launched and models initialized successfully.")
+                if h["available"]:
+                    logger.info("ACE-Step daemon launched and listening successfully.")
                     return True
-                elif h["available"]:
-                    logger.debug("ACE-Step API responding, waiting for neural checkpoints to load...")
         except Exception as e:
             logger.error(f"Failed to start ACE-Step daemon: {e}")
 
