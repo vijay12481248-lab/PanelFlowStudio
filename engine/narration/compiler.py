@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import time
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -40,10 +41,10 @@ class RunLog:
         _write_json(self.path, self._data)
 
     def record(self, step: str, *, model: str, prompt_version: str, cache_hits: int,
-               model_calls: int, seconds: float) -> None:
+               model_calls: int, seconds: float, status: str = "ok") -> None:
         self._data["steps"].append({"step": step, "model": model, "prompt_version": prompt_version,
                                     "cache_hits": cache_hits, "model_calls": model_calls,
-                                    "seconds": round(seconds, 3)})
+                                    "seconds": round(seconds, 3), "status": status})
         _write_json(self.path, self._data)
 
     def finish(self, gate: Gate, reasons: list[str]) -> None:
@@ -79,6 +80,21 @@ class _CountingCache:
         return self._inner.put(step, key, artifact)
 
 
+@contextmanager
+def _recorded(log: RunLog, step: str, model: str, version: str, counter: "_CountingCache"):
+    """Record the step in run.json whether it passes, needs review or fails."""
+    t0, status = time.monotonic(), "failed"
+    try:
+        yield
+        status = "ok"
+    except NeedsReview:
+        status = "review"
+        raise
+    finally:
+        log.record(step, model=model, prompt_version=version, cache_hits=counter.hits,
+                   model_calls=counter.calls, seconds=time.monotonic() - t0, status=status)
+
+
 class NarrationCompiler:
     def __init__(self, client: ModelClient, scheduler: ModelScheduler, cache: ArtifactCache,
                  bibles: BibleStore):
@@ -100,21 +116,19 @@ class NarrationCompiler:
         try:
             bible = self.bibles.load(inputs.series_key)
 
-            counter, t0 = _CountingCache(self.cache), time.monotonic()
-            facts = await perceive.perceive_chapter(inputs, bible, self.client, self.scheduler, counter)
-            log.record("perceive", model=self.client.model_for("vision"),
-                       prompt_version=perceive.PERCEIVE_PROMPT_VERSION, cache_hits=counter.hits,
-                       model_calls=counter.calls, seconds=time.monotonic() - t0)
+            counter = _CountingCache(self.cache)
+            with _recorded(log, "perceive", self.client.model_for("vision"),
+                           perceive.PERCEIVE_PROMPT_VERSION, counter):
+                facts = await perceive.perceive_chapter(inputs, bible, self.client, self.scheduler, counter)
             _write_json(run_dir / "panel_facts.json", [f.model_dump(mode="json") for f in facts])
             if stop_after == "perceive":
                 return result("pass", [])
 
-            counter, t0 = _CountingCache(self.cache), time.monotonic()
-            sheet = await understand.understand_chapter(
-                inputs.project_id, facts, bible, self.client, self.scheduler, counter)
-            log.record("understand", model=self.client.model_for("planner"),
-                       prompt_version=understand.UNDERSTAND_PROMPT_VERSION, cache_hits=counter.hits,
-                       model_calls=counter.calls, seconds=time.monotonic() - t0)
+            counter = _CountingCache(self.cache)
+            with _recorded(log, "understand", self.client.model_for("planner"),
+                           understand.UNDERSTAND_PROMPT_VERSION, counter):
+                sheet = await understand.understand_chapter(
+                    inputs.project_id, facts, bible, self.client, self.scheduler, counter)
             _write_json(run_dir / "beat_sheet.json", sheet.model_dump(mode="json"))
             return result("pass", [])
         except NeedsReview as exc:

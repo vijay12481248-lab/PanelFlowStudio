@@ -21,7 +21,7 @@ class PromptAsset(BaseModel):
 
 
 def load_prompt(step: str, version: str = "v1") -> PromptAsset:
-    data = (PROMPTS_ROOT / step / f"{version}.md").read_bytes()
+    data = (PROMPTS_ROOT / step / f"{version}.md").read_bytes().replace(b"\r\n", b"\n")  # checkout-EOL proof
     return PromptAsset(
         step=step,
         version=version,

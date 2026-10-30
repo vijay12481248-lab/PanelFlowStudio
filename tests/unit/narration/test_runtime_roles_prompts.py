@@ -55,3 +55,21 @@ def test_render_missing_variable_raises():
 def test_zero_concurrency_rejected():
     with pytest.raises(ValidationError):
         RoleConfig(model="m", temperature=0, max_tokens=1, concurrency=0)
+
+
+def test_partial_override_merges_over_defaults(tmp_path, monkeypatch):
+    cfg = tmp_path / "config"
+    cfg.mkdir()
+    (cfg / "narration_models.yaml").write_text('roles:\n  writer: {model: "gemma3:9b"}\n', encoding="utf-8")
+    monkeypatch.setattr(settings, "app_data_dir", tmp_path)
+    writer = load_roles()["writer"]
+    assert writer.model == "gemma3:9b" and writer.temperature == 0.7 and writer.top_p == 0.9
+
+
+def test_crlf_and_lf_prompts_hash_and_render_the_same(tmp_path, monkeypatch):
+    for name, raw in (("a", b"Line $n\r\nnext\r\n"), ("b", b"Line $n\nnext\n")):
+        (tmp_path / name).mkdir()
+        (tmp_path / name / "v1.md").write_bytes(raw)
+    monkeypatch.setattr(prompts, "PROMPTS_ROOT", tmp_path)
+    a, b = load_prompt("a"), load_prompt("b")
+    assert a.sha256 == b.sha256 and a.text == b.text and "\r" not in a.text

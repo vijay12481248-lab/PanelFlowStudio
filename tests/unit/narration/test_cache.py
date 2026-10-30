@@ -49,3 +49,13 @@ def test_list_artifacts_round_trip(tmp_path):
 def test_write_is_atomic_no_tmp_left(tmp_path):
     ArtifactCache(tmp_path).put("perceive", "k1", _facts())
     assert list(tmp_path.rglob("*.tmp")) == []
+
+
+def test_stale_or_corrupt_entry_is_a_miss(tmp_path):
+    c = ArtifactCache(tmp_path)
+    c.put("perceive", "old", _facts())
+    path = tmp_path / "perceive" / "old.json"
+    path.write_text('{"panel_id": "p1"}', encoding="utf-8")  # schema drifted
+    assert c.get("perceive", "old", PanelFacts) is None
+    path.write_text("{trunc", encoding="utf-8")  # torn write
+    assert c.get("perceive", "old", PanelFacts) is None

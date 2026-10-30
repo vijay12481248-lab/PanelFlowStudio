@@ -100,3 +100,13 @@ def test_run_json_is_valid_after_each_step(tmp_path, monkeypatch):
     run = json.loads(run_json.read_text(encoding="utf-8"))
     assert run["steps"][0]["step"] == "perceive"
     assert run["gate"] == "failed" and run["reasons"] == ["kaboom"]
+
+
+def test_failed_understand_step_is_recorded_in_run_log(tmp_path):
+    comp = _compiler(tmp_path, {"vision": [_draft()] * 3, "planner": [StepModelError("planner", "boom")]})
+    result = _go(tmp_path, comp)
+    assert result.gate == "failed"
+    run = json.loads((result.run_dir / "run.json").read_text(encoding="utf-8"))
+    steps = {s["step"]: s for s in run["steps"]}
+    assert steps["perceive"]["status"] == "ok"
+    assert steps["understand"]["status"] == "failed" and steps["understand"]["seconds"] >= 0

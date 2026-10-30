@@ -31,10 +31,13 @@ class ArtifactCache:
         path = self._path(step, key)
         if not path.exists():
             return None
-        data = json.loads(path.read_text(encoding="utf-8"))
-        if isinstance(data, list):
-            return [model_cls.model_validate(d) for d in data]
-        return model_cls.model_validate(data)
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(data, list):
+                return [model_cls.model_validate(d) for d in data]
+            return model_cls.model_validate(data)
+        except ValueError:  # JSONDecodeError and pydantic ValidationError: stale entry is a miss
+            return None
 
     def put(self, step: str, key: str, artifact: BaseModel | list[BaseModel]) -> Path:
         path = self._path(step, key)
