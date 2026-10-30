@@ -9,10 +9,11 @@ from pydantic import BaseModel, Field
 from engine.narration.artifacts import (
     BeatSheet, PanelFacts, ScriptIR, ScriptLine, SeriesBible, check_script_ids,
 )
-from engine.narration.cache import ArtifactCache, cache_key
-from engine.narration.runtime.client import ModelClient, guard_prompt
+from engine.narration.cache import ArtifactCache
+from engine.narration.runtime.client import ModelClient
 from engine.narration.runtime.prompts import load_prompt
 from engine.narration.runtime.scheduler import ModelScheduler
+from engine.narration.steps._cached import cached_call
 from engine.narration.steps.factview import load_fewshot, panel_line
 from engine.narration.steps.understand import NeedsReview
 
@@ -69,7 +70,6 @@ async def write_chapter(
     pos = {f.panel_id: i for i, f in enumerate(story)}
     names = {c.id: c.name for c in bible.characters}
     names.update({u: names[c] for u, c in sheet.character_resolutions.items() if c in names})
-    model, params = client.model_for("writer"), client.params_for("writer")
     voice = bible.narrator_voice
     common = dict(
         style="; ".join(voice.style_notes) or "plain, vivid recap voice",
@@ -78,14 +78,7 @@ async def write_chapter(
     )
 
     async def cached(step: str, sha: str, text: str, schema: type[BaseModel]):
-        key = cache_key(step, {"prompt": text}, sha, model, params)
-        hit = cache.get(step, key, schema)
-        if hit is not None:
-            return hit
-        guard_prompt(client, "writer", text)
-        out = await client.structured("writer", text, schema)
-        cache.put(step, key, out)
-        return out
+        return await cached_call(client, cache, "writer", step, sha, text, schema)
 
     sprompt = load_prompt(SCENE_STEP, WRITE_PROMPT_VERSION)
 
