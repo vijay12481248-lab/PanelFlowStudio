@@ -64,6 +64,12 @@ def test_audio_buffer_audit_and_sanitize():
     assert metrics_hot["peak_val"] <= 0.895
     assert pytest.approx(metrics_hot["peak_dbfs"], abs=0.1) == -1.0
 
+    # 3. A mix just under full scale still gets the -1.0 dBFS ceiling (AAC would push it over)
+    buf_warm = np.ones((4800, 2), dtype=np.float32) * 0.97
+    metrics_warm = mixer._audit_and_sanitize_buffer(buf_warm)
+    assert metrics_warm["clipping_detected"] is False
+    assert float(np.max(np.abs(buf_warm))) <= 0.892
+
 
 def test_audio_mixer_end_to_end_mix(tmp_path: Path):
     mixer = AudioMixer(sample_rate=48000, channels=2)

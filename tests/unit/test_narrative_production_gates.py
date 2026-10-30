@@ -177,9 +177,9 @@ def test_actual_speech_timing_keeps_all_lines_and_short_clips():
     synchronize_narration(scenes, clips)
     assert clips[0]["start_time_sec"] == 0
     assert clips[1]["start_time_sec"] == 0.5
-    assert scenes[0]["duration_sec"] == pytest.approx(1.6)
-    assert clips[2]["start_time_sec"] == pytest.approx(1.6)
-    assert scenes[1]["duration_sec"] == pytest.approx(1.35)
+    assert scenes[0]["duration_sec"] == pytest.approx(1.35)
+    assert clips[2]["start_time_sec"] == pytest.approx(1.35)
+    assert scenes[1]["duration_sec"] == pytest.approx(1.1)
 
 
 @pytest.mark.parametrize("duration", [0, -1, float("nan"), float("inf")])

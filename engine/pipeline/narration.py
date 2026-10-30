@@ -244,7 +244,7 @@ def reconcile_narration_clips(
 
 def synchronize_narration(scenes: list[dict[str, Any]], clips: list[dict[str, Any]]) -> None:
 
-    """Retime speech sequentially within each scene, with one 0.35s cushion.
+    """Retime speech sequentially within each scene, with one 0.1s cushion.
 
 
 
@@ -301,7 +301,8 @@ def synchronize_narration(scenes: list[dict[str, Any]], clips: list[dict[str, An
 
         if grouped[scene["id"]]:
 
-            scene["duration_sec"] = round(cursor - running_time + 0.35, 6)
+            # TTS clips already end in ~0.35s of quiet; recap pacing wants no extra dead air between scenes.
+            scene["duration_sec"] = round(cursor - running_time + 0.1, 6)
 
 
 

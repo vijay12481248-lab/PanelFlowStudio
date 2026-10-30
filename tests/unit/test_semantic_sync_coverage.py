@@ -9,8 +9,8 @@ def test_sync_preserves_uncited_panels_and_absolute_audio_clock():
     clips = [{"id": str(i), "scene_id": str(i), "duration_sec": 6.25,
               "source_evidence": {"panel_ids": [f"{i}-1"]}} for i in range(2)]
     synchronize_narration(scenes, clips)
-    assert clips[1]["start_time_sec"] == 6.6
-    assert scenes[1]["start_time_sec"] == 6.6
+    assert clips[1]["start_time_sec"] == 6.35
+    assert scenes[1]["start_time_sec"] == 6.35
     assert [c["duration_sec"] for c in clips] == [6.25, 6.25]
     for i, scene in enumerate(scenes):
         assert [l["source_panel_id"] for l in scene["layers"]] == [f"{i}-{j}" for j in range(3)]
@@ -27,9 +27,9 @@ def test_stale_estimated_layer_timing_is_retimed_to_measured_audio():
     clips = [{"id": "c", "scene_id": "s", "duration_sec": 4.0}]
     synchronize_narration(scenes, clips)
     layers = scenes[0]["layers"]
-    assert scenes[0]["duration_sec"] == 4.35
+    assert scenes[0]["duration_sec"] == 4.1
     assert layers[1]["start_offset_sec"] < scenes[0]["duration_sec"]
-    assert abs(sum(l["duration_sec"] for l in layers) - 4.35) < 0.01
+    assert abs(sum(l["duration_sec"] for l in layers) - 4.1) < 0.01
 
 
 def test_recap_lines_cut_on_their_panel_even_with_repeats():

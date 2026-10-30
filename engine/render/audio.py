@@ -222,8 +222,8 @@ class AudioMixer:
         peak_dbfs = 20.0 * math.log10(max(peak_val, 1e-6))
 
         clipping_detected = peak_val > 0.99
-        if clipping_detected:
-            # Soft-limit normalize to -1.0 dBFS (approx 0.891)
+        if peak_val > 0.891:
+            # Hold a -1.0 dBFS ceiling (approx 0.891): AAC encoding adds inter-sample overs to hotter mixes.
             target_peak = 0.891
             buffer *= (target_peak / peak_val)
             peak_val = target_peak

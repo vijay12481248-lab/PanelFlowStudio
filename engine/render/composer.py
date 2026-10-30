@@ -1016,6 +1016,16 @@ class FrameComposer:
                 base_h = target_h if is_widescreen_match else (target_h * 0.90)
                 base_w = base_h * p_aspect
 
+            # Recap-style framing for tall strips: fitting the whole height leaves an unreadable sliver,
+            # so widen the panel (capped at 2.5 screens tall to keep scroll speed readable) and scroll it.
+            scroll_tall = (layer.get("motion_preset") == "cinematic_vertical_pan"
+                           and not (layer.get("animation") or {}).get("enabled")
+                           and base_w < target_w * 0.42)
+            if scroll_tall:
+                grow = min(target_w * 0.42 / base_w, target_h * 2.5 / base_h)
+                base_w, base_h = base_w * grow, base_h * grow
+                scroll_tall = base_h > target_h
+
             # Apply transform scale and camera zoom
             eff_scale = tf["scale"] * cam["zoom"]
             final_w = max(1, int(round(base_w * eff_scale)))
@@ -1049,6 +1059,10 @@ class FrameComposer:
 
             paste_x = int(round(center_x - scaled_img.width / 2.0))
             paste_y = int(round(center_y - scaled_img.height / 2.0))
+            if scroll_tall and scaled_img.height > target_h:
+                # Constant-speed read from the top edge to the bottom edge over the panel's time on screen.
+                read = max(0.0, min(1.0, (elapsed_in_scene - l_start) / max(0.001, l_dur)))
+                paste_y = int(round(-(scaled_img.height - target_h) * read))
 
             # VISUAL SAFETY GUARD: Prevent headers, titles, or footers from ever leaving the screen!
             # If the image height fits on screen (e.g. 16:9 slides or standard panels),
