@@ -63,15 +63,19 @@ async def _run(project_id: str, stop_after: str) -> int:
 def _review(args) -> int:
     from engine.narration import review
 
+    with SessionLocal() as db:
+        spaces = {Path(p.workspace_path).resolve() for p in db.query(ProjectRecord)}
     if args.action == "list":
-        with SessionLocal() as db:
-            roots = {Path(p.workspace_path).parent for p in db.query(ProjectRecord)}
-        for root in sorted(roots):
+        for root in sorted({w.parent for w in spaces}):
             for i in review.list_pending(root):
                 print(f"{i.run_dir}\t{i.project_id}\t{'; '.join(i.reasons)}")
         return 0
+    run_dir = Path(args.run_dir).resolve()
+    if not any(w in run_dir.parents for w in spaces):
+        print(f"not inside a known project workspace: {args.run_dir}")
+        return 1
     try:
-        print(f"bible version: {review.approve(Path(args.run_dir), BibleStore()).version}")
+        print(f"bible version: {review.approve(run_dir, BibleStore()).version}")
     except (ValueError, OSError) as exc:
         print(str(exc))
         return 1

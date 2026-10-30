@@ -82,14 +82,87 @@ def test_approve_applies_bible_once(tmp_path):
     assert json.loads((res.run_dir / "review.json").read_text(encoding="utf-8"))["status"] == "approved"
 
 
-def test_cli_approve_prints_version(tmp_path, monkeypatch, capsys):
+def _cli(tmp_path, monkeypatch, comp):
+    from contextlib import nullcontext
+    from types import SimpleNamespace
+
     from engine.narration import __main__ as cli
 
-    comp, res = _parked(tmp_path)
+    db = SimpleNamespace(query=lambda m: [SimpleNamespace(workspace_path=str(tmp_path / "ws"))])
+    monkeypatch.setattr(cli, "SessionLocal", lambda: nullcontext(db))
     monkeypatch.setattr(cli, "BibleStore", lambda: comp.bibles)
+    return cli
+
+
+def test_cli_approve_prints_version(tmp_path, monkeypatch, capsys):
+    comp, res = _parked(tmp_path)
+    cli = _cli(tmp_path, monkeypatch, comp)
     assert cli.main(["review", "approve", str(res.run_dir)]) == 0
     assert capsys.readouterr().out.strip() == "bible version: 1"
     assert cli.main(["review", "approve", str(res.run_dir)]) == 1
+
+
+def test_cli_rejects_run_dir_outside_workspaces(tmp_path, monkeypatch, capsys):
+    import shutil
+
+    comp, res = _parked(tmp_path)
+    cli = _cli(tmp_path, monkeypatch, comp)
+    outside = tmp_path / "elsewhere" / res.run_dir.name
+    shutil.copytree(res.run_dir, outside)
+    assert cli.main(["review", "approve", str(outside)]) == 1
+    assert "not inside a known project workspace" in capsys.readouterr().out
+    assert comp.bibles.load("test-series").version == 0
+
+
+def test_item_must_name_its_own_run_dir(tmp_path):
+    import shutil
+
+    comp, res = _parked(tmp_path)
+    copy = tmp_path / "copy"
+    shutil.copytree(res.run_dir, copy)
+    with pytest.raises(ValueError, match="does not belong"):
+        review.approve(copy, comp.bibles)
+
+
+def test_early_gate_run_gives_clear_errors(tmp_path):
+    comp, res = _parked(tmp_path)
+    (res.run_dir / "beat_sheet.json").unlink()
+    with pytest.raises(ValueError, match="beat_sheet.json is missing"):
+        review.fallback_line(res.run_dir, "L002", comp.bibles)
+    (res.run_dir / "panel_facts.json").unlink()
+    with pytest.raises(ValueError, match="panel_facts.json is missing"):
+        review.edit_line(res.run_dir, "L002", "He walks on slowly now", comp.bibles)
+    for f in res.run_dir.glob("script_r*.json"):
+        f.unlink()
+    with pytest.raises(ValueError, match="no script yet"):
+        review.accept_line(res.run_dir, "L001")
+
+
+def test_approved_run_is_frozen(tmp_path):
+    comp, res = _parked(tmp_path)
+    review.approve(res.run_dir, comp.bibles)
+    for call in (lambda: review.edit_line(res.run_dir, "L002", "He walks on slowly now", comp.bibles),
+                 lambda: review.accept_line(res.run_dir, "L002"),
+                 lambda: review.fallback_line(res.run_dir, "L002", comp.bibles)):
+        with pytest.raises(ValueError, match="frozen"):
+            call()
+    with pytest.raises(ValueError, match="frozen"):
+        asyncio.run(review.regenerate_line(res.run_dir, "L002", "h", comp.client, comp.scheduler,
+                                           ArtifactCache(tmp_path / "cache"), comp.bibles))
+
+
+def test_list_pending_skips_corrupt_review_json(tmp_path):
+    comp, res = _parked(tmp_path)
+    bad = tmp_path / "ws" / "narration" / "bad"
+    bad.mkdir()
+    (bad / "review.json").write_text("{nope", encoding="utf-8")
+    assert [i.run_id for i in review.list_pending(tmp_path)] == [res.run_id]
+
+
+def test_edit_line_rejects_invented_name(tmp_path):
+    comp, res = _parked(tmp_path)
+    with pytest.raises(ValueError, match="unknown_name"):
+        review.edit_line(res.run_dir, "L002", "He meets Zorg in the hall", comp.bibles)
 
 
 def test_approve_rejects_unresolved_lines(tmp_path):

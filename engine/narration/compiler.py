@@ -13,7 +13,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-from engine.narration.artifacts import BeatSheet, CritiqueReport, PanelFacts, ScriptIR
+from engine.narration.artifacts import BeatSheet, CritiqueReport, PanelFacts, ReviewItem, ScriptIR
 from engine.narration.bible.store import BibleStore, apply_proposals
 from engine.narration.cache import ArtifactCache
 from engine.narration.inputs import ChapterInputs
@@ -118,7 +118,6 @@ class NarrationCompiler:
         def result(gate: Gate, reasons: list[str]) -> CompileResult:
             log.finish(gate, reasons)
             if gate == "review":
-                from engine.narration.review import ReviewItem  # review imports this module
                 blocked = {lc.line_id for lc in report.lines if lc.blocked} if report else set()
                 ids = [ln.line_id for ln in script.lines if ln.line_id in blocked or ln.status in ("fallback", "needs_review")] if script else []
                 _write_json(run_dir / "review.json", ReviewItem(

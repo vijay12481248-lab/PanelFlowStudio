@@ -205,6 +205,16 @@ class CritiqueReport(_Strict):
     gate_reasons: list[str] = Field(default_factory=list)
 
 
+class ReviewItem(_Strict):
+    run_id: str
+    project_id: str
+    series_key: str = ""
+    run_dir: str
+    reasons: list[str]
+    line_ids: list[str]
+    status: Literal["pending", "approved"] = "pending"
+
+
 def check_script_ids(script: ScriptIR, story_panel_ids: list[str]) -> list[str]:
     got = [ln.panel_id for ln in script.lines]
     problems = []

@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Literal
 
 from engine.narration.artifacts import (
-    BeatSheet, CritiqueReport, PanelFacts, ScriptIR, SeriesBible, _Strict,
+    BeatSheet, CritiqueReport, PanelFacts, ReviewItem, ScriptIR, SeriesBible,
 )
 from engine.narration.bible.store import BibleStore, apply_proposals
 from engine.narration.cache import ArtifactCache
@@ -24,28 +24,37 @@ from engine.narration.steps.repair import (
 _OK = {"passed", "repaired", "fallback"}
 
 
-class ReviewItem(_Strict):
-    run_id: str
-    project_id: str
-    series_key: str = ""
-    run_dir: str
-    reasons: list[str]
-    line_ids: list[str]
-    status: Literal["pending", "approved"] = "pending"
+__all__ = ["ReviewItem"]  # re-export: defined in artifacts to keep the compiler import acyclic
 
 
 def _item(run_dir: Path) -> ReviewItem:
-    return ReviewItem.model_validate_json((run_dir / "review.json").read_text(encoding="utf-8"))
+    item = ReviewItem.model_validate_json((run_dir / "review.json").read_text(encoding="utf-8"))
+    if Path(item.run_dir).resolve() != Path(run_dir).resolve():
+        raise ValueError("review.json does not belong to this run directory")
+    return item
+
+
+def _open(run_dir: Path) -> ReviewItem:
+    item = _item(run_dir)
+    if item.status == "approved":
+        raise ValueError("run is approved and frozen")
+    return item
 
 
 def list_pending(projects_root: Path) -> list[ReviewItem]:
-    paths = sorted(Path(projects_root).glob("*/narration/*/review.json"), key=lambda p: p.stat().st_mtime, reverse=True)
-    items = [ReviewItem.model_validate_json(p.read_text(encoding="utf-8")) for p in paths]
+    items = []
+    for p in sorted(Path(projects_root).glob("*/narration/*/review.json"), key=lambda p: p.stat().st_mtime, reverse=True):
+        try:
+            items.append(ReviewItem.model_validate_json(p.read_text(encoding="utf-8")))
+        except ValueError:  # one corrupt file must not hide the rest
+            continue
     return [i for i in items if i.status == "pending"]
 
 
 def _latest(run_dir: Path) -> ScriptIR:
     revs = [(int(m.group(1)), p) for p in run_dir.glob("script_r*.json") if (m := re.fullmatch(r"script_r(\d+)\.json", p.name))]
+    if not revs:
+        raise ValueError("no script yet; this run stopped before write")
     return ScriptIR.model_validate_json(max(revs)[1].read_text(encoding="utf-8"))
 
 
@@ -56,14 +65,21 @@ def _save(run_dir: Path, script: ScriptIR) -> ScriptIR:
     return script
 
 
+def _read(run_dir: Path, name: str) -> str:
+    try:
+        return (run_dir / name).read_text(encoding="utf-8")
+    except FileNotFoundError:
+        raise ValueError(f"{name} is missing; this run stopped before it was written") from None
+
+
 def _facts(run_dir: Path) -> dict[str, PanelFacts]:
     import json
-    raw = json.loads((run_dir / "panel_facts.json").read_text(encoding="utf-8"))
+    raw = json.loads(_read(run_dir, "panel_facts.json"))
     return {f["panel_id"]: PanelFacts.model_validate(f) for f in raw}
 
 
 def _sheet(run_dir: Path) -> BeatSheet:
-    return BeatSheet.model_validate_json((run_dir / "beat_sheet.json").read_text(encoding="utf-8"))
+    return BeatSheet.model_validate_json(_read(run_dir, "beat_sheet.json"))
 
 
 def _line(script: ScriptIR, line_id: str):
@@ -75,6 +91,7 @@ def _line(script: ScriptIR, line_id: str):
 
 def edit_line(run_dir: Path, line_id: str, text: str, bibles: BibleStore | None = None) -> ScriptIR:
     run_dir, bibles = Path(run_dir), bibles or BibleStore()
+    _open(run_dir)
     script = _latest(run_dir)
     _line(script, line_id)
     facts = _facts(run_dir)
@@ -88,6 +105,7 @@ def edit_line(run_dir: Path, line_id: str, text: str, bibles: BibleStore | None 
 
 
 def accept_line(run_dir: Path, line_id: str) -> ScriptIR:
+    _open(Path(run_dir))
     script = _latest(Path(run_dir))
     _line(script, line_id)
     return _save(Path(run_dir), revise(script, {line_id: dict(status="passed")}))
@@ -95,6 +113,7 @@ def accept_line(run_dir: Path, line_id: str) -> ScriptIR:
 
 def fallback_line(run_dir: Path, line_id: str, bibles: BibleStore | None = None) -> ScriptIR:
     run_dir, bibles = Path(run_dir), bibles or BibleStore()
+    _open(run_dir)
     script = _latest(run_dir)
     ln = _line(script, line_id)
     names = char_names(bibles.load(_item(run_dir).series_key), _sheet(run_dir))
@@ -105,8 +124,9 @@ def fallback_line(run_dir: Path, line_id: str, bibles: BibleStore | None = None)
 async def regenerate_line(run_dir: Path, line_id: str, hint: str, client: ModelClient, scheduler: ModelScheduler,
                           cache: ArtifactCache, bibles: BibleStore | None = None) -> ScriptIR:
     run_dir, bibles = Path(run_dir), bibles or BibleStore()
+    item = _open(run_dir)
     script, facts, sheet = _latest(run_dir), _facts(run_dir), _sheet(run_dir)
-    bible = bibles.load(_item(run_dir).series_key)
+    bible = bibles.load(item.series_key)
     at = {ln.line_id: i for i, ln in enumerate(script.lines)}
     if line_id not in at:
         raise ValueError(f"unknown line: {line_id}")
@@ -135,17 +155,13 @@ async def regenerate_line(run_dir: Path, line_id: str, hint: str, client: ModelC
 
 def approve(run_dir: Path, bibles: BibleStore) -> SeriesBible:
     run_dir = Path(run_dir)
-    item = _item(run_dir)
-    if item.status == "approved":
-        raise ValueError("already approved")
+    item = _open(run_dir)
     script = _latest(run_dir)
     open_ = [ln.line_id for ln in script.lines if ln.status not in _OK]
     if open_:
         raise ValueError(f"lines still need review: {', '.join(open_)}")
     bible = bibles.load(item.series_key)
     new, applied = apply_proposals(bible, _sheet(run_dir).bible_proposals)
-    if applied:
-        bible = bibles.save(new, item.project_id, applied)
-    _write_json(run_dir / "script.json", script.model_dump(mode="json"))
+    # approved first: a crash after this can never re-apply the proposals
     _write_json(run_dir / "review.json", item.model_copy(update={"status": "approved"}).model_dump(mode="json"))
-    return bible
+    return bibles.save(new, item.project_id, applied) if applied else bible
