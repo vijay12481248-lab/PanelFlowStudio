@@ -13,15 +13,15 @@ from tests.unit.narration.fakes import FakeModelClient, RecordingUnloader
 
 
 @pytest.mark.parametrize("energy,beat,scene_last,last,nxt,want", [
-    ("med", "setup", False, False, False, (1.0, 250)),
-    ("high", "setup", False, False, False, (1.05, 250)),
-    ("med", "escalate", False, False, False, (1.05, 250)),
-    ("med", "payoff", True, False, False, (1.05, 650)),
-    ("low", "setup", False, False, False, (0.95, 250)),
-    ("med", "reveal", False, False, True, (0.95, 650)),
-    ("high", "reveal", False, False, False, (0.95, 250)),
-    ("med", "setup", False, False, True, (1.0, 650)),
-    ("high", "cliffhanger", True, True, False, (1.05, 0)),
+    ("med", "setup", False, False, False, (0.95, 250)),
+    ("high", "setup", False, False, False, (1.0, 250)),
+    ("med", "escalate", False, False, False, (1.0, 250)),
+    ("med", "payoff", True, False, False, (1.0, 650)),
+    ("low", "setup", False, False, False, (0.9, 250)),
+    ("med", "reveal", False, False, True, (0.9, 650)),
+    ("high", "reveal", False, False, False, (0.9, 250)),
+    ("med", "setup", False, False, True, (0.95, 650)),
+    ("high", "cliffhanger", True, True, False, (1.0, 0)),
 ])
 def test_marks_map_to_rate_and_pause(energy, beat, scene_last, last, nxt, want):
     d = MarksDraft(line=1, emotion="x", energy=energy)
@@ -67,7 +67,7 @@ def test_one_mark_per_line_in_order(tmp_path):
     assert len(client.calls) == 2 and "P2 | Kai draws the sword now 2" in client.calls[0][1]
     # L2 ends its scene; L3 precedes a reveal line; L4 is the chapter's last (floor 150)
     assert [m.pause_after_ms for m in plan.lines] == [250, 650, 650, 150]
-    assert [m.rate for m in plan.lines] == [1.0, 1.0, 0.95, 0.95]
+    assert [m.rate for m in plan.lines] == [0.95, 0.95, 0.9, 0.9]
 
 
 def test_bad_structure_reasks_then_review(tmp_path):

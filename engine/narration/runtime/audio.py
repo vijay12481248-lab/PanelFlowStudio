@@ -30,11 +30,21 @@ _pipeline = None
 _whisper = None
 
 
+def _force_offline() -> None:
+    """Models are cached; never reach the network. The env var is too late once huggingface_hub is imported."""
+    os.environ.setdefault("HF_HUB_OFFLINE", "1")
+    try:
+        from huggingface_hub import constants
+    except ImportError:
+        return
+    constants.HF_HUB_OFFLINE = True
+
+
 class KokoroTts:
     def synth(self, text: str, voice: str, rate: float) -> np.ndarray:
         global _pipeline
         if _pipeline is None:
-            os.environ.setdefault("HF_HUB_OFFLINE", "1")  # models are cached; never reach the network
+            _force_offline()
             from kokoro import KPipeline  # lazy: heavy import
 
             _pipeline = KPipeline(lang_code="a")
@@ -47,7 +57,7 @@ class WhisperStt:
     def words(self, wav_path: Path) -> tuple[str, list[Word]]:
         global _whisper
         if _whisper is None:
-            os.environ.setdefault("HF_HUB_OFFLINE", "1")
+            _force_offline()
             from faster_whisper import WhisperModel  # lazy: heavy import
 
             cfg = load_stt_config()
@@ -74,6 +84,12 @@ def to_16k(wav_path: Path) -> np.ndarray:
 def release_audio_models() -> None:
     global _pipeline, _whisper
     _pipeline = _whisper = None
+    try:
+        import torch
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    except Exception:  # torch absent or CUDA unhappy: freeing the cache is best effort
+        pass
 
 
 def normalize_silence(audio: np.ndarray, sr: int = SR, pad_ms: int = PAD_MS,
@@ -97,7 +113,7 @@ def write_wav_atomic(path: Path, audio: np.ndarray, sr: int = SR) -> float:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     pcm = (np.clip(audio, -1, 1) * 32767).astype("<i2")
-    fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
+    fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")  # mkstemp names are already unique
     try:
         with os.fdopen(fd, "wb") as f, wave.open(f, "wb") as w:
             w.setnchannels(1)
@@ -115,7 +131,8 @@ def _tokens(s: str) -> list[str]:
     return re.sub(r"[^\w\s']", " ", s.lower()).split()
 
 
-def wer(ref: str, hyp: str) -> float:
+def wer(ref: str, hyp: str, wildcards: set[str] | frozenset[str] = frozenset()) -> float:
+    """Word error rate; a ref token in `wildcards` (lower-case) matches any one hyp token for free."""
     r, h = _tokens(ref), _tokens(hyp)
     if not r:
         raise ValueError("reference is empty")
@@ -123,6 +140,6 @@ def wer(ref: str, hyp: str) -> float:
     for i, rw in enumerate(r, 1):
         cur = [i]
         for j, hw in enumerate(h, 1):
-            cur.append(min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (rw != hw)))
+            cur.append(min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (rw != hw and rw not in wildcards)))
         prev = cur
     return prev[-1] / len(r)

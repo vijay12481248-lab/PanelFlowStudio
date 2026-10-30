@@ -68,6 +68,18 @@ def test_take_has_80ms_lead_and_words(tmp_path):
         assert not head.any() and w.getnframes() / SR == pytest.approx(t.duration)
 
 
+def test_names_do_not_count_against_wer(tmp_path):
+    from engine.narration.artifacts import PanelFacts
+    text = "Shangguan Feixiong stands with black tendrils on his arm."
+    bible = SeriesBible(series_key="s", characters=[BibleCharacter(id="c1", name="Shangguan")])
+    facts = [PanelFacts(panel_id="P0", order=0, is_story=True, shot="medium", action="a", emotion="calm",
+                        importance=3, confidence=0.9, names_mentioned=["Feixiong"])]
+    heard = "Shangu in Fakeshin stands with black tendrils on his arm."
+    takes, _ = asyncio.run(voice_lines(_script(text), _plan(1), bible, FakeTts(), FakeStt([heard]), tmp_path,
+                                       "am_michael", facts))
+    assert takes[0].wer <= 0.15 and not takes[0].flagged
+
+
 def test_bad_wer_retries_slower_then_flags(tmp_path):
     tts = FakeTts()
     takes, reasons = _run(_script("the hero draws his sword"), _plan(1, 1.0), FakeStt(["nothing like it at all"]), tts, tmp_path)

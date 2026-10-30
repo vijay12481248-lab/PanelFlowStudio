@@ -647,6 +647,11 @@ DEFAULT_STAGE_TIMEOUTS: Dict[str, float] = {
 
 
 
+def audio_stage_timeout(panels: int, compiler: bool) -> float:
+    """The compiler also perceives, writes and speaks the script in this stage, so it needs more time per panel."""
+    return max(3600.0, float(panels * 45.0 + 1200.0)) if compiler else max(3600.0, float(panels * 10.0 + 600.0))
+
+
 def diagnose_error(stage_id: str, exc: Exception) -> AutoPilotErrorDetails:
 
 
@@ -2583,7 +2588,7 @@ class AutoPilotRunner:
 
 
 
-                        return max(3600.0, float(panels_count * 10.0 + 600.0))
+                        return audio_stage_timeout(panels_count, app_settings.narration_engine == "compiler")
 
 
 

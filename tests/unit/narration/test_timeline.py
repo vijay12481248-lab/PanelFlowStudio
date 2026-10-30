@@ -89,6 +89,13 @@ def test_single_short_line_last_panel_is_at_least_1_2s():
     assert tl.duration == pytest.approx(1.2)
 
 
+def test_panel_in_no_beat_still_gets_its_scene():
+    script, plan, takes, sheet, ids = _world([(2.0, 300), (2.0, 300), (2.0, 300)])
+    sheet.scenes[0].beats[0].panel_ids = [ids[0], ids[2]]  # the beat skips p1
+    tl = lock_timeline(script, plan, takes, sheet, ids)
+    assert [p.scene_id for p in tl.panels] == ["s1", "s1", "s1"]
+
+
 def test_empty_or_missing_inputs_raise_value_error():
     script, plan, takes, sheet, ids = _world([(2.0, 300), (2.0, 300)])
     empty = ScriptIR.model_construct(project_id="x", revision=0, parent_revision=None, changed_line_ids=[], lines=[])

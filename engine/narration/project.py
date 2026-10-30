@@ -18,7 +18,7 @@ _CAMERA = {"preset": "custom", "zoom_start": 1.04, "zoom_end": 1.0, "pan_x_start
 
 def _copy_atomic(src: str, dst: Path) -> None:
     dst.parent.mkdir(parents=True, exist_ok=True)
-    tmp = dst.with_name(dst.name + ".tmp")
+    tmp = dst.with_name(f"{dst.name}.{uuid.uuid4().hex[:8]}.tmp")
     shutil.copyfile(src, tmp)
     os.replace(tmp, dst)
 

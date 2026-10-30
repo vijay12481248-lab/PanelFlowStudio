@@ -53,6 +53,13 @@ def test_compiler_stage_review_raises(monkeypatch, gate, exc, text):
     assert str(info.value) == text and "apply" not in seen
 
 
+def test_audio_stage_timeout_scales_under_compiler():
+    from engine.pipeline.autopilot import audio_stage_timeout
+    assert audio_stage_timeout(100, True) == 100 * 45 + 1200
+    assert audio_stage_timeout(36, True) == 3600
+    assert audio_stage_timeout(100, False) == 3600
+
+
 def test_autopilot_story_script_skipped_under_flag(monkeypatch):
     monkeypatch.setattr(settings, "narration_engine", "compiler")
     ran = []

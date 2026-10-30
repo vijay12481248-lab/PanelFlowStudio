@@ -6,12 +6,14 @@ import hashlib
 import json
 import os
 import re
+import uuid
+from collections.abc import Sequence
 from pathlib import Path
 
 import numpy as np
 
-from engine.narration.artifacts import PerformancePlan, ScriptIR, SeriesBible, VoiceTake
-from engine.narration.runtime.audio import Stt, Tts, normalize_silence, wer, write_wav_atomic
+from engine.narration.artifacts import PanelFacts, PerformancePlan, ScriptIR, SeriesBible, VoiceTake
+from engine.narration.runtime.audio import Stt, Tts, _tokens, normalize_silence, wer, write_wav_atomic
 from engine.narration.runtime.roles import load_tts_config
 
 WER_LIMIT = 0.15
@@ -30,10 +32,16 @@ def tts_text(text: str, bible: SeriesBible) -> str:
     return text
 
 
-def _score(ref: str, spoken: str, heard: str) -> float:
+def _names(bible: SeriesBible, facts: Sequence[PanelFacts]) -> frozenset[str]:
+    """Lower-cased tokens of every character name, alias and name mentioned: Whisper can't spell them."""
+    raw = [n for c in bible.characters for n in [c.name, *c.aliases]] + [n for f in facts for n in f.names_mentioned]
+    return frozenset(t for n in raw for t in _tokens(n))
+
+
+def _score(ref: str, spoken: str, heard: str, names: frozenset[str] = frozenset()) -> float:
     """Whisper may hear the respelling or the name; credit whichever matches. A line with no words scores 1.0."""
     try:
-        return min(wer(ref, heard), wer(spoken, heard))
+        return min(wer(ref, heard, names), wer(spoken, heard, names))
     except ValueError:
         return 1.0
 
@@ -43,7 +51,8 @@ def _key(spoken: str, voice: str, rate: float, bible: SeriesBible, model: str) -
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()
 
 
-async def _take(line, rate: float, spoken: str, key: str, model: str, tts: Tts, stt: Stt, out_dir: Path, voice: str) -> VoiceTake:
+async def _take(line, rate: float, spoken: str, key: str, model: str, tts: Tts, stt: Stt, out_dir: Path, voice: str,
+                names: frozenset[str] = frozenset()) -> VoiceTake:
     best: tuple[VoiceTake, Path] | None = None
     for attempt, step in enumerate(RATE_STEPS, 1):
         eff = rate * step
@@ -55,7 +64,7 @@ async def _take(line, rate: float, spoken: str, key: str, model: str, tts: Tts, 
         path = out_dir / f"{key}.a{attempt}.wav"
         duration = write_wav_atomic(path, audio)
         stt_text, words = await asyncio.to_thread(stt.words, path)
-        err = _score(line.text, spoken, stt_text)
+        err = _score(line.text, spoken, stt_text, names)
         take = VoiceTake(
             line_id=line.line_id, audio_path=str(out_dir / f"{key}.wav"), duration=duration, words=words,
             lead_ms=lead, tail_ms=tail, stt_text=stt_text, wer=min(err, 1.0), tts_model=model,
@@ -79,8 +88,9 @@ async def _take(line, rate: float, spoken: str, key: str, model: str, tts: Tts, 
 
 
 async def voice_lines(script: ScriptIR, plan: PerformancePlan, bible: SeriesBible, tts: Tts, stt: Stt,
-                      out_dir: Path, voice: str) -> tuple[list[VoiceTake], list[str]]:
+                      out_dir: Path, voice: str, facts: Sequence[PanelFacts] = ()) -> tuple[list[VoiceTake], list[str]]:
     out_dir = Path(out_dir)
+    names = _names(bible, facts)
     out_dir.mkdir(parents=True, exist_ok=True)
     model = load_tts_config().model
     marks = {m.line_id: m for m in plan.lines}
@@ -97,8 +107,8 @@ async def voice_lines(script: ScriptIR, plan: PerformancePlan, bible: SeriesBibl
             except ValueError:
                 take = None
         if take is None:
-            take = await _take(line, rate, spoken, key, model, tts, stt, out_dir, voice)
-            tmp = meta.with_suffix(".json.tmp")
+            take = await _take(line, rate, spoken, key, model, tts, stt, out_dir, voice, names)
+            tmp = meta.with_suffix(f".json.{uuid.uuid4().hex[:8]}.tmp")
             tmp.write_text(take.model_dump_json(), encoding="utf-8")
             os.replace(tmp, meta)
         takes.append(take.model_copy(update={"line_id": line.line_id}))

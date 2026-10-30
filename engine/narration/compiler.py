@@ -133,6 +133,7 @@ class NarrationCompiler:
             log.finish(gate, reasons)
             if gate == "review":
                 blocked = {lc.line_id for lc in report.lines if lc.blocked} if report else set()
+                blocked |= {t.line_id for t in takes or [] if t.flagged}
                 ids = [ln.line_id for ln in script.lines if ln.line_id in blocked or ln.status in ("fallback", "needs_review")] if script else []
                 _write_json(run_dir / "review.json", ReviewItem(
                     run_id=run_id, project_id=inputs.project_id, series_key=inputs.series_key, run_dir=str(run_dir),
@@ -224,7 +225,7 @@ class NarrationCompiler:
             with _recorded(log, "voice", audio_model, "-", _CountingCache(self.cache)):
                 takes, reasons = await voice.voice_lines(
                     script, plan, bible, self.tts or KokoroTts(), self.stt or WhisperStt(),
-                    Path(workspace) / "narration" / "voice", tts_cfg.voice)
+                    Path(workspace) / "narration" / "voice", tts_cfg.voice, facts)
                 _write_json(run_dir / "takes.json", [t.model_dump(mode="json") for t in takes])
                 if reasons:
                     raise NeedsReview(reasons)

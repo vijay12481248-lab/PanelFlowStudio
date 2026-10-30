@@ -43,6 +43,26 @@ def test_wer_cases():
         wer("", "x")
 
 
+def test_wer_wildcards_match_any_single_token():
+    ref = "Shangguan Feixiong stands with black tendrils on his arm."
+    hyp = "Shangu in Fakeshin stands with black tendrils on his arm."
+    assert wer(ref, hyp) > 0.15
+    assert wer(ref, hyp, {"shangguan", "feixiong"}) <= 0.15
+
+
+def test_force_offline_flips_already_imported_hub(monkeypatch):
+    import sys
+    import types
+
+    from engine.narration.runtime.audio import _force_offline
+
+    consts = types.SimpleNamespace(HF_HUB_OFFLINE=False)
+    monkeypatch.setitem(sys.modules, "huggingface_hub", types.SimpleNamespace(constants=consts))
+    monkeypatch.setitem(sys.modules, "huggingface_hub.constants", consts)
+    _force_offline()
+    assert consts.HF_HUB_OFFLINE is True
+
+
 def test_write_wav_atomic_duration(tmp_path):
     p = tmp_path / "a.wav"
     assert write_wav_atomic(p, _tone(0.5)) == pytest.approx(0.5)

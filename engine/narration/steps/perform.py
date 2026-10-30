@@ -33,11 +33,11 @@ class SceneMarksDraft(BaseModel):
 def marks_to_tts(draft: MarksDraft, beat_function: str, is_scene_last: bool, is_last: bool,
                  next_is_reveal: bool = False) -> tuple[float, int]:
     """(rate, pause_after_ms). The pause is 0 for the chapter's last line, otherwise within 150-800."""
-    rate = 1.0
+    rate = 0.95
     if draft.energy == "high" or beat_function in ("escalate", "payoff"):
-        rate = 1.05
+        rate = 1.0
     if draft.energy == "low" or beat_function == "reveal":  # shortcut: slow wins when both apply
-        rate = 0.95
+        rate = 0.9
     rate = min(1.1, max(0.9, rate))
     if is_last:
         return rate, 0

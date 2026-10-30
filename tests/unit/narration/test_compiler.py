@@ -267,3 +267,5 @@ def test_voice_review_gate(tmp_path):
     assert not (result.run_dir / "timeline.json").exists()
     assert _steps(result)["voice"]["status"] == "review" and "timeline" not in _steps(result)
     assert comp.bibles.load("test-series").version == 0
+    review = json.loads((result.run_dir / "review.json").read_text(encoding="utf-8"))
+    assert review["line_ids"] and {t.line_id for t in result.takes if t.flagged} <= set(review["line_ids"])

@@ -18,8 +18,15 @@ def _first(take: VoiceTake) -> float:
     return take.words[0].start if take.words else _NO_WORDS
 
 
-def _scene_of(sheet: BeatSheet) -> dict[str, str]:
-    return {pid: s.scene_id for s in sheet.scenes for b in s.beats for pid in b.panel_ids}
+def _scene_of(sheet: BeatSheet, story_ids: list[str]) -> dict[str, str]:
+    """Every story panel inside a scene's range belongs to it, beat or not; strays join the scene before them."""
+    pos = {p: i for i, p in enumerate(story_ids)}
+    out, last = {}, sheet.scenes[0].scene_id
+    for i, pid in enumerate(story_ids):
+        last = next((s.scene_id for s in sheet.scenes
+                     if pos.get(s.first_panel_id, len(pos)) <= i <= pos.get(s.last_panel_id, -1)), last)
+        out[pid] = last
+    return out
 
 
 def lock_timeline(script: ScriptIR, plan: PerformancePlan, takes: list[VoiceTake], sheet: BeatSheet,
@@ -32,7 +39,7 @@ def lock_timeline(script: ScriptIR, plan: PerformancePlan, takes: list[VoiceTake
     for ln in lines:
         if ln.line_id not in by_take or ln.line_id not in pause:
             raise ValueError(f"line {ln.line_id} has no voice take or no performance marks")
-    scene = _scene_of(sheet)
+    scene = _scene_of(sheet, story_ids)
     c = max(0.0, LEAD_CUT - _first(by_take[lines[0].line_id]))
     starts, cuts = [], []
     for i, ln in enumerate(lines):
