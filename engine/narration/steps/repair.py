@@ -56,7 +56,7 @@ def with_successors(script: ScriptIR, ids: list[str]) -> list[str]:
             if ln.line_id in want or (i and script.lines[i - 1].line_id in want)]
 
 
-def _revise(script: ScriptIR, new: dict[str, dict]) -> ScriptIR:
+def revise(script: ScriptIR, new: dict[str, dict]) -> ScriptIR:
     lines = [ln.model_copy(update=new[ln.line_id]) if ln.line_id in new else ln for ln in script.lines]
     return ScriptIR(project_id=script.project_id, revision=script.revision + 1, parent_revision=script.revision,
                     changed_line_ids=list(new), lines=lines)
@@ -94,7 +94,7 @@ async def repair_loop(
         for lid, d in zip(blocked, drafts):
             used = [x for x in dict.fromkeys(d.facts_used) if _FACT_REF.match(x)] or cur.lines[at[lid]].facts_used
             new[lid] = dict(text=" ".join(d.text.split()), facts_used=used, status="repaired")
-        cur = _revise(cur, new)
+        cur = revise(cur, new)
         revisions.append(cur)
         rep = await critique(cur, facts, story_ids, sheet, bible, client, scheduler, cache,
                              line_ids=with_successors(cur, list(new)), previous=rep)
@@ -102,7 +102,7 @@ async def repair_loop(
     fallen = [lc.line_id for lc in rep.lines if lc.blocked]
     if fallen:
         by_panel = {ln.line_id: ln.panel_id for ln in cur.lines}
-        cur = _revise(cur, {lid: dict(text=fallback_text(facts[by_panel[lid]], names), facts_used=["action", "characters"],
+        cur = revise(cur, {lid: dict(text=fallback_text(facts[by_panel[lid]], names), facts_used=["action", "characters"],
                                       status="fallback") for lid in fallen})
         revisions.append(cur)
         rep = await critique(cur, facts, story_ids, sheet, bible, client, scheduler, cache, line_ids=[], previous=rep)

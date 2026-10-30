@@ -13,13 +13,15 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-from engine.narration.artifacts import BeatSheet, PanelFacts
-from engine.narration.bible.store import BibleStore
+from engine.narration.artifacts import BeatSheet, CritiqueReport, PanelFacts, ScriptIR
+from engine.narration.bible.store import BibleStore, apply_proposals
 from engine.narration.cache import ArtifactCache
 from engine.narration.inputs import ChapterInputs
 from engine.narration.runtime.client import ModelClient, StepModelError
 from engine.narration.runtime.scheduler import ModelScheduler
-from engine.narration.steps import perceive, understand
+from engine.narration.steps import perceive, repair, understand, write
+from engine.narration.steps.critique import judges
+from engine.narration.steps.factview import char_names, panel_line
 from engine.narration.steps.understand import NeedsReview
 
 Gate = Literal["pass", "review", "failed"]
@@ -60,6 +62,8 @@ class CompileResult:
     run_dir: Path
     facts: list[PanelFacts] | None
     beat_sheet: BeatSheet | None
+    script: ScriptIR | None = None
+    critique: CritiqueReport | None = None
 
 
 class _CountingCache:
@@ -101,17 +105,19 @@ class NarrationCompiler:
         self.client, self.scheduler, self.cache, self.bibles = client, scheduler, cache, bibles
 
     async def run(self, inputs: ChapterInputs, workspace: Path,
-                  stop_after: Literal["perceive", "understand"] = "understand") -> CompileResult:
+                  stop_after: Literal["perceive", "understand", "write"] = "write") -> CompileResult:
         now = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
         run_id = f"{now}-{hashlib.sha256((inputs.project_id + now).encode()).hexdigest()[:6]}"
         run_dir = Path(workspace) / "narration" / run_id
         log = RunLog(run_dir / "run.json", run_id)
         facts: list[PanelFacts] | None = None
         sheet: BeatSheet | None = None
+        script: ScriptIR | None = None
+        report: CritiqueReport | None = None
 
         def result(gate: Gate, reasons: list[str]) -> CompileResult:
             log.finish(gate, reasons)
-            return CompileResult(run_id, gate, reasons, run_dir, facts, sheet)
+            return CompileResult(run_id, gate, reasons, run_dir, facts, sheet, script, report)
 
         try:
             bible = self.bibles.load(inputs.series_key)
@@ -130,6 +136,49 @@ class NarrationCompiler:
                 sheet = await understand.understand_chapter(
                     inputs.project_id, facts, bible, self.client, self.scheduler, counter)
             _write_json(run_dir / "beat_sheet.json", sheet.model_dump(mode="json"))
+            if stop_after == "understand":
+                return result("pass", [])
+
+            by_id = {f.panel_id: f for f in facts}
+            story_ids = [f.panel_id for f in facts if f.is_story]
+            names = char_names(bible, sheet)
+            args = (by_id, story_ids, sheet, bible, self.client, self.scheduler)
+
+            counter = _CountingCache(self.cache)
+            with _recorded(log, "write", self.client.model_for("writer"), write.WRITE_PROMPT_VERSION, counter):
+                script, candidates = await write.write_chapter(
+                    inputs.project_id, facts, sheet, bible, self.client, self.scheduler, counter)
+            _write_json(run_dir / "script_r0.json", script.model_dump(mode="json"))
+
+            counter = _CountingCache(self.cache)
+            with _recorded(log, "critique", self.client.model_for("judge"), judges.CRITIQUE_PROMPT_VERSION, counter):
+                report = await judges.critique(script, *args, counter)
+                picks = {script.lines[0].line_id: ("hook", candidates["hook"])}
+                if len(script.lines) > 1:
+                    picks[script.lines[-1].line_id] = ("cliffhanger", candidates["cliffhanger"])
+                swaps = {}
+                for ln in script.lines:
+                    if ln.line_id in picks:
+                        kind, cands = picks[ln.line_id]
+                        swaps[ln.line_id] = dict(text=await judges.pick_best(
+                            kind, cands, panel_line(1, by_id[ln.panel_id], names), self.client, self.scheduler, counter))
+                script = repair.revise(script, swaps)
+                report = await judges.critique(script, *args, counter, line_ids=repair.with_successors(script, list(swaps)),
+                                               previous=report)
+
+            counter = _CountingCache(self.cache)
+            with _recorded(log, "repair", self.client.model_for("writer"), repair.REPAIR_PROMPT_VERSION, counter):
+                fixed = await repair.repair_loop(script, report, *args, counter)
+            script, report = fixed.script, fixed.report
+            for rev in fixed.revisions:
+                _write_json(run_dir / f"script_r{rev.revision}.json", rev.model_dump(mode="json"))
+            _write_json(run_dir / "script.json", script.model_dump(mode="json"))
+            _write_json(run_dir / "critique.json", report.model_dump(mode="json"))
+            if fixed.gate == "review":
+                return result("review", fixed.reasons)
+            bible2, applied = apply_proposals(bible, sheet.bible_proposals)
+            if applied:
+                self.bibles.save(bible2, inputs.project_id, applied)
             return result("pass", [])
         except NeedsReview as exc:
             return result("review", exc.reasons)

@@ -1,4 +1,4 @@
-"""CLI: python -m engine.narration run <project_id> [--stop-after perceive|understand]"""
+"""CLI: python -m engine.narration run <project_id> [--stop-after perceive|understand|write]"""
 from __future__ import annotations
 
 import argparse
@@ -52,6 +52,11 @@ async def _run(project_id: str, stop_after: str) -> int:
         print(f"needs-review panels: {sum(f.needs_review for f in res.facts)}")
     if res.beat_sheet is not None:
         print(f"scenes: {len(res.beat_sheet.scenes)}")
+    if res.script is not None:
+        print(f"lines: {len(res.script.lines)}")
+        print(f"fallbacks: {sum(ln.status == 'fallback' for ln in res.script.lines)}")
+    if res.critique is not None:
+        print(f"coverage: {res.critique.coverage:.2f}")
     return _EXIT[res.gate]
 
 
@@ -60,7 +65,7 @@ def main(argv: list[str] | None = None) -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
     run = sub.add_parser("run")
     run.add_argument("project_id")
-    run.add_argument("--stop-after", choices=["perceive", "understand"], default="understand")
+    run.add_argument("--stop-after", choices=["perceive", "understand", "write"], default="write")
     args = ap.parse_args(argv)
     return asyncio.run(_run(args.project_id, args.stop_after))
 

@@ -39,3 +39,33 @@ def test_unknown_project_or_no_panels_exits_1_without_traceback(monkeypatch, cap
     assert cli.main(["run", "abc"]) == 1
     out = capsys.readouterr().out.strip()
     assert "\n" not in out and "abc" in out
+
+def test_cli_prints_line_stats(monkeypatch, capsys):
+    from pathlib import Path
+
+    from engine.narration.artifacts import CritiqueReport, ScriptIR, ScriptLine
+    from engine.narration.compiler import CompileResult
+
+    _patch(monkeypatch, _Provider(True))
+    script = ScriptIR(project_id="p", lines=[
+        ScriptLine(line_id=f"L{k}", panel_id=f"p{k}", text="some words go here", facts_used=[], kind="narration",
+                   status="fallback" if k == 1 else "passed") for k in (1, 2, 3)])
+    report = CritiqueReport(revision=0, lines=[], coverage=2 / 3, pace_estimate=1.0, repetition=0, gate="pass")
+    seen = {}
+
+    class _Compiler:
+        def __init__(self, *a):
+            pass
+
+        async def run(self, inputs, workspace, stop_after):
+            seen["stop_after"] = stop_after
+            return CompileResult("r", "pass", [], Path("."), None, None, script, report)
+
+    monkeypatch.setattr(cli, "NarrationCompiler", _Compiler)
+    monkeypatch.setattr(cli, "load_roles", lambda: {})
+    monkeypatch.setattr(cli, "ProviderModelClient", lambda *a: None)
+    monkeypatch.setattr(cli, "ModelScheduler", lambda *a: None)
+    assert cli.main(["run", "abc"]) == 0
+    out = capsys.readouterr().out
+    assert seen["stop_after"] == "write"
+    assert "lines: 3" in out and "fallbacks: 1" in out and "coverage: 0.67" in out
