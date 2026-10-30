@@ -1,0 +1,126 @@
+"""Step 1 PERCEIVE: grounded per-panel facts from a local vision model."""
+from __future__ import annotations
+
+import hashlib
+from typing import Literal
+
+from pydantic import BaseModel, Field
+
+from engine.narration.artifacts import OcrDialogue, PanelFacts, SeriesBible
+from engine.narration.cache import ArtifactCache, cache_key
+from engine.narration.inputs import ChapterInputs, PanelInput
+from engine.narration.runtime.client import ModelClient
+from engine.narration.runtime.prompts import load_prompt
+from engine.narration.runtime.scheduler import ModelScheduler
+
+PERCEIVE_PROMPT_VERSION = "v1"
+STEP = "perceive"
+_START = "(chapter start)"
+
+
+class SpeakerGuess(BaseModel):
+    region_id: str
+    speaker: str
+
+
+class PanelFactsDraft(BaseModel):
+    is_story: bool
+    shot: Literal["wide", "medium", "close", "insert"]
+    characters_visible: list[str]
+    action: str
+    emotion: str
+    speakers: list[SpeakerGuess]
+    sfx: list[str]
+    setting: str
+    importance: int = Field(ge=1, le=5)
+    confidence: float = Field(ge=0, le=1)
+
+
+def _context(draft: PanelFactsDraft) -> str:
+    who = ", ".join(draft.characters_visible) or "none"
+    return f"{draft.action} (visible: {who})"
+
+
+class _Namer:
+    """Maps model-written names to bible ids, then to chapter-stable unknown_<n> labels."""
+
+    def __init__(self, bible: SeriesBible):
+        self.by_name = {}
+        for c in bible.characters:
+            for n in [c.name, *c.aliases]:
+                self.by_name[n.casefold()] = c.id
+        self.unknowns: dict[str, str] = {}  # model string (casefold) -> unknown_<n>
+
+    def map(self, name: str, cues: dict[str, str]) -> str:
+        key = name.strip().casefold()
+        if key in self.by_name:
+            return self.by_name[key]
+        if key.startswith("unknown_") and key in self.unknowns.values():
+            return key
+        label = self.unknowns.setdefault(key, f"unknown_{len(self.unknowns) + 1}")
+        cues.setdefault(label, name)
+        return label
+
+
+def _facts(panel: PanelInput, d: PanelFactsDraft, namer: _Namer) -> PanelFacts:
+    cues: dict[str, str] = {}
+    visible = [namer.map(n, cues) for n in d.characters_visible]
+    guesses = {g.region_id: namer.map(g.speaker, cues) for g in d.speakers if g.region_id in {r.region_id for r in panel.ocr}}
+    dialogue = [
+        OcrDialogue(
+            region_id=r.region_id, text=r.text,
+            speaker_id=guesses.get(r.region_id),
+            speaker_confidence=0.8 if r.region_id in guesses else 0.0,
+        )
+        for r in panel.ocr
+    ]
+    # Only allowed coercion: over-long action is cut to its first 20 words.
+    action = " ".join(d.action.split()[:20]) if len(d.action.split()) > 20 else d.action
+    return PanelFacts(
+        panel_id=panel.panel_id, order=panel.order, is_story=d.is_story, shot=d.shot,
+        characters_visible=visible, unknown_cues=cues, action=action, emotion=d.emotion,
+        dialogue=dialogue, sfx=d.sfx, setting=d.setting, importance=d.importance,
+        confidence=d.confidence, needs_review=d.confidence < 0.5,
+    )
+
+
+async def perceive_chapter(
+    inputs: ChapterInputs, bible: SeriesBible, client: ModelClient,
+    scheduler: ModelScheduler, cache: ArtifactCache,
+) -> list[PanelFacts]:
+    prompt = load_prompt(STEP, PERCEIVE_PROMPT_VERSION)
+    model, params = client.model_for("vision"), client.params_for("vision")
+    characters = "\n".join(
+        f"{c.id}: {c.name} - {'; '.join(c.appearance_cues)}" for c in bible.characters
+    ) or "(none)"
+
+    async def one(panel: PanelInput, previous: str) -> PanelFactsDraft:
+        ocr = [(r.region_id, r.text) for r in panel.ocr]
+        key = cache_key(
+            STEP,
+            {"panel_id": panel.panel_id, "image": hashlib.sha256(panel.image_path.read_bytes()).hexdigest(),
+             "ocr": ocr, "previous": previous, "bible_version": bible.version},
+            prompt.sha256, model, params,
+        )
+        hit = cache.get(STEP, key, PanelFactsDraft)
+        if hit is not None:
+            return hit
+        text = prompt.render(
+            previous=previous, characters=characters,
+            ocr_lines="\n".join(f"[{i}] {t}" for i, t in ocr) or "(no text)",
+        )
+        draft = await client.structured("vision", text, PanelFactsDraft, image=panel.image_path)
+        cache.put(STEP, key, draft)
+        return draft
+
+    drafts: list[PanelFactsDraft] = []
+    previous, size = _START, scheduler.concurrency("vision")
+    for i in range(0, len(inputs.panels), size):
+        chunk = inputs.panels[i:i + size]
+        ctx = previous
+        got = await scheduler.map("vision", chunk, lambda p, ctx=ctx: one(p, ctx))
+        drafts.extend(got)
+        previous = _context(got[-1])
+
+    namer = _Namer(bible)
+    return [_facts(p, d, namer) for p, d in zip(inputs.panels, drafts)]
