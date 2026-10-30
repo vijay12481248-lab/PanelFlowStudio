@@ -1,4 +1,4 @@
-﻿import wave
+import wave
 
 import numpy as np
 import pytest
@@ -55,3 +55,10 @@ def test_audio_config_loads():
     assert load_tts_config().model == "kokoro-82m" and load_tts_config().voice == "am_michael"
     s = load_stt_config()
     assert (s.model, s.device, s.compute_type) == ("base", "cpu", "int8")
+
+
+def test_normalize_sub_frame_input_still_pads():
+    out, _, _ = normalize_silence(np.full(100, 0.5, np.float32))
+    assert len(out) == 100 + 2 * int(SR * 0.08)
+    with pytest.raises(ValueError):
+        normalize_silence(np.zeros(100, np.float32))

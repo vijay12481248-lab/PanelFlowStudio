@@ -1,4 +1,4 @@
-﻿"""Local speech adapters (Kokoro TTS, faster-whisper STT) and signal helpers."""
+"""Local speech adapters (Kokoro TTS, faster-whisper STT) and signal helpers."""
 from __future__ import annotations
 
 import os
@@ -34,10 +34,12 @@ class KokoroTts:
     def synth(self, text: str, voice: str, rate: float) -> np.ndarray:
         global _pipeline
         if _pipeline is None:
+            os.environ.setdefault("HF_HUB_OFFLINE", "1")  # models are cached; never reach the network
             from kokoro import KPipeline  # lazy: heavy import
 
             _pipeline = KPipeline(lang_code="a")
-        chunks = [np.asarray(a, dtype=np.float32).reshape(-1) for _, _, a in _pipeline(text, voice=voice, speed=rate)]
+        chunks = [np.asarray(a.cpu() if hasattr(a, "cpu") else a, dtype=np.float32).reshape(-1)
+                  for _, _, a in _pipeline(text, voice=voice, speed=rate) if a is not None]
         return np.concatenate(chunks) if chunks else np.zeros(0, dtype=np.float32)
 
 
@@ -45,6 +47,7 @@ class WhisperStt:
     def words(self, wav_path: Path) -> tuple[str, list[Word]]:
         global _whisper
         if _whisper is None:
+            os.environ.setdefault("HF_HUB_OFFLINE", "1")
             from faster_whisper import WhisperModel  # lazy: heavy import
 
             cfg = load_stt_config()
@@ -63,9 +66,9 @@ def release_audio_models() -> None:
 def normalize_silence(audio: np.ndarray, sr: int = SR, pad_ms: int = PAD_MS,
                       thresh_db: float = -40.0) -> tuple[np.ndarray, int, int]:
     frame = sr * _FRAME_MS // 1000
+    if len(audio) < frame:  # shorter than one frame: judge it as a single frame
+        frame = max(len(audio), 1)
     n = len(audio) // frame
-    if n == 0:
-        raise ValueError("take is silent")
     rms = np.sqrt((audio[: n * frame].reshape(n, frame).astype(np.float64) ** 2).mean(axis=1))
     loud = np.flatnonzero(rms > 10 ** (thresh_db / 20))
     if loud.size == 0:

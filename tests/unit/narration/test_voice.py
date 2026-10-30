@@ -1,4 +1,5 @@
-﻿import asyncio
+import asyncio
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -114,3 +115,58 @@ def test_too_many_flags_reason(tmp_path):
     assert [t.flagged for t in takes] == [False, False, True, False]
     assert reasons == ["1 of 4 takes failed the speech check"]
 
+
+
+def test_identical_text_lines_keep_their_own_line_id(tmp_path):
+    script = _script("same words here", "same words here")
+    takes, _ = _run(script, _plan(2), FakeStt(["same words here"]), FakeTts(), tmp_path)
+    assert [t.line_id for t in takes] == ["L0", "L1"]
+    again, _ = _run(script, _plan(2), FakeStt(["same words here"]), FakeTts(), tmp_path)
+    assert [t.line_id for t in again] == ["L0", "L1"]
+
+
+class SilentTts(FakeTts):
+    def synth(self, text, voice, rate):
+        self.calls.append((text, voice, rate))
+        return np.zeros(SR, np.float32)
+
+
+def test_silent_output_is_flagged_not_fatal(tmp_path):
+    tts = SilentTts()
+    takes, reasons = _run(_script("the hero draws his sword"), _plan(1), FakeStt(["x"]), tts, tmp_path)
+    t = takes[0]
+    assert len(tts.calls) == 3 and t.flagged and t.words == [] and t.wer == 1.0
+    assert t.duration == pytest.approx(0.16) and reasons == ["1 of 1 takes failed the speech check"]
+
+
+def test_silent_first_attempt_then_good(tmp_path):
+    class Once(FakeTts):
+        def synth(self, text, voice, rate):
+            return np.zeros(SR, np.float32) if not self.calls and not self.calls.append(1) else super().synth(text, voice, rate)
+
+    takes, _ = _run(_script("the hero draws his sword"), _plan(1), FakeStt(["the hero draws his sword"]), Once(), tmp_path)
+    assert takes[0].attempt == 2 and not takes[0].flagged
+
+
+def test_punctuation_only_line_is_flagged(tmp_path):
+    takes, _ = _run(_script("..."), _plan(1), FakeStt(["hmm"]), FakeTts(), tmp_path)
+    assert takes[0].flagged and takes[0].wer == 1.0
+
+
+def test_respelling_heard_by_whisper_is_not_flagged(tmp_path):
+    bible = SeriesBible(series_key="s", characters=[
+        BibleCharacter(id="c", name="Shangguan", pronunciation="Shang gwahn")])
+    takes, _ = _run(_script("Shangguan nods"), _plan(1), FakeStt(["Shang gwahn nods"]), FakeTts(), tmp_path, bible)
+    assert not takes[0].flagged and takes[0].wer == 0
+
+
+def test_partial_rerun_synthesises_only_the_missing_line(tmp_path):
+    script = _script("one two three", "four five six")
+    stt = FakeStt([script.lines[0].text, script.lines[1].text])
+    a, _ = _run(script, _plan(2), stt, FakeTts(), tmp_path)
+    gone = Path(a[1].audio_path)
+    gone.unlink()
+    gone.with_suffix(".json").unlink()
+    tts = FakeTts()
+    b, _ = _run(script, _plan(2), FakeStt([script.lines[1].text]), tts, tmp_path)
+    assert len(tts.calls) == 1 and b[0] == a[0]
