@@ -2,6 +2,8 @@ import asyncio
 
 import pytest
 
+from engine.narration.runtime.client import StepModelError
+
 from engine.narration.artifacts import (
     Beat, BeatSheet, BibleCharacter, OcrDialogue, PanelFacts, Scene, SeriesBible,
 )
@@ -9,7 +11,7 @@ from engine.narration.cache import ArtifactCache
 from engine.narration.runtime.roles import RoleConfig
 from engine.narration.runtime.scheduler import ModelScheduler
 from engine.narration.steps.understand import (
-    MergeDraft, NeedsReview, WindowBeatDraft, WindowDraft, WindowSceneDraft,
+    MergeDraft, NeedsReview, NewCharacter, NewThread, WindowBeatDraft, WindowDraft, WindowSceneDraft,
     check_beat_sheet, normalize_beats, stitch_windows, understand_chapter, windows,
 )
 from tests.unit.narration.fakes import FakeModelClient, RecordingUnloader
@@ -34,7 +36,7 @@ def _scene(first, last, beats=None):
 
 
 def _merge(**kw):
-    base = dict(hook="h", chapter_summary="sum", character_resolutions={}, bible_proposals=[])
+    base = dict(hook="h", chapter_summary="sum", character_resolutions={})
     base.update(kw)
     return MergeDraft(**base)
 
@@ -143,3 +145,74 @@ def test_merge_resolutions_only_accept_bible_ids(tmp_path):
     sheet, client = _run(tmp_path, facts, [WindowDraft(scenes=[_scene(1, 1)]), merge])
     assert sheet.character_resolutions == {"unknown_1": "c1"}
     assert "unknown_1: masked man" in client.calls[1][1]
+
+
+def _scenes_for(spans):
+    """One scene per (first, last) 1-based span, a single beat each."""
+    return WindowDraft(scenes=[_scene(a, b, [list(range(a, b + 1))]) for a, b in spans])
+
+
+def test_three_window_stitch_covers_every_panel_once(tmp_path):
+    facts = [_facts(k) for k in range(1, 71)]
+    drafts = [_scenes_for([(1, 15), (16, 30)]), _scenes_for([(26, 40), (41, 55)]), _scenes_for([(51, 70)])]
+    sheet, client = _run(tmp_path, facts, [*drafts, _merge()])
+    assert len(client.calls) == 4
+    spans = [(int(s.first_panel_id[1:]), int(s.last_panel_id[1:])) for s in sheet.scenes]
+    assert spans == [(1, 15), (16, 27), (28, 40), (41, 52), (53, 70)]
+    assert all(b == a2 - 1 for (_, b), (a2, _) in zip(spans, spans[1:]))  # no gap, no overlap
+    covered = [p for s in sheet.scenes for b in s.beats for p in b.panel_ids]
+    assert covered == [f"p{k}" for k in range(1, 71)]
+
+
+def test_multi_window_reask_redoes_only_the_broken_window(tmp_path):
+    facts = [_facts(k) for k in range(1, 71)]
+    bad3 = _scenes_for([(51, 60)])  # panels 61-70 are in no scene
+    good3 = _scenes_for([(51, 70)])
+    drafts = [_scenes_for([(1, 30)]), _scenes_for([(26, 55)]), bad3, good3]
+    sheet, client = _run(tmp_path, facts, [*drafts, _merge()])
+    assert len(client.calls) == 5  # 3 windows + one re-ask + merge
+    assert "Fix these problems" in client.calls[3][1] and "P61" in client.calls[3][1]
+    assert "P51 |" in client.calls[3][1] and "P1 |" not in client.calls[3][1]
+    assert sheet.scenes[-1].last_panel_id == "p70"
+
+
+def test_reask_is_cached_and_never_overwrites_the_first_answer(tmp_path):
+    facts = [_facts(1), _facts(2), _facts(3)]
+    bad, good = WindowDraft(scenes=[_scene(1, 2)]), WindowDraft(scenes=[_scene(1, 2), _scene(3, 3)])
+    first, c1 = _run(tmp_path, facts, [bad, good, _merge()])
+    assert len(list((tmp_path / "cache" / "understand_window").glob("*.json"))) == 2
+    second, c2 = _run(tmp_path, facts, [])  # an empty queue raises if any model call is made
+    assert c2.calls == [] and second == first
+
+
+def test_merge_draft_becomes_typed_bible_proposals(tmp_path):
+    facts = [_facts(1, characters_visible=["unknown_1", "unknown_2"],
+                    unknown_cues={"unknown_1": "masked man", "unknown_2": "man in mask"})]
+    merge = _merge(
+        new_characters=[
+            NewCharacter(name="  The   Masked Man ", description="black mask",
+                         unknown_ids=["unknown_1", "unknown_2", "unknown_9"]),
+            NewCharacter(name="shangguan  yulin", description="dup of the bible", unknown_ids=[]),
+            NewCharacter(name="the masked man", description="dup within the draft"),
+            NewCharacter(name="   "),
+        ],
+        new_threads=[NewThread(text="Who is the masked man?"), NewThread(text=" "), NewThread(text="Who is the masked man?")],
+        plot_update="Yulin met a masked man.",
+        character_resolutions={"unknown_1": "c_1"},  # a proposed id is never a valid resolution
+    )
+    sheet, _ = _run(tmp_path, facts, [WindowDraft(scenes=[_scene(1, 1)]), merge])
+    assert sheet.character_resolutions == {}
+    assert [(p.kind, p.payload) for p in sheet.bible_proposals] == [
+        ("add_character", {"id": "c_1", "name": "The Masked Man", "appearance_cues": ["black mask"],
+                           "unknown_ids": ["unknown_1", "unknown_2"]}),
+        ("add_thread", {"text": "Who is the masked man?"}),
+        ("update_plot", {"plot_so_far": "Yulin met a masked man."}),
+    ]
+
+
+def test_oversized_window_prompt_fails_loudly_without_calling_model(tmp_path):
+    client = FakeModelClient({"planner": [WindowDraft(scenes=[_scene(1, 1)]), _merge()]},
+                             params={"num_ctx": 300, "max_tokens": 200})
+    with pytest.raises(StepModelError, match="planner"):
+        _run(tmp_path, [_facts(1)], [], client=client)
+    assert client.calls == []

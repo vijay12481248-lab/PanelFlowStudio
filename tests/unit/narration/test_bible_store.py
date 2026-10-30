@@ -94,3 +94,13 @@ def test_store_rejects_path_escaping_keys(tmp_path):
         store.load("../x")
     with pytest.raises(ValueError):
         store.save(SeriesBible(series_key="../x"), "p", [])
+
+def test_apply_add_character_accepts_cluster_unknown_ids():
+    out, applied = apply_proposals(SeriesBible(series_key="s"), [
+        BibleProposal(kind="add_character", payload={"id": "c_1", "name": "Mask", "unknown_ids": ["unknown_1"]})])
+    assert [c.id for c in out.characters] == ["c_1"] and applied == ["add_character: Mask"]
+
+
+def test_store_key_must_fully_match(tmp_path):
+    with pytest.raises(ValueError):
+        BibleStore(tmp_path).load("abc\n")

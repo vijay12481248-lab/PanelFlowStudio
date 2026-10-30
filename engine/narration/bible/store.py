@@ -30,7 +30,7 @@ _KEY_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 
 
 def _check_key(series_key: str) -> None:
-    if not isinstance(series_key, str) or not _KEY_RE.match(series_key):
+    if not isinstance(series_key, str) or not _KEY_RE.fullmatch(series_key):
         raise ValueError(f"invalid series_key: {series_key!r}")
 
 
@@ -47,7 +47,7 @@ def apply_proposals(bible: SeriesBible, proposals: list[BibleProposal]) -> tuple
         try:
             if p.kind in ("add_character", "add_location"):
                 is_char = p.kind == "add_character"
-                item = (BibleCharacter if is_char else BibleLocation).model_validate(p.payload)
+                item = (BibleCharacter if is_char else BibleLocation).model_validate({k: v for k, v in p.payload.items() if k != "unknown_ids"})  # unknown_ids is cluster metadata
                 existing = out.characters if is_char else out.locations
                 if any(e.id == item.id or e.name.lower() == item.name.lower() for e in existing):
                     continue

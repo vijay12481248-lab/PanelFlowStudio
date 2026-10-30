@@ -9,7 +9,7 @@ from engine.narration.artifacts import (
     ArtifactIdError, Beat, BeatSheet, BibleProposal, PanelFacts, Scene, SeriesBible, assert_known_ids,
 )
 from engine.narration.cache import ArtifactCache, cache_key
-from engine.narration.runtime.client import ModelClient
+from engine.narration.runtime.client import ModelClient, guard_prompt
 from engine.narration.runtime.prompts import load_prompt
 from engine.narration.runtime.scheduler import ModelScheduler
 
@@ -44,11 +44,23 @@ class WindowDraft(BaseModel):
     scenes: list[WindowSceneDraft] = Field(min_length=1)
 
 
+class NewCharacter(BaseModel):
+    name: str
+    description: str = ""
+    unknown_ids: list[str] = Field(default_factory=list)  # unknown_<n> labels that are this person
+
+
+class NewThread(BaseModel):
+    text: str
+
+
 class MergeDraft(BaseModel):
     hook: str
     chapter_summary: str
-    character_resolutions: dict[str, str]
-    bible_proposals: list[BibleProposal]
+    character_resolutions: dict[str, str]  # unknown label -> EXISTING bible id only
+    new_characters: list[NewCharacter] = Field(default_factory=list)
+    new_threads: list[NewThread] = Field(default_factory=list)
+    plot_update: str | None = None
 
 
 def windows(n: int, size: int = 30, overlap: int = 5) -> list[tuple[int, int]]:
@@ -145,6 +157,44 @@ def _line(text: str) -> str:
     return " ".join(text.split())
 
 
+def _proposals(
+    merge: MergeDraft, bible: SeriesBible, unknowns: dict[str, str],
+) -> tuple[list[BibleProposal], dict[str, str]]:
+    """Typed draft -> BibleProposals with code-made ids; also unknowns the draft re-found in the bible."""
+    by_name = {_line(n).casefold(): c.id for c in bible.characters for n in (c.name, *c.aliases)}
+    taken, claimed, proposed, found, out = {c.id for c in bible.characters}, set(), set(), {}, []
+    n = 0
+    for nc in merge.new_characters:
+        name = _line(nc.name)
+        if not name:
+            continue
+        ids = [u for u in dict.fromkeys(nc.unknown_ids) if u in unknowns and u not in claimed]
+        if name.casefold() in by_name:  # already known: its unknowns resolve to that existing id
+            found.update({u: by_name[name.casefold()] for u in ids})
+            claimed.update(ids)
+            continue
+        if name.casefold() in proposed:
+            continue
+        proposed.add(name.casefold())
+        claimed.update(ids)
+        n += 1
+        while f"c_{n}" in taken:
+            n += 1
+        payload = {"id": f"c_{n}", "name": name, "unknown_ids": ids}
+        if nc.description.strip():
+            payload["appearance_cues"] = [_line(nc.description)]
+        out.append(BibleProposal(kind="add_character", payload=payload))
+    seen = set(bible.open_threads)
+    for t in merge.new_threads:
+        text = _line(t.text)
+        if text and text not in seen:
+            seen.add(text)
+            out.append(BibleProposal(kind="add_thread", payload={"text": text}))
+    if merge.plot_update and merge.plot_update.strip():
+        out.append(BibleProposal(kind="update_plot", payload={"plot_so_far": _line(merge.plot_update)}))
+    return out, found
+
+
 def _scenes(stitched: list[WindowSceneDraft], ids: list[str]) -> list[Scene]:
     return [
         Scene(scene_id=f"s{i}", first_panel_id=ids[s.first - 1], last_panel_id=ids[s.last - 1],
@@ -173,6 +223,7 @@ async def understand_chapter(
         hit = cache.get(step, key, schema)
         if hit is not None:
             return hit
+        guard_prompt(client, "planner", text)
         out = await client.structured("planner", text, schema)
         cache.put(step, key, out)
         return out
@@ -198,9 +249,9 @@ async def understand_chapter(
         bad = set().union(*(p for _, p in problems))
         redo = [k for k, (a, b) in enumerate(spans) if not bad or any(a <= pos[p] < b for p in bad)]
         fix = "\n\nFix these problems: " + "; ".join(m for m, _ in problems)
-        # re-ask bypasses the cache both ways: a bad answer is never reused, a fix never overwrites it
+        # the re-ask prompt embeds the feedback, so its cache key never collides with the first call
         fixed = await scheduler.map("planner", [render(spans[k]) + fix for k in redo],
-                                    lambda t: client.structured("planner", t, WindowDraft))
+                                    lambda t: cached(WINDOW_STEP, wprompt.sha256, t, WindowDraft))
         for k, d in zip(redo, fixed):
             drafts[k] = d
         scenes = _scenes(stitch_windows(spans, drafts), ids)
@@ -225,9 +276,9 @@ async def understand_chapter(
         unknowns="\n".join(f"{k}: {_line(v)}" for k, v in unknowns.items()) or "(none)",
     )
     merge = (await scheduler.map("planner", [mtext], lambda t: cached(MERGE_STEP, mprompt.sha256, t, MergeDraft)))[0]
+    proposals, found = _proposals(merge, bible, unknowns)
+    resolutions = {k: v for k, v in merge.character_resolutions.items() if k in unknowns and v in names}
     return BeatSheet(
         project_id=project_id, scenes=scenes, hook=merge.hook, chapter_summary=merge.chapter_summary,
-        character_resolutions={k: v for k, v in merge.character_resolutions.items()
-                               if k in unknowns and v in names},
-        bible_proposals=merge.bible_proposals,
+        character_resolutions={**found, **resolutions}, bible_proposals=proposals,
     )

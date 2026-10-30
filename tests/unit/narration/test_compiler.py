@@ -28,7 +28,7 @@ def _window():
 
 
 def _merge():
-    return MergeDraft(hook="h", chapter_summary="s", character_resolutions={}, bible_proposals=[])
+    return MergeDraft(hook="h", chapter_summary="s", character_resolutions={})
 
 
 def _compiler(tmp_path, responses):
