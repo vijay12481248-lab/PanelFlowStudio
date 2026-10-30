@@ -117,6 +117,13 @@ class NarrationCompiler:
 
         def result(gate: Gate, reasons: list[str]) -> CompileResult:
             log.finish(gate, reasons)
+            if gate == "review":
+                from engine.narration.review import ReviewItem  # review imports this module
+                blocked = {lc.line_id for lc in report.lines if lc.blocked} if report else set()
+                ids = [ln.line_id for ln in script.lines if ln.line_id in blocked or ln.status in ("fallback", "needs_review")] if script else []
+                _write_json(run_dir / "review.json", ReviewItem(
+                    run_id=run_id, project_id=inputs.project_id, series_key=inputs.series_key, run_dir=str(run_dir),
+                    reasons=list(reasons), line_ids=ids).model_dump(mode="json"))
             return CompileResult(run_id, gate, reasons, run_dir, facts, sheet, script, report)
 
         try:

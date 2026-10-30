@@ -60,13 +60,36 @@ async def _run(project_id: str, stop_after: str) -> int:
     return _EXIT[res.gate]
 
 
+def _review(args) -> int:
+    from engine.narration import review
+
+    if args.action == "list":
+        with SessionLocal() as db:
+            roots = {Path(p.workspace_path).parent for p in db.query(ProjectRecord)}
+        for root in sorted(roots):
+            for i in review.list_pending(root):
+                print(f"{i.run_dir}\t{i.project_id}\t{'; '.join(i.reasons)}")
+        return 0
+    try:
+        print(f"bible version: {review.approve(Path(args.run_dir), BibleStore()).version}")
+    except (ValueError, OSError) as exc:
+        print(str(exc))
+        return 1
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="python -m engine.narration")
     sub = ap.add_subparsers(dest="cmd", required=True)
     run = sub.add_parser("run")
     run.add_argument("project_id")
     run.add_argument("--stop-after", choices=["perceive", "understand", "write"], default="write")
+    rv = sub.add_parser("review").add_subparsers(dest="action", required=True)
+    rv.add_parser("list")
+    rv.add_parser("approve").add_argument("run_dir")
     args = ap.parse_args(argv)
+    if args.cmd == "review":
+        return _review(args)
     return asyncio.run(_run(args.project_id, args.stop_after))
 
 
