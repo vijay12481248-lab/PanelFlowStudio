@@ -97,7 +97,7 @@ def _gold(args) -> int:
     from engine.narration.eval.gold import add_gold
 
     try:
-        print(add_gold(args.project_id, args.slug))
+        print(add_gold(args.project_id, args.slug, args.kind))
     except (KeyError, ValueError, FileExistsError) as exc:
         print(str(exc))
         return 1
@@ -114,8 +114,12 @@ async def _eval(args) -> int:
     provider = await _local_provider()
     if provider is None:
         return 1
-    work = gold.gold_root() / "_work"  # own cache and bibles: never touches real series bibles
-    report = await run_eval(args.slug, lambda: _make_compiler(provider, work / "cache", BibleStore(work / "bibles")))
+    work = gold.gold_root() / "_work"  # own cache; run_eval hands each chapter a fresh temporary bible store
+    try:
+        report = await run_eval(args.slug, lambda bibles: _make_compiler(provider, work / "cache", bibles))
+    except (ValueError, FileNotFoundError) as exc:
+        print(str(exc))
+        return 1
     out = Path(args.out) if args.out else gold.gold_root() / "_reports" / datetime.now().strftime("%Y%m%dT%H%M%S")
     print(f"report: {write_report(report, out)[1]}")
     if not args.baseline:
@@ -139,6 +143,7 @@ def main(argv: list[str] | None = None) -> int:
     add = gd.add_parser("add")
     add.add_argument("project_id")
     add.add_argument("slug")
+    add.add_argument("--kind", choices=["manhua", "manhwa", "webtoon"], default="manhwa")
     ev = sub.add_parser("eval")
     ev.add_argument("--slug", action="append")
     ev.add_argument("--baseline")
