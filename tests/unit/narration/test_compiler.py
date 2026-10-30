@@ -1,7 +1,7 @@
 import asyncio
 import json
 
-from engine.narration.artifacts import SeriesBible
+from engine.narration.artifacts import Beat, BeatSheet, Scene, SeriesBible
 from engine.narration.bible.store import BibleStore
 from engine.narration.cache import ArtifactCache
 from engine.narration.compiler import NarrationCompiler
@@ -174,3 +174,29 @@ def test_rerun_after_crash_zero_model_calls(tmp_path):
     steps = _steps(again)
     assert [steps[s]["model_calls"] for s in ("perceive", "understand", "write", "critique", "repair")] == [0] * 5
     assert steps["write"]["cache_hits"] > 0 and steps["repair"]["cache_hits"] > 0
+
+def test_chapter_without_story_panels_goes_to_review(tmp_path, monkeypatch):
+    sheet = BeatSheet(project_id="p", hook="h", chapter_summary="s", scenes=[Scene(
+        scene_id="s0", first_panel_id="p1", last_panel_id="p3", goal="g", conflict="c", turn="t",
+        beats=[Beat(beat_id="b0", panel_ids=["p1"], what_happens="w", function="setup", intensity=0.5)])])
+
+    async def fake(*a, **k):
+        return sheet
+
+    monkeypatch.setattr(understand, "understand_chapter", fake)
+    result = _go(tmp_path, _compiler(tmp_path, {"vision": [_draft(False)] * 3}), stop_after="write")
+    assert result.gate == "review" and result.reasons == ["no story panels to narrate"]
+
+
+def test_missing_candidates_skip_the_swap(tmp_path, monkeypatch):
+    from engine.narration.steps import write
+
+    real = write.write_chapter
+
+    async def no_cands(*a, **k):
+        script, _ = await real(*a, **k)
+        return script, {"hook": [], "cliffhanger": []}
+
+    monkeypatch.setattr(write, "write_chapter", no_cands)
+    result = _go(tmp_path, _compiler(tmp_path, _write_responses()), stop_after="write")
+    assert result.gate == "pass" and result.script.lines[0].text.startswith("calm quiet")

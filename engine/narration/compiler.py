@@ -141,6 +141,8 @@ class NarrationCompiler:
 
             by_id = {f.panel_id: f for f in facts}
             story_ids = [f.panel_id for f in facts if f.is_story]
+            if not story_ids:
+                return result("review", ["no story panels to narrate"])
             names = char_names(bible, sheet)
             args = (by_id, story_ids, sheet, bible, self.client, self.scheduler)
 
@@ -148,17 +150,19 @@ class NarrationCompiler:
             with _recorded(log, "write", self.client.model_for("writer"), write.WRITE_PROMPT_VERSION, counter):
                 script, candidates = await write.write_chapter(
                     inputs.project_id, facts, sheet, bible, self.client, self.scheduler, counter)
+            if not script.lines:
+                return result("review", ["no story panels to narrate"])
             _write_json(run_dir / "script_r0.json", script.model_dump(mode="json"))
 
             counter = _CountingCache(self.cache)
             with _recorded(log, "critique", self.client.model_for("judge"), judges.CRITIQUE_PROMPT_VERSION, counter):
                 report = await judges.critique(script, *args, counter)
-                picks = {script.lines[0].line_id: ("hook", candidates["hook"])}
+                picks = {script.lines[0].line_id: ("hook", candidates.get("hook"))}
                 if len(script.lines) > 1:
-                    picks[script.lines[-1].line_id] = ("cliffhanger", candidates["cliffhanger"])
+                    picks[script.lines[-1].line_id] = ("cliffhanger", candidates.get("cliffhanger"))
                 swaps = {}
                 for ln in script.lines:
-                    if ln.line_id in picks:
+                    if picks.get(ln.line_id, (0, None))[1]:  # no candidates: keep the written line
                         kind, cands = picks[ln.line_id]
                         swaps[ln.line_id] = dict(text=await judges.pick_best(
                             kind, cands, panel_line(1, by_id[ln.panel_id], names), self.client, self.scheduler, counter))

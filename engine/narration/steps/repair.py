@@ -15,7 +15,7 @@ from engine.narration.runtime.client import ModelClient
 from engine.narration.runtime.prompts import load_prompt
 from engine.narration.runtime.scheduler import ModelScheduler
 from engine.narration.steps._cached import cached_call
-from engine.narration.steps.critique.judges import critique
+from engine.narration.steps.critique.judges import JUDGES, critique
 from engine.narration.steps.factview import char_names, display_name, panel_line
 
 REPAIR_PROMPT_VERSION = "v1"
@@ -106,13 +106,19 @@ async def repair_loop(
                                       status="fallback") for lid in fallen})
         revisions.append(cur)
         rep = await critique(cur, facts, story_ids, sheet, bible, client, scheduler, cache, line_ids=[], previous=rep)
-        fact_only = LineCheck(rule="fallback", passed=True, severity="warn", reason="fact-only text")
-        rep = rep.model_copy(update={"lines": [LineCritique(line_id=lc.line_id, checks=[fact_only]) if lc.line_id in fallen
-                                               else lc for lc in rep.lines]})
+        # fact-only text is not judged and may be short, but every other rule still applies to it
+        rep = rep.model_copy(update={"lines": [
+            LineCritique(line_id=lc.line_id, checks=[c for c in lc.checks if c.rule not in (*JUDGES, "word_budget")])
+            if lc.line_id in fallen else lc for lc in rep.lines]})
+        broken = sum(lc.blocked for lc in rep.lines if lc.line_id in fallen)
+    else:
+        broken = 0
     final = cur.model_copy(update={"lines": [
         ln if ln.status != "draft" else ln.model_copy(update={"status": "passed"}) for ln in cur.lines]})
     revisions[-1] = final
-    review = len(fallen) / len(final.lines) > FALLBACK_LIMIT
-    reasons = [f"{len(fallen)} of {len(final.lines)} lines fell back to facts"] if review else []
+    reasons = [f"{len(fallen)} of {len(final.lines)} lines fell back to facts"] if len(fallen) / len(final.lines) > FALLBACK_LIMIT else []
+    if broken:
+        reasons.append(f"{broken} fallback lines still break rules")
+    review = bool(reasons)
     rep = rep.model_copy(update={"gate": "review" if review else "pass", "gate_reasons": reasons})
     return RepairResult(final, rep, "review" if review else "pass", reasons, revisions)

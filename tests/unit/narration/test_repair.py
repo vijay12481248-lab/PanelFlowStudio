@@ -110,3 +110,20 @@ def test_with_successors():
     script, *_ = _setup(n=4)
     assert with_successors(script, ["L002", "L004"]) == ["L002", "L003", "L004"]
 
+
+
+def test_short_fallback_is_not_blocked_by_word_budget(tmp_path):
+    script, *rest = _setup(n=10, action="A man stands")
+    _broken(script, 1)
+    res, _ = _go(tmp_path, script, *rest, _bad_if("Bad"), [_fix("Bad again fix one here"), _fix("Bad again fix two here")])
+    assert res.script.lines[1].text == "A man stands." and res.script.lines[1].status == "fallback"
+    assert res.gate == "pass" and not any(lc.blocked for lc in res.report.lines)
+
+
+def test_fallback_that_breaks_a_rule_goes_to_review(tmp_path):
+    script, *rest = _setup(n=10, action="Kai meets Zorg there now")
+    _broken(script, 1)
+    res, _ = _go(tmp_path, script, *rest, _bad_if("Bad"), [_fix("Bad again fix one here"), _fix("Bad again fix two here")])
+    assert res.script.lines[1].status == "fallback"
+    assert res.gate == "review" and res.reasons == ["1 fallback lines still break rules"]
+    assert [lc.line_id for lc in res.report.lines if lc.blocked] == ["L002"]
