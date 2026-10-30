@@ -11,7 +11,7 @@ from engine.narration.artifacts import BeatSheet, LockedTimeline, PerformancePla
 
 # Legacy autopilot builds these inline (engine/pipeline/autopilot.py), so there is nothing to import.
 _BACKGROUND = {"enabled": True, "preset": "duplicate_blur", "blur_sigma": 24.0, "brightness": 0.45,
-               "foreground_fit": "contain", "edge_shadow": 0.6}
+               "foreground_fit": "contain", "edge_shadow": 0.6, "motion": "none", "motion_amount": 0.0}
 _CAMERA = {"preset": "custom", "zoom_start": 1.04, "zoom_end": 1.0, "pan_x_start": 0.0, "pan_x_end": 0.0,
            "pan_y_start": 0.0, "pan_y_end": 0.0, "easing": "ease_in_out"}
 
@@ -34,13 +34,13 @@ def _next_version(db, project_id: str) -> str:
 
 
 def apply_to_project(db, project_id: str, tl: LockedTimeline, script: ScriptIR, sheet: BeatSheet,
-                     takes: list[VoiceTake], workspace: Path, plan: PerformancePlan | None = None) -> str:
+                     takes: list[VoiceTake], workspace: Path, plan: PerformancePlan) -> str:
     project = db.get(ProjectRecord, project_id)
     settings = dict(project.settings or {})
     state = dict(settings.get("story_editor_state") or {})
     old = (state.get("scenes") or [{}])[0]
     take = {t.line_id: t for t in takes}
-    marks = {m.line_id: m for m in plan.lines} if plan else {}
+    marks = {m.line_id: m for m in plan.lines}
     line = {ln.line_id: ln for ln in script.lines}
 
     scenes = []
@@ -72,9 +72,9 @@ def apply_to_project(db, project_id: str, tl: LockedTimeline, script: ScriptIR, 
     db.flush()
     clips = []
     for i, c in enumerate(tl.clips):
-        name = f"narr_{c.line_id}.wav"
+        name = "narr_" + Path(take[c.line_id].audio_path).stem + ".wav"  # content-named: a changed line never overwrites
         _copy_atomic(take[c.line_id].audio_path, Path(workspace) / "audio" / "dialogue" / name)
-        emotion = marks[c.line_id].emotion.upper() if c.line_id in marks else "NEUTRAL"
+        emotion = marks[c.line_id].emotion.upper()
         sid = panel_scene[c.panel_id]
         clips.append({
             "id": "narr_" + c.line_id, "scene_id": sid, "text": line[c.line_id].text,
@@ -95,3 +95,4 @@ def apply_to_project(db, project_id: str, tl: LockedTimeline, script: ScriptIR, 
     project.settings = settings
     db.commit()
     return script_id
+

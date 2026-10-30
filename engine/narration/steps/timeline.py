@@ -24,20 +24,25 @@ def _scene_of(sheet: BeatSheet) -> dict[str, str]:
 
 def lock_timeline(script: ScriptIR, plan: PerformancePlan, takes: list[VoiceTake], sheet: BeatSheet,
                   story_ids: list[str]) -> LockedTimeline:
+    lines = script.lines
+    if not lines or not takes:
+        raise ValueError("cannot lock a timeline from an empty script or empty takes")
     by_take = {t.line_id: t for t in takes}
     pause = {m.line_id: m.pause_after_ms / 1000 for m in plan.lines}
+    for ln in lines:
+        if ln.line_id not in by_take or ln.line_id not in pause:
+            raise ValueError(f"line {ln.line_id} has no voice take or no performance marks")
     scene = _scene_of(sheet)
-    lines = script.lines
     c = max(0.0, LEAD_CUT - _first(by_take[lines[0].line_id]))
     starts, cuts = [], []
     for i, ln in enumerate(lines):
         t = by_take[ln.line_id]
-        cuts.append(0.0 if i == 0 else c + _first(t) - LEAD_CUT)
+        cuts.append(0.0 if i == 0 else c + min(_first(t) - LEAD_CUT, 0.0))
         starts.append(c)
         if i + 1 < len(lines):
             nxt = _first(by_take[lines[i + 1].line_id])
-            c = max(c + t.duration + pause[ln.line_id], cuts[i] + MIN_HOLD - nxt + LEAD_CUT)
-    end = starts[-1] + by_take[lines[-1].line_id].duration + 0.5
+            c = max(c + t.duration + pause[ln.line_id], cuts[i] + MIN_HOLD - min(nxt - LEAD_CUT, 0.0))
+    end = max(starts[-1] + by_take[lines[-1].line_id].duration + 0.5, cuts[-1] + MIN_HOLD)
     ends = cuts[1:] + [end]
     return LockedTimeline(
         project_id=script.project_id, duration=end,
@@ -49,7 +54,12 @@ def lock_timeline(script: ScriptIR, plan: PerformancePlan, takes: list[VoiceTake
 
 
 def sync_metrics(tl: LockedTimeline, takes: list[VoiceTake], script: ScriptIR) -> dict:
+    if not takes:
+        raise ValueError("cannot measure sync from empty takes")
     by_take = {t.line_id: t for t in takes}
+    for c in tl.clips:
+        if c.line_id not in by_take:
+            raise ValueError(f"line {c.line_id} has no voice take")
     holds = [p.end - p.start for p in tl.panels]
     words = sum(len(ln.text.split()) for ln in script.lines)
     secs = sum((t.words[-1].end - t.words[0].start) if t.words else t.duration for t in takes)
@@ -73,3 +83,4 @@ def sync_metrics(tl: LockedTimeline, takes: list[VoiceTake], script: ScriptIR) -
         "wer_max": m["wer_max"] <= 0.15,
     }
     return m
+

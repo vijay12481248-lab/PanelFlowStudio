@@ -39,7 +39,7 @@ def test_onset_lands_120ms_after_cut():
 
 def test_short_lines_are_held_to_1_2s():
     tl, _, _ = _lock([(0.5, 150), (0.5, 150), (0.5, 150)])
-    assert [round(p.end - p.start, 6) for p in tl.panels[:2]] == [1.2, 1.2]
+    assert [round(p.end - p.start, 6) for p in tl.panels] == [1.2, 1.2, 1.2]
     assert tl.clips[0].end <= tl.clips[1].start and tl.clips[1].end <= tl.clips[2].start
 
 
@@ -71,3 +71,37 @@ def test_timeline_validates():
     tl, _, _ = _lock([(0.5, 150), (7.0, 800), (2.0, 300)])
     LockedTimeline.model_validate(tl.model_dump())
     assert [p.scene_id for p in tl.panels] == ["s1"] * 3
+
+
+def test_late_first_word_clamps_cut_and_counts_as_onset_miss():
+    script, plan, takes, sheet, ids = _world([(2.0, 300), (2.0, 300), (2.0, 300)])
+    takes[1].words[0] = Word(text="one", start=0.25, end=0.4)
+    tl = lock_timeline(script, plan, takes, sheet, ids)
+    LockedTimeline.model_validate(tl.model_dump())
+    assert tl.clips[1].start == pytest.approx(tl.panels[1].start)
+    assert all(p.end - p.start >= 1.2 - 1e-6 for p in tl.panels)
+    assert sync_metrics(tl, takes, script)["onset_ok_share"] == pytest.approx(2 / 3)
+
+
+def test_single_short_line_last_panel_is_at_least_1_2s():
+    tl, script, takes = _lock([(0.5, 150)])
+    assert tl.panels[0].end - tl.panels[0].start == pytest.approx(1.2)
+    assert tl.duration == pytest.approx(1.2)
+
+
+def test_empty_or_missing_inputs_raise_value_error():
+    script, plan, takes, sheet, ids = _world([(2.0, 300), (2.0, 300)])
+    empty = ScriptIR.model_construct(project_id="x", revision=0, parent_revision=None, changed_line_ids=[], lines=[])
+    with pytest.raises(ValueError, match="empty"):
+        lock_timeline(empty, plan, takes, sheet, ids)
+    with pytest.raises(ValueError, match="empty"):
+        lock_timeline(script, plan, [], sheet, ids)
+    with pytest.raises(ValueError, match="l1"):
+        lock_timeline(script, plan, takes[:1], sheet, ids)
+    with pytest.raises(ValueError, match="l1"):
+        lock_timeline(script, PerformancePlan(project_id="x", script_revision=0, lines=plan.lines[:1]), takes, sheet, ids)
+    tl = lock_timeline(script, plan, takes, sheet, ids)
+    with pytest.raises(ValueError, match="empty"):
+        sync_metrics(tl, [], script)
+    with pytest.raises(ValueError, match="l1"):
+        sync_metrics(tl, takes[:1], script)
