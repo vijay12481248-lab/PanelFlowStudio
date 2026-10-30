@@ -31,3 +31,18 @@ class RecordingUnloader:
 
     async def __call__(self, model: str) -> None:
         self.unloaded.append(model)
+
+
+def make_chapter_inputs(tmp_path, n_panels: int, ocr: dict[int, list[str]]):
+    """Tiny-PNG ChapterInputs; ocr maps 1-based panel number to its region texts."""
+    from PIL import Image
+
+    from engine.narration.inputs import ChapterInputs, OcrRegionInput, PanelInput
+
+    panels = []
+    for k in range(1, n_panels + 1):
+        path = tmp_path / f"p{k}.png"
+        Image.new("RGB", (4, 4), "white").save(path)
+        regions = [OcrRegionInput(f"p{k}-r{j}", t, "SPEECH") for j, t in enumerate(ocr.get(k, []), start=1)]
+        panels.append(PanelInput(f"p{k}", k, path, regions))
+    return ChapterInputs("proj-test", "test-series", panels)
