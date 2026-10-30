@@ -7404,6 +7404,7 @@ class AutoPilotRunner:
 
 
             # 5. Ensure atmospheric background music (BGM) is attached
+            from engine.audio.bgm_defaults import default_bgm_tracks
 
 
 
@@ -7427,63 +7428,7 @@ class AutoPilotRunner:
 
 
 
-                se_state["bgm_tracks"] = [
-
-
-
-
-
-
-
-                    {
-
-
-
-
-
-
-
-                        "id": "bgm_default",
-
-
-
-
-
-
-
-                        "audio_url": "/assets/demo/crystal_resonance_bgm.mp3",
-
-
-
-
-
-
-
-                        "volume": 0.35,
-
-
-
-
-
-
-
-                        "ducking": -14.0,
-
-
-
-
-
-
-
-                    }
-
-
-
-
-
-
-
-                ]
+                se_state["bgm_tracks"] = default_bgm_tracks(bgm_tracks)
 
 
 

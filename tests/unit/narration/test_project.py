@@ -1,4 +1,5 @@
-﻿import uuid
+﻿import json
+import uuid
 from pathlib import Path
 
 from engine.database.models import ProjectRecord, ScriptSegmentRecord, VideoScriptRecord
@@ -103,3 +104,45 @@ def test_rerun_with_changed_text_writes_new_file_and_keeps_old(tmp_path):
     clip = _state(pid)["narration_clips"][1]
     assert clip["id"] == "narr_l1" and clip["audio_url"].endswith("narr_kl1v2.wav")
 
+
+
+def _tl_record(pid):
+    from engine.database.models import AudioTimelineRecord
+    with SessionLocal() as db:
+        return db.query(AudioTimelineRecord).filter_by(project_id=pid).one()
+
+
+def test_projection_audio_timeline_passes_real_approve_audio(tmp_path):
+    from engine.audio.service import AudioService
+    from engine.database.models import AudioTimelineRecord
+    pid, tl, script, sheet, takes, plan = _setup(tmp_path)
+    with SessionLocal() as db:
+        apply_to_project(db, pid, tl, script, sheet, takes, tmp_path, plan)
+        assert AudioService().approve_audio(db, pid) is True
+        rec = db.query(AudioTimelineRecord).filter_by(project_id=pid).one()
+        assert rec.status == "APPROVED" and rec.total_duration == tl.duration
+        assert rec.voice_casting == {"Narrator": takes[0].voice_id}
+        ivs = rec.timeline_json["intervals"]
+        assert [i["text"] for i in ivs] == [ln.text for ln in script.lines]
+        assert [(i["start_time"], i["end_time"]) for i in ivs] == [(c.start, c.end) for c in tl.clips]
+        assert all(i["is_speech"] for i in ivs)
+        assert ivs[1]["audio_file_uri"] == str(tmp_path / "audio" / "dialogue" / "narr_kl1.wav")
+    sidecar = json.loads((tmp_path / "audio" / "master_audio_timeline.json").read_text(encoding="utf-8"))
+    assert sidecar == rec.timeline_json
+
+
+def test_projection_adds_default_bgm_only_when_empty(tmp_path):
+    from engine.audio.bgm_defaults import default_bgm_tracks
+    pid, tl, script, sheet, takes, plan = _setup(tmp_path)
+    with SessionLocal() as db:
+        apply_to_project(db, pid, tl, script, sheet, takes, tmp_path, plan)
+    assert _state(pid)["bgm_tracks"] == default_bgm_tracks([])
+    # a project that already has music keeps it (test_projection_replaces_only_scenes_and_clips covers [{"id": "b"}])
+
+
+def test_projection_sets_voice_generated_stage(tmp_path):
+    from engine.acquisition.models.models import PipelineStage
+    pid, tl, script, sheet, takes, plan = _setup(tmp_path)
+    with SessionLocal() as db:
+        apply_to_project(db, pid, tl, script, sheet, takes, tmp_path, plan)
+        assert db.get(ProjectRecord, pid).current_stage == PipelineStage.VOICE_GENERATED.value

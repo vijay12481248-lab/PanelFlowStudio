@@ -6,7 +6,11 @@ import shutil
 import uuid
 from pathlib import Path
 
-from engine.database.models import ProjectRecord, ScriptSegmentRecord, VideoScriptRecord
+from engine.acquisition.models.models import PipelineStage
+from engine.audio.bgm_defaults import default_bgm_tracks
+from engine.database.models import AudioTimelineRecord, ProjectRecord, ScriptSegmentRecord, VideoScriptRecord
+from engine.motion.models.input_contract import AudioInterval, MasterAudioTimeline
+from engine.security.paths import write_contained_json
 from engine.narration.artifacts import BeatSheet, LockedTimeline, PerformancePlan, ScriptIR, VoiceTake
 
 # Legacy autopilot builds these inline (engine/pipeline/autopilot.py), so there is nothing to import.
@@ -70,10 +74,11 @@ def apply_to_project(db, project_id: str, tl: LockedTimeline, script: ScriptIR, 
                              adaptation_profile="narration_compiler", estimated_duration=tl.duration,
                              status="APPROVED"))
     db.flush()
-    clips = []
+    clips, intervals = [], []
     for i, c in enumerate(tl.clips):
         name = "narr_" + Path(take[c.line_id].audio_path).stem + ".wav"  # content-named: a changed line never overwrites
-        _copy_atomic(take[c.line_id].audio_path, Path(workspace) / "audio" / "dialogue" / name)
+        dest = Path(workspace) / "audio" / "dialogue" / name
+        _copy_atomic(take[c.line_id].audio_path, dest)
         emotion = marks[c.line_id].emotion.upper()
         sid = panel_scene[c.panel_id]
         clips.append({
@@ -86,11 +91,21 @@ def apply_to_project(db, project_id: str, tl: LockedTimeline, script: ScriptIR, 
             "source_evidence": {"panel_ids": [c.panel_id], "text_region_ids": [], "confidence": 0.9},
             "audio_url": f"/api/projects/{project_id}/audio/dialogue/{name}",
         })
+        intervals.append(AudioInterval(
+            script_segment_id=seg_ids[c.line_id], text=line[c.line_id].text, start_time=c.start, end_time=c.end,
+            is_speech=True, audio_file_uri=str(dest)))  # legacy stores the absolute path too (audio/service.py)
         db.add(ScriptSegmentRecord(
             id=seg_ids[c.line_id], script_id=script_id, project_id=project_id, scene_id=sid, sequence=i,
             type="NARRATOR", text=line[c.line_id].text, emotion=emotion, estimated_start=c.start,
             estimated_end=c.end, estimated_duration=c.end - c.start, source_evidence={"panel_ids": [c.panel_id]}))
     state.update(scenes=scenes, narration_clips=clips)
+    state["bgm_tracks"] = default_bgm_tracks(state.get("bgm_tracks"))
+    mat = MasterAudioTimeline(project_id=project_id, total_duration_sec=tl.duration, intervals=intervals,
+                              sample_rate=48000, channels=2).model_dump()
+    write_contained_json(workspace, Path("audio") / "master_audio_timeline.json", mat)
+    db.add(AudioTimelineRecord(project_id=project_id, status="DRAFT", total_duration=tl.duration, timeline_json=mat,
+                               voice_casting={"Narrator": takes[0].voice_id}))
+    project.current_stage = PipelineStage.VOICE_GENERATED.value
     settings["story_editor_state"] = state
     project.settings = settings
     db.commit()
