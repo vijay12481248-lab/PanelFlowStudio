@@ -74,3 +74,55 @@ def test_critique_blocked_property():
     assert LineCritique(line_id="l", checks=[warn, block]).blocked
     with pytest.raises(ValidationError):
         LineCritique(line_id="l", checks=[], scores={"bogus": True})
+
+
+def _marks(**kw):
+    from engine.narration.artifacts import LineMarks
+    return LineMarks(**{"line_id": "L001", "emotion": "calm", "energy": "med", "rate": 1.0, "pause_after_ms": 250, **kw})
+
+
+def test_marks_rate_bounds():
+    for bad in ({"rate": 0.89}, {"rate": 1.11}, {"pause_after_ms": 149}, {"pause_after_ms": 801}):
+        with pytest.raises(ValidationError):
+            _marks(**bad)
+    assert _marks(rate=0.9, pause_after_ms=800).rate == 0.9
+    from engine.narration.artifacts import PerformancePlan
+    with pytest.raises(ValidationError):
+        PerformancePlan(project_id="p", script_revision=0, lines=[_marks(), _marks()])
+
+
+def test_voice_take_word_order():
+    from engine.narration.artifacts import VoiceTake, Word
+    with pytest.raises(ValidationError):
+        Word(text="a", start=1.0, end=0.5)
+    with pytest.raises(ValidationError):
+        Word(text="a", start=-0.1, end=0.5)
+    take = dict(line_id="L001", audio_path="a.wav", duration=1.0, words=[Word(text="a", start=0, end=0.5)], lead_ms=80,
+                tail_ms=80, stt_text="a", wer=0.0, tts_model="kokoro-82m", voice_id="af", rate=1.0, attempt=1)
+    assert VoiceTake(**take).flagged is False
+    for bad in ({"duration": 0}, {"wer": 1.1}, {"attempt": 4}):
+        with pytest.raises(ValidationError):
+            VoiceTake(**{**take, **bad})
+
+
+def _tl(panels, clips):
+    from engine.narration.artifacts import LockedTimeline, TimelineClip, TimelinePanel
+    return LockedTimeline(
+        project_id="p", duration=panels[-1][2],
+        panels=[TimelinePanel(panel_id=a, start=s, end=e, cut_reason="line-start", scene_id="s0") for a, s, e in panels],
+        clips=[TimelineClip(line_id=f"L{a}", panel_id=a, start=s, end=e, audio_path="a.wav") for a, s, e in clips])
+
+
+def test_timeline_rejects_gap_and_overlap():
+    _tl([("p1", 0, 2), ("p2", 2, 4)], [])
+    for panels in ([("p1", 0, 2), ("p2", 2.5, 4)], [("p1", 0, 2), ("p2", 1.5, 4)], [("p1", 0.5, 2)]):
+        with pytest.raises(ValidationError):
+            _tl(panels, [])
+
+
+def test_timeline_clip_inside_its_panel():
+    panels = [("p1", 0, 2), ("p2", 2, 4)]
+    _tl(panels, [("p1", 0.1, 1.9), ("p2", 2.1, 3.9)])
+    for clips in ([("p1", 0.1, 2.1)], [("p1", 0.1, 1.5), ("p2", 1.4, 3)], [("p9", 0, 1)]):
+        with pytest.raises(ValidationError):
+            _tl(panels, clips)

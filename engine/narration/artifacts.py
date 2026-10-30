@@ -227,3 +227,94 @@ def check_script_ids(script: ScriptIR, story_panel_ids: list[str]) -> list[str]:
     elif len(got) == len(story_panel_ids) and got != story_panel_ids:
         problems.append("order mismatch: lines are not in reading order")
     return problems
+
+
+class LineMarks(_Strict):
+    line_id: str
+    emotion: str
+    energy: Literal["low", "med", "high"]
+    rate: float = Field(ge=0.9, le=1.1)
+    pause_after_ms: int = Field(ge=150, le=800)
+    emphasis_words: list[str] = Field(default_factory=list)
+
+
+class PerformancePlan(_Strict):
+    project_id: str
+    script_revision: int
+    lines: list[LineMarks] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _unique_line_ids(self) -> "PerformancePlan":
+        ids = [ln.line_id for ln in self.lines]
+        if len(set(ids)) != len(ids):
+            raise ValueError("line_id values must be unique")
+        return self
+
+
+class Word(_Strict):
+    text: str
+    start: float = Field(ge=0)
+    end: float
+
+    @model_validator(mode="after")
+    def _ordered(self) -> "Word":
+        if self.end < self.start:
+            raise ValueError("word end must not precede its start")
+        return self
+
+
+class VoiceTake(_Strict):
+    line_id: str
+    audio_path: str
+    duration: float = Field(gt=0)
+    words: list[Word]
+    lead_ms: int
+    tail_ms: int
+    stt_text: str
+    wer: float = Field(ge=0, le=1)
+    tts_model: str
+    voice_id: str
+    rate: float
+    attempt: int = Field(ge=1, le=3)
+    flagged: bool = False
+
+
+class TimelinePanel(_Strict):
+    panel_id: str
+    start: float
+    end: float
+    cut_reason: Literal["line-start", "hold"]
+    scene_id: str
+
+
+class TimelineClip(_Strict):
+    line_id: str
+    panel_id: str
+    start: float
+    end: float
+    audio_path: str
+
+
+class LockedTimeline(_Strict):
+    project_id: str
+    duration: float
+    panels: list[TimelinePanel]
+    clips: list[TimelineClip]
+
+    @model_validator(mode="after")
+    def _consistent(self) -> "LockedTimeline":
+        eps, t = 1e-6, 0.0
+        for p in self.panels:
+            if abs(p.start - t) > eps or p.end < p.start:
+                raise ValueError(f"panel {p.panel_id} is not contiguous with the one before it")
+            t = p.end
+        span = {p.panel_id: p for p in self.panels}
+        prev = 0.0
+        for c in sorted(self.clips, key=lambda c: c.start):
+            p = span.get(c.panel_id)
+            if p is None or c.end < c.start or c.start < p.start - eps or c.end > p.end + eps:
+                raise ValueError(f"clip {c.line_id} lies outside its panel")
+            if c.start < prev - eps:
+                raise ValueError(f"clip {c.line_id} overlaps the clip before it")
+            prev = c.end
+        return self
