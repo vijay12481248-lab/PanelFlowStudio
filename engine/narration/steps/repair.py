@@ -16,13 +16,12 @@ from engine.narration.runtime.prompts import load_prompt
 from engine.narration.runtime.scheduler import ModelScheduler
 from engine.narration.steps._cached import cached_call
 from engine.narration.steps.critique.judges import JUDGES, critique
-from engine.narration.steps.factview import char_names, display_name, panel_line
+from engine.narration.steps.factview import FACT_REF, char_names, display_name, normalize_facts, panel_line
 
 REPAIR_PROMPT_VERSION = "v1"
 REPAIR_STEP = "repair_line"
 MAX_ROUNDS = 2
 FALLBACK_LIMIT = 0.10
-_FACT_REF = re.compile(r"^(action|emotion|dialogue|characters|setting|sfx|beat:[A-Za-z0-9_-]+)$")
 _UNKNOWN = re.compile(r"unknown_\d+")
 
 
@@ -45,7 +44,9 @@ def fallback_text(f: PanelFacts, names: dict[str, str]) -> str:
     text = f.action
     if ids:
         text = re.sub(r"\b(?:" + "|".join(map(re.escape, ids)) + r")\b", lambda m: display_name(m.group(), names), text)
-    text = " ".join(" ".join(text.split()[:12]).rstrip(".!?,;: ").split()) or "(no action noted)"
+    text = " ".join(" ".join(text.split()[:12]).rstrip(".!?,;: ").split())
+    if not text:
+        raise ValueError("panel has no action to fall back to")
     return text[0].upper() + text[1:] + "."
 
 
@@ -92,7 +93,7 @@ async def repair_loop(
         drafts = await scheduler.map("writer", texts, one)
         new = {}
         for lid, d in zip(blocked, drafts):
-            used = [x for x in dict.fromkeys(d.facts_used) if _FACT_REF.match(x)] or cur.lines[at[lid]].facts_used
+            used = [x for x in normalize_facts(d.facts_used) if FACT_REF.match(x)] or cur.lines[at[lid]].facts_used
             new[lid] = dict(text=" ".join(d.text.split()), facts_used=used, status="repaired")
         cur = revise(cur, new)
         revisions.append(cur)
@@ -102,15 +103,22 @@ async def repair_loop(
     fallen = [lc.line_id for lc in rep.lines if lc.blocked]
     if fallen:
         by_panel = {ln.line_id: ln.panel_id for ln in cur.lines}
-        cur = revise(cur, {lid: dict(text=fallback_text(facts[by_panel[lid]], names), facts_used=["action", "characters"],
-                                      status="fallback") for lid in fallen})
+        new, stuck = {}, set()  # stuck: no action to fall back to; the line keeps its failing text and goes to review
+        for lid in fallen:
+            try:
+                new[lid] = dict(text=fallback_text(facts[by_panel[lid]], names), facts_used=["action", "characters"],
+                                status="fallback")
+            except ValueError:
+                new[lid] = dict(status="needs_review")
+                stuck.add(lid)
+        cur = revise(cur, new)
         revisions.append(cur)
         rep = await critique(cur, facts, story_ids, sheet, bible, client, scheduler, cache, line_ids=[], previous=rep)
         # fact-only text is not judged and may be short, but every other rule still applies to it
         rep = rep.model_copy(update={"lines": [
             LineCritique(line_id=lc.line_id, checks=[c for c in lc.checks if c.rule not in (*JUDGES, "word_budget")])
-            if lc.line_id in fallen else lc for lc in rep.lines]})
-        broken = sum(lc.blocked for lc in rep.lines if lc.line_id in fallen)
+            if lc.line_id in fallen and lc.line_id not in stuck else lc for lc in rep.lines]})
+        broken = sum(lc.blocked or lc.line_id in stuck for lc in rep.lines if lc.line_id in fallen)
     else:
         broken = 0
     final = cur.model_copy(update={"lines": [

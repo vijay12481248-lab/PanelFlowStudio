@@ -127,3 +127,14 @@ def test_overlapping_scenes_raise(tmp_path):
     facts = [_facts(k) for k in range(1, 5)]
     with pytest.raises(ValueError, match="overlap"):
         _run(tmp_path, facts, _sheet(("p1", "p3"), ("p2", "p4")), [_answer] * 4)
+
+def test_model_style_facts_used_is_normalised_without_reask(tmp_path):
+    from engine.narration.steps.factview import normalize_facts
+
+    assert normalize_facts(["Action: P4", "emotion (P4)", "dialogue", "beat:s0b0", "foo"]) == [
+        "action", "emotion", "dialogue", "beat:s0b0", "foo"]
+    facts = [_facts(k) for k in range(1, 4)]
+    (script, _), client = _run(tmp_path, facts, _sheet(("p1", "p3")),
+                               [lambda p: _draft(p, facts=("action: P4", "emotion: P4", "beat:s0b0")), _cands, _cands])
+    assert len([c for c in client.calls if "exactly 3 candidates" not in c[1]]) == 1
+    assert all(ln.facts_used == ["action", "emotion", "beat:s0b0"] for ln in script.lines)

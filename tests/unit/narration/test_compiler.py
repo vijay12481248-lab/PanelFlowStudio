@@ -200,3 +200,9 @@ def test_missing_candidates_skip_the_swap(tmp_path, monkeypatch):
     monkeypatch.setattr(write, "write_chapter", no_cands)
     result = _go(tmp_path, _compiler(tmp_path, _write_responses()), stop_after="write")
     assert result.gate == "pass" and result.script.lines[0].text.startswith("calm quiet")
+
+def test_rerun_of_passed_chapter_does_not_apply_bible_twice(tmp_path):
+    comp = _compiler(tmp_path, _write_responses())
+    assert _go(tmp_path, comp, stop_after="write").gate == "pass"
+    again = _go(tmp_path, _compiler(tmp_path, _write_responses()), stop_after="write")
+    assert again.gate == "pass" and comp.bibles.load("test-series").version == 1

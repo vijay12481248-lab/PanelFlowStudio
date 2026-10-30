@@ -8,7 +8,7 @@ from typing import Literal
 from engine.narration.artifacts import (
     BeatSheet, CritiqueReport, PanelFacts, ReviewItem, ScriptIR, SeriesBible,
 )
-from engine.narration.bible.store import BibleStore, apply_proposals
+from engine.narration.bible.store import BibleStore, apply_once
 from engine.narration.cache import ArtifactCache
 from engine.narration.compiler import _write_json
 from engine.narration.runtime.client import ModelClient
@@ -16,10 +16,8 @@ from engine.narration.runtime.prompts import load_prompt
 from engine.narration.runtime.scheduler import ModelScheduler
 from engine.narration.steps._cached import cached_call
 from engine.narration.steps.critique.rules import rule_checks
-from engine.narration.steps.factview import char_names, panel_line
-from engine.narration.steps.repair import (
-    _FACT_REF, REPAIR_PROMPT_VERSION, REPAIR_STEP, RepairDraft, fallback_text, revise,
-)
+from engine.narration.steps.factview import FACT_REF, char_names, normalize_facts, panel_line
+from engine.narration.steps.repair import REPAIR_PROMPT_VERSION, REPAIR_STEP, RepairDraft, fallback_text, revise
 
 _OK = {"passed", "repaired", "fallback"}
 
@@ -149,8 +147,18 @@ async def regenerate_line(run_dir: Path, line_id: str, hint: str, client: ModelC
         (draft,) = await scheduler.map("writer", [text], one)
     finally:
         await scheduler.release()
-    used = [x for x in dict.fromkeys(draft.facts_used) if _FACT_REF.match(x)] or ln.facts_used
-    return _save(run_dir, revise(script, {line_id: dict(text=" ".join(draft.text.split()), facts_used=used, status="repaired")}))
+    used = [x for x in normalize_facts(draft.facts_used) if FACT_REF.match(x)] or ln.facts_used
+    new = revise(script, {line_id: dict(text=" ".join(draft.text.split()), facts_used=used, status="repaired")})
+    checks = rule_checks(new, facts, [x.panel_id for x in new.lines], bible)[line_id]
+    if not any(not c.passed and c.severity == "block" for c in checks):
+        return _save(run_dir, new)
+    # a block rule failed: keep the text for the reviewer, but never call it repaired; the reasons go into critique.json
+    new = revise(script, {line_id: dict(text=new.lines[i].text, facts_used=used, status="needs_review")})
+    fresh = {c.rule for c in checks}
+    _write_json(run_dir / "critique.json", report.model_copy(update={"lines": [
+        lc.model_copy(update={"checks": [*(c for c in lc.checks if c.rule not in fresh), *checks]})
+        if lc.line_id == line_id else lc for lc in report.lines]}).model_dump(mode="json"))
+    return _save(run_dir, new)
 
 
 def approve(run_dir: Path, bibles: BibleStore) -> SeriesBible:
@@ -161,7 +169,7 @@ def approve(run_dir: Path, bibles: BibleStore) -> SeriesBible:
     if open_:
         raise ValueError(f"lines still need review: {', '.join(open_)}")
     bible = bibles.load(item.series_key)
-    new, applied = apply_proposals(bible, _sheet(run_dir).bible_proposals)
+    new, applied = apply_once(bible, _sheet(run_dir).bible_proposals, item.project_id)
     # approved first: a crash after this can never re-apply the proposals
     _write_json(run_dir / "review.json", item.model_copy(update={"status": "approved"}).model_dump(mode="json"))
     return bibles.save(new, item.project_id, applied) if applied else bible

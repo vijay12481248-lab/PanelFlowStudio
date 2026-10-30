@@ -1,4 +1,4 @@
-﻿"""Load a chapter's panels and OCR text from the project DB as narration-compiler inputs."""
+"""Load a chapter's panels and OCR text from the project DB as narration-compiler inputs."""
 from __future__ import annotations
 
 import json

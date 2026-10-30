@@ -77,6 +77,13 @@ def apply_proposals(bible: SeriesBible, proposals: list[BibleProposal]) -> tuple
     return out, applied
 
 
+def apply_once(bible: SeriesBible, proposals: list[BibleProposal], project_id: str) -> tuple[SeriesBible, list[str]]:
+    """apply_proposals, but a project that already has a bible revision is never applied twice."""
+    if any(h.project_id == project_id for h in bible.history):
+        return bible, []
+    return apply_proposals(bible, proposals)
+
+
 class BibleStore:
     def __init__(self, root: Path | None = None):
         self.root = Path(root) if root is not None else Path(settings.app_data_dir) / "series"

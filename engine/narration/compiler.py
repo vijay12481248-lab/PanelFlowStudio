@@ -14,7 +14,7 @@ from typing import Literal
 from pydantic import BaseModel
 
 from engine.narration.artifacts import BeatSheet, CritiqueReport, PanelFacts, ReviewItem, ScriptIR
-from engine.narration.bible.store import BibleStore, apply_proposals
+from engine.narration.bible.store import BibleStore, apply_once
 from engine.narration.cache import ArtifactCache
 from engine.narration.inputs import ChapterInputs
 from engine.narration.runtime.client import ModelClient, StepModelError
@@ -160,8 +160,6 @@ class NarrationCompiler:
             with _recorded(log, "write", self.client.model_for("writer"), write.WRITE_PROMPT_VERSION, counter):
                 script, candidates = await write.write_chapter(
                     inputs.project_id, facts, sheet, bible, self.client, self.scheduler, counter)
-            if not script.lines:
-                return result("review", ["no story panels to narrate"])
             _write_json(run_dir / "script_r0.json", script.model_dump(mode="json"))
 
             counter = _CountingCache(self.cache)
@@ -190,7 +188,7 @@ class NarrationCompiler:
             _write_json(run_dir / "critique.json", report.model_dump(mode="json"))
             if fixed.gate == "review":
                 return result("review", fixed.reasons)
-            bible2, applied = apply_proposals(bible, sheet.bible_proposals)
+            bible2, applied = apply_once(bible, sheet.bible_proposals, inputs.project_id)
             if applied:
                 self.bibles.save(bible2, inputs.project_id, applied)
             return result("pass", [])

@@ -2,11 +2,25 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 from engine.narration.artifacts import BeatSheet, PanelFacts, SeriesBible
 
 FEWSHOT_DIR = Path(__file__).resolve().parents[1] / "fewshot"
+
+
+FACT_REF = re.compile(r"^(action|emotion|dialogue|characters|setting|sfx|beat:[A-Za-z0-9_-]+)$")
+_FACT_TOKENS = {"action", "emotion", "dialogue", "characters", "setting", "sfx"}
+
+
+def normalize_facts(items: list[str]) -> list[str]:
+    """The model writes 'action: P4'; keep the leading token. Entries that stay invalid are left for the re-ask."""
+    out = []
+    for s in items:
+        tok = re.split(r"[:\s(]", s.strip().lower(), maxsplit=1)[0]
+        out.append(tok if tok in _FACT_TOKENS else s)
+    return list(dict.fromkeys(out))
 
 
 def load_fewshot(pack: str = "recap_v1") -> list[dict]:

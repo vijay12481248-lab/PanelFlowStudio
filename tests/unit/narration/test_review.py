@@ -171,3 +171,26 @@ def test_approve_rejects_unresolved_lines(tmp_path):
     review._save(res.run_dir, review.revise(s, {"L001": dict(status="needs_review")}))
     with pytest.raises(ValueError, match="L001"):
         review.approve(res.run_dir, comp.bibles)
+
+
+def test_fallback_line_refuses_blank_action(tmp_path):
+    comp, res = _parked(tmp_path)
+    p = res.run_dir / "panel_facts.json"
+    rows = json.loads(p.read_text(encoding="utf-8"))
+    rows[1]["action"] = " . "
+    p.write_text(json.dumps(rows), encoding="utf-8")
+    with pytest.raises(ValueError, match="no action to fall back to"):
+        review.fallback_line(res.run_dir, "L002", comp.bibles)
+
+
+def test_regenerate_line_runs_rules(tmp_path):
+    comp, res = _parked(tmp_path)
+    comp.client.responses["writer"] = [RepairDraft(text="He meets Zorg in the hall", facts_used=["action"])]
+    out = asyncio.run(review.regenerate_line(res.run_dir, "L002", "h", comp.client, comp.scheduler,
+                                             ArtifactCache(tmp_path / "cache"), comp.bibles))
+    assert out.lines[1].status == "needs_review" and out.lines[1].text == "He meets Zorg in the hall"
+    crit = json.loads((res.run_dir / "critique.json").read_text(encoding="utf-8"))
+    checks = next(lc for lc in crit["lines"] if lc["line_id"] == "L002")["checks"]
+    assert any(c["rule"] == "unknown_name" and not c["passed"] and "Zorg" in c["reason"] for c in checks)
+    with pytest.raises(ValueError, match="L002"):
+        review.approve(res.run_dir, comp.bibles)

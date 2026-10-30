@@ -1,7 +1,6 @@
 """Step 3 WRITE: one narration line per story panel, written per scene (chunks of at most 30 panels)."""
 from __future__ import annotations
 
-import re
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -14,14 +13,13 @@ from engine.narration.runtime.client import ModelClient
 from engine.narration.runtime.prompts import load_prompt
 from engine.narration.runtime.scheduler import ModelScheduler
 from engine.narration.steps._cached import cached_call
-from engine.narration.steps.factview import load_fewshot, panel_line
+from engine.narration.steps.factview import FACT_REF, load_fewshot, normalize_facts, panel_line
 from engine.narration.steps.understand import NeedsReview
 
 WRITE_PROMPT_VERSION = "v1"
 SCENE_STEP = "write_scene"
 CANDIDATE_STEP = "write_candidates"
 CHUNK = 30
-_FACT_REF = re.compile(r"^(action|emotion|dialogue|characters|setting|sfx|beat:[A-Za-z0-9_-]+)$")
 
 
 class LineDraft(BaseModel):
@@ -39,6 +37,12 @@ class CandidatesDraft(BaseModel):
     candidates: list[str] = Field(min_length=3, max_length=3)
 
 
+def _normalised(draft: SceneLinesDraft) -> SceneLinesDraft:
+    for d in draft.lines:
+        d.facts_used = normalize_facts(d.facts_used)
+    return draft
+
+
 def _problems(draft: SceneLinesDraft, n: int, beat_ids: set[str]) -> list[str]:
     """Check a chunk answer against P1..Pn; panel ids here are the chunk-local labels."""
     if not draft.lines:
@@ -52,7 +56,7 @@ def _problems(draft: SceneLinesDraft, n: int, beat_ids: set[str]) -> list[str]:
     out = check_script_ids(script, [f"P{k}" for k in range(1, n + 1)])
     for d in draft.lines:
         for f in d.facts_used:
-            if not _FACT_REF.match(f) or (f.startswith("beat:") and f[5:] not in beat_ids):
+            if not FACT_REF.match(f) or (f.startswith("beat:") and f[5:] not in beat_ids):
                 out.append(f"P{d.panel} facts_used {f!r} is not a fact of this scene")
     if out:
         got = {d.panel for d in draft.lines}
@@ -84,11 +88,11 @@ async def write_chapter(
 
     async def write_chunk(item: tuple[str, int, set[str]]) -> SceneLinesDraft:
         text, n, beat_ids = item
-        draft = await cached(SCENE_STEP, sprompt.sha256, text, SceneLinesDraft)
+        draft = _normalised(await cached(SCENE_STEP, sprompt.sha256, text, SceneLinesDraft))
         problems = _problems(draft, n, beat_ids)
         if problems:  # the re-ask embeds its feedback, so it has its own cache key
-            draft = await cached(SCENE_STEP, sprompt.sha256,
-                                 text + "\n\nFix these problems: " + "; ".join(problems), SceneLinesDraft)
+            draft = _normalised(await cached(SCENE_STEP, sprompt.sha256,
+                                             text + "\n\nFix these problems: " + "; ".join(problems), SceneLinesDraft))
             problems = _problems(draft, n, beat_ids)
             if problems:
                 raise NeedsReview(problems)

@@ -127,3 +127,21 @@ def test_fallback_that_breaks_a_rule_goes_to_review(tmp_path):
     assert res.script.lines[1].status == "fallback"
     assert res.gate == "review" and res.reasons == ["1 fallback lines still break rules"]
     assert [lc.line_id for lc in res.report.lines if lc.blocked] == ["L002"]
+
+def test_repair_normalises_model_style_facts_used(tmp_path):
+    script, *rest = _setup()
+    _broken(script, 1)
+    res, _ = _go(tmp_path, script, *rest, _bad_if("Bad"),
+                 [RepairDraft(text="Kai fixes the broken thing now", facts_used=["action: P2", "emotion: P2"])])
+    assert res.script.lines[1].facts_used == ["action", "emotion"]
+
+
+def test_blank_action_fallback_is_needs_review_not_canned_text(tmp_path):
+    script, *rest = _setup(n=10, action="...")
+    _broken(script, 1)
+    res, _ = _go(tmp_path, script, *rest, _bad_if("Bad"), [_fix("Bad again fix one here"), _fix("Bad again fix two here")])
+    ln = res.script.lines[1]
+    assert ln.status == "needs_review" and "no action" not in ln.text
+    assert res.gate == "review" and res.reasons == ["1 fallback lines still break rules"]
+    with pytest.raises(ValueError, match="no action"):
+        fallback_text(rest[0]["p2"], {})
