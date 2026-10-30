@@ -57,6 +57,14 @@ def test_bible_names_map_to_ids_and_others_become_stable_unknowns(tmp_path):
     assert facts[0].unknown_cues == {"unknown_1": "masked man"}
 
 
+def test_bible_ids_echoed_by_model_map_to_known_character(tmp_path):
+    d = _draft(characters_visible=["c1"], speakers=[SpeakerGuess(region_id="p1-r1", speaker="C1")])
+    facts, _ = _run(tmp_path, [d], {1: ["hi"]})
+    assert facts[0].characters_visible == ["c1"]
+    assert facts[0].dialogue[0].speaker_id == "c1"
+    assert facts[0].unknown_cues == {}
+
+
 def test_low_confidence_marks_needs_review(tmp_path):
     facts, _ = _run(tmp_path, [_draft(confidence=0.4), _draft(confidence=0.5)], {})
     assert facts[0].needs_review is True

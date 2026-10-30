@@ -47,7 +47,7 @@ class _Namer:
     def __init__(self, bible: SeriesBible):
         self.by_name = {}
         for c in bible.characters:
-            for n in [c.name, *c.aliases]:
+            for n in [c.id, c.name, *c.aliases]:  # models often echo the id shown in the prompt
                 self.by_name[n.casefold()] = c.id
         self.unknowns: dict[str, str] = {}  # model string (casefold) -> unknown_<n>
 
