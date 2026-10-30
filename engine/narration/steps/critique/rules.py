@@ -19,6 +19,8 @@ def _known_words(facts: dict[str, PanelFacts], bible: SeriesBible) -> set[str]:
     names = [n for c in bible.characters for n in (c.name, *c.aliases)]
     names += [loc.name for loc in bible.locations] + list(bible.glossary)
     names += [d.text for f in facts.values() for d in f.dialogue]
+    # names perceive read off the page are facts too; a name is invented only if no fact carries it
+    names += [t for f in facts.values() for t in (f.action, f.setting, *f.sfx, *f.unknown_cues.values())]
     return {w.lower() for text in names for w in _WORD.findall(text.replace("\u2019", "'"))} | _STOP
 
 

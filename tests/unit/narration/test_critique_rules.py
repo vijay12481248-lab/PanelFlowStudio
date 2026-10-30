@@ -88,3 +88,12 @@ def test_banned_phrase_matches_whole_words_only():
 
 def test_chapter_stats_empty_script_does_not_divide_by_zero():
     assert chapter_stats(ScriptIR.model_construct(lines=[])) == (0.0, 0)
+
+
+def test_unknown_name_trusts_names_in_panel_facts():
+    from engine.narration.steps.critique.rules import rule_checks as rc
+    script, _ = _run(["He meets Shangguan Yulin at the gate", "Kai faces Zorath at the gate"])
+    facts = {"p1": _facts(1).model_copy(update={"action": "Shangguan Yulin holds a map"}), "p2": _facts(2)}
+    res = rc(script, facts, ["p1", "p2"], SeriesBible(series_key="s", characters=[BibleCharacter(id="c1", name="Kai")]))
+    assert not _failed(res, "L001", "unknown_name")
+    assert _failed(res, "L002", "unknown_name")

@@ -122,7 +122,8 @@ def test_short_fallback_is_not_blocked_by_word_budget(tmp_path):
 
 
 def test_fallback_that_breaks_a_rule_goes_to_review(tmp_path):
-    script, *rest = _setup(n=10, action="Kai meets Zorg there now")
+    # names in facts are trusted; a banned phrase copied from the facts still breaks a rule
+    script, *rest = _setup(n=10, action="Kai sees what the image shows now")
     _broken(script, 1)
     res, _ = _go(tmp_path, script, *rest, _bad_if("Bad"), [_fix("Bad again fix one here"), _fix("Bad again fix two here")])
     assert res.script.lines[1].status == "fallback"
