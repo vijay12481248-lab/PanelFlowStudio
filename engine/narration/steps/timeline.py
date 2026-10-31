@@ -10,6 +10,7 @@ from engine.narration.artifacts import (
 LEAD_CUT = 0.120
 MIN_HOLD = 1.2
 MAX_HOLD = 6.0
+UNVOICED_HOLD = 1.6
 _NO_WORDS = 0.08
 _EPS = 1e-6
 
@@ -51,13 +52,34 @@ def lock_timeline(script: ScriptIR, plan: PerformancePlan, takes: list[VoiceTake
             c = max(c + t.duration + pause[ln.line_id], cuts[i] + MIN_HOLD - min(nxt - LEAD_CUT, 0.0))
     end = max(starts[-1] + by_take[lines[-1].line_id].duration + 0.5, cuts[-1] + MIN_HOLD)
     ends = cuts[1:] + [end]
-    return LockedTimeline(
-        project_id=script.project_id, duration=end,
-        panels=[TimelinePanel(panel_id=ln.panel_id, start=cuts[i], end=ends[i], cut_reason="line-start",
-                              scene_id=scene[ln.panel_id]) for i, ln in enumerate(lines)],
-        clips=[TimelineClip(line_id=ln.line_id, panel_id=ln.panel_id, start=starts[i],
-                            end=starts[i] + by_take[ln.line_id].duration, audio_path=by_take[ln.line_id].audio_path)
-               for i, ln in enumerate(lines)])
+    # A story panel no line cites is still shown: held silently after the narrated panel before it.
+    pos = {p: i for i, p in enumerate(story_ids)}
+    cited = {ln.panel_id for ln in lines}
+    after: dict[int, list[str]] = {}
+    for pid in story_ids:
+        if pid in cited:
+            continue
+        before = [i for i, ln in enumerate(lines) if pos.get(ln.panel_id, -1) < pos[pid]]
+        after.setdefault(max(before, key=lambda i: pos.get(lines[i].panel_id, -1)) if before else -1, []).append(pid)
+    panels, clips, shift = [], [], 0.0
+
+    def hold(pids):
+        nonlocal shift
+        for pid in pids:
+            start = panels[-1].end if panels else 0.0
+            panels.append(TimelinePanel(panel_id=pid, start=start, end=start + UNVOICED_HOLD,
+                                        cut_reason="hold", scene_id=scene[pid]))
+            shift += UNVOICED_HOLD
+
+    hold(after.get(-1, []))
+    for i, ln in enumerate(lines):
+        panels.append(TimelinePanel(panel_id=ln.panel_id, start=cuts[i] + shift, end=ends[i] + shift,
+                                    cut_reason="line-start", scene_id=scene[ln.panel_id]))
+        clips.append(TimelineClip(line_id=ln.line_id, panel_id=ln.panel_id, start=starts[i] + shift,
+                                  end=starts[i] + shift + by_take[ln.line_id].duration,
+                                  audio_path=by_take[ln.line_id].audio_path))
+        hold(after.get(i, []))
+    return LockedTimeline(project_id=script.project_id, duration=end + shift, panels=panels, clips=clips)
 
 
 def sync_metrics(tl: LockedTimeline, takes: list[VoiceTake], script: ScriptIR) -> dict:
@@ -70,7 +92,8 @@ def sync_metrics(tl: LockedTimeline, takes: list[VoiceTake], script: ScriptIR) -
     holds = [p.end - p.start for p in tl.panels]
     words = sum(len(ln.text.split()) for ln in script.lines)
     secs = sum((t.words[-1].end - t.words[0].start) if t.words else t.duration for t in takes)
-    onsets = [c.start + _first(by_take[c.line_id]) - p.start for c, p in zip(tl.clips, tl.panels)]
+    span = {p.panel_id: p for p in tl.panels}
+    onsets = [c.start + _first(by_take[c.line_id]) - span[c.panel_id].start for c in tl.clips]
     wers = [t.wer for t in takes]
     m = {
         "speech_rate": words / secs,

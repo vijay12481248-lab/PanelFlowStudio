@@ -998,6 +998,13 @@ class ProjectService:
             total_pages = len(pages)
             overall_seq = 1
 
+            if not protected_pages and profile.upper() in ("AUTO", "WEBTOON") and reading_direction != "rtl":
+                import asyncio
+                count = await asyncio.to_thread(self._detect_panels_strip, project_id, ws_path, pages,
+                                                cancel_token, progress_cb)
+                if count:
+                    return {"total_panels_detected": count, "preserved_pages": 0, "method": "STRIP_MODEL"}
+
             for p_idx, page in enumerate(pages, start=1):
                 if cancel_token.is_cancelled:
                     break
@@ -1070,6 +1077,68 @@ class ProjectService:
             return run_detection
         job_manager.enqueue_async(job_id, run_detection)
         return job_id
+
+    def _detect_panels_strip(self, project_id, ws_path, pages, cancel_token, progress_cb) -> int:
+        """Detect panels over the whole chapter strip; returns 0 when the per-page detector should run instead."""
+        import io
+        from PIL import Image
+        from engine.database.session import SessionLocal
+        from engine.imaging.panels import strip_detector as sd
+        if not sd.model_available():
+            return 0
+        strip_pages, y0 = [], 0
+        for page in pages:
+            img_path = project_path(ws_path, "normalized", f"page_{page.sequence:04d}.jpg")
+            if not img_path.exists():
+                img_path = project_path(ws_path, "source", page.filename)
+            with Image.open(img_path) as im:
+                size = im.size
+            strip_pages.append((page, img_path, size))
+        if not sd.is_vertical_scroll([s for _, _, s in strip_pages]):
+            return 0
+        layout = []
+        for page, img_path, (_, h) in strip_pages:
+            layout.append(sd.StripPage(page.id, img_path, y0, h))
+            y0 += h
+        progress_cb(0.1, "Detecting panels across the chapter strip")
+        result = sd.StripDetector().detect(layout, cancelled=lambda: cancel_token.is_cancelled)
+        found = sd.page_panels(result)
+        if not found:
+            logger.warning("Strip detector found no panels for project %s; using per-page detection.", project_id)
+            return 0
+        page_sizes = {page.id: size for page, _, size in strip_pages}
+        promos = {}
+        with SessionLocal() as inner_db:
+            for seq, item in enumerate(found, start=1):
+                if cancel_token.is_cancelled:
+                    raise RuntimeError("Panel detection cancelled")
+                panel_id = str(uuid.uuid4())
+                crop_filename = f"panel_{panel_id}.jpg"
+                buffer = io.BytesIO()
+                sd.crop_strip(layout, item.strip_box).save(buffer, format="JPEG", quality=95)
+                with open_contained_output(ws_path, Path("panels") / crop_filename) as output:
+                    output.write(buffer.getvalue())
+                page_w, page_h = page_sizes[item.page.page_id]
+                x, y, w, h = item.box
+                inner_db.add(PanelRecord(
+                    id=panel_id, project_id=project_id, page_id=item.page.page_id, sequence=seq, page_sequence=seq,
+                    x=x, y=y, width=w, height=h,
+                    normalized_x=round(x / page_w, 4), normalized_y=round(y / page_h, 4),
+                    normalized_width=round(min(1.0, w / page_w), 4), normalized_height=round(min(1.0, h / page_h), 4),
+                    crop_filename=crop_filename, reading_direction="vertical", detection_method="STRIP_MODEL",
+                    confidence=round(item.score, 2), panel_type="WEBTOON_SEGMENT", status="DETECTED",
+                    manually_modified=False, created_at=utc_now(), updated_at=utc_now()))
+                if item.promos:
+                    promos[panel_id] = item.promos
+            project = inner_db.get(ProjectRecord, project_id)
+            project.settings = {**(project.settings or {}), "detected_promos": promos}
+            inner_db.commit()
+            progress_cb(0.8, "Removing scanlator promotion")
+            from engine.imaging.content_cleanup import clean_all_panels
+            clean_all_panels(inner_db, project_id, cancelled=lambda: cancel_token.is_cancelled)
+            self._resequence_project_panels(inner_db, project_id)
+            self._sync_panels_json(inner_db, project_id)
+        return len(found)
 
     def detect_panels_page(
         self,

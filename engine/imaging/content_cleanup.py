@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from pathlib import Path
 from uuid import uuid4
 
@@ -10,6 +11,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from engine.config.settings import settings
 from engine.database.models import PanelRecord, ProjectRecord, TextRegionRecord
+from engine.imaging.redaction import restore_image_backup
 from engine.imaging.sanitizer import matches_label
 from engine.security.paths import project_path
 
@@ -62,28 +64,92 @@ def require_cleanup_review(db, project_id):
         raise ValueError(f"Review {pending} uncertain promotional text matches in Panel Review before continuing. Blur, exclude, or verify the text in OCR Review.")
 
 
+# Bumping this re-checks every existing panel once under the new rules (it is part of the fingerprint).
+RULES_VERSION = "2026-10-31.generic-promo"
+
+# Any scanlator, not only listed ones: OCR often splits a domain ("MANHUA PLUS . COM").
+_DOMAIN = re.compile(r"\b[a-z0-9][a-z0-9-]{2,}\s?\.\s?(?:com|net|org|io|gg|me|co|xyz|site|cc|to|tv|club|online)\b")
+_PROMO_PHRASES = ["read first at", "read first on", "faster release", "please read on", "if you enjoyed",
+                  "join our discord", "discord.gg", "patreon", "paypal", "ko-fi", "support us",
+                  "head over to our website", "higher quality releases", "updates in real time"]
+# Credit lines and outro calls that only appear on cover / credits / outro pages.
+_POSTER_CUES = ["head over to our website", "support us", "updates in real time", "discord.gg",
+                "join our discord", "patreon", "paypal", "want to read a new chapter", "higher quality releases"]
+_CREDIT = re.compile(r"^\s*(?:tl|pr|ts|rp|qc|cl|rd|c/rd|raw|raws|translator|proofreader|typesetter|cleaner)\s*[:：]")
+_HEADER = ["read first at", "read first on", "please read on"]
+
+
+def is_promo_text(text, labels):
+    lowered = text.casefold()
+    return (matches_label(text, labels) or bool(_DOMAIN.search(lowered))
+            or any(matches_label(text, [p]) for p in _PROMO_PHRASES))
+
+
+def _clamp(bbox, width, height):
+    x, y, w, h = bbox
+    x0, y0 = max(0, min(int(x), width - 1)), max(0, min(int(y), height - 1))
+    return [x0, y0, max(1, min(int(x + w), width) - x0), max(1, min(int(y + h), height) - y0)]
+
+
+def _join_line(region, others):
+    """OCR can split one logo into pieces ("MANHUA" + "PLUS.COM"); take adjacent pieces on the same line."""
+    x, y, w, h = region.bbox
+    x0, x1 = x, x + w
+    grown = True
+    while grown:
+        grown = False
+        for o in others:
+            ox, oy, ow, oh = o.bbox
+            same_line = min(y + h, oy + oh) - max(y, oy) >= 0.5 * min(h, oh)
+            adjacent = ox <= x1 + 1.5 * h and ox + ow >= x0 - 1.5 * h
+            if o is not region and same_line and adjacent and (ox < x0 or ox + ow > x1):
+                x0, x1, grown = min(x0, ox), max(x1, ox + ow), True
+    return region.model_copy(update={"bbox": [x0, y, x1 - x0, h]})
+
+
+def _stamp_box(region, others, width, height):
+    """A two-line stamp ("READ FIRST AT" over the site logo) is blurred whole, even when OCR read one line.
+
+    The header line is about two-thirds the width of the logo line, and the logo sits directly below it.
+    OCR often misreads a cropped logo ("PLUS.COM") with a box that does not reach the real glyphs.
+    """
+    x, y, w, h = region.bbox
+    if any(matches_label(region.detected_text, [p]) for p in _HEADER):
+        cx = x + w / 2
+        return _clamp([cx - 0.8 * w, y - 0.2 * h, 1.6 * w, 2.9 * h], width, height)
+    if _DOMAIN.search(region.detected_text.casefold()):
+        above = [o for o in others if any(matches_label(o.detected_text, [p]) for p in _HEADER)
+                 and 0 < y - o.bbox[1] <= 3 * o.bbox[3]]
+        if above:
+            return region.bbox  # the header's box already covers this logo line
+        cx = x + w / 2
+        return _clamp([cx - 0.6 * w, y - 1.8 * h, 1.2 * w, 3.0 * h], width, height)
+    return region.bbox
+
+
 def decide_cleanup(width, height, regions, labels):
-    """Never exclude artwork merely because it contains a website label."""
-    text_regions = [r for r in regions if r.detected_text.strip()]
-    matches = [r for r in text_regions if matches_label(r.detected_text, labels)]
-    if not matches:
-        return {"action": "KEEP", "regions": [], "reason": "No label matched"}
-    valid = [r for r in matches if r.confidence >= 0.85 and len(r.bbox) == 4
-             and r.bbox[0] >= 0 and r.bbox[1] >= 0 and r.bbox[2] > 0 and r.bbox[3] > 0
-             and r.bbox[0] + r.bbox[2] <= width and r.bbox[1] + r.bbox[3] <= height]
-    # Only a thin banner with exclusively promotional OCR lines can be dropped.
-    if (len(valid) == len(text_regions) and width / max(height, 1) >= 3
-            and height <= 300):
-        return {"action": "EXCLUDE", "regions": valid, "reason": "Thin banner with only matching promotional text"}
+    """Blur promotional text inside story panels; drop panels that are only promotion."""
+    text_regions = [r for r in regions if r.detected_text.strip() and len(r.bbox) == 4
+                    and r.bbox[2] > 0 and r.bbox[3] > 0]
+    matches = [r for r in text_regions if is_promo_text(r.detected_text, labels)]
     combined = " ".join(r.detected_text for r in text_regions)
-    poster_cues = ["head over to our website", "support us", "updates in real time", "discord.gg"]
-    if sum(matches_label(combined, [cue]) for cue in poster_cues) >= 2:
-        return {"action": "REVIEW", "regions": matches,
-                "reason": "Possible promotional cover or outro with artwork; review whole panel"}
-    localized = [r for r in valid if r.bbox[2] * r.bbox[3] <= width * height * 0.15]
-    if len(localized) != len(matches):
-        return {"action": "REVIEW", "regions": matches, "reason": "Uncertain OCR or text covers too much artwork"}
-    return {"action": "BLUR", "regions": localized, "reason": "Localized label in a retained panel"}
+    cues = sum(matches_label(combined, [cue]) for cue in _POSTER_CUES)
+    credits = sum(bool(_CREDIT.search(r.detected_text.casefold())) for r in text_regions)
+    if cues + min(credits, 2) >= 2:
+        return {"action": "EXCLUDE", "regions": matches, "reason": "Cover, credits or outro page"}
+    if not matches:
+        return {"action": "KEEP", "regions": [], "reason": "No promotional text"}
+    if len(matches) == len(text_regions) and width / max(height, 1) >= 3 and height <= 300:
+        return {"action": "EXCLUDE", "regions": matches, "reason": "Thin banner with only promotional text"}
+    # Unreadable OCR, or one "line" spanning most of the panel, is not a box we can trust to blur.
+    trusted = [r for r in matches if r.confidence >= 0.5 and r.bbox[2] * r.bbox[3] <= width * height * 0.5]
+    if not trusted:
+        return {"action": "KEEP", "regions": [], "reason": "Promotional text matched but its position is unreliable"}
+    joined = [_join_line(r, text_regions) for r in trusted]
+    boxed = [r.model_copy(update={"bbox": _stamp_box(r, text_regions, width, height)}) for r in joined]
+    for r in boxed:
+        r.bbox = _clamp(r.bbox, width, height)
+    return {"action": "BLUR", "regions": boxed, "reason": "Promotional text in a story panel"}
 
 
 def read_panel_text(ocr_engine, path, panel, labels):
@@ -109,16 +175,22 @@ def read_panel_text(ocr_engine, path, panel, labels):
         region.bbox = [x1, y1, min(panel.width-x1, round(w/scale)), min(panel.height-y1, round(h/scale))]
     def score(candidate):
         lines = [r for r in candidate.regions if r.detected_text.strip()]
-        return (sum(matches_label(r.detected_text, labels) for r in lines) / max(len(lines), 1),
+        return (sum(is_promo_text(r.detected_text, labels) for r in lines) / max(len(lines), 1),
                 sum(len(r.detected_text) for r in lines))
     return retry if score(retry) > score(result) else result
+
+
+def clean_all_panels(db, project_id, **kwargs):
+    """Bring every retained panel up to the current rules; unchanged panels are skipped by fingerprint."""
+    ids = [row.id for row in db.query(PanelRecord.id).filter(PanelRecord.project_id == project_id,
+                                                              PanelRecord.status != "IGNORED")]
+    return cleanup_detected_panels(db, project_id, ids, **kwargs)
 
 
 def cleanup_detected_panels(db, project_id, panel_ids, *, ocr_engine=None, cancelled=lambda: False):
     """Apply once per unchanged crop/rules; retain originals and an inspectable audit.
 
-    Call only on newly detected panels. Existing edited/linked pages are protected
-    by the detection service, so this does not silently rewrite an existing cut.
+    Only the panel crop is changed (its original is kept under .originals); panel boxes are never re-cut.
     """
     rules = load_rules()
     if not rules.enabled:
@@ -127,7 +199,7 @@ def cleanup_detected_panels(db, project_id, panel_ids, *, ocr_engine=None, cance
     if project is None:
         raise ValueError("Project not found")
     labels = list(dict.fromkeys(rules.labels + (project.settings or {}).get("blur_keywords", [])))
-    if not panel_ids or not labels:
+    if not panel_ids:
         return {"enabled": True, "items": []}
     if ocr_engine is None:
         from engine.ocr.providers.registry import ocr_registry
@@ -139,7 +211,8 @@ def cleanup_detected_panels(db, project_id, panel_ids, *, ocr_engine=None, cance
     previous = (project.settings or {}).get("content_cleanup_report", {})
     live_ids = {row.id for row in db.query(PanelRecord.id).filter(PanelRecord.project_id == project_id)}
     records = {key: value for key, value in previous.get("panels", {}).items() if key in live_ids}
-    fingerprint = hashlib.sha256(json.dumps(labels, sort_keys=True).encode()).hexdigest()
+    fingerprint = hashlib.sha256(json.dumps([RULES_VERSION, labels], sort_keys=True).encode()).hexdigest()
+    detected = (project.settings or {}).get("detected_promos") or {}
     items = []
     from engine.imaging.redaction import blur_image_boxes
     for panel in panels:
@@ -153,8 +226,18 @@ def cleanup_detected_panels(db, project_id, panel_ids, *, ocr_engine=None, cance
         if old.get("output_sha256") == digest and old.get("rules_hash") == fingerprint:
             items.append(old)
             continue
+        if old.get("action") == "BLUR" and old.get("output_sha256") == digest:
+            restore_image_backup(path, delete_backup=False)  # re-judge an old-rules blur from the untouched crop
         result = read_panel_text(ocr_engine, path, panel, labels)
         decision = decide_cleanup(panel.width, panel.height, result.regions, labels)
+        # Watermarks the panel detector found visually (e.g. translucent 快看漫画 marks OCR cannot read).
+        seen = [w for w in detected.get(panel.id, []) if decision["action"] != "EXCLUDE"]
+        if seen:
+            from engine.ocr.providers.base import OCRRegion
+            decision = {"action": "BLUR", "reason": decision["reason"] if decision["action"] == "BLUR"
+                        else "Watermark detected in a story panel",
+                        "regions": decision["regions"] + [OCRRegion(id="detected", detected_text="[detected watermark]",
+                                                                    confidence=1.0, bbox=w) for w in seen]}
         item = {"panel_id": panel.id, "sequence": panel.sequence, "action": decision["action"],
                 "reason": decision["reason"], "ocr_engine": ocr_engine.engine_id,
                 "matches": [{"text": r.detected_text, "bbox": r.bbox, "confidence": r.confidence}

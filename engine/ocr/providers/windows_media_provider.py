@@ -1,3 +1,4 @@
+import math
 import sys
 import uuid
 import asyncio
@@ -19,6 +20,24 @@ if sys.platform == "win32":
         WINSDK_AVAILABLE = True
     except Exception:
         WINSDK_AVAILABLE = False
+
+
+def deskewed_bbox(rects, angle_deg, img_w, img_h):
+    """Windows OCR reports word boxes in its deskewed frame when it detects slanted text (TextAngle).
+
+    Rotate their corners back by the angle around the image centre to get original pixel coordinates.
+    """
+    cos, sin = math.cos(math.radians(angle_deg)), math.sin(math.radians(angle_deg))
+    cx, cy = img_w / 2, img_h / 2
+    xs, ys = [], []
+    for x, y, w, h in rects:
+        for px, py in ((x, y), (x + w, y), (x, y + h), (x + w, y + h)):
+            vx, vy = px - cx, py - cy
+            xs.append(cx + vx * cos - vy * sin)
+            ys.append(cy + vx * sin + vy * cos)
+    x0, y0 = max(0, int(min(xs))), max(0, int(min(ys)))
+    x1, y1 = min(img_w, int(math.ceil(max(xs)))), min(img_h, int(math.ceil(max(ys))))
+    return [x0, y0, max(1, x1 - x0), max(1, y1 - y0)]
 
 
 class WindowsMediaOCREngine(OCREngine):
@@ -164,6 +183,7 @@ class WindowsMediaOCREngine(OCREngine):
 
         regions: list[OCRRegion] = []
         lines = list(ocr_res.lines) if hasattr(ocr_res, "lines") else []
+        angle = getattr(ocr_res, "text_angle", None) or 0.0
 
         for idx, line in enumerate(lines, start=1):
             line_text = line.text.strip()
@@ -172,11 +192,9 @@ class WindowsMediaOCREngine(OCREngine):
 
             words = list(line.words) if hasattr(line, "words") else []
             if words:
-                min_x = min(w.bounding_rect.x for w in words)
-                min_y = min(w.bounding_rect.y for w in words)
-                max_x = max(w.bounding_rect.x + w.bounding_rect.width for w in words)
-                max_y = max(w.bounding_rect.y + w.bounding_rect.height for w in words)
-                bbox = [int(min_x), int(min_y), int(max_x - min_x), int(max_y - min_y)]
+                rects = [(w.bounding_rect.x, w.bounding_rect.y, w.bounding_rect.width, w.bounding_rect.height)
+                         for w in words]
+                bbox = deskewed_bbox(rects, angle, img_w, img_h)
             else:
                 bbox = [int(img_w * 0.1), int(img_h * 0.1), int(img_w * 0.8), int(img_h * 0.2)]
 

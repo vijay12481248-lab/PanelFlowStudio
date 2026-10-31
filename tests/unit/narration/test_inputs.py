@@ -73,6 +73,35 @@ def test_unknown_project_raises_key_error():
         load_chapter_inputs(SessionLocal(), "missing")
 
 
+def _ocr_result(pid, panel_id, raw=(), adapted=()):
+    from engine.database.models import OCRRecord
+    with SessionLocal() as db:
+        db.add(OCRRecord(project_id=pid, panel_id=panel_id, engine_name="test",
+                         raw_blocks=[{"id": f"r{i}", "detected_text": t} for i, t in enumerate(raw)],
+                         adapted_blocks=[{"id": f"a{i}", "text": t, "classification": c} for i, (t, c) in enumerate(adapted)]))
+        db.commit()
+
+
+def test_panel_without_text_regions_uses_its_ocr_result_minus_promotion(tmp_path):
+    pid, ids = _project(tmp_path, [(1, "DETECTED")])
+    _ocr_result(pid, ids[0], raw=["JADE FALLS IN THE EAST?", "READ FIRST AT", "MANHUAPLUS.COM", "  "])
+    panel = load_chapter_inputs(SessionLocal(), pid).panels[0]
+    assert [r.text for r in panel.ocr] == ["JADE FALLS IN THE EAST?"]
+
+
+def test_edited_ocr_blocks_win_and_sfx_is_kept_apart(tmp_path):
+    pid, ids = _project(tmp_path, [(1, "DETECTED")])
+    _ocr_result(pid, ids[0], raw=["Helo"], adapted=[("Hello", "dialogue"), ("BOOM", "sfx")])
+    panel = load_chapter_inputs(SessionLocal(), pid).panels[0]
+    assert [r.text for r in panel.ocr] == ["Hello"] and panel.sfx == ["BOOM"]
+
+
+def test_text_regions_take_priority_over_ocr_result(tmp_path):
+    pid, ids = _project(tmp_path, [(1, "DETECTED")], [(0, 1, "Reviewed line", "", "DETECTED")])
+    _ocr_result(pid, ids[0], raw=["raw line"])
+    assert [r.text for r in load_chapter_inputs(SessionLocal(), pid).panels[0].ocr] == ["Reviewed line"]
+
+
 def test_redacted_blurred_and_sfx_regions_are_filtered(tmp_path):
     pid, _ = _project(tmp_path, [(1, "DETECTED")], [
         (0, 1, "Hi", "", "DETECTED"),

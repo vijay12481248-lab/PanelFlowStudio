@@ -10,7 +10,7 @@ from engine.narration.artifacts import (
     BeatSheet, CritiqueReport, LineCheck, LineCritique, PanelFacts, ScriptIR, SeriesBible,
 )
 from engine.narration.cache import ArtifactCache
-from engine.narration.runtime.client import ModelClient
+from engine.narration.runtime.client import ModelClient, StepModelError
 from engine.narration.runtime.prompts import load_prompt
 from engine.narration.runtime.scheduler import ModelScheduler
 from engine.narration.steps._cached import cached_call
@@ -60,7 +60,14 @@ async def judge_lines(
 
     async def one(item: tuple[str, str, str]) -> Verdict:
         _, name, text = item
-        return await cached_call(client, cache, "judge", f"critique_{name}", prompts[name].sha256, text, Verdict)
+        try:
+            return await cached_call(client, cache, "judge", f"critique_{name}", prompts[name].sha256, text, Verdict)
+        except StepModelError as exc:
+            if "length limit" not in str(exc.cause):
+                raise
+            # A 9B judge sometimes loops on one line until its token cap; one stuck verdict must not fail the
+            # chapter. Unjudged style checks pass; an unjudged grounding check sends the line to repair.
+            return Verdict(yes=name not in BLOCKING_JUDGES, reason="judge gave no usable answer")
 
     out: dict[str, list[LineCheck]] = {}
     for (line_id, name, _), v in zip(items, await scheduler.map("judge", items, one)):
@@ -76,12 +83,18 @@ async def pick_best(kind: str, candidates: list[str], context: str, client: Mode
     items = [(a, b, prompt.render(kind=kind, context=context, a=candidates[a], b=candidates[b]))
              for a, b in permutations(range(len(candidates)), 2)]
 
-    async def one(item: tuple[int, int, str]) -> PairVerdict:
-        return await cached_call(client, cache, "judge", PAIR_STEP, prompt.sha256, item[2], PairVerdict)
+    async def one(item: tuple[int, int, str]) -> PairVerdict | None:
+        try:
+            return await cached_call(client, cache, "judge", PAIR_STEP, prompt.sha256, item[2], PairVerdict)
+        except StepModelError as exc:
+            if "length limit" not in str(exc.cause):
+                raise
+            return None  # the judge looped on this pair: it scores for neither side
 
     score = [0] * len(candidates)
     for (a, b, _), v in zip(items, await scheduler.map("judge", items, one)):
-        score[a if v.winner == "A" else b] += 1
+        if v is not None:
+            score[a if v.winner == "A" else b] += 1
     return candidates[score.index(max(score))]
 
 

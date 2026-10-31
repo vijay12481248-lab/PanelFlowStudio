@@ -96,6 +96,20 @@ def test_panel_in_no_beat_still_gets_its_scene():
     assert [p.scene_id for p in tl.panels] == ["s1", "s1", "s1"]
 
 
+def test_story_panel_without_a_line_is_held_after_the_panel_before_it():
+    script, plan, takes, sheet, ids = _world([(2.0, 300), (2.0, 300)])
+    story = ["p_lead", ids[0], "p_mid1", "p_mid2", ids[1]]
+    sheet.scenes[0].first_panel_id = "p_lead"
+    tl = lock_timeline(script, plan, takes, sheet, story)
+    LockedTimeline.model_validate(tl.model_dump())
+    assert [(p.panel_id, p.cut_reason) for p in tl.panels] == [
+        ("p_lead", "hold"), (ids[0], "line-start"), ("p_mid1", "hold"), ("p_mid2", "hold"), (ids[1], "line-start")]
+    plain, _, _ = _lock([(2.0, 300), (2.0, 300)])
+    assert tl.duration == pytest.approx(plain.duration + 3 * 1.6)
+    assert all(abs(p.end - p.start - 1.6) < 1e-6 for p in tl.panels if p.cut_reason == "hold")
+    assert sync_metrics(tl, takes, script)["onset_ok_share"] == 1.0  # narration still lands on its own panel
+
+
 def test_empty_or_missing_inputs_raise_value_error():
     script, plan, takes, sheet, ids = _world([(2.0, 300), (2.0, 300)])
     empty = ScriptIR.model_construct(project_id="x", revision=0, parent_revision=None, changed_line_ids=[], lines=[])

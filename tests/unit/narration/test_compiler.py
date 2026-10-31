@@ -46,9 +46,12 @@ def _compiler(tmp_path, responses, tts=None, stt=None, unloader=None):
                              tts, stt)
 
 
-def _go(tmp_path, comp, **kw):
+CREDITS_ONLY = {k: ["Join our Discord for faster updates"] for k in (1, 2, 3)}  # credit text marks non-story
+
+
+def _go(tmp_path, comp, ocr=None, **kw):
     kw.setdefault("stop_after", "understand")
-    inputs = make_chapter_inputs(tmp_path, 3, {})
+    inputs = make_chapter_inputs(tmp_path, 3, ocr or {})
     return asyncio.run(comp.run(inputs, tmp_path / "ws", **kw))
 
 
@@ -75,7 +78,7 @@ def test_stop_after_perceive_writes_no_beat_sheet(tmp_path):
 
 
 def test_needs_review_sets_review_gate_with_reasons(tmp_path):
-    result = _go(tmp_path, _compiler(tmp_path, {"vision": [_draft(False)] * 3}))
+    result = _go(tmp_path, _compiler(tmp_path, {"vision": [_draft(False)] * 3}), ocr=CREDITS_ONLY)
     assert result.gate == "review" and result.reasons == ["no story panels"]
     assert not (result.run_dir / "beat_sheet.json").exists()
 
@@ -190,7 +193,7 @@ def test_chapter_without_story_panels_goes_to_review(tmp_path, monkeypatch):
         return sheet
 
     monkeypatch.setattr(understand, "understand_chapter", fake)
-    result = _go(tmp_path, _compiler(tmp_path, {"vision": [_draft(False)] * 3}), stop_after="write")
+    result = _go(tmp_path, _compiler(tmp_path, {"vision": [_draft(False)] * 3}), ocr=CREDITS_ONLY, stop_after="write")
     assert result.gate == "review" and result.reasons == ["no story panels to narrate"]
 
 

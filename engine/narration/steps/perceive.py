@@ -104,7 +104,10 @@ def _facts(panel: PanelInput, d: PanelFactsDraft, namer: _Namer) -> PanelFacts:
     # Only allowed coercion: over-long action is cut to its first 20 words.
     action = " ".join(d.action.split()[:20]) if len(d.action.split()) > 20 else d.action
     return PanelFacts(
-        panel_id=panel.panel_id, order=panel.order, is_story=d.is_story or (bool(guesses) and not credits), shot=d.shot,
+        # Panel cleanup already dropped covers, credits and promos (status IGNORED); a 9B model's "not story"
+        # guess on a surviving panel is too often wrong (Ch 928: a guard reacting, Feiyun laughing), so only
+        # credit/ad text can still mark one non-story.
+        panel_id=panel.panel_id, order=panel.order, is_story=not credits, shot=d.shot,
         characters_visible=visible, unknown_cues=cues, names_mentioned=names, action=action, emotion=d.emotion,
         dialogue=dialogue, sfx=list(dict.fromkeys([*d.sfx, *panel.sfx])), setting=d.setting, importance=d.importance,
         confidence=d.confidence, needs_review=d.confidence < 0.5,

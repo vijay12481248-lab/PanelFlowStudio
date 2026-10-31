@@ -86,16 +86,55 @@ def test_story_panel_is_preserved_local_text_blurred_and_rerun_is_idempotent(set
 
 @pytest.mark.parametrize("regions", [
     [region(confidence=0.3)],
-    [region(bbox=[-5, 0, 100, 20])],
     [region(bbox=[0, 0, 900, 800])],
 ])
-def test_uncertain_matches_do_not_modify_image(setup, regions):
+def test_unreliable_matches_do_not_modify_image(setup, regions):
     p, path = panel(setup, height=800)
     original = path.read_bytes()
     result = cleanup.cleanup_detected_panels(setup, "first", [p.id], ocr_engine=OCR(regions))
-    assert result["items"][0]["action"] == "REVIEW"
+    assert result["items"][0]["action"] == "KEEP"
     assert path.read_bytes() == original
     assert p.status != "IGNORED"
+
+
+def test_box_slightly_outside_panel_is_clamped_and_blurred():
+    result = cleanup.decide_cleanup(900, 800, [region("Join our Discord", bbox=[-5, 0, 100, 20])],
+                                    cleanup.CleanupRules().labels)
+    assert result["action"] == "BLUR"
+    assert result["regions"][0].bbox == [0, 0, 95, 20]
+
+
+def test_unlisted_scanlator_domain_is_blurred():
+    regions = [region("READ FIRST AT", [1452, 4966, 358, 48]), region("MANGACULTIVATOR.COM", [1362, 5035, 551, 46]),
+               region("Run away!", [100, 300, 200, 40])]
+    result = cleanup.decide_cleanup(1920, 6000, regions, labels=[])
+    assert result["action"] == "BLUR"
+    assert sorted(r.detected_text for r in result["regions"]) == ["MANGACULTIVATOR.COM", "READ FIRST AT"]
+
+
+def test_stamp_header_also_covers_unread_logo_line():
+    # OCR reads the white header but not the red/black logo below it (Magic Emperor 928, panel #28).
+    result = cleanup.decide_cleanup(1920, 6018, [region("READ FIRST AT", [1451, 827, 358, 48]),
+                                                 region("Run away!", [100, 300, 200, 40])], labels=[])
+    x, y, w, h = result["regions"][0].bbox
+    assert result["action"] == "BLUR"
+    assert x <= 1362 and x + w >= 1909 and y <= 827 and y + h >= 827 + 69 + 46  # logo line: 69 px down, 46 tall
+
+
+def test_detector_watermark_is_blurred_when_ocr_reads_nothing(setup):
+    p, path = panel(setup, height=800)
+    original = path.read_bytes()
+    project = setup.get(ProjectRecord, "first")
+    project.settings = {"detected_promos": {p.id: [[0, 0, 200, 25]]}}  # over the drawn stamp text
+    setup.commit()
+    result = cleanup.cleanup_detected_panels(setup, "first", [p.id], ocr_engine=OCR([region("Run away!")]))
+    assert result["items"][0]["action"] == "BLUR"
+    assert path.read_bytes() != original and p.status != "IGNORED"
+
+
+def test_credits_cover_is_excluded():
+    regions = [region("TL: SU"), region("PR: SU"), region("CH 927"), region("Story text here")]
+    assert cleanup.decide_cleanup(1920, 3000, regions, labels=[])["action"] == "EXCLUDE"
 
 
 def test_dialogue_in_wide_panel_prevents_exclusion():
@@ -103,13 +142,13 @@ def test_dialogue_in_wide_panel_prevents_exclusion():
     assert result["action"] == "BLUR"
 
 
-def test_cover_and_outro_artwork_require_review():
+def test_cover_and_outro_artwork_are_excluded():
     result = cleanup.decide_cleanup(1920, 3000, [region("Head over to our website"),
                                     region("Support us")], cleanup.CleanupRules().labels)
-    assert result["action"] == "REVIEW"
+    assert result["action"] == "EXCLUDE"
     result = cleanup.decide_cleanup(1920, 3000, [region("Updates in real time"),
                                     region("discord.gg/hello")], cleanup.CleanupRules().labels)
-    assert result["action"] == "REVIEW"
+    assert result["action"] == "EXCLUDE"
 
 
 def test_no_match_and_disabled_rules_preserve_panels(setup):
@@ -130,9 +169,21 @@ def test_mock_ocr_cannot_silently_claim_success(setup):
         cleanup.cleanup_detected_panels(setup, "first", [p.id], ocr_engine=ocr)
 
 
+def legacy_review(db, p):
+    """A NEEDS_REVIEW match left by the earlier cleanup policy, which can still exist in projects."""
+    db.add(TextRegionRecord(id="legacy", project_id=p.project_id, page_id=p.page_id, panel_id=p.id,
+                            x=5, y=5, width=180, height=20, raw_text="Read first at ManhuaPlus.com",
+                            raw_confidence=0.2, ocr_engine="test", sequence_global=1,
+                            detection_method="AUTO_CLEANUP", status="NEEDS_REVIEW"))
+    project = db.get(ProjectRecord, p.project_id)
+    project.settings = {"content_cleanup_report": {"panels": {p.id: {
+        "panel_id": p.id, "action": "REVIEW", "reason": "Uncertain OCR or text covers too much artwork"}}}}
+    db.commit()
+
+
 def test_uncertain_cleanup_blocks_story_until_verified(setup):
     p, _ = panel(setup, height=800)
-    cleanup.cleanup_detected_panels(setup, "first", [p.id], ocr_engine=OCR([region(confidence=0.2)]))
+    legacy_review(setup, p)
     with pytest.raises(ValueError, match="uncertain promotional"):
         cleanup.require_cleanup_review(setup, "first")
     setup.query(TextRegionRecord).one().status = "CONFIRMED"
@@ -178,3 +229,23 @@ def test_episode_detection_job_invokes_cleanup(setup, monkeypatch):
     asyncio.run(operation(SimpleNamespace(is_cancelled=False), lambda *args: None))
     setup.expire_all()
     assert setup.get(PanelRecord, "episode-panel").status == "IGNORED"
+
+
+def test_autopilot_auto_resolves_promotional_cleanup(setup):
+    from engine.pipeline.autopilot import AutoPilotRunner
+    p, _ = panel(setup, height=800)
+    legacy_review(setup, p)
+    with pytest.raises(ValueError, match="uncertain promotional"):
+        cleanup.require_cleanup_review(setup, "first")
+
+    runner = AutoPilotRunner(project_id="first")
+    project = setup.get(ProjectRecord, "first")
+    runner._resolve_promotional_cleanup(setup, project)
+
+    # Review requirement is now satisfied
+    cleanup.require_cleanup_review(setup, "first")
+    setup.expire_all()
+    tr = setup.query(TextRegionRecord).filter_by(panel_id=p.id).one()
+    assert tr.status == "IGNORED"
+    assert setup.get(PanelRecord, p.id).status == "IGNORED"
+

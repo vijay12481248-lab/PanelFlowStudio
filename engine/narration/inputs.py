@@ -8,7 +8,7 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
-from engine.database.models import PanelRecord, ProjectRecord, TextRegionRecord
+from engine.database.models import OCRRecord, PanelRecord, ProjectRecord, TextRegionRecord
 from engine.narration.bible.store import series_key_for
 from engine.security.paths import resolve_contained_path
 
@@ -34,6 +34,30 @@ class ChapterInputs:
     project_id: str
     series_key: str
     panels: list[PanelInput]
+
+
+def _panel_ocr_result(db: Session, panel_id: str) -> tuple[list[OcrRegionInput], list[str]]:
+    """Dialogue from the panel-level OCR stage, for panels that never went through text-region review.
+
+    Autopilot's OCR stage fills ocr_results only; without this the writer narrates from pictures alone.
+    """
+    from engine.imaging.content_cleanup import is_promo_text, load_rules
+    rec = db.query(OCRRecord).filter(OCRRecord.panel_id == panel_id).first()
+    if rec is None:
+        return [], []
+    edited = [(b.get("id"), b.get("text"), b.get("classification")) for b in rec.adapted_blocks or []]
+    blocks = edited or [(b.get("id"), b.get("detected_text"), None) for b in rec.raw_blocks or []]
+    labels = load_rules().labels
+    ocr, sfx = [], []
+    for i, (bid, text, kind) in enumerate(blocks):
+        text = " ".join((text or "").split())
+        if not text or is_promo_text(text, labels):
+            continue
+        if (kind or "").lower() == "sfx":
+            sfx.append(text)
+        else:
+            ocr.append(OcrRegionInput(bid or f"{panel_id}-ocr{i}", text, "SPEECH"))
+    return ocr, sfx
 
 
 def load_chapter_inputs(db: Session, project_id: str) -> ChapterInputs:
@@ -64,6 +88,8 @@ def load_chapter_inputs(db: Session, project_id: str) -> ChapterInputs:
             if text:
                 (sfx if r.region_type == "SFX" else ocr).append(
                     text if r.region_type == "SFX" else OcrRegionInput(r.id, text, r.region_type))
+        if not ocr and not sfx:
+            ocr, sfx = _panel_ocr_result(db, row.id)
         image = resolve_contained_path(panels_dir, row.crop_filename, must_be_file=True)
         panels.append(PanelInput(row.id, order, image, ocr, sfx))
     key = series_key_for(project.title, project.source_metadata)

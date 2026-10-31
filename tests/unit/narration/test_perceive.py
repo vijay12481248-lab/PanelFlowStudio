@@ -109,10 +109,10 @@ def test_speaker_attribution_forces_story_even_if_model_said_no(tmp_path):
     assert facts[0].is_story is True and facts[0].dialogue[0].speaker_confidence == 0.9
 
 
-def test_ocr_text_or_visible_characters_alone_do_not_force_story(tmp_path):
+def test_model_saying_not_story_is_overruled_without_credit_text(tmp_path):
     d = _draft(is_story=False, characters_visible=["Yulin"])
     facts, _ = _run(tmp_path, [d], {1: ["You dare?!"]})
-    assert facts[0].is_story is False
+    assert facts[0].is_story is True
 
 
 def test_credits_text_stays_non_story_even_with_a_speaker(tmp_path):

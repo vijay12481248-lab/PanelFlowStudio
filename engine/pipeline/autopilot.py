@@ -2404,6 +2404,61 @@ class AutoPilotRunner:
 
 
 
+    async def _clean_promotions(self, db, stage_id: str) -> None:
+        """Blur or drop scanlator promotion on every retained panel, including panels detected before the rules."""
+        from engine.imaging.content_cleanup import clean_all_panels
+        from engine.projects.service import project_service
+        self.update_stage(stage_id, message="Removing scanlator promotion...")
+        result = await asyncio.to_thread(clean_all_panels, db, self.project_id, cancelled=lambda: self.is_cancelled)
+        items = result.get("items", [])
+        blurred = sum(i.get("action") == "BLUR" for i in items)
+        excluded = sum(i.get("action") == "EXCLUDE" for i in items)
+        if blurred or excluded:
+            db.expire_all()
+            project_service._sync_panels_json(db, self.project_id)
+            self.log(f"Promotion cleanup: {blurred} panels blurred, {excluded} excluded")
+
+    def _resolve_promotional_cleanup(self, db, project) -> None:
+        """Auto-resolve pending promotional cleanup matches so unattended autopilot never halts on promotional noise."""
+        from engine.database.models import PanelRecord, TextRegionRecord
+        cleanup_pending = (
+            db.query(TextRegionRecord)
+            .join(PanelRecord, TextRegionRecord.panel_id == PanelRecord.id)
+            .filter(
+                TextRegionRecord.project_id == self.project_id,
+                TextRegionRecord.detection_method == 'AUTO_CLEANUP',
+                TextRegionRecord.status == 'NEEDS_REVIEW',
+                PanelRecord.status != 'IGNORED',
+            )
+            .all()
+        )
+        if cleanup_pending:
+            cleanup_report = dict((project.settings or {}).get('content_cleanup_report') or {}).get('panels', {})
+            modified_report = False
+            for tr in cleanup_pending:
+                panel = db.get(PanelRecord, tr.panel_id)
+                panel_info = cleanup_report.get(tr.panel_id, {})
+                reason = str(panel_info.get('reason', '')).lower()
+                if 'promotional cover or outro' in reason or panel_info.get('action') == 'REVIEW':
+                    if panel and panel.status != 'IGNORED':
+                        panel.status = 'IGNORED'
+                        self.log(f"AutoPilot: Excluded promotional panel #{panel.sequence} ({tr.raw_text})")
+                    panel_info['action'] = 'EXCLUDE'
+                    modified_report = True
+                tr.status = 'IGNORED'
+            if modified_report:
+                from copy import deepcopy
+                new_settings = deepcopy(project.settings or {})
+                if 'content_cleanup_report' not in new_settings:
+                    new_settings['content_cleanup_report'] = {}
+                new_settings['content_cleanup_report']['panels'] = cleanup_report
+                project.settings = new_settings
+            db.commit()
+            from engine.projects.service import project_service
+            project_service._sync_panels_json(db, self.project_id)
+            project_service._sync_ocr_json(db, self.project_id)
+            project_service._write_project_json(project)
+
     def _calculate_stage_timeout(self, stage_id: str) -> float:
 
 
@@ -4541,6 +4596,8 @@ class AutoPilotRunner:
 
 
                 self.log(f"Panel Stage: Using {len(panels)} existing segmented panels.")
+                await self._clean_promotions(db, s_id)
+                panels = [p for p in project.panels or [] if p.status != "IGNORED"]
 
 
 
@@ -4556,6 +4613,7 @@ class AutoPilotRunner:
 
 
 
+                    self._resolve_promotional_cleanup(db, project)
                     project_service.confirm_panels(db, self.project_id)
 
 
@@ -4629,6 +4687,8 @@ class AutoPilotRunner:
 
 
                 await detect_coro(token, cb)
+                db.expire_all()
+                await self._clean_promotions(db, s_id)
 
 
 
@@ -4644,6 +4704,7 @@ class AutoPilotRunner:
 
 
 
+                self._resolve_promotional_cleanup(db, project)
                 project_service.confirm_panels(db, self.project_id)
 
 
@@ -4852,6 +4913,7 @@ class AutoPilotRunner:
 
 
 
+                    self._resolve_promotional_cleanup(db, project)
                     project_service.confirm_ocr(db, self.project_id)
 
 
@@ -5092,6 +5154,7 @@ class AutoPilotRunner:
 
 
 
+                    self._resolve_promotional_cleanup(db, project)
                     project_service.confirm_ocr(db, self.project_id)
 
 
@@ -5256,6 +5319,7 @@ class AutoPilotRunner:
 
 
                 raise ValueError("Project not found")
+            self._resolve_promotional_cleanup(db, project)
 
 
 
@@ -6337,7 +6401,6 @@ class AutoPilotRunner:
 
 
                     scene_pids = [pid for pid in scene_pids if pid not in excluded_panel_ids]
-
 
 
 
@@ -9598,6 +9661,13 @@ class AutoPilotRunner:
 
 
             output_path = getattr(render_job, "output_path", "")
+            from engine.render.promo_gate import describe_hits, scan_video_for_promotion
+            self.update_stage(s_id, progress=0.97, message="Checking the video for promotional text...")
+            hits = await asyncio.to_thread(scan_video_for_promotion, output_path,
+                                           cancelled=lambda: self.is_cancelled)
+            if hits:
+                raise ValueError(describe_hits(hits) + " Blur or exclude those panels and render again.")
+            self.log("Render Stage: no promotional text visible in the video.")
 
 
 

@@ -70,6 +70,46 @@ def test_gate_repair_when_any_block_fails(tmp_path):
     assert rep.gate == "repair" and [ln.blocked for ln in rep.lines] == [False, False, True]
 
 
+def test_runaway_judge_on_one_line_does_not_fail_the_chapter(tmp_path):
+    from engine.narration.runtime.client import StepModelError
+    script, facts, ids, sheet, bible = _setup()
+
+    def answer(prompt):
+        if "Rain falls" in prompt:
+            raise StepModelError("judge", "Model output reached its length limit (generated=1024, budget=1024).")
+        return Verdict(yes=True, reason="ok")
+
+    rep, _ = _run(tmp_path, answer, lambda c, s, ca: critique(script, facts, ids, sheet, bible, c, s, ca))
+    assert rep.lines[2].scores == dict(grounded=False, clear=True, voice=True, flow=True)
+    assert rep.gate == "repair" and [ln.blocked for ln in rep.lines] == [False, False, True]
+
+
+def test_runaway_pair_judge_is_skipped(tmp_path):
+    from engine.narration.runtime.client import StepModelError
+    cands = ["first one", "second one", "third one"]
+
+    def answer(prompt):
+        a, b = prompt.split("Option B")
+        if "first one" in a and "third one" in b:
+            raise StepModelError("judge", "Model output reached its length limit (generated=1024, budget=1024).")
+        return PairVerdict(winner="B" if "second one" in b else "A", reason="x")
+
+    best, _ = _run(tmp_path, answer, lambda c, s, ca: pick_best("hook", cands, "ctx", c, s, ca))
+    assert best == "second one"
+
+
+def test_judge_connection_errors_still_fail(tmp_path):
+    import pytest
+    from engine.narration.runtime.client import StepModelError
+    script, facts, ids, sheet, bible = _setup()
+
+    def answer(prompt):
+        raise StepModelError("judge", "connection refused")
+
+    with pytest.raises(StepModelError):
+        _run(tmp_path, answer, lambda c, s, ca: critique(script, facts, ids, sheet, bible, c, s, ca))
+
+
 def test_coverage_excludes_fallback_lines(tmp_path):
     script, facts, ids, sheet, bible = _setup()
     script.lines[1].status = "fallback"
