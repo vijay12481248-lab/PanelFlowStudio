@@ -1119,6 +1119,16 @@ class TimelineCompiler:
                         }
                         break
 
+            if motion_graphic_spec and motion_graphic_spec['preset_id'] == 'motionkit':
+                lines = []
+                for clip in narration_clips:
+                    c_start = float(clip.get("start_time_sec", 0.0))
+                    audio = self._resolve_audio_path(clip.get("audio_url"), workspace_path) if clip.get("audio_url") else None
+                    if audio and start_time <= c_start < end_time:
+                        lines.append({"at": c_start - start_time, "audio_path": audio, "text": clip.get("text", "").strip()})
+                if lines:
+                    motion_graphic_spec['props'] = {**motion_graphic_spec['props'], 'narration': lines}
+
             shot_plans.append(
 
                 RenderShotPlan(

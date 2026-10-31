@@ -17,6 +17,7 @@ from engine.render.motion.presentation.templates import (
     AEDynamicKineticScene,
     GlobalShoeOrbitScene,
 )
+from engine.render.motion.motionkit_scene import MotionKitScene
 from engine.render.motion.presentation.cinema_templates import (
     MatrixDigitalRainScene,
     SynthwaveSunsetScene,
@@ -241,9 +242,26 @@ class MotionRegistry:
             },
             preview_description="Hero floating sneaker with dual counter-rotating 3D kinetic typography rings turning around the shoe.",
         ),
+        "motionkit": MotionPresetDefinition(
+            id="motionkit",
+            name="MotionKit Spec",
+            category="MotionKit",
+            description="Plays any MotionKit JSON spec (props.spec, or props.spec_path to a .json file): titles, roadmaps, counters, characters, transitions.",
+            default_duration=5.5,
+            aspect_ratios=["16:9", "9:16"],
+            default_props={
+                "spec": {
+                    "meta": {"theme": "neon", "size": "youtube"},
+                    "back": [{"type": "particles"}],
+                    "scenes": [{"template": "title", "dur": 5.5, "text": "MOTIONKIT", "sub": "Spec-driven motion graphics"}],
+                },
+            },
+            preview_description="MotionKit neon title scene; replace props.spec to render any MotionKit video.",
+        ),
     }
 
     _SCENE_CLASSES: Dict[str, Type] = {
+        "motionkit": MotionKitScene,
         "keynote_showcase": KeynoteShowcaseScene,
         "cyber_hud": CyberHUDScene,
         "scifi_containment": SciFiContainmentScene,

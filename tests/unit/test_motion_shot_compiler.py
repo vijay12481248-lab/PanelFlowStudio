@@ -45,6 +45,23 @@ def test_compiler_emits_motion_graphic_shot(tmp_path):
     assert shot.duration == 4.0
 
 
+def test_compiler_attaches_narration_to_motionkit_shot(tmp_path):
+    wav = tmp_path / "line.wav"
+    wav.write_bytes(b"RIFF")
+    state = {
+        "scenes": [{"id": "s1", "type": "motion_graphic", "motion_preset_id": "motionkit", "duration_sec": 4.0, "layers": []}],
+        "narration_clips": [
+            {"scene_id": "s1", "scene_offset_sec": 0.5, "duration_sec": 2.0, "audio_url": str(wav), "text": " Hello "},
+            {"linked_to_scene": False, "start_time_sec": 9.0, "duration_sec": 1.0, "audio_url": str(wav), "text": "outside"},
+        ],
+    }
+    plan = TimelineCompiler().compile(
+        state=state, project_id="p", workspace_path=tmp_path, profile=RenderProfile(width=1280, height=720, fps=30)
+    )
+    lines = plan.shots[0].motion_graphic["props"]["narration"]
+    assert lines == [{"at": 0.5, "audio_path": str(wav), "text": "Hello"}]
+
+
 def test_composer_renders_motion_graphic_frame():
     profile = RenderProfile(width=1280, height=720, fps=30)
     shot = RenderShotPlan(
