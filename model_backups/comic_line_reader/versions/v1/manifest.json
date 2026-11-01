@@ -1,0 +1,29 @@
+{
+  "name": "comic_line_reader",
+  "version": 1,
+  "created": "2026-11-01T10:11:39+0530",
+  "base_model": "microsoft/trocr-small-printed (MIT)",
+  "metrics": {
+    "real_cer_beam4": 0.0044,
+    "real_exact_lines": "33/36",
+    "synthetic_cer": 0.0032
+  },
+  "data": {
+    "steps": 6000,
+    "batch": 48,
+    "lr": 5e-05,
+    "synthetic_seed": 1,
+    "real_eval": "36 hand-transcribed Ch 928 lines, never trained on",
+    "baseline_windows_ocr_cer": 0.1171,
+    "recipe": "scripts/ocr_train/{synth_lines,train_trocr}.py"
+  },
+  "notes": "",
+  "git_commit": "7b19b22f98264af2c4831310b3aee12c210d4afa",
+  "files": {
+    "config.json": "01af09bbae881505b23c270dd74907df45c55d2ccad73b03cce42a7a8a2f87d5",
+    "generation_config.json": "71ef07bad2dd417754bb38a6639baf3786defcb9206c5eece1d559fc91334b65",
+    "model.safetensors": "8b7503ebdb8fa85ebab78a26903d9baa787c45f397e2983b6b6831237dd9bdb8",
+    "tokenizer.json": "0232bcca3f9ae5fd7fc6d609038827011d580cbb2a1610a85bd94446fa56a8c9",
+    "tokenizer_config.json": "7829e71ea309afde99bc78c6610eaac956ef5e5037344d1cd39fb4f0051b1709"
+  }
+}

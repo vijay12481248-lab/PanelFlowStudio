@@ -1,0 +1,32 @@
+{
+  "name": "panel_detector",
+  "version": 1,
+  "created": "2026-11-01T09:11:40+0530",
+  "base_model": "PekingU/rtdetr_v2_r18vd (Apache-2.0)",
+  "metrics": {
+    "ch928_heldout_f1_iou50": 0.951,
+    "ch928_end_to_end_f1_iou50": 0.97,
+    "ch928_promo_recall": 0.889,
+    "ch927_f1_iou50": 0.903,
+    "ch927_promo_recall": 1.0
+  },
+  "data": {
+    "synthetic_tiles": 6000,
+    "synthetic_seed": 1,
+    "real_tiles_ch927": 240,
+    "epochs": 12,
+    "classes": [
+      "panel",
+      "bubble",
+      "promo"
+    ],
+    "note": "Ch 927 was in the training data, Ch 928 was held out; recipe: scripts/panel_truth/{synth,real_tiles,train_detector}.py"
+  },
+  "notes": "First strip-level detector (Magic Emperor style). Live since 2026-10-31.",
+  "git_commit": "7b19b22f98264af2c4831310b3aee12c210d4afa",
+  "files": {
+    "classes.json": "37f55ba29233b6279df5db752c2e5c088ce32f801dd9bb610528f852cf597f17",
+    "config.json": "52be33df0b24003d2d5f9539c8857c3e0d306639a4689d0749cdb5bc12ce42ca",
+    "model.safetensors": "aeb26e5cc4678beccf13b269a66232265a4a7a085c94d92a3a7bc72b5cb1fd17"
+  }
+}

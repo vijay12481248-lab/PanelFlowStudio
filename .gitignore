@@ -1,4 +1,4 @@
-# Python
+﻿# Python
 __pycache__/
 *.py[cod]
 *$py.class
@@ -78,5 +78,5 @@ initial_screen.png
 chapter-923-panels.txt
 .engine_token
 
-# Trained-model mirror (large; never committed)
+# Trained-model mirror; only the released registry versions are committed (via Git LFS, force-added)
 model_backups/
