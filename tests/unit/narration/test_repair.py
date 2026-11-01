@@ -82,8 +82,10 @@ def test_fallback_hides_unknown_label():
     f = PanelFacts(panel_id="p1", order=1, is_story=True, shot="wide", characters_visible=["unknown_1"],
                    action="unknown_1 lunges at Kai", emotion="e", importance=3, confidence=0.9)
     assert fallback_text(f, {"c1": "Kai"}) == "A stranger lunges at Kai."
-    long = f.model_copy(update={"action": " ".join(["word"] * 15)})
-    assert fallback_text(long, {}) == "Word " + " ".join(["word"] * 11) + "."
+    long = f.model_copy(update={"action": " ".join(["word"] * 25)})
+    assert fallback_text(long, {}) == "Word " + " ".join(["word"] * 17) + "."
+    cut = f.model_copy(update={"action": " ".join(["word"] * 16) + " smugly at the guards waiting outside"})
+    assert fallback_text(cut, {}) == "Word " + " ".join(["word"] * 15) + " smugly."
 
 
 def test_too_many_fallbacks_goes_to_review(tmp_path):

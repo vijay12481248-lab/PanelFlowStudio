@@ -16,9 +16,12 @@ from engine.narration.runtime.prompts import load_prompt
 from engine.narration.runtime.scheduler import ModelScheduler
 from engine.narration.steps._cached import cached_call
 from engine.narration.steps.critique.judges import JUDGES, critique
-from engine.narration.steps.factview import FACT_REF, char_names, cues_of, display_name, normalize_facts, panel_line
+from engine.narration.steps.critique.rules import MAX_WORDS
+from engine.narration.steps.factview import (
+    FACT_REF, beat_context, char_names, cues_of, display_name, normalize_facts, panel_line,
+)
 
-REPAIR_PROMPT_VERSION = "v1"
+REPAIR_PROMPT_VERSION = "v2"
 REPAIR_STEP = "repair_line"
 MAX_ROUNDS = 2
 FALLBACK_LIMIT = 0.10
@@ -39,12 +42,19 @@ class RepairResult:
     revisions: list[ScriptIR]  # the input script first, then every revision written
 
 
+_DANGLING = {"with", "and", "in", "of", "on", "at", "a", "an", "the", "or", "to", "for", "by", "from", "into",
+             "toward", "towards", "as", "his", "her", "their", "its", "while", "that", "who"}
+
+
 def fallback_text(f: PanelFacts, names: dict[str, str]) -> str:
     ids = sorted({*f.characters_visible, *_UNKNOWN.findall(f.action)}, key=len, reverse=True)
     text = f.action
     if ids:
         text = re.sub(r"\b(?:" + "|".join(map(re.escape, ids)) + r")\b", lambda m: display_name(m.group(), names), text)
-    text = " ".join(" ".join(text.split()[:12]).rstrip(".!?,;: ").split())
+    words = " ".join(text.split()[:MAX_WORDS]).rstrip(".!?,;: ").split()
+    while words and words[-1].lower().strip(",;:") in _DANGLING:  # never end on "...looks smugly at."
+        words.pop()
+    text = " ".join(words).rstrip(".!?,;: ")
     if not text:
         raise ValueError("panel has no action to fall back to")
     return text[0].upper() + text[1:] + "."
@@ -88,6 +98,7 @@ async def repair_loop(
             failures = "\n".join(f"- {c.rule}: {c.reason}" for c in lc.checks if not c.passed and c.severity == "block")
             texts.append(prompt.render(
                 failures=failures, line=cur.lines[i].text, panel=panel_line(1, facts[cur.lines[i].panel_id], names),
+                story=beat_context(sheet, cur.lines[i].panel_id),
                 previous=cur.lines[i - 1].text if i else "(none)",
                 next=cur.lines[i + 1].text if i + 1 < len(cur.lines) else "(none)", **common))
         drafts = await scheduler.map("writer", texts, one)

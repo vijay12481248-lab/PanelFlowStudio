@@ -24,7 +24,7 @@ from engine.narration.runtime.prompts import load_prompt
 from engine.narration.runtime.scheduler import ModelScheduler
 from engine.narration.steps._cached import cached_call
 from engine.narration.steps.critique.rules import rule_checks
-from engine.narration.steps.factview import FACT_REF, char_names, cues_of, normalize_facts, panel_line
+from engine.narration.steps.factview import FACT_REF, beat_context, char_names, cues_of, normalize_facts, panel_line
 from engine.narration.steps.repair import REPAIR_PROMPT_VERSION, REPAIR_STEP, RepairDraft, fallback_text, revise
 from engine.security.paths import resolve_contained_path
 
@@ -153,6 +153,7 @@ async def regenerate_line(run_dir: Path, line_id: str, hint: str, client: ModelC
     text = prompt.render(
         failures="\n".join([*failures, f"- reviewer hint: {hint}"]), line=ln.text,
         panel=panel_line(1, facts[ln.panel_id], char_names(bible, sheet, cues_of(facts.values()))),
+        story=beat_context(sheet, ln.panel_id),
         previous=script.lines[i - 1].text if i else "(none)",
         next=script.lines[i + 1].text if i + 1 < len(script.lines) else "(none)",
         banned=", ".join(voice.banned_phrases) or "(none)", style="; ".join(voice.style_notes) or "plain, vivid recap voice")

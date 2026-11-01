@@ -15,9 +15,12 @@ from engine.narration.runtime.prompts import load_prompt
 from engine.narration.runtime.scheduler import ModelScheduler
 from engine.narration.steps._cached import cached_call
 from engine.narration.steps.critique.rules import chapter_stats, rule_checks
-from engine.narration.steps.factview import char_names, cues_of, panel_line
+from engine.narration.steps.factview import (
+    beat_context, cast_line, char_names, cues_of, panel_line, present_ids, scene_panels,
+)
 
 CRITIQUE_PROMPT_VERSION = "v1"
+JUDGE_PROMPT_VERSIONS = {"grounded": "v2"}  # v2 judges against the story context, not one picture
 PAIR_STEP = "critique_pair"
 JUDGES = ("grounded", "clear", "voice", "flow")
 # Only grounding blocks: a 9B judge's style verdicts are too noisy to gate on (real Ch927 run: clear 38 %, flow 34 %).
@@ -40,7 +43,7 @@ async def judge_lines(
 ) -> dict[str, list[LineCheck]]:
     names = char_names(bible, sheet, cues_of(facts.values()))
     style = "; ".join(bible.narrator_voice.style_notes) or "plain, vivid recap voice"
-    prompts = {n: load_prompt(f"critique_{n}", CRITIQUE_PROMPT_VERSION) for n in JUDGES}
+    prompts = {n: load_prompt(f"critique_{n}", JUDGE_PROMPT_VERSIONS.get(n, CRITIQUE_PROMPT_VERSION)) for n in JUDGES}
     want = set(line_ids) if line_ids is not None else None
     scene_starts = {s.first_panel_id for s in sheet.scenes}
     items = []  # (line_id, judge name, rendered prompt)
@@ -49,7 +52,9 @@ async def judge_lines(
             continue
         prev = script.lines[i - 1].text if i else "(none)"
         values = {
-            "grounded": dict(line=ln.text, panel=panel_line(1, facts[ln.panel_id], names)),
+            "grounded": dict(line=ln.text, panel=panel_line(1, facts[ln.panel_id], names),
+                             story=beat_context(sheet, ln.panel_id) + " | present in this scene: "
+                             + cast_line(present_ids(scene_panels(sheet, ln.panel_id, facts)), names, bible)),
             "clear": dict(previous=prev, line=ln.text),
             "voice": dict(style=style, line=ln.text),
             "flow": dict(previous=prev, line=ln.text),

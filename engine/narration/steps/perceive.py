@@ -15,7 +15,7 @@ from engine.narration.runtime.client import ModelClient, guard_prompt
 from engine.narration.runtime.prompts import load_prompt
 from engine.narration.runtime.scheduler import ModelScheduler
 
-PERCEIVE_PROMPT_VERSION = "v1"
+PERCEIVE_PROMPT_VERSION = "v2"
 STEP = "perceive"
 _START = "(chapter start)"
 
@@ -26,11 +26,17 @@ class SpeakerGuess(BaseModel):
     confidence: float | None = Field(default=None, ge=0, le=1)
 
 
+class BubbleRead(BaseModel):
+    region_id: str
+    text: str
+
+
 class PanelFactsDraft(BaseModel):
     is_story: bool
     shot: Literal["wide", "medium", "close", "insert"]
     characters_visible: list[str]
     names_mentioned: list[str] = Field(default_factory=list)
+    bubble_text: list[BubbleRead] = Field(default_factory=list)
     action: str
     emotion: str
     speakers: list[SpeakerGuess]
@@ -91,9 +97,11 @@ def _facts(panel: PanelInput, d: PanelFactsDraft, namer: _Namer) -> PanelFacts:
     guesses = {g.region_id: g for g in d.speakers if g.region_id in region_ids and g.speaker.strip()}
     speaker = {rid: namer.map(g.speaker, cues) for rid, g in guesses.items()}
     credits = any(k in r.text.casefold() for r in panel.ocr for k in AD_KEYWORDS)
+    # The vision model reads the bubble itself; comic fonts garble OCR badly enough to mislead the whole story.
+    read = {b.region_id: " ".join(b.text.split()) for b in d.bubble_text if b.region_id in region_ids and b.text.strip()}
     dialogue = [
         OcrDialogue(
-            region_id=r.region_id, text=r.text,
+            region_id=r.region_id, text=read.get(r.region_id, r.text),
             speaker_id=speaker.get(r.region_id),
             speaker_confidence=guesses[r.region_id].confidence if r.region_id in guesses else None,
         )
@@ -120,8 +128,10 @@ async def perceive_chapter(
 ) -> list[PanelFacts]:
     prompt = load_prompt(STEP, PERCEIVE_PROMPT_VERSION)
     model, params = client.model_for("vision"), client.params_for("vision")
+    # A character with no appearance cues cannot be recognised on sight; offering them only invites the model to
+    # pin their name on whoever is drawn (Ch 928: the shocked Sword King became "Shangguan Feixiong").
     characters = "\n".join(
-        f"{c.id}: {c.name} - {'; '.join(c.appearance_cues)}" for c in bible.characters
+        f"{c.id}: {c.name} - {'; '.join(c.appearance_cues)}" for c in bible.characters if c.appearance_cues
     ) or "(none)"
 
     async def one(panel: PanelInput, previous: str) -> PanelFactsDraft:

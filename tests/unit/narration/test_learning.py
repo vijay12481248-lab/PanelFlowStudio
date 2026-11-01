@@ -54,7 +54,7 @@ def test_write_prompt_uses_user_rows_first(tmp_path):
     learning.refresh_fewshot("s")
     _, client = _run(tmp_path, [wf(1)], _sheet(("p1", "p1")), [_answer] * 3)
     prompt = client.calls[0][1]
-    assert prompt.index("owner row e stays") < prompt.index("Kai catches the blade")
+    assert prompt.index("owner row e stays") < prompt.index("Kai stops the assassin's blade")
 
 
 def test_place_named_character_becomes_location():

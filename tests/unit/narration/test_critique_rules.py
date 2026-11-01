@@ -6,9 +6,9 @@ from engine.narration.artifacts import (
 from engine.narration.steps.critique.rules import chapter_stats, rule_checks
 
 
-def _facts(k, said=()):
+def _facts(k, said=(), visible=("c1",)):
     return PanelFacts(panel_id=f"p{k}", order=k, is_story=True, shot="medium", action="a", emotion="e",
-                      importance=3, confidence=0.9,
+                      importance=3, confidence=0.9, characters_visible=list(visible),
                       dialogue=[OcrDialogue(region_id=f"r{k}{j}", text=t) for j, t in enumerate(said)])
 
 
@@ -38,7 +38,8 @@ def test_order_blocks_every_line_when_ids_mismatch():
 
 
 def test_word_budget():
-    _, res = _run(["Too short here", "Kai walks to the old gate slowly", "one two three four five six seven eight nine ten eleven twelve thirteen"])
+    _, res = _run(["Too short here", "Kai walks to the old gate slowly",
+                   " ".join(f"w{k}" for k in range(19))])  # limit is 4-18 words
     assert _failed(res, "L001", "word_budget") and _failed(res, "L003", "word_budget")
     assert not _failed(res, "L002", "word_budget")
 
@@ -97,6 +98,46 @@ def test_unknown_name_trusts_names_in_panel_facts():
     res = rc(script, facts, ["p1", "p2"], SeriesBible(series_key="s", characters=[BibleCharacter(id="c1", name="Kai")]))
     assert not _failed(res, "L001", "unknown_name")
     assert _failed(res, "L002", "unknown_name")
+
+
+def _cast_run(texts, visible, said=None):
+    """Two-character bible; visible[k] lists who is drawn in panel k+1."""
+    lines = [ScriptLine(line_id=f"L{k:03d}", panel_id=f"p{k}", text=t, facts_used=[], kind="narration")
+             for k, t in enumerate(texts, start=1)]
+    bible = SeriesBible(series_key="s", characters=[
+        BibleCharacter(id="jw", name="Baili Jingwei", aliases=["the Prime Minister"], pronouns="he"),
+        BibleCharacter(id="fx", name="Shangguan Feixiong", pronouns="he")])
+    facts = {f"p{k}": _facts(k, (said or {}).get(k, ()), visible[k - 1]) for k in range(1, len(texts) + 1)}
+    return rule_checks(ScriptIR(project_id="p", lines=lines), facts, list(facts), bible)
+
+
+def test_character_not_in_scene_cannot_act():
+    res = _cast_run(["Feixiong reacts with shock at the map"] + ["Jingwei smiles at the fake map"] * 8,
+                    [["jw"]] * 9)
+    assert _failed(res, "L001", "absent_character")[0].reason.startswith("Shangguan Feixiong")
+    assert not _failed(res, "L002", "absent_character")  # given name alone counts as Baili Jingwei
+
+
+def test_character_mentioned_in_the_dialogue_may_be_named():
+    res = _cast_run(["Jingwei laughs that Feixiong would choke on his own plan"], [["jw"]],
+                    said={1: ["Shangguan Feixiong would spit blood if he knew!"]})
+    assert not _failed(res, "L001", "absent_character")
+
+
+def test_character_seen_a_few_panels_away_is_still_present():
+    res = _cast_run(["Jingwei plots"] * 3 + ["Feixiong storms in angrily now"], [["fx"], ["jw"], ["jw"], ["jw"]])
+    assert not _failed(res, "L004", "absent_character")
+
+
+def test_wrong_pronoun_is_blocked():
+    res = _cast_run(["Jingwei closes her eyes, sure of the trap", "Jingwei closes his eyes, sure of the trap"],
+                    [["jw"], ["jw"]])
+    assert _failed(res, "L001", "pronoun") and not _failed(res, "L002", "pronoun")
+
+
+def test_narration_about_the_narration_is_banned():
+    _, res = _run(["A guard stands outdoors, no action occurring"])
+    assert _failed(res, "L001", "banned_phrase")
 
 
 def test_article_plus_cue_description_is_not_an_unknown_name():

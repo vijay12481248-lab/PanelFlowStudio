@@ -28,11 +28,11 @@ def _bible():
         BibleCharacter(id="c1", name="Shangguan Yulin", aliases=["Yulin"], appearance_cues=["red robe"])])
 
 
-def _run(tmp_path, drafts, ocr, concurrency=3, client=None, cache=None):
+def _run(tmp_path, drafts, ocr, concurrency=3, client=None, cache=None, bible=None):
     inputs = make_chapter_inputs(tmp_path, len(drafts), ocr)
     client = client or FakeModelClient({"vision": list(drafts)})
     cache = cache or ArtifactCache(tmp_path / "cache")
-    facts = asyncio.run(perceive_chapter(inputs, _bible(), client, _sched(concurrency), cache))
+    facts = asyncio.run(perceive_chapter(inputs, bible or _bible(), client, _sched(concurrency), cache))
     return facts, client
 
 
@@ -107,6 +107,24 @@ def test_speaker_attribution_forces_story_even_if_model_said_no(tmp_path):
     d = _draft(is_story=False, speakers=[SpeakerGuess(region_id="p1-r1", speaker="Yulin", confidence=0.9)])
     facts, _ = _run(tmp_path, [d], {1: ["You dare?!"]})
     assert facts[0].is_story is True and facts[0].dialogue[0].speaker_confidence == 0.9
+
+
+def test_characters_without_appearance_cues_are_not_offered_for_recognition(tmp_path):
+    from engine.narration.artifacts import BibleCharacter, SeriesBible
+    bible = SeriesBible(series_key="s", characters=[
+        BibleCharacter(id="seen", name="Gu Yifan", appearance_cues=["red coat"]),
+        BibleCharacter(id="heard", name="Shangguan Feixiong")])
+    _, client = _run(tmp_path, [_draft()], {}, bible=bible)
+    prompt = client.calls[0][1]
+    assert "Gu Yifan" in prompt and "Feixiong" not in prompt
+
+
+def test_bubble_reading_replaces_garbled_ocr(tmp_path):
+    from engine.narration.steps.perceive import BubbleRead
+    d = _draft(bubble_text=[BubbleRead(region_id="p1-r1", text="  PER THE LORD'S ORDER "),
+                            BubbleRead(region_id="nope", text="ignored")])
+    facts, _ = _run(tmp_path, [d], {1: ["PEP THE COPD'S OPDEP", "WE KEPT HIM SAFE"]})
+    assert [x.text for x in facts[0].dialogue] == ["PER THE LORD'S ORDER", "WE KEPT HIM SAFE"]
 
 
 def test_model_saying_not_story_is_overruled_without_credit_text(tmp_path):

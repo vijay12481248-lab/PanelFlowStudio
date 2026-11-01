@@ -14,7 +14,8 @@ TEXTS = ["Kai strikes the gate hard now", "Kai breaks through and runs away", "R
 
 def _setup(n=3):
     facts = {f"p{k}": PanelFacts(panel_id=f"p{k}", order=k, is_story=True, shot="medium", action=f"unique action {k}",
-                                 emotion="calm", importance=3, confidence=0.9) for k in range(1, n + 1)}
+                                 emotion="calm", importance=3, confidence=0.9, characters_visible=["c1"])
+             for k in range(1, n + 1)}
     lines = [ScriptLine(line_id=f"L{k:03d}", panel_id=f"p{k}", text=TEXTS[k - 1], facts_used=[], kind="narration")
              for k in range(1, n + 1)]
     sheet = BeatSheet(project_id="p", hook="h", chapter_summary="s", scenes=[Scene(
@@ -139,7 +140,7 @@ def test_judge_cache_rerun_zero_calls(tmp_path):
 
 def test_only_grounded_judge_blocks(tmp_path):
     script, facts, ids, sheet, bible = _setup()
-    style_only = lambda p: Verdict(yes="one narration line against the facts" in p, reason="stiff")
+    style_only = lambda p: Verdict(yes="against the story facts" in p, reason="stiff")  # only grounded says yes
     rep, _ = _run(tmp_path, style_only, lambda c, s, ca: critique(script, facts, ids, sheet, bible, c, s, ca))
     assert rep.gate == "pass" and not any(ln.blocked for ln in rep.lines)
     assert all(c.severity == "warn" for ln in rep.lines for c in ln.checks if c.rule in ("clear", "voice", "flow"))
@@ -150,8 +151,9 @@ def test_coverage_with_no_story_ids_is_zero(tmp_path):
     assert rep.coverage == 0.0
 
 
-def test_grounded_prompt_has_no_beat_text(tmp_path):
+def test_grounded_prompt_sees_only_its_own_beat(tmp_path):
+    # A narrator states motives the beat supports; the judge must see that beat, and no other.
     script, facts, ids, sheet, bible = _setup()
     _, client = _run(tmp_path, _yes, lambda c, s, ca: critique(script, facts, ids, sheet, bible, c, s, ca, line_ids=["L002"]))
     grounded = [p for _, p, _ in client.calls if "unique action 2" in p]
-    assert grounded and all("beat text" not in p for p in grounded)
+    assert grounded and all("beat text 2" in p and "beat text 1" not in p and "beat text 3" not in p for p in grounded)

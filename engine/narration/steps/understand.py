@@ -13,7 +13,7 @@ from engine.narration.runtime.client import ModelClient, guard_prompt
 from engine.narration.runtime.prompts import load_prompt
 from engine.narration.runtime.scheduler import ModelScheduler
 
-UNDERSTAND_PROMPT_VERSION = "v1"
+UNDERSTAND_PROMPT_VERSION = "v2"
 WINDOW_STEP = "understand_window"
 MERGE_STEP = "understand_merge"
 

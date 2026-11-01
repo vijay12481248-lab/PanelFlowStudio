@@ -14,10 +14,13 @@ from engine.narration.runtime.client import ModelClient
 from engine.narration.runtime.prompts import load_prompt
 from engine.narration.runtime.scheduler import ModelScheduler
 from engine.narration.steps._cached import cached_call
-from engine.narration.steps.factview import FACT_REF, char_names, cues_of, load_fewshot, normalize_facts, panel_line
+from engine.narration.steps.factview import (
+    FACT_REF, cast_line, char_names, cues_of, load_fewshot, normalize_facts, panel_line, present_ids,
+)
 from engine.narration.steps.understand import NeedsReview
 
-WRITE_PROMPT_VERSION = "v1"
+WRITE_PROMPT_VERSION = "v2"
+FEWSHOT_PACK = "recap_v2"  # story-telling lines; recap_v1 taught picture captions
 SCENE_STEP = "write_scene"
 CANDIDATE_STEP = "write_candidates"
 CHUNK = 30
@@ -78,7 +81,8 @@ async def write_chapter(
     common = dict(
         style="; ".join(voice.style_notes) or "plain, vivid recap voice",
         banned=", ".join(voice.banned_phrases) or "(none)",
-        examples="\n".join(f"facts: {r['facts']}\nline: {r['line']}" for r in [*user_fewshot(bible.series_key), *load_fewshot()][:6]),
+        examples="\n".join(f"facts: {r['facts']}\nline: {r['line']}"
+                           for r in [*user_fewshot(bible.series_key), *load_fewshot(FEWSHOT_PACK)][:6]),
     )
 
     async def cached(step: str, sha: str, text: str, schema: type[BaseModel]):
@@ -117,7 +121,9 @@ async def write_chapter(
                     beats.append(f"beat:{b.beat_id} P{min(local)}-P{max(local)}: {b.what_happens}")
             prev = [text_of[i] for i in range(idx[0] - 3, idx[0]) if i in text_of] if rnd else []
             prompts.append((sprompt.render(
-                n=str(len(idx)), goal=s.goal, turn=s.turn, beats="\n".join(beats) or "(none)",
+                n=str(len(idx)), summary=sheet.chapter_summary, goal=s.goal, turn=s.turn,
+                cast=cast_line(present_ids(story[i] for i in idx), names, bible),
+                beats="\n".join(beats) or "(none)",
                 previous="\n".join(prev) or "(none)",
                 panels="\n".join(panel_line(k, story[i], names) for k, i in enumerate(idx, start=1)),
                 **common), len(idx), {b.beat_id for b in s.beats}))

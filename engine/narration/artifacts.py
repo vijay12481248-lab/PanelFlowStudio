@@ -55,6 +55,7 @@ class BibleCharacter(_Strict):
     relationships: dict[str, str] = Field(default_factory=dict)
     catchphrases: list[str] = Field(default_factory=list)
     pronunciation: str | None = None
+    pronouns: str = ""  # "he", "she" or "they"; empty when unknown
 
 
 class BibleLocation(_Strict):

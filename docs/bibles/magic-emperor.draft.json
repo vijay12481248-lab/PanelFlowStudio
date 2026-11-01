@@ -4,7 +4,10 @@
     {
       "id": "gu_yifan",
       "name": "Gu Yifan",
-      "aliases": ["Grandmaster Gu", "Master"],
+      "aliases": [
+        "Grandmaster Gu",
+        "Master"
+      ],
       "appearance_cues": [
         "messy black hair with a single upright strand",
         "black high-collared coat with red trim and red frog buttons",
@@ -12,46 +15,73 @@
         "purple ring on his finger; eyes turn red when serious"
       ],
       "role": "protagonist; poses as an 11th-grade alchemist at Flying Cloud Manor while playing both sides",
-      "relationships": {"shangguan_yulin": "his disciple and pawn", "companion_teal": "travels with him"}
+      "relationships": {
+        "shangguan_yulin": "his disciple and pawn",
+        "companion_teal": "travels with him"
+      },
+      "pronouns": "he"
     },
     {
       "id": "baili_jingwei",
       "name": "Baili Jingwei",
-      "aliases": ["the Prime Minister"],
+      "aliases": [
+        "the Prime Minister"
+      ],
       "appearance_cues": [
         "black hair tied in a topknot",
         "white robe over black inner clothes with a gold star emblem on the chest",
         "narrow calm eyes, often smiling with eyes closed"
       ],
       "role": "Prime Minister of the Sword Star Empire; schemes alongside the Sword King",
-      "relationships": {"sword_king_feiyun": "ally"}
+      "relationships": {
+        "sword_king_feiyun": "ally"
+      },
+      "pronouns": "he"
     },
     {
       "id": "sword_king_feiyun",
       "name": "Sword King Feiyun",
-      "aliases": ["the Sword King", "Feiyun"],
+      "aliases": [
+        "the Sword King",
+        "Feiyun"
+      ],
       "appearance_cues": [
         "long brown hair with a dark headband",
         "green jade earrings",
         "grey-blue robe with fur trim on the shoulders"
       ],
       "role": "lord of Flying Cloud Manor; target of the Shangguan clan's ambush",
-      "relationships": {"baili_jingwei": "ally"}
+      "relationships": {
+        "baili_jingwei": "ally"
+      },
+      "pronouns": "he"
     },
     {
       "id": "shangguan_yulin",
       "name": "Shangguan Yulin",
-      "aliases": ["Yulin"],
-      "appearance_cues": ["CONFIRM: appearance not verified from panels"],
+      "aliases": [
+        "Yulin"
+      ],
+      "appearance_cues": [
+        "CONFIRM: appearance not verified from panels"
+      ],
       "role": "Shangguan clan member and Gu Yifan's disciple; delivered the fake map",
-      "relationships": {"gu_yifan": "master"}
+      "relationships": {
+        "gu_yifan": "master"
+      },
+      "pronouns": "he"
     },
     {
       "id": "shangguan_feixiong",
       "name": "Shangguan Feixiong",
-      "aliases": ["the clan head"],
-      "appearance_cues": ["CONFIRM: mentioned in dialogue, not clearly shown in Ch 927-928"],
-      "role": "head of the Shangguan clan; plans the raid on Jade Falls"
+      "aliases": [
+        "the clan head"
+      ],
+      "appearance_cues": [
+        "CONFIRM: mentioned in dialogue, not clearly shown in Ch 927-928"
+      ],
+      "role": "head of the Shangguan clan; plans the raid on Jade Falls",
+      "pronouns": "he"
     },
     {
       "id": "companion_teal",
@@ -62,12 +92,21 @@
         "gold mark on the forehead and yellow eyes",
         "large golden pendant on the chest"
       ],
-      "role": "Gu Yifan's companion"
+      "role": "Gu Yifan's companion",
+      "pronouns": ""
     }
   ],
   "locations": [
-    {"id": "flying_cloud_manor", "name": "Flying Cloud Manor", "description": "Sword King Feiyun's estate"},
-    {"id": "jade_falls", "name": "Jade Falls", "description": "where the Soaring Sword is kept; the Shangguan raid target"}
+    {
+      "id": "flying_cloud_manor",
+      "name": "Flying Cloud Manor",
+      "description": "Sword King Feiyun's estate"
+    },
+    {
+      "id": "jade_falls",
+      "name": "Jade Falls",
+      "description": "where the Soaring Sword is kept; the Shangguan raid target"
+    }
   ],
   "glossary": {
     "Soaring Sword": "the treasure the Shangguan clan wants to steal",
