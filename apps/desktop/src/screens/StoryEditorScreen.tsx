@@ -405,6 +405,10 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
                 schema_version: 2,
                 ripple_edit: parsed.ripple_edit ?? true,
                 scenes: migratedScenes,
+                // Old demo placeholder tracks have no start/duration and crash the timeline.
+                bgm_tracks: (parsed.bgm_tracks ?? []).filter(
+                  (b) => typeof b.start_time_sec === "number" && typeof b.duration_sec === "number"
+                ),
                 narration_chapter: restoredChapter,
                 narration_clips: alignLinkedNarration(migratedScenes, migratedNarration),
               });

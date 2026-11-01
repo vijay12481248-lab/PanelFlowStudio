@@ -1429,7 +1429,12 @@ class StoryService:
             script_id=s_rec.id,
             project_id=s_rec.project_id,
             version=s_rec.version,
-            adaptation_profile=AdaptationProfile(s_rec.adaptation_profile),
+            # The narration compiler stores its own marker, which is not a story adaptation profile.
+            adaptation_profile=(
+                AdaptationProfile(s_rec.adaptation_profile)
+                if s_rec.adaptation_profile in AdaptationProfile._value2member_map_
+                else AdaptationProfile.DRAMATIC_NARRATION
+            ),
             segments=[
                 ScriptSegment(
                     segment_id=seg.id,
@@ -1569,12 +1574,14 @@ class StoryService:
         if not s_rec:
             raise KeyError(f"Script not found: {script_id}")
 
-        report = self.validate_script(db, project_id, script_id)
-        if not report.passed:
-            raise ValueError(
-                f"Cannot approve script: {report.unsupported_segments} statements have unsupported claims. "
-                f"Please review and fix unsupported claims."
-            )
+        # Narration-compiler scripts are grounded in the chapter storyboard, not in any Narrative IR.
+        if s_rec.adaptation_profile != "narration_compiler":
+            report = self.validate_script(db, project_id, script_id)
+            if not report.passed:
+                raise ValueError(
+                    f"Cannot approve script: {report.unsupported_segments} statements have unsupported claims. "
+                    f"Please review and fix unsupported claims."
+                )
 
         s_rec.status = "APPROVED"
         s_rec.updated_at = utc_now()

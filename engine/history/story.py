@@ -807,13 +807,15 @@ class ScriptApproveStrategy:
         if s_rec is None:
             raise HistoryFault("NOT_FOUND", "Script not found", 404)
 
-        report = _validate_script(db, project.id, script_id)
-        if not report.passed:
-            raise HistoryFault(
-                "VALIDATION",
-                f"Cannot approve script: {report.unsupported_segments} statements have unsupported claims",
-                422,
-            )
+        # Narration-compiler scripts are grounded in the chapter storyboard, not in any Narrative IR.
+        if s_rec.adaptation_profile != "narration_compiler":
+            report = _validate_script(db, project.id, script_id)
+            if not report.passed:
+                raise HistoryFault(
+                    "VALIDATION",
+                    f"Cannot approve script: {report.unsupported_segments} statements have unsupported claims",
+                    422,
+                )
 
         operation_id = input["_history_operation_id"]
         paths = ["project.json"]

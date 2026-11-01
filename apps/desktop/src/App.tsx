@@ -604,6 +604,14 @@ const DesktopAppContent: React.FC = () => {
             setAutoPilotOpen(false);
             setCurrentScreen("render");
           }}
+          onOpenStage={(stageId) => {
+            const screens: Record<string, ScreenMode> = {
+              pages: "review", panels: "panels", ocr: "ocr", story: "story", script: "script",
+              audio: "audio", motion: "motion", render: "render", packaging: "render",
+            };
+            setAutoPilotOpen(false);
+            setCurrentScreen(screens[stageId] ?? "render");
+          }}
         />
       )}
 

@@ -62,7 +62,7 @@ class EmotionType(str, Enum):
     def _missing_(cls, value):
         # Older narration presets used these names in persisted script segments.
         return {"MYSTERIOUS": cls.TENSE, "SUSPENSEFUL": cls.TENSE,
-                "SERIOUS": cls.NEUTRAL}.get(value)
+                "SERIOUS": cls.NEUTRAL, "CYNICAL": cls.SARCASTIC}.get(value, cls.UNKNOWN)
 
 
 class EventType(str, Enum):

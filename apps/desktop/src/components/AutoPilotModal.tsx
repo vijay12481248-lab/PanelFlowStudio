@@ -21,6 +21,8 @@ export interface AutoPilotModalProps {
   project: Project;
   onOpenPackaging?: () => void;
   onOpenRenderScreen?: () => void;
+  /** Jump to the screen of a pipeline stage id (pages, panels, ocr, story, script, audio, motion, render, packaging). */
+  onOpenStage?: (stageId: string) => void;
 }
 
 export const AutoPilotModal: React.FC<AutoPilotModalProps> = ({
@@ -29,6 +31,7 @@ export const AutoPilotModal: React.FC<AutoPilotModalProps> = ({
   project,
   onOpenPackaging,
   onOpenRenderScreen,
+  onOpenStage,
 }) => {
   const [statusData, setStatusData] = useState<AutoPilotStatusResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -337,6 +340,16 @@ export const AutoPilotModal: React.FC<AutoPilotModalProps> = ({
                   <Icons.Rotate className="w-3.5 h-3.5" />
                   <span>Resume Pipeline (Skip Finished)</span>
                 </Button>
+                {onOpenStage && statusData?.error_details?.stage_id && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => onOpenStage(statusData.error_details!.stage_id!)}
+                    className="text-xs flex items-center gap-1.5 border-rose-700 text-rose-200"
+                  >
+                    <span>Go to {statusData.error_details.stage_id.toUpperCase()} stage</span>
+                  </Button>
+                )}
                 <Button
                   variant="secondary"
                   size="sm"

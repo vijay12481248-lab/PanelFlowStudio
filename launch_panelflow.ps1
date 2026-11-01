@@ -12,6 +12,8 @@ $venvPython = Join-Path $rootDir '.venv\Scripts\python.exe'
 if (Test-Path -LiteralPath $venvPython) {
     $env:PANELFLOW_PYTHON = $venvPython
 }
+# Chapters are narrated by the local narration compiler; the legacy audio stage cannot validate its scripts.
+if (-not $env:PANELFLOW_NARRATION_ENGINE) { $env:PANELFLOW_NARRATION_ENGINE = 'compiler' }
 $tokenFile = Join-Path $env:LOCALAPPDATA 'PanelFlow Studio\engine.token'
 $rootTokenFile = Join-Path $rootDir '.engine_token'
 $engineWasRunning = $false
