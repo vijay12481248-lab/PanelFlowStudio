@@ -14,8 +14,9 @@ from engine.security.paths import write_contained_json
 from engine.narration.artifacts import BeatSheet, LockedTimeline, PerformancePlan, ScriptIR, VoiceTake
 
 # Legacy autopilot builds these inline (engine/pipeline/autopilot.py), so there is nothing to import.
-_BACKGROUND = {"enabled": True, "preset": "duplicate_blur", "blur_sigma": 24.0, "brightness": 0.45,
-               "foreground_fit": "contain", "edge_shadow": 0.6, "motion": "none", "motion_amount": 0.0}
+_BACKGROUND = {"enabled": True, "preset": "duplicate_blur", "blur_sigma": 36.0, "brightness": -0.30,
+               "saturation": 1.0, "vignette": 0.40, "foreground_fit": "contain", "edge_shadow": 0.7,
+               "auto_only_when_needed": False, "particles": True, "motion": "none", "motion_amount": 0.0}
 _CAMERA = {"preset": "custom", "zoom_start": 1.04, "zoom_end": 1.0, "pan_x_start": 0.0, "pan_x_end": 0.0,
            "pan_y_start": 0.0, "pan_y_end": 0.0, "easing": "ease_in_out"}
 

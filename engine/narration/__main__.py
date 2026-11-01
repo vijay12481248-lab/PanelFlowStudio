@@ -3,11 +3,13 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import os
 import sys
 from pathlib import Path
 
 from engine.database.models import ProjectRecord
 from engine.database.session import SessionLocal
+from engine.llm.providers.openai_compatible import OpenAICompatibleProvider
 from engine.llm.registry import llm_registry
 from engine.narration.bible.store import BibleStore
 from engine.narration.cache import ArtifactCache
@@ -29,10 +31,25 @@ async def _local_provider():
     return provider
 
 
+GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/openai"
+
+
+def _hosted_providers(roles) -> dict:
+    """Roles the user switched to provider: gemini. Needs an AI Studio / Vertex API key in GEMINI_API_KEY."""
+    wanted = {name: r for name, r in roles.items() if r.provider == "gemini"}
+    if not wanted:
+        return {}
+    key = os.environ.get("GEMINI_API_KEY", "").strip()
+    if not key:
+        raise RuntimeError(f"roles {', '.join(wanted)} use Gemini but GEMINI_API_KEY is not set")
+    return {name: OpenAICompatibleProvider(GEMINI_ENDPOINT, r.model, key, timeout=r.timeout_s, provider_id="gemini",
+                                           display_name="Google Gemini API") for name, r in wanted.items()}
+
+
 def _make_compiler(provider, cache_dir: Path, bibles: BibleStore) -> NarrationCompiler:
     roles = load_roles()
     return NarrationCompiler(
-        ProviderModelClient(provider, roles),
+        ProviderModelClient(provider, roles, overrides=_hosted_providers(roles)),
         ModelScheduler(roles, ollama_unloader(provider.endpoint_url)),
         ArtifactCache(cache_dir),
         bibles,

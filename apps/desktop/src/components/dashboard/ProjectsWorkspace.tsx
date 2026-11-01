@@ -5,6 +5,8 @@ import {
   LayoutGrid,
   List,
   Plus,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 import type { Project } from "@panelflow/shared-types";
 import type { ProjectViewMode, ProjectFilterTab } from "./types";
@@ -25,6 +27,31 @@ interface ProjectsWorkspaceProps {
   onOpenPanels: (project: Project) => void;
   onOpenFolder: (projectId: string) => void;
   onDeleteProject: (projectId: string) => void;
+}
+
+const CHAPTER_RE = /^(.*?)\s*[-–:]\s*(?:chapter|ch\.?|episode|ep\.?)\s*(\d+(?:\.\d+)?)/i;
+
+/** Titles look like "<Series> - Chapter N - ..."; two or more chapters of a series form a group, ordered by chapter. */
+export function groupBySeries(projects: Project[]) {
+  const bySeries = new Map<string, { project: Project; chapter: number }[]>();
+  const singles: Project[] = [];
+  const parsed = projects.map((project) => {
+    const m = CHAPTER_RE.exec(project.title);
+    return { project, series: m?.[1].trim() || "", chapter: m ? parseFloat(m[2]) : 0 };
+  });
+  for (const { project, series, chapter } of parsed) {
+    if (!series) continue;
+    const key = series.toLowerCase();
+    bySeries.set(key, [...(bySeries.get(key) ?? []), { project, chapter }]);
+  }
+  const groups: { series: string; projects: Project[] }[] = [];
+  for (const { project, series } of parsed) {
+    const rows = series ? bySeries.get(series.toLowerCase()) : undefined;
+    if (!rows || rows.length < 2) singles.push(project);
+    else if (!groups.some((g) => g.series.toLowerCase() === series.toLowerCase()))
+      groups.push({ series, projects: [...rows].sort((a, b) => a.chapter - b.chapter).map((r) => r.project) });
+  }
+  return { groups, singles };
 }
 
 export const ProjectsWorkspace: React.FC<ProjectsWorkspaceProps> = ({
@@ -79,6 +106,30 @@ export const ProjectsWorkspace: React.FC<ProjectsWorkspaceProps> = ({
       );
     });
   }, [projects, favoriteProjects, recentlyUpdatedProjects, activeFilter, searchQuery]);
+
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const { groups, singles } = useMemo(() => groupBySeries(filteredProjects), [filteredProjects]);
+
+  const renderCard = (proj: Project) => (
+    <DashboardProjectCard
+      key={proj.id}
+      project={proj}
+      coverUrl={coversMap?.[proj.id]}
+      isFavorite={!!favorites[proj.id]}
+      onToggleFavorite={onToggleFavorite}
+      onOpenStoryEditor={onOpenStoryEditor}
+      onOpenProject={onOpenProject}
+      onOpenOCR={onOpenOCR}
+      onOpenPanels={onOpenPanels}
+      onOpenFolder={onOpenFolder}
+      onDeleteProject={onDeleteProject}
+      viewMode={viewMode}
+    />
+  );
+  const gridClass =
+    viewMode === "grid"
+      ? "grid grid-cols-1 xl:grid-cols-2 gap-3.5 sm:gap-4"
+      : "flex flex-col space-y-2.5";
 
   return (
     <div className="space-y-4 select-none">
@@ -219,29 +270,22 @@ export const ProjectsWorkspace: React.FC<ProjectsWorkspaceProps> = ({
           )}
         </div>
       ) : (
-        <div
-          className={
-            viewMode === "grid"
-              ? "grid grid-cols-1 xl:grid-cols-2 gap-3.5 sm:gap-4"
-              : "flex flex-col space-y-2.5"
-          }
-        >
-          {filteredProjects.map((proj) => (
-            <DashboardProjectCard
-              key={proj.id}
-              project={proj}
-              coverUrl={coversMap?.[proj.id]}
-              isFavorite={!!favorites[proj.id]}
-              onToggleFavorite={onToggleFavorite}
-              onOpenStoryEditor={onOpenStoryEditor}
-              onOpenProject={onOpenProject}
-              onOpenOCR={onOpenOCR}
-              onOpenPanels={onOpenPanels}
-              onOpenFolder={onOpenFolder}
-              onDeleteProject={onDeleteProject}
-              viewMode={viewMode}
-            />
+        <div className="space-y-4">
+          {groups.map((g) => (
+            <section key={g.series} className="space-y-2.5">
+              <button
+                onClick={() => setCollapsed((c) => ({ ...c, [g.series]: !c[g.series] }))}
+                aria-expanded={!collapsed[g.series]}
+                className="w-full flex items-center gap-2 text-left text-sm font-semibold text-zinc-200 hover:text-white"
+              >
+                {collapsed[g.series] ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                <span className="truncate">{g.series}</span>
+                <span className="text-[11px] font-normal text-zinc-500">{g.projects.length} chapters</span>
+              </button>
+              {!collapsed[g.series] && <div className={gridClass}>{g.projects.map(renderCard)}</div>}
+            </section>
           ))}
+          {singles.length > 0 && <div className={gridClass}>{singles.map(renderCard)}</div>}
         </div>
       )}
     </div>

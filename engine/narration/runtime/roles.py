@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field
@@ -16,6 +17,7 @@ class RoleConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     model: str
+    provider: Literal["ollama", "gemini"] = "ollama"  # gemini: Google's API with GEMINI_API_KEY, opt-in per role
     temperature: float
     top_p: float | None = None
     max_tokens: int

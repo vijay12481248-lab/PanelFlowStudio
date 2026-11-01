@@ -86,9 +86,15 @@ def _absent_and_pronoun(ln, facts: dict[str, PanelFacts], story_ids: list[str], 
 def _warns(texts: list[str]) -> list[tuple[bool, bool]]:
     """Per line: (repeated_opener, similar_to_previous)."""
     first = [t.split()[0].lower() if t.split() else "" for t in texts]
-    return [(any(first[j] == first[i] for j in range(max(0, i - 2), i)),
-             i > 0 and difflib.SequenceMatcher(None, texts[i - 1], texts[i]).ratio() > 0.8)
-            for i in range(len(texts))]
+    words = [set(re.findall(r"[a-z']{4,}", t.lower())) for t in texts]  # re-told lines share their content words
+
+    def similar(i: int) -> bool:
+        if i == 0:
+            return False
+        shared = len(words[i] & words[i - 1]) / max(1, len(words[i] | words[i - 1]))
+        return difflib.SequenceMatcher(None, texts[i - 1], texts[i]).ratio() > 0.8 or shared >= 0.5
+
+    return [(any(first[j] == first[i] for j in range(max(0, i - 2), i)), similar(i)) for i in range(len(texts))]
 
 
 def rule_checks(script: ScriptIR, facts: dict[str, PanelFacts], story_ids: list[str],

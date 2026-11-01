@@ -25,7 +25,8 @@ THRESHOLDS = {"panel": 0.5, "bubble": 0.4, "promo": 0.4}
 
 
 def model_dir() -> Path:
-    return settings.app_data_dir / "models" / "panel_detector"
+    from engine.training.registry import ModelStore
+    return ModelStore().current_path("panel_detector") or settings.app_data_dir / "models" / "panel_detector"
 
 
 def model_available() -> bool:

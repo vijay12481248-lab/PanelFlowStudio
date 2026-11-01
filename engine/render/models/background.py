@@ -32,3 +32,4 @@ class BackgroundSettings(BaseModel):
     foreground_x: float = Field(default=.5, ge=0, le=1)
     foreground_y: float = Field(default=.5, ge=0, le=1)
     auto_only_when_needed: bool = True
+    particles: bool = False  # soft drifting dust and bokeh over the blurred backdrop

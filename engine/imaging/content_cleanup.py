@@ -65,13 +65,13 @@ def require_cleanup_review(db, project_id):
 
 
 # Bumping this re-checks every existing panel once under the new rules (it is part of the fingerprint).
-RULES_VERSION = "2026-10-31.generic-promo"
+RULES_VERSION = "2026-11-01.promo-banner"
 
 # Any scanlator, not only listed ones: OCR often splits a domain ("MANHUA PLUS . COM").
 _DOMAIN = re.compile(r"\b[a-z0-9][a-z0-9-]{2,}\s?\.\s?(?:com|net|org|io|gg|me|co|xyz|site|cc|to|tv|club|online)\b")
 _PROMO_PHRASES = ["read first at", "read first on", "faster release", "please read on", "if you enjoyed",
                   "join our discord", "discord.gg", "patreon", "paypal", "ko-fi", "support us",
-                  "head over to our website", "higher quality releases", "updates in real time"]
+                  "head over to our website", "higher quality releases", "updates in real time", "read the chapter on", "scanlation team"]
 # Credit lines and outro calls that only appear on cover / credits / outro pages.
 _POSTER_CUES = ["head over to our website", "support us", "updates in real time", "discord.gg",
                 "join our discord", "patreon", "paypal", "want to read a new chapter", "higher quality releases"]
@@ -127,6 +127,13 @@ def _stamp_box(region, others, width, height):
     return region.bbox
 
 
+def _span_area(regions):
+    """Area of the box around all the regions: a corner watermark is small, a banner's text spans the panel."""
+    x0, y0 = min(r.bbox[0] for r in regions), min(r.bbox[1] for r in regions)
+    x1, y1 = max(r.bbox[0] + r.bbox[2] for r in regions), max(r.bbox[1] + r.bbox[3] for r in regions)
+    return (x1 - x0) * (y1 - y0)
+
+
 def decide_cleanup(width, height, regions, labels):
     """Blur promotional text inside story panels; drop panels that are only promotion."""
     text_regions = [r for r in regions if r.detected_text.strip() and len(r.bbox) == 4
@@ -145,6 +152,8 @@ def decide_cleanup(width, height, regions, labels):
     trusted = [r for r in matches if r.confidence >= 0.5 and r.bbox[2] * r.bbox[3] <= width * height * 0.5]
     if not trusted:
         return {"action": "KEEP", "regions": [], "reason": "Promotional text matched but its position is unreliable"}
+    if len(trusted) == len(text_regions) and _span_area(trusted) >= 0.25 * width * height:
+        return {"action": "EXCLUDE", "regions": trusted, "reason": "Full-size promotional banner"}
     joined = [_join_line(r, text_regions) for r in trusted]
     boxed = [r.model_copy(update={"bbox": _stamp_box(r, text_regions, width, height)}) for r in joined]
     for r in boxed:
@@ -232,7 +241,9 @@ def cleanup_detected_panels(db, project_id, panel_ids, *, ocr_engine=None, cance
         decision = decide_cleanup(panel.width, panel.height, result.regions, labels)
         # Watermarks the panel detector found visually (e.g. translucent 快看漫画 marks OCR cannot read).
         seen = [w for w in detected.get(panel.id, []) if decision["action"] != "EXCLUDE"]
-        if seen:
+        if seen and sum(w[2] * w[3] for w in seen) >= 0.4 * panel.width * panel.height:
+            decision = {"action": "EXCLUDE", "regions": decision["regions"], "reason": "Detected promo fills the panel"}
+        elif seen:
             from engine.ocr.providers.base import OCRRegion
             decision = {"action": "BLUR", "reason": decision["reason"] if decision["action"] == "BLUR"
                         else "Watermark detected in a story panel",

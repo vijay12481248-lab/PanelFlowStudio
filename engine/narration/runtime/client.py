@@ -52,17 +52,22 @@ class ModelClient(Protocol):
 
 class ProviderModelClient:
     def __init__(self, provider: LLMProvider, roles: dict[str, RoleConfig],
-                 backoff_s: tuple[float, ...] = (2.0, 4.0)):
-        self._provider = provider
+                 backoff_s: tuple[float, ...] = (2.0, 4.0), overrides: dict[str, LLMProvider] | None = None):
+        self._local = provider
+        self._overrides = overrides or {}  # role -> remote provider
         self._roles = roles
         self._backoff_s = backoff_s
+
+    def _p(self, role: str) -> LLMProvider:
+        return self._overrides.get(role, self._local)
 
     def model_for(self, role: str) -> str:
         return self._roles[role].model
 
     def params_for(self, role: str) -> dict:
         r = self._roles[role]
-        return {"temperature": r.temperature, "max_tokens": r.max_tokens, "num_ctx": r.num_ctx,
+        ctx = {} if role in self._overrides else {"num_ctx": r.num_ctx}  # a hosted model has no local context to guard
+        return {"temperature": r.temperature, "max_tokens": r.max_tokens, **ctx,
                 **({"top_p": r.top_p} if r.top_p is not None else {})}
 
     async def _with_backoff(self, role: str, call: Callable[[], Awaitable]):
@@ -83,7 +88,7 @@ class ProviderModelClient:
         cfg = self._roles[role]
         if image is None:
             try:
-                return await self._with_backoff(role, lambda: self._provider.generate_structured(
+                return await self._with_backoff(role, lambda: self._p(role).generate_structured(
                     prompt, schema, system_prompt=system, temperature=cfg.temperature,
                     max_repair_retries=1, model=cfg.model, max_tokens=cfg.max_tokens,
                     num_ctx=cfg.num_ctx, **({"top_p": cfg.top_p} if cfg.top_p is not None else {})))
@@ -95,7 +100,7 @@ class ProviderModelClient:
         current = prompt
         for attempt in range(2):
             try:
-                text = await self._with_backoff(role, lambda: self._provider.analyze_vision(
+                text = await self._with_backoff(role, lambda: self._p(role).analyze_vision(
                     image, current, system_prompt=system, model=cfg.model, max_tokens=cfg.max_tokens,
                     num_ctx=cfg.num_ctx, temperature=cfg.temperature,
                     format_schema=schema.model_json_schema()))

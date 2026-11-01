@@ -61,6 +61,8 @@ class ModelScheduler:
 
     async def map(self, role: str, items: Sequence[T], fn: Callable[[T], Awaitable[R]]) -> list[R]:
         cfg = self.roles[role]
+        if cfg.provider != "ollama":  # hosted: nothing to load or unload locally, and it can run wider
+            return await self._pass(items, fn, cfg.concurrency)
         if self._loaded != cfg.model:
             await self.release()
             self._loaded = cfg.model

@@ -142,6 +142,14 @@ def test_dialogue_in_wide_panel_prevents_exclusion():
     assert result["action"] == "BLUR"
 
 
+def test_full_size_promo_banner_is_excluded_but_a_corner_stamp_is_blurred():
+    banner = [region("Read the chapter on", [70, 100, 270, 40]), region("DRAKESCANS.COM", [70, 140, 540, 60]),
+              region("to support the scanlation team.", [70, 220, 420, 40])]
+    assert cleanup.decide_cleanup(700, 310, banner, cleanup.CleanupRules().labels)["action"] == "EXCLUDE"
+    stamp = [region("ManhuaPlus.com", [1100, 20, 220, 30])]
+    assert cleanup.decide_cleanup(1362, 1200, stamp, cleanup.CleanupRules().labels)["action"] == "BLUR"
+
+
 def test_cover_and_outro_artwork_are_excluded():
     result = cleanup.decide_cleanup(1920, 3000, [region("Head over to our website"),
                                     region("Support us")], cleanup.CleanupRules().labels)

@@ -72,6 +72,7 @@ class _Namer:
         return label
 
 
+_PROMO_ACTION = re.compile(r"promotional|scanlation|scanlator|advertis|website banner|\bbanner\b", re.I)
 _NAME_RUN = re.compile(r"\b[A-Z][a-z]+(?:[ -][A-Z][a-z]+)*\b")
 _NOT_NAMES = {"A", "An", "The", "He", "She", "They", "His", "Her", "Their", "It", "Man", "Woman", "Young", "Red",
               "Two", "One", "Another", "Someone", "Figure", "Demon", "Master"}
@@ -97,6 +98,8 @@ def _facts(panel: PanelInput, d: PanelFactsDraft, namer: _Namer) -> PanelFacts:
     guesses = {g.region_id: g for g in d.speakers if g.region_id in region_ids and g.speaker.strip()}
     speaker = {rid: namer.map(g.speaker, cues) for rid, g in guesses.items()}
     credits = any(k in r.text.casefold() for r in panel.ocr for k in AD_KEYWORDS)
+    # Stylised banner lettering defeats OCR; the vision model still says what it is, and a banner has no bubbles.
+    credits = credits or (not d.bubble_text and bool(_PROMO_ACTION.search(d.action)))
     # The vision model reads the bubble itself; comic fonts garble OCR badly enough to mislead the whole story.
     read = {b.region_id: " ".join(b.text.split()) for b in d.bubble_text if b.region_id in region_ids and b.text.strip()}
     dialogue = [

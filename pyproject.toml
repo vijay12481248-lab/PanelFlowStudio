@@ -46,6 +46,9 @@ media = [
 ui-automation = [
   "playwright",
 ]
+training = [
+    "sentencepiece>=0.2.2",
+]
 
 [tool.uv]
 package = false

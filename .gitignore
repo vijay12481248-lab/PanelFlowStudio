@@ -77,3 +77,6 @@ graphify-out/
 initial_screen.png
 chapter-923-panels.txt
 .engine_token
+
+# Trained-model mirror (large; never committed)
+model_backups/

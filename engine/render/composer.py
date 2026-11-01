@@ -19,6 +19,15 @@ from engine.render.models.render_plan import RenderPlan, RenderShotPlan
 from engine.render.models.enums import ScalePolicy, BackgroundFillPolicy
 from engine.render.clock import RenderFrameClock
 from engine.render.models.background import BackgroundSettings
+from engine.render.motion.effects.ambient import AmbientDust
+
+# Framed layout (recap style): a panel keeps its own proportions inside the blurred backdrop and is never
+# enlarged past its real pixels, so small panels stay sharp instead of filling the screen.
+FRAME_MAX_W = 0.80
+FRAME_MAX_H = 0.80
+FRAME_MAX_UPSCALE = 1.15
+SLIDE_IN_SEC = 0.28
+SLIDE_IN_DIST = 0.06  # fraction of the canvas width a new panel travels while sliding in
 
 
 def crop_layer_source(source: Image.Image, layer: Dict[str, Any]) -> Image.Image:
@@ -578,7 +587,7 @@ class LayerStackRenderer:
                 final_y -= (6.0 * (0.5 - progress) * intensity)
             elif preset in ("cinematic_vertical_pan", "cinematic_pan"):
                 # Smooth top-to-bottom cinematic glide for tall vertical panels
-                final_y += (20.0 * (0.5 - progress) * intensity)
+                final_y += (4.0 * (0.5 - progress) * intensity)  # tall strips scroll by their own logic
                 final_scale *= (1.0 + 0.04 * progress)
             elif preset == "diagonal_pan":
                 final_x += (6.0 * (0.5 - progress) * intensity)
@@ -722,6 +731,7 @@ class FrameComposer:
         self._raster_cache_limit = max(0, raster_cache_bytes)
         self._background_cache = OrderedDict()
         self._background_cache_bytes = 0
+        self._dust: Dict[Tuple[int, int], AmbientDust] = {}
 
     def get_source_image(self, file_path: str, target_w: int, target_h: int, normalize_orientation: bool = False) -> Image.Image:
         cache_key = file_path + "|oriented" if normalize_orientation else file_path
@@ -761,9 +771,12 @@ class FrameComposer:
         self._background_cache.clear()
         self._background_cache_bytes = 0
 
-    def _prepare_layer_raster(self, working_img, key, width, height, rotation, blur, opacity):
-        """Reuse exact raster transforms; translation still happens for every frame."""
-        key = (key, width, height, rotation, blur, opacity)
+    def _prepare_layer_raster(self, working_img, key, width, height, rotation, blur, opacity, pad=False):
+        """Reuse exact raster transforms; translation still happens for every frame.
+
+        pad adds a 1px edge-replicated, fully transparent ring so a fractional-pixel draw anti-aliases the
+        panel border instead of stepping it a whole pixel at a time."""
+        key = (key, width, height, rotation, blur, opacity, pad)
         cached = self._raster_cache.get(key)
         if cached is not None:
             self._raster_cache.move_to_end(key)
@@ -775,6 +788,10 @@ class FrameComposer:
             image = image.filter(ImageFilter.GaussianBlur(radius=blur))
         if opacity < 0.995:
             image.putalpha(image.getchannel("A").point(lambda value: int(round(value * opacity))))
+        if pad:
+            arr = np.pad(np.asarray(image.convert("RGBA")), ((1, 1), (1, 1), (0, 0)), mode="edge").copy()
+            arr[0, :, 3] = arr[-1, :, 3] = arr[:, 0, 3] = arr[:, -1, 3] = 0
+            image = Image.fromarray(arr, "RGBA")
         size = image.width * image.height * 4
         if size <= self._raster_cache_limit:
             while self._raster_cache and (self._raster_cache_bytes + size > self._raster_cache_limit or len(self._raster_cache) >= 64):
@@ -953,6 +970,9 @@ class FrameComposer:
                 )
             else:
                 canvas = cached_base.copy()
+            if settings.particles:
+                dust =self._dust.setdefault((target_w, target_h), AmbientDust((target_w, target_h)))
+                dust.render(canvas, timestamp_sec, cached_base.resize((1, 1), Image.Resampling.BOX).convert("RGB").getpixel((0, 0)))
 
         for l_idx, layer in enumerate(sorted_layers):
             if layer.get("visible", True) is False:
@@ -1003,11 +1023,10 @@ class FrameComposer:
             is_widescreen_match = (aspect_ratio_diff < 0.05)
 
             if smart:
-                if is_widescreen_match and settings.foreground_fit == "contain":
-                    fit_scale = min(target_w / pw, target_h / ph)
+                if settings.foreground_fit == "contain":
+                    fit_scale = min(target_w * FRAME_MAX_W / pw, target_h * FRAME_MAX_H / ph, FRAME_MAX_UPSCALE)
                 else:
-                    safe_margin = 0.94 if settings.foreground_fit == "contain" else 1.0
-                    fit_scale = (max if settings.foreground_fit == "cover" else min)((target_w * safe_margin) / pw, (target_h * safe_margin) / ph)
+                    fit_scale = max(target_w / pw, target_h / ph)
                 base_w, base_h = pw * fit_scale, ph * fit_scale
             elif p_aspect >= c_aspect:
                 base_w = target_w if is_widescreen_match else (target_w * 0.90)
@@ -1030,16 +1049,28 @@ class FrameComposer:
 
             # Apply transform scale and camera zoom
             eff_scale = tf["scale"] * cam["zoom"]
-            final_w = max(1, int(round(base_w * eff_scale)))
-            final_h = max(1, int(round(base_h * eff_scale)))
 
             # Hard cuts between panels: the old fade-out/fade-in dipped to the background for 0.8s
             # and showed each panel ~0.25s after its narration line had started.
             layer_opacity = tf["opacity"]
 
             raster_key = (img_path, smart, str(layer.get("crop")), layer.get("already_cropped"), round(layer_opacity, 2))
-            scaled_img = self._prepare_layer_raster(working_img, raster_key, final_w, final_h,
-                                                   tf["rotation"], tf["blur"], layer_opacity)
+            subpixel = abs(tf["rotation"]) < 0.05 and tf["blur"] <= 0.5
+            if subpixel:
+                # One raster per 5% of zoom, then a fractional-pixel affine draw each frame. Resizing to
+                # whole pixels and pasting at whole pixels made slow zooms and drifts step and pulse.
+                step = math.ceil(eff_scale * 20) / 20.0
+                raster_w = max(1, math.ceil(base_w * step))
+                raster_h = max(1, round(raster_w * base_h / base_w))
+                scaled_img = self._prepare_layer_raster(working_img, raster_key, raster_w, raster_h, 0.0, 0.0,
+                                                       layer_opacity, pad=True)
+                out_w, out_h = base_w * eff_scale, base_h * eff_scale
+            else:
+                final_w = max(1, int(round(base_w * eff_scale)))
+                final_h = max(1, int(round(base_h * eff_scale)))
+                scaled_img = self._prepare_layer_raster(working_img, raster_key, final_w, final_h,
+                                                       tf["rotation"], tf["blur"], layer_opacity)
+                out_w, out_h = float(scaled_img.width), float(scaled_img.height)
 
             # Placement center: 50% + offset%
             center_x = target_w * (settings.foreground_x if smart else .5) + ((tf["x"] + cam["pan_x"]) / 100.0) * target_w
@@ -1052,20 +1083,38 @@ class FrameComposer:
             if has_active_caption and settings and settings.foreground_fit == "contain" and not is_widescreen_match:
                 center_y -= int(target_h * 0.035)
 
-            paste_x = int(round(center_x - scaled_img.width / 2.0))
-            paste_y = int(round(center_y - scaled_img.height / 2.0))
-            if scroll_tall and scaled_img.height > target_h:
+            x0 = center_x - out_w / 2.0
+            y0 = center_y - out_h / 2.0
+            if scroll_tall and out_h > target_h:
                 # Constant-speed read from the top edge to the bottom edge over the panel's time on screen.
                 read = max(0.0, min(1.0, (elapsed_in_scene - l_start) / max(0.001, l_dur)))
-                paste_y = int(round(-(scaled_img.height - target_h) * read))
+                y0 = -(out_h - target_h) * read
 
             # VISUAL SAFETY GUARD: Prevent headers, titles, or footers from ever leaving the screen!
             # If the image height fits on screen (e.g. 16:9 slides or standard panels),
-            # clamp paste_y so it is physically impossible to chop off titles at y < 0 or y > target_h!
-            if scaled_img.height <= target_h:
-                paste_y = max(0, min(target_h - scaled_img.height, paste_y))
-            if scaled_img.width <= target_w:
-                paste_x = max(0, min(target_w - scaled_img.width, paste_x))
+            # clamp so it is physically impossible to chop off titles at y < 0 or y > target_h!
+            if out_h <= target_h:
+                y0 = max(0.0, min(target_h - out_h, y0))
+            if out_w <= target_w:
+                x0 = max(0.0, min(target_w - out_w, x0))
+
+            # A new panel slides in from the right instead of hard-cutting; it is fully visible from frame 0.
+            since_start = elapsed_in_scene - l_start
+            if smart and 0.0 <= since_start < SLIDE_IN_SEC:
+                x0 += (1.0 - since_start / SLIDE_IN_SEC) ** 3 * SLIDE_IN_DIST * target_w
+
+            if subpixel:
+                ix0, iy0 = max(0, math.floor(x0)), max(0, math.floor(y0))
+                ix1, iy1 = min(target_w, math.ceil(x0 + out_w)), min(target_h, math.ceil(y0 + out_h))
+                if ix1 <= ix0 or iy1 <= iy0:
+                    continue
+                sx, sy = (scaled_img.width - 2) / out_w, (scaled_img.height - 2) / out_h  # minus the 1px pad ring
+                scaled_img = scaled_img.transform(
+                    (ix1 - ix0, iy1 - iy0), Image.Transform.AFFINE,
+                    (sx, 0.0, sx * (ix0 - x0) + 1.0, 0.0, sy, sy * (iy0 - y0) + 1.0), resample=Image.Resampling.BICUBIC)
+                paste_x, paste_y = ix0, iy0
+            else:
+                paste_x, paste_y = int(round(x0)), int(round(y0))
 
             # Alpha composite onto canvas
             if smart and settings.edge_shadow:

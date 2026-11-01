@@ -6295,6 +6295,18 @@ class AutoPilotRunner:
             current_panel_ids = [layer.get("source_panel_id")
                                  for scene in timeline_scenes
                                  for layer in scene.get("layers", [])]
+            # Panels excluded/removed since the last cut are pruned in place so manual
+            # timeline edits survive; only a missing/duplicated panel forces a rebuild.
+            stale_panel_ids = {pid for pid in current_panel_ids if pid and pid not in expected_panel_ids}
+            if stale_panel_ids:
+                for scene in timeline_scenes:
+                    pruned = [layer for layer in scene.get("layers", [])
+                              if layer.get("source_panel_id") not in stale_panel_ids]
+                    if pruned:
+                        scene["layers"] = pruned
+                current_panel_ids = [layer.get("source_panel_id")
+                                     for scene in timeline_scenes
+                                     for layer in scene.get("layers", [])]
             rebuild_timeline_scenes = (set(current_panel_ids) != expected_panel_ids
                                        or len(current_panel_ids) != len(expected_panel_ids))
 
@@ -6328,6 +6340,9 @@ class AutoPilotRunner:
 
 
 
+            if rebuild_timeline_scenes and narrative and narrative.scenes and timeline_scenes and se_state:
+                # Keep the hand-edited cut so it can be restored if the rebuild goes wrong.
+                se_state["scenes_before_autopilot"] = deepcopy(timeline_scenes)
             if rebuild_timeline_scenes and narrative and narrative.scenes:
 
 
