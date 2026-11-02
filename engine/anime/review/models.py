@@ -77,3 +77,17 @@ class ClipPlan(BaseModel):
     total_sec: float
     budget_sec: float
     dropped_beats: list[str] = Field(default_factory=list)
+
+
+class ScriptSegment(BaseModel):
+    id: str
+    clip_id: str  # the clip shown while this segment is spoken
+    role: str  # hook | recap | highlight | smooth | funny | critique | verdict | cta
+    text: str
+
+
+class ReviewScript(BaseModel):
+    title_hook: str
+    rating: float  # 0-10
+    segments: list[ScriptSegment]
+    tone: str = ""

@@ -73,3 +73,13 @@ were all grounded in the transcript (no invented events). Clip plan respected th
 kept the opening and a highlight, dropping 6 beats. Limits seen: beat kinds `smooth`/`weak` are inferred from the
 transcript only (no visual/animation judgement yet); on a 60 s excerpt the "ending" beat is just the last scene; transcripts
 over ~24k chars are thinned evenly (not chunked) - long-episode quality is unverified.
+
+## M3 verification (2026-11-02)
+
+`POST /api/anime/review/{slug}/script` -> `script.json` (7 segments, each bound to a `clip_id`). Output is validated
+(first=hook, last=cta, verdict+critique present, 12-70 words/segment, no stock AI phrases, every clip narrated, rating 0-10,
+no "funny" segment unless a funny beat exists) and re-prompted with the concrete problems up to 3 times. Real run (qwen3.5:9b,
+16 s) on the 60 s excerpt read naturally and stayed on the transcript. The first real attempt failed validation (no hook
+segment; an invented "I laughed" joke) - those two rules and prompt fixes came from that run. Limits: the excerpt gives only 2
+clips, so recap text is not matched to what the clip shows; segment order beyond hook/cta is not enforced; the rating is the
+model's opinion from a transcript, not from watching the episode; non-English `language` is untested.

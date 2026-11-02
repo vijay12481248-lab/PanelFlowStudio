@@ -6,9 +6,9 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from engine.acquisition.rights.models import RightsDeclaration
-from engine.anime.review import analysis, clips as clips_mod, ingest as ingest_mod, understanding
+from engine.anime.review import analysis, clips as clips_mod, ingest as ingest_mod, script as script_mod, understanding
 from engine.llm.registry import llm_registry
-from engine.anime.review.models import ClipPlan, EpisodeAnalysis, IngestRecord, Understanding
+from engine.anime.review.models import ClipPlan, EpisodeAnalysis, IngestRecord, ReviewScript, Understanding
 
 router = APIRouter(prefix="/api/anime/review", tags=["anime-review"])
 WORKSPACE_ROOT = Path(__file__).resolve().parents[3] / "output" / "Anime_Reviews"
@@ -79,3 +79,21 @@ async def plan_clips(slug: str, target_video_sec: float = 480.0):
     plan = clips_mod.select_clips(a, u.beats, target_video_sec, rms)
     (ws / "clips.json").write_text(plan.model_dump_json(indent=2), encoding="utf-8")
     return plan
+
+
+@router.post("/{slug}/script", response_model=ReviewScript)
+async def write_review_script(slug: str, tone: str = "warm, witty, honest fan reviewer", language: str = "English"):
+    ws = _workspace(slug)
+    rec = _load(ws, "source.json", IngestRecord)
+    rec.rights.validate_for_acquisition()
+    u = _load(ws, "understanding.json", Understanding)
+    plan = _load(ws, "clips.json", ClipPlan)
+    provider = llm_registry.get_ollama_provider()
+    if not await provider.health_check():
+        raise HTTPException(status_code=503, detail="Ollama is not reachable")
+    try:
+        sc = await script_mod.write_script(rec.title, u, plan, provider, tone, language)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    (ws / "script.json").write_text(sc.model_dump_json(indent=2), encoding="utf-8")
+    return sc
