@@ -218,3 +218,23 @@ and only a tiny moth (Lumina is shrunk or missing). Vision check mean 0.92, all 
 Limits: the left/right split is a fixed layout (first character left, second right), so compositions with a character in
 front of another, or three-character scenes (only the first two are drawn), are not handled; the second character
 occasionally disappears; the other panels of the fox video were not regenerated yet.
+
+## S4 result (2026-11-02): lettering and comic pages
+
+`engine/original/lettering.py` (balloons, narrator box, SFX; Comic Sans/Impact with fallbacks) and
+`engine/original/pages.py`; `POST /api/original/story/{slug}/pages` writes `pages/page_XXX.png` (1600x2400), `lettered/`
+and `comic.pdf`. A cover page (hero art, title, logline, AI-content line) is followed by pages of three full-width lettered
+strips each (webtoon-style stacking: landscape art would lose its left/right characters in tall manga cells). Dialogue
+balloons sit over the speaker's half of the frame (first character left, second right, matching the two-reference art
+layout) with the tail pointing down; two lines of the same speaker stack; the narrator text becomes a cream box at the bottom,
+shortened to its first ~22 words (the full 25-45 word storyteller text is for the video); SFX are drawn in yellow Impact with a
+dark outline. Missing images are reported, never faked.
+
+Real export of the fox story (28 panels): **11 pages (cover + 10) and a 4 MB PDF in 6.5 s**. Inspected: cover and body
+pages read well, balloons are legible and no longer collide after I narrowed their width (the first version let two
+balloons touch because the text width ignored the padding), tails point at the speaker's half.
+
+Limits: balloon positions are layout-based, not face-aware (a single centred character with two speakers off-frame gets
+tails pointing at empty space, as in one inspected panel); caption boxes cover the bottom of the art; this story contains no
+SFX so the SFX drawing is only covered by unit tests; right-to-left manga reading order, black-and-white screentone and
+non-stacked page layouts are not done; the fox art in this export predates the two-character fix.

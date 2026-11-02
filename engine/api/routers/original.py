@@ -90,3 +90,19 @@ async def create_video(slug: str, burn_captions: bool = True):
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
     return {**out, "package": await asyncio.to_thread(video_mod.package, story, ws)}
+
+
+@router.post("/story/{slug}/pages")
+async def create_pages(slug: str):
+    """Letters the panels (balloons, narrator box, SFX) and composes comic pages + a PDF from the generated art."""
+    from engine.original import pages as pages_mod
+
+    ws = STORY_ROOT / Path(slug).name
+    f = ws / "story.json"
+    if not f.exists():
+        raise HTTPException(status_code=404, detail="story not found")
+    story = OriginalStory.model_validate_json(f.read_text(encoding="utf-8"))
+    try:
+        return await asyncio.to_thread(pages_mod.build_pages, story, ws)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
