@@ -85,6 +85,7 @@ class ScriptSegment(BaseModel):
     clip_id: str  # the clip shown while this segment is spoken
     role: str  # hook | recap | highlight | smooth | funny | critique | verdict | cta
     text: str
+    flags: list[str] = Field(default_factory=list)  # unresolved fact-check findings: a human should look
 
 
 class ReviewScript(BaseModel):

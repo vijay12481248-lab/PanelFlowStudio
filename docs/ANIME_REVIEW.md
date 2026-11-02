@@ -158,3 +158,23 @@ varies per run). Holds of up to 9.5 s remain (flagged). **Content quality is not
 is hunting "her missing sister, Scales" - Scales is the dragon. The model only sees dialogue lines and one frame per beat,
 so it can hallucinate plot; there is no fact-check step, and a human should read `script.json` before publishing.
 Still unverified: real anime and Japanese audio, how it sounds, the desktop UI in a window.
+
+## Fact-check (added after the Sintel run)
+
+`engine/anime/review/factcheck.py`, run inside the pipeline and the `/understand` and `/script` endpoints. The summary is
+grounded first (dialogue + beat notes + vision descriptions), then every script paragraph is checked.
+
+- **Layer 1, deterministic**: invented names, kinship words (sister, father, family...), quotations absent from the
+  dialogue, and numbers (not in verdict/cta) must literally appear in the evidence.
+- **Layer 2, LLM judge**: looks for invented events, but only counts phrases that really occur in the narration. A first
+  version asking the 9B model to judge everything was worse than useless on real data (it echoed the evidence back as
+  "unsupported" and flagged plain paraphrases), hence the layering.
+- Failing paragraphs are rewritten (max 2 rounds); if still failing they are dropped when optional or kept with `flags` when
+  required (hook, critique, verdict, cta), and flagged ones are listed in the job's `warnings`.
+
+Real check on the earlier Sintel script (which said Sintel hunts "her missing sister, Scales"): the invented "sister" was
+caught in all 6 places, "family" in the verdict, all were rewritten without them, 0 left flagged. Full re-run:
+242 s review, 24 segments, no kinship invention, footage 23.5% of the video (under the limit). Limits: the checker cannot
+catch an invented *event* that uses only words from the evidence, or plausible vision-model errors (it trusts the per-beat frame
+descriptions); the summary of that run could not be grounded and fell back to a terse list of moments, so the YouTube
+description is poor; still no real anime, no Japanese audio, still read `script.json` before publishing.

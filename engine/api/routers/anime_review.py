@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
 from engine.acquisition.rights.models import RightsDeclaration
-from engine.anime.review import analysis, clips as clips_mod, packaging as packaging_mod, render as render_mod, ingest as ingest_mod, script as script_mod, timeline as timeline_mod, understanding
+from engine.anime.review import analysis, clips as clips_mod, factcheck, packaging as packaging_mod, render as render_mod, ingest as ingest_mod, script as script_mod, timeline as timeline_mod, understanding
 from engine.anime.review.channels import ChannelPreset, channel_store
 from engine.anime.review.pipeline import ReviewJobSpec
 from engine.anime.review.queue import JOB_TYPE, enqueue_review
@@ -73,6 +73,7 @@ async def understand_episode(slug: str):
         raise HTTPException(status_code=503, detail="Ollama is not reachable")
     u = await understanding.understand(a, rec.title, provider, Path(a.audio_path) if a.audio_path else None,
                                        Path(rec.local_path), ws / "frames")
+    u = await factcheck.ground_summary(u, a, provider)
     (ws / "understanding.json").write_text(u.model_dump_json(indent=2), encoding="utf-8")
     return u
 
@@ -104,6 +105,7 @@ async def write_review_script(slug: str, tone: str = "warm, witty, honest fan re
                                           analysis=_load(ws, "analysis.json", EpisodeAnalysis))
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
+    sc = await factcheck.verify_script(sc, u, _load(ws, "analysis.json", EpisodeAnalysis), provider)
     (ws / "script.json").write_text(sc.model_dump_json(indent=2), encoding="utf-8")
     return sc
 

@@ -12,7 +12,7 @@ from typing import Callable
 from pydantic import BaseModel
 
 from engine.acquisition.rights.models import RightsDeclaration
-from engine.anime.review import analysis, clips, clips as clips_mod, ingest, packaging, render, script, timeline, understanding
+from engine.anime.review import analysis, clips, clips as clips_mod, factcheck, ingest, packaging, render, script, timeline, understanding
 from engine.anime.review.channels import ChannelPreset
 from engine.anime.review.models import (ClipPlan, EpisodeAnalysis, IngestRecord, ReviewScript, Timeline,
                                         Understanding)
@@ -60,6 +60,7 @@ def run_review(spec: ReviewJobSpec, channel: ChannelPreset, provider, progress: 
     else:
         u = asyncio.run(understanding.understand(a, spec.title, provider, Path(a.audio_path) if a.audio_path else None,
                                  Path(rec.local_path), ws / "frames"))
+        u = asyncio.run(factcheck.ground_summary(u, a, provider))
         (ws / "understanding.json").write_text(u.model_dump_json(indent=2), encoding="utf-8")
     step(0.40, "Selecting clips")
     if _have(ws, "clips.json"):
@@ -74,6 +75,7 @@ def run_review(spec: ReviewJobSpec, channel: ChannelPreset, provider, progress: 
     else:
         sc = asyncio.run(script.write_script(spec.title, u, plan, provider, channel.tone, channel.language,
                                                   target_sec=channel.target_video_sec, analysis=a))
+        sc = asyncio.run(factcheck.verify_script(sc, u, a, provider))
         (ws / "script.json").write_text(sc.model_dump_json(indent=2), encoding="utf-8")
     step(0.65, "Voicing narration")
     tl = _load(ws, "timeline.json", Timeline) if _have(ws, "timeline.json") else timeline.voice_script(
@@ -87,6 +89,7 @@ def run_review(spec: ReviewJobSpec, channel: ChannelPreset, provider, progress: 
     pkg = packaging.build_package(spec.title, sc, u, tl, plan, src, rec.rights, ws, channel.extra_tags,
                                   channel.description_footer)
     warnings = [w for e in tl.entries for w in e.warnings]
+    warnings += [f"{s.id} ({s.role}) needs a human check: {f}" for s in sc.segments for f in s.flags]
     share = clips_total(plan) / tl.total_sec
     if share > clips_mod.VIDEO_FRACTION:
         warnings.append(f"footage is {share:.0%} of the video (limit {clips_mod.VIDEO_FRACTION:.0%})")
