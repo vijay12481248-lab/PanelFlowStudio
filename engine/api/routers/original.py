@@ -1,4 +1,5 @@
 """Original Story Studio endpoints (docs/ORIGINAL_STORY_STUDIO.md)."""
+import asyncio
 import uuid
 from pathlib import Path
 
@@ -6,6 +7,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from engine.llm.registry import llm_registry
+from engine.original import art as art_mod
 from engine.original import story as story_mod
 from engine.original.genres import GENRES
 from engine.original.models import OriginalStory
@@ -51,3 +53,23 @@ def get_story(slug: str):
     if not f.exists():
         raise HTTPException(status_code=404, detail="story not found")
     return OriginalStory.model_validate_json(f.read_text(encoding="utf-8"))
+
+
+@router.post("/story/{slug}/art")
+async def create_art(slug: str, limit: int | None = None, check: bool = True):
+    """Character sheets + panel images through ComfyUI (cached; reruns only redo changed panels). Long: minutes per ~10 panels."""
+    ws = STORY_ROOT / Path(slug).name
+    f = ws / "story.json"
+    if not f.exists():
+        raise HTTPException(status_code=404, detail="story not found")
+    story = OriginalStory.model_validate_json(f.read_text(encoding="utf-8"))
+    provider = None
+    if check:
+        provider = llm_registry.get_ollama_provider()
+        if not await provider.health_check():
+            raise HTTPException(status_code=503, detail="Ollama is not reachable (needed for the consistency check)")
+    try:
+        runner = art_mod.ComfyRunner()
+    except Exception as e:  # ComfyUI down or workflow/model missing
+        raise HTTPException(status_code=503, detail=str(e))
+    return await asyncio.to_thread(art_mod.generate_art, story, ws, runner, provider, limit)

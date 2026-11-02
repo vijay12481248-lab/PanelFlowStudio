@@ -125,3 +125,32 @@ retries (a character `look` written as a sentence, mild words like "trapped" in 
 included a character not listed in the scene). Rules were relaxed where they were stricter than needed (look: 4 tags or 8
 words; panels may use any bible character; the scary-word list is shorter) and the third run produced a 28-panel, ~7.1 min
 story. Expect an occasional failed job with this local model; the job layer (S6) should retry automatically.
+
+## S2 result (2026-11-02): art engine
+
+`engine/original/art.py` + `POST /api/original/story/{slug}/art?limit=&check=`: per story it renders a character sheet
+per character, then every panel through the approved `anime_sdxl` ComfyUI workflow (1344x768), storing `art.json`
+(prompt hash, seed, attempts, consistency score, missing tags). Reruns reuse any panel whose prompt is unchanged and redo
+only edited ones. Prompts repeat each character's exact `look` tags plus shot/angle tags, the location look and the genre
+art style; the negative prompt blocks nsfw/text/bubbles. A vision check then confirms the character's core look tags and
+a panel scoring below 0.6 is regenerated once with a new seed and the missing tags emphasised `(tag:1.3)`.
+
+Real runs on stored stories (RTX 5060 Ti, ~28 s per image; ~40 s per panel with the check):
+- **Fox bedtime story**, 10 panels: the fox is recognisable in every panel by eye; the vision check's core-tag score is
+  mean 0.70 (0.5-1.0, one 0.0 on an extreme close-up). Images are clean, colourful, storybook style.
+- **Horror story**, 6 panels: atmospheric, dark, the keeper is recognisably the same figure (long white hair, dark coat,
+  goggles) in 3 of the 4 panels I inspected; the character sheet shows him with darker, shorter hair.
+
+What the runs broke and the fixes: (1) the first check asked the vision model to match characters by *name* and it answered
+with tag names, so every panel scored 0 -> the check is now one call per character with an explicit tag list; (2) it demanded
+all 5-8 tags, including the carried item and textures ("salt-crusted hair"), which the 9B vision model cannot confirm (it denied
+a clearly visible fox cub) -> only the first 3 core tags (2 for close-ups) are checked; (3) `look` fields that described another
+character ("glowing moth companion perched on shoulder") are now rejected and the bible prompt asks for drawable colour-and-shape
+tags; (4) retries capped at 2 attempts.
+
+Not solved / honest limits: consistency is a *prompt-tag baseline* - same outfit and species yes, same face no (that needs
+IP-Adapter or a LoRA: an extra ~1.5 GB of downloads and a ComfyUI custom node, to be decided in S2b); two characters in one
+prompt blend features (a fox grew moth wings); the checker is noisy, so scores are a coarse signal and a human should skim
+the contact sheet; the character sheet prompt sometimes draws several copies of the character; the horror run was made before
+the drawable-tags prompt change and the new bible prompt itself was not re-run against the LLM; not yet verified through the
+`JobManager`/API path (long call, S6 queues it).

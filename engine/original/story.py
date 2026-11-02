@@ -189,6 +189,10 @@ def check_bible(o: _Bible, genre: Genre) -> list[str]:
         p.append("the protagonist of a bedtime story must be a child (age_group child)")
     if genre.child_safe and any(c.role == "antagonist" for c in o.characters):
         p.append("a bedtime story has no antagonist; use a gentle worry or a misunderstanding instead")
+    for c in o.characters:
+        others = [x.name for x in o.characters if x is not c and x.name.split()[0].lower() in c.look.lower()]
+        if others:
+            p.append(f"{c.name}: look must describe only this character, not {others}")
     blob = " ".join(x.look for x in o.characters + o.locations) + " " + " ".join(o.rules)
     if forbidden_hits(blob, genre):
         p.append(f"remove forbidden words: {forbidden_hits(blob, genre)}")
@@ -298,7 +302,10 @@ async def generate_story(genre_key: str, provider, idea: str = "", scenes: int |
     progress(0.15, "Characters and places")
     bo = await _ask(provider, f"Story: {premise.title}. {premise.logline} Setting: {premise.setting}. Genre: {genre.key}, "
                     f"tone {genre.tone}. Create the cast (2-4 characters, exactly one protagonist; give each a distinctive, "
-                    "reusable visual 'look' of comma-separated tags for an image model), 2-3 locations and 2-4 world rules."
+                    "reusable visual 'look' of comma-separated tags for an image model, ordered hair/fur, eyes, body, outfit, one "
+                    "carried item; use concrete colour-and-shape tags an illustrator can draw, like 'long white hair' or 'black "
+                    "wool coat', never textures or story words like 'salt-crusted' or 'weary'; describe ONLY that character and never mention another character in a look), 2-3 locations "
+                    "and 2-4 world rules."
                     + (" This is a children's bedtime story: no antagonist, nothing frightening." if genre.child_safe else ""),
                     _Bible, lambda o: check_bible(o, genre), temperature=0.8, max_tokens=2500)
     bible = Bible(premise=premise, rules=[r.strip() for r in bo.rules],

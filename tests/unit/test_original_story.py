@@ -174,3 +174,9 @@ def test_pronouns_are_not_character_names():
     b = bible(chars=[st._Char(id="they", name="They", role="protagonist", age_group="elder", look="a, b, c, d", personality="p"),
                      st._Char(id="it", name="It", role="other", age_group="adult", look="a, b, c, d", personality="p")])
     assert sum("proper name" in m for m in st.check_bible(b, HORROR)) == 2
+
+
+def test_look_must_not_describe_another_character():
+    b = bible(chars=[st._Char(id="mira", name="Mira", role="protagonist", age_group="child", look="brown hair, green eyes, raincoat, Pip on her shoulder", personality="p"),
+                     st._Char(id="pip", name="Pip", role="other", age_group="adult", look="grey owl, round eyes, tiny scarf, soft feathers", personality="p")])
+    assert any("only this character" in m for m in st.check_bible(b, BED))
