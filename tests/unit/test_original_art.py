@@ -26,7 +26,7 @@ def test_prompt_repeats_looks_style_shot_and_angle():
     assert "solo" in pos and "yellow raincoat" in pos and "close-up" in pos and "from below" in pos and "storybook" in pos
     assert "dusty, wooden beams" in pos and "nsfw" in neg and "speech bubble" in neg
     pos3, _ = art.build_prompt(s, s.panels[2])
-    assert "multiple others" in pos3 and "small grey owl" in pos3
+    assert "2others" in pos3 and "small grey owl" in pos3
     assert "no humans" in art.build_prompt(s, s.panels[0])[0]
 
 
@@ -129,3 +129,18 @@ def test_first_character_reference_is_passed_when_ipadapter_is_available(tmp_pat
     r2 = IpaRunner()
     art.generate_art(s, tmp_path, r2)
     assert r2.calls == []  # reference name is part of the cache key and unchanged
+
+
+def test_two_character_panel_passes_both_references_to_the_masked_workflow(tmp_path):
+    class Ipa2Runner(FakeRunner):
+        ipa, ipa2 = object(), object()
+
+        def generate(self, pos, neg, seed, w, h, prefix, reference=None, reference_b=None, **kw):
+            self.calls.append((prefix, reference, reference_b))
+            return png()
+
+    r = Ipa2Runner()
+    art.generate_art(story(), tmp_path, r)
+    refs = {c[0]: (c[1], c[2]) for c in r.calls}
+    assert refs["panel_p003"][0].name == "mira.png" and refs["panel_p003"][1].name == "pip.png"  # two on screen: left=Mira, right=Pip
+    assert refs["panel_p002"][1] is None  # one character: single reference only

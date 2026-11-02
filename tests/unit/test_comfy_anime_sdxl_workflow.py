@@ -26,3 +26,16 @@ def test_ipadapter_workflow_declares_reference_slot_and_patches_it():
     plain, _ = reg.load("anime_sdxl")
     with pytest.raises(Exception):  # and a plain workflow refuses a reference
         _patch_workflow(plain, plain_entry["patch_slots"], "p", "n", 832, 1216, 3, "x", reference_image="ref.png")
+
+
+def test_two_reference_workflow_masks_left_and_right_and_patches_both_references():
+    import pytest
+    reg = ComfyWorkflowRegistry(ComfyUIClient())
+    wf, _ = reg.load("anime_sdxl_ipa2")
+    entry = reg.metadata("anime_sdxl_ipa2")
+    patched = _patch_workflow(wf, entry["patch_slots"], "p", "n", 1344, 768, 3, "x", reference_image="a.png", reference_image_b="b.png")
+    assert patched["8"]["inputs"]["image"] == "a.png" and patched["11"]["inputs"]["image"] == "b.png"
+    assert (wf["22"]["inputs"]["x"], wf["23"]["inputs"]["x"]) == (0, 672)  # first character left, second right
+    assert wf["10"]["inputs"]["attn_mask"] == ["22", 0] and wf["12"]["inputs"]["attn_mask"] == ["23", 0] and wf["12"]["inputs"]["model"] == ["10", 0]
+    with pytest.raises(Exception):  # both references are mandatory for this workflow
+        _patch_workflow(wf, entry["patch_slots"], "p", "n", 1344, 768, 3, "x", reference_image="a.png")

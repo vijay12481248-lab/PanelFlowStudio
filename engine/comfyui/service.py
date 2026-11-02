@@ -33,6 +33,7 @@ def _patch_workflow(
     seed: int,
     prefix: str,
     reference_image: str | None = None,
+    reference_image_b: str | None = None,
 ) -> dict[str, Any]:
     patched = deepcopy(workflow)
     values: dict[str, Any] = {
@@ -45,6 +46,8 @@ def _patch_workflow(
     }
     if reference_image is not None:
         values["reference_image"] = reference_image
+    if reference_image_b is not None:
+        values["reference_image_b"] = reference_image_b
     if set(patch_slots) != set(values):
         raise ComfyImageGenerationError("Approved workflow does not declare every required patch slot")
     for slot_name, value in values.items():

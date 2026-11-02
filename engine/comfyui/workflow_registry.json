@@ -185,5 +185,80 @@
       "max": 2048,
       "multiple_of": 8
     }
+  },
+  {
+    "id": "anime_sdxl_ipa2",
+    "purpose": "text_to_image",
+    "filename": "anime_sdxl_ipa2.api.json",
+    "sha256": "d8de4d7dd24108d007dbcb1da821d957182f95e57abf141e4fd033a7d1def09a",
+    "requires_gpu": true,
+    "gpu_vram_mb": 11000,
+    "model_files": [
+      "animagine-xl-4.0.safetensors",
+      "ip-adapter-plus_sdxl_vit-h.safetensors",
+      "CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors"
+    ],
+    "required_nodes": [
+      "CheckpointLoaderSimple",
+      "CLIPTextEncode",
+      "EmptyLatentImage",
+      "KSampler",
+      "VAEDecode",
+      "SaveImage",
+      "LoadImage",
+      "IPAdapterUnifiedLoader",
+      "IPAdapter",
+      "IPAdapterAdvanced",
+      "SolidMask",
+      "MaskComposite"
+    ],
+    "patch_slots": {
+      "prompt": {
+        "node_id": "2",
+        "input": "text",
+        "class_type": "CLIPTextEncode"
+      },
+      "negative_prompt": {
+        "node_id": "3",
+        "input": "text",
+        "class_type": "CLIPTextEncode"
+      },
+      "seed": {
+        "node_id": "5",
+        "input": "seed",
+        "class_type": "KSampler"
+      },
+      "width": {
+        "node_id": "4",
+        "input": "width",
+        "class_type": "EmptyLatentImage"
+      },
+      "height": {
+        "node_id": "4",
+        "input": "height",
+        "class_type": "EmptyLatentImage"
+      },
+      "filename_prefix": {
+        "node_id": "7",
+        "input": "filename_prefix",
+        "class_type": "SaveImage"
+      },
+      "reference_image": {
+        "node_id": "8",
+        "input": "image",
+        "class_type": "LoadImage"
+      },
+      "reference_image_b": {
+        "node_id": "11",
+        "input": "image",
+        "class_type": "LoadImage"
+      }
+    },
+    "dimension_policy": {
+      "mode": "exact",
+      "min": 1344,
+      "max": 1344,
+      "multiple_of": 8
+    }
   }
 ]

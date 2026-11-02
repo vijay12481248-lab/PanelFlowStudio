@@ -1,0 +1,210 @@
+{
+  "1": {
+    "class_type": "CheckpointLoaderSimple",
+    "inputs": {
+      "ckpt_name": "animagine-xl-4.0.safetensors"
+    }
+  },
+  "2": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "",
+      "clip": [
+        "1",
+        1
+      ]
+    }
+  },
+  "3": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "",
+      "clip": [
+        "1",
+        1
+      ]
+    }
+  },
+  "4": {
+    "class_type": "EmptyLatentImage",
+    "inputs": {
+      "width": 1344,
+      "height": 768,
+      "batch_size": 1
+    }
+  },
+  "8": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "reference.png"
+    }
+  },
+  "11": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "reference_b.png"
+    }
+  },
+  "9": {
+    "class_type": "IPAdapterUnifiedLoader",
+    "inputs": {
+      "model": [
+        "1",
+        0
+      ],
+      "preset": "PLUS (high strength)"
+    }
+  },
+  "20": {
+    "class_type": "SolidMask",
+    "inputs": {
+      "value": 0.0,
+      "width": 1344,
+      "height": 768
+    }
+  },
+  "21": {
+    "class_type": "SolidMask",
+    "inputs": {
+      "value": 1.0,
+      "width": 672,
+      "height": 768
+    }
+  },
+  "22": {
+    "class_type": "MaskComposite",
+    "inputs": {
+      "destination": [
+        "20",
+        0
+      ],
+      "source": [
+        "21",
+        0
+      ],
+      "x": 0,
+      "y": 0,
+      "operation": "add"
+    }
+  },
+  "23": {
+    "class_type": "MaskComposite",
+    "inputs": {
+      "destination": [
+        "20",
+        0
+      ],
+      "source": [
+        "21",
+        0
+      ],
+      "x": 672,
+      "y": 0,
+      "operation": "add"
+    }
+  },
+  "10": {
+    "class_type": "IPAdapterAdvanced",
+    "inputs": {
+      "model": [
+        "9",
+        0
+      ],
+      "ipadapter": [
+        "9",
+        1
+      ],
+      "image": [
+        "8",
+        0
+      ],
+      "attn_mask": [
+        "22",
+        0
+      ],
+      "weight": 0.55,
+      "weight_type": "linear",
+      "combine_embeds": "concat",
+      "start_at": 0.0,
+      "end_at": 0.65,
+      "embeds_scaling": "V only"
+    }
+  },
+  "12": {
+    "class_type": "IPAdapterAdvanced",
+    "inputs": {
+      "model": [
+        "10",
+        0
+      ],
+      "ipadapter": [
+        "9",
+        1
+      ],
+      "image": [
+        "11",
+        0
+      ],
+      "attn_mask": [
+        "23",
+        0
+      ],
+      "weight": 0.55,
+      "weight_type": "linear",
+      "combine_embeds": "concat",
+      "start_at": 0.0,
+      "end_at": 0.65,
+      "embeds_scaling": "V only"
+    }
+  },
+  "5": {
+    "class_type": "KSampler",
+    "inputs": {
+      "seed": 0,
+      "steps": 28,
+      "cfg": 5.0,
+      "sampler_name": "euler_ancestral",
+      "scheduler": "normal",
+      "denoise": 1.0,
+      "model": [
+        "12",
+        0
+      ],
+      "positive": [
+        "2",
+        0
+      ],
+      "negative": [
+        "3",
+        0
+      ],
+      "latent_image": [
+        "4",
+        0
+      ]
+    }
+  },
+  "6": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": [
+        "5",
+        0
+      ],
+      "vae": [
+        "1",
+        2
+      ]
+    }
+  },
+  "7": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "filename_prefix": "panelflow",
+      "images": [
+        "6",
+        0
+      ]
+    }
+  }
+}

@@ -202,3 +202,19 @@ Visible problems: the hero fox comes out white/pink in one panel and orange in t
 three foxes and winged foxes (character blending, see S2b); captions are verbose (whole narration is burned in); the same
 music bed as the anime review (not genre-specific); voices were not listened to; chapter labels are just the first 7 words of
 each scene summary; only one story/genre was rendered; the API route was not exercised and nothing is queued via `JobManager` yet.
+
+## S2c result (2026-11-02): two-character panels
+
+New approved workflow `anime_sdxl_ipa2` (`registry` optional slot `reference_image_b`, fixed 1344x768): two IP-Adapter
+nodes chained on the same model, each with an attention mask - the first character's portrait owns the left half of the
+frame, the second the right half (SolidMask + MaskComposite). `ComfyRunner` uses it for panels with two characters and the
+prompt now says `2others` instead of `multiple others`; cache keys include both reference names; if the workflow or its nodes
+are missing it falls back to the single-reference workflow.
+
+Real check on the four fox+moth panels that had produced three foxes and winged foxes: **3 of 4 now show exactly one fox
+and one winged girl (Lumina) side by side**, recognisably the same characters as their portraits; the fourth shows the fox
+and only a tiny moth (Lumina is shrunk or missing). Vision check mean 0.92, all first attempts, ~20 s/panel.
+
+Limits: the left/right split is a fixed layout (first character left, second right), so compositions with a character in
+front of another, or three-character scenes (only the first two are drawn), are not handled; the second character
+occasionally disappears; the other panels of the fox video were not regenerated yet.

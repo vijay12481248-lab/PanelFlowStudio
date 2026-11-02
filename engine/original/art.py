@@ -43,7 +43,7 @@ def build_prompt(story: OriginalStory, panel: Panel, emphasis: list[str] | None 
         for t in emphasis or []:
             tags = tags.replace(t, f"({t}:1.3)")
         looks.append(tags)
-    count = {0: "no humans", 1: "solo"}.get(len(shown), "multiple others")
+    count = {0: "no humans", 1: "solo", 2: "2others"}.get(len(shown), "multiple others")
     parts = [count, *looks, panel.action.rstrip("."), SHOT_TAGS.get(panel.shot, ""), ANGLE_TAGS.get(panel.angle, ""),
              loc.look if loc else "", genre.art_style, QUALITY]
     return ", ".join(p for p in parts if p), NEGATIVE
@@ -66,7 +66,8 @@ def seed_for(story: OriginalStory, key: str, attempt: int = 0) -> int:
 class ComfyRunner:
     """Runs the approved anime_sdxl workflow (anime_sdxl_ipa when a character reference is given); returns PNG bytes."""
 
-    def __init__(self, client: ComfyUIClient | None = None, workflow_id: str = "anime_sdxl", ipa_id: str = "anime_sdxl_ipa"):
+    def __init__(self, client: ComfyUIClient | None = None, workflow_id: str = "anime_sdxl", ipa_id: str = "anime_sdxl_ipa",
+                 ipa2_id: str = "anime_sdxl_ipa2"):
         self.client = client or ComfyUIClient()
         reg = ComfyWorkflowRegistry(self.client)
         pre = reg.preflight(workflow_id)
@@ -80,6 +81,12 @@ class ComfyRunner:
                 self.ipa = (reg.load(ipa_id)[0], reg.metadata(ipa_id))
         except Exception:
             self.ipa = None
+        self.ipa2 = None  # two-character panels: left/right masked references; falls back to the single-reference workflow
+        try:
+            if reg.preflight(ipa2_id)["ready"]:
+                self.ipa2 = (reg.load(ipa2_id)[0], reg.metadata(ipa2_id))
+        except Exception:
+            self.ipa2 = None
 
     def _upload(self, path: Path) -> str:
         """Copy a reference image into ComfyUI's input folder (name derived from content, so reruns reuse it)."""
@@ -96,8 +103,12 @@ class ComfyRunner:
             return json.loads(r.read())["name"]
 
     def generate(self, pos: str, neg: str, seed: int, width: int, height: int, prefix: str, timeout: float = 300.0,
-                 is_cancelled: Callable[[], bool] = lambda: False, reference: Path | None = None) -> bytes:
-        if reference is not None and self.ipa is not None:
+                 is_cancelled: Callable[[], bool] = lambda: False, reference: Path | None = None,
+                 reference_b: Path | None = None) -> bytes:
+        if reference is not None and reference_b is not None and self.ipa2 is not None and (width, height) == (W, H):
+            wf = _patch_workflow(self.ipa2[0], self.ipa2[1]["patch_slots"], pos, neg, width, height, seed, prefix,
+                                 reference_image=self._upload(reference), reference_image_b=self._upload(reference_b))
+        elif reference is not None and self.ipa is not None:
             wf = _patch_workflow(self.ipa[0], self.ipa[1]["patch_slots"], pos, neg, width, height, seed, prefix,
                                  reference_image=self._upload(reference))
         else:
@@ -197,8 +208,10 @@ def generate_art(story: OriginalStory, ws: Path, runner: ComfyRunner, provider=N
         shown = [chars[c] for c in p.character_ids if c in chars][:2]
         # the first character on screen has its face pinned to its sheet
         ref = ws / "sheets" / f"{shown[0].id}.png" if shown and getattr(runner, "ipa", None) is not None else None
+        # two characters: the first is pinned to the left half, the second to the right half (needs the masked workflow)
+        ref_b = ws / "sheets" / f"{shown[1].id}.png" if len(shown) == 2 and getattr(runner, "ipa2", None) is not None else None
         rec, img = db.get(p.id), ws / "panels" / f"{p.id}.png"
-        if rec and rec.prompt_hash == _hash(pos, neg, ref.name if ref else "") and img.exists():
+        if rec and rec.prompt_hash == _hash(pos, neg, (ref.name if ref else "") + (ref_b.name if ref_b else "")) and img.exists():
             reused += 1
             continue
         best: tuple[float, bytes, int, list[str]] | None = None
@@ -206,7 +219,7 @@ def generate_art(story: OriginalStory, ws: Path, runner: ComfyRunner, provider=N
         for attempt in range(MAX_ATTEMPTS):
             seed = seed_for(story, p.id, attempt)
             pos_i, _ = build_prompt(story, p, emphasis)
-            png = runner.generate(pos_i, neg, seed, W, H, f"panel_{p.id}", reference=ref)
+            png = runner.generate(pos_i, neg, seed, W, H, f"panel_{p.id}", reference=ref, reference_b=ref_b)
             score, missing = 1.0, []
             if provider is not None and shown:
                 tmp = ws / "panels" / f"_try_{p.id}.png"
@@ -220,7 +233,7 @@ def generate_art(story: OriginalStory, ws: Path, runner: ComfyRunner, provider=N
             emphasis = missing
         score, png, seed, missing = best
         img.write_bytes(png)
-        db[p.id] = ArtRecord(panel_id=p.id, image=str(img), prompt_hash=_hash(pos, neg, ref.name if ref else ""), seed=seed, attempts=attempt + 1,
+        db[p.id] = ArtRecord(panel_id=p.id, image=str(img), prompt_hash=_hash(pos, neg, (ref.name if ref else "") + (ref_b.name if ref_b else "")), seed=seed, attempts=attempt + 1,
                              score=score if provider is not None and shown else None, missing=missing)
         save()
         done += 1
