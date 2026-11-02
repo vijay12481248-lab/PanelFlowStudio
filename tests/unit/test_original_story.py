@@ -15,8 +15,8 @@ def bible(**kw):
                  look="short brown hair, green eyes, yellow raincoat, red boots", personality="curious"),
         st._Char(id="pip", name="Pip", role="companion", age_group="child",
                  look="small grey owl, big round eyes, tiny scarf, soft feathers", personality="kind")]
-    locs = [st._Loc(id="attic", name="The Attic", look="dusty, wooden beams, round window, warm lamp"),
-            st._Loc(id="garden", name="Moon Garden", look="silver flowers, night sky, fireflies, stone path")]
+    locs = [st._Loc(id="attic", name="Attic", look="dusty, wooden beams, round window, warm lamp"),
+            st._Loc(id="garden", name="Garden", look="silver flowers, night sky, fireflies, stone path")]
     return st._Bible(characters=chars, locations=locs, rules=["The lamp never goes out."])
 
 
