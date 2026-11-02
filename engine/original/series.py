@@ -8,12 +8,16 @@ from __future__ import annotations
 import json
 import re
 import shutil
+import threading
+import uuid
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
 
 from pydantic import BaseModel, Field
 
 from engine.original.models import Bible, OriginalStory
+
+_LOCK = threading.RLock()  # episode jobs run in worker threads and all rewrite the same series.json
 
 
 class Episode(BaseModel):
@@ -26,6 +30,12 @@ class Episode(BaseModel):
     video: str | None = None
     pdf: str | None = None
     warnings: list[str] = Field(default_factory=list)
+    upload_status: str = ""  # "" | uploading | uploaded | failed
+    upload_error: str = ""
+    youtube_id: str | None = None
+    youtube_url: str | None = None
+    youtube_privacy: str | None = None
+    uploaded_at: str | None = None
 
 
 class Series(BaseModel):
@@ -66,10 +76,11 @@ class SeriesStore:
 
     def save(self, s: Series) -> None:
         d = self.dir(s.id)
-        d.mkdir(parents=True, exist_ok=True)
-        tmp = d / "series.json.tmp"
-        tmp.write_text(s.model_dump_json(indent=2), encoding="utf-8")
-        tmp.replace(d / "series.json")
+        with _LOCK:
+            d.mkdir(parents=True, exist_ok=True)
+            tmp = d / f"series.{uuid.uuid4().hex[:8]}.tmp"
+            tmp.write_text(s.model_dump_json(indent=2), encoding="utf-8")
+            tmp.replace(d / "series.json")
 
     def get(self, series_id: str) -> Series:
         f = self.dir(series_id) / "series.json"
@@ -84,10 +95,11 @@ class SeriesStore:
         return self.dir(series_id) / f"ep{number:03d}"
 
     def update_episode(self, series_id: str, ep: Episode) -> None:
-        s = self.get(series_id)
-        s.episodes = [e for e in s.episodes if e.number != ep.number] + [ep]
-        s.episodes.sort(key=lambda e: e.number)
-        self.save(s)
+        with _LOCK:  # read-modify-write: two jobs must not overwrite each other's episode record
+            s = self.get(series_id)
+            s.episodes = [e for e in s.episodes if e.number != ep.number] + [ep]
+            s.episodes.sort(key=lambda e: e.number)
+            self.save(s)
 
     def pull_sheets(self, series_id: str, ws: Path) -> int:
         """Copy the series' portraits into an episode workspace so the art engine reuses them instead of redrawing."""

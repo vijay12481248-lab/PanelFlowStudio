@@ -271,3 +271,33 @@ the check is noisy and the generated looks were hard to draw; episodes of 3 scen
 8+ scenes (about 20+ min of generation each); a failed episode lets the next one start without its summary, and the retry
 then runs out of order; series are not per-user or deleted/edited from the UI; channel watermark is not applied to
 original-story videos; the UI was type-checked, not opened; nobody has listened to the voices or read the stories for quality.
+
+## YouTube upload (added after S6)
+
+`engine/youtube/` (`auth.py`, `client.py`), `engine/original/upload.py`, routes `PUT /api/youtube/client`,
+`GET /api/youtube/status`, `POST /api/youtube/connect`, `POST /api/youtube/disconnect` and
+`POST /api/original/series/{id}/episodes/{n}/upload` (starts a background upload; poll the series for `upload_status`,
+`youtube_url`). Desktop: "Original Stories" screen -> YouTube section.
+
+**One-time setup (yours; I cannot do it for you):** in Google Cloud Console create a project, enable *YouTube Data API v3*,
+configure the OAuth consent screen (add yourself as a test user while the app is in testing), create an *OAuth client ID* of type
+*Desktop app*, paste the client id and secret into the screen, press Connect, approve in the browser. Scope requested: `youtube.upload`
+only. The secret and tokens are kept in the app-data config folder, never returned by the API or logged. Note that an app left in
+"testing" mode has refresh tokens that expire after about 7 days.
+
+How it behaves: OAuth with a loopback redirect and PKCE; resumable upload in 8 MiB chunks that resumes from the byte the server
+has after a network error or 5xx; custom thumbnail (<= 2 MB; failing to set it does not undo the upload); metadata checked
+(title <= 100, description <= 5000 bytes, tags fitted into 500 characters). **Everything uploads PRIVATE by default.** A public
+upload or a scheduled release (private + `publishAt` at the episode's slot, 20 minutes or more in the future) is refused unless
+`confirm_public` is sent, the desktop button asks for confirmation, and a second upload of the same episode needs `force`.
+`made_for_kids` has no default (a legal declaration only the channel owner can make) and `containsSyntheticMedia` is set.
+Upload is never part of the episode queue: producing and publishing are separate decisions.
+
+Verified: 20 mock-server tests (PKCE URL, code exchange with verifier, state-mismatch rejection, refresh keeps the refresh token,
+chunking, resume after 503, give-up, quota message, thumbnail limits, privacy gates, double upload, failure recorded, secrets not echoed,
+route refusals) and concurrency of episode records; `tsc --noEmit` clean. **NOT verified against the real YouTube API** - that needs
+your OAuth client. Facts I could not settle: Google's docs currently list `videos.insert` at 1 unit in a separate "Video Uploads" bucket
+(100 calls/day) and say unverified projects are not forced private, while older text said the opposite; check on the first upload.
+While building it a real bug surfaced: two episode jobs writing `series.json` at once crashed on Windows (shared temp file) - the store
+now locks read-modify-write and uses unique temp names (covered by a concurrency test).
+Not covered: the anime-review videos (the module is generic but only the original-story route exists), comment replies, analytics.

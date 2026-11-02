@@ -190,3 +190,43 @@ def queue_episodes(series_id: str, req: EpisodesRequest, db: Session = Depends(g
 @router.get("/jobs")
 def list_episode_jobs(limit: int = 50):
     return [j for j in job_manager.list_all_jobs(limit=200) if j["job_type"] == JOB_TYPE][:limit]
+
+
+class UploadRequest(BaseModel):
+    made_for_kids: bool  # required: a legal declaration the channel owner makes, never defaulted
+    privacy: str = "private"
+    schedule: bool = False  # private upload that YouTube publishes at the episode's slot
+    confirm_public: bool = False
+    force: bool = False
+
+
+@router.post("/series/{series_id}/episodes/{number}/upload", status_code=202)
+def upload_episode_route(series_id: str, number: int, req: UploadRequest):
+    """Starts the upload in the background (minutes for a long video); poll the series for `upload_status`."""
+    import threading
+
+    from engine.api.routers.youtube import auth as yt_auth
+    from engine.original import upload as upload_mod
+    from engine.youtube.auth import AuthError
+    from engine.youtube.client import YouTubeClient
+
+    store = _store()
+    if not yt_auth.status()["connected"]:
+        raise HTTPException(status_code=409, detail="YouTube is not connected")
+    kwargs = dict(made_for_kids=req.made_for_kids, privacy=req.privacy, schedule=req.schedule,
+                  confirm_public=req.confirm_public, force=req.force)
+    try:
+        upload_mod.plan_upload(store, series_id, number, **kwargs)  # refuse before starting anything
+    except KeyError:
+        raise HTTPException(status_code=404, detail="series not found")
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+    def run():
+        try:
+            upload_mod.upload_episode(store, series_id, number, YouTubeClient(yt_auth), **kwargs)
+        except (AuthError, Exception):  # the failure is recorded on the episode by upload_episode
+            pass
+
+    threading.Thread(target=run, daemon=True).start()
+    return {"series": series_id, "episode": number, "status": "uploading"}

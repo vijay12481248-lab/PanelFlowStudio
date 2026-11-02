@@ -126,3 +126,23 @@ def test_unknown_series_and_channel_are_rejected(client):
     assert c.get("/api/original/series/nope").status_code == 404
     bad = c.post("/api/original/series", json={"name": "X Y", "genre": "bedtime", "channel_id": "missing"})
     assert bad.status_code == 422 and "missing" in bad.json()["detail"]
+
+
+def test_concurrent_episode_updates_neither_crash_nor_lose_records(tmp_path):
+    import threading
+
+    store = SeriesStore(tmp_path)
+    s = store.create("S", "bedtime", full_bible())
+    errors = []
+
+    def work(n):
+        try:
+            for _ in range(20):
+                store.update_episode(s.id, Episode(number=n, title=f"T{n}"))
+        except Exception as e:  # noqa: BLE001
+            errors.append(e)
+
+    threads = [threading.Thread(target=work, args=(n,)) for n in range(1, 6)]
+    [t.start() for t in threads]
+    [t.join() for t in threads]
+    assert errors == [] and [e.number for e in store.get(s.id).episodes] == [1, 2, 3, 4, 5]

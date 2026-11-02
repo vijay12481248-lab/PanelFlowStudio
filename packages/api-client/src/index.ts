@@ -215,6 +215,17 @@ export interface OriginalEpisode {
   video: string | null;
   pdf: string | null;
   warnings: string[];
+  upload_status: string;
+  upload_error: string;
+  youtube_url: string | null;
+  youtube_privacy: string | null;
+}
+
+export interface YouTubeStatus {
+  configured: boolean;
+  connected: boolean;
+  pending: boolean;
+  error: string | null;
 }
 
 export interface OriginalSeries {
@@ -2241,6 +2252,34 @@ export class PanelFlowApiClient {
 
   async listOriginalJobs(): Promise<Job[]> {
     return this.request<Job[]>("/api/original/jobs");
+  }
+
+  // YouTube connection and upload
+  async youtubeStatus(): Promise<YouTubeStatus> {
+    return this.request<YouTubeStatus>("/api/youtube/status");
+  }
+
+  async saveYoutubeClient(client_id: string, client_secret: string): Promise<YouTubeStatus> {
+    return this.request<YouTubeStatus>("/api/youtube/client", { method: "PUT", body: JSON.stringify({ client_id, client_secret }) });
+  }
+
+  async youtubeConnect(): Promise<{ auth_url: string }> {
+    return this.request<{ auth_url: string }>("/api/youtube/connect", { method: "POST" });
+  }
+
+  async youtubeDisconnect(): Promise<YouTubeStatus> {
+    return this.request<YouTubeStatus>("/api/youtube/disconnect", { method: "POST" });
+  }
+
+  async uploadOriginalEpisode(
+    seriesId: string,
+    episode: number,
+    req: { made_for_kids: boolean; privacy?: string; schedule?: boolean; confirm_public?: boolean },
+  ): Promise<{ status: string }> {
+    return this.request(`/api/original/series/${encodeURIComponent(seriesId)}/episodes/${episode}/upload`, {
+      method: "POST",
+      body: JSON.stringify(req),
+    });
   }
 }
 

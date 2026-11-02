@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { api } from "@panelflow/api-client";
-import type { AnimeChannelPreset, OriginalSeries } from "@panelflow/api-client";
+import type { AnimeChannelPreset, OriginalSeries, YouTubeStatus } from "@panelflow/api-client";
 import type { Job } from "@panelflow/shared-types";
 import { useError } from "../context/ErrorContext";
 
@@ -22,6 +22,10 @@ export const OriginalStoriesScreen: React.FC<OriginalStoriesScreenProps> = ({ on
   const [count, setCount] = useState(3);
   const [startDate, setStartDate] = useState("");
   const [busy, setBusy] = useState(false);
+  const [yt, setYt] = useState<YouTubeStatus | null>(null);
+  const [ytId, setYtId] = useState("");
+  const [ytSecret, setYtSecret] = useState("");
+  const [forKids, setForKids] = useState<boolean | null>(null);
 
   const fail = useCallback(
     (e: unknown) => reportError({ title: "Original stories", message: e instanceof Error ? e.message : String(e) }),
@@ -30,7 +34,8 @@ export const OriginalStoriesScreen: React.FC<OriginalStoriesScreenProps> = ({ on
 
   const refresh = useCallback(async () => {
     try {
-      const [s, c, j] = await Promise.all([api.listOriginalSeries(), api.listAnimeChannels(), api.listOriginalJobs()]);
+      const [s, c, j, y] = await Promise.all([api.listOriginalSeries(), api.listAnimeChannels(), api.listOriginalJobs(), api.youtubeStatus()]);
+      setYt(y);
       setSeries(s);
       setChannels(c);
       setJobs(j);
@@ -51,6 +56,41 @@ export const OriginalStoriesScreen: React.FC<OriginalStoriesScreenProps> = ({ on
       await api.createOriginalSeries({ name: name.trim(), genre, idea: idea.trim(), channel_id: channelId });
       setName("");
       setIdea("");
+      await refresh();
+    } catch (e) {
+      fail(e);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const connectYoutube = async () => {
+    setBusy(true);
+    try {
+      if (ytId.trim() && ytSecret.trim()) {
+        await api.saveYoutubeClient(ytId.trim(), ytSecret.trim());
+        setYtSecret("");
+      }
+      const { auth_url } = await api.youtubeConnect();
+      window.open(auth_url, "_blank", "noopener");
+      await refresh();
+    } catch (e) {
+      fail(e);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Upload is always a deliberate click per episode; the default is a private upload.
+  const upload = async (seriesId: string, episode: number, schedule: boolean) => {
+    if (forKids === null) {
+      fail(new Error("Choose whether your videos are made for kids first (a legal declaration only you can make)."));
+      return;
+    }
+    if (schedule && !window.confirm("This schedules the video to become PUBLIC at its publish slot. Continue?")) return;
+    setBusy(true);
+    try {
+      await api.uploadOriginalEpisode(seriesId, episode, { made_for_kids: forKids, schedule, confirm_public: schedule });
       await refresh();
     } catch (e) {
       fail(e);
@@ -82,6 +122,33 @@ export const OriginalStoriesScreen: React.FC<OriginalStoriesScreenProps> = ({ on
         story, illustrated panels, a narrated video, a comic PDF and a YouTube package, one publish slot per day. Read every
         script before you publish: these are AI-made.
       </p>
+
+      <section className="space-y-2 rounded-lg border border-zinc-800 p-4 text-sm">
+        <h2 className="text-sm font-bold uppercase tracking-wide text-zinc-300">YouTube</h2>
+        <div className="text-zinc-400">
+          {yt?.connected
+            ? "Connected. Uploads are private unless you schedule a public release."
+            : yt?.pending
+              ? "Waiting for you to approve access in the browser…"
+              : "Not connected. Create an OAuth client (Desktop app) in your Google Cloud project with the YouTube Data API enabled, then paste its id and secret."}
+          {yt?.error && <span className="text-amber-400"> {yt.error}</span>}
+        </div>
+        {!yt?.connected && (
+          <div className="flex gap-2">
+            <input className="flex-1 bg-zinc-900 border border-zinc-800 rounded px-3 py-2" placeholder="OAuth client id" value={ytId} onChange={(e) => setYtId(e.target.value)} />
+            <input className="flex-1 bg-zinc-900 border border-zinc-800 rounded px-3 py-2" type="password" placeholder="OAuth client secret" value={ytSecret} onChange={(e) => setYtSecret(e.target.value)} />
+            <button disabled={busy} onClick={connectYoutube} className="px-3 rounded bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40">Connect</button>
+          </div>
+        )}
+        {yt?.connected && (
+          <button onClick={() => api.youtubeDisconnect().then(setYt).catch(fail)} className="px-3 py-1 rounded bg-zinc-800 hover:bg-zinc-700">Disconnect</button>
+        )}
+        <div className="flex gap-4 text-zinc-300">
+          <span>Made for kids?</span>
+          <label><input type="radio" name="kids" checked={forKids === true} onChange={() => setForKids(true)} /> Yes</label>
+          <label><input type="radio" name="kids" checked={forKids === false} onChange={() => setForKids(false)} /> No</label>
+        </div>
+      </section>
 
       <section className="space-y-3 rounded-lg border border-zinc-800 p-4">
         <h2 className="text-sm font-bold uppercase tracking-wide text-zinc-300">New series</h2>
@@ -173,9 +240,18 @@ export const OriginalStoriesScreen: React.FC<OriginalStoriesScreenProps> = ({ on
                   Ep {e.number}: {e.title || "…"}
                   {e.warnings.length > 0 && <span className="text-amber-400"> · {e.warnings.length} warnings</span>}
                 </span>
-                <span className="text-zinc-400">
+                <span className="text-zinc-400 flex items-center gap-2">
                   {e.status}
-                  {e.publish_at ? ` · live ${e.publish_at.slice(0, 16).replace("T", " ")}` : ""}
+                  {e.publish_at ? ` · slot ${e.publish_at.slice(0, 16).replace("T", " ")}` : ""}
+                  {e.youtube_url ? <a className="text-emerald-400" href={e.youtube_url} target="_blank" rel="noreferrer">{e.youtube_privacy}</a> : null}
+                  {e.upload_status === "uploading" && <span>uploading…</span>}
+                  {e.upload_status === "failed" && <span className="text-amber-400" title={e.upload_error}>upload failed</span>}
+                  {e.status === "done" && !e.youtube_url && yt?.connected && e.upload_status !== "uploading" && (
+                    <>
+                      <button disabled={busy} onClick={() => upload(s.id, e.number, false)} className="px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700">Upload private</button>
+                      <button disabled={busy || !e.publish_at} onClick={() => upload(s.id, e.number, true)} className="px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700">Schedule public</button>
+                    </>
+                  )}
                 </span>
               </div>
             ))}
