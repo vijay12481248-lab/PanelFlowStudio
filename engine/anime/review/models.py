@@ -41,3 +41,39 @@ class EpisodeAnalysis(BaseModel):
     transcript_source: str = "none"  # embedded_subs | asr | none
     language: str | None = None
     audio_path: str | None = None
+
+
+class Beat(BaseModel):
+    """One reviewable moment of the episode, located in source time."""
+    id: str
+    start: float
+    end: float
+    kind: str  # opening | highlight | emotional | funny | smooth | weak | ending
+    label: str
+    why: str
+
+
+class Understanding(BaseModel):
+    summary: str
+    characters: list[str] = Field(default_factory=list)
+    beats: list[Beat] = Field(default_factory=list)
+    energy_peaks: list[float] = Field(default_factory=list)  # seconds of loudest moments (deterministic)
+
+
+class Clip(BaseModel):
+    id: str
+    beat_id: str
+    start: float
+    end: float
+    purpose: str
+
+    @property
+    def duration(self) -> float:
+        return self.end - self.start
+
+
+class ClipPlan(BaseModel):
+    clips: list[Clip]
+    total_sec: float
+    budget_sec: float
+    dropped_beats: list[str] = Field(default_factory=list)

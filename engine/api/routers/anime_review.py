@@ -6,8 +6,9 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from engine.acquisition.rights.models import RightsDeclaration
-from engine.anime.review import analysis, ingest as ingest_mod
-from engine.anime.review.models import EpisodeAnalysis, IngestRecord
+from engine.anime.review import analysis, clips as clips_mod, ingest as ingest_mod, understanding
+from engine.llm.registry import llm_registry
+from engine.anime.review.models import ClipPlan, EpisodeAnalysis, IngestRecord, Understanding
 
 router = APIRouter(prefix="/api/anime/review", tags=["anime-review"])
 WORKSPACE_ROOT = Path(__file__).resolve().parents[3] / "output" / "Anime_Reviews"
@@ -45,3 +46,36 @@ async def analyze_episode(slug: str, use_asr: bool = True):
     rec = IngestRecord.model_validate_json(src.read_text(encoding="utf-8"))
     rec.rights.validate_for_acquisition()
     return await asyncio.to_thread(analysis.analyze, rec, ws, use_asr)
+
+
+def _load(ws: Path, name: str, model):
+    f = ws / name
+    if not f.exists():
+        raise HTTPException(status_code=404, detail=f"{name} missing - run the previous step first")
+    return model.model_validate_json(f.read_text(encoding="utf-8"))
+
+
+@router.post("/{slug}/understand", response_model=Understanding)
+async def understand_episode(slug: str):
+    ws = _workspace(slug)
+    rec = _load(ws, "source.json", IngestRecord)
+    rec.rights.validate_for_acquisition()
+    a = _load(ws, "analysis.json", EpisodeAnalysis)
+    provider = llm_registry.get_ollama_provider()  # local first; no silent cloud/mock fallback
+    if not await provider.health_check():
+        raise HTTPException(status_code=503, detail="Ollama is not reachable")
+    u = await understanding.understand(a, rec.title, provider, Path(a.audio_path) if a.audio_path else None)
+    (ws / "understanding.json").write_text(u.model_dump_json(indent=2), encoding="utf-8")
+    return u
+
+
+@router.post("/{slug}/clips", response_model=ClipPlan)
+async def plan_clips(slug: str, target_video_sec: float = 480.0):
+    ws = _workspace(slug)
+    _load(ws, "source.json", IngestRecord).rights.validate_for_acquisition()
+    a = _load(ws, "analysis.json", EpisodeAnalysis)
+    u = _load(ws, "understanding.json", Understanding)
+    rms = understanding.energy_peaks(Path(a.audio_path))[1] if a.audio_path else None
+    plan = clips_mod.select_clips(a, u.beats, target_video_sec, rms)
+    (ws / "clips.json").write_text(plan.model_dump_json(indent=2), encoding="utf-8")
+    return plan

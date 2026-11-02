@@ -64,3 +64,12 @@ Run on a 60 s excerpt of a real narrated 1080p video already in `output/` (not a
 faster-whisper (cached model, 3.6 s) produced a coherent English transcript. Synthetic clip tests cover embedded-subtitle
 extraction. **Not verified**: URL download (`yt-dlp` is not installed in `.venv`; the code path raises a clear error),
 Japanese-audio `task="translate"` quality on real anime, files > 1 h.
+
+## M2 verification (2026-11-02)
+
+Endpoints: `POST /api/anime/review/{slug}/understand` (local Ollama `qwen3.5:9b`, no cloud/mock fallback) and
+`POST .../clips?target_video_sec=`. Real run on the same 60 s excerpt: 17 s for the LLM; summary, characters and 8 beats
+were all grounded in the transcript (no invented events). Clip plan respected the budget (12.02 s = 20 % of 60 s) and
+kept the opening and a highlight, dropping 6 beats. Limits seen: beat kinds `smooth`/`weak` are inferred from the
+transcript only (no visual/animation judgement yet); on a 60 s excerpt the "ending" beat is just the last scene; transcripts
+over ~24k chars are thinned evenly (not chunked) - long-episode quality is unverified.
