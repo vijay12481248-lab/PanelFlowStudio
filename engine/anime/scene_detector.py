@@ -176,21 +176,16 @@ class AnimeSceneClipper:
         video_path: str,
         scene_intervals: List[Tuple[float, float]],
         target_dir: Path,
-        anti_copyright: bool = True,
     ) -> List[AnimeSceneCut]:
         """
         Slices and reframes detected scene intervals into 1080p MP4 clips.
-        Applies smart 16:9 crop and subtle anti-content-ID framing.
+        Applies a plain 16:9 crop.
         """
         target_dir.mkdir(parents=True, exist_ok=True)
         cuts = []
 
-        # Video filter: center-crop to 1920x1080, remove black bars
-        # Anti-copyright: 1.02x subtle punch-in scale, micro contrast tweak
-        if anti_copyright:
-            vf = "scale=1960:1102:force_original_aspect_ratio=increase,crop=1920:1080,eq=contrast=1.02:brightness=0.01:saturation=1.03"
-        else:
-            vf = "scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080"
+        # Editorial reframe only: centre-crop to 16:9 1080p (no content-matching evasion filters).
+        vf = "scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080"
 
         for idx, (start_t, end_t) in enumerate(scene_intervals, 1):
             dur = round(end_t - start_t, 2)

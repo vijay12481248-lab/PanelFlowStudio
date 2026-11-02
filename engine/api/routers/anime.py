@@ -129,6 +129,12 @@ async def start_anime_review(config: AnimeReviewConfig, background_tasks: Backgr
     """
     Launches an automated video review and recap production pipeline in the background.
     """
+    try:
+        if config.rights is None:
+            raise ValueError("A rights declaration is required.")
+        config.rights.validate_for_acquisition()
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
     job_id = f"anime_{uuid.uuid4().hex[:10]}"
     now = time.time()
     active_anime_jobs[job_id] = {

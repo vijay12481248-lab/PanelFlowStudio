@@ -6,6 +6,8 @@ from enum import Enum
 from pathlib import Path
 from pydantic import BaseModel, Field
 
+from engine.acquisition.rights.models import RightsDeclaration
+
 
 class ActType(str, Enum):
     HOOK_AND_SETUP = "HOOK_AND_SETUP"
@@ -67,9 +69,9 @@ class AnimeReviewConfig(BaseModel):
     tts_speed: float = 1.0
     original_audio_duck_db: float = -18.0  # Subtle original anime BGM/SFX under voice
     crop_to_1080p: bool = True
-    anti_copyright_transform: bool = True  # Subtle 1.02x scale, reframe, anti-content-ID
     output_dir: Optional[str] = None
     subtitles: bool = True
+    rights: Optional[RightsDeclaration] = None  # required: UNKNOWN/missing is refused
 
 
 class AnimeReviewResult(BaseModel):

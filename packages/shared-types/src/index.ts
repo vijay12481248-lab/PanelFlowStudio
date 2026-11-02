@@ -4,7 +4,8 @@ export type RightsStatus =
   | "CREATIVE_COMMONS"
   | "LICENSED"
   | "USER_OWNED"
-  | "EXPLICIT_PERMISSION";
+  | "EXPLICIT_PERMISSION"
+  | "COMMENTARY_REVIEW";
 
 export type SourceType =
   | "LOCAL_FOLDER"

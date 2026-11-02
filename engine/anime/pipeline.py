@@ -57,6 +57,10 @@ class AnimeReviewPipeline:
                 except Exception:
                     pass
 
+        if config.rights is None:
+            raise ValueError("A rights declaration is required before producing an anime review.")
+        config.rights.validate_for_acquisition()
+
         # 1. Setup workspace
         clean_title = "".join(c if c.isalnum() or c in ("-", "_") else "_" for c in config.series_title).strip("_")
         ep_str = f"{int(config.episode_number)}" if config.episode_number.is_integer() else f"{config.episode_number:g}"
@@ -91,7 +95,6 @@ class AnimeReviewPipeline:
             config.source_video,
             scene_intervals,
             cuts_dir,
-            anti_copyright=config.anti_copyright_transform,
         )
 
         if not cuts:

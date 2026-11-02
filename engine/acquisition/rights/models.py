@@ -8,6 +8,7 @@ class RightsStatus(str, Enum):
     LICENSED = "LICENSED"
     USER_OWNED = "USER_OWNED"
     EXPLICIT_PERMISSION = "EXPLICIT_PERMISSION"
+    COMMENTARY_REVIEW = "COMMENTARY_REVIEW"  # transformative review/criticism; permission_notes required
 
 
 class RightsDeclaration(BaseModel):
@@ -27,5 +28,7 @@ class RightsDeclaration(BaseModel):
             raise ValueError(
                 "Acquisition cannot proceed with UNKNOWN rights status. "
                 "Explicitly declare PUBLIC_DOMAIN, CREATIVE_COMMONS, LICENSED, "
-                "USER_OWNED, or EXPLICIT_PERMISSION."
+                "USER_OWNED, EXPLICIT_PERMISSION, or COMMENTARY_REVIEW."
             )
+        if self.status == RightsStatus.COMMENTARY_REVIEW and not (self.permission_notes or "").strip():
+            raise ValueError("COMMENTARY_REVIEW requires permission_notes stating the commentary/review basis.")
