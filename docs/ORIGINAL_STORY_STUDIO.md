@@ -94,3 +94,28 @@ judged by reading/looking, not by passing tests alone. Anything not verified is 
   (she smiles) - expression control needs work in S2, and prompts must keep characters clearly adult or explicitly
   not child-like in suggestive framing; for kids' bedtime content use child-safe tags and review every image.
 - Not verified yet: generation through the `JobManager`/`/api/comfyui` job path, consistent characters, B&W/manga look.
+
+## S1 result (2026-11-02): story engine
+
+`engine/original/` (`models.py`, `genres.py`, `story.py`) and `POST /api/original/story`, `GET /api/original/story/{slug}`,
+`GET /api/original/genres`. Steps: premise -> bible (cast, places, world rules) -> scene outline -> panel script per scene,
+one small LLM call each, with deterministic validation and retries that name the concrete problems. Panels carry shot,
+angle, characters, a visual `action` for the art model, dialogue (<=2 lines, <=18 words), a narrator `caption` (the storyteller
+voice that carries the video) and SFX. Genres: bedtime, horror, mystery, fantasy (tone, structure, length, art style tags,
+forbidden words; bedtime is child-safe: child protagonist, no antagonist, no gore/scary words).
+
+Real runs with local `qwen3.5:9b` (about 4 minutes each):
+- **Bedtime** ("a small child who cannot sleep"): 35 panels, ~8.8 min of narration, child protagonist, gentle arc.
+- **Horror** ("an old lighthouse keeper's last night shift"): 40 panels, ~8.3 min, atmospheric, no gore.
+
+What the real runs broke, and the fixes: hyphenated/odd ids and `age_group` words ("kid", "ageless") -> normalised, not failed;
+no or two protagonists -> repaired; characters named "They"/"It"/"protagonist" -> rejected (proper name required);
+ids drifting from names ("fenrir" for "Mist-Walker") -> id now derived from the name; the first bedtime draft had an adult
+protagonist and terrifying wording (nightmare, panic, sweat) -> child protagonist enforced, scary words forbidden for
+bedtime; only 175 words for 35 panels (1.2 min) -> every panel needs a 25-45 word storyteller caption (15-35 for horror);
+a real term ("Fresnel lens") looked like an invented name -> soft warning after two retries.
+
+Not verified / known weak: stories are coherent but generic; repeated beats appear (two near-identical "tossing and turning"
+panels); the model sometimes confuses camera terms with places; the `unknown names` checks are lexical, so invented
+*events* are not caught (fiction has no ground truth; a human must read the story); mystery/fantasy not run; no
+continuity check of facts across scenes beyond names and cast.
