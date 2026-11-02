@@ -48,6 +48,7 @@ class Panel(BaseModel):
     dialogue: list[Line] = Field(default_factory=list)
     caption: str = ""  # narration box
     sfx: list[str] = Field(default_factory=list)
+    key_visuals: list[str] = Field(default_factory=list)  # what the narration needs visible; checked on the image
 
 
 class Scene(BaseModel):

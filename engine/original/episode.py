@@ -9,6 +9,7 @@ from typing import Callable
 
 from engine.anime.review.channels import ChannelPreset
 from engine.original import art, pages, video
+from engine.original.beats import BEATS_FILE, expand_story
 from engine.original.series import Episode, SeriesStore, episode_summary
 from engine.original.story import generate_story, estimated_minutes
 from engine.original.models import OriginalStory
@@ -59,7 +60,15 @@ def run_episode(store: SeriesStore, series_id: str, number: int, channel: Channe
         ep = ep.model_copy(update={"title": story.bible.premise.title, "summary": episode_summary(story)})
         store.update_episode(series_id, ep)
 
-        step(0.2, "Drawing the panels")
+        step(0.12, "Planning one picture per narrated moment")
+        bf = ws / BEATS_FILE
+        if bf.exists():
+            story = OriginalStory.model_validate_json(bf.read_text(encoding="utf-8"))
+        else:
+            story = asyncio.run(expand_story(story, provider, lambda p, m: step(0.12 + 0.08 * p, m)))
+            bf.write_text(story.model_dump_json(indent=2), encoding="utf-8")
+
+        step(0.2, "Drawing the pictures")
         store.pull_sheets(series_id, ws)
         runner = runner_factory()
         report = art.generate_art(story, ws, runner, provider if check else None,

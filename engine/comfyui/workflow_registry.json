@@ -177,6 +177,11 @@
         "node_id": "8",
         "input": "image",
         "class_type": "LoadImage"
+      },
+      "reference_weight": {
+        "node_id": "10",
+        "input": "weight",
+        "class_type": "IPAdapter"
       }
     },
     "dimension_policy": {

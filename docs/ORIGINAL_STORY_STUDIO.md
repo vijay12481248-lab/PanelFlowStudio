@@ -301,3 +301,28 @@ your OAuth client. Facts I could not settle: Google's docs currently list `video
 While building it a real bug surfaced: two episode jobs writing `series.json` at once crashed on Windows (shared temp file) - the store
 now locks read-modify-write and uses unique temp names (covered by a concurrency test).
 Not covered: the anime-review videos (the module is generic but only the original-story route exists), comment replies, analytics.
+
+## Picture/narration match (fix after the first real episode, 2026-11-03)
+
+Reported by the user: the narrated sentence ("Pip closes his eyes, drifting peacefully into dreams...") did not match the picture on
+screen. Diagnosis on the real episode: one image stayed up 13-19 s while 2-3 sentences played, and its prompt came from a separately
+written `action`, not from the narration; the shot for that sentence was a wide group shot.
+
+Fix (`engine/original/beats.py`, wired into the episode run and the API as `POST /story/{slug}/beats`): each panel's narration is
+split into beats of at most ~24 words; each beat gets its own picture and a brief written FROM the spoken text (shot, who is
+visible, pose/expression, key things that must be visible). Rules that do not depend on the LLM: a moment about one named character's
+eyes/sleep/expression must be a close/medium shot of that character alone; requirements like "eyes closed", "sleeping", "yawning",
+"smiling", "tears" are detected by pattern from the words and always added (weighted 1.4, with "open eyes" negated); the character
+portrait pin is lowered for such poses (it was forcing open eyes); a failed brief falls back to the spoken words themselves. The
+art step then asks the vision model whether the key visuals are visible and redraws (2 attempts) when not; the identity score no
+longer triggers redraws (too noisy), only what the narration says does.
+
+Real result, Moon Tales episode 1 rebuilt: 15 panels -> 30 narrated moments, picture changes every 7.9 s on average (was ~15 s),
+3:57 video, 7131 frames, -16.1 LUFS. The user's sentence now shows Pip close-up, asleep, eyes closed. Contact sheet of 6 beats vs
+their sentences: 4 match well (sleeping Pip, Barnaby stepping into Pip's shadow, the glowing basket, Barnaby whispering), 1
+abstract line ("he realizes that if the forest stops its noisy song...") has no good picture, 1 ("He drifts into a slumber") first
+missed the sleep rule (added "slumber/doze/nods off") and now shows a sleeper, though it is the girl character, not Pip.
+Vision match score mean 0.62 with 12 of 30 beats still under the 0.6 threshold after retries - the 9B vision model is a noisy judge and
+the briefs' key visuals often describe the bible instead of the sentence, so treat those scores as a coarse signal and skim the
+video. Cost: about 1 minute per picture (2x the pictures plus checks), ~20 min for a 4-minute episode. Abstract sentences, several
+characters in one shot and "he/she" without a name remain the weak spots.

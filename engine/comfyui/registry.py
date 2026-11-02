@@ -16,7 +16,7 @@ _WORKFLOW_ID = re.compile(r"^[a-z][a-z0-9_-]{2,63}$")
 _REGISTRY_FILE = Path(__file__).with_name("workflow_registry.json")
 _MAX_WORKFLOW_BYTES = 4 * 1024 * 1024
 _REQUIRED_PATCH_SLOTS = frozenset({"prompt", "negative_prompt", "seed", "width", "height", "filename_prefix"})
-_OPTIONAL_PATCH_SLOTS = frozenset({"reference_image", "reference_image_b"})  # character-likeness workflows (IP-Adapter)
+_OPTIONAL_PATCH_SLOTS = frozenset({"reference_image", "reference_image_b", "reference_weight"})  # character-likeness workflows (IP-Adapter)
 
 
 class WorkflowRegistryError(RuntimeError):

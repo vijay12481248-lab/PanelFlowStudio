@@ -99,18 +99,35 @@ def test_check_panel_scores_tags_and_treats_garbage_as_failure(tmp_path):
     assert asyncio.run(art.check_panel(Vision([two]), img, [mira], "extreme_close"))[0] == 1.0  # a close-up expects 2 tags
 
 
-def test_low_score_panel_is_regenerated_with_emphasis_and_best_kept(tmp_path):
+def test_panel_that_does_not_show_the_narration_is_regenerated_with_emphasis_and_best_kept(tmp_path):
     s = story()
     s.panels = s.panels[1:2]
-    def answer(visible):
-        tags = ["short brown hair", "green eyes", "yellow raincoat", "red boots"]
-        return '{"results":[' + ",".join(f'{{"tag":"{x}","visible":{str(x in visible).lower()}}}' for x in tags) + "]}"
-    bad, good = answer({"short brown hair"}), answer({"short brown hair", "green eyes", "yellow raincoat", "red boots"})
+    s.panels[0].key_visuals = ["eyes closed", "asleep"]
+    tags = ["short brown hair", "green eyes"]  # a close-up checks the first two look tags
+    ident = '{"results":[' + ",".join(f'{{"tag":"{x}","visible":true}}' for x in tags) + "]}"
+
+    def match(seen):
+        return '{"results":[' + ",".join(f'{{"tag":"{k}","visible":{str(k in seen).lower()}}}' for k in ("eyes closed", "asleep")) + "]}"
+
     r = FakeRunner()
-    out = art.generate_art(s, tmp_path, r, provider=Vision([bad, good]))
+    out = art.generate_art(s, tmp_path, r, provider=Vision([ident, match(set()), ident, match({"eyes closed", "asleep"})]))
     panel_calls = [c for c in r.calls if c[0].startswith("panel_")]
-    assert len(panel_calls) == 2 and "(green eyes:1.3)" in panel_calls[1][2] and panel_calls[0][1] != panel_calls[1][1]
-    assert out["mean_score"] == 1.0 and out["below_threshold"] == []
+    assert len(panel_calls) == 2 and "(eyes closed:1.4)" in panel_calls[1][2] and panel_calls[0][1] != panel_calls[1][1]
+    assert out["mean_match"] == 1.0 and out["below_threshold"] == []
+
+
+def test_identity_score_alone_does_not_trigger_redraws(tmp_path):
+    s = story()
+    s.panels = s.panels[1:2]
+    bad_identity = '{"results":[]}'
+    r = FakeRunner()
+    out = art.generate_art(s, tmp_path, r, provider=Vision([bad_identity]))
+    assert len([c for c in r.calls if c[0].startswith("panel_")]) == 1 and out["mean_score"] == 0.0
+
+
+def test_closed_eyes_and_back_views_lower_the_reference_pin():
+    p = story().panels[1].model_copy(update={"key_visuals": ["eyes closed"], "action": "x"})
+    assert art.pose_sensitive(p) and not art.pose_sensitive(p.model_copy(update={"key_visuals": ["smiling"], "action": "waves hello"}))
 
 
 def test_first_character_reference_is_passed_when_ipadapter_is_available(tmp_path):
@@ -144,3 +161,11 @@ def test_two_character_panel_passes_both_references_to_the_masked_workflow(tmp_p
     refs = {c[0]: (c[1], c[2]) for c in r.calls}
     assert refs["panel_p003"][0].name == "mira.png" and refs["panel_p003"][1].name == "pip.png"  # two on screen: left=Mira, right=Pip
     assert refs["panel_p002"][1] is None  # one character: single reference only
+
+
+def test_closed_eyes_requirement_is_weighted_and_open_eyes_are_negated():
+    s = story()
+    p = s.panels[1].model_copy(update={"key_visuals": ["eyes closed", "sleeping"]})
+    pos, neg = art.build_prompt(s, p)
+    assert "(eyes closed:1.4)" in pos and "(sleeping:1.4)" in pos and "open eyes" in neg
+    assert "open eyes" not in art.build_prompt(s, s.panels[1])[1]

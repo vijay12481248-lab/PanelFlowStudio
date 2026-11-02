@@ -26,6 +26,7 @@ THRESHOLD = 0.6
 SHOT_TAGS = {"wide": "wide shot, scenery, from a distance", "medium": "cowboy shot", "close": "close-up, portrait",
              "extreme_close": "extreme close-up, detail focus", "over_shoulder": "from behind, over the shoulder"}
 ANGLE_TAGS = {"eye_level": "", "low": "from below", "high": "from above", "dutch": "dutch angle"}
+POSE_KEYS = {"eyes closed", "sleeping", "yawning", "smiling", "tears"}  # deterministic requirements from the narration
 QUALITY = "safe, masterpiece, high score, great score, absurdres"
 NEGATIVE = ("lowres, bad anatomy, bad hands, text, error, missing finger, extra digits, fewer digits, cropped, worst quality, "
             "low quality, low score, bad score, average score, signature, watermark, username, blurry, nsfw, nude, "
@@ -44,9 +45,11 @@ def build_prompt(story: OriginalStory, panel: Panel, emphasis: list[str] | None 
             tags = tags.replace(t, f"({t}:1.3)")
         looks.append(tags)
     count = {0: "no humans", 1: "solo", 2: "2others"}.get(len(shown), "multiple others")
-    parts = [count, *looks, panel.action.rstrip("."), SHOT_TAGS.get(panel.shot, ""), ANGLE_TAGS.get(panel.angle, ""),
+    keys = [f"({k}:1.4)" if (k in (emphasis or []) or k in POSE_KEYS) else k for k in panel.key_visuals]
+    parts = [count, *looks, *keys, panel.action.rstrip("."), SHOT_TAGS.get(panel.shot, ""), ANGLE_TAGS.get(panel.angle, ""),
              loc.look if loc else "", genre.art_style, QUALITY]
-    return ", ".join(p for p in parts if p), NEGATIVE
+    neg = NEGATIVE + (", open eyes, looking at viewer" if "eyes closed" in panel.key_visuals else "")
+    return ", ".join(p for p in parts if p), neg
 
 
 SHEET_NEGATIVE = NEGATIVE + ", multiple views, split screen, collage, reference sheet, multiple characters, 2girls, 2boys"
@@ -104,13 +107,13 @@ class ComfyRunner:
 
     def generate(self, pos: str, neg: str, seed: int, width: int, height: int, prefix: str, timeout: float = 300.0,
                  is_cancelled: Callable[[], bool] = lambda: False, reference: Path | None = None,
-                 reference_b: Path | None = None) -> bytes:
+                 reference_b: Path | None = None, reference_weight: float | None = None) -> bytes:
         if reference is not None and reference_b is not None and self.ipa2 is not None and (width, height) == (W, H):
             wf = _patch_workflow(self.ipa2[0], self.ipa2[1]["patch_slots"], pos, neg, width, height, seed, prefix,
                                  reference_image=self._upload(reference), reference_image_b=self._upload(reference_b))
         elif reference is not None and self.ipa is not None:
             wf = _patch_workflow(self.ipa[0], self.ipa[1]["patch_slots"], pos, neg, width, height, seed, prefix,
-                                 reference_image=self._upload(reference))
+                                 reference_image=self._upload(reference), reference_weight=reference_weight)
         else:
             wf = _patch_workflow(self.workflow, self.meta["patch_slots"], pos, neg, width, height, seed, prefix)
         pid = self.client.submit_prompt(wf)
@@ -167,6 +170,32 @@ async def check_panel(provider, image: Path, chars: list[Character], shot: str =
     return sum(scores) / len(scores), sorted(set(missing))
 
 
+POSE_WORDS = ("closed", "asleep", "sleeping", "from behind", "back to", "turned away", "facing away", "looking up", "looking down")
+MATCH_THRESHOLD = 0.6
+POSE_WEIGHT = 0.3  # the portrait looks at the viewer with open eyes; a lower pin lets "eyes closed" or "from behind" through
+
+
+def pose_sensitive(panel: Panel) -> bool:
+    text = " ".join(panel.key_visuals + [panel.action]).lower()
+    return any(w in text for w in POSE_WORDS)
+
+
+async def check_match(provider, image: Path, keys: list[str]) -> tuple[float, list[str]]:
+    """Share of the narration's key visuals the vision model can see (0..1) and the ones it cannot."""
+    if not keys:
+        return 1.0, []
+    prompt = ("Look at this illustration. For each item below say whether it is clearly visible in the picture. Return every "
+              "item exactly as written with visible true or false.\nItems:\n" + "\n".join(f"- {k}" for k in keys))
+    raw = await provider.analyze_vision(image, prompt, format_schema=_Check.model_json_schema(), max_tokens=500, temperature=0.0)
+    try:
+        res = _Check.model_validate_json(raw)
+    except Exception:
+        return 0.0, list(keys)
+    seen = {r.tag.strip().lower(): r.visible for r in res.results}
+    bad = [k for k in keys if not seen.get(k.lower(), False)]
+    return 1 - len(bad) / len(keys), bad
+
+
 class ArtRecord(BaseModel):
     panel_id: str
     image: str
@@ -174,6 +203,7 @@ class ArtRecord(BaseModel):
     seed: int
     attempts: int
     score: float | None = None
+    match_score: float | None = None  # does the picture show what the narration says (vision check of key_visuals)
     missing: list[str] = Field(default_factory=list)
 
 
@@ -214,30 +244,36 @@ def generate_art(story: OriginalStory, ws: Path, runner: ComfyRunner, provider=N
         if rec and rec.prompt_hash == _hash(pos, neg, (ref.name if ref else "") + (ref_b.name if ref_b else "")) and img.exists():
             reused += 1
             continue
-        best: tuple[float, bytes, int, list[str]] | None = None
+        best: tuple | None = None
         emphasis: list[str] = []
         for attempt in range(MAX_ATTEMPTS):
             seed = seed_for(story, p.id, attempt)
             pos_i, _ = build_prompt(story, p, emphasis)
-            png = runner.generate(pos_i, neg, seed, W, H, f"panel_{p.id}", reference=ref, reference_b=ref_b)
-            score, missing = 1.0, []
-            if provider is not None and shown:
+            png = runner.generate(pos_i, neg, seed, W, H, f"panel_{p.id}", reference=ref, reference_b=ref_b,
+                                  reference_weight=POSE_WEIGHT if pose_sensitive(p) else None)
+            score, missing, match, unmatched = 1.0, [], 1.0, []
+            if provider is not None and (shown or p.key_visuals):
                 tmp = ws / "panels" / f"_try_{p.id}.png"
                 tmp.write_bytes(png)
-                score, missing = asyncio.run(check_panel(provider, tmp, shown, p.shot))
+                if shown:
+                    score, missing = asyncio.run(check_panel(provider, tmp, shown, p.shot))
+                match, unmatched = asyncio.run(check_match(provider, tmp, p.key_visuals))
                 tmp.unlink(missing_ok=True)
-            if best is None or score > best[0]:
-                best = (score, png, seed, missing)
-            if provider is None or score >= THRESHOLD:
-                break
-            emphasis = missing
-        score, png, seed, missing = best
+            total = 0.7 * match + 0.3 * score  # what the narration says leads; the face is pinned by the reference already
+            if best is None or total > best[0]:
+                best = (total, png, seed, missing, score, match, unmatched)
+            if provider is None or match >= MATCH_THRESHOLD:
+                break  # the identity score is recorded but does not trigger redraws: its tags are too noisy to act on
+            emphasis = missing + unmatched
+        total, png, seed, missing, score, match, unmatched = best
         img.write_bytes(png)
         db[p.id] = ArtRecord(panel_id=p.id, image=str(img), prompt_hash=_hash(pos, neg, (ref.name if ref else "") + (ref_b.name if ref_b else "")), seed=seed, attempts=attempt + 1,
-                             score=score if provider is not None and shown else None, missing=missing)
+                             score=score if provider is not None and shown else None,
+                             match_score=match if provider is not None and p.key_visuals else None, missing=missing + unmatched)
         save()
         done += 1
     scores = [r.score for r in db.values() if r.score is not None]
     return {"generated": done, "reused": reused, "panels": len(panels),
             "mean_score": round(sum(scores) / len(scores), 3) if scores else None,
-            "below_threshold": [r.panel_id for r in db.values() if r.score is not None and r.score < THRESHOLD]}
+            "mean_match": round(sum(m) / len(m), 3) if (m := [r.match_score for r in db.values() if r.match_score is not None]) else None,
+            "below_threshold": [r.panel_id for r in db.values() if r.match_score is not None and r.match_score < MATCH_THRESHOLD]}

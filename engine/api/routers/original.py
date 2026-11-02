@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 from engine.llm.registry import llm_registry
 from engine.original import art as art_mod
+from engine.original.beats import BEATS_FILE, expand_story, media_story
 from engine.original import story as story_mod
 from engine.original.genres import GENRES
 from engine.original.models import OriginalStory
@@ -62,7 +63,7 @@ async def create_art(slug: str, limit: int | None = None, check: bool = True):
     f = ws / "story.json"
     if not f.exists():
         raise HTTPException(status_code=404, detail="story not found")
-    story = OriginalStory.model_validate_json(f.read_text(encoding="utf-8"))
+    story = media_story(ws)
     provider = None
     if check:
         provider = llm_registry.get_ollama_provider()
@@ -84,7 +85,7 @@ async def create_video(slug: str, burn_captions: bool = True):
     f = ws / "story.json"
     if not f.exists():
         raise HTTPException(status_code=404, detail="story not found")
-    story = OriginalStory.model_validate_json(f.read_text(encoding="utf-8"))
+    story = media_story(ws)
     try:
         out = await asyncio.to_thread(video_mod.build_video, story, ws, None, 30.0, burn_captions)
     except ValueError as e:
@@ -101,7 +102,7 @@ async def create_pages(slug: str):
     f = ws / "story.json"
     if not f.exists():
         raise HTTPException(status_code=404, detail="story not found")
-    story = OriginalStory.model_validate_json(f.read_text(encoding="utf-8"))
+    story = media_story(ws)
     try:
         return await asyncio.to_thread(pages_mod.build_pages, story, ws)
     except ValueError as e:
@@ -230,3 +231,18 @@ def upload_episode_route(series_id: str, number: int, req: UploadRequest):
 
     threading.Thread(target=run, daemon=True).start()
     return {"series": series_id, "episode": number, "status": "uploading"}
+
+
+@router.post("/story/{slug}/beats")
+async def create_beats(slug: str):
+    """One picture per narrated moment: splits each panel's narration and writes a brief from the spoken text (beats.json)."""
+    ws = STORY_ROOT / Path(slug).name
+    f = ws / "story.json"
+    if not f.exists():
+        raise HTTPException(status_code=404, detail="story not found")
+    provider = llm_registry.get_ollama_provider()
+    if not await provider.health_check():
+        raise HTTPException(status_code=503, detail="Ollama is not reachable")
+    story = await expand_story(OriginalStory.model_validate_json(f.read_text(encoding="utf-8")), provider)
+    (ws / BEATS_FILE).write_text(story.model_dump_json(indent=2), encoding="utf-8")
+    return {"beats": len(story.panels), "warnings": story.warnings}
