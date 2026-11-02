@@ -73,3 +73,20 @@ async def create_art(slug: str, limit: int | None = None, check: bool = True):
     except Exception as e:  # ComfyUI down or workflow/model missing
         raise HTTPException(status_code=503, detail=str(e))
     return await asyncio.to_thread(art_mod.generate_art, story, ws, runner, provider, limit)
+
+
+@router.post("/story/{slug}/video")
+async def create_video(slug: str, burn_captions: bool = True):
+    """Voices every panel with an image, renders the 1080p video (Ken Burns, captions, music) and writes the YouTube package."""
+    from engine.original import video as video_mod
+
+    ws = STORY_ROOT / Path(slug).name
+    f = ws / "story.json"
+    if not f.exists():
+        raise HTTPException(status_code=404, detail="story not found")
+    story = OriginalStory.model_validate_json(f.read_text(encoding="utf-8"))
+    try:
+        out = await asyncio.to_thread(video_mod.build_video, story, ws, None, 30.0, burn_captions)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    return {**out, "package": await asyncio.to_thread(video_mod.package, story, ws)}

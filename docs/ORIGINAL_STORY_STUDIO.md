@@ -176,3 +176,29 @@ Still wrong: panels with two characters (fox + moth) draw several foxes - only o
 character is not drawn from its own reference; the pastel style washes out strong genre mood (horror was not re-tested with the
 adapter); small "ghost" creatures clutter backgrounds. Next ideas: two-reference regional prompting for two-character panels
 (a second IPAdapter node with an attention mask) and re-testing horror.
+
+## S3 result (2026-11-02): video from panels
+
+`engine/original/video.py`, `POST /api/original/story/{slug}/video`. Each panel is voiced by the genre's storyteller
+(bedtime `af_heart` at 0.88x, horror `bm_george`, mystery `am_adam`, fantasy `bm_fable`; only voices cached offline are
+used) with a distinct voice per character for dialogue; the panel's audio length (frame-aligned, min 3 s, 0.6 s closing
+pause) is its length on screen, as in the anime review sync. Rendering: the panel image is cropped to 16:9 and gets a slow
+push-in / pan-right / push-out / pan-left (zoompan on a 2x upscale), burned-in captions, fade in/out at the ends, NVENC with
+CPU fallback; segments are concatenated and mixed with the music bed, then loudness-normalised to -16 LUFS. Reruns reuse
+unchanged voice and segment files (per-panel content hash). `package()` writes title, description with chapters per scene and
+an AI-content disclosure, tags and a thumbnail from a close/medium panel.
+
+**Deviation from the plan**: the existing manga project pipeline was not used. It OCRs page images and rewrites narration
+from them, while stories here already carry narration and dialogue, so a direct path reusing the Kokoro adapter, caption/SRT
+helpers, encoder detection and music bed was smaller and verifiable. Registering generated stories as normal projects
+(dashboard, auto-pilot, story editor) is not done.
+
+Real run, fox bedtime story (28 panels, all generated with IP-Adapter, check score mean 0.875, none below threshold):
+**6:32 1080p video built in 75 s**, 11776 frames = timeline 392.53 s x 30 fps exactly, -16.1 LUFS (the first mix was -28.6
+dB mean, too quiet, hence the normalisation), SRT sidecar, 5 chapters. Frames inspected at 4 points: clean storybook look,
+readable captions, correct motion.
+
+Visible problems: the hero fox comes out white/pink in one panel and orange in the others; the two-character panels draw
+three foxes and winged foxes (character blending, see S2b); captions are verbose (whole narration is burned in); the same
+music bed as the anime review (not genre-specific); voices were not listened to; chapter labels are just the first 7 words of
+each scene summary; only one story/genre was rendered; the API route was not exercised and nothing is queued via `JobManager` yet.
