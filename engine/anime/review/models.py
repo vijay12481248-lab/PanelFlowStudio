@@ -91,3 +91,23 @@ class ReviewScript(BaseModel):
     rating: float  # 0-10
     segments: list[ScriptSegment]
     tone: str = ""
+
+
+class TimelineEntry(BaseModel):
+    segment_id: str
+    clip_id: str
+    audio_path: str
+    audio_sec: float  # measured from the written wav, frame-aligned: this IS the segment's length on the timeline
+    timeline_start: float
+    src_start: float  # seconds in the source episode
+    src_len: float  # source seconds consumed
+    speed: float = 1.0  # <1 slows the clip to cover more audio
+    hold_sec: float = 0.0  # freeze the last frame for this long after the clip runs out
+    warnings: list[str] = Field(default_factory=list)
+
+
+class Timeline(BaseModel):
+    fps: float
+    total_sec: float
+    entries: list[TimelineEntry]
+    voice: str

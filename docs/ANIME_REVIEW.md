@@ -83,3 +83,16 @@ no "funny" segment unless a funny beat exists) and re-prompted with the concrete
 segment; an invented "I laughed" joke) - those two rules and prompt fixes came from that run. Limits: the excerpt gives only 2
 clips, so recap text is not matched to what the clip shows; segment order beyond hook/cta is not enforced; the rating is the
 model's opinion from a transcript, not from watching the episode; non-English `language` is untested.
+
+## M4 verification (2026-11-02)
+
+`POST /api/anime/review/{slug}/voice` -> `voice/*.wav` + `timeline.json`. Each segment is synthesised with the existing
+`KokoroTts`, dead air trimmed, +0.25 s pause, padded to a whole video frame, then the length is **read back from the wav**
+and becomes the segment's timeline length (audio drives the clip). Per segment the clip is consumed from a per-clip cursor:
+trimmed if long enough; else slowed to >= 0.8x; else the last frame is held; footage reuse and holds > 3 s are flagged as
+warnings. Real run (Kokoro `am_michael`, 7 segments, 6 s): timeline total 64.0667 s vs ffprobe sum of the wavs 64.067 s, every
+segment matched ffprobe to the millisecond. **Found by the run**: the 60 s excerpt yields only 2 clips (12 s budget) for 64 s of
+narration, so clips were reused 5 times and 3 segments carry long freezes. That is the footage-budget rule working against a
+tiny source; on a full episode more beats/clips exist, but M5/M6 should size the clip plan from the narration length
+(re-plan after voicing) and the render must show these warnings. Not verified: how it sounds (no listening test), video-side
+sync (render is M5), non-default voices.

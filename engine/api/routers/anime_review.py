@@ -6,9 +6,9 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from engine.acquisition.rights.models import RightsDeclaration
-from engine.anime.review import analysis, clips as clips_mod, ingest as ingest_mod, script as script_mod, understanding
+from engine.anime.review import analysis, clips as clips_mod, ingest as ingest_mod, script as script_mod, timeline as timeline_mod, understanding
 from engine.llm.registry import llm_registry
-from engine.anime.review.models import ClipPlan, EpisodeAnalysis, IngestRecord, ReviewScript, Understanding
+from engine.anime.review.models import ClipPlan, EpisodeAnalysis, IngestRecord, ReviewScript, Timeline, Understanding
 
 router = APIRouter(prefix="/api/anime/review", tags=["anime-review"])
 WORKSPACE_ROOT = Path(__file__).resolve().parents[3] / "output" / "Anime_Reviews"
@@ -97,3 +97,13 @@ async def write_review_script(slug: str, tone: str = "warm, witty, honest fan re
         raise HTTPException(status_code=422, detail=str(e))
     (ws / "script.json").write_text(sc.model_dump_json(indent=2), encoding="utf-8")
     return sc
+
+
+@router.post("/{slug}/voice", response_model=Timeline)
+async def voice_and_sync(slug: str, voice: str = "am_michael", rate: float = 1.0):
+    ws = _workspace(slug)
+    rec = _load(ws, "source.json", IngestRecord)
+    rec.rights.validate_for_acquisition()
+    sc = _load(ws, "script.json", ReviewScript)
+    plan = _load(ws, "clips.json", ClipPlan)
+    return await asyncio.to_thread(timeline_mod.voice_script, sc, plan, ws, rec.fps, voice, rate)
