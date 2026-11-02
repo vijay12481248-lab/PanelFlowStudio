@@ -76,3 +76,21 @@ Data contracts (JSON in the project workspace): `premise.json`, `bible.json`, `o
 
 Real generated images and a real rendered video are inspected at every milestone; consistency and story quality are
 judged by reading/looking, not by passing tests alone. Anything not verified is listed in the milestone notes.
+
+## S0 result (2026-11-02): image engine installed and verified
+
+- ComfyUI 0.43.0 cloned to `E:\VIJAY SEKAR\ComfyUI` (outside the repo, GPL-3.0) with its own venv (torch 2.14.1+cu130);
+  start it with `venv\Scripts\python.exe main.py --listen 127.0.0.1 --port 8188`.
+- Checkpoint `animagine-xl-4.0.safetensors` (6.94 GB, CreativeML Open RAIL++-M, commercial use allowed) in
+  `ComfyUI\models\checkpoints`.
+- New approved workflow `anime_sdxl` (SDXL, euler_ancestral, 28 steps, cfg 5) bundled at
+  `engine/comfyui/workflows/anime_sdxl.api.json` and registered with its checksum; `api_workflow_root()` now falls back
+  to the bundled folder.
+- PanelFlow discovers installed models through `<PANELFLOW_COMFYUI_WORKFLOW_DIR>/../models`, so set
+  `PANELFLOW_COMFYUI_WORKFLOW_DIR=E:\VIJAY SEKAR\ComfyUI\workflow` for the engine (the empty `workflow` folder exists).
+  With it set, preflight reports `ready: true`; without it the model shows as missing.
+- Real check: one 832x1216 panel (silver-haired girl, candle, dark hallway) generated through the approved workflow in
+  30.5 s on the RTX 5060 Ti; sharp, correct anime style, prompt followed except the requested "scared" expression
+  (she smiles) - expression control needs work in S2, and prompts must keep characters clearly adult or explicitly
+  not child-like in suggestive framing; for kids' bedtime content use child-safe tags and review every image.
+- Not verified yet: generation through the `JobManager`/`/api/comfyui` job path, consistent characters, B&W/manga look.

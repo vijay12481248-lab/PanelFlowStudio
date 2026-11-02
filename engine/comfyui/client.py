@@ -159,10 +159,12 @@ class ComfyUIClient:
             root = Path(configured).expanduser()
             return root if root.is_dir() and not root.is_symlink() else None
         workflow_root = self._workflow_root()
-        if workflow_root is None:
-            return None
-        candidate = workflow_root.parent / "workflows"
-        return candidate if candidate.is_dir() and not candidate.is_symlink() else None
+        if workflow_root is not None:
+            candidate = workflow_root.parent / "workflows"
+            if candidate.is_dir() and not candidate.is_symlink():
+                return candidate
+        bundled = Path(__file__).with_name("workflows")  # workflows shipped with PanelFlow (checksummed in the registry)
+        return bundled if bundled.is_dir() and not bundled.is_symlink() else None
 
     def download_output(self, filename: str, subfolder: str = "", folder_type: str = "output") -> bytes:
         if not isinstance(filename, str) or not filename or Path(filename).name != filename:
