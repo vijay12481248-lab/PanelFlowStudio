@@ -26,8 +26,8 @@ ZOOM_END = 1.12
 MOTIONS = ["in", "pan_right", "out", "pan_left"]
 
 
-def voices_for(story: OriginalStory) -> tuple[tuple[str, float], dict[str, tuple[str, float]]]:
-    narrator = NARRATORS.get(story.bible.premise.genre, NARRATORS["fantasy"])
+def voices_for(story: OriginalStory, narrator: tuple[str, float] | None = None) -> tuple[tuple[str, float], dict[str, tuple[str, float]]]:
+    narrator = narrator or NARRATORS.get(story.bible.premise.genre, NARRATORS["fantasy"])
     pool = [v for v in CHARACTER_VOICES if v != narrator[0]]
     return narrator, {c.id: (pool[i % len(pool)], 1.0) for i, c in enumerate(story.bible.characters)}
 
@@ -94,10 +94,10 @@ def _digest(*parts: str) -> str:
 
 def build_video(story: OriginalStory, ws: Path, tts=None, fps: float = 30.0, burn_captions: bool = True,
                 music: Path | None = rr.DEFAULT_MUSIC, name: str = "story_1080p.mp4",
-                progress: Callable[[float, str], None] = lambda p, m: None) -> dict:
+                progress: Callable[[float, str], None] = lambda p, m: None, narrator: tuple[str, float] | None = None) -> dict:
     """Voices and renders every panel that has an image (missing panels are listed, not faked); reruns reuse unchanged work."""
     tts = tts or rt.KokoroTts()
-    narrator, chars = voices_for(story)
+    narrator, chars = voices_for(story, narrator)
     (ws / "voice").mkdir(parents=True, exist_ok=True)
     (ws / "segments").mkdir(exist_ok=True)
     panels = [p for p in story.panels if (ws / "panels" / f"{p.id}.png").exists()]
@@ -165,7 +165,7 @@ def chapters(story: OriginalStory, timeline: dict) -> list[tuple[str, str]]:
     return [(_stamp(t), label) for t, label in out] if len(out) >= 3 else []
 
 
-def package(story: OriginalStory, ws: Path) -> dict:
+def package(story: OriginalStory, ws: Path, extra_tags: list[str] | None = None, footer: str = "") -> dict:
     """Title, description (with the AI disclosure YouTube asks for), chapters, tags and a thumbnail from the best panel."""
     from PIL import Image, ImageDraw, ImageFont
 
@@ -177,7 +177,7 @@ def package(story: OriginalStory, ws: Path) -> dict:
     ch = chapters(story, timeline)
     desc = [pr.logline, ""] + (["Chapters:"] + [f"{t} {l}" for t, l in ch] + [""] if ch else []) + [
         f"An original {pr.genre} story. The story, art and narration were created with AI tools (PanelFlow Studio) and "
-        "reviewed by the channel owner."]
+        "reviewed by the channel owner."] + (["", footer] if footer else [])
     first = next((p for p in story.panels if (ws / "panels" / f"{p.id}.png").exists() and p.shot in ("close", "medium")), None) or next(
         p for p in story.panels if (ws / "panels" / f"{p.id}.png").exists())
     img = Image.open(ws / "panels" / f"{first.id}.png").convert("RGB").resize((1280, 720))
@@ -197,7 +197,7 @@ def package(story: OriginalStory, ws: Path) -> dict:
         y += 110
     thumb = ws / "thumbnail.jpg"
     img.save(thumb, quality=92)
-    tags = [pr.genre + " story", "original story", "animated story", "story time", "AI generated story"] + [c.name for c in story.bible.characters]
+    tags = [pr.genre + " story", "original story", "animated story", "story time", "AI generated story"] + [c.name for c in story.bible.characters] + (extra_tags or [])
     pkg = {"title": pr.title[:100], "description": chr(10).join(desc), "tags": tags, "chapters": ch,
            "thumbnail_path": str(thumb), "genre_style": GENRES[pr.genre].art_style}
     (ws / "youtube_package.json").write_text(json.dumps(pkg, indent=1), encoding="utf-8")

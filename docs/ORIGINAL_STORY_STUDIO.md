@@ -238,3 +238,36 @@ Limits: balloon positions are layout-based, not face-aware (a single centred cha
 tails pointing at empty space, as in one inspected panel); caption boxes cover the bottom of the art; this story contains no
 SFX so the SFX drawing is only covered by unit tests; right-to-left manga reading order, black-and-white screentone and
 non-stacked page layouts are not done; the fox art in this export predates the two-character fix.
+
+## S6 result (2026-11-02): series, channel presets and the daily queue
+
+- **Series** (`engine/original/series.py`): `<root>/<series_id>/series.json` holds the bible (world, cast, places, rules),
+  the episode records (title, continuity summary, publish slot, status, video/pdf paths, warnings) and `sheets/` - the
+  character portraits drawn once and copied into every episode's workspace, so faces stay the same across episodes.
+  `generate_story(..., series_bible=, previous=)` writes the next episode with the same cast/places/rules, a new premise and
+  the earlier episodes' summaries in the prompt.
+- **Episode run** (`episode.py`): story -> art (with the shared portraits) -> voiced video (the channel preset's voice,
+  rate, music, captions) -> package (preset tags/footer) -> comic pages; every stage resumes from its files. An episode waits
+  until the previous one is done/failed (its summary feeds the next), so a series is written in order.
+- **Queue** (`queue.py`): `POST /api/original/series/{id}/episodes {count, start_date, scenes}` creates one durable
+  `ORIGINAL_EPISODE` job per episode in the existing `JobManager` (retries x2, rehydrates after a restart) with one publish slot
+  per day at 18:00; plus `POST /api/original/series`, `GET /series`, `GET /series/{id}`, `GET /jobs`. Channel presets are the
+  same store as the anime review (`/api/anime/review/channels`). Desktop: Quick Actions -> "Original Stories" (create a
+  series, queue N episodes, watch the jobs); `tsc --noEmit` is clean.
+- Tests: 9 new (store/path safety, portraits shared, continuity prompt, ordering/wait, queue through the JobManager,
+  rejects); related suites still pass.
+
+Real run (isolated app data, local qwen3.5:9b + ComfyUI + Kokoro): created the series "Moon Tales" (bedtime, "a sleepy fox who
+collects lullabies") in 22 s and queued 2 episodes of 3 scenes. **Both jobs SUCCEEDED unattended in about 20 minutes total**:
+episode 1 "The Song of the Silver Leaves" (15 panels, 4.0 min video, 1080p, 7157 frames, -16.1 LUFS) and episode 2 "The Moonbeam
+Waltz" (14 panels, 3.0 min, -16.0 LUFS) with publish slots 2026-11-10 and 2026-11-11 18:00. Episode 2 continued from
+episode 1's summary with the same cast and places, and the three portraits were byte-identical across both episodes (reused,
+not redrawn); Pip is recognisably the same fox in both. Package has the channel's tags and footer, an AI-content disclosure and
+3 chapters.
+
+Not done / honest limits: **no YouTube upload** (publish slots are a plan, not a schedule that posts - that needs Google OAuth
+and the Data API, with the API-audit caveat); the consistency scores of this run are only 0.33-1.0 (mean about 0.6) because
+the check is noisy and the generated looks were hard to draw; episodes of 3 scenes are 3-4 minutes, real ad-eligible videos need
+8+ scenes (about 20+ min of generation each); a failed episode lets the next one start without its summary, and the retry
+then runs out of order; series are not per-user or deleted/edited from the UI; channel watermark is not applied to
+original-story videos; the UI was type-checked, not opened; nobody has listened to the voices or read the stories for quality.

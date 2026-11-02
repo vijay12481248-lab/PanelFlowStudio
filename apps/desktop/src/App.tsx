@@ -18,6 +18,7 @@ import { RenderScreen } from "./screens/RenderScreen";
 import { ComfyImageScreen } from "./screens/ComfyImageScreen";
 import { StoryEditorScreen } from "./screens/StoryEditorScreen";
 import { AnimeReviewScreen } from "./screens/AnimeReviewScreen";
+import { OriginalStoriesScreen } from "./screens/OriginalStoriesScreen";
 import { PipelineNavbar } from "./components/PipelineNavbar";
 import { ProviderHealthModal } from "./components/ProviderHealthModal";
 import { AutoPilotModal } from "./components/AutoPilotModal";
@@ -45,7 +46,8 @@ type ScreenMode =
   | "render"
   | "ai_provider_management"
   | "comfy_image"
-  | "anime_review";
+  | "anime_review"
+  | "original_stories";
 
 const DesktopAppContent: React.FC = () => {
   const { selectedError, closeInspector, dismissError, retryJob, reportError } = useError();
@@ -217,6 +219,10 @@ const DesktopAppContent: React.FC = () => {
     );
   }
 
+  if (currentScreen === "original_stories") {
+    return <OriginalStoriesScreen onBack={() => setCurrentScreen("projects")} />;
+  }
+
   if (currentScreen === "anime_review") {
     return <AnimeReviewScreen onBack={() => setCurrentScreen("projects")} />;
   }
@@ -237,6 +243,7 @@ const DesktopAppContent: React.FC = () => {
           onOpenProviderManagement={() => setCurrentScreen("ai_provider_management")}
           onNewProject={() => setCurrentScreen("new_project")}
           onOpenAnimeReview={() => setCurrentScreen("anime_review")}
+          onOpenOriginalStories={() => setCurrentScreen("original_stories")}
           onOpenAcquisition={(proj) => {
             setSelectedProject(proj);
             setCurrentScreen("acquisition");

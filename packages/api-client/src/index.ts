@@ -206,6 +206,26 @@ export interface AnimeQueueItem {
   channel_id: string;
 }
 
+export interface OriginalEpisode {
+  number: number;
+  title: string;
+  summary: string;
+  publish_at: string | null;
+  status: string;
+  video: string | null;
+  pdf: string | null;
+  warnings: string[];
+}
+
+export interface OriginalSeries {
+  id: string;
+  name: string;
+  genre: string;
+  channel_id: string;
+  bible: { premise: { title: string; logline: string }; characters: { name: string; role: string }[] };
+  episodes: OriginalEpisode[];
+}
+
 export class PanelFlowApiClient {
   private baseUrl: string;
   private engineToken?: string;
@@ -2204,6 +2224,23 @@ export class PanelFlowApiClient {
 
   async listAnimeReviewJobs(): Promise<Job[]> {
     return this.request<Job[]>("/api/anime/review/jobs");
+  }
+
+  // Original story studio
+  async listOriginalSeries(): Promise<OriginalSeries[]> {
+    return this.request<OriginalSeries[]>("/api/original/series");
+  }
+
+  async createOriginalSeries(req: { name: string; genre: string; idea?: string; channel_id?: string }): Promise<OriginalSeries> {
+    return this.request<OriginalSeries>("/api/original/series", { method: "POST", body: JSON.stringify(req) });
+  }
+
+  async queueOriginalEpisodes(seriesId: string, req: { count: number; start_date?: string; scenes?: number }): Promise<{ episode: number; job_id: string }[]> {
+    return this.request(`/api/original/series/${encodeURIComponent(seriesId)}/episodes`, { method: "POST", body: JSON.stringify(req) });
+  }
+
+  async listOriginalJobs(): Promise<Job[]> {
+    return this.request<Job[]>("/api/original/jobs");
   }
 }
 

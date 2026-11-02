@@ -32,4 +32,5 @@ export interface DashboardShellProps {
   onOpenProject?: (project: Project) => void;
   onOpenLibrary?: () => void;
   onOpenAnimeReview?: () => void;
+  onOpenOriginalStories?: () => void;
 }

@@ -106,3 +106,87 @@ async def create_pages(slug: str):
         return await asyncio.to_thread(pages_mod.build_pages, story, ws)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
+
+
+# ---- series: a persistent cast/world, many episodes, one daily queue ---------------------------------------------------
+from datetime import date as _date
+
+from fastapi import Depends
+from sqlalchemy.orm import Session
+
+from engine.database.session import get_db
+from engine.jobs.manager import job_manager
+from engine.original.queue import JOB_TYPE, enqueue_episodes
+from engine.original.series import SeriesStore, publish_times
+
+SERIES_ROOT = STORY_ROOT / "series"
+
+
+def _store() -> SeriesStore:
+    return SeriesStore(SERIES_ROOT)
+
+
+class SeriesRequest(BaseModel):
+    name: str = Field(min_length=2, max_length=80)
+    genre: str
+    idea: str = Field(default="", max_length=600)
+    channel_id: str = ""
+
+
+class EpisodesRequest(BaseModel):
+    count: int = Field(default=1, ge=1, le=30)
+    start_date: _date | None = None  # first publish day; default tomorrow, then one per day at 18:00
+    scenes: int | None = Field(default=None, ge=3, le=14)
+    check: bool = True
+
+
+@router.post("/series")
+async def create_series(req: SeriesRequest):
+    if req.genre not in GENRES:
+        raise HTTPException(status_code=422, detail=f"genre must be one of {sorted(GENRES)}")
+    if req.channel_id:
+        from engine.anime.review.channels import channel_store
+        try:
+            channel_store.get(req.channel_id)
+        except KeyError as e:
+            raise HTTPException(status_code=422, detail=str(e))
+    provider = llm_registry.get_ollama_provider()
+    if not await provider.health_check():
+        raise HTTPException(status_code=503, detail="Ollama is not reachable")
+    try:
+        bible = await story_mod.generate_series_bible(req.genre, provider, req.idea)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    return _store().create(req.name, req.genre, bible, req.channel_id, req.idea)
+
+
+@router.get("/series")
+def list_series():
+    return _store().list()
+
+
+@router.get("/series/{series_id}")
+def get_series(series_id: str):
+    try:
+        return _store().get(series_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="series not found")
+
+
+@router.post("/series/{series_id}/episodes")
+def queue_episodes(series_id: str, req: EpisodesRequest, db: Session = Depends(get_db)):
+    """Queues `count` consecutive episodes as durable jobs with one publish slot per day (upload itself is not automated yet)."""
+    store = _store()
+    try:
+        store.get(series_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="series not found")
+    try:
+        return enqueue_episodes(db, store, series_id, req.count, publish_times(req.count, req.start_date), req.scenes, req.check)
+    except KeyError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+
+@router.get("/jobs")
+def list_episode_jobs(limit: int = 50):
+    return [j for j in job_manager.list_all_jobs(limit=200) if j["job_type"] == JOB_TYPE][:limit]

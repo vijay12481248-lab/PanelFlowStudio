@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 from engine.original.genres import ANGLES, GENRES, SHOTS, Genre
 from engine.original.models import (Bible, Character, Line, Location, OriginalStory, Panel, Premise, Scene)
 
+NL = chr(10)
 SYSTEM = "You are a professional story writer for illustrated manga and picture books. You follow the requested format exactly."
 AGE_GROUPS = {"child", "teen", "adult", "elder"}
 ROLES = {"protagonist", "companion", "antagonist", "mentor", "other"}
@@ -285,14 +286,25 @@ def _bible_text(b: Bible) -> str:
             f"Locations:\n{locs}\nWorld rules: {'; '.join(b.rules)}")
 
 
+def _episode_ask(sb: Bible, genre: Genre, previous: str, idea: str) -> str:
+    return (f"Write the next episode of the {genre.key} series '{sb.premise.title}' ({sb.premise.logline}). Cast: "
+            f"{', '.join(c.name for c in sb.characters)}. Places: {', '.join(x.name for x in sb.locations)}. "
+            f"Earlier episodes: {previous or 'none yet'}. Give a NEW episode title, a two-sentence logline and the setting "
+            "(one of the places). It is a self-contained adventure that continues naturally, uses only the existing cast, "
+            f"and keeps the tone: {genre.tone}." + (f" Author's idea: {idea}." if idea else ""))
+
+
 async def generate_story(genre_key: str, provider, idea: str = "", scenes: int | None = None,
-                         progress=lambda pct, msg: None) -> OriginalStory:
+                         progress=lambda pct, msg: None, series_bible: Bible | None = None, previous: str = "") -> OriginalStory:
+    """A standalone story, or - with `series_bible` - the next episode: same cast, places and rules, a new premise that
+    continues from `previous` (summaries of the earlier episodes)."""
     genre = GENRES[genre_key]
     notes: list[str] = []
     if scenes:
         genre = Genre(**{**genre.__dict__, "scenes": scenes})
     progress(0.05, "Premise")
-    pr = await _ask(provider, f"Invent an original {genre.key} story for an illustrated video. Tone: {genre.tone}. "
+    pr = await _ask(provider, _episode_ask(series_bible, genre, previous, idea) if series_bible is not None else
+                    f"Invent an original {genre.key} story for an illustrated video. Tone: {genre.tone}. "
                     f"Structure: {genre.structure}. " + (f"Seed idea from the author: {idea}. " if idea else "") +
                     "Give a title, a two-sentence logline and the setting. Nothing copied from existing franchises.",
                     _Premise, lambda o: [] if len(o.logline.split()) >= 12 and not forbidden_hits(o.logline + o.title, genre)
@@ -300,6 +312,19 @@ async def generate_story(genre_key: str, provider, idea: str = "", scenes: int |
     premise = Premise(title=pr.title.strip(), genre=genre.key, logline=pr.logline.strip(), tone=genre.tone, setting=pr.setting.strip())
 
     progress(0.15, "Characters and places")
+    bible = series_bible.model_copy(update={"premise": premise}) if series_bible is not None else await _make_bible(
+        provider, genre, premise)
+
+    progress(0.3, "Scene outline")
+    ou = await _ask(provider, _bible_text(bible) + (f"{NL}{NL}Earlier episodes: {previous}" if previous else "") +
+                    f"{NL}{NL}Write the scene outline: {genre.scenes} scenes in story order following "
+                    f"this structure: {genre.structure}. Each scene has a location_id, the character_ids present, a 2-3 "
+                    "sentence summary and a mood. Use only the characters and places above; do not invent names.",
+                    _Outline, lambda o: check_outline(o, bible, genre), temperature=0.7, max_tokens=2500, notes=notes)
+    return await _script(bible, genre, ou, provider, progress, notes)
+
+
+async def _make_bible(provider, genre: Genre, premise: Premise) -> Bible:
     bo = await _ask(provider, f"Story: {premise.title}. {premise.logline} Setting: {premise.setting}. Genre: {genre.key}, "
                     f"tone {genre.tone}. Create the cast (2-4 characters, exactly one protagonist; give each a distinctive, "
                     "reusable visual 'look' of comma-separated tags for an image model, ordered hair/fur, eyes, body, outfit, one "
@@ -308,15 +333,12 @@ async def generate_story(genre_key: str, provider, idea: str = "", scenes: int |
                     "and 2-4 world rules."
                     + (" This is a children's bedtime story: no antagonist, nothing frightening." if genre.child_safe else ""),
                     _Bible, lambda o: check_bible(o, genre), temperature=0.8, max_tokens=2500)
-    bible = Bible(premise=premise, rules=[r.strip() for r in bo.rules],
+    return Bible(premise=premise, rules=[r.strip() for r in bo.rules],
                   characters=[Character(**c.model_dump()) for c in bo.characters],
                   locations=[Location(**loc.model_dump()) for loc in bo.locations])
 
-    progress(0.3, "Scene outline")
-    ou = await _ask(provider, _bible_text(bible) + f"\n\nWrite the scene outline: {genre.scenes} scenes in story order following "
-                    f"this structure: {genre.structure}. Each scene has a location_id, the character_ids present, a 2-3 "
-                    "sentence summary and a mood. Use only the characters and places above; do not invent names.",
-                    _Outline, lambda o: check_outline(o, bible, genre), temperature=0.7, max_tokens=2500, notes=notes)
+
+async def _script(bible: Bible, genre: Genre, ou: _Outline, provider, progress, notes: list[str]) -> OriginalStory:
     scene_list = [Scene(id=f"sc{i:02d}", location_id=s.location_id, character_ids=list(dict.fromkeys(s.character_ids)),
                         summary=s.summary.strip(), mood=s.mood.strip()) for i, s in enumerate(ou.scenes, 1)]
 
@@ -366,3 +388,16 @@ def continuity_warnings(s: OriginalStory) -> list[str]:
 def estimated_minutes(s: OriginalStory) -> float:
     words = sum(len(ln.text.split()) for p in s.panels for ln in p.dialogue) + sum(len(p.caption.split()) for p in s.panels)
     return round(math.ceil(words / 2.4) / 60, 1)
+
+
+async def generate_series_bible(genre_key: str, provider, idea: str = "") -> Bible:
+    """The long-lived part of a series: premise of the world, cast with drawable looks, places and rules."""
+    genre = GENRES[genre_key]
+    pr = await _ask(provider, f"Invent an original {genre.key} story SERIES for an illustrated video channel. Tone: {genre.tone}. "
+                    + (f"Seed idea from the author: {idea}. " if idea else "") +
+                    "Give the series title, a two-sentence logline that can sustain many episodes, and the main setting. "
+                    "Nothing copied from existing franchises.", _Premise,
+                    lambda o: [] if len(o.logline.split()) >= 12 and not forbidden_hits(o.logline + o.title, genre)
+                    else ["logline too short or contains forbidden words"], temperature=0.9, max_tokens=600)
+    premise = Premise(title=pr.title.strip(), genre=genre.key, logline=pr.logline.strip(), tone=genre.tone, setting=pr.setting.strip())
+    return await _make_bible(provider, genre, premise)

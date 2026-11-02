@@ -6,6 +6,7 @@ interface QuickActionsPanelProps {
   onImportPages?: () => void;
   onOpenLibrary?: () => void;
   onOpenAnimeReview?: () => void;
+  onOpenOriginalStories?: () => void;
   onModelSettings?: () => void;
   onEngineSettings?: () => void;
 }
@@ -15,6 +16,7 @@ export const QuickActionsPanel: React.FC<QuickActionsPanelProps> = ({
   onImportPages,
   onOpenLibrary,
   onOpenAnimeReview,
+  onOpenOriginalStories,
   onModelSettings,
   onEngineSettings,
 }) => {
@@ -45,6 +47,17 @@ export const QuickActionsPanel: React.FC<QuickActionsPanelProps> = ({
         >
           <Zap className="w-4 h-4 text-indigo-400" />
           <span>Anime Review</span>
+        </button>
+      )}
+
+      {onOpenOriginalStories && (
+        <button
+          onClick={onOpenOriginalStories}
+          className="w-full bg-[#151928] hover:bg-[#1f253d] text-zinc-200 border border-[#242c44] text-xs font-semibold py-2 px-3 rounded-lg flex items-center justify-center gap-2 transition-colors"
+          title="Write, draw, narrate and queue original story episodes"
+        >
+          <BookOpen className="w-4 h-4 text-indigo-400" />
+          <span>Original Stories</span>
         </button>
       )}
 
