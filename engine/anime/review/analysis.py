@@ -1,6 +1,7 @@
 """Analyse: ffmpeg scene detection, audio extraction, transcript (embedded subs first, ASR fallback)."""
 from __future__ import annotations
 
+import json
 import re
 import subprocess
 from pathlib import Path
@@ -12,7 +13,7 @@ MIN_SHOT_SEC = 0.5
 
 def detect_shots(video: Path, duration: float, threshold: float = 0.3) -> list[Shot]:
     """Shot boundaries from ffmpeg's scene score; tiny shots are merged into their predecessor."""
-    r = subprocess.run(["ffmpeg", "-nostats", "-i", str(video), "-an", "-vf", f"select='gt(scene,{threshold})',showinfo",
+    r = subprocess.run(["ffmpeg", "-nostats", "-i", str(video), "-an", "-vf", f"scale=320:-2,select='gt(scene,{threshold})',showinfo",
                         "-f", "null", "-"], capture_output=True, text=True)
     cuts = [float(m) for m in re.findall(r"pts_time:([0-9.]+)", r.stderr)]
     bounds = [0.0]
@@ -30,10 +31,28 @@ def extract_audio(video: Path, wav: Path) -> Path:
     return wav
 
 
+TEXT_SUB_CODECS = {"subrip", "ass", "ssa", "mov_text", "webvtt", "text"}
+ENGLISH = {"eng", "en", "english"}
+
+
+def english_subtitle_index(video: Path) -> int | None:
+    """Absolute stream index of the first English *text* subtitle track (image subs cannot be converted)."""
+    r = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "s", "-show_entries",
+                        "stream=index,codec_name:stream_tags=language", "-of", "json", str(video)],
+                       capture_output=True, text=True)
+    for s in json.loads(r.stdout or "{}").get("streams", []):
+        if s.get("codec_name") in TEXT_SUB_CODECS and s.get("tags", {}).get("language", "").lower() in ENGLISH:
+            return s["index"]
+    return None
+
+
 def embedded_subtitles(video: Path, tmp: Path) -> list[Segment]:
-    """First text subtitle stream as segments; [] when there is none (image subs are not OCR'd)."""
+    """English embedded subtitles as segments; [] when there are none (other languages go through ASR translation)."""
+    idx = english_subtitle_index(video)
+    if idx is None:
+        return []
     srt = tmp / "embedded.srt"
-    r = subprocess.run(["ffmpeg", "-y", "-i", str(video), "-map", "0:s:0", str(srt)], capture_output=True)
+    r = subprocess.run(["ffmpeg", "-y", "-i", str(video), "-map", f"0:{idx}", str(srt)], capture_output=True)
     if r.returncode != 0 or not srt.exists():
         return []
     return parse_srt(srt.read_text(encoding="utf-8", errors="ignore"))

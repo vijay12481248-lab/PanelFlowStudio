@@ -71,7 +71,8 @@ async def understand_episode(slug: str):
     provider = llm_registry.get_ollama_provider()  # local first; no silent cloud/mock fallback
     if not await provider.health_check():
         raise HTTPException(status_code=503, detail="Ollama is not reachable")
-    u = await understanding.understand(a, rec.title, provider, Path(a.audio_path) if a.audio_path else None)
+    u = await understanding.understand(a, rec.title, provider, Path(a.audio_path) if a.audio_path else None,
+                                       Path(rec.local_path), ws / "frames")
     (ws / "understanding.json").write_text(u.model_dump_json(indent=2), encoding="utf-8")
     return u
 
@@ -99,7 +100,8 @@ async def write_review_script(slug: str, tone: str = "warm, witty, honest fan re
     if not await provider.health_check():
         raise HTTPException(status_code=503, detail="Ollama is not reachable")
     try:
-        sc = await script_mod.write_script(rec.title, u, plan, provider, tone, language)
+        sc = await script_mod.write_script(rec.title, u, plan, provider, tone, language, target_sec=plan.total_sec * 4,
+                                          analysis=_load(ws, "analysis.json", EpisodeAnalysis))
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
     (ws / "script.json").write_text(sc.model_dump_json(indent=2), encoding="utf-8")

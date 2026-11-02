@@ -20,7 +20,7 @@ def clip(tmp_path_factory):
                     "-f", "lavfi", "-i", "color=green:s=640x360:d=2,format=yuv420p",
                     "-f", "lavfi", "-i", "sine=f=440:d=6", "-i", str(srt),
                     "-filter_complex", "[0][1][2]concat=n=3:v=1:a=0[v]", "-map", "[v]", "-map", "3:a", "-map", "4:s",
-                    "-c:v", "libx264", "-c:a", "aac", "-c:s", "srt", str(out)], check=True, capture_output=True)
+                    "-c:v", "libx264", "-c:a", "aac", "-c:s", "srt", "-metadata:s:s:0", "language=eng", str(out)], check=True, capture_output=True)
     return out
 
 
@@ -55,3 +55,24 @@ def test_ingest_and_analyze(clip, tmp_path):
 def test_srt_parse_strips_markup():
     segs = analysis.parse_srt("1\n00:00:01,000 --> 00:00:02,500\n<i>Hi</i> {\an8}there\n")
     assert segs[0].text == "Hi there" and segs[0].end == 2.5
+
+
+def test_picks_english_track_not_first(tmp_path):
+    de, en = tmp_path / "de.srt", tmp_path / "en.srt"
+    de.write_text("1\n00:00:00,500 --> 00:00:02,000\nHallo.\n")
+    en.write_text("1\n00:00:00,500 --> 00:00:02,000\nHello.\n")
+    out = tmp_path / "m.mkv"
+    subprocess.run(["ffmpeg", "-y", "-f", "lavfi", "-i", "color=red:s=320x180:d=3", "-i", str(de), "-i", str(en),
+                    "-map", "0:v", "-map", "1", "-map", "2", "-c:v", "libx264", "-c:s", "srt",
+                    "-metadata:s:s:0", "language=ger", "-metadata:s:s:1", "language=eng", str(out)],
+                   check=True, capture_output=True)
+    assert [s.text for s in analysis.embedded_subtitles(out, tmp_path)] == ["Hello."]
+
+
+def test_no_english_track_means_no_embedded_subs(tmp_path):
+    de = tmp_path / "de.srt"
+    de.write_text("1" + chr(10) + "00:00:00,500 --> 00:00:02,000" + chr(10) + "Hallo." + chr(10))
+    out = tmp_path / "g.mkv"
+    subprocess.run(["ffmpeg", "-y", "-f", "lavfi", "-i", "color=red:s=320x180:d=3", "-i", str(de), "-map", "0:v", "-map", "1",
+                    "-c:v", "libx264", "-c:s", "srt", "-metadata:s:s:0", "language=ger", str(out)], check=True, capture_output=True)
+    assert analysis.embedded_subtitles(out, tmp_path) == []  # German must go through ASR translation instead

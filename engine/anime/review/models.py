@@ -51,6 +51,7 @@ class Beat(BaseModel):
     kind: str  # opening | highlight | emotional | funny | smooth | weak | ending
     label: str
     why: str
+    visual: str = ""  # what the vision model sees mid-beat; the script may rely on it
 
 
 class Understanding(BaseModel):

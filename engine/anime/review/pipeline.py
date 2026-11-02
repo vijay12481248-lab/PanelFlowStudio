@@ -12,12 +12,15 @@ from typing import Callable
 from pydantic import BaseModel
 
 from engine.acquisition.rights.models import RightsDeclaration
-from engine.anime.review import analysis, clips, ingest, packaging, render, script, timeline, understanding
+from engine.anime.review import analysis, clips, clips as clips_mod, ingest, packaging, render, script, timeline, understanding
 from engine.anime.review.channels import ChannelPreset
 from engine.anime.review.models import (ClipPlan, EpisodeAnalysis, IngestRecord, ReviewScript, Timeline,
                                         Understanding)
 
 Progress = Callable[[float, str], None]
+# measured on a real 15 min episode: the scripts land at ~70% of the requested length, so the footage budget
+# (25% of the final video) is computed from that, not from the target
+NARRATION_YIELD = 0.7
 
 
 class ReviewJobSpec(BaseModel):
@@ -55,20 +58,22 @@ def run_review(spec: ReviewJobSpec, channel: ChannelPreset, provider, progress: 
     if _have(ws, "understanding.json"):
         u = _load(ws, "understanding.json", Understanding)
     else:
-        u = asyncio.run(understanding.understand(a, spec.title, provider, Path(a.audio_path) if a.audio_path else None))
+        u = asyncio.run(understanding.understand(a, spec.title, provider, Path(a.audio_path) if a.audio_path else None,
+                                 Path(rec.local_path), ws / "frames"))
         (ws / "understanding.json").write_text(u.model_dump_json(indent=2), encoding="utf-8")
     step(0.40, "Selecting clips")
     if _have(ws, "clips.json"):
         plan = _load(ws, "clips.json", ClipPlan)
     else:
         rms = understanding.energy_peaks(Path(a.audio_path))[1] if a.audio_path else None
-        plan = clips.select_clips(a, u.beats, channel.target_video_sec, rms)
+        plan = clips.select_clips(a, u.beats, channel.target_video_sec * NARRATION_YIELD, rms)
         (ws / "clips.json").write_text(plan.model_dump_json(indent=2), encoding="utf-8")
     step(0.50, "Writing the review script")
     if _have(ws, "script.json"):
         sc = _load(ws, "script.json", ReviewScript)
     else:
-        sc = asyncio.run(script.write_script(spec.title, u, plan, provider, channel.tone, channel.language))
+        sc = asyncio.run(script.write_script(spec.title, u, plan, provider, channel.tone, channel.language,
+                                                  target_sec=channel.target_video_sec, analysis=a))
         (ws / "script.json").write_text(sc.model_dump_json(indent=2), encoding="utf-8")
     step(0.65, "Voicing narration")
     tl = _load(ws, "timeline.json", Timeline) if _have(ws, "timeline.json") else timeline.voice_script(
@@ -82,8 +87,11 @@ def run_review(spec: ReviewJobSpec, channel: ChannelPreset, provider, progress: 
     pkg = packaging.build_package(spec.title, sc, u, tl, plan, src, rec.rights, ws, channel.extra_tags,
                                   channel.description_footer)
     warnings = [w for e in tl.entries for w in e.warnings]
+    share = clips_total(plan) / tl.total_sec
+    if share > clips_mod.VIDEO_FRACTION:
+        warnings.append(f"footage is {share:.0%} of the video (limit {clips_mod.VIDEO_FRACTION:.0%})")
     progress(1.0, "Review video ready")
-    return {"video": str(video), "srt": str(ws / "review.srt"), "title": pkg.title, "thumbnail": pkg.thumbnail_path,
+    return {"footage_share": round(share, 3), "video": str(video), "srt": str(ws / "review.srt"), "title": pkg.title, "thumbnail": pkg.thumbnail_path,
             "duration_sec": tl.total_sec, "footage_sec": clips_total(plan), "warnings": warnings}
 
 

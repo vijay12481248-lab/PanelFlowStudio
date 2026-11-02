@@ -131,3 +131,30 @@ type-checked but never opened in a browser/Tauri window; URL download (`yt-dlp` 
 audio was ever used; no listening test; cancelling a running job mid-FFmpeg is cooperative only between stages; concurrency
 relies on the existing admission control (both jobs ran in parallel here); "Anime Review" shares the Ollama model with
 other jobs.
+
+## Real-episode run (2026-11-02): Sintel, 14:48, 1080p, CC-BY 3.0
+
+Source: Blender Foundation's *Sintel* (CC-BY, declared as `CREATIVE_COMMONS`). Not anime and English-language, but a real
+full-length animated episode with a score, action and ten embedded subtitle tracks. Ingested through the **URL path**
+(yt-dlp against a local HTTP server; `yt-dlp` is now a declared dependency) and run unattended through the queue.
+
+What the real run found and what was fixed:
+
+1. **Wrong subtitle track**: the first embedded track was German. Now the first *English text* track is used; otherwise ASR
+   translation. Test added.
+2. **One-shot script failed** on 8 clips: 262-541 words instead of ~1000 and invented role names. Script writing is now
+   sectioned (hook/recap, one block per clip with its dialogue and a vision description, critique, verdict+CTA), with the
+   structure, order and clip binding fixed in code.
+3. **Dialogue-only understanding** missed the visual story (only 26 subtitle lines in 14 min). Added: a keyframe description
+   per beat from the local vision model, plus loud no-dialogue moments as extra beats (end-credit fades are dropped).
+4. **Long freezes** (up to 19.7 s): long holds now get a slow push-in instead of a frozen frame; clip length adapts to the budget.
+5. **Footage share**: the first run used 39% of the final video's length. The budget is now computed from the expected
+   narration length and the real share is reported in the job output.
+6. Shot detection now runs on a 320 px downscale (much faster on 1080p).
+
+Final run: job SUCCEEDED in ~2 min wall time for a 242 s review (5814 frames, 1080p h264 + AAC), 24 segments, 611 words,
+rating 9.0, 65.7 s of source footage = **27% of the video, over the 25% limit; the job flags this as a warning** (script length
+varies per run). Holds of up to 9.5 s remain (flagged). **Content quality is not trustworthy yet**: the narration said Sintel
+is hunting "her missing sister, Scales" - Scales is the dragon. The model only sees dialogue lines and one frame per beat,
+so it can hallucinate plot; there is no fact-check step, and a human should read `script.json` before publishing.
+Still unverified: real anime and Japanese audio, how it sounds, the desktop UI in a window.

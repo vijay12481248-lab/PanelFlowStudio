@@ -22,6 +22,7 @@ dependencies = [
   "kokoro>=0.8.4",
   "edge-tts",
   "faster-whisper",
+  "yt-dlp",
   "winrt-windows-media-ocr; sys_platform == 'win32'",
   "winrt-windows-graphics-imaging; sys_platform == 'win32'",
   "winrt-windows-storage; sys_platform == 'win32'",

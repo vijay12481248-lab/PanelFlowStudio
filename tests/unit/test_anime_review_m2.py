@@ -57,3 +57,14 @@ def test_understand_uses_provider():
                 {"start": 1, "end": 9, "kind": "opening", "label": "l", "why": "w"}])
     u = asyncio.run(understanding.understand(_analysis(60), "T", P()))
     assert u.summary == "s" and u.beats[0].id == "b01"
+
+
+def test_loud_moments_not_covered_by_dialogue_become_beats():
+    spoken = [Beat(id="b01", start=100, end=120, kind="opening", label="x", why="y")]
+    out = understanding.add_loud_beats(spoken, [50.0, 115.0, 300.0], 600.0)
+    assert [(b.id, b.start, b.kind) for b in out] == [("b01", 47.0, "highlight"), ("b02", 100, "opening"), ("b03", 297.0, "highlight")]
+
+
+def test_clip_length_adapts_to_budget():
+    plan = clips.select_clips(_analysis(1200), _beats(4), target_video_sec=800)  # budget 200 s over 4 beats
+    assert max(c.duration for c in plan.clips) > clips.DEFAULT_CLIP_SEC

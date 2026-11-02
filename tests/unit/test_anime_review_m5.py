@@ -54,3 +54,28 @@ def test_render_segment_is_exact_length(tmp_path):
     n = subprocess.run(["ffprobe", "-v", "error", "-count_frames", "-select_streams", "v:0", "-show_entries",
                         "stream=nb_read_frames,width,height", "-of", "csv=p=0", str(out)], capture_output=True, text=True).stdout.strip()
     assert n.split(",") == ["1920", "1080", "90"]
+
+
+def test_long_hold_zooms_slowly_and_keeps_exact_length(tmp_path):
+    from PIL import Image, ImageChops
+
+    src = tmp_path / "src.mp4"
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "testsrc=s=640x360:r=24:d=4", "-pix_fmt", "yuv420p", str(src)],
+                   check=True)
+    wav = tmp_path / "v.wav"
+    with wave.open(str(wav), "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(24000)
+        w.writeframes(np.zeros(24000 * 3).astype("<i2").tobytes())
+    e = TimelineEntry(segment_id="s1", clip_id="c", audio_path=str(wav), audio_sec=3.0, timeline_start=0,
+                      src_start=0, src_len=1.0, speed=1.0, hold_sec=2.0)
+    out = tmp_path / "o.mp4"
+    render.render_segment(e, "hold test", src, False, 30.0, tmp_path, False, out)
+    n = subprocess.run(["ffprobe", "-v", "error", "-count_frames", "-select_streams", "v:0", "-show_entries",
+                        "stream=nb_read_frames", "-of", "csv=p=0", str(out)], capture_output=True, text=True).stdout.strip()
+    assert n == "90"
+    for t, name in ((1.2, "a.png"), (2.9, "b.png")):
+        subprocess.run(["ffmpeg", "-y", "-v", "error", "-ss", str(t), "-i", str(out), "-frames:v", "1", str(tmp_path / name)], check=True)
+    diff = ImageChops.difference(Image.open(tmp_path / "a.png").convert("RGB"), Image.open(tmp_path / "b.png").convert("RGB"))
+    assert diff.getbbox() is not None  # the held frame is slowly zooming, not frozen

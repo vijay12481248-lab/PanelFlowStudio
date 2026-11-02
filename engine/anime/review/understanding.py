@@ -67,7 +67,39 @@ def clean_beats(raw: list[_BeatOut], duration: float) -> list[Beat]:
     return out
 
 
-async def understand(a: EpisodeAnalysis, title: str, provider, wav: Path | None = None) -> Understanding:
+def add_loud_beats(beats: list[Beat], peaks: list[float], duration: float, limit: int = 3) -> list[Beat]:
+    """Dialogue-only beats miss action and music peaks: add the loudest moments no beat already covers."""
+    extra = [p for p in peaks if all(not (b.start - 10 <= p <= b.end + 10) for b in beats)]
+    merged = list(beats) + [Beat(id="", start=max(0.0, p - 3), end=min(duration, p + 6), kind="highlight",
+                                 label="Intense moment", why="A high-impact moment with little or no dialogue")
+                            for p in extra[:limit]]
+    merged.sort(key=lambda b: b.start)
+    return [b.model_copy(update={"id": f"b{i + 1:02d}"}) for i, b in enumerate(merged)]
+
+
+async def describe_beats(beats: list[Beat], source: Path, provider, tmp: Path) -> list[Beat]:
+    """One keyframe per beat -> one factual sentence from the local vision model. Failures leave the beat unchanged."""
+    import subprocess
+
+    out = []
+    for b in beats:
+        frame = tmp / f"{b.id}.jpg"
+        r = subprocess.run(["ffmpeg", "-y", "-v", "error", "-ss", f"{(b.start + b.end) / 2}", "-i", str(source),
+                            "-frames:v", "1", "-vf", "scale=768:-2", str(frame)])
+        text = ""
+        if r.returncode == 0 and frame.exists():
+            try:
+                text = (await provider.analyze_vision(
+                    frame, "Describe in one factual sentence what is visibly happening in this animation frame "
+                           "(who/what, action, mood). No speculation.", max_tokens=200)).strip()
+            except Exception:  # vision only enriches; the review still works without it
+                text = ""
+        out.append(b.model_copy(update={"visual": text}))
+    return out
+
+
+async def understand(a: EpisodeAnalysis, title: str, provider, wav: Path | None = None,
+                     source: Path | None = None, tmp: Path | None = None) -> Understanding:
     peaks = energy_peaks(wav)[0] if wav and wav.exists() else []
     prompt = (
         f'You are preparing a YouTube anime episode review of "{title}" ({a.duration_sec:.0f}s long).\n'
@@ -83,5 +115,10 @@ async def understand(a: EpisodeAnalysis, title: str, provider, wav: Path | None 
     out = await provider.generate_structured(
         prompt, _LLMOut, system_prompt="You are an experienced anime reviewer and careful note-taker.",
         temperature=0.3, max_tokens=3000, num_ctx=16384)
-    return Understanding(summary=out.summary.strip(), characters=out.characters,
-                         beats=clean_beats(out.beats, a.duration_sec), energy_peaks=peaks)
+    beats = add_loud_beats(clean_beats(out.beats, a.duration_sec), peaks, a.duration_sec)
+    if source and tmp:
+        tmp.mkdir(parents=True, exist_ok=True)
+        beats = await describe_beats(beats, source, provider, tmp)
+        # an energy peak over black frames is the end credits or a fade, not a moment worth a clip
+        beats = [b for b in beats if not (b.label == "Intense moment" and "black" in b.visual.lower())]
+    return Understanding(summary=out.summary.strip(), characters=out.characters, beats=beats, energy_peaks=peaks)

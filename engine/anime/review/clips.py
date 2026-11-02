@@ -37,8 +37,10 @@ def _candidates(a: EpisodeAnalysis, b: Beat, clip_sec: float) -> list[tuple[floa
 
 
 def select_clips(a: EpisodeAnalysis, beats: list[Beat], target_video_sec: float,
-                 rms: np.ndarray | None = None, clip_sec: float = DEFAULT_CLIP_SEC) -> ClipPlan:
+                 rms: np.ndarray | None = None, clip_sec: float | None = None) -> ClipPlan:
     budget = budget_sec(a.duration_sec, target_video_sec)
+    if clip_sec is None:  # spend the budget evenly: long videos get longer clips instead of more freezing
+        clip_sec = min(12.0, max(DEFAULT_CLIP_SEC, budget / max(len(beats), 1)))
     clip_sec = min(clip_sec, MAX_CLIP_SEC)
     rms = rms if rms is not None else np.zeros(0)
     used = 0.0

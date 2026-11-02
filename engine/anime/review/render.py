@@ -9,6 +9,8 @@ from pathlib import Path
 from engine.anime.review.models import ReviewScript, Timeline, TimelineEntry
 
 W, H = 1920, 1080
+SLOW_ZOOM_MIN_HOLD = 0.75
+SLOW_ZOOM_END = 1.10
 DUCK_DB = -22.0     # original anime audio under the narration
 MUSIC_DB = -24.0
 MAX_CAPTION_WORDS = 9
@@ -62,6 +64,12 @@ def render_segment(e: TimelineEntry, text: str, source: Path, has_audio: bool, f
     vf = [f"setpts=PTS/{e.speed}", f"scale={W}:{H}:force_original_aspect_ratio=increase", f"crop={W}:{H}", f"fps={fps}"]
     if e.hold_sec > 0:
         vf.append(f"tpad=stop_mode=clone:stop_duration={e.hold_sec + 1:.3f}")
+    if e.hold_sec >= SLOW_ZOOM_MIN_HOLD:
+        # a frozen frame looks broken; a slow push-in on it looks intentional (and uses no extra footage)
+        cf = round(e.src_len / e.speed * fps)
+        step = (SLOW_ZOOM_END - 1) / max(n_frames - cf, 1)
+        vf.append(f"scale={W * 2}:{H * 2},zoompan=z='if(lte(on,{cf}),1,min(1+(on-{cf})*{step:.6f},{SLOW_ZOOM_END}))'"
+                  f":x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s={W}x{H}:fps={fps}")
     if burn_captions:
         srt = ws / "tmp_seg.srt"
         srt.write_text(srt_text(caption_chunks(text, max(e.audio_sec - 0.25, 0.5))), encoding="utf-8")
