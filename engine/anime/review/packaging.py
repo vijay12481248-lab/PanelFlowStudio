@@ -75,14 +75,17 @@ def thumbnail(source: Path, plan: ClipPlan, text: str, out: Path) -> Path | None
 
 
 def build_package(series: str, script: ReviewScript, u: Understanding, tl: Timeline, plan: ClipPlan, source: Path,
-                  rights: RightsDeclaration, ws: Path) -> YouTubePackage:
+                  rights: RightsDeclaration, ws: Path, extra_tags: list[str] | None = None,
+                  footer: str = "") -> YouTubePackage:
     ch = chapters(script, tl)
     desc = [script.title_hook, "", u.summary, "", f"My rating: {script.rating:g}/10", ""]
     if ch:
         desc += ["Chapters:"] + [f"{t} {l}" for t, l in ch] + [""]
     desc += ["This is an independent review with my own commentary. Short clips are used for criticism and discussion; "
              f"all rights belong to their owners. Rights basis: {rights.status.value}."]
-    tags = [series, f"{series} review", "anime review", "episode review", "anime recap"] + u.characters[:5]
+    if footer:
+        desc += ["", footer]
+    tags = [series, f"{series} review", "anime review", "episode review", "anime recap"] + u.characters[:5] + (extra_tags or [])
     pkg = YouTubePackage(title=f"{series} Review - {script.title_hook}"[:100], description="\n".join(desc), tags=tags,
                          chapters=ch)
     thumb = thumbnail(source, plan, script.title_hook, ws / "thumbnail.jpg")

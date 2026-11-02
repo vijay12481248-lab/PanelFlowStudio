@@ -22,6 +22,7 @@ def build_operation(job_type: str, project_id: str, job_input: dict) -> Operatio
     global _PROVIDER_FACTORIES_READY
     if not _PROVIDER_FACTORIES_READY:
         from engine.comfyui import service as _comfyui_service  # noqa: F401
+        from engine.anime.review import queue as _anime_queue  # noqa: F401  (registers ANIME_REVIEW)
         _PROVIDER_FACTORIES_READY = True
     factory = _OPERATION_FACTORIES.get(job_type)
     return factory(project_id, job_input) if factory else None

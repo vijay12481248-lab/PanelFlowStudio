@@ -1,12 +1,19 @@
 """Anime Review workflow endpoints (docs/ANIME_REVIEW.md). Every entry point goes through the rights gate."""
 import asyncio
+import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
 from engine.acquisition.rights.models import RightsDeclaration
 from engine.anime.review import analysis, clips as clips_mod, packaging as packaging_mod, render as render_mod, ingest as ingest_mod, script as script_mod, timeline as timeline_mod, understanding
+from engine.anime.review.channels import ChannelPreset, channel_store
+from engine.anime.review.pipeline import ReviewJobSpec
+from engine.anime.review.queue import JOB_TYPE, enqueue_review
+from engine.database.session import get_db
+from engine.jobs.manager import job_manager
 from engine.llm.registry import llm_registry
 from engine.anime.review.models import ClipPlan, EpisodeAnalysis, IngestRecord, ReviewScript, Timeline, Understanding
 
@@ -121,3 +128,49 @@ async def render_review(slug: str, burn_captions: bool = True):
     out = await asyncio.to_thread(render_mod.render_review, sc, tl, src, rec.has_audio, ws, burn_captions)
     pkg = await asyncio.to_thread(packaging_mod.build_package, rec.title, sc, u, tl, plan, src, rec.rights, ws)
     return {"video": str(out), "srt": str(ws / "review.srt"), "package": pkg}
+
+
+@router.get("/channels", response_model=list[ChannelPreset])
+def list_channels():
+    return channel_store.list()
+
+
+@router.put("/channels", response_model=ChannelPreset)
+def save_channel(preset: ChannelPreset):
+    return channel_store.save(preset)
+
+
+@router.delete("/channels/{channel_id}")
+def delete_channel(channel_id: str):
+    channel_store.delete(channel_id)
+    return {"deleted": channel_id}
+
+
+class QueueItem(BaseModel):
+    source: str
+    title: str
+    rights: RightsDeclaration
+    channel_id: str
+
+
+@router.post("/queue")
+def queue_episodes(items: list[QueueItem], db: Session = Depends(get_db)):
+    """One durable job per episode; all items are validated (rights, channel) before any is queued."""
+    for it in items:
+        try:
+            it.rights.validate_for_acquisition()
+            channel_store.get(it.channel_id)
+        except (ValueError, KeyError) as e:
+            raise HTTPException(status_code=422, detail=f"{it.title}: {e}")
+    queued = []
+    for it in items:
+        ws = WORKSPACE_ROOT / f"{ingest_mod.slugify(it.title)}_{uuid.uuid4().hex[:6]}"
+        spec = ReviewJobSpec(source=it.source, title=it.title, rights=it.rights, channel_id=it.channel_id, workspace=str(ws))
+        project_id, job_id = enqueue_review(db, spec)
+        queued.append({"title": it.title, "project_id": project_id, "job_id": job_id, "workspace": str(ws)})
+    return queued
+
+
+@router.get("/jobs")
+def list_review_jobs(limit: int = 50):
+    return [j for j in job_manager.list_all_jobs(limit=200) if j["job_type"] == JOB_TYPE][:limit]

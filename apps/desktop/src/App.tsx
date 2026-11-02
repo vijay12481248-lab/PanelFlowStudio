@@ -17,6 +17,7 @@ import { MotionScreen } from "./screens/MotionScreen";
 import { RenderScreen } from "./screens/RenderScreen";
 import { ComfyImageScreen } from "./screens/ComfyImageScreen";
 import { StoryEditorScreen } from "./screens/StoryEditorScreen";
+import { AnimeReviewScreen } from "./screens/AnimeReviewScreen";
 import { PipelineNavbar } from "./components/PipelineNavbar";
 import { ProviderHealthModal } from "./components/ProviderHealthModal";
 import { AutoPilotModal } from "./components/AutoPilotModal";
@@ -43,7 +44,8 @@ type ScreenMode =
   | "motion"
   | "render"
   | "ai_provider_management"
-  | "comfy_image";
+  | "comfy_image"
+  | "anime_review";
 
 const DesktopAppContent: React.FC = () => {
   const { selectedError, closeInspector, dismissError, retryJob, reportError } = useError();
@@ -215,6 +217,10 @@ const DesktopAppContent: React.FC = () => {
     );
   }
 
+  if (currentScreen === "anime_review") {
+    return <AnimeReviewScreen onBack={() => setCurrentScreen("projects")} />;
+  }
+
   // Full-Window Redesigned Desktop Dashboard
   if (currentScreen === "projects") {
     return (
@@ -230,6 +236,7 @@ const DesktopAppContent: React.FC = () => {
           onOpenToolsModels={() => setHealthModalOpen(true)}
           onOpenProviderManagement={() => setCurrentScreen("ai_provider_management")}
           onNewProject={() => setCurrentScreen("new_project")}
+          onOpenAnimeReview={() => setCurrentScreen("anime_review")}
           onOpenAcquisition={(proj) => {
             setSelectedProject(proj);
             setCurrentScreen("acquisition");

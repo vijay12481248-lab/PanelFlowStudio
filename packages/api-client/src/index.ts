@@ -184,6 +184,28 @@ export class ApiRequestError extends Error {
   constructor(message: string, readonly status: number, readonly code?: string) { super(message); this.name = "ApiRequestError"; }
 }
 
+export interface AnimeChannelPreset {
+  id: string;
+  name: string;
+  voice: string;
+  voice_rate: number;
+  tone: string;
+  language: string;
+  target_video_sec: number;
+  music_path: string | null;
+  watermark_path: string | null;
+  extra_tags: string[];
+  description_footer: string;
+  burn_captions: boolean;
+}
+
+export interface AnimeQueueItem {
+  source: string;
+  title: string;
+  rights: { status: string; permission_notes?: string | null };
+  channel_id: string;
+}
+
 export class PanelFlowApiClient {
   private baseUrl: string;
   private engineToken?: string;
@@ -2165,6 +2187,23 @@ export class PanelFlowApiClient {
       method: "POST",
       body: JSON.stringify(req),
     });
+  }
+
+  // Anime review workflow
+  async listAnimeChannels(): Promise<AnimeChannelPreset[]> {
+    return this.request<AnimeChannelPreset[]>("/api/anime/review/channels");
+  }
+
+  async saveAnimeChannel(preset: Partial<AnimeChannelPreset> & { name: string }): Promise<AnimeChannelPreset> {
+    return this.request<AnimeChannelPreset>("/api/anime/review/channels", { method: "PUT", body: JSON.stringify(preset) });
+  }
+
+  async queueAnimeReviews(items: AnimeQueueItem[]): Promise<{ title: string; project_id: string; job_id: string }[]> {
+    return this.request("/api/anime/review/queue", { method: "POST", body: JSON.stringify(items) });
+  }
+
+  async listAnimeReviewJobs(): Promise<Job[]> {
+    return this.request<Job[]>("/api/anime/review/jobs");
   }
 }
 

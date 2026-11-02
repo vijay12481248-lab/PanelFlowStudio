@@ -57,7 +57,7 @@ def _run(cmd: list[str], cwd: Path) -> None:
 
 
 def render_segment(e: TimelineEntry, text: str, source: Path, has_audio: bool, fps: float, ws: Path,
-                   burn_captions: bool, out: Path) -> None:
+                   burn_captions: bool, out: Path, watermark: Path | None = None) -> None:
     n_frames = round(e.audio_sec * fps)
     vf = [f"setpts=PTS/{e.speed}", f"scale={W}:{H}:force_original_aspect_ratio=increase", f"crop={W}:{H}", f"fps={fps}"]
     if e.hold_sec > 0:
@@ -75,7 +75,11 @@ def render_segment(e: TimelineEntry, text: str, source: Path, has_audio: bool, f
         af = "[1:a]aresample=48000[a]"
     cmd_in = ["ffmpeg", "-y", "-v", "error", "-ss", f"{e.src_start}", "-t", f"{e.src_len}", "-i", str(source),
               "-i", e.audio_path]
-    tail = ["-filter_complex", f"[0:v]{','.join(vf)}[vv];{af}", "-map", "[vv]", "-map", "[a]",
+    video = f"[0:v]{','.join(vf)}[vv]"
+    if watermark:  # channel branding: logo top-right, 80 px tall
+        cmd_in += ["-i", str(watermark)]
+        video = f"[0:v]{','.join(vf)}[v0];[2:v]scale=-1:80[lg];[v0][lg]overlay=W-w-30:30,format=yuv420p[vv]"
+    tail = ["-filter_complex", f"{video};{af}", "-map", "[vv]", "-map", "[a]",
             "-frames:v", str(n_frames), "-t", f"{e.audio_sec}", "-r", str(fps), "-c:a", "aac", "-b:a", "192k",
             "-ar", "48000", "-ac", "2", str(out)]
     try:
@@ -87,14 +91,15 @@ def render_segment(e: TimelineEntry, text: str, source: Path, has_audio: bool, f
 
 
 def render_review(script: ReviewScript, tl: Timeline, source: Path, has_audio: bool, ws: Path,
-                  burn_captions: bool = True, music: Path | None = DEFAULT_MUSIC, name: str = "review_1080p.mp4") -> Path:
+                  burn_captions: bool = True, music: Path | None = DEFAULT_MUSIC, name: str = "review_1080p.mp4",
+                  watermark: Path | None = None) -> Path:
     seg_dir = ws / "render_segments"
     seg_dir.mkdir(exist_ok=True)
     texts = {s.id: s.text for s in script.segments}
     parts = []
     for e in tl.entries:
         p = seg_dir / f"{e.segment_id}.mp4"
-        render_segment(e, texts[e.segment_id], source, has_audio, tl.fps, ws, burn_captions, p)
+        render_segment(e, texts[e.segment_id], source, has_audio, tl.fps, ws, burn_captions, p, watermark)
         parts.append(p)
     (ws / "review.srt").write_text(srt_text(
         [c for e in tl.entries for c in [(a + e.timeline_start, b + e.timeline_start, t)

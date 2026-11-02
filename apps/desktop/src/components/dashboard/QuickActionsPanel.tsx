@@ -5,6 +5,7 @@ interface QuickActionsPanelProps {
   onNewProject: () => void;
   onImportPages?: () => void;
   onOpenLibrary?: () => void;
+  onOpenAnimeReview?: () => void;
   onModelSettings?: () => void;
   onEngineSettings?: () => void;
 }
@@ -13,6 +14,7 @@ export const QuickActionsPanel: React.FC<QuickActionsPanelProps> = ({
   onNewProject,
   onImportPages,
   onOpenLibrary,
+  onOpenAnimeReview,
   onModelSettings,
   onEngineSettings,
 }) => {
@@ -34,6 +36,17 @@ export const QuickActionsPanel: React.FC<QuickActionsPanelProps> = ({
         <Plus className="w-4 h-4 text-white" />
         <span>New Project</span>
       </button>
+
+      {onOpenAnimeReview && (
+        <button
+          onClick={onOpenAnimeReview}
+          className="w-full bg-[#151928] hover:bg-[#1f253d] text-zinc-200 border border-[#242c44] text-xs font-semibold py-2 px-3 rounded-lg flex items-center justify-center gap-2 transition-colors"
+          title="Queue anime episodes for automatic review videos"
+        >
+          <Zap className="w-4 h-4 text-indigo-400" />
+          <span>Anime Review</span>
+        </button>
+      )}
 
       {/* 2x2 Grid of Actions */}
       <div className="grid grid-cols-2 gap-2">

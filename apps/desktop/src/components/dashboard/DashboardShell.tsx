@@ -32,6 +32,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
   onOpenStoryEditor,
   onOpenProject,
   onOpenLibrary,
+  onOpenAnimeReview,
 }) => {
   const { reportError } = useError();
   // Navigation & view states
@@ -260,6 +261,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
                 onNewProject={onNewProject}
                 onImportPages={onNewProject}
                 onOpenLibrary={onOpenLibrary}
+                onOpenAnimeReview={onOpenAnimeReview}
                 onModelSettings={onOpenToolsModels}
                 onEngineSettings={onOpenToolsModels}
               />

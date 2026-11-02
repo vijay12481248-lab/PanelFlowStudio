@@ -108,3 +108,26 @@ padding); frames inspected at 4/20/45 s show the right clip, readable captions, 
 0:17, 0:30, 0:48 (chapters closer than 10 s to the previous are folded, so the short "critique" segment has no chapter of its
 own). Not verified: how the mix sounds (no listening test; levels are fixed constants), CPU fallback end-to-end on a real
 episode, Intro/outro/branding (M6), non-Windows fonts for the thumbnail.
+
+## M6 verification (2026-11-02)
+
+Added: channel presets (`/api/anime/review/channels`, stored in `app_data/config/anime_channels.json`: voice, rate, tone,
+language, target length, music, watermark logo, extra tags, description footer, captions), a hands-off orchestrator
+(`engine/anime/review/pipeline.py`, resumes from existing artifacts, rights re-checked inside the worker), durable queue
+(`POST /api/anime/review/queue`, `GET .../jobs`; each episode = one `ANIME_REVIEW` job in the existing `JobManager`,
+rehydratable after restart via `workflow.build_operation`), and a desktop screen (Quick Actions -> "Anime Review"):
+paste links/paths, pick channel, declare rights basis, watch the queue.
+Each queued episode also creates a tracking project (kind `anime_review`) because `JobRecord.project_id` is a foreign key;
+it will show up in the dashboard project list.
+
+Real run (isolated app-data dir): two 60-75 s excerpts queued at once with two channels. Both jobs SUCCEEDED unattended
+(~2 min total): "Hype Channel" (am_michael, logo watermark, footer text) and "Calm Critic" (af_heart, rate 0.95). Outputs: 1080p
+h264, frame counts equal timeline seconds x 30 (2273 = 75.7667 s, 2226 = 74.2 s); the watermark appears only on the Hype video;
+voices differ; footer appears only in the Hype description. `tsc --noEmit` on the desktop app is clean; 77 backend tests pass.
+
+Not done / not verified: intro/outro clips (preset has no such field yet); clip plan is NOT re-sized after voicing, so short
+sources still get long freezes (Hype episode: 3.8 s and 5.4 s freezes, flagged in `warnings` and in the job output); the UI was
+type-checked but never opened in a browser/Tauri window; URL download (`yt-dlp` not installed); no real anime or Japanese
+audio was ever used; no listening test; cancelling a running job mid-FFmpeg is cooperative only between stages; concurrency
+relies on the existing admission control (both jobs ran in parallel here); "Anime Review" shares the Ollama model with
+other jobs.
