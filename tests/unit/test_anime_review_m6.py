@@ -65,6 +65,8 @@ def test_queue_runs_job_through_job_manager(client, monkeypatch):
         async def health_check(self):
             return True
 
+    from engine.system.resources import resource_manager
+    monkeypatch.setattr(resource_manager, "can_admit_gpu_job", lambda *_a, **_k: (True, ""))  # real VRAM use (ComfyUI/Ollama running) must not gate the test
     monkeypatch.setattr(queue, "run_review", fake_run)
     from engine.llm.registry import llm_registry
     monkeypatch.setattr(llm_registry, "get_ollama_provider", lambda: P())
