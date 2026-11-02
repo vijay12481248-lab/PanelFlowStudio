@@ -49,9 +49,13 @@ def build_prompt(story: OriginalStory, panel: Panel, emphasis: list[str] | None 
     return ", ".join(p for p in parts if p), NEGATIVE
 
 
+SHEET_NEGATIVE = NEGATIVE + ", multiple views, split screen, collage, reference sheet, multiple characters, 2girls, 2boys"
+
+
 def sheet_prompt(c: Character, story: OriginalStory) -> str:
+    """One clean portrait per character: it is also the IP-Adapter reference, so it must show exactly one subject."""
     style = GENRES[story.bible.premise.genre].art_style
-    return f"solo, {c.look}, full body, standing, neutral pose, looking at viewer, simple white background, character sheet, {style}, {QUALITY}"
+    return f"solo, {c.look}, upper body, portrait, looking at viewer, simple plain background, {style}, {QUALITY}"
 
 
 def seed_for(story: OriginalStory, key: str, attempt: int = 0) -> int:
@@ -60,9 +64,9 @@ def seed_for(story: OriginalStory, key: str, attempt: int = 0) -> int:
 
 
 class ComfyRunner:
-    """Runs the approved anime_sdxl workflow and returns PNG bytes."""
+    """Runs the approved anime_sdxl workflow (anime_sdxl_ipa when a character reference is given); returns PNG bytes."""
 
-    def __init__(self, client: ComfyUIClient | None = None, workflow_id: str = "anime_sdxl"):
+    def __init__(self, client: ComfyUIClient | None = None, workflow_id: str = "anime_sdxl", ipa_id: str = "anime_sdxl_ipa"):
         self.client = client or ComfyUIClient()
         reg = ComfyWorkflowRegistry(self.client)
         pre = reg.preflight(workflow_id)
@@ -70,10 +74,34 @@ class ComfyRunner:
             raise RuntimeError(f"ComfyUI workflow not ready: missing nodes {pre['missing_nodes']}, models {pre['missing_models']}")
         self.workflow, _ = reg.load(workflow_id)
         self.meta = reg.metadata(workflow_id)
+        self.ipa = None  # optional: without its nodes/models panels fall back to prompt-only consistency
+        try:
+            if reg.preflight(ipa_id)["ready"]:
+                self.ipa = (reg.load(ipa_id)[0], reg.metadata(ipa_id))
+        except Exception:
+            self.ipa = None
+
+    def _upload(self, path: Path) -> str:
+        """Copy a reference image into ComfyUI's input folder (name derived from content, so reruns reuse it)."""
+        import urllib.request
+
+        data = path.read_bytes()
+        digest = hashlib.sha256(data).hexdigest()
+        name, boundary = f"pf_{digest[:16]}.png", "pfboundary" + digest[:8]
+        head = (f"--{boundary}\r\nContent-Disposition: form-data; name=\"image\"; filename=\"{name}\"\r\nContent-Type: image/png\r\n\r\n").encode()
+        tail = (f"\r\n--{boundary}\r\nContent-Disposition: form-data; name=\"overwrite\"\r\n\r\ntrue\r\n--{boundary}--\r\n").encode()
+        req = urllib.request.Request(self.client.base_url + "upload/image", data=head + data + tail,
+                                     headers={"Content-Type": f"multipart/form-data; boundary={boundary}"})
+        with urllib.request.urlopen(req, timeout=60) as r:
+            return json.loads(r.read())["name"]
 
     def generate(self, pos: str, neg: str, seed: int, width: int, height: int, prefix: str, timeout: float = 300.0,
-                 is_cancelled: Callable[[], bool] = lambda: False) -> bytes:
-        wf = _patch_workflow(self.workflow, self.meta["patch_slots"], pos, neg, width, height, seed, prefix)
+                 is_cancelled: Callable[[], bool] = lambda: False, reference: Path | None = None) -> bytes:
+        if reference is not None and self.ipa is not None:
+            wf = _patch_workflow(self.ipa[0], self.ipa[1]["patch_slots"], pos, neg, width, height, seed, prefix,
+                                 reference_image=self._upload(reference))
+        else:
+            wf = _patch_workflow(self.workflow, self.meta["patch_slots"], pos, neg, width, height, seed, prefix)
         pid = self.client.submit_prompt(wf)
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
@@ -138,8 +166,8 @@ class ArtRecord(BaseModel):
     missing: list[str] = Field(default_factory=list)
 
 
-def _hash(pos: str, neg: str) -> str:
-    return hashlib.sha256(f"{pos}\n{neg}\n{W}x{H}".encode()).hexdigest()[:16]
+def _hash(pos: str, neg: str, ref: str = "") -> str:
+    return hashlib.sha256(f"{pos}\n{neg}\n{W}x{H}\n{ref}".encode()).hexdigest()[:16]
 
 
 def generate_art(story: OriginalStory, ws: Path, runner: ComfyRunner, provider=None, limit: int | None = None,
@@ -157,7 +185,7 @@ def generate_art(story: OriginalStory, ws: Path, runner: ComfyRunner, provider=N
     for c in story.bible.characters:
         f = ws / "sheets" / f"{c.id}.png"
         if not f.exists():
-            f.write_bytes(runner.generate(sheet_prompt(c, story), NEGATIVE, seed_for(story, "sheet_" + c.id), W, H, f"sheet_{c.id}"))
+            f.write_bytes(runner.generate(sheet_prompt(c, story), SHEET_NEGATIVE, seed_for(story, "sheet_" + c.id), W, H, f"sheet_{c.id}"))
     chars = {c.id: c for c in story.bible.characters}
     panels = story.panels[:limit] if limit else story.panels
     done = reused = 0
@@ -166,17 +194,19 @@ def generate_art(story: OriginalStory, ws: Path, runner: ComfyRunner, provider=N
             raise RuntimeError("cancelled")
         progress(n / len(panels), f"Panel {n}/{len(panels)}")
         pos, neg = build_prompt(story, p)
+        shown = [chars[c] for c in p.character_ids if c in chars][:2]
+        # the first character on screen has its face pinned to its sheet
+        ref = ws / "sheets" / f"{shown[0].id}.png" if shown and getattr(runner, "ipa", None) is not None else None
         rec, img = db.get(p.id), ws / "panels" / f"{p.id}.png"
-        if rec and rec.prompt_hash == _hash(pos, neg) and img.exists():
+        if rec and rec.prompt_hash == _hash(pos, neg, ref.name if ref else "") and img.exists():
             reused += 1
             continue
-        shown = [chars[c] for c in p.character_ids if c in chars][:2]
         best: tuple[float, bytes, int, list[str]] | None = None
         emphasis: list[str] = []
         for attempt in range(MAX_ATTEMPTS):
             seed = seed_for(story, p.id, attempt)
             pos_i, _ = build_prompt(story, p, emphasis)
-            png = runner.generate(pos_i, neg, seed, W, H, f"panel_{p.id}")
+            png = runner.generate(pos_i, neg, seed, W, H, f"panel_{p.id}", reference=ref)
             score, missing = 1.0, []
             if provider is not None and shown:
                 tmp = ws / "panels" / f"_try_{p.id}.png"
@@ -190,7 +220,7 @@ def generate_art(story: OriginalStory, ws: Path, runner: ComfyRunner, provider=N
             emphasis = missing
         score, png, seed, missing = best
         img.write_bytes(png)
-        db[p.id] = ArtRecord(panel_id=p.id, image=str(img), prompt_hash=_hash(pos, neg), seed=seed, attempts=attempt + 1,
+        db[p.id] = ArtRecord(panel_id=p.id, image=str(img), prompt_hash=_hash(pos, neg, ref.name if ref else ""), seed=seed, attempts=attempt + 1,
                              score=score if provider is not None and shown else None, missing=missing)
         save()
         done += 1

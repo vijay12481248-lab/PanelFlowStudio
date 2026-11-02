@@ -111,3 +111,21 @@ def test_low_score_panel_is_regenerated_with_emphasis_and_best_kept(tmp_path):
     panel_calls = [c for c in r.calls if c[0].startswith("panel_")]
     assert len(panel_calls) == 2 and "(green eyes:1.3)" in panel_calls[1][2] and panel_calls[0][1] != panel_calls[1][1]
     assert out["mean_score"] == 1.0 and out["below_threshold"] == []
+
+
+def test_first_character_reference_is_passed_when_ipadapter_is_available(tmp_path):
+    class IpaRunner(FakeRunner):
+        ipa = object()
+
+        def generate(self, pos, neg, seed, w, h, prefix, reference=None, **kw):
+            self.calls.append((prefix, seed, pos, reference))
+            return png()
+
+    s, r = story(), IpaRunner()
+    art.generate_art(s, tmp_path, r)
+    refs = {c[0]: c[3] for c in r.calls}
+    assert refs["panel_p001"] is None  # no character on screen: nothing to pin
+    assert refs["panel_p002"].name == "mira.png" and refs["panel_p003"].name == "mira.png"  # first character leads
+    r2 = IpaRunner()
+    art.generate_art(s, tmp_path, r2)
+    assert r2.calls == []  # reference name is part of the cache key and unchanged

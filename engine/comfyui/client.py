@@ -222,7 +222,7 @@ class ComfyUIClient:
         if not models_root.is_dir() or models_root.is_symlink():
             return {}
         result: dict[str, list[str]] = {}
-        for category in ("checkpoints", "diffusion_models", "unet", "vae", "loras", "controlnet", "clip", "text_encoders"):
+        for category in ("checkpoints", "diffusion_models", "unet", "vae", "loras", "controlnet", "clip", "text_encoders", "ipadapter", "clip_vision"):
             category_dir = models_root / category
             if category_dir.is_dir() and not category_dir.is_symlink():
                 try:

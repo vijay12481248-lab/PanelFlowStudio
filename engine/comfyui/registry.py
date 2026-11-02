@@ -16,6 +16,7 @@ _WORKFLOW_ID = re.compile(r"^[a-z][a-z0-9_-]{2,63}$")
 _REGISTRY_FILE = Path(__file__).with_name("workflow_registry.json")
 _MAX_WORKFLOW_BYTES = 4 * 1024 * 1024
 _REQUIRED_PATCH_SLOTS = frozenset({"prompt", "negative_prompt", "seed", "width", "height", "filename_prefix"})
+_OPTIONAL_PATCH_SLOTS = frozenset({"reference_image"})  # character-likeness workflows (IP-Adapter)
 
 
 class WorkflowRegistryError(RuntimeError):
@@ -71,7 +72,7 @@ class ComfyWorkflowRegistry:
         entry: dict[str, Any],
     ) -> None:
         slots = entry.get("patch_slots")
-        if not isinstance(slots, dict) or set(slots) != _REQUIRED_PATCH_SLOTS:
+        if not isinstance(slots, dict) or not _REQUIRED_PATCH_SLOTS <= set(slots) <= _REQUIRED_PATCH_SLOTS | _OPTIONAL_PATCH_SLOTS:
             raise WorkflowRegistryError(
                 f"Workflow {workflow_id} must declare exact patch slots: {sorted(_REQUIRED_PATCH_SLOTS)}"
             )

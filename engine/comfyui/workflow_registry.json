@@ -118,5 +118,72 @@
       "max": 2048,
       "multiple_of": 8
     }
+  },
+  {
+    "id": "anime_sdxl_ipa",
+    "purpose": "text_to_image",
+    "filename": "anime_sdxl_ipa.api.json",
+    "sha256": "094eed69c26402b18d0110c39799318c3b22b30b99cb6a4c45484cf829358311",
+    "requires_gpu": true,
+    "gpu_vram_mb": 10000,
+    "model_files": [
+      "animagine-xl-4.0.safetensors",
+      "ip-adapter-plus_sdxl_vit-h.safetensors",
+      "CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors"
+    ],
+    "required_nodes": [
+      "CheckpointLoaderSimple",
+      "CLIPTextEncode",
+      "EmptyLatentImage",
+      "KSampler",
+      "VAEDecode",
+      "SaveImage",
+      "LoadImage",
+      "IPAdapterUnifiedLoader",
+      "IPAdapter"
+    ],
+    "patch_slots": {
+      "prompt": {
+        "node_id": "2",
+        "input": "text",
+        "class_type": "CLIPTextEncode"
+      },
+      "negative_prompt": {
+        "node_id": "3",
+        "input": "text",
+        "class_type": "CLIPTextEncode"
+      },
+      "seed": {
+        "node_id": "5",
+        "input": "seed",
+        "class_type": "KSampler"
+      },
+      "width": {
+        "node_id": "4",
+        "input": "width",
+        "class_type": "EmptyLatentImage"
+      },
+      "height": {
+        "node_id": "4",
+        "input": "height",
+        "class_type": "EmptyLatentImage"
+      },
+      "filename_prefix": {
+        "node_id": "7",
+        "input": "filename_prefix",
+        "class_type": "SaveImage"
+      },
+      "reference_image": {
+        "node_id": "8",
+        "input": "image",
+        "class_type": "LoadImage"
+      }
+    },
+    "dimension_policy": {
+      "mode": "exact",
+      "min": 256,
+      "max": 2048,
+      "multiple_of": 8
+    }
   }
 ]

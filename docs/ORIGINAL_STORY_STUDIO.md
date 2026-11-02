@@ -154,3 +154,25 @@ prompt blend features (a fox grew moth wings); the checker is noisy, so scores a
 the contact sheet; the character sheet prompt sometimes draws several copies of the character; the horror run was made before
 the drawable-tags prompt change and the new bible prompt itself was not re-run against the LLM; not yet verified through the
 `JobManager`/API path (long call, S6 queues it).
+
+## S2b result (2026-11-02): IP-Adapter for consistent faces
+
+Installed (approved, 3.4 GB): `ip-adapter-plus_sdxl_vit-h.safetensors` (848 MB, Apache-2.0) and the CLIP ViT-H image encoder
+(`CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors`, 2.53 GB) from `h94/IP-Adapter`, plus the `ComfyUI_IPAdapter_plus` custom
+node (GPL-3.0) in `ComfyUI\custom_nodes` (ComfyUI restarted to load it). New approved workflow `anime_sdxl_ipa`
+(`engine/comfyui/workflows/`, registry entry with an optional `reference_image` patch slot; registry/service accept it only
+for workflows that declare it). `ComfyRunner` uploads the reference to ComfyUI and uses this workflow whenever a panel
+shows a character; the first character on screen is pinned to its sheet, and the reference name is part of the cache key.
+Character sheets are now one clean portrait (they double as the reference). If the adapter models or nodes are missing the
+runner silently falls back to prompt-only consistency.
+
+Real A/B on the fox story (same 8 panels, same checker):
+- prompt-tags only: core-tag score mean **0.70**, ~40 s/panel (frequent regeneration);
+- IP-Adapter weight 0.6: **0.96**, all first attempts, ~20 s/panel, but compositions copied the portrait (same pose/framing);
+- IP-Adapter weight 0.45, ends at 65% of the steps (shipped): **0.92**, all first attempts, faces clearly the same fox across
+  panels (blue eyes, forehead spots, orange fur) with real variety of pose and setting.
+
+Still wrong: panels with two characters (fox + moth) draw several foxes - only one reference is applied, and the second
+character is not drawn from its own reference; the pastel style washes out strong genre mood (horror was not re-tested with the
+adapter); small "ghost" creatures clutter backgrounds. Next ideas: two-reference regional prompting for two-character panels
+(a second IPAdapter node with an attention mask) and re-testing horror.
