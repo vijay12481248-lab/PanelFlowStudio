@@ -71,7 +71,7 @@ def test_panel_rules():
     bad = st._Panels(panels=[panel(shot="medium", character_ids=["ghost"], dialogue=[st._LineOut(speaker_id="pip", text="word " * 30)],
                                    action='"Hi" says Bob', caption="Zorblax appears here")])
     msg = " ".join(st.check_panels(bad, sc(), full_bible(), BED))
-    for needle in ("panels, got", "wide establishing", "character_ids must be", "6+ words", "not shown", "1-18 words", "unknown names", "caption must be"):
+    for needle in ("panels, got", "wide establishing", "character_ids must be bible characters", "6+ words", "not shown", "1-18 words", "unknown names", "caption must be"):
         assert needle in msg
 
 

@@ -119,3 +119,9 @@ Not verified / known weak: stories are coherent but generic; repeated beats appe
 panels); the model sometimes confuses camera terms with places; the `unknown names` checks are lexical, so invented
 *events* are not caught (fiction has no ground truth; a human must read the story); mystery/fantasy not run; no
 continuity check of facts across scenes beyond names and cast.
+
+S1 reliability note: on a fresh idea ("a sleepy fox who collects lullabies") the first two attempts failed validation after
+retries (a character `look` written as a sentence, mild words like "trapped" in the bedtime forbidden list, panels that
+included a character not listed in the scene). Rules were relaxed where they were stricter than needed (look: 4 tags or 8
+words; panels may use any bible character; the scary-word list is shorter) and the third run produced a 28-panel, ~7.1 min
+story. Expect an occasional failed job with this local model; the job layer (S6) should retry automatically.

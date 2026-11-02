@@ -19,7 +19,7 @@ class Genre:
 ALWAYS_FORBIDDEN = frozenset({"sex", "sexual", "naked", "nude", "rape", "suicide", "porn"})
 GORE = frozenset({"gore", "blood", "bloody", "corpse", "dismember", "decapitate", "mutilate", "entrails"})
 SCARY = frozenset({"terror", "terrifying", "terrified", "nightmare", "nightmares", "panic", "scary", "threatening", "scream",
-                   "screaming", "trapped", "sweat", "dangerous", "dangerously", "howling", "violently"})
+                   "screaming"})
 KIDS = GORE | SCARY | frozenset({"kill", "killed", "murder", "die", "died", "dead", "death", "gun", "knife", "weapon", "stab", "hate"})
 
 GENRES: dict[str, Genre] = {

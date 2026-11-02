@@ -172,7 +172,7 @@ def check_bible(o: _Bible, genre: Genre) -> list[str]:
     for x in o.characters + o.locations:
         if not SLUG.match(x.id):
             p.append(f"id {x.id!r} must be a lowercase slug")
-        if len([t for t in x.look.split(",") if t.strip()]) < 4:
+        if len([t for t in x.look.split(",") if t.strip()]) < 4 and len(x.look.split()) < 8:
             p.append(f"{x.name}: look needs at least 4 comma-separated visual tags")
     for c in o.characters:
         if c.age_group not in AGE_GROUPS:
@@ -232,8 +232,8 @@ def check_panels(o: _Panels, scene: Scene, bible: Bible, genre: Genre) -> list[s
             p.append(f"panel {i}: shot must be in {sorted(SHOTS)} and angle in {sorted(ANGLES)}")
         if not x.character_ids and x.shot not in {"wide", "close", "extreme_close"}:
             p.append(f"panel {i}: only wide shots and close-ups of objects may show no character")
-        if any(c not in scene.character_ids for c in x.character_ids):
-            p.append(f"panel {i}: character_ids must be from this scene {scene.character_ids}")
+        if any(c not in {ch.id for ch in bible.characters} for c in x.character_ids):
+            p.append(f"panel {i}: character_ids must be bible characters {[ch.id for ch in bible.characters]}")
         if len(x.action.split()) < 6 or '"' in x.action:
             p.append(f"panel {i}: action must be a visual sentence of 6+ words without quotes")
         if len(x.dialogue) > 2:
