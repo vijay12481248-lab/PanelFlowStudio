@@ -96,3 +96,15 @@ narration, so clips were reused 5 times and 3 segments carry long freezes. That 
 tiny source; on a full episode more beats/clips exist, but M5/M6 should size the clip plan from the narration length
 (re-plan after voicing) and the render must show these warnings. Not verified: how it sounds (no listening test), video-side
 sync (render is M5), non-default voices.
+
+## M5 verification (2026-11-02)
+
+`POST /api/anime/review/{slug}/render` -> `review_1080p.mp4`, `review.srt` (sidecar) and `youtube_package.json` + `thumbnail.jpg`.
+Per segment, one ffmpeg pass: clip trimmed/slowed/frozen per the timeline, cropped to 1920x1080, original audio at -22 dB under
+the narration, captions burned in, exactly `round(audio_sec*fps)` frames; segments are concatenated with stream copy and the
+bundled BGM is mixed at -24 dB with a 2 s fade. NVENC is used when a 1-frame test encode works, with a libx264 retry. Real run
+(NVENC, 7 s for 64 s of video): 1920x1080 h264, 1922 frames = 64.0667 s x 30 fps exactly (audio track 21 ms longer from AAC
+padding); frames inspected at 4/20/45 s show the right clip, readable captions, and a 3-line thumbnail. Chapters: 0:00 Intro,
+0:17, 0:30, 0:48 (chapters closer than 10 s to the previous are folded, so the short "critique" segment has no chapter of its
+own). Not verified: how the mix sounds (no listening test; levels are fixed constants), CPU fallback end-to-end on a real
+episode, Intro/outro/branding (M6), non-Windows fonts for the thumbnail.

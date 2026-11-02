@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from engine.acquisition.rights.models import RightsDeclaration
-from engine.anime.review import analysis, clips as clips_mod, ingest as ingest_mod, script as script_mod, timeline as timeline_mod, understanding
+from engine.anime.review import analysis, clips as clips_mod, packaging as packaging_mod, render as render_mod, ingest as ingest_mod, script as script_mod, timeline as timeline_mod, understanding
 from engine.llm.registry import llm_registry
 from engine.anime.review.models import ClipPlan, EpisodeAnalysis, IngestRecord, ReviewScript, Timeline, Understanding
 
@@ -107,3 +107,17 @@ async def voice_and_sync(slug: str, voice: str = "am_michael", rate: float = 1.0
     sc = _load(ws, "script.json", ReviewScript)
     plan = _load(ws, "clips.json", ClipPlan)
     return await asyncio.to_thread(timeline_mod.voice_script, sc, plan, ws, rec.fps, voice, rate)
+
+
+@router.post("/{slug}/render")
+async def render_review(slug: str, burn_captions: bool = True):
+    """Renders the 1080p review and writes the YouTube package next to it."""
+    ws = _workspace(slug)
+    rec = _load(ws, "source.json", IngestRecord)
+    rec.rights.validate_for_acquisition()
+    sc, tl = _load(ws, "script.json", ReviewScript), _load(ws, "timeline.json", Timeline)
+    plan, u = _load(ws, "clips.json", ClipPlan), _load(ws, "understanding.json", Understanding)
+    src = Path(rec.local_path)
+    out = await asyncio.to_thread(render_mod.render_review, sc, tl, src, rec.has_audio, ws, burn_captions)
+    pkg = await asyncio.to_thread(packaging_mod.build_package, rec.title, sc, u, tl, plan, src, rec.rights, ws)
+    return {"video": str(out), "srt": str(ws / "review.srt"), "package": pkg}
