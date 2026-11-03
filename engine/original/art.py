@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import os
 import time
 from pathlib import Path
 from typing import Callable
@@ -34,9 +35,10 @@ NEGATIVE = ("lowres, bad anatomy, bad hands, text, error, missing finger, extra 
             "suggestive, revealing clothes, speech bubble")
 
 
-def build_prompt(story: OriginalStory, panel: Panel, emphasis: list[str] | None = None) -> tuple[str, str]:
+def build_prompt(story: OriginalStory, panel: Panel, emphasis: list[str] | None = None, style: str = "tags") -> tuple[str, str]:
     if panel.director:  # a directed shot: the composer writes the detailed prompt from the structured spec
-        return shotspec.compose(story, shotspec.ShotSpec(**panel.director), panel.location_id, emphasis)
+        compose = shotspec.compose_natural if style == "natural" else shotspec.compose
+        return compose(story, shotspec.ShotSpec(**panel.director), panel.location_id, emphasis)
     genre = GENRES[story.bible.premise.genre]
     chars = {c.id: c for c in story.bible.characters}
     shown = [chars[c] for c in panel.character_ids if c in chars][:2]
@@ -58,9 +60,12 @@ def build_prompt(story: OriginalStory, panel: Panel, emphasis: list[str] | None 
 SHEET_NEGATIVE = NEGATIVE + ", multiple views, split screen, collage, reference sheet, multiple characters, 2girls, 2boys"
 
 
-def sheet_prompt(c: Character, story: OriginalStory) -> str:
+def sheet_prompt(c: Character, story: OriginalStory, style_kind: str = "tags") -> str:
     """One clean portrait per character: it is also the IP-Adapter reference, so it must show exactly one subject."""
     style = GENRES[story.bible.premise.genre].art_style
+    if style_kind == "natural":
+        return (f"Character reference portrait, upper body, facing the viewer, plain background, {style}. "
+                f"{shotspec.describe_character(c)}. {shotspec.NATURAL_SUFFIX}")
     return f"solo, {shotspec.person_tags(c)}, {c.look}, upper body, portrait, looking at viewer, simple plain background, {style}, {QUALITY}"
 
 
@@ -73,14 +78,25 @@ class ComfyRunner:
     """Runs the approved anime_sdxl workflow (anime_sdxl_ipa when a character reference is given); returns PNG bytes."""
 
     def __init__(self, client: ComfyUIClient | None = None, workflow_id: str = "anime_sdxl", ipa_id: str = "anime_sdxl_ipa",
-                 ipa2_id: str = "anime_sdxl_ipa2"):
+                 ipa2_id: str = "anime_sdxl_ipa2", engine: str | None = None, flux_id: str = "flux_schnell"):
         self.client = client or ComfyUIClient()
         reg = ComfyWorkflowRegistry(self.client)
-        pre = reg.preflight(workflow_id)
-        if not pre["ready"]:
+        engine = engine or os.environ.get("PANELFLOW_IMAGE_ENGINE", "auto")  # auto | flux | sdxl
+        self.flux = None  # a prompt-following model: it reads sentences, so objects and actions in the narration survive
+        if engine in ("auto", "flux"):
+            try:
+                if reg.preflight(flux_id)["ready"]:
+                    self.flux = (reg.load(flux_id)[0], reg.metadata(flux_id))
+            except Exception:
+                self.flux = None
+            if engine == "flux" and self.flux is None:
+                raise RuntimeError("FLUX was requested but its workflow is not ready (model file missing or ComfyUI down)")
+        self.engine = "flux" if self.flux is not None else "sdxl"
+        self.style = "natural" if self.flux is not None else "tags"
+        pre = reg.preflight(workflow_id) if self.flux is None or engine == "auto" else {"ready": True}
+        if not pre["ready"] and self.flux is None:
             raise RuntimeError(f"ComfyUI workflow not ready: missing nodes {pre['missing_nodes']}, models {pre['missing_models']}")
-        self.workflow, _ = reg.load(workflow_id)
-        self.meta = reg.metadata(workflow_id)
+        self.workflow, self.meta = (reg.load(workflow_id)[0], reg.metadata(workflow_id)) if pre["ready"] else (None, None)
         self.ipa = None  # optional: without its nodes/models panels fall back to prompt-only consistency
         try:
             if reg.preflight(ipa_id)["ready"]:
@@ -111,7 +127,9 @@ class ComfyRunner:
     def generate(self, pos: str, neg: str, seed: int, width: int, height: int, prefix: str, timeout: float = 300.0,
                  is_cancelled: Callable[[], bool] = lambda: False, reference: Path | None = None,
                  reference_b: Path | None = None, reference_weight: float | None = None) -> bytes:
-        if reference is not None and reference_b is not None and self.ipa2 is not None and (width, height) == (W, H):
+        if self.flux is not None:
+            wf = _patch_workflow(self.flux[0], self.flux[1]["patch_slots"], pos, neg, width, height, seed, prefix)
+        elif reference is not None and reference_b is not None and self.ipa2 is not None and (width, height) == (W, H):
             wf = _patch_workflow(self.ipa2[0], self.ipa2[1]["patch_slots"], pos, neg, width, height, seed, prefix,
                                  reference_image=self._upload(reference), reference_image_b=self._upload(reference_b))
         elif reference is not None and self.ipa is not None:
@@ -256,7 +274,7 @@ def generate_art(story: OriginalStory, ws: Path, runner: ComfyRunner, provider=N
     for c in story.bible.characters:
         f = ws / "sheets" / f"{c.id}.png"
         if not f.exists():
-            f.write_bytes(runner.generate(sheet_prompt(c, story), SHEET_NEGATIVE, seed_for(story, "sheet_" + c.id), W, H, f"sheet_{c.id}"))
+            f.write_bytes(runner.generate(sheet_prompt(c, story, getattr(runner, "style", "tags")), "" if getattr(runner, "style", "tags") == "natural" else SHEET_NEGATIVE, seed_for(story, "sheet_" + c.id), W, H, f"sheet_{c.id}"))
     chars = {c.id: c for c in story.bible.characters}
     panels = story.panels[:limit] if limit else story.panels
     done = reused = 0
@@ -264,21 +282,22 @@ def generate_art(story: OriginalStory, ws: Path, runner: ComfyRunner, provider=N
         if is_cancelled():
             raise RuntimeError("cancelled")
         progress(n / len(panels), f"Panel {n}/{len(panels)}")
-        pos, neg = build_prompt(story, p)
+        style, engine = getattr(runner, "style", "tags"), getattr(runner, "engine", "sdxl")
+        pos, neg = build_prompt(story, p, style=style)
         shown = [chars[c] for c in p.character_ids if c in chars][:2]
         # the first character on screen has its face pinned to its sheet
         ref = ws / "sheets" / f"{shown[0].id}.png" if shown and getattr(runner, "ipa", None) is not None else None
         # two characters: the first is pinned to the left half, the second to the right half (needs the masked workflow)
         ref_b = ws / "sheets" / f"{shown[1].id}.png" if len(shown) == 2 and getattr(runner, "ipa2", None) is not None else None
         rec, img = db.get(p.id), ws / "panels" / f"{p.id}.png"
-        if rec and rec.prompt_hash == _hash(pos, neg, (ref.name if ref else "") + (ref_b.name if ref_b else "")) and img.exists():
+        if rec and rec.prompt_hash == _hash(pos, neg, engine + (ref.name if ref else "") + (ref_b.name if ref_b else "")) and img.exists():
             reused += 1
             continue
         best: tuple | None = None
         emphasis: list[str] = []
         for attempt in range(DIRECTED_ATTEMPTS if p.director else MAX_ATTEMPTS):
             seed = seed_for(story, p.id, attempt)
-            pos_i, _ = build_prompt(story, p, emphasis)
+            pos_i, _ = build_prompt(story, p, emphasis, style)
             png = runner.generate(pos_i, neg, seed, W, H, f"panel_{p.id}", reference=ref, reference_b=ref_b,
                                   reference_weight=POSE_WEIGHT if (pose_sensitive(p) or attempt > 0) else None)  # retries loosen the pin
             score, missing, match, unmatched, desc, verified = 1.0, [], 1.0, [], "", True
@@ -305,7 +324,7 @@ def generate_art(story: OriginalStory, ws: Path, runner: ComfyRunner, provider=N
             emphasis = missing + unmatched
         total, png, seed, missing, score, match, unmatched, desc, verified = best
         img.write_bytes(png)
-        db[p.id] = ArtRecord(panel_id=p.id, image=str(img), prompt_hash=_hash(pos, neg, (ref.name if ref else "") + (ref_b.name if ref_b else "")), seed=seed, attempts=attempt + 1,
+        db[p.id] = ArtRecord(panel_id=p.id, image=str(img), prompt_hash=_hash(pos, neg, engine + (ref.name if ref else "") + (ref_b.name if ref_b else "")), seed=seed, attempts=attempt + 1,
                              score=score if provider is not None and shown else None,
                              match_score=match if provider is not None and p.key_visuals and verified else None, missing=missing + unmatched,
                              description=desc)

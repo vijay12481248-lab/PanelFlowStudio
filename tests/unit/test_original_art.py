@@ -199,3 +199,26 @@ def test_directed_shot_is_described_judged_and_redrawn_until_it_matches(tmp_path
     assert len(calls) == 2 and "(eyes closed:1.3)" in calls[1][2]  # the miss was weighted in the retry prompt
     rec = json.loads((tmp_path / "art.json").read_text())[0]
     assert rec["match_score"] == 1.0 and "asleep" in rec["description"] and out["below_threshold"] == []
+
+
+def test_a_prompt_following_engine_gets_sentences_and_no_negative_prompt(tmp_path):
+    from engine.original.shotspec import CharPose, ShotSpec
+
+    class FluxRunner(FakeRunner):
+        style, engine = "natural", "flux"
+
+        def generate(self, pos, neg, seed, w, h, prefix, **kw):
+            self.calls.append((prefix, seed, pos, neg))
+            return png()
+
+    s = story()
+    s.panels = [s.panels[1].model_copy(update={"director": ShotSpec(
+        shot="medium", setting="a dusty attic", lighting="lamp light", mood="calm", key_visuals=["a glowing lamp"],
+        characters=[CharPose(id="mira", side="center", pose="standing", expression="smiling", action="holding a lamp")]).model_dump()})]
+    r = FluxRunner()
+    art.generate_art(s, tmp_path, r)
+    panel = [c for c in r.calls if c[0].startswith("panel_")][0]
+    assert "The picture must clearly show: a glowing lamp." in panel[2] and panel[3] == ""
+    sheet = [c for c in r.calls if c[0].startswith("sheet_")][0]
+    assert sheet[2].startswith("Character reference portrait") and sheet[3] == ""
+    assert json.loads((tmp_path / "art.json").read_text())[0]["prompt_hash"]

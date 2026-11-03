@@ -265,5 +265,62 @@
       "max": 1344,
       "multiple_of": 8
     }
+  },
+  {
+    "id": "flux_schnell",
+    "purpose": "text_to_image",
+    "filename": "flux_schnell.api.json",
+    "sha256": "6cbfe91eace6b4ef646da0d13973e97c5cce7a5eca0c02682f54d597837e1939",
+    "requires_gpu": true,
+    "gpu_vram_mb": 14000,
+    "model_files": [
+      "flux1-schnell-fp8.safetensors"
+    ],
+    "required_nodes": [
+      "CheckpointLoaderSimple",
+      "CLIPTextEncode",
+      "EmptySD3LatentImage",
+      "KSampler",
+      "VAEDecode",
+      "SaveImage"
+    ],
+    "patch_slots": {
+      "prompt": {
+        "node_id": "2",
+        "input": "text",
+        "class_type": "CLIPTextEncode"
+      },
+      "negative_prompt": {
+        "node_id": "3",
+        "input": "text",
+        "class_type": "CLIPTextEncode"
+      },
+      "seed": {
+        "node_id": "5",
+        "input": "seed",
+        "class_type": "KSampler"
+      },
+      "width": {
+        "node_id": "4",
+        "input": "width",
+        "class_type": "EmptySD3LatentImage"
+      },
+      "height": {
+        "node_id": "4",
+        "input": "height",
+        "class_type": "EmptySD3LatentImage"
+      },
+      "filename_prefix": {
+        "node_id": "7",
+        "input": "filename_prefix",
+        "class_type": "SaveImage"
+      }
+    },
+    "dimension_policy": {
+      "mode": "exact",
+      "min": 256,
+      "max": 2048,
+      "multiple_of": 16
+    }
   }
 ]

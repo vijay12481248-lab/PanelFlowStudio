@@ -161,6 +161,57 @@ def compose(story: OriginalStory, spec: ShotSpec, location_id: str, emphasis: li
     return ", ".join(tokens), neg
 
 
+NATURAL_PERSON = {
+    ("child", "male"): "a little boy", ("child", "female"): "a little girl", ("child", "neutral"): "a child",
+    ("teen", "male"): "a teenage boy", ("teen", "female"): "a teenage girl", ("teen", "neutral"): "a teenager",
+    ("adult", "male"): "an adult man", ("adult", "female"): "an adult woman", ("adult", "neutral"): "an adult",
+    ("elder", "male"): "an old man with a wrinkled face", ("elder", "female"): "an old woman with a wrinkled face",
+    ("elder", "neutral"): "an elderly person",
+}
+FRAMING = {"wide": "Wide shot showing the whole scene and the surroundings.", "medium": "Medium shot from the waist up.",
+           "close": "Close-up of the face and shoulders.", "extreme_close": "Extreme close-up on the face and eyes.",
+           "over_shoulder": "Over-the-shoulder shot from behind the character."}
+NATURAL_SUFFIX = "No text, no captions, no speech bubbles, no watermark. A single clean illustration with consistent character design."
+
+
+def describe_character(ch: Character) -> str:
+    """One reusable sentence fragment for a character: the same words in every picture keep the design consistent."""
+    who = NATURAL_PERSON.get((ch.age_group, ch.gender), "a person") if ch.species == "human" else f"a {ch.species}"
+    return f"{who} with {ch.look}"
+
+
+def compose_natural(story: OriginalStory, spec: ShotSpec, location_id: str, emphasis: list[str] | None = None) -> tuple[str, str]:
+    """The same ShotSpec as a paragraph of plain English, for models that follow sentences instead of tags. (positive, negative='')"""
+    genre = GENRES[story.bible.premise.genre]
+    chars = {c.id: c for c in story.bible.characters}
+    loc = next((x for x in story.bible.locations if x.id == location_id), None)
+    shown = [c for c in spec.characters if c.id in chars][:2]
+    if len(shown) == 2:
+        shown.sort(key=lambda c: {"left": 0, "center": 1, "right": 2}.get(c.side, 1))
+    parts = [f"{genre.art_style.split(',')[-1].strip().capitalize() if 'style' in genre.art_style.split(',')[-1] else 'Anime illustration'}.",
+             FRAMING.get(spec.shot, "")]
+    if not shown:
+        parts.append("There are no people in the picture.")
+    for k, c in enumerate(shown):
+        where = "" if len(shown) == 1 else ("On the left: " if k == 0 else "On the right: ")
+        doing = ", ".join(x for x in (c.pose, c.expression, c.action) if x)
+        parts.append(f"{where}{describe_character(chars[c.id])}. {doing[:1].upper() + doing[1:]}." if doing else f"{where}{describe_character(chars[c.id])}.")
+    place = ". ".join(x for x in ((loc.name + ": " + ", ".join(_tokens(loc.look, 5))) if loc else "", spec.setting) if x)
+    if place:
+        parts.append(f"Setting: {place}.")
+    if spec.lighting or spec.mood:
+        parts.append(f"Lighting: {spec.lighting or 'natural'}. Mood: {spec.mood or 'calm'}.")
+    need = list(dict.fromkeys(spec.key_visuals + (emphasis or [])))
+    if need:
+        parts.append("The picture must clearly show: " + "; ".join(need) + ".")
+    if emphasis:
+        parts.append("Pay special attention to: " + "; ".join(emphasis) + ".")
+    if any(k in " ".join(spec.key_visuals).lower() for k in ("eyes closed", "closed eyes")):
+        parts.append("Her/his eyes are closed.")
+    parts.append(f"Style: {', '.join(_tokens(genre.art_style))}. {NATURAL_SUFFIX}")
+    return " ".join(x for x in parts if x), ""
+
+
 def pose_sensitive(spec: ShotSpec) -> bool:
     """Shots whose pose or expression the character portrait would override (it looks at the viewer, eyes open)."""
     text = " ".join([c.pose + " " + c.expression + " " + c.action for c in spec.characters] + spec.key_visuals).lower()

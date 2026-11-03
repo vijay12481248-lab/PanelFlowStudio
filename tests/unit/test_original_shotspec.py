@@ -44,3 +44,25 @@ def test_from_behind_shots_negate_looking_at_the_viewer_and_pose_sensitivity_is_
 def test_required_text_names_characters_with_their_look_for_the_judge():
     text = spec().required_text({c.id: c for c in STORY.bible.characters})
     assert "Mira (short brown hair)" in text and "eyes closed, peaceful smile" in text and "Must be visible: eyes closed" in text
+
+
+def test_natural_language_prompt_for_prompt_following_models():
+    s = spec(shot="medium", camera="eye_level", key_visuals=["a silver bell on the wall", "eyes open"],
+             characters=[ss.CharPose(id="pip", side="right", pose="standing", expression="wide-eyed", action="staring at the bell"),
+                         ss.CharPose(id="mira", side="left", pose="sitting", expression="calm", action="holding a lamp")])
+    pos, neg = ss.compose_natural(STORY, s, "attic", emphasis=["a silver bell on the wall"])
+    assert neg == "" and pos.index("On the left:") < pos.index("On the right:")  # Mira (left) first
+    for needle in ("Medium shot from the waist up.", "a little girl with short brown hair", "Sitting, calm, holding a lamp", "Setting: Attic",
+                   "The picture must clearly show: a silver bell on the wall; eyes open.", "Pay special attention to: a silver bell on the wall.",
+                   "No text, no captions, no speech bubbles"):
+        assert needle in pos, needle
+    assert "masterpiece" not in pos and ":1.3)" not in pos  # no booru tags or weights
+    none, _ = ss.compose_natural(STORY, spec(characters=[]), "attic")
+    assert "There are no people in the picture." in none
+
+
+def test_character_description_is_the_same_words_every_time():
+    elder = full_bible().characters[0].model_copy(update={"age_group": "elder", "gender": "male"})
+    assert ss.describe_character(elder).startswith("an old man with a wrinkled face with ")
+    fox = elder.model_copy(update={"species": "fox cub"})
+    assert ss.describe_character(fox).startswith("a fox cub with ")
