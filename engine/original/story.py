@@ -35,6 +35,8 @@ class _Char(BaseModel):
     name: str
     role: str = Field(description="protagonist, companion, antagonist, mentor or other")
     age_group: str = Field(description="child, teen, adult or elder")
+    species: str = Field(description="'human', or exactly what it is: fox cub, robot, spirit")
+    gender: str = Field(description="male or female for humans (decide it); neutral only for creatures, robots and spirits")
     look: str = Field(description="6-10 comma-separated visual tags: hair, eyes, build, outfit, one distinctive item")
     personality: str
 
@@ -111,11 +113,17 @@ def to_slug(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", text.lower()).strip("_")[:24] or "x"
 
 
+GENDERS = {"man": "male", "boy": "male", "he": "male", "woman": "female", "girl": "female", "she": "female"}
+
+
 def normalize_bible(o: _Bible) -> _Bible:
     """Fix what the model gets cosmetically wrong (hyphenated ids, 'kid' for child) instead of failing the whole step."""
     for x in o.characters + o.locations:
         x.id = to_slug(x.name or x.id)  # the id follows the name: a model that calls "Mist-Walker" by its id "fenrir" in prose is a real failure
     for c in o.characters:
+        g = c.gender.strip().lower()
+        c.gender = GENDERS.get(g, g if g in ("male", "female") else "neutral")
+        c.species = c.species.strip().lower() or "human"
         c.age_group = AGE_SYNONYMS.get(c.age_group.strip().lower(), c.age_group.strip().lower())
         if c.age_group not in AGE_GROUPS and c.role != "protagonist":
             c.age_group = "adult"  # creatures and spirits: the field only matters for the hero and for child-safety
@@ -183,6 +191,9 @@ def check_bible(o: _Bible, genre: Genre) -> list[str]:
     for c in o.characters:
         if re.sub(r"[^a-z]", "", c.name.lower()) in NOT_NAMES or len(c.name.strip()) < 3:
             p.append(f"character name {c.name!r} is a pronoun or generic word; give every character a proper name")
+    for c in o.characters:
+        if c.species == "human" and c.gender == "neutral":
+            p.append(f"{c.name}: a human character needs gender male or female (it decides how they are drawn)")
     if sum(c.role == "protagonist" for c in o.characters) != 1:
         p.append("exactly one protagonist is required")
     hero = next((c for c in o.characters if c.role == "protagonist"), None)
@@ -221,6 +232,18 @@ def check_outline(o: _Outline, bible: Bible, genre: Genre) -> list[str]:
     return p
 
 
+ABSTRACT_WORDS = {"realizes", "realises", "realized", "realised", "understands", "understood", "represents", "symbol", "symbolizes", "metaphor",
+                  "essence", "embodiment", "testament", "tapestry", "sanctuary", "legacy", "destiny", "significance", "profound", "transcend"}
+
+
+def caption_visual_problem(caption: str, shown: list[Character]) -> str:
+    """The picture is drawn from the caption, so a caption must say who is on screen and describe something that can be seen."""
+    if shown and not any(c.name.split()[0].lower() in caption.lower() for c in shown):
+        return f"the caption must name who is on screen ({', '.join(c.name for c in shown)}) and what they visibly do"
+    hits = sorted({w.strip(".,;:!?").lower() for w in caption.split()} & ABSTRACT_WORDS)
+    return f"the caption is abstract ({hits}): describe what we SEE - body, face, objects, place" if hits else ""
+
+
 def check_panels(o: _Panels, scene: Scene, bible: Bible, genre: Genre) -> list[str]:
     p: list[str] = []
     normalize_panels(o, bible)
@@ -251,6 +274,9 @@ def check_panels(o: _Panels, scene: Scene, bible: Bible, genre: Genre) -> list[s
         cw = len(x.caption.split())
         if not genre.caption_words[0] <= cw <= genre.caption_words[1] + 10:  # ten words of slack over the requested range
             p.append(f"panel {i}: caption must be {genre.caption_words[0]}-{genre.caption_words[1]} words, got {cw}")
+        problem = caption_visual_problem(x.caption, [c for c in bible.characters if c.id in x.character_ids])
+        if problem:
+            p.append(f"panel {i}: {problem}")
         text = " ".join([x.action, x.caption] + [ln.text for ln in x.dialogue])
         if forbidden_hits(text, genre):
             p.append(f"panel {i}: forbidden words {forbidden_hits(text, genre)}")
@@ -353,8 +379,10 @@ async def _script(bible: Bible, genre: Genre, ou: _Outline, provider, progress, 
                          "establishing shot; vary shots and angles. 'action' is a concrete visual description for an "
                          "illustrator (no dialogue in it; 'shot' and 'angle' are camera terms - never describe a person or room as 'high' or 'low' because of them). Dialogue speakers must appear in the panel; keep lines short and "
                          "natural. Keep every panel different from the last - move the story forward. EVERY panel needs a narrator 'caption' of "
-                         f"{genre.caption_words[0]}-{genre.caption_words[1]} words in the voice of a storyteller (what happens, "
-                         "what it feels like); it is read aloud over the picture. Use only the bible's characters and places.",
+                         f"{genre.caption_words[0]}-{genre.caption_words[1]} words in the voice of a storyteller; it is read aloud over the picture and "
+                         "the picture is DRAWN FROM IT, so every caption must name the characters on screen and describe what can be SEEN: "
+                         "their body, face and eyes, what they hold or do, the place and light. Feelings are shown through faces and "
+                         "gestures; no internal thoughts and no abstract statements. Use only the bible's characters and places.",
                          _Panels, lambda o, sc=sc: check_panels(o, sc, bible, genre), temperature=0.8, notes=notes)
         for x in out.panels:
             panels.append(Panel(id=f"p{len(panels) + 1:03d}", scene_id=sc.id, shot=x.shot, angle=x.angle,

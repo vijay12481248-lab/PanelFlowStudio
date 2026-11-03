@@ -1,3 +1,4 @@
+import json
 import asyncio
 import io
 
@@ -169,3 +170,32 @@ def test_closed_eyes_requirement_is_weighted_and_open_eyes_are_negated():
     pos, neg = art.build_prompt(s, p)
     assert "(eyes closed:1.4)" in pos and "(sleeping:1.4)" in pos and "open eyes" in neg
     assert "open eyes" not in art.build_prompt(s, s.panels[1])[1]
+
+
+def test_directed_shot_is_described_judged_and_redrawn_until_it_matches(tmp_path):
+    from engine.original.shotspec import CharPose, ShotSpec
+
+    s = story()
+    p = s.panels[1].model_copy(update={"director": ShotSpec(
+        shot="close", camera="eye_level", setting="a dusty attic with a round window", lighting="lamp light", mood="calm", key_visuals=["eyes closed"],
+        characters=[CharPose(id="mira", side="center", pose="lying down", expression="eyes closed", action="")]).model_dump(), "key_visuals": ["eyes closed"]})
+    s.panels = [p]
+
+    class P:
+        def __init__(self):
+            self.n = 0
+
+        async def analyze_vision(self, image, prompt, **kw):
+            self.n += 1
+            return "a girl lying down with her eyes wide open" if self.n == 1 else "a girl lying curled up asleep, her eyes closed"
+
+        async def generate_structured(self, prompt, model, **kw):
+            shows = "eyes closed" in prompt.split("ACTUALLY SHOWS")[1] and "wide open" not in prompt.split("ACTUALLY SHOWS")[1]
+            return model(score=1.0 if shows else 0.4, missing=[] if shows else ["eyes closed"])
+
+    r = FakeRunner()
+    out = art.generate_art(s, tmp_path, r, provider=P())
+    calls = [c for c in r.calls if c[0].startswith("panel_")]
+    assert len(calls) == 2 and "(eyes closed:1.3)" in calls[1][2]  # the miss was weighted in the retry prompt
+    rec = json.loads((tmp_path / "art.json").read_text())[0]
+    assert rec["match_score"] == 1.0 and "asleep" in rec["description"] and out["below_threshold"] == []

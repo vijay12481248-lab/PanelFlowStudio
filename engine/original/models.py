@@ -17,6 +17,8 @@ class Character(BaseModel):
     age_group: str  # child | teen | adult | elder
     look: str  # comma-separated visual tags reused verbatim in every art prompt
     personality: str
+    species: str = "human"  # "human" or what they are: "fox cub", "clockwork assistant" (a human tag must never be put on a creature)
+    gender: str = "neutral"  # male | female | neutral (humans only)
 
 
 class Location(BaseModel):
@@ -49,6 +51,7 @@ class Panel(BaseModel):
     caption: str = ""  # narration box
     sfx: list[str] = Field(default_factory=list)
     key_visuals: list[str] = Field(default_factory=list)  # what the narration needs visible; checked on the image
+    director: dict = Field(default_factory=dict)  # the ShotSpec the shot director wrote (see shotspec.py); empty for plain panels
 
 
 class Scene(BaseModel):

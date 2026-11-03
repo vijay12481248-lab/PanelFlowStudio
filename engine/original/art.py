@@ -20,6 +20,7 @@ from engine.comfyui import ComfyUIClient, ComfyWorkflowRegistry
 from engine.comfyui.service import _history_images, _patch_workflow
 from engine.original.genres import GENRES
 from engine.original.models import Character, OriginalStory, Panel
+from engine.original import shotspec
 
 W, H = 1344, 768  # SDXL-friendly 16:9, the video frame shape
 THRESHOLD = 0.6
@@ -34,6 +35,8 @@ NEGATIVE = ("lowres, bad anatomy, bad hands, text, error, missing finger, extra 
 
 
 def build_prompt(story: OriginalStory, panel: Panel, emphasis: list[str] | None = None) -> tuple[str, str]:
+    if panel.director:  # a directed shot: the composer writes the detailed prompt from the structured spec
+        return shotspec.compose(story, shotspec.ShotSpec(**panel.director), panel.location_id, emphasis)
     genre = GENRES[story.bible.premise.genre]
     chars = {c.id: c for c in story.bible.characters}
     shown = [chars[c] for c in panel.character_ids if c in chars][:2]
@@ -58,7 +61,7 @@ SHEET_NEGATIVE = NEGATIVE + ", multiple views, split screen, collage, reference 
 def sheet_prompt(c: Character, story: OriginalStory) -> str:
     """One clean portrait per character: it is also the IP-Adapter reference, so it must show exactly one subject."""
     style = GENRES[story.bible.premise.genre].art_style
-    return f"solo, {c.look}, upper body, portrait, looking at viewer, simple plain background, {style}, {QUALITY}"
+    return f"solo, {shotspec.person_tags(c)}, {c.look}, upper body, portrait, looking at viewer, simple plain background, {style}, {QUALITY}"
 
 
 def seed_for(story: OriginalStory, key: str, attempt: int = 0) -> int:
@@ -171,11 +174,14 @@ async def check_panel(provider, image: Path, chars: list[Character], shot: str =
 
 
 POSE_WORDS = ("closed", "asleep", "sleeping", "from behind", "back to", "turned away", "facing away", "looking up", "looking down")
-MATCH_THRESHOLD = 0.6
+MATCH_THRESHOLD = 0.7
+DIRECTED_ATTEMPTS = 3
 POSE_WEIGHT = 0.3  # the portrait looks at the viewer with open eyes; a lower pin lets "eyes closed" or "from behind" through
 
 
 def pose_sensitive(panel: Panel) -> bool:
+    if panel.director:
+        return shotspec.pose_sensitive(shotspec.ShotSpec(**panel.director))
     text = " ".join(panel.key_visuals + [panel.action]).lower()
     return any(w in text for w in POSE_WORDS)
 
@@ -196,6 +202,29 @@ async def check_match(provider, image: Path, keys: list[str]) -> tuple[float, li
     return 1 - len(bad) / len(keys), bad
 
 
+class _Judgement(BaseModel):
+    score: float = Field(description="share of the required items the description shows, 0 to 1")
+    missing: list[str] = Field(default_factory=list, description="required items not shown or contradicted, as short phrases")
+
+
+async def describe_image(provider, image: Path) -> str:
+    """What a viewer would say the picture shows: free text is something the vision model does well, unlike yes/no lists."""
+    return (await provider.analyze_vision(
+        image, "Describe this illustration in detail for someone who cannot see it: each character (kind of creature, hair or fur, "
+        "clothes), their body pose, their facial expression and whether their eyes are open or closed, what they are doing, objects "
+        "they hold, the place, the lighting and mood. Be literal, do not guess what is not visible, and use at most 90 words.", max_tokens=1000, temperature=0.0)).strip()
+
+
+async def judge_shot(provider, required: str, description: str) -> tuple[float, list[str]]:
+    """Text-only comparison of what the shot REQUIRES with what the picture was described as showing."""
+    prompt = (f"REQUIRED in the picture:\n{required}\n\nWHAT THE PICTURE ACTUALLY SHOWS (a literal description):\n{description}\n\n"
+              "Which required items are NOT shown or are contradicted by the description? Different wording for the same thing counts as shown "
+              "(a fox cub is the orange fox). List only real misses, as short phrases. score = share of required items that are shown.")
+    out = await provider.generate_structured(prompt, _Judgement, system_prompt="You are a strict, literal reviewer.", temperature=0.0,
+                                             max_tokens=400, num_ctx=8192)
+    return max(0.0, min(1.0, out.score)), [m.strip() for m in out.missing if m.strip()]
+
+
 class ArtRecord(BaseModel):
     panel_id: str
     image: str
@@ -203,7 +232,8 @@ class ArtRecord(BaseModel):
     seed: int
     attempts: int
     score: float | None = None
-    match_score: float | None = None  # does the picture show what the narration says (vision check of key_visuals)
+    match_score: float | None = None  # does the picture show what the narration says (described, then judged against the shot spec)
+    description: str = ""  # what the accepted picture was described as showing
     missing: list[str] = Field(default_factory=list)
 
 
@@ -246,30 +276,39 @@ def generate_art(story: OriginalStory, ws: Path, runner: ComfyRunner, provider=N
             continue
         best: tuple | None = None
         emphasis: list[str] = []
-        for attempt in range(MAX_ATTEMPTS):
+        for attempt in range(DIRECTED_ATTEMPTS if p.director else MAX_ATTEMPTS):
             seed = seed_for(story, p.id, attempt)
             pos_i, _ = build_prompt(story, p, emphasis)
             png = runner.generate(pos_i, neg, seed, W, H, f"panel_{p.id}", reference=ref, reference_b=ref_b,
-                                  reference_weight=POSE_WEIGHT if pose_sensitive(p) else None)
-            score, missing, match, unmatched = 1.0, [], 1.0, []
+                                  reference_weight=POSE_WEIGHT if (pose_sensitive(p) or attempt > 0) else None)  # retries loosen the pin
+            score, missing, match, unmatched, desc, verified = 1.0, [], 1.0, [], "", True
             if provider is not None and (shown or p.key_visuals):
                 tmp = ws / "panels" / f"_try_{p.id}.png"
                 tmp.write_bytes(png)
-                if shown:
-                    score, missing = asyncio.run(check_panel(provider, tmp, shown, p.shot))
-                match, unmatched = asyncio.run(check_match(provider, tmp, p.key_visuals))
+                if p.director:
+                    spec = shotspec.ShotSpec(**p.director)
+                    try:
+                        desc = asyncio.run(describe_image(provider, tmp))
+                        match, unmatched = asyncio.run(judge_shot(provider, spec.required_text(chars), desc))
+                    except Exception as e:  # a model hiccup must not stop a whole episode: keep the picture, mark it unverified
+                        desc, match, unmatched, verified = f"(not verified: {str(e)[:80]})", 1.0, [], False
+                else:
+                    if shown:
+                        score, missing = asyncio.run(check_panel(provider, tmp, shown, p.shot))
+                    match, unmatched = asyncio.run(check_match(provider, tmp, p.key_visuals))
                 tmp.unlink(missing_ok=True)
             total = 0.7 * match + 0.3 * score  # what the narration says leads; the face is pinned by the reference already
             if best is None or total > best[0]:
-                best = (total, png, seed, missing, score, match, unmatched)
+                best = (total, png, seed, missing, score, match, unmatched, desc, verified)
             if provider is None or match >= MATCH_THRESHOLD:
                 break  # the identity score is recorded but does not trigger redraws: its tags are too noisy to act on
             emphasis = missing + unmatched
-        total, png, seed, missing, score, match, unmatched = best
+        total, png, seed, missing, score, match, unmatched, desc, verified = best
         img.write_bytes(png)
         db[p.id] = ArtRecord(panel_id=p.id, image=str(img), prompt_hash=_hash(pos, neg, (ref.name if ref else "") + (ref_b.name if ref_b else "")), seed=seed, attempts=attempt + 1,
                              score=score if provider is not None and shown else None,
-                             match_score=match if provider is not None and p.key_visuals else None, missing=missing + unmatched)
+                             match_score=match if provider is not None and p.key_visuals and verified else None, missing=missing + unmatched,
+                             description=desc)
         save()
         done += 1
     scores = [r.score for r in db.values() if r.score is not None]

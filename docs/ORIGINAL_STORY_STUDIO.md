@@ -326,3 +326,35 @@ Vision match score mean 0.62 with 12 of 30 beats still under the 0.6 threshold a
 the briefs' key visuals often describe the bible instead of the sentence, so treat those scores as a coarse signal and skim the
 video. Cost: about 1 minute per picture (2x the pictures plus checks), ~20 min for a 4-minute episode. Abstract sentences, several
 characters in one shot and "he/she" without a name remain the weak spots.
+
+## Generic picture pipeline v2 (2026-11-03): the system writes the prompts, for any story
+
+The user's requirement: images must follow the narration for ANY future story, with detailed prompts produced by the tool itself
+(not typed by hand per chapter), carrying consistency, actions and emotions. The first fix (one picture per narrated moment) was
+not enough: on a brand-new horror story (a night-shift nurse; different genre, cast and setting) the pictures showed the wrong
+people, the wrong place and bizarre camera angles. What was wrong and what the tool now does by itself:
+
+1. **Narration must be drawable** (story engine): every caption has to name the characters on screen and describe what can be SEEN
+   (body, face, eyes, objects, place); abstract captions ("realizes", "sanctuary", "profound") and captions that name nobody are
+   rejected and rewritten. The new horror story's captions came out concrete.
+2. **Shot director** (`beats.py`): per narrated moment (<= ~24 words) an LLM writes a structured `ShotSpec`: shot, camera, who is
+   on screen and where (max 2), each character's pose, expression and action, specific place details, lighting, mood and the
+   phrases that must be visible. Hard rules in code: every named character must be on screen and nobody else; a narration that
+   names nobody is a wide shot of the place with no characters; one character's eyes/sleep/expression = close-up of that character
+   alone; objects need a medium/wide shot; eye-level camera unless the text says otherwise; pose words ("closes his eyes", "asleep",
+   "yawns", "smiles", "cries", "slumber") always become required visuals; the previous shot is shown for continuity.
+3. **Prompt composer** (`shotspec.py`): turns the spec into the image prompt deterministically, most important first and inside a
+   word budget (subject, pose, expression, action, visible items, place, light, camera, then style): a vocabulary maps plain words to
+   booru tags, weights the narration's requirements, negates "open eyes" for closed-eye shots, drops dutch angles (they distort anatomy).
+4. **Characters** carry `species` and `gender`; the bible must decide man/woman for humans (a missing gender produced a grey-haired man
+   drawn as a girl); kind-of-person tags (old man, little girl...) go in every prompt and portrait.
+5. **Verification loop** (`art.py`): each picture is described by the vision model in free text, a text judge compares that to the
+   spec's required items, and a mismatch redraws (3 attempts) with the missed items weighted and the portrait pin loosened.
+   Description, score and misses are stored per picture.
+
+Real result, new horror story, first 4 panels (8 pictures, 13 min): scene-setting beats are now empty corridors (no wrong people),
+Elena appears alone exactly when named, the corridor, fluorescent lights, scrubs and stethoscope are right and consistent, reading the
+logbook is shown. Still wrong: objects that matter (the silver bell she looks up at) are not drawn, "scans the empty hall" gives a
+messy pose, and the vision judge still scores most pictures 0.5, so 7 of 8 are flagged for review. The cause is the image model: SDXL
+anime follows tags, not sentences, and drops objects and complex actions. The honest next step is a prompt-following model
+(e.g. FLUX.1 schnell, Apache-2.0, ~12 GB) or pose/object control (ControlNet), both extra downloads that need approval.

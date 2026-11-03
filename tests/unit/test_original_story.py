@@ -9,11 +9,15 @@ from engine.original.models import Bible, Character, Location, Premise, Scene
 BED, HORROR = GENRES["bedtime"], GENRES["horror"]
 
 
+def _char(**kw):
+    return st._Char(**{"species": "human", "gender": "female", **kw})
+
+
 def bible(**kw):
     chars = kw["chars"] if "chars" in kw else [
-        st._Char(id="mira", name="Mira", role="protagonist", age_group="child",
+        _char(id="mira", name="Mira", role="protagonist", age_group="child",
                  look="short brown hair, green eyes, yellow raincoat, red boots", personality="curious"),
-        st._Char(id="pip", name="Pip", role="companion", age_group="child",
+        _char(id="pip", name="Pip", role="companion", age_group="child",
                  look="small grey owl, big round eyes, tiny scarf, soft feathers", personality="kind")]
     locs = [st._Loc(id="attic", name="Attic", look="dusty, wooden beams, round window, warm lamp"),
             st._Loc(id="garden", name="Garden", look="silver flowers, night sky, fireflies, stone path")]
@@ -29,13 +33,13 @@ def full_bible():
 
 def test_valid_bible_passes_and_problems_are_reported():
     assert st.check_bible(bible(), BED) == []
-    bad = bible(chars=[st._Char(id="Bad Id", name="X", role="antagonist", age_group="adult", look="one tag", personality="p"),
-                       st._Char(id="hero", name="H", role="protagonist", age_group="adult", look="a, b, c, d", personality="p")])
+    bad = bible(chars=[_char(id="Bad Id", name="X", role="antagonist", age_group="adult", look="one tag", personality="p"),
+                       _char(id="hero", name="H", role="protagonist", age_group="adult", look="a, b, c, d", personality="p")])
     msg = " ".join(st.check_bible(bad, BED))
     for needle in ("4 comma", "must be a child", "no antagonist"):
         assert needle in msg
-    adult_hero = bible(chars=[st._Char(id="a", name="A", role="protagonist", age_group="adult", look="a, b, c, d", personality="p"),
-                              st._Char(id="b", name="B", role="companion", age_group="child", look="a, b, c, d", personality="p")])
+    adult_hero = bible(chars=[_char(id="a", name="A", role="protagonist", age_group="adult", look="a, b, c, d", personality="p"),
+                              _char(id="b", name="B", role="companion", age_group="child", look="a, b, c, d", personality="p")])
     assert any("must be a child" in m for m in st.check_bible(adult_hero, BED))
 
 
@@ -55,7 +59,7 @@ def sc():
     return Scene(id="sc01", location_id="attic", character_ids=["mira", "pip"], summary="x", mood="calm")
 
 
-CAP = " ".join(["soft"] * 30)
+CAP = "Mira and Pip " + " ".join(["soft"] * 28)
 
 
 def panel(**kw):
@@ -131,8 +135,8 @@ def test_gives_up_after_retries():
 
 def test_cosmetic_model_mistakes_are_normalised_not_rejected():
     b = st._Bible(characters=[
-        st._Char(id="Moon-Kite", name="Moon Kite", role="Companion", age_group="ageless", look="a, b, c, d, e", personality="p"),
-        st._Char(id="Mira", name="Mira", role="protagonist", age_group="Kid", look="a, b, c, d, e", personality="p")],
+        _char(id="Moon-Kite", name="Moon Kite", role="Companion", age_group="ageless", look="a, b, c, d, e", personality="p"),
+        _char(id="Mira", name="Mira", role="protagonist", age_group="Kid", look="a, b, c, d, e", personality="p")],
         locations=[st._Loc(id="attic-window-view", name="Attic", look="a, b, c, d"), st._Loc(id="garden", name="G", look="a, b, c, d")],
         rules=["r"])
     assert st.check_bible(b, BED) == []
@@ -149,7 +153,7 @@ def test_names_and_variants_resolve_to_ids_in_outline_and_panels():
 
 
 def test_missing_or_extra_protagonists_and_duplicate_ids_are_repaired():
-    mk = lambda i, n, r: st._Char(id=i, name=n, role=r, age_group="adult", look="a, b, c, d", personality="p")
+    mk = lambda i, n, r: _char(id=i, name=n, role=r, age_group="adult", look="a, b, c, d", personality="p")
     b = st._Bible(characters=[mk("Ann", "Ann", "other"), mk("ann", "Ann 2", "companion")],
                   locations=[st._Loc(id="x", name="X", look="a, b, c, d"), st._Loc(id="x", name="Y", look="a, b, c, d")], rules=[])
     assert st.check_bible(b, HORROR) == []
@@ -171,12 +175,29 @@ def test_unknown_names_alone_become_a_warning_after_two_tries():
 
 
 def test_pronouns_are_not_character_names():
-    b = bible(chars=[st._Char(id="they", name="They", role="protagonist", age_group="elder", look="a, b, c, d", personality="p"),
-                     st._Char(id="it", name="It", role="other", age_group="adult", look="a, b, c, d", personality="p")])
+    b = bible(chars=[_char(id="they", name="They", role="protagonist", age_group="elder", look="a, b, c, d", personality="p"),
+                     _char(id="it", name="It", role="other", age_group="adult", look="a, b, c, d", personality="p")])
     assert sum("proper name" in m for m in st.check_bible(b, HORROR)) == 2
 
 
 def test_look_must_not_describe_another_character():
-    b = bible(chars=[st._Char(id="mira", name="Mira", role="protagonist", age_group="child", look="brown hair, green eyes, raincoat, Pip on her shoulder", personality="p"),
-                     st._Char(id="pip", name="Pip", role="other", age_group="adult", look="grey owl, round eyes, tiny scarf, soft feathers", personality="p")])
+    b = bible(chars=[_char(id="mira", name="Mira", role="protagonist", age_group="child", look="brown hair, green eyes, raincoat, Pip on her shoulder", personality="p"),
+                     _char(id="pip", name="Pip", role="other", age_group="adult", look="grey owl, round eyes, tiny scarf, soft feathers", personality="p")])
     assert any("only this character" in m for m in st.check_bible(b, BED))
+
+
+def test_captions_must_name_who_is_on_screen_and_be_visual():
+    shown = full_bible().characters[:1]
+    assert st.caption_visual_problem("Mira lifts the lamp and smiles at the window.", shown) == ""
+    assert "must name who is on screen" in st.caption_visual_problem("The night is quiet and deep.", shown)
+    assert "abstract" in st.caption_visual_problem("Mira realizes the sanctuary of the night.", shown)
+    assert st.caption_visual_problem("The night is quiet.", []) == ""  # nobody on screen: nothing to name
+
+
+def test_a_human_without_a_gender_is_rejected_because_it_decides_how_they_are_drawn():
+    b = bible(chars=[_char(id="a", name="Ann", role="protagonist", age_group="adult", gender="neutral", look="a, b, c, d", personality="p"),
+                     _char(id="b", name="Bo", role="other", age_group="adult", species="fox cub", gender="neutral", look="a, b, c, d", personality="p")])
+    msgs = st.check_bible(b, HORROR)
+    assert any("Ann" in m and "gender" in m for m in msgs) and not any("Bo:" in m for m in msgs)
+    assert _char(id="c", name="Cy", role="x", age_group="adult", gender="Woman", look="a", personality="p") and         st.normalize_bible(st._Bible(characters=[_char(id="c", name="Cy", role="protagonist", age_group="adult", gender="Woman", look="a, b, c, d", personality="p")],
+                                     locations=[], rules=[])).characters[0].gender == "female"

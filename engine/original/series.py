@@ -9,6 +9,7 @@ import json
 import re
 import shutil
 import threading
+import time
 import uuid
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
@@ -80,13 +81,21 @@ class SeriesStore:
             d.mkdir(parents=True, exist_ok=True)
             tmp = d / f"series.{uuid.uuid4().hex[:8]}.tmp"
             tmp.write_text(s.model_dump_json(indent=2), encoding="utf-8")
-            tmp.replace(d / "series.json")
+            for attempt in range(6):  # Windows refuses to replace a file another process (e.g. a virus scanner) briefly holds open
+                try:
+                    tmp.replace(d / "series.json")
+                    break
+                except PermissionError:
+                    if attempt == 5:
+                        raise
+                    time.sleep(0.05 * (attempt + 1))
 
     def get(self, series_id: str) -> Series:
         f = self.dir(series_id) / "series.json"
-        if not f.exists():
-            raise KeyError(series_id)
-        return Series.model_validate_json(f.read_text(encoding="utf-8"))
+        with _LOCK:  # never read while another thread is replacing the file
+            if not f.exists():
+                raise KeyError(series_id)
+            return Series.model_validate_json(f.read_text(encoding="utf-8"))
 
     def list(self) -> list[Series]:
         return [Series.model_validate_json(f.read_text(encoding="utf-8")) for f in sorted(self.root.glob("*/series.json"))] if self.root.exists() else []
