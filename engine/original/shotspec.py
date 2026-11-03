@@ -180,7 +180,8 @@ def describe_character(ch: Character) -> str:
     return f"{who} with {ch.look}"
 
 
-def compose_natural(story: OriginalStory, spec: ShotSpec, location_id: str, emphasis: list[str] | None = None) -> tuple[str, str]:
+def compose_natural(story: OriginalStory, spec: ShotSpec, location_id: str, emphasis: list[str] | None = None,
+                    simplify: bool = False) -> tuple[str, str]:
     """The same ShotSpec as a paragraph of plain English, for models that follow sentences instead of tags. (positive, negative='')"""
     genre = GENRES[story.bible.premise.genre]
     chars = {c.id: c for c in story.bible.characters}
@@ -188,7 +189,8 @@ def compose_natural(story: OriginalStory, spec: ShotSpec, location_id: str, emph
     shown = [c for c in spec.characters if c.id in chars][:2]
     if len(shown) == 2:
         shown.sort(key=lambda c: {"left": 0, "center": 1, "right": 2}.get(c.side, 1))
-    parts = [f"{genre.art_style.split(',')[-1].strip().capitalize() if 'style' in genre.art_style.split(',')[-1] else 'Anime illustration'}.",
+    parts = [f"Most important: the picture must clearly show {'; '.join(emphasis)}."] if (emphasis and simplify) else []
+    parts += [f"{genre.art_style.split(',')[-1].strip().capitalize() if 'style' in genre.art_style.split(',')[-1] else 'Anime illustration'}.",
              FRAMING.get(spec.shot, "")]
     if not shown:
         parts.append("There are no people in the picture.")
@@ -196,6 +198,8 @@ def compose_natural(story: OriginalStory, spec: ShotSpec, location_id: str, emph
         where = "" if len(shown) == 1 else ("On the left: " if k == 0 else "On the right: ")
         doing = ", ".join(x for x in (c.pose, c.expression, c.action) if x)
         parts.append(f"{where}{describe_character(chars[c.id])}. {doing[:1].upper() + doing[1:]}." if doing else f"{where}{describe_character(chars[c.id])}.")
+    if simplify:  # last resort: fewer details compete with the thing the previous attempts kept missing
+        spec = spec.model_copy(update={"lighting": "", "mood": "", "setting": spec.setting.split(".")[0][:80]})
     place = ". ".join(x for x in ((loc.name + ": " + ", ".join(_tokens(loc.look, 5))) if loc else "", spec.setting) if x)
     if place:
         parts.append(f"Setting: {place}.")

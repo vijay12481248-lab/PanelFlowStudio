@@ -172,34 +172,63 @@ def test_closed_eyes_requirement_is_weighted_and_open_eyes_are_negated():
     assert "open eyes" not in art.build_prompt(s, s.panels[1])[1]
 
 
-def test_directed_shot_is_described_judged_and_redrawn_until_it_matches(tmp_path):
+class Reviewer:
+    """Fake models for the reviewer: claims, a vision model answering numbered questions, and a description judge."""
+
+    def __init__(self, good_from_attempt=1, always_no=False):
+        self.attempt, self.good_from, self.always_no = 0, good_from_attempt, always_no
+
+    async def generate_structured(self, prompt, model, **kw):
+        from engine.original import review as rv
+        if model is rv._Claims:
+            return model(claims=[{"text": "her eyes are closed", "critical": True}])
+        if model is rv._DescJudge:
+            ok = (self.attempt >= self.good_from) and not self.always_no
+            return model(stated=[ok] * 10)
+        raise AssertionError(model)
+
+    async def analyze_vision(self, image, prompt, **kw):
+        from engine.original import review as rv
+        if "format_schema" in kw:
+            self.attempt += 1
+            ok = (self.attempt - 1 >= self.good_from) and not self.always_no
+            return json.dumps({"answers": [{"n": i + 1, "answer": "yes" if ok or i > 0 else "no", "evidence": "eyes open" if not ok else "eyes shut"}
+                                           for i in range(10)]})
+        return "a girl lying down with her eyes shut" if self.attempt >= self.good_from else "a girl lying down looking at the viewer"
+
+
+def directed_panel(s):
     from engine.original.shotspec import CharPose, ShotSpec
 
-    s = story()
-    p = s.panels[1].model_copy(update={"director": ShotSpec(
+    return s.panels[1].model_copy(update={"director": ShotSpec(
         shot="close", camera="eye_level", setting="a dusty attic with a round window", lighting="lamp light", mood="calm", key_visuals=["eyes closed"],
-        characters=[CharPose(id="mira", side="center", pose="lying down", expression="eyes closed", action="")]).model_dump(), "key_visuals": ["eyes closed"]})
-    s.panels = [p]
+        characters=[CharPose(id="mira", side="center", pose="lying down", expression="eyes closed", action="")]).model_dump(),
+        "key_visuals": ["eyes closed"], "caption": "Mira lies down and her eyes are closed."})
 
-    class P:
-        def __init__(self):
-            self.n = 0
 
-        async def analyze_vision(self, image, prompt, **kw):
-            self.n += 1
-            return "a girl lying down with her eyes wide open" if self.n == 1 else "a girl lying curled up asleep, her eyes closed"
-
-        async def generate_structured(self, prompt, model, **kw):
-            shows = "eyes closed" in prompt.split("ACTUALLY SHOWS")[1] and "wide open" not in prompt.split("ACTUALLY SHOWS")[1]
-            return model(score=1.0 if shows else 0.4, missing=[] if shows else ["eyes closed"])
-
+def test_picture_is_reviewed_against_the_narration_and_redrawn_until_accepted(tmp_path):
+    s = story()
+    s.panels = [directed_panel(s)]
     r = FakeRunner()
-    out = art.generate_art(s, tmp_path, r, provider=P())
+    out = art.generate_art(s, tmp_path, r, provider=Reviewer(good_from_attempt=1))
     calls = [c for c in r.calls if c[0].startswith("panel_")]
-    assert len(calls) == 2 and "(eyes closed:1.3)" in calls[1][2]  # the miss was weighted in the retry prompt
+    assert len(calls) == 2 and "her eyes are closed" in calls[1][2]  # the miss the reviewer reported is weighted into the retry
     rec = json.loads((tmp_path / "art.json").read_text())[0]
-    assert rec["match_score"] == 1.0 and "asleep" in rec["description"] and out["below_threshold"] == []
+    assert rec["status"] == "accept" and rec["review"]["decision"] == "accept" and rec["claims"][0]["text"] == "her eyes are closed"
+    assert out["accepted"] == [rec["panel_id"]] and out["needs_review"] == []
+    assert "eyes shut" in rec["description"] and (tmp_path / "review_report.html").exists()
 
+
+def test_a_picture_that_never_matches_is_marked_needs_review_not_silently_accepted(tmp_path):
+    s = story()
+    s.panels = [directed_panel(s)]
+    r = FakeRunner()
+    out = art.generate_art(s, tmp_path, r, provider=Reviewer(always_no=True))
+    assert len([c for c in r.calls if c[0].startswith("panel_")]) == art.DIRECTED_ATTEMPTS  # every attempt was used
+    rec = json.loads((tmp_path / "art.json").read_text())[0]
+    assert rec["status"] == "needs_review" and out["needs_review"] == [rec["panel_id"]] and out["below_threshold"] == out["needs_review"]
+    assert "critical item not shown: her eyes are closed" in rec["review"]["reasons"]
+    assert "needs_review" in (tmp_path / "review_report.html").read_text(encoding="utf-8")
 
 def test_a_prompt_following_engine_gets_sentences_and_no_negative_prompt(tmp_path):
     from engine.original.shotspec import CharPose, ShotSpec
@@ -222,3 +251,52 @@ def test_a_prompt_following_engine_gets_sentences_and_no_negative_prompt(tmp_pat
     sheet = [c for c in r.calls if c[0].startswith("sheet_")][0]
     assert sheet[2].startswith("Character reference portrait") and sheet[3] == ""
     assert json.loads((tmp_path / "art.json").read_text())[0]["prompt_hash"]
+
+
+def test_review_decisions_two_witnesses_agree_or_confidence_drops():
+    from engine.original import review as rv
+    qa = lambda *a: [rv._QA(n=i + 1, answer=x, evidence="e") for i, x in enumerate(a)]
+    reqs = [("a silver bell hangs on the wall", True), ("exactly 1 person is visible", True), ("a corridor", False)]
+    good = rv.combine(reqs, qa("yes", "yes", "yes"), [True, True, True])
+    assert good.decision == "accept" and good.score == 1.0 and good.confidence == 0.9
+    assert rv.combine(reqs, qa("no", "yes", "yes"), [False, True, True]).decision == "regenerate"  # critical object missing, both agree
+    split = rv.combine(reqs, qa("yes", "yes", "yes"), [False, False, False])  # vision says yes, the description never mentions it
+    assert split.decision == "accept_low" or split.confidence < 0.6
+    unclear = rv.combine(reqs, qa("partly", "yes", "yes"), [True, True, True])
+    assert unclear.decision == "accept_low" and any("unclear" in r for r in unclear.reasons)  # half-shown critical item: kept but flagged, and the loop still retries (rank 1 < accept)
+    assert rv.combine([], [], []).decision == "accept_low"
+
+
+def test_requirements_come_from_the_narration_then_the_shot_spec():
+    from engine.original import review as rv
+    from engine.original.shotspec import CharPose, ShotSpec
+
+    s = story()
+    spec = ShotSpec(shot="medium", setting="The corridor: long hallway. Peeling paint", characters=[CharPose(id="mira", pose="standing", expression="x", action="y")])
+    reqs = rv.requirements([rv.Claim(text="a silver bell hangs high on the wall", critical=True)], spec, {c.id: c for c in s.bible.characters})
+    assert reqs[0] == ("a silver bell hangs high on the wall", True)
+    assert ("exactly 1 person or creature is visible", True) in reqs and any("short brown hair" in t for t, _ in reqs)
+    assert rv.requirements([], ShotSpec(shot="wide"), {})[0] == ("there are no people in the picture", True)
+
+
+def test_last_attempt_widens_the_frame_and_front_loads_what_was_missed():
+    from engine.original.shotspec import CharPose, ShotSpec
+
+    s = story()
+    p = s.panels[1].model_copy(update={"director": ShotSpec(shot="medium", characters=[CharPose(id="mira", pose="standing", expression="calm", action="looking up")],
+                                                            setting="a hall").model_dump()})
+    first, _ = art.build_prompt(s, p, style="natural", attempt=0)
+    last, _ = art.build_prompt(s, p, ["a silver bell on the wall"], "natural", must=["a silver bell on the wall"], attempt=2)
+    assert "Medium shot" in first and "Wide shot" in last
+    assert last.startswith("Most important: the picture must clearly show a silver bell on the wall.")
+
+
+def test_claims_are_positive_visible_statements_from_this_narration():
+    from engine.original import review as rv
+
+    narration = "Elena turns her head upward, her eyes locking onto the single silver bell hanging high on the wall."
+    claims = [rv.Claim(text="a single silver bell hangs high on the wall"), rv.Claim(text="Elena Vance is present"),
+              rv.Claim(text="there is no visible sign of the date"), rv.Claim(text="an adult woman with messy black hair"),
+              rv.Claim(text="her head is turned upward", critical=True), rv.Claim(text="a single silver bell hangs high on the wall")]
+    kept = [c.text for c in rv.clean_claims(claims, narration)]
+    assert kept == ["a single silver bell hangs high on the wall", "her head is turned upward"]  # no names, no negations, no cast parroting, no duplicates

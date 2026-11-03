@@ -21,6 +21,7 @@ from engine.comfyui import ComfyUIClient, ComfyWorkflowRegistry
 from engine.comfyui.service import _history_images, _patch_workflow
 from engine.original.genres import GENRES
 from engine.original.models import Character, OriginalStory, Panel
+from engine.original import review as review_mod
 from engine.original import shotspec
 
 W, H = 1344, 768  # SDXL-friendly 16:9, the video frame shape
@@ -35,10 +36,16 @@ NEGATIVE = ("lowres, bad anatomy, bad hands, text, error, missing finger, extra 
             "suggestive, revealing clothes, speech bubble")
 
 
-def build_prompt(story: OriginalStory, panel: Panel, emphasis: list[str] | None = None, style: str = "tags") -> tuple[str, str]:
+def build_prompt(story: OriginalStory, panel: Panel, emphasis: list[str] | None = None, style: str = "tags",
+                 must: list[str] | None = None, attempt: int = 0) -> tuple[str, str]:
     if panel.director:  # a directed shot: the composer writes the detailed prompt from the structured spec
-        compose = shotspec.compose_natural if style == "natural" else shotspec.compose
-        return compose(story, shotspec.ShotSpec(**panel.director), panel.location_id, emphasis)
+        spec = shotspec.ShotSpec(**panel.director)
+        if style == "natural":
+            spec = spec.model_copy(update={"key_visuals": list(dict.fromkeys(spec.key_visuals + (must or [])))[:8]})  # the narration's own facts
+            if attempt >= 2:  # last attempt: widen the frame so the objects the narration names fit in with the character
+                spec = spec.model_copy(update={"shot": {"close": "medium", "extreme_close": "medium", "medium": "wide"}.get(spec.shot, spec.shot)})
+            return shotspec.compose_natural(story, spec, panel.location_id, emphasis, simplify=attempt >= 2)
+        return shotspec.compose(story, spec, panel.location_id, emphasis)
     genre = GENRES[story.bible.premise.genre]
     chars = {c.id: c for c in story.bible.characters}
     shown = [chars[c] for c in panel.character_ids if c in chars][:2]
@@ -252,6 +259,9 @@ class ArtRecord(BaseModel):
     score: float | None = None
     match_score: float | None = None  # does the picture show what the narration says (described, then judged against the shot spec)
     description: str = ""  # what the accepted picture was described as showing
+    status: str = ""  # accept | accept_low | needs_review | unverified (only set for directed shots)
+    review: dict = Field(default_factory=dict)  # the full Review: every requirement, both witnesses, confidence, decision
+    claims: list[dict] = Field(default_factory=list)  # what the narration asserts that must be visible
     missing: list[str] = Field(default_factory=list)
 
 
@@ -295,43 +305,59 @@ def generate_art(story: OriginalStory, ws: Path, runner: ComfyRunner, provider=N
             continue
         best: tuple | None = None
         emphasis: list[str] = []
+        claims: list[review_mod.Claim] = []
+        spec = shotspec.ShotSpec(**p.director) if p.director else None
+        if provider is not None and spec is not None and p.caption:
+            try:  # the narration's own visible facts, extracted independently of the shot director
+                claims = asyncio.run(review_mod.extract_claims(provider, p.caption))
+            except Exception:
+                claims = []
+        must = [c.text for c in claims if c.critical]
         for attempt in range(DIRECTED_ATTEMPTS if p.director else MAX_ATTEMPTS):
             seed = seed_for(story, p.id, attempt)
-            pos_i, _ = build_prompt(story, p, emphasis, style)
+            pos_i, _ = build_prompt(story, p, emphasis, style, must, attempt)
             png = runner.generate(pos_i, neg, seed, W, H, f"panel_{p.id}", reference=ref, reference_b=ref_b,
                                   reference_weight=POSE_WEIGHT if (pose_sensitive(p) or attempt > 0) else None)  # retries loosen the pin
-            score, missing, match, unmatched, desc, verified = 1.0, [], 1.0, [], "", True
+            score, missing, match, unmatched, desc, rev = 1.0, [], 1.0, [], "", None
             if provider is not None and (shown or p.key_visuals):
                 tmp = ws / "panels" / f"_try_{p.id}.png"
                 tmp.write_bytes(png)
-                if p.director:
-                    spec = shotspec.ShotSpec(**p.director)
+                if spec is not None:
                     try:
-                        desc = asyncio.run(describe_image(provider, tmp))
-                        match, unmatched = asyncio.run(judge_shot(provider, spec.required_text(chars), desc))
+                        rev = asyncio.run(review_mod.review_image(provider, tmp, claims, spec, chars))
+                        match, desc = rev.score, rev.description
                     except Exception as e:  # a model hiccup must not stop a whole episode: keep the picture, mark it unverified
-                        desc, match, unmatched, verified = f"(not verified: {str(e)[:80]})", 1.0, [], False
+                        desc = f"(not verified: {str(e)[:80]})"
                 else:
                     if shown:
                         score, missing = asyncio.run(check_panel(provider, tmp, shown, p.shot))
                     match, unmatched = asyncio.run(check_match(provider, tmp, p.key_visuals))
                 tmp.unlink(missing_ok=True)
-            total = 0.7 * match + 0.3 * score  # what the narration says leads; the face is pinned by the reference already
-            if best is None or total > best[0]:
-                best = (total, png, seed, missing, score, match, unmatched, desc, verified)
-            if provider is None or match >= MATCH_THRESHOLD:
-                break  # the identity score is recorded but does not trigger redraws: its tags are too noisy to act on
-            emphasis = missing + unmatched
-        total, png, seed, missing, score, match, unmatched, desc, verified = best
+            rank = review_mod.RANK[rev.decision] if rev is not None else (1.5 if spec is not None else (2 if match >= MATCH_THRESHOLD else 0))
+            key = (rank, match)
+            if best is None or key > best[0]:
+                best = (key, png, seed, missing, score, match, unmatched, desc, rev)
+            if provider is None or rank >= 2 or (rev is None and spec is not None):
+                break  # accepted, or unverifiable (a model error): do not burn attempts on a judge that is not answering
+            emphasis = (rev.missing_critical + [i.item for i in rev.items if not i.critical and i.verdict != "shown"][:2]) if rev else missing + unmatched
+        key, png, seed, missing, score, match, unmatched, desc, rev = best
         img.write_bytes(png)
-        db[p.id] = ArtRecord(panel_id=p.id, image=str(img), prompt_hash=_hash(pos, neg, engine + (ref.name if ref else "") + (ref_b.name if ref_b else "")), seed=seed, attempts=attempt + 1,
-                             score=score if provider is not None and shown else None,
-                             match_score=match if provider is not None and p.key_visuals and verified else None, missing=missing + unmatched,
-                             description=desc)
+        status = ("" if spec is None else "unverified" if rev is None else {"accept": "accept", "accept_low": "accept_low"}.get(rev.decision, "needs_review"))
+        db[p.id] = ArtRecord(panel_id=p.id, image=str(img), prompt_hash=_hash(pos, neg, engine + (ref.name if ref else "") + (ref_b.name if ref_b else "")),
+                             seed=seed, attempts=attempt + 1, score=score if provider is not None and shown and spec is None else None,
+                             match_score=match if provider is not None and (p.key_visuals or spec is not None) and (rev is not None or spec is None) else None,
+                             missing=(rev.missing_critical if rev else missing + unmatched), description=desc, status=status,
+                             review=rev.model_dump() if rev else {}, claims=[c.model_dump() for c in claims])
         save()
         done += 1
     scores = [r.score for r in db.values() if r.score is not None]
+    recs = list(db.values())
+    review_mod.write_report(panels, ws, [r.model_dump() for r in recs])
     return {"generated": done, "reused": reused, "panels": len(panels),
             "mean_score": round(sum(scores) / len(scores), 3) if scores else None,
-            "mean_match": round(sum(m) / len(m), 3) if (m := [r.match_score for r in db.values() if r.match_score is not None]) else None,
-            "below_threshold": [r.panel_id for r in db.values() if r.match_score is not None and r.match_score < MATCH_THRESHOLD]}
+            "mean_match": round(sum(m) / len(m), 3) if (m := [r.match_score for r in recs if r.match_score is not None]) else None,
+            "accepted": [r.panel_id for r in recs if r.status == "accept"],
+            "accepted_low_confidence": [r.panel_id for r in recs if r.status == "accept_low"],
+            "needs_review": [r.panel_id for r in recs if r.status == "needs_review"],
+            "below_threshold": [r.panel_id for r in recs if r.status == "needs_review"
+                                or (not r.status and r.match_score is not None and r.match_score < MATCH_THRESHOLD)]}

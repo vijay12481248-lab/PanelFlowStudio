@@ -383,3 +383,29 @@ Remaining weaknesses: face consistency is looser than with the IP-Adapter (hair 
 recognisable by outfit and features, not pixel-consistent); the judge still flags 2 pictures; two-character panels on FLUX were not
 tested yet; the fox bedtime episode was not regenerated with the new director + FLUX (its stored beats predate the shot director).
 A FLUX identity-pinning adapter (XLabs/InstantX IP-Adapter for FLUX, plus a custom node) is the next option if consistency needs it.
+
+## Image reviewer (user request, 2026-11-03): analyse, compare, get a confidence, then accept or regenerate
+
+The user showed one FLUX picture (narration: "Elena turns her head upward, her eyes locking onto the single silver bell hanging high
+on the wall") and asked whether it was acceptable and for a review step that analyses and compares every picture against the
+narration and decides from a confidence. Verdict on that picture: **not acceptable** - the bell was a speck on her head, she
+looked sideways. Why the old loop accepted it: the director's key-visual list had lost the bell (phrases over 5 words were dropped),
+the judge marked nearly everything missing, and the loop kept the best of three anyway.
+
+`engine/original/review.py`, used inside `generate_art` for every directed picture:
+1. **Claims** from the narration itself, independent of the shot director (LLM), then cleaned in code: positive statements only, no names
+   or negations, each must share content words with the narration (a small model otherwise parrots the cast list - seen once).
+2. **Witness A**: the vision model answers one numbered question per requirement (yes/partly/no + the visible evidence).
+3. **Witness B**: a free description of the picture, and a text-only model says whether it states each requirement.
+4. **Verdict per requirement**: both agree -> shown/missing (confidence 0.9); they disagree -> partial or low confidence.
+5. **Decision**: accept (no critical miss, score >= 0.75, confidence >= 0.6); accept_low (no critical miss, score >= 0.6, flagged);
+   otherwise regenerate. Retry ladder: weight what was missed; 3rd attempt: "Most important: ..." first, fewer details, a wider frame.
+   A picture still failing after the last attempt is **needs_review**, never silently accepted.
+6. Everything is saved per picture (`art.json`: status, claims, every requirement with both answers) and `review_report.html` shows each
+   picture beside its narration, the decision and the evidence.
+
+Real run, hospital story, 8 beats on FLUX (9.5 min): 4 accepted, 2 accepted with low confidence, 2 needs_review. The user's picture
+(p004_1) is now: Elena looks up at a silver bell hanging high on the wall - accepted on the first attempt (score 0.96, confidence 0.68).
+The two needs_review are honest: "the windows rattle" cannot be drawn, and "her hand touches a metal desk" is not clearly shown.
+Limits: the reviewer is the same 9B vision/text model family as the other steps, so confidence is a calibrated-by-agreement signal, not
+ground truth; it adds ~20 s per attempt; claims about sound or ideas are flagged for a human instead of fixed.
