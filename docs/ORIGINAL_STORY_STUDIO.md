@@ -358,3 +358,28 @@ logbook is shown. Still wrong: objects that matter (the silver bell she looks up
 messy pose, and the vision judge still scores most pictures 0.5, so 7 of 8 are flagged for review. The cause is the image model: SDXL
 anime follows tags, not sentences, and drops objects and complex actions. The honest next step is a prompt-following model
 (e.g. FLUX.1 schnell, Apache-2.0, ~12 GB) or pose/object control (ControlNet), both extra downloads that need approval.
+
+## FLUX.1 schnell engine (2026-11-03)
+
+Installed (approved): `flux1-schnell-fp8.safetensors`, 17.24 GB, FLUX.1 schnell (Apache-2.0) from `Comfy-Org/flux1-schnell`, in
+`ComfyUI\models\checkpoints` (the download needed about 75 min at 3.3 MB/s). New approved workflow `flux_schnell` (4 steps, cfg 1,
+1344x768, multiples of 16). `ComfyRunner` picks FLUX automatically when its model is present (`PANELFLOW_IMAGE_ENGINE=auto|flux|sdxl`
+forces a choice) and the prompt composer then writes plain English instead of tags (`shotspec.compose_natural`: framing, each
+character with the SAME description sentence every time, left/right placement, pose/expression/action, setting, lighting, mood, a
+"must clearly show" list, anything the last attempt missed, no-text constraints). The SDXL anime + IP-Adapter path remains the
+fallback. FLUX has no face-pinning (IP-Adapter is SDXL-only): consistency comes from the identical character sentence.
+
+Real A/B on the same 8 directed beats of the hospital story (identical shot specs):
+
+| | SDXL anime + IP-Adapter | FLUX schnell |
+|---|---|---|
+| judged match to the shot spec (mean) | 0.51 (7 of 8 flagged) | **0.82 (2 of 8 flagged)** |
+| time for 8 pictures | 13 min (3 attempts most) | **6 min** |
+| right place (arched windows, peeling yellow paint, fluorescent tubes) | no | **yes, every picture** |
+| right person, outfit, props (scrubs, stethoscope, clipboard, logbook) | partly | **yes** |
+| silver bell she looks up at | not drawn | small bell above her head, pose only partly right |
+
+Remaining weaknesses: face consistency is looser than with the IP-Adapter (hair length varies between pictures; same person
+recognisable by outfit and features, not pixel-consistent); the judge still flags 2 pictures; two-character panels on FLUX were not
+tested yet; the fox bedtime episode was not regenerated with the new director + FLUX (its stored beats predate the shot director).
+A FLUX identity-pinning adapter (XLabs/InstantX IP-Adapter for FLUX, plus a custom node) is the next option if consistency needs it.
