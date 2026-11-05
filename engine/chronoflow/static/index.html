@@ -6,73 +6,303 @@
   <title>ChronoFlow Pro Studio — Live Agent & Video Production Center</title>
   <style>
     :root {
-      --bg: #090d16;
-      --card-bg: #111726;
-      --card-border: #1e293b;
-      --card-hover: #172033;
-      --accent: #6366f1;
-      --accent-hover: #4f46e5;
-      --accent-gradient: linear-gradient(135deg, #6366f1 0%, #a855f7 50%, #ec4899 100%);
-      --text-main: #f8fafc;
-      --text-muted: #94a3b8;
-      --text-dim: #64748b;
-      --success: #10b981;
+      /* DaVinci Resolve Studio Professional Dark Palette */
+      --bg: #111215;
+      --card-bg: #18191d;
+      --card-border: #282a30;
+      --card-hover: #222328;
+      --accent: #e58525;             /* DaVinci signature Amber/Orange */
+      --accent-hover: #f59e0b;
+      --accent-gradient: linear-gradient(180deg, #e58525 0%, #c26a15 100%);
+      --text-main: #ececec;
+      --text-muted: #9ba0a6;
+      --text-dim: #6c7078;
+      --success: #22c55e;
       --warning: #f59e0b;
       --danger: #ef4444;
-      --radius-sm: 8px;
-      --radius-md: 14px;
-      --radius-lg: 20px;
+      --radius-sm: 2px;
+      --radius-md: 4px;
+      --radius-lg: 4px;
+
+      /* Resolve NLE Precision Tokens */
+      --resolve-dark-panel: #15161a;
+      --resolve-deck-bg: #1c1d22;
+      --resolve-inset-bg: #0d0e11;
+      --resolve-border: #2a2b32;
+      --resolve-border-light: #383a44;
+      --resolve-amber: #e58525;
+      --resolve-amber-glow: rgba(229, 133, 37, 0.35);
+      --resolve-cyan: #00b4d8;
+      --resolve-playhead: #ff3344;
+      --resolve-v-clip-bg: linear-gradient(180deg, #243c5c 0%, #17273d 100%);
+      --resolve-v-clip-border: #3b82f6;
+      --resolve-v-clip-top: #60a5fa;
+      --resolve-a-sfx-bg: linear-gradient(180deg, #133a35 0%, #0d2623 100%);
+      --resolve-a-sfx-border: #14b8a6;
+      --resolve-a-sfx-top: #2dd4bf;
+      --resolve-a-music-bg: linear-gradient(180deg, #153a23 0%, #0e2717 100%);
+      --resolve-a-music-border: #22c55e;
+      --resolve-a-music-top: #4ade80;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; }
-    body { background: var(--bg); color: var(--text-main); min-height: 100vh; display: flex; flex-direction: column; overflow-x: hidden; }
+    body { background: var(--bg); color: var(--text-main); min-height: 100vh; display: flex; flex-direction: column; overflow-x: hidden; padding-bottom: 54px; }
 
-    /* Top Navigation Header */
-    header {
-      background: rgba(17, 23, 38, 0.92);
-      backdrop-filter: blur(14px);
-      border-bottom: 1px solid var(--card-border);
-      position: sticky;
-      top: 0;
-      z-index: 100;
-      padding: 10px 24px;
+    /* Accessibility: Focus-visible states */
+    button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, a:focus-visible {
+      outline: 2px solid #818cf8 !important;
+      outline-offset: 2px !important;
+    }
+
+    /* Accessibility: Respect prefers-reduced-motion */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+      }
+      .pulse-dot { animation: none !important; }
+    }
+
+    button, select, input[type="radio"], input[type="checkbox"] {
+      cursor: pointer;
+    }
+
+    
+    /* Status Button & Slide-Down Panel */
+    .btn-status-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #151b2a;
+      color: #cbd5e1;
+      border: 1px solid #27324c;
+      padding: 5px 11px;
+      border-radius: 8px;
+      font-size: 0.76rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      white-space: nowrap;
+    }
+    .btn-status-toggle:hover {
+      background: #20283d;
+      color: #fff;
+      border-color: #4f46e5;
+    }
+    .btn-status-toggle:focus-visible {
+      outline: 2px solid #818cf8;
+      outline-offset: 2px;
+    }
+    .status-indicator-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #10b981;
+      box-shadow: 0 0 8px #10b981;
+      animation: pulse 1.8s infinite;
+    }
+    .status-slider-panel {
+      position: absolute;
+      top: calc(100% + 8px);
+      left: 0;
+      width: 360px;
+      background: rgba(11, 15, 25, 0.98);
+      backdrop-filter: blur(20px);
+      border: 1px solid #2c3856;
+      border-radius: 12px;
+      box-shadow: 0 12px 36px rgba(0, 0, 0, 0.65), 0 0 20px rgba(99, 102, 241, 0.18);
+      z-index: 250;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      animation: slideDown 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    @keyframes slideDown {
+      from { opacity: 0; transform: translateY(-8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .status-panel-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      padding-bottom: 8px;
+    }
+    .status-panel-title {
+      font-size: 0.8rem;
+      font-weight: 800;
+      color: #f1f5f9;
+      letter-spacing: -0.2px;
+    }
+    .status-panel-items {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .status-panel-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.75rem;
+    }
+    .status-row-label {
+      color: #94a3b8;
+      font-weight: 600;
     }
 
-    .brand { display: flex; align-items: center; gap: 12px; }
+    /* Prompt Button in Header */
+    .btn-prompt-trigger {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: linear-gradient(135deg, rgba(99, 102, 241, 0.25), rgba(168, 85, 247, 0.25));
+      color: #e0e7ff;
+      border: 1px solid rgba(99, 102, 241, 0.45);
+      padding: 5px 12px;
+      border-radius: 8px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      white-space: nowrap;
+    }
+    .btn-prompt-trigger:hover {
+      background: linear-gradient(135deg, rgba(99, 102, 241, 0.4), rgba(168, 85, 247, 0.4));
+      border-color: #818cf8;
+      color: #fff;
+      transform: translateY(-1px);
+    }
+    .btn-prompt-trigger:focus-visible {
+      outline: 2px solid #818cf8;
+      outline-offset: 2px;
+    }
+
+    /* Top Navigation Header */
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 6px 14px;
+      background: #16171b;
+      border-bottom: 1px solid var(--card-border);
+      position: sticky;
+      top: 0;
+      z-index: 200;
+      min-height: 44px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+      white-space: nowrap;
+    }
     .logo-icon {
-      width: 36px; height: 36px; border-radius: 10px;
+      width: 26px;
+      height: 26px;
+      border-radius: 7px;
       background: var(--accent-gradient);
-      display: flex; align-items: center; justify-content: center;
-      font-weight: 800; font-size: 18px; color: white;
-      box-shadow: 0 0 16px rgba(99, 102, 241, 0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 13px;
+      color: white;
+      box-shadow: 0 0 12px rgba(99, 102, 241, 0.35);
+      flex-shrink: 0;
     }
     .brand-title {
-      font-size: 1.15rem; font-weight: 800; letter-spacing: -0.5px;
+      font-size: 0.92rem;
+      font-weight: 800;
+      letter-spacing: -0.3px;
+      white-space: nowrap;
       background: linear-gradient(90deg, #ffffff, #cbd5e1);
-      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
     }
+    
+    .btn-dashboard-back {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      background: #1e293b;
+      color: #e2e8f0;
+      border: 1px solid #334155;
+      padding: 4px 9px;
+      border-radius: 6px;
+      font-size: 0.74rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      margin-right: 2px;
+      flex-shrink: 0;
+      white-space: nowrap;
+    }
+    .btn-dashboard-back:hover {
+      background: #334155;
+      color: #ffffff;
+      border-color: #6366f1;
+    }
+    .btn-dashboard-back:focus-visible {
+      outline: 2px solid #818cf8;
+      outline-offset: 2px;
+    }
+    .brand-project-tag {
+      font-size: 0.68rem;
+      background: rgba(168, 85, 247, 0.18);
+      color: #e9d5ff;
+      border: 1px solid rgba(168, 85, 247, 0.4);
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-weight: 600;
+      max-width: 180px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      letter-spacing: -0.2px;
+      flex-shrink: 0;
+    }
+
     .brand-tag {
-      font-size: 0.68rem; background: rgba(99, 102, 241, 0.18);
-      color: #a5b4fc; border: 1px solid rgba(99, 102, 241, 0.35);
-      padding: 2px 7px; border-radius: 20px; font-weight: 700;
+      font-size: 0.62rem;
+      background: rgba(99, 102, 241, 0.15);
+      color: #a5b4fc;
+      border: 1px solid rgba(99, 102, 241, 0.3);
+      padding: 2px 6px;
+      border-radius: 10px;
+      font-weight: 700;
+      white-space: nowrap;
+      flex-shrink: 0;
+      letter-spacing: 0.2px;
     }
 
     /* Live MCP Agent Status Banner */
     .mcp-pill {
-      display: flex; align-items: center; gap: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
       background: rgba(16, 185, 129, 0.12);
       border: 1px solid rgba(16, 185, 129, 0.35);
-      padding: 5px 14px; border-radius: 20px;
-      font-size: 0.78rem; color: #6ee7b7; font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 14px;
+      font-size: 0.72rem;
+      color: #6ee7b7;
+      font-weight: 600;
+      white-space: nowrap;
+      flex-shrink: 0;
     }
     .pulse-dot {
-      width: 8px; height: 8px; border-radius: 50%;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
       background: var(--success);
-      box-shadow: 0 0 10px var(--success);
+      box-shadow: 0 0 8px var(--success);
       animation: pulse 1.5s infinite;
+      flex-shrink: 0;
     }
     @keyframes pulse {
       0% { transform: scale(0.95); opacity: 0.8; }
@@ -81,21 +311,63 @@
     }
 
     .nav-tabs {
-      display: flex; gap: 6px; background: #0d121f;
-      padding: 4px; border-radius: 12px; border: 1px solid var(--card-border);
+      display: flex;
+      gap: 2px;
+      background: #111215;
+      padding: 2px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--card-border);
+      flex-shrink: 0;
+      white-space: nowrap;
     }
     .nav-tab {
-      background: transparent; border: none; color: var(--text-muted);
-      padding: 7px 14px; border-radius: 8px; font-size: 0.82rem;
-      font-weight: 600; cursor: pointer; transition: all 0.2s;
+      background: transparent;
+      border: none;
+      border-bottom: 2px solid transparent;
+      color: var(--text-muted);
+      padding: 4px 12px;
+      border-radius: var(--radius-sm);
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      cursor: pointer;
+      transition: all 0.15s;
+      white-space: nowrap;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
     }
-    .nav-tab.active { background: var(--accent); color: white; box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3); }
+    .nav-tab:hover {
+      color: #fff;
+      background: rgba(255, 255, 255, 0.04);
+    }
+    .nav-tab.active {
+      background: #22242b;
+      color: #f59e0b;
+      border-bottom: 2px solid #e58525;
+      box-shadow: none;
+    }
 
-    .header-status { display: flex; align-items: center; gap: 10px; }
+    .header-status {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      flex-shrink: 0;
+      white-space: nowrap;
+    }
     .status-badge {
-      display: flex; align-items: center; gap: 8px;
-      font-size: 0.78rem; background: #1e293b; padding: 5px 12px;
-      border-radius: 20px; border: 1px solid var(--card-border); color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.72rem;
+      background: #1e293b;
+      padding: 4px 9px;
+      border-radius: 12px;
+      border: 1px solid var(--card-border);
+      color: var(--text-muted);
+      white-space: nowrap;
+      flex-shrink: 0;
     }
     .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-dim); }
     .status-dot.active { background: var(--success); box-shadow: 0 0 8px var(--success); }
@@ -125,8 +397,10 @@
 
     /* Layout Grid */
     .studio-grid {
-      display: grid; grid-template-columns: 460px 1fr; gap: 22px;
-      transition: grid-template-columns 0.25s ease;
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 16px;
+      width: 100%;
     }
     .studio-grid.sidebar-collapsed {
       grid-template-columns: 1fr;
@@ -220,40 +494,173 @@
     .btn-primary:hover:not(:disabled) { opacity: 0.93; transform: translateY(-1px); }
     .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
 
-    /* Live Progress Card */
+    /* Sleek Compact Inline Progress Strip */
     .progress-box {
-      background: #0e1422; border: 1px solid rgba(99, 102, 241, 0.5);
-      border-radius: var(--radius-md); padding: 8px 16px;
-      box-shadow: 0 0 15px rgba(99, 102, 241, 0.12);
-      margin-bottom: 8px;
+      background: rgba(14, 20, 34, 0.95);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(99, 102, 241, 0.35);
+      border-radius: 8px;
+      padding: 6px 12px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+      margin-bottom: 6px;
+      position: relative;
+      overflow: hidden;
+      transition: all 0.2s ease;
     }
-    .prog-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
-    .prog-status { font-size: 0.84rem; font-weight: 700; color: #e2e8f0; display: flex; align-items: center; gap: 8px; }
+    .prog-compact-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      font-size: 0.78rem;
+    }
+    .prog-status {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-weight: 700;
+      color: #e2e8f0;
+      min-width: 0;
+      overflow: hidden;
+    }
+    #statusMessage {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .prog-compact-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+      font-size: 0.74rem;
+      color: #94a3b8;
+    }
+    .prog-timer {
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      color: #cbd5e1;
+      font-weight: 600;
+      font-size: 0.72rem;
+    }
+    .btn-dismiss-prog {
+      background: none;
+      border: none;
+      color: #64748b;
+      font-size: 0.9rem;
+      cursor: pointer;
+      padding: 2px 6px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s ease;
+      line-height: 1;
+    }
+    .btn-dismiss-prog:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: #fff;
+    }
     .progress-bar-container {
-      width: 100%; height: 6px; background: #1e293b; border-radius: 4px; overflow: hidden; margin: 6px 0;
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      height: 2.5px;
+      background: rgba(255, 255, 255, 0.06);
+      overflow: hidden;
+      margin: 0;
     }
-    .progress-bar-fill { height: 100%; width: 0%; background: var(--accent-gradient); transition: width 0.3s ease; }
-    .progress-subtext { display: flex; justify-content: space-between; font-size: 0.72rem; color: var(--text-dim); }
+    .progress-bar-fill {
+      height: 100%;
+      width: 0%;
+      background: var(--accent-gradient);
+      transition: width 0.3s ease;
+    }
+    .progress-subtext { display: none; }
 
-    /* Master Player */
+    
+    /* DaVinci Resolve Dual Monitor Viewport */
+    .video-viewport.dual-view {
+      display: grid !important;
+      grid-template-columns: 1fr 1fr !important;
+      gap: 6px !important;
+      background: #090a0d !important;
+      padding: 6px !important;
+    }
+    .monitor-pane {
+      background: #050608;
+      border: 1px solid #23252a;
+      border-radius: 2px;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      overflow: hidden;
+      height: 100%;
+    }
+    .monitor-badge {
+      position: absolute;
+      top: 6px;
+      left: 8px;
+      background: rgba(14, 15, 18, 0.85);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: #9ba0a6;
+      font-size: 0.62rem;
+      font-weight: 800;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      padding: 2px 6px;
+      border-radius: 2px;
+      z-index: 10;
+      pointer-events: none;
+    }
+    .monitor-badge.rec {
+      color: #ef4444;
+      border-color: rgba(239, 68, 68, 0.35);
+    }
+    .waveform-strip {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 2px;
+      height: 18px;
+      display: flex;
+      align-items: flex-end;
+      gap: 2px;
+      padding: 0 8px;
+      opacity: 0.45;
+      pointer-events: none;
+    }
+    .waveform-bar {
+      flex: 1;
+      background: currentColor;
+      border-radius: 1px;
+    }
+
+    /* Master Player — DaVinci Cinema Monitor */
     .master-player-container {
-      background: #070a10; border: 1px solid var(--card-border);
-      border-radius: var(--radius-lg); overflow: hidden; display: flex; flex-direction: column;
+      background: #0c0d10; border: 1px solid var(--card-border);
+      border-radius: var(--radius-md); overflow: hidden; display: flex; flex-direction: column;
+      box-shadow: 0 4px 18px rgba(0, 0, 0, 0.5);
     }
     .player-header {
-      padding: 8px 14px; background: rgba(17, 23, 38, 0.7);
-      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      padding: 6px 12px; background: #18191e;
+      border-bottom: 1px solid var(--card-border);
       display: flex; justify-content: space-between; align-items: center;
     }
-    .player-title { font-size: 0.88rem; font-weight: 700; color: #f1f5f9; display: flex; align-items: center; gap: 6px; }
+    .player-title { font-size: 0.8rem; font-weight: 700; color: #e4e4e7; text-transform: uppercase; letter-spacing: 0.05em; display: flex; align-items: center; gap: 8px; }
     .btn-download {
-      background: #1e293b; color: #e2e8f0; border: 1px solid var(--card-border);
-      padding: 4px 10px; border-radius: 6px; font-size: 0.76rem; font-weight: 600;
+      background: #24252c; color: #e2e8f0; border: 1px solid #363842;
+      padding: 5px 10px; border-radius: 2px; font-size: 0.74rem; font-weight: 600;
       cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 6px;
+      min-height: 28px;
+      transition: all 0.15s ease;
     }
+    .btn-download:hover { background: #31333c; border-color: #4a4d59; color: #fff; }
     .video-viewport {
-      width: 100%; height: 38vh; max-height: 420px; min-height: 220px; background: #030509;
+      width: 100%; height: 38vh; max-height: 420px; min-height: 220px; background: #050608;
       display: flex; align-items: center; justify-content: center; position: relative;
+      border-top: 1px solid rgba(0,0,0,0.6);
+      border-bottom: 1px solid rgba(255,255,255,0.04);
     }
     video { width: 100%; height: 100%; object-fit: contain; }
     .empty-state { display: flex; flex-direction: column; align-items: center; gap: 8px; color: var(--text-dim); font-size: 0.86rem; }
@@ -484,70 +891,83 @@
       flex-direction: column;
       gap: 12px;
     }
+    /* Transport Bar — DaVinci Resolve Control Deck */
     .smpte-display {
-      font-family: 'Courier New', Courier, monospace;
-      font-size: 1.5rem;
-      font-weight: 800;
-      color: #34d399;
-      background: #050811;
-      padding: 6px 14px;
-      border-radius: 6px;
-      border: 1px solid rgba(52, 211, 153, 0.3);
+      font-family: 'SF Mono', 'Courier New', 'Consolas', monospace;
+      font-size: 1.12rem;
+      font-weight: 700;
+      color: #f59e0b;
+      background: #08090b;
+      padding: 4px 12px;
+      border-radius: 2px;
+      border: 1px solid #23252c;
       text-align: center;
       letter-spacing: 2px;
-      box-shadow: inset 0 0 10px rgba(52, 211, 153, 0.1);
+      box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.9);
+      user-select: none;
     }
     .transport-bar {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      background: #0d121f;
-      padding: 8px 14px;
-      border-radius: 8px;
+      background: #17181c;
+      padding: 6px 10px;
+      border-radius: 2px;
       border: 1px solid var(--card-border);
     }
     .transport-btn-group {
       display: flex;
       align-items: center;
-      gap: 6px;
+      gap: 3px;
+      background: #0f1013;
+      padding: 2px 4px;
+      border-radius: 3px;
+      border: 1px solid #24262d;
     }
     .btn-transport {
-      background: #1e293b;
-      color: #f1f5f9;
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      width: 34px;
-      height: 34px;
-      border-radius: 6px;
-      font-size: 0.85rem;
+      background: #1f2026;
+      color: #cbd5e1;
+      border: 1px solid #2c2e37;
+      width: 30px;
+      height: 30px;
+      border-radius: 2px;
+      font-size: 0.8rem;
       display: flex;
       align-items: center;
       justify-content: center;
       cursor: pointer;
-      transition: all 0.15s;
+      transition: all 0.12s;
     }
     .btn-transport:hover {
-      background: var(--accent);
-      color: white;
+      background: #2c2e38;
+      border-color: #4a4d59;
+      color: #fff;
     }
     .btn-play {
-      background: var(--accent-gradient);
-      width: 40px;
-      height: 40px;
-      font-size: 1.1rem;
+      background: #282a32;
+      border-color: #e58525;
+      color: #f59e0b;
+      width: 36px;
+      height: 30px;
+      font-size: 0.95rem;
+    }
+    .btn-play:hover {
+      background: #e58525;
+      color: #000;
     }
 
-    /* Multi-Track Tracks */
+    /* Multi-Track Tracks — DaVinci Resolve Cut / Edit NLE Canvas */
     .tracks-wrapper {
-      background: #050811;
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      border-radius: var(--radius-md);
+      background: #0c0d10;
+      border: 1px solid var(--card-border);
+      border-radius: 2px;
       overflow-x: auto;
       position: relative;
     }
     .timeline-ruler-bar {
-      height: 28px;
-      background: #0b101c;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      height: 24px;
+      background: #15161b;
+      border-bottom: 1px solid #24262d;
       position: relative;
       cursor: pointer;
       user-select: none;
@@ -556,108 +976,484 @@
       position: absolute;
       top: 0;
       bottom: 0;
-      width: 2px;
-      background: #ef4444;
+      width: 1.5px;
+      background: #ff3344;
       pointer-events: none;
       z-index: 100;
       left: 140px;
+      box-shadow: 0 0 6px rgba(255, 51, 68, 0.6);
     }
     .playhead-handle {
       position: absolute;
-      top: -2px;
-      left: -6px;
-      width: 14px;
+      top: 0;
+      left: -5.5px;
+      width: 12px;
       height: 14px;
-      background: #ef4444;
-      transform: rotate(45deg);
-      border-radius: 2px;
+      background: #ff3344;
+      clip-path: polygon(0 0, 100% 0, 100% 65%, 50% 100%, 0 65%);
+      border-radius: 0;
+      transform: none;
     }
     .track-row {
       display: grid;
       grid-template-columns: 140px 1fr;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-      min-height: 52px;
+      border-bottom: 1px solid #1a1b20;
+      min-height: 48px;
     }
     .track-header-cell {
-      background: #0a0f1d;
-      border-right: 1px solid rgba(255, 255, 255, 0.08);
-      padding: 8px 10px;
+      background: #141519;
+      border-right: 1px solid #23252a;
+      padding: 4px 8px;
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      font-size: 0.78rem;
+      gap: 6px;
+      font-size: 0.74rem;
       font-weight: 700;
-      color: #94a3b8;
+      color: #9ba0a6;
+      user-select: none;
+      position: relative;
+    }
+    .track-color-strip {
+      width: 3px;
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+    }
+    .track-color-strip.v-strip { background: #3b82f6; }
+    .track-color-strip.a-strip-sfx { background: #14b8a6; }
+    .track-color-strip.a-strip-music { background: #22c55e; }
+    .track-header-cell .track-info {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      overflow: hidden;
+      margin-left: 2px;
+    }
+    .track-header-cell .track-name {
+      color: #e4e4e7;
+      font-size: 0.76rem;
+      font-weight: 800;
+      line-height: 1.1;
+    }
+    .track-header-cell .track-label {
+      color: #6c7078;
+      font-size: 0.64rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .track-controls {
+      display: flex;
+      gap: 3px;
+      align-items: center;
+    }
+    .track-btn {
+      background: #1e1f25;
+      border: 1px solid #2d2e37;
+      color: #8a8d98;
+      width: 18px;
+      height: 18px;
+      border-radius: 2px;
+      font-size: 0.58rem;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+    .track-btn:hover { background: #2a2c35; color: #fff; }
+    .track-btn.active { color: #f59e0b; border-color: #f59e0b; }
+    .track-btn-mute.active { background: #ef4444; color: #fff; border-color: #ef4444; }
+    .track-btn-solo.active { background: #f59e0b; color: #000; border-color: #f59e0b; }
+    .track-vu-meter {
+      width: 8px;
+      height: 32px;
+      background: #08090b;
+      border: 1px solid #202127;
+      border-radius: 1px;
+      display: flex;
+      gap: 1px;
+      padding: 1px;
+    }
+    .track-vu-meter .vu-bar {
+      flex: 1;
+      height: 100%;
+      background: #111216;
+      position: relative;
+      display: flex;
+      align-items: flex-end;
+    }
+    .track-vu-meter .vu-fill {
+      width: 100%;
+      background: linear-gradient(0deg, #22c55e 0%, #eab308 70%, #ef4444 95%);
+      border-radius: 1px;
     }
     .track-badge {
-      padding: 2px 6px;
-      border-radius: 4px;
-      font-size: 0.72rem;
-      font-weight: 800;
+      display: none;
     }
-    .badge-v { background: rgba(99, 102, 241, 0.25); color: #a5b4fc; }
-    .badge-a { background: rgba(16, 185, 129, 0.25); color: #6ee7b7; }
     .track-lane-cell {
       position: relative;
-      background: #050811;
-      padding: 6px 0;
+      background: #0c0d10;
+      padding: 4px 0;
       display: flex;
       align-items: center;
+      background-image: linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+      background-size: 45px 100%;
     }
     .timeline-clip-block {
       position: absolute;
-      height: 40px;
-      background: linear-gradient(135deg, #312e81, #1e1b4b);
-      border: 1px solid #6366f1;
-      border-radius: 6px;
-      color: #e0e7ff;
+      height: 38px;
+      background: linear-gradient(180deg, #243c5c 0%, #17273d 100%);
+      border: 1px solid #3b82f6;
+      border-top: 3px solid #60a5fa;
+      border-radius: 2px;
+      color: #e2e8f0;
       display: flex;
       align-items: center;
       justify-content: space-between;
       padding: 0 8px;
-      font-size: 0.75rem;
+      font-size: 0.74rem;
       font-weight: 700;
       cursor: pointer;
       user-select: none;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.4);
-      transition: transform 0.1s;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+      transition: outline 0.1s;
     }
     .timeline-clip-block.active-clip {
-      border-color: #38bdf8;
-      box-shadow: 0 0 12px rgba(56, 189, 248, 0.5);
+      border-color: #f59e0b;
+      outline: 2px solid #f59e0b;
+      box-shadow: 0 0 12px rgba(245, 158, 11, 0.45);
+      z-index: 5;
     }
     .timeline-clip-block.audio-clip {
-      background: linear-gradient(135deg, #064e3b, #022c22);
-      border-color: #10b981;
-      color: #d1fae5;
+      background: linear-gradient(180deg, #133a35 0%, #0d2723 100%);
+      border-color: #14b8a6;
+      border-top: 3px solid #2dd4bf;
+      color: #ccfbf1;
     }
     .trim-handle {
-      width: 6px;
+      width: 5px;
       height: 100%;
       position: absolute;
       top: 0;
       cursor: ew-resize;
-      background: rgba(255, 255, 255, 0.2);
-      border-radius: 2px;
+      background: rgba(255, 255, 255, 0.25);
+      border-radius: 1px;
+    }
+    .trim-handle:hover {
+      background: #f59e0b;
     }
     .trim-handle-left { left: 0; }
     .trim-handle-right { right: 0; }
     .transition-marker {
       position: absolute;
-      width: 20px;
-      height: 20px;
-      background: #f59e0b;
-      color: black;
+      width: 18px;
+      height: 18px;
+      background: #e58525;
+      color: #000;
       font-size: 0.65rem;
       font-weight: 900;
-      border-radius: 50%;
+      border-radius: 2px;
       display: flex;
       align-items: center;
       justify-content: center;
       transform: translate(-50%, -50%);
       top: 50%;
       z-index: 10;
-      box-shadow: 0 0 8px rgba(245, 158, 11, 0.6);
+      box-shadow: 0 0 6px rgba(229, 133, 37, 0.6);
+    }
+
+    /* DaVinci Resolve Bottom Workflow Page Switcher Rail */
+    .resolve-bottom-rail {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 48px;
+      background: #111215;
+      border-top: 1px solid #282a30;
+      display: flex;
+      align-items: stretch;
+      justify-content: center;
+      gap: 2px;
+      z-index: 900;
+      box-shadow: 0 -4px 16px rgba(0,0,0,0.6);
+    }
+    .resolve-rail-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      padding: 0 22px;
+      background: transparent;
+      border: none;
+      border-top: 2px solid transparent;
+      color: #7d818c;
+      font-size: 0.68rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .resolve-rail-item:hover {
+      color: #d1d5db;
+      background: rgba(255, 255, 255, 0.03);
+    }
+    .resolve-rail-item.active {
+      color: #f59e0b;
+      border-top-color: #e58525;
+      background: #18191e;
+    }
+    .resolve-rail-item svg {
+      transition: transform 0.15s ease;
+    }
+    .resolve-rail-item.active svg {
+      color: #f59e0b;
+    }
+
+    /* ========================================================= */
+    /* STORYBOARD STUDIO CSS (Cinematic AI Director)            */
+    /* ========================================================= */
+    .storyboard-header-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+      background: #090e1a;
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius-md);
+      padding: 12px 18px;
+      margin-bottom: 14px;
+    }
+    .storyboard-title-group {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .storyboard-title {
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: #f8fafc;
+      letter-spacing: -0.01em;
+    }
+    .storyboard-meta-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.72rem;
+      background: #1e293b;
+      padding: 3px 9px;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      color: #cbd5e1;
+      font-weight: 600;
+    }
+    .storyboard-protagonist-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(99, 102, 241, 0.12);
+      border: 1px solid rgba(99, 102, 241, 0.35);
+      border-radius: 20px;
+      padding: 3px 12px 3px 4px;
+      font-size: 0.72rem;
+      color: #c7d2fe;
+    }
+    .storyboard-protagonist-img {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      object-fit: cover;
+      border: 1px solid #818cf8;
+    }
+    .storyboard-actions-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .storyboard-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+      gap: 16px;
+      width: 100%;
+    }
+    .shot-beat-card {
+      background: #0c1322;
+      border: 1px solid rgba(99, 102, 241, 0.18);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      position: relative;
+    }
+    .shot-beat-card:hover {
+      border-color: rgba(99, 102, 241, 0.55);
+      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+      transform: translateY(-2px);
+    }
+    .shot-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 14px;
+      background: rgba(15, 23, 42, 0.75);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+    .shot-num-label {
+      font-size: 0.76rem;
+      font-weight: 800;
+      color: #94a3b8;
+      letter-spacing: 0.05em;
+    }
+    .shot-type-badge {
+      font-size: 0.68rem;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .shot-type-establishing {
+      background: rgba(6, 182, 212, 0.15);
+      color: #22d3ee;
+      border: 1px solid rgba(6, 182, 212, 0.4);
+    }
+    .shot-type-tracking {
+      background: rgba(56, 189, 248, 0.15);
+      color: #38bdf8;
+      border: 1px solid rgba(56, 189, 248, 0.4);
+    }
+    .shot-type-closeup {
+      background: rgba(245, 158, 11, 0.15);
+      color: #fbbf24;
+      border: 1px solid rgba(245, 158, 11, 0.4);
+    }
+    .shot-type-climax {
+      background: rgba(244, 63, 94, 0.15);
+      color: #fb7185;
+      border: 1px solid rgba(244, 63, 94, 0.4);
+    }
+    .shot-preview-container {
+      position: relative;
+      width: 100%;
+      height: 190px;
+      background: #050811;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      cursor: pointer;
+    }
+    .shot-preview-media {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      transition: transform 0.3s ease;
+    }
+    .shot-preview-container:hover .shot-preview-media {
+      transform: scale(1.02);
+    }
+    .shot-preview-empty {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      color: #64748b;
+      font-size: 0.74rem;
+    }
+    .shot-workflow-pill {
+      position: absolute;
+      bottom: 8px;
+      left: 8px;
+      font-size: 0.65rem;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 4px;
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(4px);
+      color: #e2e8f0;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+    }
+    .shot-rendered-badge {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      font-size: 0.65rem;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 4px;
+      background: rgba(16, 185, 129, 0.9);
+      color: white;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+    }
+    .shot-duration-pill {
+      position: absolute;
+      bottom: 8px;
+      right: 8px;
+      font-size: 0.65rem;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: rgba(0, 0, 0, 0.75);
+      color: #cbd5e1;
+    }
+    .shot-card-body {
+      padding: 12px 14px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    .shot-title-text {
+      font-size: 0.86rem;
+      font-weight: 700;
+      color: #f1f5f9;
+      margin-bottom: 6px;
+      line-height: 1.3;
+    }
+    .shot-summary-snippet {
+      font-size: 0.74rem;
+      color: #94a3b8;
+      line-height: 1.45;
+      margin-bottom: 10px;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .shot-metadata-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      margin-bottom: 12px;
+    }
+    .shot-chip {
+      font-size: 0.68rem;
+      background: #172033;
+      color: #cbd5e1;
+      padding: 2px 7px;
+      border-radius: 4px;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+    .shot-card-actions {
+      display: flex;
+      gap: 6px;
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+      padding-top: 10px;
+      flex-wrap: wrap;
+    }
+    .shot-card-actions .btn-tool {
+      font-size: 0.72rem;
+      padding: 5px 9px;
     }
   </style>
 </head>
@@ -666,75 +1462,77 @@
   <!-- Top Navigation Bar -->
   <header>
     <div class="brand">
-      <div class="logo-icon">C</div>
-      <div>
-        <div style="display: flex; align-items: center; gap: 8px;">
-          <h1 class="brand-title">CHRONOFLOW PRO STUDIO</h1>
-          <span class="brand-tag">v2.0 LIVE</span>
-        </div>
-      </div>
-    </div>
-
-    
-
-    <!-- Live MCP Agent Status Indicator -->
-    <div class="mcp-pill" id="mcpAgentPill">
-      <span class="pulse-dot"></span>
-      <span id="mcpAgentText">Antigravity (MCP Agent) Active</span>
-    </div>
-
-    <div class="nav-tabs">
-      <button class="nav-tab active" data-tab="director" onclick="switchTab('director')">🎬 Video Production Studio</button>
-      <button class="nav-tab" data-tab="image-studio" onclick="switchTab('image-studio')">🎨 Image Studio &amp; Inpaint</button>
-      <button class="nav-tab" data-tab="vault" onclick="switchTab('vault')">🏛️ Recent Works &amp; Master Gallery</button>
-      <button class="nav-tab" data-tab="storyboard" onclick="switchTab('storyboard')">📜 AI Storyboard</button>
-    </div>
-
-    <div class="header-status">
-      <button type="button" class="btn-tool" id="btnToggleSidebar" onclick="toggleSidebar()" style="background: rgba(99, 102, 241, 0.2); border-color: rgba(99, 102, 241, 0.4); color: #a5b4fc; padding: 5px 12px;">
-        ◀ Hide Controls
+      <button id="btnBackToDashboard" type="button" onclick="navigateBackToDashboard()" class="btn-dashboard-back" style="display: none;" title="Return to PanelFlow Dashboard">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>
+        </svg>
+        <span>Dashboard</span>
       </button>
-      <div class="status-badge" id="comfyStatusBadge">
-        <span class="status-dot active" id="comfyDot"></span>
-        <span id="comfyStatusText">ComfyUI Online</span>
-      </div>
-      <div class="status-badge" id="vramBadge">
-        <span>VRAM: <strong id="vramText">-- / -- GB</strong></span>
-      </div>
-    </div>
 
-    
-  </header>
+      <!-- Status Dropdown Toggle Button -->
+      <div style="position: relative;">
+        <button id="btnStatusToggle" type="button" onclick="toggleStatusSlider(event)" class="btn-status-toggle" aria-expanded="false" title="Click to view MCP agent, ComfyUI, VRAM & Telemetry">
+          <span class="status-indicator-dot"></span>
+          <span>Status</span>
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
 
-  <!-- Live Telemetry Ticker -->
-  <div class="telemetry-ticker">
-    <div class="ticker-item">
-      <span>⚡ Active Engine:</span>
-      <strong style="color: #cbd5e1;">MiniMax H3 FL2VA + 4-Step Turbo LoRA</strong>
-    </div>
-    <div class="ticker-item">
-      <span>📡 MCP Protocol:</span>
-      <strong style="color: #6ee7b7;">Connected (JSON-RPC stdio)</strong>
-    </div>
-    <div class="ticker-item">
-      <span>🎯 Current Task:</span>
-      <strong style="color: #a5b4fc;" id="activeTaskTicker">Autonomous Production Running</strong>
-    </div>
-  </div>
-
-  <!-- Main Workspace -->
-  <main>
-    <div class="tab-content active" id="tab-director">
-      <div class="studio-grid" id="studioGrid">
-        <!-- Left Column: Live Agent Console & Workflow Settings -->
-        <div id="leftSidebarCol">
-          <!-- Live Agent Execution Terminal -->
-          <div class="terminal-card">
-            <div class="terminal-header">
-              <span>🤖 LIVE MCP AGENT TELEMETRY &amp; CONSOLE</span>
-              <span style="color: #6ee7b7; font-size: 0.68rem;">LIVE STREAMING</span>
+        <!-- Status Slider Panel (Drops down from bottom of Status button) -->
+        <div id="statusSliderPanel" class="status-slider-panel" style="display: none;">
+          <div class="status-panel-header">
+            <span class="status-panel-title">System &amp; Telemetry Status</span>
+            <button type="button" onclick="toggleStatusSlider(event)" class="btn-close" style="font-size: 1rem; line-height: 1;">&times;</button>
+          </div>
+          <div class="status-panel-items">
+            <!-- Antigravity MCP Agent -->
+            <div class="status-panel-row">
+              <span class="status-row-label">MCP Protocol</span>
+              <div class="mcp-pill" id="mcpAgentPill" style="margin: 0;">
+                <span class="pulse-dot"></span>
+                <span id="mcpAgentText">Antigravity (MCP) &mdash; Standing By</span>
+              </div>
             </div>
-            <div class="terminal-logs" id="terminalLogs">
+
+            <!-- ComfyUI Online -->
+            <div class="status-panel-row">
+              <span class="status-row-label">AI Engine</span>
+              <div class="status-badge" id="comfyStatusBadge" style="margin: 0;">
+                <span class="status-dot active" id="comfyDot"></span>
+                <span id="comfyStatusText">ComfyUI Online</span>
+              </div>
+            </div>
+
+            <!-- VRAM Usage -->
+            <div class="status-panel-row">
+              <span class="status-row-label">VRAM Usage</span>
+              <div class="status-badge" id="vramBadge" style="margin: 0;">
+                <span>VRAM: <strong id="vramText">-- / -- GB</strong></span>
+              </div>
+            </div>
+
+            <!-- Active Task Ticker -->
+            <div class="status-panel-row">
+              <span class="status-row-label">Current Task</span>
+              <span id="activeTaskTicker" style="color: #a5b4fc; font-size: 0.74rem; font-weight: 600;">Autonomous Production Running</span>
+            </div>
+
+            <!-- Popout Window -->
+            <div class="status-panel-row" style="border-top: 1px solid rgba(255,255,255,0.06); padding-top: 8px;">
+              <span class="status-row-label">Window</span>
+              <button type="button" class="btn-tool" id="btnOpenExternal" onclick="openStandaloneWindow()" title="Open standalone in new browser window" style="padding: 5px 12px; font-size: 0.74rem;">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 4px;" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                <span>Popout Browser</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Mini Terminal Console inside Status Panel -->
+          <div class="terminal-card" style="margin-top: 6px; margin-bottom: 0;">
+            <div class="terminal-header">
+              <span>🤖 MCP AGENT LOGS</span>
+              <span style="color: #6ee7b7; font-size: 0.65rem;">LIVE STREAMING</span>
+            </div>
+            <div class="terminal-logs" id="terminalLogs" style="max-height: 110px;">
               <div class="log-line">
                 <span class="log-time">[16:38:34]</span>
                 <span class="log-tag">[MCP]</span>
@@ -750,112 +1548,62 @@
                 <span class="log-tag">[DISPATCH]</span>
                 <span class="log-msg highlight">Dispatched Job #fbc9c0f2aa4d (Sliding Window Continuation).</span>
               </div>
-              <div class="log-line">
-                <span class="log-time">[16:38:35]</span>
-                <span class="log-tag">[PROMPT]</span>
-                <span class="log-msg">"Cinematic comedy scene: An adorable chubby ginger tabby cat wearing tiny sunglasses..."</span>
-              </div>
-              <div class="log-line">
-                <span class="log-time">[16:42:57]</span>
-                <span class="log-tag">[CHUNK 1]</span>
-                <span class="log-msg highlight">Chunk 1 completed (5.17s @ 1344x768). Tail frame extracted.</span>
-              </div>
-              <div class="log-line">
-                <span class="log-time">[16:47:30]</span>
-                <span class="log-tag">[CHUNK 2]</span>
-                <span class="log-msg highlight">Chunk 2 completed. Passing anchor forward into Chunk 3...</span>
-              </div>
             </div>
-          </div>
-
-          <!-- Controls Card -->
-          <div class="card">
-            <div class="card-header">
-              <div class="card-title"><span>🎬</span> Scene &amp; Production Controls</div>
-              <span style="font-size: 0.72rem; color: #a5b4fc; background: rgba(99,102,241,0.12); padding: 2px 8px; border-radius: 4px;" id="badgeWorkflow">Sliding Window</span>
-            </div>
-
-            <!-- Active Prompt Input (Auto-filled by MCP Agent) -->
-            <!-- Starting Anchor Frame / Character Reference -->
-            <div class="form-group" style="margin-bottom: 12px;">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                <label style="margin: 0;">Starting Anchor Frame / Character</label>
-                <span id="anchorBadge" style="font-size: 0.68rem; color: #94a3b8;">Auto-detect</span>
-              </div>
-              <div id="anchorPreviewContainer" style="display: none; align-items: center; gap: 10px; background: #070b14; border: 1px solid var(--card-border); border-radius: 6px; padding: 6px 10px; margin-bottom: 6px;">
-                <img id="anchorThumb" src="" alt="Anchor" style="width: 50px; height: 32px; object-fit: cover; border-radius: 4px; border: 1px solid rgba(255,255,255,0.1);">
-                <div style="flex: 1; overflow: hidden;">
-                  <div id="anchorFilename" style="font-size: 0.75rem; color: #f8fafc; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; overflow: hidden;"></div>
-                  <div style="font-size: 0.68rem; color: #34d399;">✓ Locked Character Reference</div>
-                </div>
-                <button type="button" onclick="clearAnchorImage()" style="background: none; border: none; color: #ef4444; cursor: pointer; font-size: 0.85rem;" title="Clear Anchor">✕</button>
-              </div>
-              <div style="display: flex; gap: 8px;">
-                <button type="button" class="btn-tool" onclick="switchTab('image-studio')" style="font-size: 0.74rem; flex: 1; justify-content: center; background: rgba(236, 72, 153, 0.15); border-color: rgba(236, 72, 153, 0.4); color: #f472b6;">
-                  🎨 Create in Image Studio
-                </button>
-                <button type="button" class="btn-tool" onclick="switchTab('vault')" style="font-size: 0.74rem; flex: 1; justify-content: center; background: rgba(99, 102, 241, 0.15); border-color: rgba(99, 102, 241, 0.4); color: #a5b4fc;">
-                  🎭 Pick from Vault
-                </button>
-              </div>
-            </div>
-
-            <div class="form-group">
-              <label for="promptInput">Active Scene Prompt (Agent Directed)</label>
-              <textarea id="promptInput">Cinematic comedy scene: An adorable chubby ginger tabby cat wearing tiny sunglasses and a miniature detective trench coat tiptoes stealthily across a sleek kitchen granite counter in slow motion, eyes laser-focused on a roasted chicken drumstick. Warm kitchen lighting, cinematic 8k photorealistic comedy film, slow smooth tracking shot.</textarea>
-            </div>
-
-            <div class="form-group">
-              <label>Target Duration &amp; Architecture</label>
-              <select id="durationSelect">
-                <option value="15" selected>15 Seconds (~3 Chunks of 5.2s)</option>
-                <option value="30">30 Seconds (~6 Chunks)</option>
-                <option value="60">60 Seconds (~12 Chunks)</option>
-              </select>
-            </div>
-
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px;">
-              <div>
-                <label>Resolution</label>
-                <select id="resolutionSelect">
-                  <option value="1344x768" selected>1344 &times; 768 (Native 16:9)</option>
-                  <option value="864x480">864 &times; 480 (Draft Speed)</option>
-                </select>
-              </div>
-              <div>
-                <label>Acceleration</label>
-                <select id="loraSelect">
-                  <option value="4step" selected>Turbo 4-Step (2&times; Speed)</option>
-                  <option value="8step">Turbo 8-Step</option>
-                </select>
-              </div>
-            </div>
-
-            <button type="button" class="btn-primary" id="btnManualTrigger" onclick="startNewProductionRun()">
-              <span>🚀 Start New Video Production</span>
-            </button>
           </div>
         </div>
+      </div>
 
+      <!-- Prompt Modal Trigger Button -->
+      <button id="btnPromptModal" type="button" onclick="openPromptModal()" class="btn-prompt-trigger" title="Open Scene &amp; Production Controls Popup">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        <span>Prompt</span>
+      </button>
+
+      <!-- Project Badge -->
+      <span id="headerProjectBadge" class="brand-project-tag" style="display: none;"></span>
+    </div>
+
+    <!-- Center Navigation Tabs -->
+    <div class="nav-tabs">
+      <button class="nav-tab active" data-tab="director" onclick="switchTab('director')">🎬 Video Studio</button>
+      <button class="nav-tab" data-tab="image-studio" onclick="switchTab('image-studio')">🎨 Image Studio</button>
+      <button class="nav-tab" data-tab="vault" onclick="switchTab('vault')">🏛️ Gallery</button>
+      <button class="nav-tab" data-tab="storyboard" onclick="switchTab('storyboard')">📜 Storyboard</button>
+    </div>
+
+    <!-- Right Controls -->
+    <div class="header-status">
+      <button type="button" class="btn-prompt-trigger" onclick="openPromptModal()" style="font-size: 0.74rem; padding: 4px 10px;">
+        <span>🎬 New Shot Controls</span>
+      </button>
+    </div>
+  </header>
+
+  
+
+  <!-- Main Workspace -->
+  <main>
+    <div class="tab-content active" id="tab-director">
+      <div class="studio-grid" id="studioGrid">
+        <!-- Full-Width Workspace (Controls accessible via Prompt modal) -->
         <!-- Right Column: Live Pipeline Viewer & Clip Reviewer -->
         <div style="display: flex; flex-direction: column; gap: 18px;">
-          <!-- Live Real-Time Progress Box -->
-          <div class="progress-box" id="progressBox" style="border-color: rgba(52, 211, 153, 0.4);">
-            <div class="prog-header">
+          <!-- Sleek Compact Task Notification Strip (Hidden by default when idle) -->
+          <div class="progress-box" id="progressBox" style="display: none;">
+            <div class="prog-compact-row">
               <div class="prog-status" id="progStatusContainer">
-                <span id="statusIcon" style="color: #34d399; font-size: 18px; font-weight: 800;">✓</span>
-                <span id="statusMessage">Master 15.6s Film Completed &amp; Ready for Review!</span>
+                <span id="statusIcon" style="color: #34d399; font-size: 14px; font-weight: 800;">✓</span>
+                <span id="statusMessage">Task Ready</span>
               </div>
-              <div class="prog-timer" id="timerDisplay">15:36</div>
+              <div class="prog-compact-right">
+                <span id="chunkStepText" style="font-size: 0.73rem;">100% Complete</span>
+                <span id="overallChunkText" style="color: #34d399; font-weight: 700; font-size: 0.73rem;">All Chunks Ready</span>
+                <span class="prog-timer" id="timerDisplay">00:00</span>
+                <button type="button" class="btn-dismiss-prog" onclick="dismissProgressBox()" title="Dismiss notification">&times;</button>
+              </div>
             </div>
-
             <div class="progress-bar-container">
-              <div class="progress-bar-fill" id="chunkProgressFill" style="width: 100%; background: linear-gradient(135deg, #10b981, #059669);"></div>
-            </div>
-
-            <div class="progress-subtext">
-              <span id="chunkStepText">Step Progress: 100% Complete</span>
-              <span id="overallChunkText" style="color: #34d399; font-weight: 700;">All 3 Chunks Generated</span>
+              <div class="progress-bar-fill" id="chunkProgressFill" style="width: 0%;"></div>
             </div>
           </div>
 
@@ -873,8 +1621,11 @@
                 <button type="button" id="btnCancelActiveJob" onclick="cancelCurrentActiveJob()" title="Cancel or reset the active job" style="background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.5); color: #fca5a5; border-radius: 6px; padding: 3px 8px; font-size: 0.74rem; font-weight: 700; cursor: pointer; display: none;">✕ Cancel Job</button>
               </div>
               <div class="player-actions" style="display: flex; gap: 8px; align-items: center;">
-                <button type="button" class="btn-tool" onclick="extractFrameToImageStudio()" style="background: rgba(99, 102, 241, 0.25); border-color: rgba(99, 102, 241, 0.5); color: #a5b4fc;">
-                  📸 Send Current Frame to Image Studio
+                <button type="button" class="btn-tool" id="btnDualViewer" onclick="toggleDualViewer()" title="Toggle DaVinci Dual Monitor View (Source | Timeline)" style="border-radius: 2px; background: #202228; border-color: #363942; color: #cbd5e1;">
+                  ◫ Dual Monitor
+                </button>
+                <button type="button" class="btn-tool" onclick="extractFrameToImageStudio()" style="background: #202228; border-color: #363942; color: #a5b4fc; border-radius: 2px;">
+                  📸 Send Frame to Studio
                 </button>
                 <a href="/outputs/chronoflow_master_66c76c556502.mp4" class="btn-download" id="btnDownloadMaster" download="zombie_master_film.mp4">
                   Download Master Video
@@ -882,12 +1633,22 @@
               </div>
             </div>
 
-            <div class="video-viewport">
-              <div class="empty-state" id="emptyVideoState" style="display: none;">
-                <div style="font-size: 36px; opacity: 0.35;">🎥</div>
-                <div style="font-weight: 600;">Master Continuous Video Ready</div>
+            <div class="video-viewport" id="cinemaVideoViewport">
+              <!-- Left: Source Clip Monitor (Visible in Dual-View Mode) -->
+              <div class="monitor-pane" id="sourceMonitorPane" style="display: none;">
+                <div class="monitor-badge">Source Clip [V1]</div>
+                <video id="sourceVideoPlayer" controls playsinline style="width: 100%; height: 100%; object-fit: contain;"></video>
               </div>
-              <video id="masterVideoPlayer" controls playsinline src="/outputs/chronoflow_master_66c76c556502.mp4" style="display: block; width: 100%; height: 100%; object-fit: contain;"></video>
+
+              <!-- Right: Master Timeline Program Monitor -->
+              <div class="monitor-pane" id="masterMonitorPane" style="width: 100%;">
+                <div class="monitor-badge rec">Timeline Program [REC]</div>
+                <div class="empty-state" id="emptyVideoState" style="display: none; height: 100%; justify-content: center;">
+                  <div style="font-size: 32px; opacity: 0.35;">🎥</div>
+                  <div style="font-weight: 600;">Master Continuous Video Ready</div>
+                </div>
+                <video id="masterVideoPlayer" controls playsinline src="/outputs/chronoflow_master_66c76c556502.mp4" style="display: block; width: 100%; height: 100%; object-fit: contain;"></video>
+              </div>
             </div>
           </div>
 
@@ -951,41 +1712,81 @@
 
                 <!-- Track V2: Overlay / Titles -->
                 <div class="track-row">
-                  <div class="track-header-cell">
-                    <span class="track-badge badge-v">V2 Overlay</span>
+                  <div class="track-header-cell track-header-v2">
+                    <div class="track-color-strip v-strip"></div>
+                    <div class="track-info">
+                      <span class="track-name">V2</span>
+                      <span class="track-label">Overlay</span>
+                    </div>
+                    <div class="track-controls">
+                      <button type="button" class="track-btn" title="Lock Track" onclick="this.classList.toggle('active')">🔒</button>
+                      <button type="button" class="track-btn active" title="Auto Patch">&lt;&gt;</button>
+                    </div>
                   </div>
                   <div class="track-lane-cell" id="trackLaneV2"></div>
                 </div>
 
                 <!-- Track V1: Main Video Shots -->
                 <div class="track-row">
-                  <div class="track-header-cell">
-                    <span class="track-badge badge-v">V1 Video</span>
+                  <div class="track-header-cell track-header-v1">
+                    <div class="track-color-strip v-strip"></div>
+                    <div class="track-info">
+                      <span class="track-name">V1</span>
+                      <span class="track-label">Video</span>
+                    </div>
+                    <div class="track-controls">
+                      <button type="button" class="track-btn" title="Lock Track" onclick="this.classList.toggle('active')">🔒</button>
+                      <button type="button" class="track-btn active" title="Auto Patch">&lt;&gt;</button>
+                    </div>
                   </div>
                   <div class="track-lane-cell" id="trackLaneV1"></div>
                 </div>
 
                 <!-- Track A1: Foley / Dialog -->
                 <div class="track-row">
-                  <div class="track-header-cell">
-                    <span class="track-badge badge-a">A1 SFX</span>
+                  <div class="track-header-cell track-header-a1">
+                    <div class="track-color-strip a-strip-sfx"></div>
+                    <div class="track-info">
+                      <span class="track-name">A1</span>
+                      <span class="track-label">SFX</span>
+                    </div>
+                    <div class="track-controls">
+                      <button type="button" class="track-btn track-btn-mute" title="Mute Track" onclick="this.classList.toggle('active')">M</button>
+                      <button type="button" class="track-btn track-btn-solo" title="Solo Track" onclick="this.classList.toggle('active')">S</button>
+                    </div>
+                    <div class="track-vu-meter" title="Fairlight Audio Meter">
+                      <div class="vu-bar left"><div class="vu-fill" id="vuFillA1L" style="height: 10%;"></div></div>
+                      <div class="vu-bar right"><div class="vu-fill" id="vuFillA1R" style="height: 12%;"></div></div>
+                    </div>
                   </div>
                   <div class="track-lane-cell" id="trackLaneA1"></div>
                 </div>
 
                 <!-- Track A2: Score / Soundtrack -->
                 <div class="track-row">
-                  <div class="track-header-cell">
-                    <span class="track-badge badge-a">A2 Music</span>
+                  <div class="track-header-cell track-header-a2">
+                    <div class="track-color-strip a-strip-music"></div>
+                    <div class="track-info">
+                      <span class="track-name">A2</span>
+                      <span class="track-label">Music</span>
+                    </div>
+                    <div class="track-controls">
+                      <button type="button" class="track-btn track-btn-mute" title="Mute Track" onclick="this.classList.toggle('active')">M</button>
+                      <button type="button" class="track-btn track-btn-solo" title="Solo Track" onclick="this.classList.toggle('active')">S</button>
+                    </div>
+                    <div class="track-vu-meter" title="Fairlight Audio Meter">
+                      <div class="vu-bar left"><div class="vu-fill" id="vuFillA2L" style="height: 10%;"></div></div>
+                      <div class="vu-bar right"><div class="vu-fill" id="vuFillA2R" style="height: 12%;"></div></div>
+                    </div>
                   </div>
                   <div class="track-lane-cell" id="trackLaneA2"></div>
                 </div>
               </div>
 
               <!-- Inspector & Parameters under timeline -->
-              <div style="display: flex; gap: 14px; margin-top: 12px; background: #070b14; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--card-border); align-items: center; flex-wrap: wrap;">
+              <div style="display: flex; gap: 14px; margin-top: 10px; background: #17181d; padding: 6px 12px; border-radius: 2px; border: 1px solid var(--card-border); align-items: center; flex-wrap: wrap;">
                 <div style="font-size: 0.8rem; font-weight: 700; color: #f1f5f9;">
-                  Clip: <span id="selectedClipBadge" style="color: #38bdf8;">Shot #1</span>
+                  Clip: <span id="selectedClipBadge" style="color: #f59e0b;">Shot #1</span>
                 </div>
                 <div style="display: flex; align-items: center; gap: 6px;">
                   <span style="font-size: 0.75rem; color: #94a3b8;">Speed:</span>
@@ -1170,14 +1971,56 @@
 
     
 
-    <!-- TAB 3: STORYBOARD -->
+    <!-- TAB 3: STORYBOARD & AI SCENE BEAT DIRECTOR -->
     <div class="tab-content" id="tab-storyboard">
-      <div class="card">
-        <div class="card-header">
-          <div class="card-title"><span>📜</span> AI Storyboard &amp; Scene Beat Director</div>
+      <!-- Storyboard Header Toolbar -->
+      <div class="storyboard-header-bar">
+        <div class="storyboard-title-group">
+          <span style="font-size: 1.2rem;">📜</span>
+          <div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span class="storyboard-title" id="sbTitleDisplay">Chrono Relic: Avalon Prime</span>
+              <span class="storyboard-meta-badge" id="sbDurationBadge">⏱️ 124.8s</span>
+              <span class="storyboard-meta-badge" id="sbCountBadge">🎬 24 Shots</span>
+            </div>
+            <div style="font-size: 0.72rem; color: #94a3b8; margin-top: 2px;">
+              Master AI Scene Beat Director • MiniMax H3 6-Heading Prompt Chains
+            </div>
+          </div>
+          <div id="sbProtagonistContainer" style="margin-left: 8px;"></div>
         </div>
-        <div style="color: #94a3b8; font-size: 0.88rem; padding: 20px 0;">
-          The AI Director has compiled the active 3-shot storyboard for <strong>"Agent Whiskers"</strong>. You can monitor the real-time render in the Live Production Studio tab.
+
+        <div class="storyboard-actions-bar">
+          <!-- Preset Selector -->
+          <div style="display: flex; align-items: center; gap: 6px;">
+            <label for="sbPresetSelect" style="font-size: 0.74rem; color: #94a3b8; margin: 0; font-weight: 600;">Blueprint:</label>
+            <select id="sbPresetSelect" onchange="onSelectScreenplayPreset(this.value)" style="background: #131b2e; border: 1px solid var(--card-border); color: #f1f5f9; padding: 5px 10px; border-radius: 6px; font-size: 0.74rem; font-weight: 600; cursor: pointer;">
+              <option value="">Loading Blueprints...</option>
+            </select>
+          </div>
+
+          <button type="button" class="btn-tool" onclick="openAIDirectorModal()" style="background: rgba(99, 102, 241, 0.15); border-color: rgba(99, 102, 241, 0.4); color: #a5b4fc; font-weight: 700;">
+            <span>⚡ AI Director Plan</span>
+          </button>
+          <button type="button" class="btn-tool" onclick="addNewStoryboardBeat()" style="font-weight: 600;">
+            <span>➕ Add Beat</span>
+          </button>
+          <button type="button" class="btn-tool" onclick="saveCurrentStoryboard()" style="font-weight: 600;" title="Save Storyboard to Vault">
+            <span>💾 Save</span>
+          </button>
+          <button type="button" class="btn-tool" onclick="exportStoryboardToNLE()" style="background: rgba(16, 185, 129, 0.15); border-color: rgba(16, 185, 129, 0.4); color: #6ee7b7; font-weight: 600;" title="Export all shots to Multi-Track NLE Timeline">
+            <span>🎬 To NLE</span>
+          </button>
+          <button type="button" class="btn-primary" onclick="renderAllStoryboardInVideoStudio()" style="padding: 6px 14px; font-size: 0.78rem; font-weight: 700; box-shadow: 0 2px 10px rgba(99, 102, 241, 0.35);">
+            <span>▶ Render Storyboard</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Storyboard Interactive Cards Grid -->
+      <div class="storyboard-grid" id="storyboardGrid">
+        <div style="grid-column: 1 / -1; padding: 40px; text-align: center; color: #94a3b8; font-size: 0.85rem;">
+          Loading master storyboard scene beats...
         </div>
       </div>
     </div>
@@ -1230,16 +2073,402 @@
         </div>
       </div>
     </div>
-  </main>
+  
+  <!-- PROMPT & PRODUCTION CONTROLS POPUP MODAL -->
+  <div id="promptModal" class="modal-overlay" style="display: none;" onclick="handlePromptModalOverlayClick(event)">
+    <div class="modal-box" style="width: 580px; max-width: 95vw;" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 1.2rem;">🎬</span>
+          <h3 style="margin: 0; font-size: 1.05rem; font-weight: 800; color: #f8fafc;">Scene &amp; Production Controls</h3>
+          <span style="font-size: 0.72rem; color: #a5b4fc; background: rgba(99,102,241,0.18); padding: 2px 8px; border-radius: 4px; font-weight: 700;" id="badgeWorkflow">Sliding Window</span>
+        </div>
+        <button type="button" class="btn-close" onclick="closePromptModal()" title="Close Controls (Esc)">&times;</button>
+      </div>
+
+      <div class="modal-scroll-body" style="max-height: 75vh; overflow-y: auto; padding-right: 4px; display: flex; flex-direction: column; gap: 14px;">
+        <!-- Starting Anchor Frame / Character Reference -->
+        <div class="form-group" style="margin-bottom: 0;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <label style="margin: 0; font-weight: 700; color: #cbd5e1; font-size: 0.8rem;">Starting Anchor Frame / Character</label>
+            <span id="anchorBadge" style="font-size: 0.68rem; color: #94a3b8;">Auto-detect</span>
+          </div>
+          <div id="anchorPreviewContainer" style="display: none; align-items: center; gap: 10px; background: #070b14; border: 1px solid var(--card-border); border-radius: 6px; padding: 6px 10px; margin-bottom: 8px;">
+            <img id="anchorThumb" src="" alt="Anchor" style="width: 50px; height: 32px; object-fit: cover; border-radius: 4px; border: 1px solid rgba(255,255,255,0.1);">
+            <div style="flex: 1; overflow: hidden;">
+              <div id="anchorFilename" style="font-size: 0.75rem; color: #f8fafc; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; overflow: hidden;"></div>
+              <div style="font-size: 0.68rem; color: #34d399;">✓ Locked Character Reference</div>
+            </div>
+            <button type="button" onclick="clearAnchorImage()" style="background: none; border: none; color: #ef4444; cursor: pointer; font-size: 0.85rem;" title="Clear Anchor">✕</button>
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <button type="button" class="btn-tool" onclick="closePromptModal(); switchTab('image-studio')" style="font-size: 0.76rem; flex: 1; justify-content: center; background: rgba(236, 72, 153, 0.15); border-color: rgba(236, 72, 153, 0.4); color: #f472b6; padding: 8px;">
+              🎨 Create in Image Studio
+            </button>
+            <button type="button" class="btn-tool" onclick="closePromptModal(); switchTab('vault')" style="font-size: 0.76rem; flex: 1; justify-content: center; background: rgba(99, 102, 241, 0.15); border-color: rgba(99, 102, 241, 0.4); color: #a5b4fc; padding: 8px;">
+              🎭 Pick from Vault
+            </button>
+          </div>
+        </div>
+
+        <!-- Prompt Textarea & Presets -->
+        <div class="form-group" style="margin-bottom: 0;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <label for="promptInput" style="margin: 0; font-weight: 700; color: #cbd5e1; font-size: 0.8rem;">Active Scene Prompt (Agent Directed)</label>
+            <div style="display: flex; gap: 4px;">
+              <button type="button" onclick="setPromptPreset('cat')" class="btn-tool" style="font-size: 0.68rem; padding: 2px 7px;">Cat</button>
+              <button type="button" onclick="setPromptPreset('cyberpunk')" class="btn-tool" style="font-size: 0.68rem; padding: 2px 7px;">Cyberpunk</button>
+              <button type="button" onclick="setPromptPreset('anime')" class="btn-tool" style="font-size: 0.68rem; padding: 2px 7px;">Anime</button>
+            </div>
+          </div>
+          <textarea id="promptInput" rows="4" style="line-height: 1.5; font-size: 0.85rem;">Cinematic comedy scene: An adorable chubby ginger tabby cat wearing tiny sunglasses and a miniature detective trench coat tiptoes stealthily across a sleek kitchen granite counter in slow motion, eyes laser-focused on a roasted chicken drumstick. Warm kitchen lighting, cinematic 8k photorealistic comedy film, slow smooth tracking shot.</textarea>
+        </div>
+
+        <!-- Duration & Architecture -->
+        <div class="form-group" style="margin-bottom: 0;">
+          <label style="font-weight: 700; color: #cbd5e1; font-size: 0.8rem; margin-bottom: 6px;">Target Duration &amp; Architecture</label>
+          <select id="durationSelect" style="font-size: 0.85rem;">
+            <option value="15" selected>15 Seconds (~3 Chunks of 5.2s - Standard Scene)</option>
+            <option value="30">30 Seconds (~6 Chunks - Extended Action Sequence)</option>
+            <option value="60">60 Seconds (~12 Chunks - Full Scene Beat)</option>
+          </select>
+        </div>
+
+        <!-- Resolution & Acceleration -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div>
+            <label style="font-weight: 700; color: #cbd5e1; font-size: 0.8rem; margin-bottom: 6px;">Resolution</label>
+            <select id="resolutionSelect" style="font-size: 0.85rem;">
+              <option value="1344x768" selected>1344 &times; 768 (Native 16:9 Cinematic)</option>
+              <option value="768x1344">768 &times; 1344 (9:16 Shorts / Vertical)</option>
+              <option value="864x480">864 &times; 480 (Draft Speed Preview)</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-weight: 700; color: #cbd5e1; font-size: 0.8rem; margin-bottom: 6px;">Acceleration Engine</label>
+            <select id="loraSelect" style="font-size: 0.85rem;">
+              <option value="4step" selected>Turbo 4-Step (2&times; Speed)</option>
+              <option value="8step">Turbo 8-Step (High Precision)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Start Video Production Button -->
+        <button type="button" class="btn-primary" id="btnManualTrigger" onclick="startNewProductionRun(); closePromptModal();" style="padding: 14px; font-size: 0.96rem; margin-top: 4px;">
+          <span>🚀 Start New Video Production</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- DEEP 6-HEADING SHOT BEAT EDITOR MODAL -->
+  <div id="shotBeatModal" class="modal-overlay" style="display: none;" onclick="if(event.target===this) closeBeatEditor()">
+    <div class="modal-box" style="width: 720px; max-width: 95vw;" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 1.2rem;">🎬</span>
+          <h3 style="margin: 0; font-size: 1.05rem; font-weight: 800; color: #f8fafc;">
+            Scene Beat Editor &bull; Shot #<span id="sbEditShotNum">1</span>
+          </h3>
+          <span id="sbEditWorkflowBadge" class="shot-type-badge shot-type-tracking">Sliding Window</span>
+        </div>
+        <button type="button" class="btn-close" onclick="closeBeatEditor()" title="Close">&times;</button>
+      </div>
+
+      <div class="modal-scroll-body" style="max-height: 75vh; overflow-y: auto; padding-right: 6px; display: flex; flex-direction: column; gap: 14px;">
+        <!-- Title & Shot Type -->
+        <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 12px;">
+          <div>
+            <label style="font-weight: 700; color: #cbd5e1; font-size: 0.8rem; margin-bottom: 4px;">Shot Title</label>
+            <input type="text" id="sbEditTitle" style="font-size: 0.85rem;" placeholder="e.g. Shot 1: The Threshold of Eternity">
+          </div>
+          <div>
+            <label style="font-weight: 700; color: #cbd5e1; font-size: 0.8rem; margin-bottom: 4px;">Shot Framing</label>
+            <select id="sbEditShotType" style="font-size: 0.85rem;">
+              <option value="Wide Establishing">Wide Establishing</option>
+              <option value="Low-Angle Tracking">Low-Angle Tracking</option>
+              <option value="Medium Tracking">Medium Tracking</option>
+              <option value="Macro Close-Up">Macro Close-Up</option>
+              <option value="High-Angle Crane">High-Angle Crane</option>
+              <option value="Dynamic Climax">Dynamic Climax</option>
+              <option value="Resolution Vista">Resolution Vista</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Duration & Conditioning -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div>
+            <label style="font-weight: 700; color: #cbd5e1; font-size: 0.8rem; margin-bottom: 4px;">Duration</label>
+            <select id="sbEditDuration" style="font-size: 0.85rem;">
+              <option value="5.2" selected>5.2s (124 frames - Cinematic Full Shot)</option>
+              <option value="3.0">3.0s (73 frames - Scene Beat)</option>
+              <option value="2.3">2.3s (56 frames - Quick Burst)</option>
+              <option value="1.0">1.0s (22 frames - Micro Action)</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-weight: 700; color: #cbd5e1; font-size: 0.8rem; margin-bottom: 4px;">Conditioning Workflow</label>
+            <select id="sbEditWorkflow" style="font-size: 0.85rem;">
+              <option value="sliding_window">Sliding Window (Chain from previous tail)</option>
+              <option value="reference">Reference Image (Character Lock)</option>
+              <option value="flf2v">FLF2V (First &amp; Last Keyframe Bridge)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Anchor Keyframe -->
+        <div>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+            <label style="font-weight: 700; color: #cbd5e1; font-size: 0.8rem; margin: 0;">Starting Anchor Image / Frame</label>
+            <button type="button" class="btn-tool" onclick="sendActiveEditFrameToInpaint()" style="font-size: 0.7rem; color: #a5b4fc; padding: 2px 8px;">
+              🎨 Open in Image Studio Canvas
+            </button>
+          </div>
+          <div style="display: flex; gap: 10px; align-items: center;">
+            <input type="text" id="sbEditFirstFrame" style="flex: 1; font-size: 0.82rem;" placeholder="e.g. qwen_gen_fa600e52.png or chronoflow_tail_...png">
+            <button type="button" class="btn-tool" onclick="pickVaultImageForBeat()" style="font-size: 0.74rem;">Pick from Vault</button>
+          </div>
+        </div>
+
+        <!-- 6-Heading MiniMax H3 Prompt Editor -->
+        <div style="border-top: 1px solid rgba(255, 255, 255, 0.08); padding-top: 12px;">
+          <div style="font-weight: 800; color: #e2e8f0; font-size: 0.85rem; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
+            <span>📜</span> MiniMax H3 6-Heading Prompt Schema
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 10px;">
+            <div>
+              <label style="font-size: 0.74rem; color: #94a3b8; font-weight: 600;">1. Subject Definitions (Protagonist / Secondary actors)</label>
+              <textarea id="sbEditSubjectDef" rows="2" style="font-size: 0.78rem;" placeholder="e.g. Commander Maya Voss: Deep-space operative in matte obsidian armor..."></textarea>
+            </div>
+            <div>
+              <label style="font-size: 0.74rem; color: #94a3b8; font-weight: 600;">2. Summary (Cinematic scene one-liner)</label>
+              <textarea id="sbEditSummary" rows="2" style="font-size: 0.78rem;" placeholder="e.g. Cinematic sci-fi scene: Maya Voss stands poised at the threshold..."></textarea>
+            </div>
+            <div>
+              <label style="font-size: 0.74rem; color: #94a3b8; font-weight: 600;">3. Camera Movement &amp; Spatial Orientation</label>
+              <input type="text" id="sbEditCamera" style="font-size: 0.8rem;" placeholder="e.g. Slow deliberate low-angle tracking shot gliding behind Maya Voss.">
+            </div>
+            <div>
+              <label style="font-size: 0.74rem; color: #94a3b8; font-weight: 600;">4. Detailed Description (Subject actions, environment, lighting)</label>
+              <textarea id="sbEditDetails" rows="4" style="font-size: 0.78rem;" placeholder="e.g. subject_description: ... environmental_details: ... lighting_and_atmosphere: ..."></textarea>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+              <div>
+                <label style="font-size: 0.74rem; color: #94a3b8; font-weight: 600;">5. Soundscape / Foley Notes</label>
+                <input type="text" id="sbEditSoundscape" style="font-size: 0.78rem;" placeholder="e.g. Heavy suit breathing, faint electrical servo hum.">
+              </div>
+              <div>
+                <label style="font-size: 0.74rem; color: #94a3b8; font-weight: 600;">6. Non-Diegetic Music Theme</label>
+                <input type="text" id="sbEditMusic" style="font-size: 0.78rem;" placeholder="e.g. Deep sub-bass atmospheric drone creating suspense.">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Modal Footer Actions -->
+        <div style="display: flex; justify-content: flex-end; gap: 10px; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 12px; margin-top: 6px;">
+          <button type="button" class="btn-tool" onclick="closeBeatEditor()">Cancel</button>
+          <button type="button" class="btn-primary" onclick="saveBeatModal()" style="width: auto; padding: 8px 24px; font-weight: 700;">
+            <span>💾 Save Scene Beat</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- AI DIRECTOR STORYBOARD GENERATOR MODAL -->
+  <div id="aiDirectorModal" class="modal-overlay" style="display: none;" onclick="if(event.target===this) closeAIDirectorModal()">
+    <div class="modal-box" style="width: 560px; max-width: 95vw;" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 1.2rem;">⚡</span>
+          <h3 style="margin: 0; font-size: 1.05rem; font-weight: 800; color: #f8fafc;">
+            AI Director &bull; Synthesize Storyboard
+          </h3>
+        </div>
+        <button type="button" class="btn-close" onclick="closeAIDirectorModal()" title="Close">&times;</button>
+      </div>
+
+      <div class="modal-scroll-body" style="display: flex; flex-direction: column; gap: 14px;">
+        <p style="font-size: 0.78rem; color: #94a3b8; margin: 0; line-height: 1.45;">
+          Enter your story premise or cinematic scene idea. The AI Director will decompose your vision into sequential shots with complete MiniMax H3 6-heading prompts and camera blocking.
+        </p>
+
+        <div class="form-group" style="margin-bottom: 0;">
+          <label style="font-weight: 700; color: #cbd5e1; font-size: 0.8rem; margin-bottom: 4px;">Story Premise / Scene Synopsis</label>
+          <textarea id="aiDirectorIdea" rows="3" style="font-size: 0.85rem;" placeholder="e.g. A cybernetic detective pursues a rogue android through a neon night market during a torrential downpour."></textarea>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div>
+            <label style="font-weight: 700; color: #cbd5e1; font-size: 0.8rem; margin-bottom: 4px;">Target Video Duration</label>
+            <select id="aiDirectorDuration" style="font-size: 0.85rem;">
+              <option value="15" selected>15 Seconds (~3 Shots)</option>
+              <option value="30">30 Seconds (~6 Shots)</option>
+              <option value="60">60 Seconds (~12 Shots)</option>
+              <option value="120">120 Seconds (~24 Shots - Epic Cut)</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-weight: 700; color: #cbd5e1; font-size: 0.8rem; margin-bottom: 4px;">Cinematic Genre</label>
+            <select id="aiDirectorGenre" style="font-size: 0.85rem;">
+              <option value="sci-fi" selected>Sci-Fi / Space Exploration</option>
+              <option value="cyberpunk">Cyberpunk / Neo-Noir</option>
+              <option value="fantasy">Dark Fantasy / Mythic</option>
+              <option value="action">High-Octane Action Thriller</option>
+              <option value="horror">Cosmic / Psychological Horror</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-bottom: 0;">
+          <label style="font-weight: 700; color: #cbd5e1; font-size: 0.8rem; margin-bottom: 4px;">Protagonist Character (Optional)</label>
+          <select id="aiDirectorCharSelect" style="font-size: 0.85rem;">
+            <option value="">Auto-Assign / Default Operative</option>
+          </select>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 6px;">
+          <button type="button" class="btn-tool" onclick="closeAIDirectorModal()">Cancel</button>
+          <button type="button" class="btn-primary" id="btnSynthesizeStoryboard" onclick="dispatchAIDirectorPlan()" style="width: auto; padding: 8px 22px; font-weight: 700;">
+            <span>✨ Synthesize Storyboard Plan</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <script>
     const API_BASE = (window.location.pathname.startsWith('/chronoflow') || window.location.pathname.startsWith('/api/chronoflow')) ? '/api/chronoflow' : '/api';
     const _urlParams = new URLSearchParams(window.location.search);
-    const _tokenFromUrl = _urlParams.get('token') || _urlParams.get('pf-token');
+    // Embedded Mode & Dashboard Back Navigation
+    const _isEmbedded = window.self !== window.top || _urlParams.get('embedded') === '1';
+    const _projectFromUrl = _urlParams.get('project');
+
+    function navigateBackToDashboard() {
+      try {
+        if (window.parent && window.parent !== window) {
+          window.parent.postMessage({ type: 'panelflow_back_to_dashboard' }, '*');
+          return;
+        }
+      } catch (e) {
+        console.warn('postMessage to parent failed:', e);
+      }
+      window.location.href = '/';
+    }
+
+    
+    // Status Slider & Prompt Modal Controllers
+    
+    function dismissProgressBox() {
+      const box = document.getElementById('progressBox');
+      if (box) {
+        box.style.opacity = '0';
+        box.style.transform = 'translateY(-4px)';
+        setTimeout(() => {
+          box.style.display = 'none';
+          box.style.opacity = '1';
+          box.style.transform = '';
+        }, 200);
+      }
+    }
+
+    function toggleStatusSlider(event) {
+      if (event) event.stopPropagation();
+      const panel = document.getElementById('statusSliderPanel');
+      const btn = document.getElementById('btnStatusToggle');
+      if (!panel) return;
+      const isOpening = panel.style.display === 'none';
+      panel.style.display = isOpening ? 'flex' : 'none';
+      if (btn) btn.setAttribute('aria-expanded', String(isOpening));
+    }
+
+    function openPromptModal() {
+      const modal = document.getElementById('promptModal');
+      if (modal) {
+        modal.style.display = 'flex';
+        const textarea = document.getElementById('promptInput');
+        if (textarea) textarea.focus();
+      }
+    }
+
+    function closePromptModal() {
+      const modal = document.getElementById('promptModal');
+      if (modal) modal.style.display = 'none';
+    }
+
+    function handlePromptModalOverlayClick(e) {
+      if (e.target.id === 'promptModal') {
+        closePromptModal();
+      }
+    }
+
+    function setPromptPreset(preset) {
+      const input = document.getElementById('promptInput');
+      if (!input) return;
+      if (preset === 'cat') {
+        input.value = "Cinematic comedy scene: An adorable chubby ginger tabby cat wearing tiny sunglasses and a miniature detective trench coat tiptoes stealthily across a sleek kitchen granite counter in slow motion, eyes laser-focused on a roasted chicken drumstick. Warm kitchen lighting, cinematic 8k photorealistic comedy film, slow smooth tracking shot.";
+      } else if (preset === 'cyberpunk') {
+        input.value = "Cinematic drone shot over a glowing cyberpunk metropolis at dusk, neon rain reflections on sleek rooftops, high tension pursuit with atmospheric holographic signs and fluid camera motion.";
+      } else if (preset === 'anime') {
+        input.value = "Dramatic anime confrontation in a rain-soaked neon alleyway, cinematic lighting, expressive eyes, dynamic wind and particle effects, sharp focus.";
+      }
+    }
+
+    // Dismiss status dropdown on click outside
+    document.addEventListener('click', (e) => {
+      const panel = document.getElementById('statusSliderPanel');
+      const btn = document.getElementById('btnStatusToggle');
+      if (panel && panel.style.display !== 'none') {
+        if (!panel.contains(e.target) && !btn.contains(e.target)) {
+          panel.style.display = 'none';
+          if (btn) btn.setAttribute('aria-expanded', 'false');
+        }
+      }
+    });
+
+    // Escape key closes modals and dropdowns
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        closePromptModal();
+        const panel = document.getElementById('statusSliderPanel');
+        if (panel) panel.style.display = 'none';
+      }
+    });
+
+    function openStandaloneWindow() {
+      const u = new URL(window.location.href);
+      u.searchParams.delete('embedded');
+      window.open(u.toString(), '_blank', 'noopener,noreferrer');
+    }
+
+    // Apply header elements for single unified bar
+    function _initUnifiedHeader() {
+      if (_isEmbedded) {
+        const backBtn = document.getElementById('btnBackToDashboard');
+        if (backBtn) backBtn.style.display = 'inline-flex';
+      }
+      if (_projectFromUrl) {
+        const projBadge = document.getElementById('headerProjectBadge');
+        if (projBadge) {
+          projBadge.textContent = 'Project: ' + _projectFromUrl;
+          projBadge.style.display = 'inline-block';
+        }
+      }
+    }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', _initUnifiedHeader);
+    } else {
+      _initUnifiedHeader();
+    }
+
+    const _tokenFromUrl = _urlParams.get('token') || _urlParams.get('pf-token') || window.__PANELFLOW_ENGINE_TOKEN__;
     if (_tokenFromUrl) {
       try { sessionStorage.setItem('panelflow_engine_token', _tokenFromUrl); } catch(e){}
     }
-    const ENGINE_TOKEN = _tokenFromUrl || (function(){ try { return sessionStorage.getItem('panelflow_engine_token') || localStorage.getItem('panelflow_engine_token') || ''; } catch(e){ return ''; } })();
+    const ENGINE_TOKEN = _tokenFromUrl || window.__PANELFLOW_ENGINE_TOKEN__ || (function(){ try { return sessionStorage.getItem('panelflow_engine_token') || localStorage.getItem('panelflow_engine_token') || ''; } catch(e){ return ''; } })();
 
     const _origFetch = window.fetch;
     window.fetch = function(url, options = {}) {
@@ -1274,6 +2503,13 @@
       if (tabId === 'vault') loadMasterGallery();
       if (tabId === 'image-studio') initCanvas();
       if (tabId === 'timeline-editor') initTimeline();
+      if (tabId === 'storyboard') initStoryboard();
+
+      // Sync DaVinci Resolve Bottom Rail
+      if (tabId === 'vault') syncResolveRail('media');
+      else if (tabId === 'director') syncResolveRail('edit');
+      else if (tabId === 'image-studio') syncResolveRail('color');
+      else if (tabId === 'storyboard') syncResolveRail('cut');
     }
 
     // Dynamic Timeline Renderer
@@ -1427,11 +2663,13 @@
       if (subtab === 'chunks') {
         if (btnChunks) btnChunks.classList.add('active');
         if (btnNLE) btnNLE.classList.remove('active');
+        syncResolveRail('cut');
         if (chunksContent) chunksContent.style.display = 'block';
         if (nleContent) nleContent.style.display = 'none';
       } else {
         if (btnNLE) btnNLE.classList.add('active');
         if (btnChunks) btnChunks.classList.remove('active');
+        syncResolveRail('edit');
         if (chunksContent) chunksContent.style.display = 'none';
         if (nleContent) nleContent.style.display = 'block';
         initTimeline();
@@ -1455,7 +2693,7 @@
       const frameData = offscreen.toDataURL('image/png');
 
       try {
-        const res = await fetch(`${API_BASE}/save_frame', {
+        const res = await fetch(`${API_BASE}/save_frame`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -1512,7 +2750,7 @@
       const frameData = exportCanvas.toDataURL('image/png');
 
       try {
-        const saveRes = await fetch(`${API_BASE}/save_frame', {
+        const saveRes = await fetch(`${API_BASE}/save_frame`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -1526,7 +2764,7 @@
           return;
         }
 
-        const regenRes = await fetch(`${API_BASE}/regenerate_chunk', {
+        const regenRes = await fetch(`${API_BASE}/regenerate_chunk`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -1601,7 +2839,7 @@
       const frameData = offscreen.toDataURL('image/png');
 
       try {
-        const res = await fetch(`${API_BASE}/save_frame', {
+        const res = await fetch(`${API_BASE}/save_frame`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -1650,7 +2888,7 @@ Paint the exact area you want to replace/fix with the brush, inpaint it, then cl
       }
 
       try {
-        const res = await fetch(`${API_BASE}/regenerate_chunk', {
+        const res = await fetch(`${API_BASE}/regenerate_chunk`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -1928,7 +3166,14 @@ The AI Director is modifying the prompt and rendering in ComfyUI.`);
 
         renderTimeline(job);
 
+        const pBox = document.getElementById('progressBox');
         if (job.status === 'completed' || job.status === 'completed_chunks') {
+          if (pBox) {
+            pBox.style.display = 'block';
+            pBox.style.borderColor = 'rgba(16, 185, 129, 0.4)';
+            clearTimeout(window._progDismissTimer);
+            window._progDismissTimer = setTimeout(() => { dismissProgressBox(); }, 8000);
+          }
           const mcpText = document.getElementById('mcpAgentText');
           if (mcpText) mcpText.textContent = 'Antigravity (MCP) — Ready & Standing By';
           const ticker = document.getElementById('activeTaskTicker');
@@ -1971,6 +3216,12 @@ The AI Director is modifying the prompt and rendering in ComfyUI.`);
             icon.style.color = '#ef4444';
           }
         } else if (job.status === 'cancelled') {
+          if (pBox) {
+            pBox.style.display = 'block';
+            pBox.style.borderColor = 'rgba(239, 68, 68, 0.4)';
+            clearTimeout(window._progDismissTimer);
+            window._progDismissTimer = setTimeout(() => { dismissProgressBox(); }, 6000);
+          }
           const mcpText = document.getElementById('mcpAgentText');
           if (mcpText) mcpText.textContent = 'Antigravity (MCP) — Standing By';
           const ticker = document.getElementById('activeTaskTicker');
@@ -2060,7 +3311,7 @@ The AI Director is modifying the prompt and rendering in ComfyUI.`);
       if (!studioStore.activeJobId) return;
       if (!confirm(`Cancel Job #${studioStore.activeJobId.slice(0, 8)}? This will unlock the studio and cancel background rendering.`)) return;
       try {
-        await fetch(`${API_BASE}/cancel', {
+        await fetch(`${API_BASE}/cancel`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ job_id: studioStore.activeJobId })
@@ -2132,27 +3383,32 @@ The AI Director is modifying the prompt and rendering in ComfyUI.`);
       }
       addTerminalLog("DISPATCH", `Initiating ${durationSec}s video generation with ${width}x${height}...`, true);
 
+      const hasStoryboardScenes = window._activeStoryboardScenes && window._activeStoryboardScenes.length > 0;
+      const activeWorkflowMode = hasStoryboardScenes ? "storyboard" : "sliding_window";
+
       try {
-        const res = await fetch(`${API_BASE}/generate', {
+        const res = await fetch(`${API_BASE}/generate`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             prompt: promptText,
-            workflow_mode: "sliding_window",
+            workflow_mode: activeWorkflowMode,
             initial_image: initialImage,
             total_duration: durationSec,
             width: width,
             height: height,
-            lora_choice: loraChoice
+            lora_choice: loraChoice,
+            scenes: hasStoryboardScenes ? window._activeStoryboardScenes : []
           })
         });
-        const data = await res.json();
-        if (data.success && data.job_id) {
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data.success && data.job_id) {
           addTerminalLog("PIPELINE", `Created Job #${data.job_id.slice(0, 8)}. ComfyUI execution underway!`, true);
           studioStore.selectJob(data.job_id);
           await studioStore.syncNow(true);
         } else {
-          alert(`Failed to start video production: ${data.error || "Unknown server error"}`);
+          const errMsg = data.detail || data.error || data.message || `Server returned HTTP ${res.status}`;
+          alert(`Failed to start video production: ${errMsg}`);
           if (btn) {
             btn.disabled = false;
             btn.innerHTML = `<span>🚀 Start New Video Production</span>`;
@@ -2235,7 +3491,7 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
 
     async function loadCharacters() {
       try {
-        const res = await fetch(`${API_BASE}/characters?t=' + Date.now(), { cache: "no-store" });
+        const res = await fetch(`${API_BASE}/characters?t=${Date.now()}`, { cache: "no-store" });
         const data = await res.json();
         const grid = document.getElementById('vaultGrid');
         grid.innerHTML = '';
@@ -2446,7 +3702,7 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
       btn.innerHTML = `<span class="spinner"></span> Generating with ${model.toUpperCase()}...`;
 
       try {
-        const res = await fetch(`${API_BASE}/generate_image', {
+        const res = await fetch(`${API_BASE}/generate_image`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -2507,7 +3763,7 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
       btn.innerHTML = `<span class="spinner"></span> Inpainting / Regenerating Area...`;
 
       try {
-        const res = await fetch(`${API_BASE}/inpaint_image', {
+        const res = await fetch(`${API_BASE}/inpaint_image`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -2554,7 +3810,7 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
       const role = prompt("Enter character role:", "Protagonist / Keyframe Asset");
 
       try {
-        const res = await fetch(`${API_BASE}/characters', {
+        const res = await fetch(`${API_BASE}/characters`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -2636,10 +3892,13 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
         masterPlayer.addEventListener('play', () => {
           const btn = document.getElementById('btnTimelinePlay');
           if (btn) btn.textContent = '⏸️';
+          startLiveVUMeters();
         });
         masterPlayer.addEventListener('pause', () => {
           const btn = document.getElementById('btnTimelinePlay');
           if (btn) btn.textContent = '▶';
+          if (vuAnimationId) cancelAnimationFrame(vuAnimationId);
+          startLiveVUMeters();
         });
       }
     }
@@ -2687,27 +3946,40 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
         v1Html += `
           <div class="timeline-clip-block ${isSel ? 'active-clip' : ''}" style="left: ${curLeft}px; width: ${width}px;" onclick="selectTimelineClip(${idx})">
             <div class="trim-handle trim-handle-left" onmousedown="startTrim(event, ${idx}, 'left')"></div>
-            <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${c.title} (${clipDur.toFixed(1)}s)</span>
-            <span style="font-size: 0.68rem; opacity: 0.8;">${c.speed}x</span>
+            <div style="display: flex; align-items: center; gap: 5px; overflow: hidden; width: calc(100% - 34px);">
+              <span style="font-size: 0.62rem; color: #60a5fa; font-weight: 800; background: rgba(59, 130, 246, 0.2); padding: 1px 4px; border-radius: 2px;">V1</span>
+              <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.73rem;">${c.title} (${clipDur.toFixed(1)}s)</span>
+            </div>
+            <span style="font-size: 0.66rem; opacity: 0.85; font-family: monospace; background: rgba(0,0,0,0.35); padding: 1px 4px; border-radius: 2px;">${c.speed}x</span>
             <div class="trim-handle trim-handle-right" onmousedown="startTrim(event, ${idx}, 'right')"></div>
             ${c.transition !== 'cut' ? `<div class="transition-marker" title="${c.transition}" style="right: -10px;">${c.transition[0].toUpperCase()}</div>` : ''}
           </div>`;
 
-        // Synced A1 Foley audio block
+        // Synced A1 Foley audio block with DaVinci waveform styling
+        const a1Bars = Math.max(8, Math.floor(width / 7));
         a1Html += `
           <div class="timeline-clip-block audio-clip" style="left: ${curLeft}px; width: ${width}px;" onclick="selectTimelineClip(${idx})">
-            <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">🔊 Foley Sync: ${c.title}</span>
-            <span style="font-size: 0.68rem; opacity: 0.8;">${Math.round(c.volume * 100)}%</span>
+            <div style="display: flex; align-items: center; gap: 5px; overflow: hidden; width: calc(100% - 40px); z-index: 2;">
+              <span style="font-size: 0.62rem; color: #2dd4bf; font-weight: 800; background: rgba(20, 184, 166, 0.2); padding: 1px 4px; border-radius: 2px;">A1</span>
+              <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.72rem;">Foley: ${c.title}</span>
+            </div>
+            <span style="font-size: 0.66rem; opacity: 0.85; font-family: monospace; background: rgba(0,0,0,0.35); padding: 1px 4px; border-radius: 2px; z-index: 2;">${Math.round(c.volume * 100)}%</span>
+            ${generateWaveformHtml(a1Bars, '#2dd4bf')}
           </div>`;
 
         curLeft += width;
       });
 
-      // Ambient Music Score Track A2
+      // Ambient Music Score Track A2 with Fairlight waveform styling
+      const a2Bars = Math.max(16, Math.floor(curLeft / 7));
       const a2Html = `
-        <div class="timeline-clip-block audio-clip" style="left: 0px; width: ${curLeft}px; background: linear-gradient(135deg, #065f46, #047857); border-color: #34d399;">
-          <span>🎵 Cinematic Tension Drone &amp; Synth Bass</span>
-          <span style="font-size: 0.68rem; opacity: 0.8;">100% Vol</span>
+        <div class="timeline-clip-block audio-clip" style="left: 0px; width: ${curLeft}px; background: linear-gradient(180deg, #153a23 0%, #0e2717 100%); border-color: #22c55e; border-top: 3px solid #4ade80;">
+          <div style="display: flex; align-items: center; gap: 5px; z-index: 2;">
+            <span style="font-size: 0.62rem; color: #4ade80; font-weight: 800; background: rgba(34, 197, 94, 0.2); padding: 1px 4px; border-radius: 2px;">A2</span>
+            <span>🎵 Cinematic Tension Drone &amp; Synth Bass</span>
+          </div>
+          <span style="font-size: 0.68rem; opacity: 0.85; font-family: monospace; background: rgba(0,0,0,0.35); padding: 1px 4px; border-radius: 2px; z-index: 2;">100% Vol</span>
+          ${generateWaveformHtml(a2Bars, '#4ade80')}
         </div>`;
 
       v1Lane.innerHTML = v1Html;
@@ -2731,6 +4003,12 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
       if (volLbl) volLbl.textContent = `${Math.round(clip.volume * 100)}%`;
       const transSel = document.getElementById('clipTransitionSelect');
       if (transSel) transSel.value = clip.transition;
+
+      // If Dual View is active, update source video monitor
+      const srcVid = document.getElementById('sourceVideoPlayer');
+      if (srcVid && clip.url) {
+        srcVid.src = clip.url;
+      }
 
       // Jump master cinema player to this clip's start time
       let startTime = 0;
@@ -2814,7 +4092,7 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
         const frameData = offscreen.toDataURL('image/png');
 
         try {
-          const res = await fetch(`${API_BASE}/save_frame', {
+          const res = await fetch(`${API_BASE}/save_frame`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -2892,7 +4170,7 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
       alert("🚀 Compiling multi-track Edit Decision List (EDL) and dispatching FFmpeg filtergraph render engine...");
 
       try {
-        const res = await fetch(`${API_BASE}/timeline/export', {
+        const res = await fetch(`${API_BASE}/timeline/export`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -2916,6 +4194,624 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
       }
     }
 
+    /* ========================================================= */
+    /* PILLAR 4: AI STORYBOARD & SCENE BEAT DIRECTOR             */
+    /* ========================================================= */
+    let currentScreenplay = null;
+    let currentScreenplayFilename = "screenplay_avalon_prime_2min.json";
+    let storyboardScenes = [];
+    let storyboardProtagonist = null;
+    let editingBeatIndex = -1;
+    let isStoryboardInitialized = false;
+
+    async function initStoryboard() {
+      if (isStoryboardInitialized && storyboardScenes.length > 0) return;
+      await loadScreenplaysDropdown();
+      await loadScreenplay(currentScreenplayFilename);
+      isStoryboardInitialized = true;
+    }
+
+    async function loadScreenplaysDropdown() {
+      const select = document.getElementById('sbPresetSelect');
+      if (!select) return;
+      try {
+        const res = await fetch(`${API_BASE}/screenplays`);
+        const data = await res.json();
+        const list = data.screenplays || [];
+        select.innerHTML = '';
+        list.forEach(sp => {
+          const opt = document.createElement('option');
+          opt.value = sp.filename;
+          opt.textContent = `${sp.title} (${sp.scenes_count} shots • ${sp.duration.toFixed(1)}s)`;
+          if (sp.filename === currentScreenplayFilename) opt.selected = true;
+          select.appendChild(opt);
+        });
+
+        // Also add custom option
+        const customOpt = document.createElement('option');
+        customOpt.value = '__custom__';
+        customOpt.textContent = '➕ Create Custom Storyboard...';
+        select.appendChild(customOpt);
+      } catch (e) {
+        console.error('Failed to load screenplays list:', e);
+      }
+    }
+
+    async function onSelectScreenplayPreset(filename) {
+      if (!filename) return;
+      if (filename === '__custom__') {
+        currentScreenplay = {
+          title: "Custom AI Storyboard",
+          duration: 15.6,
+          protagonist: { name: "Lead Character", role: "Protagonist" },
+          scenes: []
+        };
+        currentScreenplayFilename = "screenplay_custom.json";
+        storyboardScenes = [];
+        storyboardProtagonist = currentScreenplay.protagonist;
+        addNewStoryboardBeat();
+        renderStoryboardUI();
+        return;
+      }
+      currentScreenplayFilename = filename;
+      await loadScreenplay(filename);
+    }
+
+    async function loadScreenplay(filename) {
+      const grid = document.getElementById('storyboardGrid');
+      if (grid) grid.innerHTML = '<div style="grid-column: 1 / -1; padding: 40px; text-align: center; color: #94a3b8; font-size: 0.85rem;">Loading scene beats...</div>';
+
+      try {
+        const res = await fetch(`${API_BASE}/screenplay/${encodeURIComponent(filename)}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        currentScreenplay = data;
+        storyboardScenes = data.scenes || [];
+        storyboardProtagonist = data.protagonist || null;
+
+        renderStoryboardUI();
+        addTerminalLog("STORYBOARD", `Loaded "${data.title}" with ${storyboardScenes.length} shots.`, true);
+      } catch (e) {
+        if (grid) grid.innerHTML = `<div style="grid-column: 1 / -1; padding: 30px; text-align: center; color: #f87171;">Failed to load screenplay: ${e.message}</div>`;
+      }
+    }
+
+    function renderStoryboardUI() {
+      const titleEl = document.getElementById('sbTitleDisplay');
+      const durEl = document.getElementById('sbDurationBadge');
+      const countEl = document.getElementById('sbCountBadge');
+      const protagEl = document.getElementById('sbProtagonistContainer');
+
+      if (titleEl && currentScreenplay) titleEl.textContent = currentScreenplay.title || "Storyboard Director";
+      const totalDur = storyboardScenes.reduce((acc, s) => acc + (parseFloat(s.duration) || 5.2), 0);
+      if (durEl) durEl.textContent = `⏱️ ${totalDur.toFixed(1)}s`;
+      if (countEl) countEl.textContent = `🎬 ${storyboardScenes.length} Shots`;
+
+      if (protagEl) {
+        if (storyboardProtagonist && storyboardProtagonist.name) {
+          const imgSrc = storyboardProtagonist.image ? `${API_BASE}/../inputs/${storyboardProtagonist.image}` : '';
+          const imgTag = imgSrc ? `<img src="${imgSrc}" class="storyboard-protagonist-img" alt="${storyboardProtagonist.name}">` : '<span>👤</span>';
+          protagEl.innerHTML = `
+            <div class="storyboard-protagonist-pill" title="${storyboardProtagonist.role || 'Protagonist'}: ${storyboardProtagonist.description || ''}">
+              ${imgTag}
+              <span><strong>${storyboardProtagonist.name}</strong> ${storyboardProtagonist.tag || ''}</span>
+            </div>
+          `;
+        } else {
+          protagEl.innerHTML = '';
+        }
+      }
+
+      renderStoryboardGrid();
+    }
+
+    function parse6HeadingSchema(promptStr) {
+      if (!promptStr) return {};
+      const sections = {};
+      const headings = [
+        'subject_definitions',
+        'summary',
+        'camera_movement',
+        'detailed_description',
+        'environmental_details',
+        'lighting_and_atmosphere',
+        'retention_analysis',
+        'overall_soundscape',
+        'soundscape',
+        'non_diegetic_music',
+        'music'
+      ];
+
+      let currentKey = 'summary';
+      let currentLines = [];
+
+      promptStr.split('\n').forEach(line => {
+        const trimmed = line.trim();
+        const lower = trimmed.toLowerCase();
+        let matched = false;
+        for (const h of headings) {
+          if (lower.startsWith(h + ':')) {
+            if (currentLines.length > 0) {
+              sections[currentKey] = currentLines.join('\n').trim();
+            }
+            currentKey = h;
+            currentLines = [trimmed.substring(h.length + 1).trim()];
+            matched = true;
+            break;
+          }
+        }
+        if (!matched) {
+          currentLines.push(line);
+        }
+      });
+      if (currentLines.length > 0) {
+        sections[currentKey] = currentLines.join('\n').trim();
+      }
+      return sections;
+    }
+
+    function renderStoryboardGrid() {
+      const grid = document.getElementById('storyboardGrid');
+      if (!grid) return;
+      if (!storyboardScenes || storyboardScenes.length === 0) {
+        grid.innerHTML = `
+          <div style="grid-column: 1 / -1; padding: 60px 20px; text-align: center; background: #0c1322; border-radius: var(--radius-md); border: 1px dashed var(--card-border);">
+            <div style="font-size: 2.2rem; margin-bottom: 10px;">📜</div>
+            <h4 style="color: #f1f5f9; margin-bottom: 6px;">Storyboard is Empty</h4>
+            <p style="color: #94a3b8; font-size: 0.82rem; max-width: 440px; margin: 0 auto 16px auto;">
+              Generate sequential shots with the AI Director, load a master screenplay from the vault, or add individual scene beats manually.
+            </p>
+            <div style="display: flex; gap: 10px; justify-content: center;">
+              <button type="button" class="btn-primary" onclick="openAIDirectorModal()" style="padding: 7px 18px; font-size: 0.82rem;">⚡ Synthesize with AI Director</button>
+              <button type="button" class="btn-tool" onclick="loadScreenplay('screenplay_avalon_prime_2min.json')" style="padding: 7px 18px; font-size: 0.82rem;">Load Avalon Prime (24 Shots)</button>
+            </div>
+          </div>
+        `;
+        return;
+      }
+
+      let html = '';
+      storyboardScenes.forEach((scene, idx) => {
+        const shotNum = scene.shot_index || (idx + 1);
+        const title = scene.title || `Shot ${shotNum}`;
+        const shotType = scene.shot_type || 'Medium Tracking';
+        const duration = (parseFloat(scene.duration) || 5.2).toFixed(1);
+        const workflow = scene.workflow || (idx === 0 ? 'reference' : 'sliding_window');
+        const firstFrame = scene.first_frame || '';
+        const renderedVideo = scene.rendered_video || '';
+
+        let typeClass = 'shot-type-tracking';
+        const lowerType = shotType.toLowerCase();
+        if (lowerType.includes('establishing') || lowerType.includes('wide')) typeClass = 'shot-type-establishing';
+        else if (lowerType.includes('close') || lowerType.includes('macro')) typeClass = 'shot-type-closeup';
+        else if (lowerType.includes('climax') || lowerType.includes('dynamic')) typeClass = 'shot-type-climax';
+
+        const schema = parse6HeadingSchema(scene.prompt || '');
+        const summaryText = schema.summary || scene.prompt || 'Cinematic shot sequence with MiniMax H3 motion.';
+        const cameraText = schema.camera_movement || 'Cinematic camera track';
+        const soundText = schema.overall_soundscape || schema.soundscape || 'Ambient audio';
+
+        let previewContent = '';
+        if (renderedVideo) {
+          previewContent = `
+            <video src="${renderedVideo}" class="shot-preview-media" muted loop onmouseover="this.play()" onmouseout="this.pause()" playsinline></video>
+            <span class="shot-rendered-badge">✓ RENDERED</span>
+          `;
+        } else if (firstFrame) {
+          const imgUrl = `${API_BASE}/../inputs/${firstFrame}`;
+          previewContent = `
+            <img src="${imgUrl}" class="shot-preview-media" alt="${title}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+            <div class="shot-preview-empty" style="display: none;">
+              <span>🖼️</span>
+              <span>${firstFrame}</span>
+            </div>
+          `;
+        } else {
+          previewContent = `
+            <div class="shot-preview-empty">
+              <span style="font-size: 1.8rem; opacity: 0.4;">🎬</span>
+              <span>Chained Continuation (${idx === 0 ? 'First Keyframe' : 'Tail Frame'})</span>
+            </div>
+          `;
+        }
+
+        html += `
+          <div class="shot-beat-card" id="beatCard_${idx}">
+            <div class="shot-card-header">
+              <span class="shot-num-label">SHOT #${shotNum}</span>
+              <span class="shot-type-badge ${typeClass}">${shotType}</span>
+            </div>
+
+            <div class="shot-preview-container" onclick="openBeatEditor(${idx})" title="Click to edit Shot #${shotNum} beat">
+              ${previewContent}
+              <span class="shot-workflow-pill">${workflow.toUpperCase()}</span>
+              <span class="shot-duration-pill">${duration}s</span>
+            </div>
+
+            <div class="shot-card-body">
+              <div>
+                <div class="shot-title-text">${title}</div>
+                <div class="shot-summary-snippet" title="${summaryText.replace(/"/g, '&quot;')}">${summaryText}</div>
+
+                <div class="shot-metadata-chips">
+                  <span class="shot-chip" title="Camera Movement">🎥 ${cameraText.substring(0, 32)}...</span>
+                  <span class="shot-chip" title="Soundscape">🔊 ${soundText.substring(0, 24)}...</span>
+                  ${firstFrame ? `<span class="shot-chip" style="color: #6ee7b7;" title="Starting Anchor Frame">⚓ ${firstFrame}</span>` : ''}
+                </div>
+              </div>
+
+              <div class="shot-card-actions">
+                <button type="button" class="btn-primary" onclick="renderSingleStoryboardShot(${idx})" style="padding: 4px 10px; font-size: 0.72rem; flex: 1; justify-content: center;" title="Render Shot #${shotNum} chunk">
+                  <span>▶ Render</span>
+                </button>
+                <button type="button" class="btn-tool" onclick="sendBeatToInpaint(${idx})" style="color: #a5b4fc;" title="Send Keyframe to Image Studio Canvas">
+                  <span>🎨 Inpaint</span>
+                </button>
+                <button type="button" class="btn-tool" onclick="openBeatEditor(${idx})" title="Edit 6-Heading Prompt Schema">
+                  <span>✏️ Edit</span>
+                </button>
+                <button type="button" class="btn-tool" onclick="moveBeat(${idx}, -1)" ${idx === 0 ? 'disabled style="opacity:0.3;"' : ''} title="Move Left">
+                  <span>⬅</span>
+                </button>
+                <button type="button" class="btn-tool" onclick="moveBeat(${idx}, 1)" ${idx === storyboardScenes.length - 1 ? 'disabled style="opacity:0.3;"' : ''} title="Move Right">
+                  <span>➡</span>
+                </button>
+                <button type="button" class="btn-tool" onclick="deleteBeat(${idx})" style="color: #f87171;" title="Delete Beat">
+                  <span>✕</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        `;
+      });
+
+      grid.innerHTML = html;
+    }
+
+    function openBeatEditor(idx) {
+      if (idx < 0 || idx >= storyboardScenes.length) return;
+      editingBeatIndex = idx;
+      const scene = storyboardScenes[idx];
+      const shotNum = scene.shot_index || (idx + 1);
+
+      document.getElementById('sbEditShotNum').textContent = shotNum;
+      document.getElementById('sbEditTitle').value = scene.title || `Shot ${shotNum}`;
+      document.getElementById('sbEditShotType').value = scene.shot_type || 'Medium Tracking';
+      document.getElementById('sbEditDuration').value = String(scene.duration || 5.2);
+      document.getElementById('sbEditWorkflow').value = scene.workflow || 'sliding_window';
+      document.getElementById('sbEditFirstFrame').value = scene.first_frame || '';
+
+      const schema = parse6HeadingSchema(scene.prompt || '');
+      document.getElementById('sbEditSubjectDef').value = schema.subject_definitions || '';
+      document.getElementById('sbEditSummary').value = schema.summary || '';
+      document.getElementById('sbEditCamera').value = schema.camera_movement || '';
+      document.getElementById('sbEditDetails').value = schema.detailed_description || scene.prompt || '';
+      document.getElementById('sbEditSoundscape').value = schema.overall_soundscape || schema.soundscape || '';
+      document.getElementById('sbEditMusic').value = schema.non_diegetic_music || schema.music || '';
+
+      const modal = document.getElementById('shotBeatModal');
+      if (modal) modal.style.display = 'flex';
+    }
+
+    function closeBeatEditor() {
+      const modal = document.getElementById('shotBeatModal');
+      if (modal) modal.style.display = 'none';
+      editingBeatIndex = -1;
+    }
+
+    function saveBeatModal() {
+      if (editingBeatIndex < 0 || editingBeatIndex >= storyboardScenes.length) return;
+      const scene = storyboardScenes[editingBeatIndex];
+
+      scene.title = document.getElementById('sbEditTitle').value.trim() || `Shot ${editingBeatIndex + 1}`;
+      scene.shot_type = document.getElementById('sbEditShotType').value;
+      scene.duration = parseFloat(document.getElementById('sbEditDuration').value) || 5.2;
+      scene.workflow = document.getElementById('sbEditWorkflow').value;
+      scene.first_frame = document.getElementById('sbEditFirstFrame').value.trim();
+
+      const subDef = document.getElementById('sbEditSubjectDef').value.trim();
+      const summary = document.getElementById('sbEditSummary').value.trim();
+      const camera = document.getElementById('sbEditCamera').value.trim();
+      const details = document.getElementById('sbEditDetails').value.trim();
+      const soundscape = document.getElementById('sbEditSoundscape').value.trim();
+      const music = document.getElementById('sbEditMusic').value.trim();
+
+      let compiled = '';
+      if (subDef) compiled += `subject_definitions:\n${subDef}\n\n`;
+      if (summary) compiled += `summary:\n${summary}\n\n`;
+      compiled += `retention_analysis:\nSubject appearance, costume details, lighting palette, and spatial environment strictly preserved.\n\n`;
+      if (camera || details) {
+        compiled += `detailed_description:\n`;
+        if (camera) compiled += `camera_movement: ${camera} `;
+        if (details) compiled += details;
+        compiled += `\n\n`;
+      }
+      if (soundscape) compiled += `overall_soundscape:\n${soundscape}\n\n`;
+      if (music) compiled += `non_diegetic_music:\n${music}\n`;
+
+      scene.prompt = compiled.trim();
+
+      closeBeatEditor();
+      renderStoryboardUI();
+      addTerminalLog("STORYBOARD", `Updated Scene Beat #${editingBeatIndex + 1}: ${scene.title}.`, true);
+    }
+
+    function deleteBeat(idx) {
+      if (idx < 0 || idx >= storyboardScenes.length) return;
+      if (!confirm(`Delete Shot #${idx + 1} "${storyboardScenes[idx].title}" from storyboard?`)) return;
+      storyboardScenes.splice(idx, 1);
+      storyboardScenes.forEach((s, i) => { s.shot_index = i + 1; });
+      renderStoryboardUI();
+    }
+
+    function moveBeat(idx, dir) {
+      const targetIdx = idx + dir;
+      if (targetIdx < 0 || targetIdx >= storyboardScenes.length) return;
+      const temp = storyboardScenes[idx];
+      storyboardScenes[idx] = storyboardScenes[targetIdx];
+      storyboardScenes[targetIdx] = temp;
+      storyboardScenes.forEach((s, i) => { s.shot_index = i + 1; });
+      renderStoryboardUI();
+    }
+
+    function addNewStoryboardBeat() {
+      const shotNum = storyboardScenes.length + 1;
+      const defaultDesc = `camera_movement: Cinematic smooth tracking push. subject_description: The protagonist advances with sharp visual focus. environmental_details: Highly detailed cinematic set with atmospheric volumetric lighting. overall_soundscape: Ambient environmental tone. non_diegetic_music: Cinematic orchestral drone.`;
+
+      storyboardScenes.push({
+        shot_index: shotNum,
+        title: `Shot ${shotNum}: Scene Continuation`,
+        shot_type: "Medium Tracking",
+        duration: 5.2,
+        workflow: shotNum === 1 ? "reference" : "sliding_window",
+        first_frame: "",
+        last_frame: "",
+        ref_images: [],
+        prompt: `summary:\nCinematic sequence beat #${shotNum}.\n\nretention_analysis:\nSubject traits strictly preserved.\n\ndetailed_description:\n${defaultDesc}\n\noverall_soundscape:\nCrisp atmospheric audio.\n\nnon_diegetic_music:\nLow tension cinematic pad.`
+      });
+      renderStoryboardUI();
+      openBeatEditor(storyboardScenes.length - 1);
+    }
+
+    function openAIDirectorModal() {
+      const charSel = document.getElementById('aiDirectorCharSelect');
+      if (charSel) {
+        charSel.innerHTML = '<option value="">Auto-Assign / Default Operative</option>';
+        fetch(`${API_BASE}/characters`)
+          .then(r => r.json())
+          .then(data => {
+            (data.characters || []).forEach(c => {
+              const opt = document.createElement('option');
+              opt.value = c.name;
+              opt.dataset.tag = c.tag || '<Picture 1>';
+              opt.textContent = `${c.name} (${c.role}) ${c.tag || ''}`;
+              charSel.appendChild(opt);
+            });
+          })
+          .catch(() => {});
+      }
+      const modal = document.getElementById('aiDirectorModal');
+      if (modal) modal.style.display = 'flex';
+    }
+
+    function closeAIDirectorModal() {
+      const modal = document.getElementById('aiDirectorModal');
+      if (modal) modal.style.display = 'none';
+    }
+
+    async function dispatchAIDirectorPlan() {
+      const ideaInput = document.getElementById('aiDirectorIdea');
+      const durInput = document.getElementById('aiDirectorDuration');
+      const genreInput = document.getElementById('aiDirectorGenre');
+      const charSel = document.getElementById('aiDirectorCharSelect');
+      const btn = document.getElementById('btnSynthesizeStoryboard');
+
+      const idea = (ideaInput && ideaInput.value.trim()) || "A lone operative navigates an ancient subterranean alien citadel.";
+      const duration = durInput ? parseInt(durInput.value) : 15;
+      const genre = genreInput ? genreInput.value : "sci-fi";
+      const charName = (charSel && charSel.value) || "Commander Maya Voss";
+      const charOpt = charSel && charSel.selectedOptions && charSel.selectedOptions[0];
+      const charTag = (charOpt && charOpt.dataset.tag) || "<Picture 1>";
+
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span>⏳ Synthesizing Beats...</span>';
+      }
+
+      try {
+        const res = await fetch(`${API_BASE}/ai_director/plan`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            idea: idea,
+            duration: duration,
+            genre: genre,
+            protagonist_name: charName,
+            protagonist_tag: charTag
+          })
+        });
+        const data = await res.json();
+        if (data.success && data.scenes) {
+          currentScreenplay = {
+            title: data.title || `AI Storyboard: ${idea.substring(0, 30)}...`,
+            duration: data.duration || duration,
+            protagonist: { name: charName, role: "Protagonist", tag: charTag },
+            scenes: data.scenes
+          };
+          storyboardScenes = data.scenes;
+          storyboardProtagonist = currentScreenplay.protagonist;
+
+          closeAIDirectorModal();
+          renderStoryboardUI();
+          addTerminalLog("AI_DIRECTOR", `Synthesized ${storyboardScenes.length} shots for "${currentScreenplay.title}".`, true);
+          alert(`🎉 AI Director compiled ${storyboardScenes.length} cinematic shots for your storyboard!`);
+        } else {
+          alert('AI Director plan failed to synthesize scene beats.');
+        }
+      } catch (e) {
+        alert(`AI Director error: ${e.message}`);
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = '<span>✨ Synthesize Storyboard Plan</span>';
+        }
+      }
+    }
+
+    async function renderSingleStoryboardShot(idx) {
+      if (idx < 0 || idx >= storyboardScenes.length) return;
+      const scene = storyboardScenes[idx];
+      const shotNum = scene.shot_index || (idx + 1);
+
+      addTerminalLog("DISPATCH", `Rendering single Shot #${shotNum} (${scene.title})...`, true);
+
+      try {
+        const res = await fetch(`${API_BASE}/storyboard/render_shot`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            scene: scene,
+            shot_index: shotNum,
+            width: 1344,
+            height: 768,
+            steps: 4,
+            lora_choice: "4step"
+          })
+        });
+        const data = await res.json();
+        if (data.success && data.video_url) {
+          scene.rendered_video = data.video_url;
+          renderStoryboardUI();
+          addTerminalLog("RENDER", `Shot #${shotNum} completed: ${data.filename}`, true);
+          alert(`🎉 Shot #${shotNum} rendered successfully!\nVideo: ${data.video_url}`);
+        } else {
+          alert(`Render failed for Shot #${shotNum}: ${data.detail || 'Unknown error'}`);
+        }
+      } catch (e) {
+        alert(`Render error: ${e.message}`);
+      }
+    }
+
+    function renderAllStoryboardInVideoStudio() {
+      if (!storyboardScenes || storyboardScenes.length === 0) {
+        alert("Please add at least one scene beat before rendering.");
+        return;
+      }
+
+      const promptInput = document.getElementById('promptInput');
+      if (promptInput && storyboardScenes.length > 0) {
+        promptInput.value = storyboardScenes[0].prompt || "Cinematic multi-shot storyboard sequence.";
+      }
+
+      if (storyboardScenes[0].first_frame) {
+        setActiveAnchorImage(storyboardScenes[0].first_frame);
+      }
+
+      window._activeStoryboardScenes = storyboardScenes;
+      switchTab('director');
+      addTerminalLog("STORYBOARD", `Loaded ${storyboardScenes.length} storyboard shots into Video Studio. Ready to produce!`, true);
+      alert(`🎬 Storyboard with ${storyboardScenes.length} shots transferred to Video Studio!\nClick "Start New Video Production" in the controls modal to begin multi-chunk continuous chaining.`);
+      openPromptModal();
+    }
+
+    function sendBeatToInpaint(idx) {
+      if (idx < 0 || idx >= storyboardScenes.length) return;
+      const scene = storyboardScenes[idx];
+      const frameFile = scene.first_frame || (storyboardProtagonist && storyboardProtagonist.image) || 'qwen_gen_fa600e52.png';
+
+      switchTab('image-studio');
+      loadCanvasImage(`${API_BASE}/../inputs/${frameFile}`, frameFile);
+      addTerminalLog("INPAINT", `Loaded Shot #${idx + 1} anchor "${frameFile}" into Image Studio canvas.`, true);
+      alert(`🎨 Keyframe "${frameFile}" loaded onto Image Studio canvas for inpainting!`);
+    }
+
+    function sendActiveEditFrameToInpaint() {
+      const frameInput = document.getElementById('sbEditFirstFrame');
+      const filename = (frameInput && frameInput.value.trim()) || 'qwen_gen_fa600e52.png';
+      closeBeatEditor();
+      switchTab('image-studio');
+      loadCanvasImage(`${API_BASE}/../inputs/${filename}`, filename);
+      addTerminalLog("INPAINT", `Transferred "${filename}" to Image Studio.`, true);
+    }
+
+    function pickVaultImageForBeat() {
+      fetch(`${API_BASE}/characters`)
+        .then(r => r.json())
+        .then(data => {
+          const chars = data.characters || [];
+          if (chars.length === 0) {
+            alert("No characters in vault yet.");
+            return;
+          }
+          const options = chars.map((c, i) => `${i + 1}. ${c.name} (${c.image})`).join('\n');
+          const choice = prompt(`Select character reference frame:\n${options}\nEnter number (1-${chars.length}):`, "1");
+          const idx = parseInt(choice) - 1;
+          if (!isNaN(idx) && chars[idx]) {
+            document.getElementById('sbEditFirstFrame').value = chars[idx].image;
+          }
+        })
+        .catch(e => alert(`Vault error: ${e.message}`));
+    }
+
+    async function exportStoryboardToNLE() {
+      if (!storyboardScenes || storyboardScenes.length === 0) {
+        alert("Storyboard is empty.");
+        return;
+      }
+      timelineClips = storyboardScenes.map((scene, i) => ({
+        id: `sb_clip_${i + 1}`,
+        track: 0,
+        name: scene.title || `Shot ${i + 1}`,
+        in: 0.0,
+        out: parseFloat(scene.duration) || 5.2,
+        speed: 1.0,
+        volume: 1.0,
+        start_time: i * 5.2,
+        color: '#6366f1',
+        filename: scene.rendered_video || `shot_${i + 1}.mp4`
+      }));
+
+      switchTab('director');
+      switchBottomTimelineTab('nle');
+      renderNLETimeline();
+      addTerminalLog("NLE", `Populated NLE multi-track timeline with ${timelineClips.length} storyboard clips.`, true);
+      alert(`🎬 Exported ${timelineClips.length} storyboard shots into the Multi-Track NLE Editor!`);
+    }
+
+    async function saveCurrentStoryboard() {
+      if (!storyboardScenes || storyboardScenes.length === 0) {
+        alert("Nothing to save in storyboard.");
+        return;
+      }
+      const title = (currentScreenplay && currentScreenplay.title) || prompt("Enter Storyboard Project Title:", "New AI Storyboard");
+      if (!title) return;
+
+      const totalDur = storyboardScenes.reduce((acc, s) => acc + (parseFloat(s.duration) || 5.2), 0);
+      try {
+        const res = await fetch(`${API_BASE}/screenplay/save`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: title,
+            duration: totalDur,
+            protagonist: storyboardProtagonist || {},
+            anchor_images: (currentScreenplay && currentScreenplay.anchor_images) || {},
+            scenes: storyboardScenes,
+            filename: currentScreenplayFilename.startsWith('screenplay_') ? currentScreenplayFilename : null
+          })
+        });
+        const data = await res.json();
+        if (data.success) {
+          currentScreenplayFilename = data.filename;
+          await loadScreenplaysDropdown();
+          addTerminalLog("VAULT", `Saved storyboard blueprint "${data.filename}".`, true);
+          alert(`💾 Storyboard "${data.title}" successfully saved to Vault!\nFile: ${data.filename}`);
+        }
+      } catch (e) {
+        alert(`Save failed: ${e.message}`);
+      }
+    }
+
     // Hotkeys (Spacebar = Play/Pause, V = Select, C = Razor)
     window.addEventListener('keydown', (e) => {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
@@ -2933,6 +4829,116 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
       }
     });
 
+    
+    
+    // DaVinci Dual Viewer & Live Fairlight Audio Engine
+    let isDualViewerActive = false;
+    let vuAnimationId = null;
+
+    function toggleDualViewer() {
+      isDualViewerActive = !isDualViewerActive;
+      const vp = document.getElementById('cinemaVideoViewport');
+      const srcPane = document.getElementById('sourceMonitorPane');
+      const btn = document.getElementById('btnDualViewer');
+
+      if (isDualViewerActive) {
+        if (vp) vp.classList.add('dual-view');
+        if (srcPane) {
+          srcPane.style.display = 'flex';
+          const srcVid = document.getElementById('sourceVideoPlayer');
+          if (srcVid && timelineClips[selectedClipIdx]) {
+            srcVid.src = timelineClips[selectedClipIdx].url;
+          }
+        }
+        if (btn) {
+          btn.classList.add('active');
+          btn.style.borderColor = '#e58525';
+          btn.style.color = '#f59e0b';
+        }
+      } else {
+        if (vp) vp.classList.remove('dual-view');
+        if (srcPane) srcPane.style.display = 'none';
+        if (btn) {
+          btn.classList.remove('active');
+          btn.style.borderColor = '#363942';
+          btn.style.color = '#cbd5e1';
+        }
+      }
+    }
+
+    function generateWaveformHtml(barCount, colorHex) {
+      let bars = '';
+      for (let i = 0; i < barCount; i++) {
+        // Organic waveform height pattern
+        const h = Math.max(3, Math.floor(Math.sin(i * 0.45) * 6 + Math.cos(i * 0.9) * 4 + 7));
+        bars += `<div class="waveform-bar" style="height: ${h}px; color: ${colorHex};"></div>`;
+      }
+      return `<div class="waveform-strip">${bars}</div>`;
+    }
+
+    function startLiveVUMeters() {
+      if (vuAnimationId) cancelAnimationFrame(vuAnimationId);
+      function updateVU() {
+        const a1L = document.getElementById('vuFillA1L');
+        const a1R = document.getElementById('vuFillA1R');
+        const a2L = document.getElementById('vuFillA2L');
+        const a2R = document.getElementById('vuFillA2R');
+        const video = document.getElementById('masterVideoPlayer');
+
+        if (video && !video.paused) {
+          const t = Date.now() * 0.008;
+          const a1Val = Math.min(95, Math.max(15, (Math.sin(t * 3.2) * 25 + Math.cos(t * 5.1) * 20 + 50)));
+          const a2Val = Math.min(90, Math.max(20, (Math.cos(t * 2.8) * 20 + Math.sin(t * 4.4) * 15 + 55)));
+
+          if (a1L) a1L.style.height = `${a1Val}%`;
+          if (a1R) a1R.style.height = `${Math.min(95, a1Val + (Math.sin(t * 7) * 6))}%`;
+          if (a2L) a2L.style.height = `${a2Val}%`;
+          if (a2R) a2R.style.height = `${Math.min(90, a2Val + (Math.cos(t * 6) * 5))}%`;
+
+          vuAnimationId = requestAnimationFrame(updateVU);
+        } else {
+          // Smooth decay to rest
+          if (a1L) a1L.style.height = '6%';
+          if (a1R) a1R.style.height = '6%';
+          if (a2L) a2L.style.height = '8%';
+          if (a2R) a2R.style.height = '8%';
+        }
+      }
+      updateVU();
+    }
+
+    // DaVinci Resolve Workflow Page Switcher
+    function switchResolvePage(page) {
+      document.querySelectorAll('.resolve-rail-item').forEach(b => b.classList.remove('active'));
+      const btn = document.getElementById('rail' + page.charAt(0).toUpperCase() + page.slice(1));
+      if (btn) btn.classList.add('active');
+
+      if (page === 'media') {
+        switchTab('vault');
+      } else if (page === 'cut') {
+        switchTab('director');
+        switchBottomTimelineTab('chunks');
+      } else if (page === 'edit') {
+        switchTab('director');
+        switchBottomTimelineTab('nle');
+      } else if (page === 'fusion') {
+        switchTab('image-studio');
+      } else if (page === 'color') {
+        switchTab('image-studio');
+      } else if (page === 'fairlight') {
+        switchTab('director');
+        switchBottomTimelineTab('nle');
+      } else if (page === 'deliver') {
+        exportTimelineCut();
+      }
+    }
+
+    function syncResolveRail(page) {
+      document.querySelectorAll('.resolve-rail-item').forEach(b => b.classList.remove('active'));
+      const btn = document.getElementById('rail' + page.charAt(0).toUpperCase() + page.slice(1));
+      if (btn) btn.classList.add('active');
+    }
+
     async function initApp() {
       initComfyWebSocket();
       await studioStore.syncNow(true);
@@ -2948,5 +4954,36 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
 
     initApp();
   </script>
+  <!-- Iconic DaVinci Resolve Workflow Page Switcher Rail -->
+  <nav class="resolve-bottom-rail" id="resolveBottomRail">
+    <button type="button" class="resolve-rail-item" id="railMedia" onclick="switchResolvePage('media')" title="Media & Asset Vault">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/></svg>
+      <span>Media</span>
+    </button>
+    <button type="button" class="resolve-rail-item" id="railCut" onclick="switchResolvePage('cut')" title="Cut Page (Storyboard Chunks)">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg>
+      <span>Cut</span>
+    </button>
+    <button type="button" class="resolve-rail-item active" id="railEdit" onclick="switchResolvePage('edit')" title="Edit Page (Multi-Track NLE Timeline)">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="7" y1="8" x2="17" y2="8"/><line x1="7" y1="12" x2="17" y2="12"/><line x1="7" y1="16" x2="13" y2="16"/></svg>
+      <span>Edit</span>
+    </button>
+    <button type="button" class="resolve-rail-item" id="railFusion" onclick="switchResolvePage('fusion')" title="Fusion FX & Inpainting">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg>
+      <span>Fusion</span>
+    </button>
+    <button type="button" class="resolve-rail-item" id="railColor" onclick="switchResolvePage('color')" title="Color & Image Generation Studio">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><line x1="12" y1="3" x2="12" y2="8"/><line x1="12" y1="16" x2="12" y2="21"/><line x1="3" y1="12" x2="8" y2="12"/><line x1="16" y1="12" x2="21" y2="12"/></svg>
+      <span>Color</span>
+    </button>
+    <button type="button" class="resolve-rail-item" id="railFairlight" onclick="switchResolvePage('fairlight')" title="Fairlight Audio Mixer">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
+      <span>Fairlight</span>
+    </button>
+    <button type="button" class="resolve-rail-item" id="railDeliver" onclick="switchResolvePage('deliver')" title="Deliver & Bake Master Video">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      <span>Deliver</span>
+    </button>
+  </nav>
 </body>
 </html>
