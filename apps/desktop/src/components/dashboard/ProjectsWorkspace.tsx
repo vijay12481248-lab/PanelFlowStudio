@@ -27,6 +27,7 @@ interface ProjectsWorkspaceProps {
   onOpenPanels: (project: Project) => void;
   onOpenFolder: (projectId: string) => void;
   onDeleteProject: (projectId: string) => void;
+  onOpenChronoFlow?: (project: Project) => void;
 }
 
 const CHAPTER_RE = /^(.*?)\s*[-–:]\s*(?:chapter|ch\.?|episode|ep\.?)\s*(\d+(?:\.\d+)?)/i;
@@ -69,6 +70,7 @@ export const ProjectsWorkspace: React.FC<ProjectsWorkspaceProps> = ({
   onOpenPanels,
   onOpenFolder,
   onDeleteProject,
+  onOpenChronoFlow,
 }) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<ProjectViewMode>("grid");
@@ -123,6 +125,7 @@ export const ProjectsWorkspace: React.FC<ProjectsWorkspaceProps> = ({
       onOpenPanels={onOpenPanels}
       onOpenFolder={onOpenFolder}
       onDeleteProject={onDeleteProject}
+      onOpenChronoFlow={onOpenChronoFlow}
       viewMode={viewMode}
     />
   );

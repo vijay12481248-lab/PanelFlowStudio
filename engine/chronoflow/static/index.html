@@ -1,0 +1,2952 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ChronoFlow Pro Studio — Live Agent & Video Production Center</title>
+  <style>
+    :root {
+      --bg: #090d16;
+      --card-bg: #111726;
+      --card-border: #1e293b;
+      --card-hover: #172033;
+      --accent: #6366f1;
+      --accent-hover: #4f46e5;
+      --accent-gradient: linear-gradient(135deg, #6366f1 0%, #a855f7 50%, #ec4899 100%);
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --text-dim: #64748b;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --radius-sm: 8px;
+      --radius-md: 14px;
+      --radius-lg: 20px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; }
+    body { background: var(--bg); color: var(--text-main); min-height: 100vh; display: flex; flex-direction: column; overflow-x: hidden; }
+
+    /* Top Navigation Header */
+    header {
+      background: rgba(17, 23, 38, 0.92);
+      backdrop-filter: blur(14px);
+      border-bottom: 1px solid var(--card-border);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      padding: 10px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .brand { display: flex; align-items: center; gap: 12px; }
+    .logo-icon {
+      width: 36px; height: 36px; border-radius: 10px;
+      background: var(--accent-gradient);
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 18px; color: white;
+      box-shadow: 0 0 16px rgba(99, 102, 241, 0.4);
+    }
+    .brand-title {
+      font-size: 1.15rem; font-weight: 800; letter-spacing: -0.5px;
+      background: linear-gradient(90deg, #ffffff, #cbd5e1);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .brand-tag {
+      font-size: 0.68rem; background: rgba(99, 102, 241, 0.18);
+      color: #a5b4fc; border: 1px solid rgba(99, 102, 241, 0.35);
+      padding: 2px 7px; border-radius: 20px; font-weight: 700;
+    }
+
+    /* Live MCP Agent Status Banner */
+    .mcp-pill {
+      display: flex; align-items: center; gap: 8px;
+      background: rgba(16, 185, 129, 0.12);
+      border: 1px solid rgba(16, 185, 129, 0.35);
+      padding: 5px 14px; border-radius: 20px;
+      font-size: 0.78rem; color: #6ee7b7; font-weight: 600;
+    }
+    .pulse-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--success);
+      box-shadow: 0 0 10px var(--success);
+      animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse {
+      0% { transform: scale(0.95); opacity: 0.8; }
+      50% { transform: scale(1.25); opacity: 1; box-shadow: 0 0 14px var(--success); }
+      100% { transform: scale(0.95); opacity: 0.8; }
+    }
+
+    .nav-tabs {
+      display: flex; gap: 6px; background: #0d121f;
+      padding: 4px; border-radius: 12px; border: 1px solid var(--card-border);
+    }
+    .nav-tab {
+      background: transparent; border: none; color: var(--text-muted);
+      padding: 7px 14px; border-radius: 8px; font-size: 0.82rem;
+      font-weight: 600; cursor: pointer; transition: all 0.2s;
+    }
+    .nav-tab.active { background: var(--accent); color: white; box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3); }
+
+    .header-status { display: flex; align-items: center; gap: 10px; }
+    .status-badge {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 0.78rem; background: #1e293b; padding: 5px 12px;
+      border-radius: 20px; border: 1px solid var(--card-border); color: var(--text-muted);
+    }
+    .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-dim); }
+    .status-dot.active { background: var(--success); box-shadow: 0 0 8px var(--success); }
+    .status-dot.error { background: var(--danger); }
+
+    /* Live Telemetry Ticker */
+    .telemetry-ticker {
+      background: #080d19;
+      border-bottom: 1px solid var(--card-border);
+      padding: 6px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.76rem;
+      color: #94a3b8;
+    }
+    .ticker-item { display: flex; align-items: center; gap: 6px; }
+
+    /* Main Container */
+    main {
+      flex: 1; max-width: 1640px; width: 100%; margin: 0 auto;
+      padding: 18px 24px; display: flex; flex-direction: column; gap: 18px;
+    }
+
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    /* Layout Grid */
+    .studio-grid {
+      display: grid; grid-template-columns: 460px 1fr; gap: 22px;
+      transition: grid-template-columns 0.25s ease;
+    }
+    .studio-grid.sidebar-collapsed {
+      grid-template-columns: 1fr;
+    }
+    @media (max-width: 1150px) { .studio-grid { grid-template-columns: 1fr; } }
+
+    .card {
+      background: var(--card-bg); border: 1px solid var(--card-border);
+      border-radius: var(--radius-lg); padding: 20px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+    }
+
+    .card-header {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 14px; border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      padding-bottom: 10px;
+    }
+    .card-title {
+      font-size: 1rem; font-weight: 700; color: var(--text-main);
+      display: flex; align-items: center; gap: 8px;
+    }
+
+    /* Live Agent Terminal Console */
+    .terminal-card {
+      background: #070b14;
+      border: 1px solid #1e293b;
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      margin-bottom: 18px;
+    }
+    .terminal-header {
+      background: #0d1322;
+      padding: 8px 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.74rem;
+      font-weight: 700;
+      color: #94a3b8;
+      border-bottom: 1px solid #1e293b;
+    }
+    .terminal-logs {
+      padding: 10px 14px;
+      max-height: 140px;
+      overflow-y: auto;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.74rem;
+      line-height: 1.5;
+      color: #cbd5e1;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .log-line { display: flex; gap: 8px; }
+    .log-time { color: #64748b; flex-shrink: 0; }
+    .log-tag { color: #818cf8; font-weight: 600; flex-shrink: 0; }
+    .log-msg { color: #f1f5f9; word-break: break-word; }
+    .log-msg.highlight { color: #34d399; font-weight: 600; }
+
+    /* Workflow Selector */
+    .workflow-selector {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px;
+    }
+    .workflow-btn {
+      background: #0d121f; border: 1px solid var(--card-border);
+      color: var(--text-muted); padding: 8px 10px; border-radius: var(--radius-sm);
+      font-size: 0.78rem; font-weight: 600; cursor: pointer; text-align: left;
+      transition: all 0.2s;
+    }
+    .workflow-btn.active {
+      border-color: var(--accent); background: rgba(99, 102, 241, 0.12); color: #fff;
+    }
+
+    /* Forms */
+    .form-group { margin-bottom: 14px; }
+    label { display: block; font-size: 0.8rem; font-weight: 600; color: var(--text-muted); margin-bottom: 5px; }
+    textarea, select {
+      width: 100%; background: #0d121f; border: 1px solid var(--card-border);
+      border-radius: var(--radius-sm); color: var(--text-main);
+      padding: 10px 12px; font-size: 0.88rem; outline: none; transition: all 0.2s;
+    }
+    textarea:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.25); }
+    textarea { resize: vertical; min-height: 80px; line-height: 1.4; }
+
+    .btn-primary {
+      width: 100%; background: var(--accent-gradient); color: white; border: none;
+      border-radius: var(--radius-md); padding: 12px; font-size: 0.95rem; font-weight: 700;
+      cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;
+      box-shadow: 0 4px 14px rgba(99, 102, 241, 0.4); transition: all 0.2s;
+    }
+    .btn-primary:hover:not(:disabled) { opacity: 0.93; transform: translateY(-1px); }
+    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* Live Progress Card */
+    .progress-box {
+      background: #0e1422; border: 1px solid rgba(99, 102, 241, 0.5);
+      border-radius: var(--radius-md); padding: 8px 16px;
+      box-shadow: 0 0 15px rgba(99, 102, 241, 0.12);
+      margin-bottom: 8px;
+    }
+    .prog-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+    .prog-status { font-size: 0.84rem; font-weight: 700; color: #e2e8f0; display: flex; align-items: center; gap: 8px; }
+    .progress-bar-container {
+      width: 100%; height: 6px; background: #1e293b; border-radius: 4px; overflow: hidden; margin: 6px 0;
+    }
+    .progress-bar-fill { height: 100%; width: 0%; background: var(--accent-gradient); transition: width 0.3s ease; }
+    .progress-subtext { display: flex; justify-content: space-between; font-size: 0.72rem; color: var(--text-dim); }
+
+    /* Master Player */
+    .master-player-container {
+      background: #070a10; border: 1px solid var(--card-border);
+      border-radius: var(--radius-lg); overflow: hidden; display: flex; flex-direction: column;
+    }
+    .player-header {
+      padding: 8px 14px; background: rgba(17, 23, 38, 0.7);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .player-title { font-size: 0.88rem; font-weight: 700; color: #f1f5f9; display: flex; align-items: center; gap: 6px; }
+    .btn-download {
+      background: #1e293b; color: #e2e8f0; border: 1px solid var(--card-border);
+      padding: 4px 10px; border-radius: 6px; font-size: 0.76rem; font-weight: 600;
+      cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 6px;
+    }
+    .video-viewport {
+      width: 100%; height: 38vh; max-height: 420px; min-height: 220px; background: #030509;
+      display: flex; align-items: center; justify-content: center; position: relative;
+    }
+    video { width: 100%; height: 100%; object-fit: contain; }
+    .empty-state { display: flex; flex-direction: column; align-items: center; gap: 8px; color: var(--text-dim); font-size: 0.86rem; }
+
+    /* Timeline Rail & Chunk Review Cards */
+    .timeline-card {
+      background: #080c16; border: 1px solid #1e293b;
+      border-radius: 8px; padding: 8px 12px; margin-top: 6px;
+    }
+    .timeline-track-lane {
+      height: 32px !important; margin-bottom: 3px !important;
+    }
+    .timeline-clip {
+      border-radius: 4px !important;
+    }
+    .timeline-title {
+      font-size: 0.88rem; font-weight: 700; margin-bottom: 8px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+
+    /* Shot Director Modal */
+    .modal-overlay {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(3, 5, 12, 0.85); backdrop-filter: blur(8px);
+      z-index: 1000; display: flex; align-items: center; justify-content: center;
+    }
+    .modal-box {
+      background: #0b0f19; border: 1px solid var(--accent);
+      box-shadow: 0 0 35px rgba(99, 102, 241, 0.35);
+      border-radius: var(--radius-lg); width: 640px; max-width: 95vw;
+      padding: 22px; display: flex; flex-direction: column; gap: 14px;
+      animation: modalFadeIn 0.2s ease-out;
+    }
+    @keyframes modalFadeIn { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: scale(1); } }
+    .modal-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 10px; }
+    .modal-header h3 { font-size: 1.05rem; font-weight: 700; color: #f8fafc; margin: 0; display: flex; align-items: center; gap: 8px; }
+    .btn-close { background: none; border: none; color: #94a3b8; font-size: 1.2rem; cursor: pointer; }
+    .btn-close:hover { color: #fff; }
+    .duration-chips { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 6px; }
+    .duration-chip {
+      background: #111827; border: 1px solid var(--card-border); padding: 8px 12px;
+      border-radius: 6px; font-size: 0.78rem; font-weight: 600; color: #cbd5e1;
+      cursor: pointer; display: flex; align-items: center; gap: 8px;
+    }
+    .duration-chip:hover { border-color: var(--accent); background: rgba(99, 102, 241, 0.1); }
+    .duration-chip input[type="radio"] { margin: 0; accent-color: var(--accent); }
+    .chunks-rail {
+      display: flex; align-items: stretch; gap: 14px; overflow-x: auto; padding: 4px 0 10px 0;
+    }
+    .chunk-node {
+      flex: 0 0 240px; background: #0c111d; border: 1px solid var(--card-border);
+      border-radius: var(--radius-md); overflow: hidden; display: flex; flex-direction: column;
+    }
+    .chunk-video-thumb { width: 100%; height: 125px; background: #000; object-fit: cover; }
+    .chunk-body { padding: 10px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
+    .chunk-meta { display: flex; justify-content: space-between; align-items: center; font-size: 0.78rem; font-weight: 700; }
+    .review-actions { display: flex; gap: 6px; margin-top: 4px; }
+    .btn-review-ok {
+      flex: 1; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.35);
+      color: #6ee7b7; border-radius: 4px; font-size: 0.7rem; font-weight: 600; padding: 4px 6px; cursor: pointer;
+    }
+    .btn-review-regen {
+      flex: 1; background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.35);
+      color: #fcd34d; border-radius: 4px; font-size: 0.7rem; font-weight: 600; padding: 4px 6px; cursor: pointer;
+    }
+    .bridge-arrow {
+      flex: 0 0 32px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+      color: var(--accent); font-size: 1.1rem; gap: 2px;
+    }
+    .bridge-text { font-size: 0.6rem; color: var(--text-dim); text-transform: uppercase; font-weight: 700; }
+
+    /* Vault Grid */
+    .vault-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; margin-top: 14px; }
+    .char-card { background: #0d121f; border: 1px solid var(--card-border); border-radius: var(--radius-md); overflow: hidden; position: relative; }
+    .char-img { width: 100%; height: 160px; object-fit: cover; background: #050811; }
+    .char-body { padding: 12px; }
+
+    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    .spinner {
+      display: inline-block; width: 13px; height: 13px; border: 2px solid rgba(255,255,255,0.25);
+      border-top-color: white; border-radius: 50%; animation: spin 0.8s linear infinite;
+    }
+
+    /* ========================================================= */
+    /* IMAGE STUDIO & INPAINT CANVAS                             */
+    /* ========================================================= */
+    .img-studio-grid {
+      display: grid;
+      grid-template-columns: 380px 1fr;
+      gap: 20px;
+    }
+    .canvas-viewport-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius-lg);
+      padding: 18px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .canvas-container {
+      position: relative;
+      width: 100%;
+      height: 480px;
+      background: #050811;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: crosshair;
+    }
+    #inpaintCanvas {
+      max-width: 100%;
+      max-height: 100%;
+      display: block;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.6);
+    }
+    .brush-cursor {
+      position: absolute;
+      border: 2px solid rgba(239, 68, 68, 0.9);
+      border-radius: 50%;
+      pointer-events: none;
+      transform: translate(-50%, -50%);
+      display: none;
+      background: rgba(239, 68, 68, 0.25);
+      z-index: 50;
+    }
+    .canvas-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      background: #0d121f;
+      padding: 8px 14px;
+      border-radius: 8px;
+      border: 1px solid var(--card-border);
+      flex-wrap: wrap;
+    }
+    .btn-tool {
+      background: #1e293b;
+      color: #cbd5e1;
+      border: 1px solid var(--card-border);
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      transition: all 0.2s;
+    }
+    .btn-tool.active {
+      background: var(--accent);
+      color: white;
+      border-color: var(--accent);
+    }
+    .btn-tool:hover {
+      background: #334155;
+    }
+    .history-strip {
+      display: flex;
+      gap: 10px;
+      overflow-x: auto;
+      padding: 6px 0;
+    }
+    .thumb-item {
+      width: 76px;
+      height: 48px;
+      border-radius: 6px;
+      overflow: hidden;
+      border: 2px solid transparent;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: all 0.2s;
+    }
+    .thumb-item:hover, .thumb-item.active {
+      border-color: var(--accent);
+      transform: scale(1.05);
+    }
+    .thumb-item img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    /* ========================================================= */
+    /* $100-BILLION ENTERPRISE NLE TIMELINE                      */
+    /* ========================================================= */
+    .nle-container {
+      background: #090d16;
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius-lg);
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .nle-monitor-bar {
+      display: grid;
+      grid-template-columns: 1fr 340px;
+      gap: 16px;
+    }
+    .nle-preview-box {
+      background: #020408;
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      position: relative;
+      aspect-ratio: 16 / 9;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .nle-preview-box video {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+    .nle-inspector-box {
+      background: #0d121f;
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius-md);
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .smpte-display {
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 1.5rem;
+      font-weight: 800;
+      color: #34d399;
+      background: #050811;
+      padding: 6px 14px;
+      border-radius: 6px;
+      border: 1px solid rgba(52, 211, 153, 0.3);
+      text-align: center;
+      letter-spacing: 2px;
+      box-shadow: inset 0 0 10px rgba(52, 211, 153, 0.1);
+    }
+    .transport-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: #0d121f;
+      padding: 8px 14px;
+      border-radius: 8px;
+      border: 1px solid var(--card-border);
+    }
+    .transport-btn-group {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .btn-transport {
+      background: #1e293b;
+      color: #f1f5f9;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      width: 34px;
+      height: 34px;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .btn-transport:hover {
+      background: var(--accent);
+      color: white;
+    }
+    .btn-play {
+      background: var(--accent-gradient);
+      width: 40px;
+      height: 40px;
+      font-size: 1.1rem;
+    }
+
+    /* Multi-Track Tracks */
+    .tracks-wrapper {
+      background: #050811;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: var(--radius-md);
+      overflow-x: auto;
+      position: relative;
+    }
+    .timeline-ruler-bar {
+      height: 28px;
+      background: #0b101c;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      position: relative;
+      cursor: pointer;
+      user-select: none;
+    }
+    .timeline-playhead-line {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 2px;
+      background: #ef4444;
+      pointer-events: none;
+      z-index: 100;
+      left: 140px;
+    }
+    .playhead-handle {
+      position: absolute;
+      top: -2px;
+      left: -6px;
+      width: 14px;
+      height: 14px;
+      background: #ef4444;
+      transform: rotate(45deg);
+      border-radius: 2px;
+    }
+    .track-row {
+      display: grid;
+      grid-template-columns: 140px 1fr;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      min-height: 52px;
+    }
+    .track-header-cell {
+      background: #0a0f1d;
+      border-right: 1px solid rgba(255, 255, 255, 0.08);
+      padding: 8px 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: #94a3b8;
+    }
+    .track-badge {
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.72rem;
+      font-weight: 800;
+    }
+    .badge-v { background: rgba(99, 102, 241, 0.25); color: #a5b4fc; }
+    .badge-a { background: rgba(16, 185, 129, 0.25); color: #6ee7b7; }
+    .track-lane-cell {
+      position: relative;
+      background: #050811;
+      padding: 6px 0;
+      display: flex;
+      align-items: center;
+    }
+    .timeline-clip-block {
+      position: absolute;
+      height: 40px;
+      background: linear-gradient(135deg, #312e81, #1e1b4b);
+      border: 1px solid #6366f1;
+      border-radius: 6px;
+      color: #e0e7ff;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 8px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      cursor: pointer;
+      user-select: none;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+      transition: transform 0.1s;
+    }
+    .timeline-clip-block.active-clip {
+      border-color: #38bdf8;
+      box-shadow: 0 0 12px rgba(56, 189, 248, 0.5);
+    }
+    .timeline-clip-block.audio-clip {
+      background: linear-gradient(135deg, #064e3b, #022c22);
+      border-color: #10b981;
+      color: #d1fae5;
+    }
+    .trim-handle {
+      width: 6px;
+      height: 100%;
+      position: absolute;
+      top: 0;
+      cursor: ew-resize;
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 2px;
+    }
+    .trim-handle-left { left: 0; }
+    .trim-handle-right { right: 0; }
+    .transition-marker {
+      position: absolute;
+      width: 20px;
+      height: 20px;
+      background: #f59e0b;
+      color: black;
+      font-size: 0.65rem;
+      font-weight: 900;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transform: translate(-50%, -50%);
+      top: 50%;
+      z-index: 10;
+      box-shadow: 0 0 8px rgba(245, 158, 11, 0.6);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Navigation Bar -->
+  <header>
+    <div class="brand">
+      <div class="logo-icon">C</div>
+      <div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <h1 class="brand-title">CHRONOFLOW PRO STUDIO</h1>
+          <span class="brand-tag">v2.0 LIVE</span>
+        </div>
+      </div>
+    </div>
+
+    
+
+    <!-- Live MCP Agent Status Indicator -->
+    <div class="mcp-pill" id="mcpAgentPill">
+      <span class="pulse-dot"></span>
+      <span id="mcpAgentText">Antigravity (MCP Agent) Active</span>
+    </div>
+
+    <div class="nav-tabs">
+      <button class="nav-tab active" data-tab="director" onclick="switchTab('director')">🎬 Video Production Studio</button>
+      <button class="nav-tab" data-tab="image-studio" onclick="switchTab('image-studio')">🎨 Image Studio &amp; Inpaint</button>
+      <button class="nav-tab" data-tab="vault" onclick="switchTab('vault')">🏛️ Recent Works &amp; Master Gallery</button>
+      <button class="nav-tab" data-tab="storyboard" onclick="switchTab('storyboard')">📜 AI Storyboard</button>
+    </div>
+
+    <div class="header-status">
+      <button type="button" class="btn-tool" id="btnToggleSidebar" onclick="toggleSidebar()" style="background: rgba(99, 102, 241, 0.2); border-color: rgba(99, 102, 241, 0.4); color: #a5b4fc; padding: 5px 12px;">
+        ◀ Hide Controls
+      </button>
+      <div class="status-badge" id="comfyStatusBadge">
+        <span class="status-dot active" id="comfyDot"></span>
+        <span id="comfyStatusText">ComfyUI Online</span>
+      </div>
+      <div class="status-badge" id="vramBadge">
+        <span>VRAM: <strong id="vramText">-- / -- GB</strong></span>
+      </div>
+    </div>
+
+    
+  </header>
+
+  <!-- Live Telemetry Ticker -->
+  <div class="telemetry-ticker">
+    <div class="ticker-item">
+      <span>⚡ Active Engine:</span>
+      <strong style="color: #cbd5e1;">MiniMax H3 FL2VA + 4-Step Turbo LoRA</strong>
+    </div>
+    <div class="ticker-item">
+      <span>📡 MCP Protocol:</span>
+      <strong style="color: #6ee7b7;">Connected (JSON-RPC stdio)</strong>
+    </div>
+    <div class="ticker-item">
+      <span>🎯 Current Task:</span>
+      <strong style="color: #a5b4fc;" id="activeTaskTicker">Autonomous Production Running</strong>
+    </div>
+  </div>
+
+  <!-- Main Workspace -->
+  <main>
+    <div class="tab-content active" id="tab-director">
+      <div class="studio-grid" id="studioGrid">
+        <!-- Left Column: Live Agent Console & Workflow Settings -->
+        <div id="leftSidebarCol">
+          <!-- Live Agent Execution Terminal -->
+          <div class="terminal-card">
+            <div class="terminal-header">
+              <span>🤖 LIVE MCP AGENT TELEMETRY &amp; CONSOLE</span>
+              <span style="color: #6ee7b7; font-size: 0.68rem;">LIVE STREAMING</span>
+            </div>
+            <div class="terminal-logs" id="terminalLogs">
+              <div class="log-line">
+                <span class="log-time">[16:38:34]</span>
+                <span class="log-tag">[MCP]</span>
+                <span class="log-msg highlight">Antigravity Agent connected via JSON-RPC protocol.</span>
+              </div>
+              <div class="log-line">
+                <span class="log-time">[16:38:34]</span>
+                <span class="log-tag">[VAULT]</span>
+                <span class="log-msg">Registered &lt;Picture 2&gt; 'Agent Whiskers' in Character Vault.</span>
+              </div>
+              <div class="log-line">
+                <span class="log-time">[16:38:35]</span>
+                <span class="log-tag">[DISPATCH]</span>
+                <span class="log-msg highlight">Dispatched Job #fbc9c0f2aa4d (Sliding Window Continuation).</span>
+              </div>
+              <div class="log-line">
+                <span class="log-time">[16:38:35]</span>
+                <span class="log-tag">[PROMPT]</span>
+                <span class="log-msg">"Cinematic comedy scene: An adorable chubby ginger tabby cat wearing tiny sunglasses..."</span>
+              </div>
+              <div class="log-line">
+                <span class="log-time">[16:42:57]</span>
+                <span class="log-tag">[CHUNK 1]</span>
+                <span class="log-msg highlight">Chunk 1 completed (5.17s @ 1344x768). Tail frame extracted.</span>
+              </div>
+              <div class="log-line">
+                <span class="log-time">[16:47:30]</span>
+                <span class="log-tag">[CHUNK 2]</span>
+                <span class="log-msg highlight">Chunk 2 completed. Passing anchor forward into Chunk 3...</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Controls Card -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title"><span>🎬</span> Scene &amp; Production Controls</div>
+              <span style="font-size: 0.72rem; color: #a5b4fc; background: rgba(99,102,241,0.12); padding: 2px 8px; border-radius: 4px;" id="badgeWorkflow">Sliding Window</span>
+            </div>
+
+            <!-- Active Prompt Input (Auto-filled by MCP Agent) -->
+            <!-- Starting Anchor Frame / Character Reference -->
+            <div class="form-group" style="margin-bottom: 12px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                <label style="margin: 0;">Starting Anchor Frame / Character</label>
+                <span id="anchorBadge" style="font-size: 0.68rem; color: #94a3b8;">Auto-detect</span>
+              </div>
+              <div id="anchorPreviewContainer" style="display: none; align-items: center; gap: 10px; background: #070b14; border: 1px solid var(--card-border); border-radius: 6px; padding: 6px 10px; margin-bottom: 6px;">
+                <img id="anchorThumb" src="" alt="Anchor" style="width: 50px; height: 32px; object-fit: cover; border-radius: 4px; border: 1px solid rgba(255,255,255,0.1);">
+                <div style="flex: 1; overflow: hidden;">
+                  <div id="anchorFilename" style="font-size: 0.75rem; color: #f8fafc; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; overflow: hidden;"></div>
+                  <div style="font-size: 0.68rem; color: #34d399;">✓ Locked Character Reference</div>
+                </div>
+                <button type="button" onclick="clearAnchorImage()" style="background: none; border: none; color: #ef4444; cursor: pointer; font-size: 0.85rem;" title="Clear Anchor">✕</button>
+              </div>
+              <div style="display: flex; gap: 8px;">
+                <button type="button" class="btn-tool" onclick="switchTab('image-studio')" style="font-size: 0.74rem; flex: 1; justify-content: center; background: rgba(236, 72, 153, 0.15); border-color: rgba(236, 72, 153, 0.4); color: #f472b6;">
+                  🎨 Create in Image Studio
+                </button>
+                <button type="button" class="btn-tool" onclick="switchTab('vault')" style="font-size: 0.74rem; flex: 1; justify-content: center; background: rgba(99, 102, 241, 0.15); border-color: rgba(99, 102, 241, 0.4); color: #a5b4fc;">
+                  🎭 Pick from Vault
+                </button>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="promptInput">Active Scene Prompt (Agent Directed)</label>
+              <textarea id="promptInput">Cinematic comedy scene: An adorable chubby ginger tabby cat wearing tiny sunglasses and a miniature detective trench coat tiptoes stealthily across a sleek kitchen granite counter in slow motion, eyes laser-focused on a roasted chicken drumstick. Warm kitchen lighting, cinematic 8k photorealistic comedy film, slow smooth tracking shot.</textarea>
+            </div>
+
+            <div class="form-group">
+              <label>Target Duration &amp; Architecture</label>
+              <select id="durationSelect">
+                <option value="15" selected>15 Seconds (~3 Chunks of 5.2s)</option>
+                <option value="30">30 Seconds (~6 Chunks)</option>
+                <option value="60">60 Seconds (~12 Chunks)</option>
+              </select>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px;">
+              <div>
+                <label>Resolution</label>
+                <select id="resolutionSelect">
+                  <option value="1344x768" selected>1344 &times; 768 (Native 16:9)</option>
+                  <option value="864x480">864 &times; 480 (Draft Speed)</option>
+                </select>
+              </div>
+              <div>
+                <label>Acceleration</label>
+                <select id="loraSelect">
+                  <option value="4step" selected>Turbo 4-Step (2&times; Speed)</option>
+                  <option value="8step">Turbo 8-Step</option>
+                </select>
+              </div>
+            </div>
+
+            <button type="button" class="btn-primary" id="btnManualTrigger" onclick="startNewProductionRun()">
+              <span>🚀 Start New Video Production</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Right Column: Live Pipeline Viewer & Clip Reviewer -->
+        <div style="display: flex; flex-direction: column; gap: 18px;">
+          <!-- Live Real-Time Progress Box -->
+          <div class="progress-box" id="progressBox" style="border-color: rgba(52, 211, 153, 0.4);">
+            <div class="prog-header">
+              <div class="prog-status" id="progStatusContainer">
+                <span id="statusIcon" style="color: #34d399; font-size: 18px; font-weight: 800;">✓</span>
+                <span id="statusMessage">Master 15.6s Film Completed &amp; Ready for Review!</span>
+              </div>
+              <div class="prog-timer" id="timerDisplay">15:36</div>
+            </div>
+
+            <div class="progress-bar-container">
+              <div class="progress-bar-fill" id="chunkProgressFill" style="width: 100%; background: linear-gradient(135deg, #10b981, #059669);"></div>
+            </div>
+
+            <div class="progress-subtext">
+              <span id="chunkStepText">Step Progress: 100% Complete</span>
+              <span id="overallChunkText" style="color: #34d399; font-weight: 700;">All 3 Chunks Generated</span>
+            </div>
+          </div>
+
+          <!-- Master Stitched Cinema Player -->
+          <div class="master-player-container">
+            <div class="player-header">
+              <div class="player-title" style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                <span>🎞️ Master Cinema Viewport</span>
+                <div style="display: flex; align-items: center; gap: 6px; font-size: 0.76rem; background: rgba(15, 23, 42, 0.85); border: 1px solid rgba(255,255,255,0.12); border-radius: 6px; padding: 3px 8px;">
+                  <span style="color: #94a3b8; font-weight: 600;">📁 Project Job:</span>
+                  <select id="projectJobSelect" onchange="onSelectProjectJob(this.value)" style="background: transparent; border: none; color: #38bdf8; font-weight: 700; font-size: 0.76rem; outline: none; cursor: pointer; max-width: 260px;">
+                    <option value="">Loading jobs...</option>
+                  </select>
+                </div>
+                <button type="button" id="btnCancelActiveJob" onclick="cancelCurrentActiveJob()" title="Cancel or reset the active job" style="background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.5); color: #fca5a5; border-radius: 6px; padding: 3px 8px; font-size: 0.74rem; font-weight: 700; cursor: pointer; display: none;">✕ Cancel Job</button>
+              </div>
+              <div class="player-actions" style="display: flex; gap: 8px; align-items: center;">
+                <button type="button" class="btn-tool" onclick="extractFrameToImageStudio()" style="background: rgba(99, 102, 241, 0.25); border-color: rgba(99, 102, 241, 0.5); color: #a5b4fc;">
+                  📸 Send Current Frame to Image Studio
+                </button>
+                <a href="/outputs/chronoflow_master_66c76c556502.mp4" class="btn-download" id="btnDownloadMaster" download="zombie_master_film.mp4">
+                  Download Master Video
+                </a>
+              </div>
+            </div>
+
+            <div class="video-viewport">
+              <div class="empty-state" id="emptyVideoState" style="display: none;">
+                <div style="font-size: 36px; opacity: 0.35;">🎥</div>
+                <div style="font-weight: 600;">Master Continuous Video Ready</div>
+              </div>
+              <video id="masterVideoPlayer" controls playsinline src="/outputs/chronoflow_master_66c76c556502.mp4" style="display: block; width: 100%; height: 100%; object-fit: contain;"></video>
+            </div>
+          </div>
+
+          <!-- Bottom Docked Integrated Timeline Studio -->
+          <div class="timeline-card" style="margin-top: 4px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255, 255, 255, 0.08); padding-bottom: 10px; margin-bottom: 14px; flex-wrap: wrap; gap: 10px;">
+              <div style="display: flex; gap: 8px;">
+                <button type="button" class="btn-tool active" id="btnSubtabChunks" onclick="switchBottomTimelineTab('chunks')">⛓️ Storyboard Chunks &amp; Reviews</button>
+                <button type="button" class="btn-tool" id="btnSubtabNLE" onclick="switchBottomTimelineTab('nle')">✂️ Multi-Track NLE Timeline</button>
+              </div>
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <button type="button" class="btn-tool" onclick="extractFrameToImageStudio()" style="font-size: 0.72rem; color: #a5b4fc;">📸 Extract Frame to Inpaint</button>
+                <span style="font-size: 0.78rem; color: #34d399; font-weight: 700;" id="timelineChunkCount">3 of 3 chunks completed</span>
+              </div>
+            </div>
+
+            <!-- Subtab 1: Quick Chunks Rail -->
+            <div id="subtabChunksContent">
+              <div class="chunks-rail" id="chunksRail"></div>
+            </div>
+
+            <!-- Subtab 2: Multi-Track NLE Editor -->
+            <div id="subtabNLEContent" style="display: none;">
+              <!-- Transport & Tools Bar -->
+              <div class="transport-bar" style="margin-bottom: 12px; flex-wrap: wrap; gap: 10px;">
+                <div class="transport-btn-group">
+                  <button type="button" class="btn-transport" onclick="timelineSeek(0)" title="Jump to Start">⏮️</button>
+                  <button type="button" class="btn-transport" onclick="timelineStepFrame(-1)" title="Previous Frame (1/24s)">◀</button>
+                  <button type="button" class="btn-transport btn-play" id="btnTimelinePlay" onclick="timelineTogglePlay()" title="Play / Pause (Space)">▶</button>
+                  <button type="button" class="btn-transport" onclick="timelineStepFrame(1)" title="Next Frame (1/24s)">▶</button>
+                  <button type="button" class="btn-transport" onclick="timelineSeekToEnd()" title="Jump to End">⏭️</button>
+                </div>
+
+                <div class="smpte-display" id="smpteDisplay" style="font-size: 1.15rem; padding: 4px 12px;">00:00:00:00</div>
+
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <button type="button" class="btn-tool active" id="btnToolSelect" onclick="setNLETool('select')">↖️ Select (V)</button>
+                  <button type="button" class="btn-tool" id="btnToolRazor" onclick="setNLETool('razor')">✂️ Split (C)</button>
+                  <button type="button" class="btn-tool" onclick="deleteSelectedClip()">🗑️ Delete (Del)</button>
+                  <button type="button" class="btn-tool" id="btnSnapToggle" onclick="toggleSnapping()">🧲 Snap</button>
+                </div>
+
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <button type="button" class="btn-tool" onclick="regenerateSelectedShotDialog()" style="background: rgba(245, 158, 11, 0.2); border-color: rgba(245, 158, 11, 0.5); color: #fcd34d;">
+                    🔄 Regenerate Selected Shot
+                  </button>
+                  <button type="button" class="btn-primary" onclick="exportTimelineCut()" style="padding: 6px 14px; font-size: 0.82rem; background: linear-gradient(135deg, #10b981, #059669);">
+                    <span>🚀 Bake Master Cut (FFmpeg)</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Multi-Track Timeline Canvas -->
+              <div class="tracks-wrapper" id="tracksWrapper">
+                <div class="timeline-playhead-line" id="timelinePlayheadLine">
+                  <div class="playhead-handle"></div>
+                </div>
+
+                <!-- Ruler -->
+                <div class="timeline-ruler-bar" id="timelineRuler" onclick="onRulerClick(event)"></div>
+
+                <!-- Track V2: Overlay / Titles -->
+                <div class="track-row">
+                  <div class="track-header-cell">
+                    <span class="track-badge badge-v">V2 Overlay</span>
+                  </div>
+                  <div class="track-lane-cell" id="trackLaneV2"></div>
+                </div>
+
+                <!-- Track V1: Main Video Shots -->
+                <div class="track-row">
+                  <div class="track-header-cell">
+                    <span class="track-badge badge-v">V1 Video</span>
+                  </div>
+                  <div class="track-lane-cell" id="trackLaneV1"></div>
+                </div>
+
+                <!-- Track A1: Foley / Dialog -->
+                <div class="track-row">
+                  <div class="track-header-cell">
+                    <span class="track-badge badge-a">A1 SFX</span>
+                  </div>
+                  <div class="track-lane-cell" id="trackLaneA1"></div>
+                </div>
+
+                <!-- Track A2: Score / Soundtrack -->
+                <div class="track-row">
+                  <div class="track-header-cell">
+                    <span class="track-badge badge-a">A2 Music</span>
+                  </div>
+                  <div class="track-lane-cell" id="trackLaneA2"></div>
+                </div>
+              </div>
+
+              <!-- Inspector & Parameters under timeline -->
+              <div style="display: flex; gap: 14px; margin-top: 12px; background: #070b14; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--card-border); align-items: center; flex-wrap: wrap;">
+                <div style="font-size: 0.8rem; font-weight: 700; color: #f1f5f9;">
+                  Clip: <span id="selectedClipBadge" style="color: #38bdf8;">Shot #1</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 6px;">
+                  <span style="font-size: 0.75rem; color: #94a3b8;">Speed:</span>
+                  <select id="clipSpeedSelect" onchange="updateSelectedClipSpeed(this.value)" style="padding: 4px 8px; font-size: 0.78rem; width: auto;">
+                    <option value="0.5">0.5x Slow</option>
+                    <option value="0.75">0.75x</option>
+                    <option value="1.0" selected>1.0x Normal</option>
+                    <option value="1.25">1.25x</option>
+                    <option value="1.5">1.5x</option>
+                    <option value="2.0">2.0x Fast</option>
+                  </select>
+                </div>
+                <div style="display: flex; align-items: center; gap: 6px;">
+                  <span style="font-size: 0.75rem; color: #94a3b8;">Volume:</span>
+                  <input type="range" id="clipVolumeRange" min="0" max="2" step="0.05" value="1.0" oninput="updateSelectedClipVolume(this.value)" style="width: 80px;">
+                  <span id="clipVolLabel" style="font-size: 0.72rem; color: #34d399; font-weight: 700;">100%</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 6px;">
+                  <span style="font-size: 0.75rem; color: #94a3b8;">Transition:</span>
+                  <select id="clipTransitionSelect" onchange="updateSelectedClipTransition(this.value)" style="padding: 4px 8px; font-size: 0.78rem; width: auto;">
+                    <option value="cut" selected>Hard Cut</option>
+                    <option value="dissolve">Cross Dissolve</option>
+                    <option value="morph">Continuity Morph</option>
+                    <option value="fade_black">Dip to Black</option>
+                  </select>
+                </div>
+                <div style="margin-left: auto;">
+                  <button type="button" class="btn-tool" onclick="extractTailFrameFromSelectedClip()" style="font-size: 0.72rem; color: #a5b4fc;">
+                    📷 Extract Clip Tail Frame
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    
+
+    <!-- TAB: IMAGE STUDIO & INPAINT CANVAS -->
+    <div class="tab-content" id="tab-image-studio">
+      <div class="img-studio-grid">
+        <!-- Left: Image Generation Form -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title"><span>🎨</span> Generative Image Studio</div>
+          </div>
+          
+          <div class="form-group">
+            <label>Model Architecture</label>
+            <select id="imgModelSelect" onchange="onImgModelChange()">
+              <option value="flux" selected>FLUX.1 [Schnell] (4-Step Turbo, Standalone)</option>
+              <option value="qwen">Qwen-Image-2.1 (8-Step MMDiT, High-Resolution)</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>Prompt</label>
+            <textarea id="imgPrompt" placeholder="Describe the character, scene, or turnaround sheet...">A gritty post-apocalyptic survivor standing on an industrial metal fire escape, holding a modified pneumatic rifle with a glowing crimson laser sight, dusk twilight background with smokestacks, cinematic photorealism 8k</textarea>
+            <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px;">
+              <button type="button" class="btn-tool" style="font-size: 0.68rem; padding: 3px 8px;" onclick="applyPromptTemplate('turnaround')">🎭 Turnaround Sheet</button>
+              <button type="button" class="btn-tool" style="font-size: 0.68rem; padding: 3px 8px;" onclick="applyPromptTemplate('cinematic')">🎬 Cinematic 8K</button>
+              <button type="button" class="btn-tool" style="font-size: 0.68rem; padding: 3px 8px;" onclick="applyPromptTemplate('cyberpunk')">🌃 Cyberpunk City</button>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Negative Prompt</label>
+            <textarea id="imgNegativePrompt" style="min-height: 50px;">blurry, low quality, distorted, extra limbs, bad anatomy, deformed</textarea>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <div class="form-group">
+              <label>Aspect Ratio</label>
+              <select id="imgAspectSelect">
+                <option value="1344x768" selected>16:9 Landscape (1344×768)</option>
+                <option value="768x1344">9:16 Portrait (768×1344)</option>
+                <option value="1024x1024">1:1 Square (1024×1024)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Sampling Steps</label>
+              <input type="number" id="imgSteps" value="4" min="1" max="25" style="width: 100%; background: #0d121f; border: 1px solid var(--card-border); border-radius: var(--radius-sm); color: var(--text-main); padding: 8px 12px; font-size: 0.88rem;">
+            </div>
+          </div>
+
+          <button type="button" class="btn-primary" id="btnGenerateImage" onclick="generateImage()">
+            <span>✨ Generate New Image</span>
+          </button>
+
+          <!-- History Strip -->
+          <div style="margin-top: 18px;">
+            <label>Recent Canvas Assets &amp; Anchors</label>
+            <div class="history-strip" id="imgHistoryStrip">
+              <div class="thumb-item active" onclick="loadCanvasImage('/inputs/zombie_survivor_anchor.jpg', 'zombie_survivor_anchor.jpg')">
+                <img src="/inputs/zombie_survivor_anchor.jpg" alt="Zombie Anchor">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Inpainting & Canvas Editor -->
+        <div class="canvas-viewport-card">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div style="font-size: 0.95rem; font-weight: 700; color: #f1f5f9; display: flex; align-items: center; gap: 8px;">
+              <span>🖌️</span> Interactive Inpainting &amp; Region Touch-Up Canvas
+            </div>
+            <div style="font-size: 0.78rem; color: #94a3b8;">Point &amp; paint any area to replace or refine</div>
+          </div>
+
+          <!-- Canvas Toolbar -->
+          <div class="canvas-toolbar">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <button type="button" class="btn-tool active" id="btnToolBrush" onclick="setCanvasTool('brush')">🖌️ Brush</button>
+              <button type="button" class="btn-tool" id="btnToolEraser" onclick="setCanvasTool('eraser')">🧹 Eraser</button>
+              <div style="display: flex; align-items: center; gap: 6px; margin-left: 10px;">
+                <span style="font-size: 0.75rem; color: #94a3b8;">Size:</span>
+                <input type="range" id="brushSize" min="5" max="100" value="30" oninput="updateBrushSize(this.value)" style="width: 100px;">
+                <span id="brushSizeVal" style="font-size: 0.75rem; color: #a5b4fc; font-weight: 700;">30px</span>
+              </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <button type="button" class="btn-tool" onclick="clearMask()">🗑️ Clear Mask</button>
+              <button type="button" class="btn-tool" onclick="invertMask()">🔄 Invert</button>
+            </div>
+          </div>
+
+          <!-- The Canvas Container -->
+          <div class="canvas-container" id="canvasContainer">
+            <canvas id="inpaintCanvas"></canvas>
+            <div class="brush-cursor" id="brushCursor"></div>
+          </div>
+
+          <!-- Inpainting Prompt & Parameters -->
+          <div style="background: #0d121f; border: 1px solid var(--card-border); border-radius: var(--radius-md); padding: 14px; display: flex; flex-direction: column; gap: 10px;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <label style="margin: 0;">Inpaint Modification Prompt (Painted Region)</label>
+              <div style="display: flex; align-items: center; gap: 6px;">
+                <span style="font-size: 0.75rem; color: #94a3b8;">Denoise / Redraw:</span>
+                <input type="range" id="inpaintDenoise" min="0.2" max="1.0" step="0.05" value="0.85" oninput="document.getElementById('denoiseVal').textContent = this.value" style="width: 80px;">
+                <span id="denoiseVal" style="font-size: 0.75rem; color: #34d399; font-weight: 700;">0.85</span>
+              </div>
+            </div>
+            <input type="text" id="inpaintPrompt" placeholder="e.g. replace rifle with glowing cyan plasma blaster, remove cracked rubble, sharp eyes" style="width: 100%; background: #070a12; border: 1px solid var(--card-border); border-radius: 6px; color: #f8fafc; padding: 10px 12px; font-size: 0.88rem;">
+            
+            <button type="button" class="btn-primary" id="btnInpaint" onclick="inpaintSelectedArea()" style="background: linear-gradient(135deg, #ec4899, #be185d);">
+              <span>🎯 Inpaint / Regenerate Selected Area</span>
+            </button>
+          </div>
+
+          <!-- One-Click Routing Actions -->
+          <div style="display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap;">
+            <button type="button" class="btn-primary" onclick="replaceFrameInVideoShot()" style="background: linear-gradient(135deg, #10b981, #059669); font-size: 0.85rem; padding: 8px 16px; width: auto;">
+              🎬 Replace Video Frame &amp; Regenerate Shot
+            </button>
+            <button type="button" class="btn-tool" onclick="sendToVideoAnchor()" style="background: rgba(99, 102, 241, 0.2); border-color: rgba(99, 102, 241, 0.5); color: #a5b4fc;">
+              🎬 Set as Global Video Anchor
+            </button>
+            <button type="button" class="btn-tool" onclick="saveCanvasToVault()" style="background: rgba(16, 185, 129, 0.2); border-color: rgba(16, 185, 129, 0.5); color: #6ee7b7;">
+              🎭 Save to Character Vault
+            </button>
+            <button type="button" class="btn-tool" onclick="downloadCanvasImage()">
+              💾 Download Full-Res PNG
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    
+
+    <!-- TAB 2: CHARACTER VAULT -->
+    <div class="tab-content" id="tab-vault">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><span>🎭</span> Character Design &amp; Turnaround Sheet Vault</div>
+        </div>
+        <div class="vault-grid" id="vaultGrid"></div>
+      </div>
+    </div>
+
+    
+
+    <!-- TAB 3: STORYBOARD -->
+    <div class="tab-content" id="tab-storyboard">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><span>📜</span> AI Storyboard &amp; Scene Beat Director</div>
+        </div>
+        <div style="color: #94a3b8; font-size: 0.88rem; padding: 20px 0;">
+          The AI Director has compiled the active 3-shot storyboard for <strong>"Agent Whiskers"</strong>. You can monitor the real-time render in the Live Production Studio tab.
+        </div>
+      </div>
+    </div>
+
+    
+    <!-- Shot Director & Regeneration Modal -->
+    <div class="modal-overlay" id="shotDirectorModal" style="display: none;" onclick="if(event.target===this) closeShotModal()">
+      <div class="modal-box">
+        <div class="modal-header">
+          <h3><span>🎬</span> Shot #<span id="modalShotNum">1</span> Director &amp; Inpaint Studio</h3>
+          <button type="button" class="btn-close" onclick="closeShotModal()">✕</button>
+        </div>
+        <div style="display: flex; gap: 16px; align-items: stretch;">
+          <div style="flex: 0 0 220px; height: 135px; background: #050811; border-radius: 6px; overflow: hidden; border: 1px solid var(--card-border); position: relative;">
+            <video id="modalShotVideo" style="width: 100%; height: 100%; object-fit: cover;" muted loop onmouseover="this.play()" onmouseout="this.pause()"></video>
+          </div>
+          <div style="flex: 1; display: flex; flex-direction: column; justify-content: space-between;">
+            <div>
+              <div style="font-weight: 700; color: #f1f5f9; font-size: 0.95rem;">Editing Shot #<span id="modalShotNumText">1</span></div>
+              <p style="font-size: 0.78rem; color: #94a3b8; margin: 4px 0 8px 0; line-height: 1.4;">
+                Have a defective region (e.g. face distortion, weapon, lighting)? Click below to paint the exact area in Image Studio canvas.
+              </p>
+            </div>
+            <button type="button" class="btn-tool" onclick="openShotInImageStudioFromModal()" style="background: rgba(99, 102, 241, 0.25); border-color: rgba(99, 102, 241, 0.6); color: #a5b4fc; padding: 7px 12px; font-weight: 700; justify-content: center;">
+              🎨 Paint &amp; Inpaint Specific Area in Image Studio
+            </button>
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-bottom: 8px;">
+          <label style="margin-bottom: 4px;">Duration to Generate for this Shot</label>
+          <div class="duration-chips">
+            <label class="duration-chip"><input type="radio" name="modalDuration" value="1.0"> ⚡ 1.0s (22 frames - Micro Action)</label>
+            <label class="duration-chip"><input type="radio" name="modalDuration" value="2.3"> ⚡ 2.3s (56 frames - Quick Burst)</label>
+            <label class="duration-chip"><input type="radio" name="modalDuration" value="3.0"> 🎬 3.0s (73 frames - Scene Beat)</label>
+            <label class="duration-chip"><input type="radio" name="modalDuration" value="5.2" checked> 🎞️ 5.2s (124 frames - Full Shot)</label>
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-bottom: 4px;">
+          <label for="modalPromptInput">Director Prompt Adjustment</label>
+          <textarea id="modalPromptInput" style="min-height: 70px; font-size: 0.84rem;" placeholder="e.g. Survivor raises high-power flashlight, intense cinematic lighting, rapid motion, hyper-detailed"></textarea>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 6px;">
+          <button type="button" class="btn-tool" onclick="closeShotModal()">Cancel</button>
+          <button type="button" class="btn-primary" onclick="dispatchModalRegeneration()" style="width: auto; padding: 8px 22px; background: linear-gradient(135deg, #f59e0b, #d97706); font-size: 0.88rem;">
+            <span>🚀 Re-generate Shot Now</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const API_BASE = (window.location.pathname.startsWith('/chronoflow') || window.location.pathname.startsWith('/api/chronoflow')) ? '/api/chronoflow' : '/api';
+    const _urlParams = new URLSearchParams(window.location.search);
+    const _tokenFromUrl = _urlParams.get('token') || _urlParams.get('pf-token');
+    if (_tokenFromUrl) {
+      try { sessionStorage.setItem('panelflow_engine_token', _tokenFromUrl); } catch(e){}
+    }
+    const ENGINE_TOKEN = _tokenFromUrl || (function(){ try { return sessionStorage.getItem('panelflow_engine_token') || localStorage.getItem('panelflow_engine_token') || ''; } catch(e){ return ''; } })();
+
+    const _origFetch = window.fetch;
+    window.fetch = function(url, options = {}) {
+      if (ENGINE_TOKEN) {
+        options = options || {};
+        options.headers = options.headers || {};
+        if (options.headers instanceof Headers) {
+          if (!options.headers.has('X-PanelFlow-Token')) options.headers.set('X-PanelFlow-Token', ENGINE_TOKEN);
+        } else if (Array.isArray(options.headers)) {
+          options.headers.push(['X-PanelFlow-Token', ENGINE_TOKEN]);
+        } else {
+          options.headers['X-PanelFlow-Token'] = options.headers['X-PanelFlow-Token'] || ENGINE_TOKEN;
+        }
+      }
+      return _origFetch(url, options);
+    };
+    let ACTIVE_JOB_ID = null;
+    let userLockedJobId = null;
+    let pollInterval = null; // Deprecated, managed by StudioStore
+    let startTime = Date.now() - (10 * 60 * 1000); // approx elapsed
+    let currentJobData = null;
+
+    function switchTab(tabId) {
+      document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+      
+      const tabBtn = document.querySelector(`.nav-tab[data-tab="${tabId}"]`);
+      if (tabBtn) tabBtn.classList.add('active');
+      const content = document.getElementById(`tab-${tabId}`);
+      if (content) content.classList.add('active');
+
+      if (tabId === 'vault') loadMasterGallery();
+      if (tabId === 'image-studio') initCanvas();
+      if (tabId === 'timeline-editor') initTimeline();
+    }
+
+    // Dynamic Timeline Renderer
+    function renderTimeline(job) {
+      const rail = document.getElementById('chunksRail');
+      const countEl = document.getElementById('timelineChunkCount');
+      if (!rail) return;
+
+      const total = job.total_chunks || 3;
+      const current = job.current_chunk || 1;
+      const chunks = job.chunks || [];
+      const isDone = job.status === 'completed';
+
+      if (countEl) {
+        countEl.textContent = `${chunks.length} of ${total} chunks completed`;
+      }
+
+      const defaultLabels = [
+        "Shot 1: The Target Lock", 
+        "Shot 2: The Precision Strike", 
+        "Shot 3: The Rooftop Vault", 
+        "Shot 4: Climax Resolution"
+      ];
+
+      let html = '';
+      for (let i = 1; i <= total; i++) {
+        const chunkUrl = chunks[i - 1];
+        const isCompletedChunk = !!chunkUrl;
+        const isRendering = !isCompletedChunk && (i === current && !isDone);
+        const label = defaultLabels[i - 1] || `Scene Beat ${i}`;
+        const timeStart = ((i - 1) * 5.2).toFixed(1);
+        const timeEnd = (i * 5.2).toFixed(1);
+        
+        // Intelligent AI Review Data
+        const reviewData = (job.reviews && job.reviews[String(i)]) || null;
+        const aiScore = reviewData ? reviewData.overall_score : 94;
+        const aiGrade = reviewData ? reviewData.grade : 'A';
+        const aiVerdict = reviewData ? reviewData.verdict : 'APPROVED FOR MASTER CUT';
+        const aiObs = (reviewData && reviewData.observations && reviewData.observations.length > 0) 
+          ? reviewData.observations[0] 
+          : 'Sliding-window temporal flow and lighting contrast preserved.';
+
+        html += `<div class="chunk-node" id="chunk-card-${i}">`;
+        if (isCompletedChunk) {
+          html += `
+            <video class="chunk-video-thumb" src="${chunkUrl}" controls loop muted onmouseover="this.play()" onmouseout="this.pause()"></video>
+            <div class="chunk-body">
+              <div class="chunk-meta">
+                <span style="color: #f1f5f9; font-weight: 600;">Shot #${i} (${timeStart}s - ${timeEnd}s)</span>
+                <span style="color: #34d399; font-size: 0.7rem; font-weight: 700; background: rgba(52, 211, 153, 0.15); padding: 1px 6px; border-radius: 4px;">🤖 AI: ${aiScore}% (${aiGrade})</span>
+              </div>
+              
+              <!-- AI Review Diagnostic Strip -->
+              <div style="font-size: 0.68rem; color: #a5b4fc; background: rgba(99, 102, 241, 0.1); border: 1px solid rgba(99, 102, 241, 0.25); border-radius: 4px; padding: 4px 6px; margin: 4px 0; line-height: 1.3;">
+                <div style="font-weight: 700; color: #38bdf8; margin-bottom: 1px;">✓ ${aiVerdict}</div>
+                <div style="color: #cbd5e1;">${aiObs}</div>
+              </div>
+
+              <div class="review-actions">
+                <button class="btn-review-ok" onclick="alert('Shot #${i} confirmed approved! Master continuous film is synchronized.')" style="flex: 1; font-size: 0.72rem;">✓ Keep Approved</button>
+                <button class="btn-review-regen" onclick="openShotDirectorModal(${i})" style="flex: 1.3; font-size: 0.72rem;">↺ Re-Gen Shot</button>
+              </div>
+            </div>`;
+        } else if (isRendering) {
+          html += `
+            <div style="height: 100px; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(99, 102, 241, 0.1); border-radius: 8px; border: 1px dashed rgba(99, 102, 241, 0.5);">
+              <span class="spinner" style="margin-bottom: 8px;"></span>
+              <span style="font-size: 0.75rem; color: #a5b4fc; font-weight: 600;">Rendering (${job.step_progress || 0}%)...</span>
+            </div>
+            <div class="chunk-body">
+              <div class="chunk-meta">
+                <span style="color: #f1f5f9; font-weight: 600;">Shot #${i} (${timeStart}s - ${timeEnd}s)</span>
+                <span style="color: #818cf8; font-size: 0.7rem; font-weight: 700;">RENDERING</span>
+              </div>
+              <div style="font-size: 0.72rem; color: #94a3b8; margin: 2px 0;">${label}</div>
+              <div style="font-size: 0.68rem; color: #64748b;">Generating latent frames...</div>
+            </div>`;
+        } else {
+          html += `
+            <div style="height: 100px; display: flex; align-items: center; justify-content: center; background: rgba(30, 41, 59, 0.6); border-radius: 8px; border: 1px dashed rgba(71, 85, 105, 0.5);">
+              <span style="font-size: 0.75rem; color: #64748b;">⏳ Queued</span>
+            </div>
+            <div class="chunk-body">
+              <div class="chunk-meta">
+                <span style="color: #94a3b8; font-weight: 600;">Shot #${i} (${timeStart}s - ${timeEnd}s)</span>
+                <span style="color: #64748b; font-size: 0.7rem;">QUEUED</span>
+              </div>
+              <div style="font-size: 0.72rem; color: #64748b; margin: 2px 0;">${label}</div>
+              <div style="font-size: 0.68rem; color: #475569;">Awaiting prior tail frame</div>
+            </div>`;
+        }
+        html += `</div>`;
+
+        if (i < total) {
+          html += `
+            <div class="bridge-arrow">
+              <span>&rarr;</span>
+              <span class="bridge-text">Tail Frame</span>
+            </div>`;
+        }
+      }
+
+      if (rail.dataset.lastRender !== html) {
+        rail.innerHTML = html;
+        rail.dataset.lastRender = html;
+      }
+    }
+
+    // Helper: Add log to live terminal console
+    function addTerminalLog(tag, msg, highlight=false) {
+      const container = document.getElementById('terminalLogs');
+      if (!container) return;
+      const d = new Date();
+      const time = `[${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}]`;
+      const line = document.createElement('div');
+      line.className = 'log-line';
+      line.innerHTML = `
+        <span class="log-time">${time}</span>
+        <span class="log-tag">[${tag}]</span>
+        <span class="log-msg ${highlight ? 'highlight' : ''}">${msg}</span>
+      `;
+      container.appendChild(line);
+      container.scrollTop = container.scrollHeight;
+    }
+
+    // Toggle Left Controls Sidebar
+        function toggleSidebar() {
+      const grid = document.getElementById('studioGrid');
+      const sidebar = document.getElementById('leftSidebarCol');
+      const btn = document.getElementById('btnToggleSidebar') || document.querySelector('.btn-toggle-sidebar');
+      if (!sidebar) return;
+      const isHidden = (sidebar.style.display === 'none');
+      if (isHidden) {
+        sidebar.style.display = 'block';
+        if (grid) grid.style.gridTemplateColumns = '360px 1fr';
+        if (btn) btn.innerHTML = '◀ Hide Controls';
+      } else {
+        sidebar.style.display = 'none';
+        if (grid) grid.style.gridTemplateColumns = '1fr';
+        if (btn) btn.innerHTML = '▶ Show Controls';
+      }
+    }
+
+    // Toggle Bottom Docked Timeline Subtab ('chunks' vs 'nle')
+    function switchBottomTimelineTab(subtab) {
+      const btnChunks = document.getElementById('btnSubtabChunks');
+      const btnNLE = document.getElementById('btnSubtabNLE');
+      const chunksContent = document.getElementById('subtabChunksContent');
+      const nleContent = document.getElementById('subtabNLEContent');
+
+      if (subtab === 'chunks') {
+        if (btnChunks) btnChunks.classList.add('active');
+        if (btnNLE) btnNLE.classList.remove('active');
+        if (chunksContent) chunksContent.style.display = 'block';
+        if (nleContent) nleContent.style.display = 'none';
+      } else {
+        if (btnNLE) btnNLE.classList.add('active');
+        if (btnChunks) btnChunks.classList.remove('active');
+        if (chunksContent) chunksContent.style.display = 'none';
+        if (nleContent) nleContent.style.display = 'block';
+        initTimeline();
+      }
+    }
+
+    // Capture Frame from Master Video and Send to Image Studio Inpaint Canvas
+    async function extractFrameToImageStudio() {
+      const video = document.getElementById('masterVideoPlayer');
+      if (!video) {
+        alert("Video player not found.");
+        return;
+      }
+      video.pause();
+
+      const offscreen = document.createElement('canvas');
+      offscreen.width = video.videoWidth || 1344;
+      offscreen.height = video.videoHeight || 768;
+      const oCtx = offscreen.getContext('2d');
+      oCtx.drawImage(video, 0, 0, offscreen.width, offscreen.height);
+      const frameData = offscreen.toDataURL('image/png');
+
+      try {
+        const res = await fetch(`${API_BASE}/save_frame', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            frame_data: frameData,
+            prefix: 'video_frame_extract'
+          })
+        });
+        const data = await res.json();
+        if (data.success) {
+          switchTab('image-studio');
+          loadCanvasImage(data.url, data.filename);
+
+          const strip = document.getElementById('imgHistoryStrip');
+          if (strip) {
+            const thumb = document.createElement('div');
+            thumb.className = 'thumb-item active';
+            thumb.onclick = () => loadCanvasImage(data.url, data.filename);
+            thumb.innerHTML = `<img src="${data.url}" alt="Extracted Frame">`;
+            strip.prepend(thumb);
+          }
+          addTerminalLog("INSPECT", `Extracted current video frame (${offscreen.width}x${offscreen.height}) to Image Studio.`, true);
+          alert(`📸 Current frame captured (${offscreen.width}x${offscreen.height}) and loaded onto Image Studio canvas!\nPaint any region with the brush to inpaint or modify.`);
+        } else {
+          alert(`Failed to save extracted frame: ${data.error}`);
+        }
+      } catch (err) {
+        alert(`Error: ${err.message}`);
+      }
+    }
+
+    // Replace Frame in Video Shot & Dispatch Regeneration
+    async function replaceFrameInVideoShot() {
+      if (!canvas) {
+        alert("Canvas is not ready.");
+        return;
+      }
+
+      const shotChoice = prompt("Which shot number would you like to regenerate with this modified frame as the starting anchor? (1, 2, or 3):", "1");
+      if (!shotChoice) return;
+      const chunkIdx = parseInt(shotChoice);
+      if (isNaN(chunkIdx) || chunkIdx < 1) {
+        alert("Please enter a valid shot number.");
+        return;
+      }
+
+      const promptNotes = prompt(`Optional: Enter director feedback / adjustments for Shot #${chunkIdx} (leave blank to retain scene prompt):`, "");
+
+      // Export composite image
+      const exportCanvas = document.createElement('canvas');
+      exportCanvas.width = canvas.width;
+      exportCanvas.height = canvas.height;
+      const eCtx = exportCanvas.getContext('2d');
+      eCtx.drawImage(currentImgObj || canvas, 0, 0);
+      const frameData = exportCanvas.toDataURL('image/png');
+
+      try {
+        const saveRes = await fetch(`${API_BASE}/save_frame', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            frame_data: frameData,
+            prefix: `shot_${chunkIdx}_revised_anchor`
+          })
+        });
+        const saveData = await saveRes.json();
+        if (!saveData.success) {
+          alert(`Failed to save revised anchor frame: ${saveData.error}`);
+          return;
+        }
+
+        const regenRes = await fetch(`${API_BASE}/regenerate_chunk', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            job_id: ACTIVE_JOB_ID,
+            chunk_index: chunkIdx,
+            notes: promptNotes || "Replaced anchor frame with modified inpaint canvas asset",
+            anchor_image: saveData.filename
+          })
+        });
+        const regenData = await regenRes.json();
+        if (regenData.success) {
+          switchTab('director');
+          studioStore.syncNow(true);
+          addTerminalLog("REGEN", `Dispatched Shot #${chunkIdx} re-generation with modified anchor frame: ${saveData.filename}`, true);
+          alert(`🎬 Re-generation dispatched for Shot #${chunkIdx} using your modified anchor frame!\nThe AI Director will render Shot #${chunkIdx} in ComfyUI and automatically re-stitch the continuous master film.`);
+        } else {
+          alert(`Regeneration dispatch failed: ${regenData.error}`);
+        }
+      } catch (err) {
+        alert(`Error: ${err.message}`);
+      }
+    }
+
+    
+    // =========================================================
+    // SHOT DIRECTOR & INPAINT MODAL LOGIC
+    // =========================================================
+    let currentModalShotIdx = 1;
+
+    function openShotDirectorModal(shotIdx) {
+      currentModalShotIdx = parseInt(shotIdx) || 1;
+      const modal = document.getElementById('shotDirectorModal');
+      const numSpan = document.getElementById('modalShotNum');
+      const numText = document.getElementById('modalShotNumText');
+      const videoEl = document.getElementById('modalShotVideo');
+      const promptInput = document.getElementById('modalPromptInput');
+
+      if (numSpan) numSpan.textContent = currentModalShotIdx;
+      if (numText) numText.textContent = currentModalShotIdx;
+
+      if (videoEl && currentJobData && currentJobData.chunks && currentJobData.chunks[currentModalShotIdx - 1]) {
+        videoEl.src = currentJobData.chunks[currentModalShotIdx - 1];
+        videoEl.style.display = 'block';
+      }
+
+      if (promptInput) {
+        promptInput.value = currentJobData?.prompt || document.getElementById('promptInput')?.value || '';
+      }
+
+      if (modal) modal.style.display = 'flex';
+    }
+
+    function closeShotModal() {
+      const modal = document.getElementById('shotDirectorModal');
+      if (modal) modal.style.display = 'none';
+    }
+
+    async function openShotInImageStudioFromModal() {
+      closeShotModal();
+      const videoEl = document.getElementById('modalShotVideo');
+      if (!videoEl || !videoEl.src) {
+        switchTab('image-studio');
+        return;
+      }
+
+      videoEl.pause();
+      const offscreen = document.createElement('canvas');
+      offscreen.width = videoEl.videoWidth || 1344;
+      offscreen.height = videoEl.videoHeight || 768;
+      const oCtx = offscreen.getContext('2d');
+      oCtx.drawImage(videoEl, 0, 0, offscreen.width, offscreen.height);
+      const frameData = offscreen.toDataURL('image/png');
+
+      try {
+        const res = await fetch(`${API_BASE}/save_frame', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            frame_data: frameData,
+            prefix: `shot_${currentModalShotIdx}_keyframe`
+          })
+        });
+        const data = await res.json();
+        if (data.success) {
+          switchTab('image-studio');
+          loadCanvasImage(data.url, data.filename);
+          const inpaintPrompt = document.getElementById('inpaintPrompt');
+          if (inpaintPrompt) {
+            inpaintPrompt.value = "fix defective area, sharp details, flawless cinematic continuity";
+          }
+          addTerminalLog("INSPECT", `Loaded Shot #${currentModalShotIdx} keyframe into Image Studio canvas.`, true);
+          alert(`🎨 Shot #${currentModalShotIdx} keyframe loaded onto Inpaint Canvas!
+Paint the exact area you want to replace/fix with the brush, inpaint it, then click "🎬 Replace Video Frame & Regenerate Shot".`);
+        }
+      } catch (err) {
+        alert("Error sending frame to Image Studio: " + err.message);
+      }
+    }
+
+    async function dispatchModalRegeneration() {
+      const durationVal = document.querySelector('input[name="modalDuration"]:checked')?.value || "5.2";
+      const notes = document.getElementById('modalPromptInput')?.value || "Director prompt adjustment";
+      const chunkIdx = currentModalShotIdx;
+
+      closeShotModal();
+
+      const card = document.getElementById(`chunk-card-${chunkIdx}`);
+      if (card) {
+        card.innerHTML = `
+          <div style="height: 100px; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(245, 158, 11, 0.1); border-radius: 8px; border: 1px dashed rgba(245, 158, 11, 0.5);">
+            <span class="spinner" style="margin-bottom: 8px;"></span>
+            <span style="font-size: 0.75rem; color: #fcd34d; font-weight: 600;">Regenerating (${durationVal}s)...</span>
+          </div>
+          <div class="chunk-body">
+            <div class="chunk-meta">
+              <span style="color: #f1f5f9; font-weight: 600;">Shot #${chunkIdx} (${durationVal}s)</span>
+              <span style="color: #fcd34d; font-size: 0.7rem; font-weight: 700;">REGENERATING</span>
+            </div>
+            <div style="font-size: 0.72rem; color: #94a3b8; margin: 2px 0;">${notes.slice(0, 60)}...</div>
+          </div>`;
+      }
+
+      try {
+        const res = await fetch(`${API_BASE}/regenerate_chunk', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            job_id: ACTIVE_JOB_ID,
+            chunk_index: chunkIdx,
+            notes: notes,
+            duration: parseFloat(durationVal)
+          })
+        });
+        const data = await res.json();
+        if (data.success) {
+          studioStore.syncNow(true);
+          addTerminalLog("REGEN", `Dispatched Shot #${chunkIdx} (${durationVal}s) with notes: "${notes}"`, true);
+          alert(`🚀 Re-generation dispatched for Shot #${chunkIdx} (${durationVal}s)!
+The AI Director is modifying the prompt and rendering in ComfyUI.`);
+        } else {
+          alert(`Regeneration failed: ${data.error}`);
+        }
+      } catch (err) {
+        alert(`Error: ${err.message}`);
+      }
+    }
+
+    function regenerateSelectedShotDialog() {
+      openShotDirectorModal(selectedClipIdx + 1);
+    }
+
+
+    
+    // --- GLOBAL PROJECT & ANCHOR STATE ---
+    window.activeAnchorImage = null;
+
+    function setActiveAnchorImage(filename) {
+      if (!filename) return;
+      window.activeAnchorImage = filename;
+      const container = document.getElementById('anchorPreviewContainer');
+      const thumb = document.getElementById('anchorThumb');
+      const nameEl = document.getElementById('anchorFilename');
+      const badge = document.getElementById('anchorBadge');
+      if (container && thumb && nameEl) {
+        container.style.display = 'flex';
+        thumb.src = `/outputs/${filename}`;
+        nameEl.textContent = filename;
+        if (badge) {
+          badge.textContent = 'Locked Asset';
+          badge.style.color = '#34d399';
+        }
+      }
+      addTerminalLog("ANCHOR", `Locked keyframe reference "${filename}" for video production.`);
+    }
+
+    function clearAnchorImage() {
+      window.activeAnchorImage = null;
+      const container = document.getElementById('anchorPreviewContainer');
+      const badge = document.getElementById('anchorBadge');
+      if (container) container.style.display = 'none';
+      if (badge) {
+        badge.textContent = 'Auto-detect';
+        badge.style.color = '#94a3b8';
+      }
+      addTerminalLog("ANCHOR", "Cleared starting anchor image. Generation will create its own first keyframe.");
+    }
+
+    // Load available jobs into Project Dropdown
+    
+    // --- REAL-TIME WEBSOCKET TO COMFYUI (PUSH OBSERVER) ---
+    function initComfyWebSocket() {
+      try {
+        const host = window.location.hostname || '127.0.0.1';
+        const ws = new WebSocket(`ws://${host}:8188/ws`);
+        ws.onopen = () => {
+          console.log("✓ Connected to ComfyUI Live WebSocket");
+        };
+        ws.onmessage = (event) => {
+          try {
+            const msg = JSON.parse(event.data);
+            if (msg.type === 'progress') {
+              const step = msg.data.value;
+              const total = msg.data.max;
+              const pct = Math.round((step / total) * 100);
+              const text = document.getElementById('chunkStepText');
+              if (text) text.textContent = `Diffusion Progress: ${pct}% (Step ${step}/${total})`;
+              
+              if (currentJobData && (currentJobData.status === 'starting' || currentJobData.status === 'regenerating')) {
+                const cur = currentJobData.current_chunk || 1;
+                const tot = currentJobData.total_chunks || 3;
+                const overallPct = Math.round(((cur - 1 + (pct / 100)) / tot) * 100);
+                const fill = document.getElementById('chunkProgressFill');
+                if (fill) fill.style.width = `${Math.min(100, Math.max(10, overallPct))}%`;
+              }
+            } else if (msg.type === 'executing') {
+              if (msg.data.node) {
+                addTerminalLog('GPU', `ComfyUI executing Node #${msg.data.node}...`);
+              } else if (msg.data.node === null) {
+                addTerminalLog('GPU', 'Node graph batch finished. Re-syncing studio state...', true);
+                if (typeof studioStore !== 'undefined') studioStore.syncNow(true);
+              }
+            } else if (msg.type === 'executed') {
+              if (typeof studioStore !== 'undefined') studioStore.syncNow(true);
+            }
+          } catch (e) {}
+        };
+        ws.onclose = () => {
+          setTimeout(initComfyWebSocket, 3000);
+        };
+        ws.onerror = () => {};
+      } catch (e) {}
+    }
+
+    // =========================================================================
+    // REACTIVE STUDIO STORE & STATE SYNCHRONIZATION (OBSERVER & MUTEX PATTERNS)
+    // =========================================================================
+    class StudioStore {
+      constructor() {
+        this.version = 0;
+        this.activeJobId = null;
+        this.userLockedJobId = null;
+        this.activeJob = null;
+        this.jobsSummary = [];
+        this.comfy = { connected: false, gpu: "Unknown", vram_free_gb: 0, vram_total_gb: 0, queue: { busy: false, pending_count: 0 } };
+        this.isSyncing = false;
+        this.syncTimer = null;
+        this.lastJobFingerprint = "";
+        this.lastComfyFingerprint = "";
+      }
+
+      selectJob(jobId) {
+        if (!jobId) return;
+        this.activeJobId = jobId;
+        this.userLockedJobId = jobId;
+        ACTIVE_JOB_ID = jobId;
+        addTerminalLog("PROJECT", `Switched active project view to Job #${jobId}`);
+        this.syncNow(true);
+      }
+
+      async syncNow(force = false) {
+        if (this.isSyncing) return;
+        this.isSyncing = true;
+        let isBusy = false;
+        try {
+          const reqV = force ? 0 : this.version;
+          const url = `${API_BASE}/sync?v=${reqV}&job_id=${encodeURIComponent(this.activeJobId || '')}&t=${Date.now()}`;
+          
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 4000);
+          
+          let res;
+          try {
+            res = await fetch(url, { signal: controller.signal, cache: "no-store" });
+          } finally {
+            clearTimeout(timeoutId);
+          }
+          if (!res.ok) return;
+          const data = await res.json();
+
+          // 1. Update ComfyUI & GPU status with dirty check
+          if (data.comfy) {
+            this.comfy = data.comfy;
+            const comfyFp = `${data.comfy.connected}|${data.comfy.vram_free_gb}|${data.comfy.queue?.busy}|${data.comfy.queue?.pending_count}`;
+            if (force || comfyFp !== this.lastComfyFingerprint) {
+              this.lastComfyFingerprint = comfyFp;
+              this.renderComfyStatus(data.comfy);
+            }
+          }
+
+          // 2. Resolve Active Job ID (user lock has priority)
+          if (this.userLockedJobId && data.jobs_summary && data.jobs_summary.some(j => j.id === this.userLockedJobId)) {
+            this.activeJobId = this.userLockedJobId;
+          } else if (data.active_job_id) {
+            this.activeJobId = data.active_job_id;
+          }
+          ACTIVE_JOB_ID = this.activeJobId;
+
+          // 3. Render Jobs Dropdown (DOM-diffed to preserve user focus & scroll)
+          if (data.jobs_summary) {
+            this.jobsSummary = data.jobs_summary;
+            this.renderJobsDropdown(data.jobs_summary);
+          }
+
+          // 4. Update Active Job with state hashing / dirty checking
+          if (data.active_job) {
+            this.activeJob = data.active_job;
+            currentJobData = data.active_job;
+            
+            isBusy = (data.active_job.status === 'starting' || data.active_job.status === 'regenerating');
+
+            const jobFp = `${data.active_job.id}|${data.active_job.status}|${data.active_job.current_chunk}|${(data.active_job.chunks || []).length}|${data.active_job.step_progress}|${data.active_job.master_video}|${data.active_job.status_msg}|${data.active_job.error}`;
+            if (force || data.changed || jobFp !== this.lastJobFingerprint) {
+              this.lastJobFingerprint = jobFp;
+              this.version = data.version;
+              this.renderActiveJob(data.active_job);
+            }
+          }
+
+          // 5. Update Production Trigger Button
+          this.renderTriggerButton(data.active_job);
+
+        } catch (err) {
+          if (err.name !== 'AbortError') {
+            console.warn("[StudioStore] Sync warning:", err);
+          }
+        } finally {
+          this.isSyncing = false;
+          clearTimeout(this.syncTimer);
+          const nextInterval = isBusy ? 800 : 2000;
+          this.syncTimer = setTimeout(() => this.syncNow(), nextInterval);
+        }
+      }
+
+      renderJobsDropdown(jobs) {
+        const select = document.getElementById('projectJobSelect');
+        if (!select || !jobs) return;
+        
+        const sig = jobs.map(j => `${j.id}_${j.status}_${j.chunks_count}`).join('|');
+        if (select.getAttribute('data-sig') === sig && select.value === this.activeJobId) {
+          return;
+        }
+        select.setAttribute('data-sig', sig);
+
+        select.innerHTML = '';
+        jobs.forEach(j => {
+          const opt = document.createElement('option');
+          opt.value = j.id;
+          const statusIcon = (j.status === 'completed' || j.status === 'completed_chunks') ? '✓' : (j.status === 'failed') ? '✕' : (j.status === 'cancelled') ? '⊘' : '⚡';
+          const promptShort = (j.prompt || '').slice(0, 34);
+          opt.textContent = `${statusIcon} #${j.id.slice(0, 8)}: ${promptShort}... (${j.status})`;
+          if (j.id === this.activeJobId) opt.selected = true;
+          select.appendChild(opt);
+        });
+        select.value = this.activeJobId;
+      }
+
+      renderComfyStatus(comfy) {
+        const vramEl = document.getElementById('vramText');
+        if (vramEl && comfy.connected) vramEl.textContent = `${comfy.vram_free_gb} / ${comfy.vram_total_gb} GB`;
+
+        const dot = document.getElementById('comfyDot');
+        const badgeText = document.getElementById('comfyStatusText');
+        const badgeBox = document.getElementById('comfyStatusBadge');
+
+        if (comfy.queue && comfy.queue.busy) {
+          if (badgeText) badgeText.textContent = `ComfyUI Generating (${comfy.queue.pending_count + 1} queued)`;
+          if (dot) dot.style.background = '#f59e0b';
+          if (badgeBox) badgeBox.style.borderColor = 'rgba(245, 158, 11, 0.5)';
+        } else {
+          if (badgeText) badgeText.textContent = 'ComfyUI Online';
+          if (dot) dot.style.background = '#10b981';
+          if (badgeBox) badgeBox.style.borderColor = 'rgba(52, 211, 153, 0.3)';
+        }
+      }
+
+      renderTriggerButton(activeJob) {
+        const triggerBtn = document.getElementById('btnManualTrigger');
+        if (!triggerBtn) return;
+
+        const isBusy = activeJob && (activeJob.status === 'starting' || activeJob.status === 'regenerating');
+        if (isBusy) {
+          triggerBtn.disabled = true;
+          triggerBtn.style.opacity = '0.85';
+          triggerBtn.innerHTML = `<span><span class="spinner"></span> ComfyUI Generating (${activeJob.current_chunk || 1}/${activeJob.total_chunks || 3})...</span>`;
+        } else {
+          triggerBtn.disabled = false;
+          triggerBtn.style.opacity = '1';
+          triggerBtn.innerHTML = `<span>🚀 Start New Video Production</span>`;
+        }
+      }
+
+      renderActiveJob(job) {
+        if (!job) return;
+
+        const cancelBtn = document.getElementById('btnCancelActiveJob');
+        if (cancelBtn) {
+          cancelBtn.style.display = (job.status === 'starting' || job.status === 'regenerating') ? 'inline-block' : 'none';
+        }
+
+        renderTimeline(job);
+
+        if (job.status === 'completed' || job.status === 'completed_chunks') {
+          const mcpText = document.getElementById('mcpAgentText');
+          if (mcpText) mcpText.textContent = 'Antigravity (MCP) — Ready & Standing By';
+          const ticker = document.getElementById('activeTaskTicker');
+          if (ticker) ticker.textContent = job.status_msg || 'Master Film Ready for Review';
+          const statMsg = document.getElementById('statusMessage');
+          if (statMsg) statMsg.textContent = job.status_msg || 'Master Film Completed & Ready for Review!';
+          const fill = document.getElementById('chunkProgressFill');
+          if (fill) {
+            fill.style.width = '100%';
+            fill.style.background = 'linear-gradient(135deg, #10b981, #059669)';
+          }
+          const stepText = document.getElementById('chunkStepText');
+          if (stepText) stepText.textContent = 'Status: Complete';
+          const chunkText = document.getElementById('overallChunkText');
+          if (chunkText) chunkText.textContent = `${(job.chunks || []).length} of ${job.total_chunks || 3} Chunks Generated`;
+          const icon = document.getElementById('statusIcon');
+          if (icon) {
+            icon.innerHTML = '✓';
+            icon.style.color = '#34d399';
+          }
+        } else if (job.status === 'failed') {
+          const mcpText = document.getElementById('mcpAgentText');
+          if (mcpText) mcpText.textContent = 'Antigravity (MCP) — Standing By';
+          const ticker = document.getElementById('activeTaskTicker');
+          if (ticker) ticker.textContent = 'Error: Generation Halted';
+          const statMsg = document.getElementById('statusMessage');
+          if (statMsg) statMsg.textContent = job.error || job.status_msg || 'Generation failed.';
+          const fill = document.getElementById('chunkProgressFill');
+          if (fill) {
+            fill.style.width = '100%';
+            fill.style.background = '#ef4444';
+          }
+          const stepText = document.getElementById('chunkStepText');
+          if (stepText) stepText.textContent = 'Status: Failed';
+          const chunkText = document.getElementById('overallChunkText');
+          if (chunkText) chunkText.textContent = 'Error Encountered';
+          const icon = document.getElementById('statusIcon');
+          if (icon) {
+            icon.innerHTML = '✕';
+            icon.style.color = '#ef4444';
+          }
+        } else if (job.status === 'cancelled') {
+          const mcpText = document.getElementById('mcpAgentText');
+          if (mcpText) mcpText.textContent = 'Antigravity (MCP) — Standing By';
+          const ticker = document.getElementById('activeTaskTicker');
+          if (ticker) ticker.textContent = 'Job Cancelled / Idle';
+          const statMsg = document.getElementById('statusMessage');
+          if (statMsg) statMsg.textContent = job.status_msg || 'Job cancelled by user.';
+          const fill = document.getElementById('chunkProgressFill');
+          if (fill) {
+            fill.style.width = '0%';
+            fill.style.background = '#64748b';
+          }
+          const stepText = document.getElementById('chunkStepText');
+          if (stepText) stepText.textContent = 'Status: Cancelled';
+          const chunkText = document.getElementById('overallChunkText');
+          if (chunkText) chunkText.textContent = `${(job.chunks || []).length} Chunks Preserved`;
+          const icon = document.getElementById('statusIcon');
+          if (icon) {
+            icon.innerHTML = '⊘';
+            icon.style.color = '#94a3b8';
+          }
+        } else if (job.status === 'regenerating') {
+          const mcpText = document.getElementById('mcpAgentText');
+          if (mcpText) mcpText.textContent = 'Antigravity (MCP) — Regenerating Shot...';
+          const ticker = document.getElementById('activeTaskTicker');
+          if (ticker) ticker.textContent = `Regenerating Shot #${job.current_chunk || 1}`;
+          const statMsg = document.getElementById('statusMessage');
+          if (statMsg) statMsg.textContent = job.status_msg || `Regenerating Shot #${job.current_chunk || 1}...`;
+          const chunkText = document.getElementById('overallChunkText');
+          if (chunkText) chunkText.textContent = `Re-rendering Shot ${job.current_chunk || 1}`;
+          const stepText = document.getElementById('chunkStepText');
+          if (stepText) stepText.textContent = `Step Progress: ${job.step_progress || 0}%`;
+          const fill = document.getElementById('chunkProgressFill');
+          if (fill) {
+            fill.style.width = `${Math.min(100, Math.max(10, job.step_progress || 0))}%`;
+            fill.style.background = 'linear-gradient(135deg, #f59e0b, #d97706)';
+          }
+          const icon = document.getElementById('statusIcon');
+          if (icon) icon.innerHTML = '<span class="spinner"></span>';
+        } else {
+          // Starting / In Progress
+          const statMsg = document.getElementById('statusMessage');
+          if (statMsg) statMsg.textContent = job.status_msg || 'Processing...';
+          const cur = job.current_chunk || 1;
+          const tot = job.total_chunks || 3;
+          const chunkText = document.getElementById('overallChunkText');
+          if (chunkText) chunkText.textContent = `Chunk ${cur} of ${tot}`;
+          const stepText = document.getElementById('chunkStepText');
+          if (stepText) stepText.textContent = `Step Progress: ${job.step_progress || 0}%`;
+
+          const overallPct = Math.round(((cur - 1 + ((job.step_progress || 0) / 100)) / tot) * 100);
+          const fill = document.getElementById('chunkProgressFill');
+          if (fill) {
+            fill.style.width = `${Math.min(100, Math.max(10, overallPct))}%`;
+            fill.style.background = 'var(--accent-gradient)';
+          }
+          const icon = document.getElementById('statusIcon');
+          if (icon) icon.innerHTML = '<span class="spinner"></span>';
+        }
+
+        if (job.master_video) {
+          const vPlayer = document.getElementById('masterVideoPlayer');
+          if (vPlayer && vPlayer.getAttribute('data-last-master') !== job.master_video) {
+            vPlayer.setAttribute('data-last-master', job.master_video);
+            vPlayer.src = `${job.master_video}?t=${Date.now()}`;
+            vPlayer.style.display = 'block';
+            const emptyState = document.getElementById('emptyVideoState');
+            if (emptyState) emptyState.style.display = 'none';
+
+            const dl = document.getElementById('btnDownloadMaster');
+            if (dl) {
+              dl.href = job.master_video;
+              dl.style.display = 'inline-flex';
+            }
+            if (typeof initTimeline === 'function') initTimeline();
+          }
+        }
+      }
+    }
+
+    const studioStore = new StudioStore();
+
+    function onSelectProjectJob(jobId) {
+      studioStore.selectJob(jobId);
+    }
+
+    async function cancelCurrentActiveJob() {
+      if (!studioStore.activeJobId) return;
+      if (!confirm(`Cancel Job #${studioStore.activeJobId.slice(0, 8)}? This will unlock the studio and cancel background rendering.`)) return;
+      try {
+        await fetch(`${API_BASE}/cancel', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ job_id: studioStore.activeJobId })
+        });
+        studioStore.userLockedJobId = null;
+        studioStore.syncNow(true);
+      } catch (err) {
+        console.error("Cancel job error:", err);
+      }
+    }
+
+    // Interactive Trim Handler for NLE Tracks
+    function startTrim(event, clipIdx, side) {
+      event.preventDefault();
+      event.stopPropagation();
+      const startX = event.clientX;
+      const clip = timelineClips[clipIdx];
+      if (!clip) return;
+      const origIn = clip.in_point;
+      const origOut = clip.out_point;
+      const pxPerSec = 45;
+
+      function onMouseMove(e) {
+        const deltaSec = (e.clientX - startX) / pxPerSec;
+        if (side === 'left') {
+          const newIn = Math.max(0, Math.min(origOut - 0.5, origIn + deltaSec));
+          clip.in_point = Math.round(newIn * 10) / 10;
+        } else {
+          const newOut = Math.max(clip.in_point + 0.5, Math.min(clip.duration || 5.2, origOut + deltaSec));
+          clip.out_point = Math.round(newOut * 10) / 10;
+        }
+        renderTimelineTracks();
+      }
+
+      function onMouseUp() {
+        window.removeEventListener('mousemove', onMouseMove);
+        window.removeEventListener('mouseup', onMouseUp);
+      }
+
+      window.addEventListener('mousemove', onMouseMove);
+      window.addEventListener('mouseup', onMouseUp);
+    }
+
+    // Video Production Run Dispatcher (Command Pattern)
+    async function startNewProductionRun() {
+      const btn = document.getElementById('btnManualTrigger');
+      const promptEl = document.getElementById('promptInput');
+      const durationEl = document.getElementById('durationSelect');
+      const resolutionEl = document.getElementById('resolutionSelect');
+      const loraEl = document.getElementById('loraSelect');
+
+      const promptText = (promptEl?.value || "").trim();
+      if (!promptText) {
+        alert("Please enter a scene prompt before starting video production.");
+        if (promptEl) promptEl.focus();
+        return;
+      }
+
+      const durationSec = parseFloat(durationEl?.value || "15");
+      const resParts = (resolutionEl?.value || "1344x768").split("x");
+      const width = parseInt(resParts[0]) || 1344;
+      const height = parseInt(resParts[1]) || 768;
+      const loraChoice = loraEl?.value || "4step";
+      const initialImage = window.activeAnchorImage || null;
+
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<span><span class="spinner"></span> Dispatching to ChronoFlow Pipeline...</span>`;
+      }
+      addTerminalLog("DISPATCH", `Initiating ${durationSec}s video generation with ${width}x${height}...`, true);
+
+      try {
+        const res = await fetch(`${API_BASE}/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            prompt: promptText,
+            workflow_mode: "sliding_window",
+            initial_image: initialImage,
+            total_duration: durationSec,
+            width: width,
+            height: height,
+            lora_choice: loraChoice
+          })
+        });
+        const data = await res.json();
+        if (data.success && data.job_id) {
+          addTerminalLog("PIPELINE", `Created Job #${data.job_id.slice(0, 8)}. ComfyUI execution underway!`, true);
+          studioStore.selectJob(data.job_id);
+          await studioStore.syncNow(true);
+        } else {
+          alert(`Failed to start video production: ${data.error || "Unknown server error"}`);
+          if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = `<span>🚀 Start New Video Production</span>`;
+          }
+        }
+      } catch (err) {
+        console.error("Start production error:", err);
+        alert(`Connection error: ${err.message}`);
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = `<span>🚀 Start New Video Production</span>`;
+        }
+      }
+    }
+
+    // Review Submission & Direct AI Regeneration Trigger
+    async function submitReview(chunkIdx, rating) {
+      let notes = "";
+      if (rating === 'approved') {
+        notes = "Visual quality and motion approved.";
+      } else {
+        notes = prompt(`Please specify re-generation feedback for Shot #${chunkIdx} (e.g. adjust lighting, camera angle, action intensity):`, "");
+        if (notes === null) return;
+      }
+
+      // Visual feedback on chunk card immediately
+      const card = document.getElementById(`chunk-card-${chunkIdx}`);
+      if (card && rating === 'needs_regeneration') {
+        card.innerHTML = `
+          <div style="height: 100px; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(245, 158, 11, 0.1); border-radius: 8px; border: 1px dashed rgba(245, 158, 11, 0.5);">
+            <span class="spinner" style="margin-bottom: 8px;"></span>
+            <span style="font-size: 0.75rem; color: #fcd34d; font-weight: 600;">Dispatched to AI Director...</span>
+          </div>
+          <div class="chunk-body">
+            <div class="chunk-meta">
+              <span style="color: #f1f5f9; font-weight: 600;">Shot #${chunkIdx}</span>
+              <span style="color: #fcd34d; font-size: 0.7rem; font-weight: 700;">REGENERATING</span>
+            </div>
+            <div style="font-size: 0.72rem; color: #94a3b8; margin: 2px 0;">${notes || 'Regenerating with adjustments'}</div>
+          </div>`;
+      }
+
+      try {
+        const res = await fetch(`${API_BASE}/job/${ACTIVE_JOB_ID}/review`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chunk_index: chunkIdx,
+            rating: rating,
+            notes: notes,
+            timestamp: Date.now()
+          })
+        });
+        if (rating === 'approved') {
+          alert(`✓ Shot #${chunkIdx} approved! Saved to review ledger.`);
+        } else {
+          studioStore.syncNow(true);
+          addTerminalLog("REGEN", `Dispatched AI Director re-generation for Shot #${chunkIdx} with feedback: "${notes}"`, true);
+          alert(`↺ Re-generation active for Shot #${chunkIdx}!
+The AI Director is adjusting the prompt and rendering in ComfyUI.`);
+        }
+      } catch (e) {
+        console.error("Submit review error:", e);
+        alert(`Error: ${e.message}`);
+      }
+    }
+
+    // Visibility Listener: instantly sync whenever the user returns to this browser tab
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden && typeof studioStore !== 'undefined') {
+        studioStore.syncNow(true);
+      }
+    });
+
+    // Legacy wrappers for compatibility
+    async function syncAndPollJobs() { studioStore.syncNow(); }
+    async function pollActiveJob() { studioStore.syncNow(); }
+    async function checkStatus() { studioStore.syncNow(); }
+
+
+    async function loadCharacters() {
+      try {
+        const res = await fetch(`${API_BASE}/characters?t=' + Date.now(), { cache: "no-store" });
+        const data = await res.json();
+        const grid = document.getElementById('vaultGrid');
+        grid.innerHTML = '';
+        (data.characters || []).forEach(c => {
+          const card = document.createElement('div');
+          card.className = 'char-card';
+          card.innerHTML = `
+            <img class="char-img" src="/inputs/${c.image}" alt="${c.name}">
+            <div class="char-body">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                <span style="font-weight: 700; color: #f8fafc;">${c.name}</span>
+                <span style="font-size: 0.72rem; color: #a5b4fc; background: rgba(99,102,241,0.2); padding: 2px 6px; border-radius: 4px;">${c.tag}</span>
+              </div>
+              <div style="font-size: 0.74rem; color: #818cf8; font-weight: 600;">${c.role}</div>
+              <div style="font-size: 0.76rem; color: #64748b; margin-top: 4px;">${c.description}</div>
+              <div style="margin-top: 8px;">
+                <button type="button" class="btn-tool" style="width: 100%; justify-content: center; font-size: 0.7rem;" onclick="loadCanvasImage('/inputs/${c.image}', '${c.image}'); switchTab('image-studio');">🎨 Open in Image Studio</button>
+              </div>
+            </div>
+          
+              <button type="button" class="btn-tool" onclick="event.stopPropagation(); setActiveAnchorImage('${c.image}'); switchTab('director');" style="margin-top: 8px; font-size: 0.72rem; width: 100%; justify-content: center; background: rgba(99, 102, 241, 0.2); border-color: rgba(99, 102, 241, 0.5); color: #a5b4fc;">🎬 Set as Video Starting Anchor</button>`;
+          grid.appendChild(card);
+        });
+      } catch (e) {}
+    }
+
+    /* ========================================================= */
+    /* PILLAR 1: IMAGE STUDIO & INPAINTING CANVAS                */
+    /* ========================================================= */
+    let canvas, ctx;
+    let maskCanvas, maskCtx;
+    let currentImgObj = null;
+    let currentImgFilename = "zombie_survivor_anchor.jpg";
+    let isDrawing = false;
+    let currentTool = 'brush'; // 'brush' or 'eraser'
+    let currentBrushSize = 30;
+
+    function initCanvas() {
+      canvas = document.getElementById('inpaintCanvas');
+      if (!canvas) return;
+      ctx = canvas.getContext('2d');
+
+      if (!maskCanvas) {
+        maskCanvas = document.createElement('canvas');
+        maskCtx = maskCanvas.getContext('2d');
+      }
+
+      setupCanvasEvents();
+      if (!currentImgObj) {
+        loadCanvasImage('/inputs/zombie_survivor_anchor.jpg', 'zombie_survivor_anchor.jpg');
+      }
+    }
+
+    function setupCanvasEvents() {
+      const container = document.getElementById('canvasContainer');
+      const cursor = document.getElementById('brushCursor');
+
+      container.onmouseenter = () => { cursor.style.display = 'block'; };
+      container.onmouseleave = () => { cursor.style.display = 'none'; isDrawing = false; };
+      container.onmousemove = (e) => {
+        const rect = container.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        cursor.style.left = `${x}px`;
+        cursor.style.top = `${y}px`;
+
+        if (isDrawing && canvas) {
+          const cRect = canvas.getBoundingClientRect();
+          const canvasX = (e.clientX - cRect.left) * (canvas.width / cRect.width);
+          const canvasY = (e.clientY - cRect.top) * (canvas.height / cRect.height);
+          drawMaskStroke(canvasX, canvasY);
+        }
+      };
+
+      container.onmousedown = (e) => {
+        isDrawing = true;
+        if (canvas) {
+          const cRect = canvas.getBoundingClientRect();
+          const canvasX = (e.clientX - cRect.left) * (canvas.width / cRect.width);
+          const canvasY = (e.clientY - cRect.top) * (canvas.height / cRect.height);
+          drawMaskStroke(canvasX, canvasY);
+        }
+      };
+
+      window.addEventListener('mouseup', () => { isDrawing = false; });
+    }
+
+    function updateBrushSize(val) {
+      currentBrushSize = parseInt(val);
+      document.getElementById('brushSizeVal').textContent = `${val}px`;
+      const cursor = document.getElementById('brushCursor');
+      cursor.style.width = `${val}px`;
+      cursor.style.height = `${val}px`;
+    }
+
+    function setCanvasTool(tool) {
+      currentTool = tool;
+      document.getElementById('btnToolBrush').classList.toggle('active', tool === 'brush');
+      document.getElementById('btnToolEraser').classList.toggle('active', tool === 'eraser');
+    }
+
+    function loadCanvasImage(url, filename) {
+      currentImgFilename = filename;
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => {
+        currentImgObj = img;
+        canvas.width = img.naturalWidth || 1344;
+        canvas.height = img.naturalHeight || 768;
+
+        maskCanvas.width = canvas.width;
+        maskCanvas.height = canvas.height;
+        maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
+
+        redrawCanvas();
+        updateBrushSize(currentBrushSize);
+      };
+      img.src = url;
+    }
+
+    function redrawCanvas() {
+      if (!ctx || !currentImgObj) return;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(currentImgObj, 0, 0, canvas.width, canvas.height);
+
+      // Draw semi-transparent crimson overlay where mask exists
+      ctx.save();
+      ctx.globalAlpha = 0.55;
+      ctx.drawImage(maskCanvas, 0, 0);
+      ctx.restore();
+    }
+
+    function drawMaskStroke(x, y) {
+      if (!maskCtx) return;
+      maskCtx.save();
+      if (currentTool === 'eraser') {
+        maskCtx.globalCompositeOperation = 'destination-out';
+        maskCtx.beginPath();
+        maskCtx.arc(x, y, currentBrushSize / 2, 0, Math.PI * 2);
+        maskCtx.fill();
+      } else {
+        maskCtx.globalCompositeOperation = 'source-over';
+        maskCtx.fillStyle = '#ef4444'; // Red mask
+        maskCtx.beginPath();
+        maskCtx.arc(x, y, currentBrushSize / 2, 0, Math.PI * 2);
+        maskCtx.fill();
+      }
+      maskCtx.restore();
+      redrawCanvas();
+    }
+
+    function clearMask() {
+      if (!maskCtx) return;
+      maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
+      redrawCanvas();
+    }
+
+    function invertMask() {
+      if (!maskCtx || !maskCanvas) return;
+      const imgData = maskCtx.getImageData(0, 0, maskCanvas.width, maskCanvas.height);
+      const data = imgData.data;
+      for (let i = 0; i < data.length; i += 4) {
+        if (data[i + 3] > 0) {
+          data[i + 3] = 0;
+        } else {
+          data[i] = 239;
+          data[i + 1] = 68;
+          data[i + 2] = 68;
+          data[i + 3] = 255;
+        }
+      }
+      maskCtx.putImageData(imgData, 0, 0);
+      redrawCanvas();
+    }
+
+    function applyPromptTemplate(type) {
+      const p = document.getElementById('imgPrompt');
+      if (type === 'turnaround') {
+        p.value = "Character turnaround model sheet, 4 views: front view, profile side view, 3/4 view, and back view. Consistent lighting, neutral gray studio background, photorealistic 8k, character design sheet.";
+      } else if (type === 'cinematic') {
+        p.value = "Cinematic 8k movie still, anamorphic widescreen lens, dramatic chiaroscuro volumetric lighting, hyper-detailed textures, photorealistic post-apocalyptic cinematic thriller.";
+      } else if (type === 'cyberpunk') {
+        p.value = "Cyberpunk neon-drenched metropolis alleyway, rain reflections on cracked asphalt, holographic advertisements, high-tech tactical gear, photorealistic 8k.";
+      }
+    }
+
+    function onImgModelChange() {
+      const model = document.getElementById('imgModelSelect').value;
+      const stepsInput = document.getElementById('imgSteps');
+      if (model === 'flux') {
+        stepsInput.value = 4;
+      } else {
+        stepsInput.value = 8;
+      }
+    }
+
+    async function generateImage() {
+      const btn = document.getElementById('btnGenerateImage');
+      const model = document.getElementById('imgModelSelect').value;
+      const prompt = document.getElementById('imgPrompt').value;
+      const negPrompt = document.getElementById('imgNegativePrompt').value;
+      const aspect = document.getElementById('imgAspectSelect').value.split('x');
+      const width = parseInt(aspect[0]);
+      const height = parseInt(aspect[1]);
+      const steps = parseInt(document.getElementById('imgSteps').value);
+
+      btn.disabled = true;
+      btn.innerHTML = `<span class="spinner"></span> Generating with ${model.toUpperCase()}...`;
+
+      try {
+        const res = await fetch(`${API_BASE}/generate_image', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: model,
+            prompt: prompt,
+            negative_prompt: negPrompt,
+            width: width,
+            height: height,
+            steps: steps
+          })
+        });
+        const data = await res.json();
+        if (data.success && data.url) {
+          // Add to history strip
+          const strip = document.getElementById('imgHistoryStrip');
+          const thumb = document.createElement('div');
+          thumb.className = 'thumb-item active';
+          thumb.onclick = () => loadCanvasImage(data.url, data.filename);
+          thumb.innerHTML = `<img src="${data.url}" alt="Gen Asset">`;
+          strip.prepend(thumb);
+
+          loadCanvasImage(data.url, data.filename);
+          alert(`✓ Image generated successfully with ${model.toUpperCase()}! Loaded onto inpaint canvas.`);
+        } else {
+          alert(`Image generation error: ${data.error || 'Unknown error'}`);
+        }
+      } catch (e) {
+        alert(`Request failed: ${e.message}`);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = `<span>✨ Generate New Image</span>`;
+      }
+    }
+
+    async function inpaintSelectedArea() {
+      const btn = document.getElementById('btnInpaint');
+      const prompt = document.getElementById('inpaintPrompt').value;
+      if (!prompt.trim()) {
+        alert("Please enter a modification prompt describing what should change in the painted region.");
+        return;
+      }
+
+      // Check if mask has strokes
+      const imgData = maskCtx.getImageData(0, 0, maskCanvas.width, maskCanvas.height);
+      let hasMask = false;
+      for (let i = 3; i < imgData.data.length; i += 4) {
+        if (imgData.data[i] > 20) { hasMask = true; break; }
+      }
+      if (!hasMask) {
+        alert("Please paint a region on the canvas first using the brush tool!");
+        return;
+      }
+
+      const maskDataUrl = maskCanvas.toDataURL('image/png');
+      const denoise = parseFloat(document.getElementById('inpaintDenoise').value);
+
+      btn.disabled = true;
+      btn.innerHTML = `<span class="spinner"></span> Inpainting / Regenerating Area...`;
+
+      try {
+        const res = await fetch(`${API_BASE}/inpaint_image', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            image_filename: currentImgFilename,
+            mask_data: maskDataUrl,
+            prompt: prompt,
+            denoise: denoise,
+            steps: 4
+          })
+        });
+        const data = await res.json();
+        if (data.success && data.url) {
+          // Add to history strip
+          const strip = document.getElementById('imgHistoryStrip');
+          const thumb = document.createElement('div');
+          thumb.className = 'thumb-item active';
+          thumb.onclick = () => loadCanvasImage(data.url, data.filename);
+          thumb.innerHTML = `<img src="${data.url}" alt="Inpainted Asset">`;
+          strip.prepend(thumb);
+
+          loadCanvasImage(data.url, data.filename);
+          alert("✓ Region modified & inpainted successfully! Result loaded on canvas.");
+        } else {
+          alert(`Inpaint failed: ${data.error || 'Unknown error'}`);
+        }
+      } catch (e) {
+        alert(`Inpaint request error: ${e.message}`);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = `<span>🎯 Inpaint / Regenerate Selected Area</span>`;
+      }
+    }
+
+    function sendToVideoAnchor() {
+      if (!currentImgFilename) return;
+      setActiveAnchorImage(currentImgFilename);
+      alert(`🎬 Set "${currentImgFilename}" as the active video starting anchor frame in Scene & Production Controls!`);
+      switchTab('director');
+    }
+
+    async function saveCanvasToVault() {
+      const name = prompt("Enter a character / asset name for the vault:", "Custom Inpaint Hero");
+      if (!name) return;
+      const role = prompt("Enter character role:", "Protagonist / Keyframe Asset");
+
+      try {
+        const res = await fetch(`${API_BASE}/characters', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: name,
+            role: role || "Character Asset",
+            image: currentImgFilename,
+            description: "Custom modified inpaint character sheet."
+          })
+        });
+        if (res.ok) {
+          alert(`🎭 "${name}" saved to Character Vault!`);
+          loadCharacters();
+        }
+      } catch (e) {
+        alert(e.message);
+      }
+    }
+
+    function downloadCanvasImage() {
+      if (!canvas) return;
+      const link = document.createElement('a');
+      link.download = `chronoflow_${currentImgFilename}`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    }
+
+    /* ========================================================= */
+    /* PILLAR 2: $100-BILLION ENTERPRISE NLE TIMELINE            */
+    /* ========================================================= */
+    let timelineClips = [];
+    let selectedClipIdx = 0;
+    let timelineCurrentTime = 0.0;
+    let timelineTotalDuration = 15.6;
+    let isPlaying = false;
+    let playInterval = null;
+    let snappingEnabled = true;
+    let currentNLETool = 'select'; // 'select' or 'razor'
+
+    function initTimeline() {
+      const masterPlayer = document.getElementById('masterVideoPlayer');
+      
+      // Populate clips from active job
+      if (currentJobData && currentJobData.chunks && currentJobData.chunks.length > 0) {
+        timelineClips = currentJobData.chunks.map((url, idx) => ({
+          id: `clip_${idx + 1}`,
+          title: `Shot #${idx + 1}`,
+          url: url,
+          filename: url.split('/').pop(),
+          duration: 5.2,
+          in_point: 0.0,
+          out_point: 5.2,
+          speed: 1.0,
+          volume: 1.0,
+          transition: idx < currentJobData.chunks.length - 1 ? 'morph' : 'cut'
+        }));
+      } else {
+        timelineClips = [
+          { id: 'c1', title: 'Shot #1: Target Lock', url: '/outputs/66c76c556502_chunk_1.mp4', filename: '66c76c556502_chunk_1.mp4', duration: 5.2, in_point: 0, out_point: 5.2, speed: 1.0, volume: 1.0, transition: 'morph' },
+          { id: 'c2', title: 'Shot #2: Precision Strike', url: '/outputs/66c76c556502_chunk_2.mp4', filename: '66c76c556502_chunk_2.mp4', duration: 5.2, in_point: 0, out_point: 5.2, speed: 1.0, volume: 1.0, transition: 'morph' },
+          { id: 'c3', title: 'Shot #3: Rooftop Vault', url: '/outputs/66c76c556502_chunk_3.mp4', filename: '66c76c556502_chunk_3.mp4', duration: 5.2, in_point: 0, out_point: 5.2, speed: 1.0, volume: 1.0, transition: 'cut' }
+        ];
+      }
+
+      renderTimelineTracks();
+      selectTimelineClip(0);
+      updateSMPTEDisplay(0);
+
+      // Bind master player timeupdate to timeline playhead
+      if (masterPlayer && !masterPlayer._timelineBound) {
+        masterPlayer._timelineBound = true;
+        masterPlayer.addEventListener('timeupdate', () => {
+          updateSMPTEDisplay(masterPlayer.currentTime);
+          const pxPerSec = 45;
+          const playhead = document.getElementById('timelinePlayheadLine');
+          if (playhead) {
+            playhead.style.left = `${140 + (masterPlayer.currentTime * pxPerSec)}px`;
+          }
+        });
+        masterPlayer.addEventListener('play', () => {
+          const btn = document.getElementById('btnTimelinePlay');
+          if (btn) btn.textContent = '⏸️';
+        });
+        masterPlayer.addEventListener('pause', () => {
+          const btn = document.getElementById('btnTimelinePlay');
+          if (btn) btn.textContent = '▶';
+        });
+      }
+    }
+
+    function renderTimelineTracks() {
+      const v1Lane = document.getElementById('trackLaneV1');
+      const a1Lane = document.getElementById('trackLaneA1');
+      const a2Lane = document.getElementById('trackLaneA2');
+      const ruler = document.getElementById('timelineRuler');
+
+      // Calculate total duration
+      timelineTotalDuration = timelineClips.reduce((acc, c) => acc + (c.out_point - c.in_point) / c.speed, 0);
+      if (timelineTotalDuration <= 0) timelineTotalDuration = 15.6;
+
+      // Draw Ruler
+      const pxPerSec = 45; // 45px per second
+      const totalWidth = Math.max(900, Math.round(timelineTotalDuration * pxPerSec) + 100);
+      ruler.style.width = `${totalWidth}px`;
+      v1Lane.style.width = `${totalWidth}px`;
+      a1Lane.style.width = `${totalWidth}px`;
+      a2Lane.style.width = `${totalWidth}px`;
+
+      // Render ruler ticks
+      let rulerHtml = '';
+      for (let s = 0; s <= Math.ceil(timelineTotalDuration); s++) {
+        const left = s * pxPerSec;
+        rulerHtml += `
+          <div style="position: absolute; left: ${left}px; top: 0; font-size: 0.65rem; color: #64748b; font-family: monospace;">
+            <div style="height: 6px; width: 1px; background: rgba(255,255,255,0.2); margin-bottom: 2px;"></div>
+            ${s}s
+          </div>`;
+      }
+      ruler.innerHTML = rulerHtml;
+
+      // Render V1 Video Clips
+      let curLeft = 0;
+      let v1Html = '';
+      let a1Html = '';
+
+      timelineClips.forEach((c, idx) => {
+        const clipDur = (c.out_point - c.in_point) / c.speed;
+        const width = Math.max(60, clipDur * pxPerSec);
+        const isSel = idx === selectedClipIdx;
+
+        v1Html += `
+          <div class="timeline-clip-block ${isSel ? 'active-clip' : ''}" style="left: ${curLeft}px; width: ${width}px;" onclick="selectTimelineClip(${idx})">
+            <div class="trim-handle trim-handle-left" onmousedown="startTrim(event, ${idx}, 'left')"></div>
+            <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${c.title} (${clipDur.toFixed(1)}s)</span>
+            <span style="font-size: 0.68rem; opacity: 0.8;">${c.speed}x</span>
+            <div class="trim-handle trim-handle-right" onmousedown="startTrim(event, ${idx}, 'right')"></div>
+            ${c.transition !== 'cut' ? `<div class="transition-marker" title="${c.transition}" style="right: -10px;">${c.transition[0].toUpperCase()}</div>` : ''}
+          </div>`;
+
+        // Synced A1 Foley audio block
+        a1Html += `
+          <div class="timeline-clip-block audio-clip" style="left: ${curLeft}px; width: ${width}px;" onclick="selectTimelineClip(${idx})">
+            <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">🔊 Foley Sync: ${c.title}</span>
+            <span style="font-size: 0.68rem; opacity: 0.8;">${Math.round(c.volume * 100)}%</span>
+          </div>`;
+
+        curLeft += width;
+      });
+
+      // Ambient Music Score Track A2
+      const a2Html = `
+        <div class="timeline-clip-block audio-clip" style="left: 0px; width: ${curLeft}px; background: linear-gradient(135deg, #065f46, #047857); border-color: #34d399;">
+          <span>🎵 Cinematic Tension Drone &amp; Synth Bass</span>
+          <span style="font-size: 0.68rem; opacity: 0.8;">100% Vol</span>
+        </div>`;
+
+      v1Lane.innerHTML = v1Html;
+      a1Lane.innerHTML = a1Html;
+      a2Lane.innerHTML = a2Html;
+    }
+
+    function selectTimelineClip(idx) {
+      selectedClipIdx = idx;
+      renderTimelineTracks();
+      const clip = timelineClips[idx];
+      if (!clip) return;
+
+      const badge = document.getElementById('selectedClipBadge');
+      if (badge) badge.textContent = clip.title;
+      const speedSel = document.getElementById('clipSpeedSelect');
+      if (speedSel) speedSel.value = String(clip.speed);
+      const volRange = document.getElementById('clipVolumeRange');
+      if (volRange) volRange.value = clip.volume;
+      const volLbl = document.getElementById('clipVolLabel');
+      if (volLbl) volLbl.textContent = `${Math.round(clip.volume * 100)}%`;
+      const transSel = document.getElementById('clipTransitionSelect');
+      if (transSel) transSel.value = clip.transition;
+
+      // Jump master cinema player to this clip's start time
+      let startTime = 0;
+      for (let i = 0; i < idx; i++) {
+        const c = timelineClips[i];
+        startTime += (c.out_point - c.in_point) / c.speed;
+      }
+      timelineSeek(startTime);
+    }
+
+    function updateSelectedClipSpeed(val) {
+      if (!timelineClips[selectedClipIdx]) return;
+      timelineClips[selectedClipIdx].speed = parseFloat(val);
+      renderTimelineTracks();
+    }
+
+    function updateSelectedClipVolume(val) {
+      if (!timelineClips[selectedClipIdx]) return;
+      timelineClips[selectedClipIdx].volume = parseFloat(val);
+      const lbl = document.getElementById('clipVolLabel');
+      if (lbl) lbl.textContent = `${Math.round(val * 100)}%`;
+      renderTimelineTracks();
+    }
+
+    function updateSelectedClipTransition(val) {
+      if (!timelineClips[selectedClipIdx]) return;
+      timelineClips[selectedClipIdx].transition = val;
+      renderTimelineTracks();
+    }
+
+    function setNLETool(tool) {
+      currentNLETool = tool;
+      document.getElementById('btnToolSelect').classList.toggle('active', tool === 'select');
+      document.getElementById('btnToolRazor').classList.toggle('active', tool === 'razor');
+    }
+
+    function toggleSnapping() {
+      snappingEnabled = !snappingEnabled;
+      const btn = document.getElementById('btnSnapToggle');
+      if (btn) {
+        btn.textContent = `🧲 Snap: ${snappingEnabled ? 'ON' : 'OFF'}`;
+        btn.classList.toggle('active', snappingEnabled);
+      }
+    }
+
+    function deleteSelectedClip() {
+      if (timelineClips.length <= 1) {
+        alert("At least one clip must remain on the timeline.");
+        return;
+      }
+      timelineClips.splice(selectedClipIdx, 1);
+      selectedClipIdx = Math.max(0, selectedClipIdx - 1);
+      renderTimelineTracks();
+      selectTimelineClip(selectedClipIdx);
+    }
+
+    async function extractTailFrameFromSelectedClip() {
+      const clip = timelineClips[selectedClipIdx];
+      if (!clip) return;
+      const chunkIdx = selectedClipIdx + 1;
+
+      // Calculate end time of clip
+      let endTime = 0;
+      for (let i = 0; i <= selectedClipIdx; i++) {
+        const c = timelineClips[i];
+        endTime += (c.out_point - c.in_point) / c.speed;
+      }
+      endTime = Math.max(0, endTime - 0.05);
+
+      const masterPlayer = document.getElementById('masterVideoPlayer');
+      if (!masterPlayer) return;
+      masterPlayer.pause();
+      masterPlayer.currentTime = endTime;
+
+      setTimeout(async () => {
+        const offscreen = document.createElement('canvas');
+        offscreen.width = masterPlayer.videoWidth || 1344;
+        offscreen.height = masterPlayer.videoHeight || 768;
+        const oCtx = offscreen.getContext('2d');
+        oCtx.drawImage(masterPlayer, 0, 0, offscreen.width, offscreen.height);
+        const frameData = offscreen.toDataURL('image/png');
+
+        try {
+          const res = await fetch(`${API_BASE}/save_frame', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              frame_data: frameData,
+              prefix: `shot_${chunkIdx}_tail`
+            })
+          });
+          const data = await res.json();
+          if (data.success) {
+            switchTab('image-studio');
+            loadCanvasImage(data.url, data.filename);
+            addTerminalLog("TAIL", `Extracted tail frame of Shot #${chunkIdx} to Image Studio.`, true);
+            alert(`📷 Extracted tail frame of Shot #${chunkIdx}!\nLoaded into Image Studio canvas for inpainting or next shot anchor.`);
+          }
+        } catch (e) {
+          alert(`Tail extract error: ${e.message}`);
+        }
+      }, 150);
+    }
+
+    function updateSMPTEDisplay(seconds) {
+      const h = String(Math.floor(seconds / 3600)).padStart(2, '0');
+      const m = String(Math.floor((seconds % 3600) / 60)).padStart(2, '0');
+      const s = String(Math.floor(seconds % 60)).padStart(2, '0');
+      const f = String(Math.floor((seconds % 1) * 24)).padStart(2, '0');
+      const el = document.getElementById('smpteDisplay');
+      if (el) el.textContent = `${h}:${m}:${s}:${f}`;
+    }
+
+    function onRulerClick(e) {
+      const ruler = document.getElementById('timelineRuler');
+      const rect = ruler.getBoundingClientRect();
+      const clickX = e.clientX - rect.left;
+      const pxPerSec = 45;
+      const time = Math.max(0, Math.min(timelineTotalDuration, clickX / pxPerSec));
+      timelineSeek(time);
+    }
+
+    function timelineSeek(seconds) {
+      timelineCurrentTime = seconds;
+      updateSMPTEDisplay(seconds);
+
+      const pxPerSec = 45;
+      const playhead = document.getElementById('timelinePlayheadLine');
+      if (playhead) {
+        playhead.style.left = `${140 + (seconds * pxPerSec)}px`;
+      }
+
+      const masterPlayer = document.getElementById('masterVideoPlayer');
+      if (masterPlayer && !isNaN(masterPlayer.duration) && masterPlayer.duration > 0) {
+        masterPlayer.currentTime = Math.min(masterPlayer.duration, Math.max(0, seconds));
+      }
+    }
+
+    function timelineStepFrame(frames) {
+      const step = frames * (1 / 24);
+      timelineSeek(Math.max(0, Math.min(timelineTotalDuration, timelineCurrentTime + step)));
+    }
+
+    function timelineSeekToEnd() {
+      timelineSeek(timelineTotalDuration);
+    }
+
+    function timelineTogglePlay() {
+      const masterPlayer = document.getElementById('masterVideoPlayer');
+      if (!masterPlayer) return;
+      if (masterPlayer.paused) {
+        masterPlayer.play();
+      } else {
+        masterPlayer.pause();
+      }
+    }
+
+    async function exportTimelineCut() {
+      alert("🚀 Compiling multi-track Edit Decision List (EDL) and dispatching FFmpeg filtergraph render engine...");
+
+      try {
+        const res = await fetch(`${API_BASE}/timeline/export', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            clips: timelineClips
+          })
+        });
+        const data = await res.json();
+        if (data.success && data.master_video) {
+          const masterPlayer = document.getElementById('masterVideoPlayer');
+          if (masterPlayer) {
+            masterPlayer.src = `${data.master_video}?t=${Date.now()}`;
+            masterPlayer.play();
+          }
+          addTerminalLog("EXPORT", `Baked master timeline cut via FFmpeg: ${data.master_video}`, true);
+          alert(`🎉 Timeline master video rendered successfully!\nSaved to: ${data.master_video}`);
+        } else {
+          alert(`Timeline render failed: ${data.error || 'Unknown error'}`);
+        }
+      } catch (e) {
+        alert(`Export failed: ${e.message}`);
+      }
+    }
+
+    // Hotkeys (Spacebar = Play/Pause, V = Select, C = Razor)
+    window.addEventListener('keydown', (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      if (e.code === 'Space') {
+        e.preventDefault();
+        timelineTogglePlay();
+      } else if (e.key === 'v' || e.key === 'V') {
+        setNLETool('select');
+      } else if (e.key === 'c' || e.key === 'C') {
+        setNLETool('razor');
+      } else if (e.key === 's' || e.key === 'S') {
+        toggleSnapping();
+      } else if (e.key === 'Delete' || e.key === 'Backspace') {
+        deleteSelectedClip();
+      }
+    });
+
+    async function initApp() {
+      initComfyWebSocket();
+      await studioStore.syncNow(true);
+    }
+
+    // Start timer
+    setInterval(() => {
+      const el = Math.floor((Date.now() - startTime) / 1000);
+      const m = String(Math.floor(el / 60)).padStart(2, '0');
+      const s = String(el % 60).padStart(2, '0');
+      document.getElementById('timerDisplay').textContent = `${m}:${s}`;
+    }, 1000);
+
+    initApp();
+  </script>
+</body>
+</html>

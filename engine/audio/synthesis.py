@@ -362,14 +362,24 @@ class LocalSpeechSynthesizer:
         for t in tasks:
             check_cancelled(cancelled_cb)
             raw_text = t["text"].strip()
-            if not raw_text:
-                continue
-            cleaned_text = sanitize_tts_text(raw_text)
-            if not cleaned_text:
-                continue
+            cleaned_text = sanitize_tts_text(raw_text) if raw_text else ""
             directory = Path(t["directory"])
             root = directory.parents[1]
             resolve_contained_path(root, directory)
+
+            if not raw_text or not cleaned_text:
+                silence_wav = directory / f"speech_silence_{t['id']}.wav"
+                if not silence_wav.exists():
+                    sf.write(str(silence_wav), np.zeros(12000, dtype=np.float32), 24000, format="WAV", subtype="PCM_16")
+                results.append({
+                    "id": t["id"],
+                    "success": True,
+                    "audio_path": str(silence_wav),
+                    "duration": 0.5,
+                    "cached": False,
+                    "emotion": "neutral",
+                })
+                continue
             voice = t.get("voice", "Narrator")
             emotion_raw = t.get("emotion", "Neutral").strip().lower()
             emo_cfg = EMOTION_SETTINGS.get(emotion_raw, EMOTION_SETTINGS["neutral"])
@@ -442,10 +452,26 @@ class LocalSpeechSynthesizer:
                     pace_val = float(pt.get("pace", 1.0) or 1.0)
                     rate_pct = int(round((pace_val - 1.0) * 100))
                     rate_str = f"{rate_pct:+d}%"
-                    comm = edge_tts.Communicate(pt["text"], v_name, rate=rate_str)
-                    await await_speech_operation(comm.save(str(tmp_mp3)), cancelled_cb)
-                    run_speech_process(["ffmpeg", "-y", "-i", str(tmp_mp3), "-ar", "24000", "-ac", "1", pt["target_path"]], timeout=180, cancelled=cancelled_cb).check_returncode()
-                    tmp_mp3.unlink(missing_ok=True)
+                    try:
+                        comm = edge_tts.Communicate(pt["text"], v_name, rate=rate_str)
+                        await await_speech_operation(comm.save(str(tmp_mp3)), cancelled_cb)
+                        run_speech_process(["ffmpeg", "-y", "-i", str(tmp_mp3), "-ar", "24000", "-ac", "1", pt["target_path"]], timeout=180, cancelled=cancelled_cb).check_returncode()
+                        tmp_mp3.unlink(missing_ok=True)
+                    except Exception as edge_err:
+                        logger.warning(f"edge_tts failed for '{pt['text'][:30]}': {edge_err}. Falling back to Kokoro.")
+                        tmp_mp3.unlink(missing_ok=True)
+                        from kokoro import KPipeline
+                        import soundfile as ksf
+                        k_pipe = KPipeline(lang_code='a')
+                        k_voice = "af_sarah" if "en-US-Aria" in v_name else "am_michael"
+                        k_gen = k_pipe(pt["text"], voice=k_voice, speed=pace_val)
+                        audios = [a for _, _, a in k_gen]
+                        if audios:
+                            import torch
+                            full_aud = np.concatenate([a.cpu().numpy() if hasattr(a, 'cpu') else np.array(a) for a in audios])
+                            ksf.write(pt["target_path"], full_aud, 24000, format="WAV", subtype="PCM_16")
+                        else:
+                            raise edge_err
 
                     temporary_wav = Path(pt["target_path"])
                     target_wav = Path(pt["authoritative_path"])

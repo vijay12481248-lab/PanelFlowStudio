@@ -85,17 +85,25 @@ class ComfyRunner:
     """Runs the approved anime_sdxl workflow (anime_sdxl_ipa when a character reference is given); returns PNG bytes."""
 
     def __init__(self, client: ComfyUIClient | None = None, workflow_id: str = "anime_sdxl", ipa_id: str = "anime_sdxl_ipa",
-                 ipa2_id: str = "anime_sdxl_ipa2", engine: str | None = None, flux_id: str = "flux_schnell"):
+                 ipa2_id: str = "anime_sdxl_ipa2", engine: str | None = None, flux_id: str = "flux_schnell",
+                 flux_pulid_id: str = "flux_pulid"):
         self.client = client or ComfyUIClient()
         reg = ComfyWorkflowRegistry(self.client)
         engine = engine or os.environ.get("PANELFLOW_IMAGE_ENGINE", "auto")  # auto | flux | sdxl
         self.flux = None  # a prompt-following model: it reads sentences, so objects and actions in the narration survive
+        self.flux_pulid = None  # PuLID reference face conditioning for FLUX
         if engine in ("auto", "flux"):
             try:
                 if reg.preflight(flux_id)["ready"]:
                     self.flux = (reg.load(flux_id)[0], reg.metadata(flux_id))
             except Exception:
                 self.flux = None
+            if self.flux is not None:
+                try:
+                    if reg.preflight(flux_pulid_id)["ready"]:
+                        self.flux_pulid = (reg.load(flux_pulid_id)[0], reg.metadata(flux_pulid_id))
+                except Exception:
+                    self.flux_pulid = None
             if engine == "flux" and self.flux is None:
                 raise RuntimeError("FLUX was requested but its workflow is not ready (model file missing or ComfyUI down)")
         self.engine = "flux" if self.flux is not None else "sdxl"
@@ -135,7 +143,11 @@ class ComfyRunner:
                  is_cancelled: Callable[[], bool] = lambda: False, reference: Path | None = None,
                  reference_b: Path | None = None, reference_weight: float | None = None) -> bytes:
         if self.flux is not None:
-            wf = _patch_workflow(self.flux[0], self.flux[1]["patch_slots"], pos, neg, width, height, seed, prefix)
+            if reference is not None and self.flux_pulid is not None:
+                wf = _patch_workflow(self.flux_pulid[0], self.flux_pulid[1]["patch_slots"], pos, neg, width, height, seed, prefix,
+                                     reference_image=self._upload(reference), reference_weight=reference_weight or 0.85)
+            else:
+                wf = _patch_workflow(self.flux[0], self.flux[1]["patch_slots"], pos, neg, width, height, seed, prefix)
         elif reference is not None and reference_b is not None and self.ipa2 is not None and (width, height) == (W, H):
             wf = _patch_workflow(self.ipa2[0], self.ipa2[1]["patch_slots"], pos, neg, width, height, seed, prefix,
                                  reference_image=self._upload(reference), reference_image_b=self._upload(reference_b))
@@ -296,7 +308,7 @@ def generate_art(story: OriginalStory, ws: Path, runner: ComfyRunner, provider=N
         pos, neg = build_prompt(story, p, style=style)
         shown = [chars[c] for c in p.character_ids if c in chars][:2]
         # the first character on screen has its face pinned to its sheet
-        ref = ws / "sheets" / f"{shown[0].id}.png" if shown and getattr(runner, "ipa", None) is not None else None
+        ref = ws / "sheets" / f"{shown[0].id}.png" if shown and (getattr(runner, "ipa", None) is not None or getattr(runner, "flux_pulid", None) is not None) else None
         # two characters: the first is pinned to the left half, the second to the right half (needs the masked workflow)
         ref_b = ws / "sheets" / f"{shown[1].id}.png" if len(shown) == 2 and getattr(runner, "ipa2", None) is not None else None
         rec, img = db.get(p.id), ws / "panels" / f"{p.id}.png"

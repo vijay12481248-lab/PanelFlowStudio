@@ -89,10 +89,12 @@ class ScriptFaithfulnessValidator:
             word_overlap = len(seg_words & all_known_words) / max(1, len(seg_words))
 
             is_dialogue_match = any(
-                st in seg_text_clean or seg_text_clean in st for st in source_texts if len(st) > 4
+                st == seg_text_clean or (len(st) >= 3 and (st in seg_text_clean or seg_text_clean in st))
+                for st in source_texts
             )
             is_narrative_match = any(
-                bs in seg_text_clean or seg_text_clean in bs for bs in (beat_summaries + event_descriptions) if len(bs) > 4
+                bs == seg_text_clean or (len(bs) >= 3 and (bs in seg_text_clean or seg_text_clean in bs))
+                for bs in (beat_summaries + event_descriptions)
             )
 
             # Check if completely ungrounded (< 20% word overlap and no substring match)

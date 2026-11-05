@@ -508,7 +508,7 @@ class OllamaProvider(LLMProvider):
                     "num_ctx": kwargs.get("num_ctx", self.num_ctx),
                     "think": False,
                     "thinking": False,
-                    "num_predict": kwargs.get("max_tokens", 1536),
+                    "num_predict": kwargs.get("max_tokens", 8192),
                     **({"top_p": kwargs["top_p"]} if kwargs.get("top_p") is not None else {}),
                 },
             }
@@ -559,7 +559,7 @@ class OllamaProvider(LLMProvider):
             "images": [b64_img],
             "stream": False,
             "think": False,
-            "options": {"num_ctx": kwargs.get("num_ctx", self.num_ctx), "num_predict": kwargs.get("max_tokens", 2048),
+            "options": {"num_ctx": kwargs.get("num_ctx", self.num_ctx), "num_predict": kwargs.get("max_tokens", 8192),
                         "temperature": kwargs.get("temperature", 0.1)},
         }
         if kwargs.get("format_schema"):

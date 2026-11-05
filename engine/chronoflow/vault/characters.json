@@ -1,0 +1,42 @@
+[
+  {
+    "id": "char_eli_001",
+    "name": "Eli (The Scavenger)",
+    "role": "Protagonist",
+    "image": "zombie_survivor_anchor.jpg",
+    "description": "30-year-old male survivor in rugged leather bomber jacket, tactical backpack, and weathered denim.",
+    "tag": "<Picture 1>"
+  },
+  {
+    "id": "char_a5201c",
+    "name": "Agent Whiskers",
+    "role": "Feline Special Agent / Protagonist",
+    "image": "zombie_outpost_start.jpg",
+    "description": "Chubby orange ginger tabby cat wearing miniature sunglasses, a tiny beige detective trenchcoat, and a determined facial expression.",
+    "tag": "<Picture 2>"
+  },
+  {
+    "id": "char_d14a59",
+    "name": "Pizza Survivor & Zombie Horde",
+    "role": "Protagonist / Comic Thriller Lead",
+    "image": "flux_gen_c75c1de0.png",
+    "description": "The lone survivor guarding the last steaming slice of pepperoni pizza in a post-apocalyptic zombie wasteland.",
+    "tag": "<Picture 3>"
+  },
+  {
+    "id": "char_c16d64",
+    "name": "Commander Maya Voss",
+    "role": "Deep-Space Operative / Protagonist",
+    "image": "qwen_gen_fa600e52.png",
+    "description": "32-year-old female deep-space operative in matte obsidian tactical armored suit with glowing cyan conduits, amber HUD visor, utility harness, and carbon-fiber pauldrons.",
+    "tag": "<Picture 4>"
+  },
+  {
+    "id": "char_637725",
+    "name": "Commander Maya Voss",
+    "role": "Deep-Space Operative / Protagonist",
+    "image": "qwen_gen_fa600e52.png",
+    "description": "32-year-old female deep-space operative in matte obsidian tactical armored suit with glowing cyan conduits, amber HUD visor, utility harness, and carbon-fiber pauldrons.",
+    "tag": "<Picture 5>"
+  }
+]

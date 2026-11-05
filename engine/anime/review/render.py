@@ -14,7 +14,7 @@ SLOW_ZOOM_END = 1.10
 DUCK_DB = -22.0     # original anime audio under the narration
 MUSIC_DB = -24.0
 MAX_CAPTION_WORDS = 9
-DEFAULT_MUSIC = Path(__file__).resolve().parents[4] / "apps" / "desktop" / "public" / "assets" / "demo" / "crystal_resonance_bgm.mp3"
+DEFAULT_MUSIC = Path(__file__).resolve().parents[3] / "apps" / "desktop" / "public" / "assets" / "demo" / "crystal_resonance_bgm.mp3"
 
 
 @lru_cache(maxsize=1)

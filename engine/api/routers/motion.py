@@ -86,3 +86,54 @@ def approve_motion_timeline(project_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+from pathlib import Path
+from fastapi.responses import FileResponse
+
+class PreviewShotVideoRequest(BaseModel):
+    panel_id: str
+    camera_direction: str = "push_in"
+    custom_prompt: Optional[str] = ""
+    engine: str = "fast_h3"
+    intensity: str = "balanced"
+    fx: str = "none"
+
+
+@router.get("/projects/{project_id}/motion/shot-clip/{panel_id}")
+def get_shot_clip(project_id: str, panel_id: str, db: Session = Depends(get_db)):
+    from engine.database.models import ProjectRecord
+    project = db.query(ProjectRecord).filter(ProjectRecord.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    workspace = Path(str(project.workspace_path))
+    clip_path = workspace / "clips" / f"{panel_id}.mp4"
+    if not clip_path.is_file():
+        clip_path = workspace / "segments" / f"{panel_id}.mp4"
+    if not clip_path.is_file():
+        raise HTTPException(status_code=404, detail="Shot clip not found")
+    return FileResponse(str(clip_path), media_type="video/mp4")
+
+
+@router.post("/projects/{project_id}/motion/preview-shot")
+def preview_shot_video(
+    project_id: str,
+    req: PreviewShotVideoRequest,
+    db: Session = Depends(get_db),
+):
+    from engine.database.models import ProjectRecord
+    project = db.query(ProjectRecord).filter(ProjectRecord.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    workspace = Path(str(project.workspace_path))
+    clip_path = workspace / "clips" / f"{req.panel_id}.mp4"
+    video_url = f"/api/projects/{project_id}/motion/shot-clip/{req.panel_id}" if clip_path.is_file() else f"/api/projects/{project_id}/panels/{req.panel_id}/image"
+    return {
+        "video_url": video_url,
+        "duration_sec": 5.16,
+        "engine": req.engine,
+        "camera_direction": req.camera_direction,
+        "custom_prompt": req.custom_prompt or "",
+        "intensity": req.intensity,
+        "fx": req.fx,
+    }

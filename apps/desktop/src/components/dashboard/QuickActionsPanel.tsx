@@ -1,5 +1,5 @@
 import React from "react";
-import { Zap, Plus, FolderInput, BookOpen, Sliders, Wrench } from "lucide-react";
+import { Zap, Plus, FolderInput, BookOpen, Sliders, Wrench, Film } from "lucide-react";
 
 interface QuickActionsPanelProps {
   onNewProject: () => void;
@@ -7,6 +7,7 @@ interface QuickActionsPanelProps {
   onOpenLibrary?: () => void;
   onOpenAnimeReview?: () => void;
   onOpenOriginalStories?: () => void;
+  onOpenChronoFlow?: () => void;
   onModelSettings?: () => void;
   onEngineSettings?: () => void;
 }
@@ -17,6 +18,7 @@ export const QuickActionsPanel: React.FC<QuickActionsPanelProps> = ({
   onOpenLibrary,
   onOpenAnimeReview,
   onOpenOriginalStories,
+  onOpenChronoFlow,
   onModelSettings,
   onEngineSettings,
 }) => {
@@ -58,6 +60,17 @@ export const QuickActionsPanel: React.FC<QuickActionsPanelProps> = ({
         >
           <BookOpen className="w-4 h-4 text-indigo-400" />
           <span>Original Stories</span>
+        </button>
+      )}
+
+      {onOpenChronoFlow && (
+        <button
+          onClick={onOpenChronoFlow}
+          className="w-full bg-[#151928] hover:bg-[#1f253d] text-zinc-200 border border-[#242c44] text-xs font-semibold py-2 px-3 rounded-lg flex items-center justify-center gap-2 transition-colors group"
+          title="ChronoFlow Studio: MiniMax H3 Video Chaining, Inpaint & AI Storyboard"
+        >
+          <Film className="w-4 h-4 text-purple-400 group-hover:text-purple-300" />
+          <span>ChronoFlow Studio</span>
         </button>
       )}
 

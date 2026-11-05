@@ -25,6 +25,7 @@ interface DashboardProjectCardProps {
   onOpenPanels: (project: Project) => void;
   onOpenFolder: (projectId: string) => void;
   onDeleteProject: (projectId: string) => void;
+  onOpenChronoFlow?: (project: Project) => void;
   viewMode?: ProjectViewMode;
 }
 
@@ -39,6 +40,7 @@ export const DashboardProjectCard: React.FC<DashboardProjectCardProps> = ({
   onOpenPanels,
   onOpenFolder,
   onDeleteProject,
+  onOpenChronoFlow,
   viewMode = "grid",
 }) => {
   const [showMenu, setShowMenu] = useState(false);
@@ -120,6 +122,13 @@ export const DashboardProjectCard: React.FC<DashboardProjectCardProps> = ({
 
   // Source / Rights badge
   const renderSourceBadge = () => {
+    if (project.source_type === "CHRONOFLOW_AI" || (project as any).settings?.workflow_type === "chronoflow") {
+      return (
+        <span className="bg-[#281347] text-[#c084fc] border border-[#6b21a8] text-[10px] px-2 py-0.5 rounded font-bold uppercase tracking-wider flex-shrink-0">
+          AI CHRONOFLOW
+        </span>
+      );
+    }
     const status = (project.rights_status || "") as string;
     if (status === "PUBLIC_DOMAIN") {
       return (
@@ -236,6 +245,17 @@ export const DashboardProjectCard: React.FC<DashboardProjectCardProps> = ({
             <Film className="w-3.5 h-3.5 text-white" />
             <span>Story Editor</span>
           </button>
+
+          {onOpenChronoFlow && (
+            <button
+              onClick={() => onOpenChronoFlow(project)}
+              className="bg-[#241a4a] hover:bg-[#35256e] text-purple-200 border border-purple-700/60 text-[11px] font-semibold px-2 py-1.5 rounded-lg flex items-center gap-1 transition-all flex-shrink-0 shadow-sm"
+              title="Open ChronoFlow: Video, Image & Panel Generation"
+            >
+              <Film className="w-3.5 h-3.5 text-purple-400 flex-shrink-0" />
+              <span>AI Video</span>
+            </button>
+          )}
 
           <button
             onClick={() => onOpenOCR(project)}
@@ -396,6 +416,17 @@ export const DashboardProjectCard: React.FC<DashboardProjectCardProps> = ({
           <Film className="w-3.5 h-3.5 text-white flex-shrink-0" />
           <span>Story Editor</span>
         </button>
+
+        {onOpenChronoFlow && (
+          <button
+            onClick={() => onOpenChronoFlow(project)}
+            className="bg-[#241a4a] hover:bg-[#35256e] text-purple-200 border border-purple-700/60 text-[11px] font-semibold px-2 py-1.5 rounded-lg flex items-center gap-1 transition-all flex-shrink-0 shadow-sm"
+            title="Open ChronoFlow: Video, Image & Panel Generation"
+          >
+            <Film className="w-3.5 h-3.5 text-purple-400 flex-shrink-0" />
+            <span>AI Video</span>
+          </button>
+        )}
 
         <div className="flex items-center gap-1 flex-shrink-0">
           <button

@@ -29,6 +29,16 @@ export const NewProjectScreen: React.FC<NewProjectScreenProps> = ({
   const [rightsStatus, setRightsStatus] = useState<RightsStatus | "">("");
   const [licenseNotes, setLicenseNotes] = useState<string>("");
 
+  // ChronoFlow AI Generation settings
+  const [chronoWorkflow, setChronoWorkflow] = useState<"video" | "image" | "panel">("video");
+  const [chronoPrompt, setChronoPrompt] = useState<string>(
+    "Cinematic drone shot over a glowing cyberpunk metropolis at dusk, neon rain reflections on sleek rooftops, fluid motion."
+  );
+  const [chronoDuration, setChronoDuration] = useState<number>(15.6);
+  const [chronoDimensions, setChronoDimensions] = useState<string>("1344x768");
+  const [chronoCameraMotion, setChronoCameraMotion] = useState<string>("cinematic_drone");
+  const [chronoLora, setChronoLora] = useState<string>("4step");
+
   // Single Chapter Storytelling settings
   const [storyStyle, setStoryStyle] = useState("Cinematic");
   const [narrationLength, setNarrationLength] = useState("Medium");
@@ -264,11 +274,12 @@ export const NewProjectScreen: React.FC<NewProjectScreenProps> = ({
       setSubmitError("Please enter a project title.");
       return;
     }
-    if (!sourcePath.trim()) {
+    if (sourceType !== "CHRONOFLOW_AI" && !sourcePath.trim()) {
       setSubmitError("Please provide a valid source folder, archive, video, or URL.");
       return;
     }
-    if (!rightsStatus || rightsStatus === "UNKNOWN") {
+    const effectiveRights = sourceType === "CHRONOFLOW_AI" ? (rightsStatus || "USER_OWNED") : rightsStatus;
+    if (!effectiveRights || effectiveRights === "UNKNOWN") {
       setSubmitError(
         "A valid, verified Rights Status is required. Projects with UNKNOWN rights cannot proceed into the acquisition pipeline."
       );
@@ -278,13 +289,25 @@ export const NewProjectScreen: React.FC<NewProjectScreenProps> = ({
     setSubmitting(true);
     try {
       const proj = await api.createProject({
-        title: title.trim(),
+        title: title.trim() || (sourceType === "CHRONOFLOW_AI" ? (chronoWorkflow === "video" ? "ChronoFlow AI Video Project" : chronoWorkflow === "image" ? "ChronoFlow AI Image Art" : "ChronoFlow Storyboard Panels") : "Untitled Project"),
         source_type: sourceType,
         source_url: sourcePath.trim(),
-        rights_status: rightsStatus as RightsStatus,
-        license_info: licenseNotes.trim(),
+        rights_status: effectiveRights as RightsStatus,
+        license_info: licenseNotes.trim() || (sourceType === "CHRONOFLOW_AI" ? "Original AI Generative Media" : ""),
         settings: {
           ...(destinationPath.trim() ? { project_path: destinationPath.trim() } : {}),
+          ...(sourceType === "CHRONOFLOW_AI"
+            ? {
+                workflow_type: "chronoflow",
+                chronoflow_mode: chronoWorkflow,
+                prompt: chronoPrompt,
+                duration: chronoDuration,
+                dimensions: chronoDimensions,
+                camera_motion: chronoCameraMotion,
+                lora: chronoLora,
+                visual_storytelling: true,
+              }
+            : {}),
           ...(sourceType === "AUTHORIZED_WEB"
             ? {
                 visual_storytelling: true,
@@ -403,6 +426,12 @@ export const NewProjectScreen: React.FC<NewProjectScreenProps> = ({
                 icon: Icons.Film,
                 desc: "Anime / video cut detection & review voiceover",
               },
+              {
+                type: "CHRONOFLOW_AI",
+                label: "ChronoFlow AI Studio",
+                icon: Icons.Sparkles,
+                desc: "MiniMax H3 video chaining, FLUX.1 image art & AI panels",
+              },
             ].map((s) => {
               const IconComp = s.icon;
               const isSelected = sourceType === s.type;
@@ -434,86 +463,90 @@ export const NewProjectScreen: React.FC<NewProjectScreenProps> = ({
           </div>
 
           {/* Source Input & Action */}
-          <div className="space-y-2">
-            <div className="flex gap-2">
-              <Input
-                label={
-                  sourceType === "VIDEO_FILE"
-                    ? "Video File Path (.mp4, .mkv, .webm)"
-                    : sourceType === "MANGA_SERIES"
-                    ? "Manga Series Index or Chapter URL"
-                    : "Source Path or URL"
-                }
-                placeholder={getSourcePlaceholder()}
-                value={sourcePath}
-                onChange={(e) => setSourcePath(e.target.value)}
-                required
-              />
-              <div className="flex items-end">
-                {sourceType === "MANGA_SERIES" ? (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="md"
-                    onClick={handleInspectSeries}
-                    loading={inspectingSeries}
-                    disabled={!sourcePath.trim()}
-                    className="whitespace-nowrap bg-indigo-900/40 hover:bg-indigo-900/60 border-indigo-700/50 text-indigo-200"
-                  >
-                    <Icons.Globe className="w-4 h-4 mr-1.5" />
-                    Inspect Series
-                  </Button>
-                ) : sourceType === "VIDEO_FILE" ? (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="md"
-                    onClick={handleInspectVideo}
-                    loading={inspectingVideo}
-                    disabled={!sourcePath.trim()}
-                    className="whitespace-nowrap bg-amber-900/40 hover:bg-amber-900/60 border-amber-700/50 text-amber-200"
-                  >
-                    <Icons.Film className="w-4 h-4 mr-1.5" />
-                    Inspect Video
-                  </Button>
-                ) : (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="md"
-                    onClick={handleInspect}
-                    loading={inspecting}
-                    disabled={!sourcePath.trim()}
-                    className="whitespace-nowrap"
-                  >
-                    Inspect Source
-                  </Button>
-                )}
+          {sourceType !== "CHRONOFLOW_AI" && (
+            <div className="space-y-3">
+              <div className="space-y-2">
+                <div className="flex gap-2">
+                  <Input
+                    label={
+                      sourceType === "VIDEO_FILE"
+                        ? "Video File Path (.mp4, .mkv, .webm)"
+                        : sourceType === "MANGA_SERIES"
+                        ? "Manga Series Index or Chapter URL"
+                        : "Source Path or URL"
+                    }
+                    placeholder={getSourcePlaceholder()}
+                    value={sourcePath}
+                    onChange={(e) => setSourcePath(e.target.value)}
+                    required
+                  />
+                  <div className="flex items-end">
+                    {sourceType === "MANGA_SERIES" ? (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="md"
+                        onClick={handleInspectSeries}
+                        loading={inspectingSeries}
+                        disabled={!sourcePath.trim()}
+                        className="whitespace-nowrap bg-indigo-900/40 hover:bg-indigo-900/60 border-indigo-700/50 text-indigo-200"
+                      >
+                        <Icons.Globe className="w-4 h-4 mr-1.5" />
+                        Inspect Series
+                      </Button>
+                    ) : sourceType === "VIDEO_FILE" ? (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="md"
+                        onClick={handleInspectVideo}
+                        loading={inspectingVideo}
+                        disabled={!sourcePath.trim()}
+                        className="whitespace-nowrap bg-amber-900/40 hover:bg-amber-900/60 border-amber-700/50 text-amber-200"
+                      >
+                        <Icons.Film className="w-4 h-4 mr-1.5" />
+                        Inspect Video
+                      </Button>
+                    ) : (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="md"
+                        onClick={handleInspect}
+                        loading={inspecting}
+                        disabled={!sourcePath.trim()}
+                        className="whitespace-nowrap"
+                      >
+                        Inspect Source
+                      </Button>
+                    )}
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
 
-          {/* Standard Inspection Error */}
-          {inspectError && (
-            <div className="p-3 bg-rose-950/40 border border-rose-800/80 rounded-lg text-xs text-rose-300 flex items-center gap-2">
-              <Icons.AlertTriangle className="w-4 h-4 flex-shrink-0" />
-              <span>{inspectError}</span>
-            </div>
-          )}
+              {/* Standard Inspection Error */}
+              {inspectError && (
+                <div className="p-3 bg-rose-950/40 border border-rose-800/80 rounded-lg text-xs text-rose-300 flex items-center gap-2">
+                  <Icons.AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                  <span>{inspectError}</span>
+                </div>
+              )}
 
-          {/* Standard Inspection Result */}
-          {inspection && inspection.is_valid && (
-            <div className="p-3.5 bg-zinc-950 border border-zinc-800 rounded-lg space-y-2 text-xs">
-              <div className="flex items-center justify-between text-emerald-400 font-medium">
-                <span className="flex items-center gap-1.5">
-                  <Icons.CheckCircle className="w-4 h-4" />
-                  Source verified successfully
-                </span>
-                <Badge variant="success">{inspection.total_pages_detected} pages discovered</Badge>
-              </div>
-              {inspection.title_suggestion && (
-                <div className="text-zinc-300">
-                  <span className="text-zinc-500">Suggested Title:</span> {inspection.title_suggestion}
+              {/* Standard Inspection Result */}
+              {inspection && inspection.is_valid && (
+                <div className="p-3.5 bg-zinc-950 border border-zinc-800 rounded-lg space-y-2 text-xs">
+                  <div className="flex items-center justify-between text-emerald-400 font-medium">
+                    <span className="flex items-center gap-1.5">
+                      <Icons.CheckCircle className="w-4 h-4" />
+                      Source verified successfully
+                    </span>
+                    <Badge variant="success">{inspection.total_pages_detected} pages discovered</Badge>
+                  </div>
+                  {inspection.title_suggestion && (
+                    <div className="text-zinc-300">
+                      <span className="text-zinc-500">Suggested Title:</span> {inspection.title_suggestion}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -521,6 +554,167 @@ export const NewProjectScreen: React.FC<NewProjectScreenProps> = ({
         </Card>
 
         {/* ------------------------------------------------------------------ */}
+        {/* PANEL: CHRONOFLOW AI VIDEO, IMAGE & PANEL GENERATION               */}
+        {/* ------------------------------------------------------------------ */}
+        {sourceType === "CHRONOFLOW_AI" && (
+          <Card className="space-y-5 border-purple-500/30 bg-purple-950/10">
+            <div className="flex items-center justify-between pb-2 border-b border-zinc-800">
+              <div className="flex items-center gap-2">
+                <Icons.Sparkles className="w-5 h-5 text-purple-400" />
+                <h3 className="text-sm font-bold text-zinc-100">
+                  ChronoFlow Studio: Core Generation Pipeline
+                </h3>
+              </div>
+              <Badge variant="accent">MiniMax H3 & FLUX.1 Schnell</Badge>
+            </div>
+
+            <p className="text-xs text-zinc-400 leading-relaxed">
+              Start with video generation, image generation, or multi-shot panel storyboarding. If you start with video generation, you can synthesize the initial keyframe using FLUX.1 or let ChronoFlow dynamically generate starting and continuation video chunks.
+            </p>
+
+            {/* Workflow Mode Selector */}
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-zinc-300">Choose Primary Generation Focus:</label>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {[
+                  {
+                    id: "video",
+                    title: "Video Generation",
+                    icon: Icons.Film,
+                    badge: "MiniMax Fast H3",
+                    desc: "Sliding window video chaining, camera dynamics & FLF2V bridging",
+                  },
+                  {
+                    id: "image",
+                    title: "Image Generation",
+                    icon: Icons.Image,
+                    badge: "FLUX.1 Schnell fp8",
+                    desc: "Character consistency turnaround sheets, panel art & inpainting",
+                  },
+                  {
+                    id: "panel",
+                    title: "Panel Storyboarding",
+                    icon: Icons.Layout,
+                    badge: "AI Director",
+                    desc: "Multi-shot scene breakdown from story ideas into sequential video panels",
+                  },
+                ].map((mode) => {
+                  const Icon = mode.icon;
+                  const isSelected = chronoWorkflow === mode.id;
+                  return (
+                    <button
+                      type="button"
+                      key={mode.id}
+                      onClick={() => setChronoWorkflow(mode.id as any)}
+                      className={`p-3 rounded-xl border text-left transition-all ${
+                        isSelected
+                          ? "border-purple-500 bg-purple-950/40 ring-1 ring-purple-500/50 shadow-md shadow-purple-950/30"
+                          : "border-zinc-800 bg-zinc-950 hover:border-zinc-700"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1.5">
+                        <Icon className={`w-4 h-4 ${isSelected ? "text-purple-400" : "text-zinc-400"}`} />
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-900 text-purple-300 border border-purple-900/40 font-mono">
+                          {mode.badge}
+                        </span>
+                      </div>
+                      <div className="font-semibold text-xs text-zinc-100">{mode.title}</div>
+                      <div className="text-[11px] text-zinc-400 mt-1 leading-snug">{mode.desc}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Prompt & Synopsis */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-zinc-300">Initial Prompt / Story Synopsis:</label>
+                <div className="flex gap-1.5">
+                  {[
+                    "Cyberpunk Chase",
+                    "Martial Duel",
+                    "Anime Rain",
+                    "Space Station",
+                  ].map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => {
+                        if (preset === "Cyberpunk Chase") setChronoPrompt("Cinematic drone shot over a glowing cyberpunk metropolis at dusk, neon rain reflections on sleek rooftops, high tension pursuit.");
+                        if (preset === "Martial Duel") setChronoPrompt("Low angle dynamic action of celestial martial artist drawing a glowing lightning blade on a misty mountain peak.");
+                        if (preset === "Anime Rain") setChronoPrompt("Dramatic anime confrontation in a rain-soaked neon alleyway, cinematic lighting, expressive eyes and flowing hair.");
+                        if (preset === "Space Station") setChronoPrompt("Massive sci-fi orbital ring docking sequence, starry nebula background, smooth cinematic dolly push.");
+                      }}
+                      className="text-[10px] px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700"
+                    >
+                      {preset}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <textarea
+                value={chronoPrompt}
+                onChange={(e) => setChronoPrompt(e.target.value)}
+                rows={3}
+                className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-xs text-zinc-100 focus:outline-none focus:border-purple-500 font-sans leading-relaxed"
+                placeholder="Describe your scene, camera motion, characters and visual style..."
+              />
+            </div>
+
+            {/* Video / Image Parameters Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <Select
+                label="Target Duration"
+                value={String(chronoDuration)}
+                onChange={(e) => setChronoDuration(parseFloat(e.target.value))}
+              >
+                <option value="5.2">5.2s (1 Chunk - Fast Cut)</option>
+                <option value="10.4">10.4s (2 Chunks - Motion Chaining)</option>
+                <option value="15.6">15.6s (3 Chunks - Standard Scene)</option>
+                <option value="31.2">31.2s (6 Chunks - Extended Sequence)</option>
+              </Select>
+
+              <Select
+                label="Resolution & Aspect Ratio"
+                value={chronoDimensions}
+                onChange={(e) => setChronoDimensions(e.target.value)}
+              >
+                <option value="1344x768">1344x768 (16:9 Cinematic Landscape)</option>
+                <option value="768x1344">768x1344 (9:16 Shorts / Vertical Cut)</option>
+                <option value="1024x1024">1024x1024 (1:1 Square Panel)</option>
+              </Select>
+
+              <Select
+                label="Camera Movement"
+                value={chronoCameraMotion}
+                onChange={(e) => setChronoCameraMotion(e.target.value)}
+              >
+                <option value="push_in">Push In (Dramatic Reveal)</option>
+                <option value="cinematic_drone">Cinematic Drone (Wide Aerial)</option>
+                <option value="orbit">Orbit (Dynamic Arc)</option>
+                <option value="pan_right">Pan Right (Lateral Tracking)</option>
+                <option value="low_angle">Low Angle Reaction</option>
+              </Select>
+            </div>
+
+            {/* Keyframe Generation Notice */}
+            <div className="p-3 bg-purple-950/30 border border-purple-800/40 rounded-lg flex items-center justify-between text-xs">
+              <div className="flex items-center gap-2 text-purple-200">
+                <Icons.CheckCircle className="w-4 h-4 text-purple-400" />
+                <span>
+                  {chronoWorkflow === "video"
+                    ? "Continuous Chaining: Starts with FLUX.1 image synthesis if keyframe is needed, then chains MiniMax H3 video."
+                    : chronoWorkflow === "image"
+                    ? "Asset Locking: Produces master character & scene images ready to chain into video."
+                    : "AI Director: Generates multi-scene storyboard panels with automatic 6-heading prompts."}
+                </span>
+              </div>
+            </div>
+          </Card>
+        )}
+
+                {/* ------------------------------------------------------------------ */}
         {/* PANEL: MULTI-CHAPTER MANGA REVIEW & BATCH VIDEO GENERATION         */}
         {/* ------------------------------------------------------------------ */}
         {sourceType === "MANGA_SERIES" && (
@@ -1032,9 +1226,10 @@ export const NewProjectScreen: React.FC<NewProjectScreenProps> = ({
             variant="primary"
             size="lg"
             loading={submitting}
-            disabled={!rightsStatus || rightsStatus === "UNKNOWN"}
+            disabled={sourceType !== "CHRONOFLOW_AI" && (!rightsStatus || rightsStatus === "UNKNOWN")}
+            className={sourceType === "CHRONOFLOW_AI" ? "bg-purple-600 hover:bg-purple-500 shadow-md shadow-purple-600/30" : ""}
           >
-            Create & Proceed to Acquisition
+            {sourceType === "CHRONOFLOW_AI" ? "Create Project & Launch ChronoFlow AI" : "Create & Proceed to Acquisition"}
           </Button>
         </div>
       </form>

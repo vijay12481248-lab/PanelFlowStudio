@@ -30,6 +30,9 @@ class SourceType(str, Enum):
     LOCAL_FOLDER = "LOCAL_FOLDER"
     ZIP_ARCHIVE = "ZIP_ARCHIVE"
     AUTHORIZED_WEB = "AUTHORIZED_WEB"
+    MANGA_SERIES = "MANGA_SERIES"
+    VIDEO_FILE = "VIDEO_FILE"
+    CHRONOFLOW_AI = "CHRONOFLOW_AI"
 
 
 class JobStatus(str, Enum):

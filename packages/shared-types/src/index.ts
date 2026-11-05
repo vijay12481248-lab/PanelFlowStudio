@@ -12,7 +12,8 @@ export type SourceType =
   | "ZIP_ARCHIVE"
   | "AUTHORIZED_WEB"
   | "MANGA_SERIES"
-  | "VIDEO_FILE";
+  | "VIDEO_FILE"
+  | "CHRONOFLOW_AI";
 
 export type PipelineStage =
   | "NEW"
@@ -83,6 +84,7 @@ export interface Page {
   error_message: string | null;
   downloaded_at: string;
   image_url: string;
+  video_url?: string;
 }
 
 export type ReadingDirection = "ltr" | "rtl" | "vertical" | "auto" | "custom";
@@ -121,6 +123,7 @@ export interface Panel {
   manually_modified?: boolean;
   created_at: string;
   image_url: string;
+  video_url?: string;
 }
 
 export interface Job {
@@ -284,6 +287,7 @@ export interface TextRegion {
   speaker_confidence?: number | null;
   speaker_assignment_method?: SpeakerAssignmentMethod | string | null;
   image_url: string;
+  video_url?: string;
 }
 
 export interface CanonicalExportContract {
@@ -1306,6 +1310,7 @@ export interface VisualLayer {
   source_page_id: string;
   source_panel_id?: string;
   image_url: string;
+  video_url?: string;
   page_sequence: number;
   crop: VisualLayerCrop;
   transform: VisualLayerTransform;

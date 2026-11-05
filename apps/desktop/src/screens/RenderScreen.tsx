@@ -34,6 +34,8 @@ export const RenderScreen: React.FC<RenderScreenProps> = ({
   const [minPanelDuration, setMinPanelDuration] = useState<number>(4.0);
   const [panelZoomMode, setPanelZoomMode] = useState<"fit" | "motion" | "cover">("fit");
   const [narrationSpeed, setNarrationSpeed] = useState<number>(1.0);
+  const [videoEngine, setVideoEngine] = useState<"fast_h3" | "ken_burns">("fast_h3");
+  const [motionFx, setMotionFx] = useState<string>("none");
 
   // Custom Output Save Destination
   const [saveLocation, setSaveLocation] = useState<string>("");
@@ -175,6 +177,8 @@ export const RenderScreen: React.FC<RenderScreenProps> = ({
         minPanelDuration,
         panelZoomMode,
         narrationSpeed,
+        videoEngine,
+        motionFx,
       });
       setActiveJob(job);
       await loadHistory();
@@ -479,6 +483,76 @@ export const RenderScreen: React.FC<RenderScreenProps> = ({
                       {r.toFixed(2)}x
                     </button>
                   ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Video Engine & Motion Graphics FX Controls */}
+          <div className="p-4 rounded-xl bg-zinc-950/70 border border-zinc-800/80 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-zinc-200 uppercase tracking-wider font-mono">
+                  Video Generation Engine & Motion FX
+                </span>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-indigo-950 text-indigo-400 border border-indigo-800/60">
+                  MiniMax Fast H3 Ready
+                </span>
+              </div>
+              <span className="text-[11px] font-mono text-zinc-500">
+                GPU Target: RTX 5060 Ti 16 GB · 8-Step Turbo
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Engine Toggle */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-zinc-400">Motion Engine</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setVideoEngine("fast_h3")}
+                    className={`p-2.5 rounded-lg border text-left transition-all ${
+                      videoEngine === "fast_h3"
+                        ? "bg-indigo-950/60 border-indigo-500 text-white shadow-md shadow-indigo-950/50"
+                        : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200"
+                    }`}
+                  >
+                    <div className="text-xs font-bold font-mono text-indigo-300">Fast H3 AI Video</div>
+                    <div className="text-[10px] text-zinc-400 mt-0.5">24fps MiniMax H3 motion generation</div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setVideoEngine("ken_burns")}
+                    className={`p-2.5 rounded-lg border text-left transition-all ${
+                      videoEngine === "ken_burns"
+                        ? "bg-zinc-800 border-zinc-500 text-white"
+                        : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200"
+                    }`}
+                  >
+                    <div className="text-xs font-bold font-mono text-zinc-200">Ken Burns 2D</div>
+                    <div className="text-[10px] text-zinc-400 mt-0.5">Dynamic 2D camera pan & zoom</div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Motion Graphics FX Preset */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-zinc-400">Master Motion Graphics Overlay</label>
+                <select
+                  value={motionFx}
+                  onChange={(e) => setMotionFx(e.target.value)}
+                  className="w-full bg-zinc-900 border border-zinc-700 text-xs text-zinc-200 rounded-lg p-2.5 font-mono focus:outline-none focus:border-indigo-500"
+                >
+                  <option value="none">Clean (Standard Animation)</option>
+                  <option value="letterbox">Cinematic 2.39:1 Anamorphic Scope</option>
+                  <option value="vignette">Moody Vignette & Contrast Curve</option>
+                  <option value="film_grain">Analog 35mm Film Grain</option>
+                  <option value="action_shake">Dynamic Action Camera Shake</option>
+                  <option value="warm_cinema">Warm Golden Hour Tone Curve</option>
+                </select>
+                <div className="text-[10px] text-zinc-500 font-mono">
+                  Applied seamlessly across all generated shot clips and final assembly.
                 </div>
               </div>
             </div>

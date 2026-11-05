@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "panelflow-studio": {
+      "command": "E:\\VIJAY SEKAR\\PanelFlow Studio\\.venv\\Scripts\\python.exe",
+      "args": [
+        "E:\\VIJAY SEKAR\\PanelFlow Studio\\scripts\\run_mcp_server.py"
+      ],
+      "env": {
+        "PANELFLOW_API_URL": "http://127.0.0.1:8765"
+      }
+    }
+  }
+}

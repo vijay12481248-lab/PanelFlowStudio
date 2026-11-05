@@ -1,0 +1,318 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>PanelFlow Studio - Launch Ad</title>
+<style>
+:root{--ind:#6366f1;--vio:#8b5cf6;--bg:#080b12;--bg2:#0c0e17;--bg3:#111422;--bd:#1e2538;--tx:#fafafa;--tx2:#a1a1aa;--ok:#34d399}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1920px;height:1080px;overflow:hidden;background:var(--bg);font-family:'Segoe UI Variable Display','Segoe UI',system-ui,sans-serif;color:var(--tx)}
+#stage{position:relative;width:1920px;height:1080px;overflow:hidden;background:var(--bg)}
+.a{position:absolute;left:0;top:0;transform-origin:center center}
+.grp{position:absolute;left:0;top:0;width:1920px;height:1080px}
+#grid{position:absolute;inset:0;background-image:linear-gradient(rgba(99,102,241,.07) 1px,transparent 1px),linear-gradient(90deg,rgba(99,102,241,.07) 1px,transparent 1px);background-size:90px 90px;-webkit-mask-image:radial-gradient(ellipse at center,#000 20%,transparent 75%);mask-image:radial-gradient(ellipse at center,#000 20%,transparent 75%)}
+.glow{position:absolute;width:1100px;height:1100px;border-radius:50%;filter:blur(120px);left:0;top:0}
+#vig{position:absolute;inset:0;background:radial-gradient(ellipse at center,transparent 55%,rgba(0,0,0,.65) 100%);pointer-events:none}
+.t{white-space:nowrap;font-weight:800;letter-spacing:-2px;line-height:1.08}
+.w{display:inline-block;margin-right:.24em;will-change:transform,opacity}
+.grad{background:linear-gradient(90deg,#818cf8,#c084fc 60%,#f0abfc);-webkit-background-clip:text;background-clip:text;color:transparent}
+.pnl{box-shadow:0 18px 50px rgba(0,0,0,.55)}
+.pnl .in{position:absolute;inset:0;overflow:hidden;border-radius:6px;border:4px solid #0a0a12;background:#000}
+.pnl svg{width:100%;height:100%;display:block}
+.box{position:absolute;inset:-7px;border:3px solid #818cf8;border-radius:10px;box-shadow:0 0 24px rgba(129,140,248,.8),inset 0 0 18px rgba(129,140,248,.25)}
+.lbl{position:absolute;left:12px;top:12px;font:700 15px 'Segoe UI';letter-spacing:1px;padding:4px 10px;border-radius:6px;background:#4f46e5;color:#fff;white-space:nowrap}
+.card{width:300px;height:420px;border-radius:22px;background:linear-gradient(180deg,#141935,#0c0e17);border:1.5px solid var(--bd)}
+.card .cn{position:absolute;left:24px;top:22px;font:800 15px 'Segoe UI';letter-spacing:3px;color:#818cf8}
+.card .ct{position:absolute;left:24px;top:46px;font:800 28px 'Segoe UI';letter-spacing:1px}
+.card .cm{position:absolute;left:20px;top:100px;width:260px;height:170px;overflow:hidden;border-radius:12px;background:#080b12;border:1px solid var(--bd)}
+.card .cd{position:absolute;left:24px;right:24px;top:292px;font-size:19px;line-height:1.3;color:var(--tx2)}
+.card .cs{position:absolute;left:24px;bottom:20px;font:700 14px 'Segoe UI';letter-spacing:2px;color:var(--ok)}
+.fcard{width:480px;height:420px;border-radius:26px;background:linear-gradient(180deg,#151a38,#0c0e17);border:1.5px solid var(--bd);padding:40px}
+.fcard h3{font:800 38px 'Segoe UI';letter-spacing:-1px;margin:26px 0 12px}
+.fcard p{font-size:22px;line-height:1.4;color:var(--tx2)}
+.ic{width:78px;height:78px;border-radius:20px;background:linear-gradient(135deg,#4f46e5,#8b5cf6);display:flex;align-items:center;justify-content:center;box-shadow:0 10px 30px rgba(99,102,241,.45)}
+.chip{display:inline-block;padding:10px 20px;border-radius:999px;border:1px solid #2b3358;background:#12162b;font:600 22px 'Segoe UI';color:#c7d2fe;margin:6px}
+.row{position:absolute;left:0;right:0;height:46px}
+.row .lb{position:absolute;left:0;top:0;font:600 17px 'Segoe UI';color:var(--tx2)}
+.row .pill{position:absolute;right:0;top:-4px;padding:6px 14px;border-radius:8px;background:#161b33;border:1px solid var(--bd);font:600 16px 'Segoe UI';color:#c7d2fe}
+.row .tr{position:absolute;left:0;right:0;top:34px;height:6px;border-radius:3px;background:#1a2040}
+.row .tr i{position:absolute;left:0;top:0;bottom:0;border-radius:3px;background:linear-gradient(90deg,#6366f1,#a78bfa)}
+</style>
+<div id="stage">
+  <div class="glow a" id="g1" style="background:#4338ca;opacity:.38"></div>
+  <div class="glow a" id="g2" style="background:#7c3aed;opacity:.28"></div>
+  <div id="grid"></div>
+  <div id="vig"></div>
+</div>
+<script>
+const $=(s,p=document)=>p.querySelector(s);
+const clamp=(x,a=0,b=1)=>Math.min(b,Math.max(a,x));
+const prog=(t,a,b)=>clamp((t-a)/(b-a));
+const eo=x=>1-Math.pow(1-x,3);
+const eio=x=>x<.5?4*x*x*x:1-Math.pow(-2*x+2,3)/2;
+const eb=x=>{const c=2.70158;return 1+c*Math.pow(x-1,3)+1.70158*Math.pow(x-1,2)};
+const lerp=(a,b,k)=>a+(b-a)*k;
+const vis=(t,a,b,fi=.4,fo=.4)=>t<a||t>b?0:eo(prog(t,a,a+fi))*(1-eo(prog(t,b-fo,b)));
+const DUR=34;
+const stage=$('#stage');
+function mk(cls,html='',style='',parent=stage){const d=document.createElement('div');d.className=cls;d.innerHTML=html;d.style.cssText=style;parent.appendChild(d);return d}
+function tf(el,x,y,s=1,r=0,o=1){el.style.transform=`translate(${x}px,${y}px) translate(-50%,-50%) rotate(${r}deg) scale(${s})`;el.style.opacity=o}
+function grp(){return mk('grp','', '',stage)}
+function show(g,o){g.style.display=o>.002?'block':'none';g.style.opacity=o}
+function words(parent,txt,size,{align='center',width=1500,cls=''}={}){
+  const g=cls.includes('grad');cls=cls.replace('grad','');const el=mk('a t '+cls,'',`font-size:${size}px;width:${width}px;text-align:${align};white-space:normal`,parent);
+  const sp=[];
+  txt.split('|').forEach((line,li,arr)=>{line.split(' ').forEach(w=>{const s=document.createElement('span');s.className='w'+(g?' grad':'');s.textContent=w;el.appendChild(s);sp.push(s)});if(li<arr.length-1)el.appendChild(document.createElement('br'))});
+  return {el,sp};
+}
+function reveal(c,t,start,out,stag=.09,dur=.7){
+  c.sp.forEach((s,i)=>{const k=eo(prog(t,start+i*stag,start+i*stag+dur));const f=1-eo(prog(t,out,out+.4));
+    s.style.opacity=k*f;s.style.transform=`translateY(${(1-k)*46}px)`;s.style.filter=`blur(${(1-k)*14}px)`});
+}
+const typed=(s,n)=>s.slice(0,Math.max(0,Math.min(s.length,Math.floor(n))));
+
+/* ---------- comic art ---------- */
+const rnd=(s=>()=>(s=(s*16807)%2147483647)/2147483647)(11);
+const star=(cx,cy,n,r1,r2)=>{const p=[];for(let i=0;i<n*2;i++){const a=i*Math.PI/n,r=i%2?r1:r2;p.push((cx+Math.cos(a)*r).toFixed(1)+','+(cy+Math.sin(a)*r).toFixed(1))}return p.join(' ')};
+const ARTF=[
+()=>{let b='',x=0;while(x<400){const w=30+rnd()*40,h=60+rnd()*130;b+=`<rect x="${x}" y="${300-h}" width="${w}" height="${h}" fill="#150d2e"/>`;for(let y=300-h+10;y<290;y+=16)for(let xx=x+6;xx<x+w-8;xx+=12)if(rnd()>.55)b+=`<rect x="${xx}" y="${y}" width="5" height="7" fill="#ffd27a"/>`;x+=w+4}
+ return `<defs><linearGradient id="g0" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1b1340"/><stop offset=".55" stop-color="#9b3a8f"/><stop offset="1" stop-color="#ff9a5a"/></linearGradient></defs><rect width="400" height="300" fill="url(#g0)"/><circle cx="290" cy="190" r="62" fill="#ffd27a"/>${b}`},
+()=>{let r='';for(let i=0;i<48;i++){const a=i/48*Math.PI*2,a2=a+.045;r+=`<polygon points="200,150 ${200+Math.cos(a)*400},${150+Math.sin(a)*400} ${200+Math.cos(a2)*400},${150+Math.sin(a2)*400}" fill="#000" opacity=".28"/>`}
+ return `<rect width="400" height="300" fill="#d11f3d"/>${r}<circle cx="200" cy="150" r="70" fill="#ffe8d0" opacity=".25"/><path d="M120 300 L135 215 Q200 185 265 215 L280 300Z" fill="#0a0a14"/><circle cx="200" cy="170" r="34" fill="#0a0a14"/><path d="M165 150 L150 118 L185 140 L200 105 L215 140 L250 118 L235 150Z" fill="#0a0a14"/><path d="M225 205 Q300 215 330 270 Q285 245 235 235Z" fill="#fff"/>`},
+()=>`<defs><clipPath id="ce"><path d="M40 150 Q200 30 360 150 Q200 270 40 150Z"/></clipPath></defs><rect width="400" height="300" fill="#0b0f1d"/><path d="M40 150 Q200 30 360 150 Q200 270 40 150Z" fill="#f4f4fa"/><g clip-path="url(#ce)"><circle cx="200" cy="150" r="62" fill="#6366f1"/><circle cx="200" cy="150" r="62" fill="none" stroke="#312e81" stroke-width="6"/><circle cx="200" cy="150" r="26" fill="#05060c"/><circle cx="178" cy="128" r="14" fill="#fff"/><circle cx="222" cy="170" r="6" fill="#fff" opacity=".8"/></g><path d="M40 150 Q200 30 360 150" fill="none" stroke="#05060c" stroke-width="9"/>`,
+()=>{let s='';for(let i=0;i<40;i++)s+=`<circle cx="${rnd()*400}" cy="${rnd()*170}" r="${rnd()*1.6+.4}" fill="#fff" opacity="${.4+rnd()*.6}"/>`;
+ return `<defs><linearGradient id="g3" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#070d24"/><stop offset="1" stop-color="#27508f"/></linearGradient></defs><rect width="400" height="300" fill="url(#g3)"/>${s}<circle cx="140" cy="120" r="64" fill="#f4f1de"/><circle cx="118" cy="104" r="12" fill="#d9d4b8"/><circle cx="165" cy="140" r="9" fill="#d9d4b8"/><circle cx="150" cy="95" r="6" fill="#d9d4b8"/><ellipse cx="260" cy="230" rx="150" ry="36" fill="#1b3a74"/><ellipse cx="90" cy="262" rx="140" ry="34" fill="#16305f"/><ellipse cx="330" cy="285" rx="120" ry="30" fill="#102549"/>`},
+()=>`<defs><pattern id="ht" width="14" height="14" patternUnits="userSpaceOnUse"><circle cx="7" cy="7" r="3.2" fill="#ff8c1a"/></pattern></defs><rect width="400" height="300" fill="#ffd23f"/><rect width="400" height="300" fill="url(#ht)"/><polygon points="${star(200,150,14,56,84)}" fill="#e11d48" stroke="#111" stroke-width="5"/><polygon points="${star(200,150,14,40,62)}" fill="#fff25a"/><text x="200" y="164" text-anchor="middle" font-family="Segoe UI Black,Impact,sans-serif" font-size="34" fill="#111" transform="rotate(-8 200 150)">BOOM!</text>`
+];
+const ART=ARTF.map(f=>f());
+const svg=i=>`<svg viewBox="0 0 400 300" preserveAspectRatio="xMidYMid slice">${ART[i]}</svg>`;
+
+/* ---------- background ---------- */
+const g1=$('#g1'),g2=$('#g2'),grid=$('#grid');
+
+/* ---------- S1-S3 : page -> panels ---------- */
+const G1=grp();
+const PL=[[20,20,580,230],[20,270,280,340],[320,270,280,160],[320,450,280,160],[20,630,580,230]];
+const paper=mk('a','', 'width:620px;height:880px;border-radius:10px;background:linear-gradient(160deg,#f7f3ea,#e4dfd0);box-shadow:0 40px 90px rgba(0,0,0,.6)',G1);
+const pn=PL.map((l,i)=>{const p=mk('a pnl',`<div class="in">${svg(i)}</div><div class="box"><span class="lbl">PANEL 0${i+1} · ${[98,99,97,98,96][i]}%</span></div>`,'',G1);return p});
+const scan=mk('a','','width:640px;height:150px;background:linear-gradient(180deg,transparent,rgba(129,140,248,.28));border-bottom:4px solid #a5b4fc;box-shadow:0 8px 40px rgba(129,140,248,.9)',G1);
+const c1=words(G1,'Every story|is trapped|on a page.',118,{align:'left',width:900});
+const c1s=mk('a t','Beautiful art. Zero motion.','font-size:34px;font-weight:500;letter-spacing:0;color:#a1a1aa',G1);
+const c2=words(G1,'Panel by panel,|it sees the story.',88,{align:'left',width:900});
+const c3=words(G1,'The page, rebuilt|as a scene.',84,{width:1500});
+
+const PC=[1400,540],PS=.92;
+function pstate(i,t){
+  const l=PL[i],k0=eo(prog(t,.15+i*.1,1.25+i*.1));
+  const pr=eo(prog(t,0,1.4)),rot=lerp(-5,0,pr),sc=lerp(.78,PS,pr);
+  const ox=(l[0]+l[2]/2-310)*sc,oy=(l[1]+l[3]/2-440)*sc,cr=Math.cos(rot*Math.PI/180),sr=Math.sin(rot*Math.PI/180);
+  const bob=Math.sin(t*1.5)*6*(1-prog(t,5.8,6.4));
+  const A={x:PC[0]+ox*cr-oy*sr,y:PC[1]+ox*sr+oy*cr+bob,w:l[2]*sc,h:l[3]*sc,r:rot,s:lerp(.85,1,k0)};
+  const B={x:960+(i-2)*340,y:560+Math.sin(t*1.3+i)*7,w:300,h:210,r:(i-2)*1.6,s:1};
+  const C={x:960+(i-2)*250,y:235,w:190,h:130,r:0,s:1};
+  const k1=eio(prog(t,6.0+i*.09,7.2+i*.09)),k2=eio(prog(t,9.0+i*.06,10.0+i*.06));
+  const m=(a,b,k)=>({x:lerp(a.x,b.x,k),y:lerp(a.y,b.y,k),w:lerp(a.w,b.w,k),h:lerp(a.h,b.h,k),r:lerp(a.r,b.r,k),s:lerp(a.s,b.s,k)});
+  return {...m(m(A,B,k1),C,k2),o:k0*(1-eo(prog(t,13.7,14.4)))};
+}
+
+/* S3 cards */
+const G3=grp();
+const STG=[['01','DETECT','Finds every panel and the reading order.'],['02','READ','OCR lifts out every line of dialogue.'],['03','UNDERSTAND','Characters, mood and story beats.'],['04','NARRATE','Voices and delivery, line by line.'],['05','SCORE','Music that follows the scene.']];
+const t3=words(G3,'Five AI stages. Zero busywork.',58,{width:1700});
+const cards=STG.map((s,i)=>mk('a card',`<div class="cn">${s[0]}</div><div class="ct">${s[1]}</div><div class="cm"></div><div class="cd">${s[2]}</div><div class="cs">✓ COMPLETE</div>`,'',G3));
+const track=mk('a','','width:1660px;height:6px;border-radius:3px;background:#1a2040',G3);
+const fill=mk('a','','width:1660px;height:6px;border-radius:3px;background:linear-gradient(90deg,#6366f1,#c084fc);box-shadow:0 0 18px #8b5cf6;transform-origin:left center',G3);
+const t3b=words(G3,'From a flat page to a finished film.',46,{width:1700,cls:'grad'});
+// build minis after cards exist
+const mm=cards.map(c=>$('.cm',c));
+const upd=[];
+{ // DETECT
+  const bx=PL.map(l=>mk('a','',`left:${71+l[0]*.185}px;top:${2+l[1]*.185}px;width:${l[2]*.185}px;height:${l[3]*.185}px;background:#1d2547;border:2px solid #818cf8;transform:none;border-radius:2px`,mm[0]));
+  upd[0]=t=>bx.forEach((b,i)=>b.style.opacity=eo(prog(t,i*.16,i*.16+.25)));
+  // READ
+  const L=['“We leave at dawn.”','“Then the war begins.”','— NARRATOR','“Hold the gate!”'];
+  const ln=L.map((s,i)=>mk('a','',`left:14px;top:${16+i*38}px;transform:none;font:600 17px Consolas,monospace;color:${i==2?'#a78bfa':'#e0e7ff'};white-space:nowrap`,mm[1]));
+  upd[1]=t=>ln.forEach((e,i)=>e.textContent=typed(L[i],(t-i*.45)*26)+((t-i*.45)*26>0&&(t-i*.45)*26<L[i].length?'▍':''));
+  // UNDERSTAND
+  const T=[['KAI','hero','#34d399'],['REN','rival','#f87171'],['SCENE','dawn, city gate','#fbbf24'],['MOOD','tense','#60a5fa']];
+  const tg=T.map((s,i)=>mk('a','',`left:14px;top:${12+i*38}px;transform:none;font:700 16px 'Segoe UI';white-space:nowrap;background:#12162b;border:1px solid #2b3358;border-radius:8px;padding:6px 12px`,mm[2]));
+  tg.forEach((e,i)=>e.innerHTML=`<b style="color:${T[i][2]}">${T[i][0]}</b> <span style="color:#a1a1aa;font-weight:500">${T[i][1]}</span>`);
+  upd[2]=t=>tg.forEach((e,i)=>{const k=eo(prog(t,i*.3,i*.3+.4));e.style.opacity=k;e.style.transform=`translateX(${(1-k)*30}px)`});
+  // NARRATE
+  const wb=Array.from({length:26},(_,i)=>mk('a','',`left:${12+i*9.5}px;width:5px;background:linear-gradient(#a78bfa,#6366f1);border-radius:3px;transform:none`,mm[3]));
+  upd[3]=t=>wb.forEach((b,i)=>{const h=8+Math.abs(Math.sin(i*.7+t*9)*Math.sin(i*.23+t*3.1))*110*eo(prog(t,0,.5));b.style.height=h+'px';b.style.top=(85-h/2)+'px'});
+  // SCORE
+  const eq=Array.from({length:14},(_,i)=>mk('a','',`left:${12+i*18}px;width:12px;background:linear-gradient(#f0abfc,#8b5cf6);border-radius:3px;transform:none`,mm[4]));
+  upd[4]=t=>eq.forEach((b,i)=>{const h=14+(0.5+0.5*Math.sin(i*.9-t*7))*(60+Math.abs(Math.sin(t*2+i))*60)*eo(prog(t,0,.5));b.style.height=h+'px';b.style.bottom='0';b.style.top=(170-h)+'px'});
+}
+
+/* S4 editor */
+const G4=grp();
+const t4=words(G4,'Direct it. Don’t just render it.',64,{width:1700});
+const ED=mk('a',`
+ <div style="position:absolute;left:0;top:0;right:0;height:50px;border-bottom:1px solid #1e2538;display:flex;align-items:center;padding:0 22px;gap:9px">
+  <i style="width:13px;height:13px;border-radius:50%;background:#ef4444"></i><i style="width:13px;height:13px;border-radius:50%;background:#f59e0b"></i><i style="width:13px;height:13px;border-radius:50%;background:#10b981"></i>
+  <span style="margin-left:18px;font:600 17px 'Segoe UI';color:#a1a1aa">PanelFlow Studio  —  Chapter 12  ·  Story Editor</span>
+  <span style="margin-left:auto;padding:8px 22px;border-radius:9px;background:linear-gradient(90deg,#4f46e5,#8b5cf6);font:700 16px 'Segoe UI'">Export video</span></div>
+ <div id="pv" style="position:absolute;left:24px;top:68px;width:880px;height:495px;border-radius:12px;overflow:hidden;background:#000;border:1px solid #1e2538">
+   ${[0,1,2,3,4].map(i=>`<div class="kb" style="position:absolute;inset:0;transform-origin:center">${svg(i)}</div>`).join('')}
+   <div id="sub" style="position:absolute;left:50%;bottom:26px;transform:translateX(-50%);max-width:780px;text-align:center;padding:10px 22px;border-radius:10px;background:rgba(5,6,12,.78);font:600 25px 'Segoe UI';line-height:1.3;white-space:nowrap"></div>
+   <div style="position:absolute;left:16px;top:14px;padding:5px 12px;border-radius:7px;background:rgba(5,6,12,.7);font:700 14px 'Segoe UI';letter-spacing:2px;color:#c7d2fe">PREVIEW · 1080p</div>
+ </div>
+ <div style="position:absolute;left:928px;top:68px;width:608px;height:495px;border-radius:12px;background:#0f1226;border:1px solid #1e2538;padding:26px 30px">
+   <div style="font:800 20px 'Segoe UI';letter-spacing:3px;color:#818cf8;margin-bottom:22px">INSPECTOR</div>
+   <div style="position:relative;height:340px">
+    <div class="row" style="top:0"><span class="lb">Camera motion</span><span class="pill">Slow push-in</span><div class="tr"><i id="s1"></i></div></div>
+    <div class="row" style="top:76px"><span class="lb">Voice</span><span class="pill">Kai · calm, low</span><div class="tr"><i id="s2"></i></div></div>
+    <div class="row" style="top:152px"><span class="lb">Emotion</span><span class="pill">Tense</span><div class="tr"><i id="s3"></i></div></div>
+    <div class="row" style="top:228px"><span class="lb">Music</span><span class="pill">Epic Dawn · 92 BPM</span><div class="tr"><i id="s4"></i></div></div>
+    <div class="row" style="top:304px"><span class="lb">Transition</span><span class="pill">Cross-dissolve</span></div>
+   </div>
+ </div>
+ <div style="position:absolute;left:24px;top:584px;width:1512px;height:152px;border-radius:12px;background:#0a0c18;border:1px solid #1e2538;overflow:hidden">
+   <div style="position:absolute;left:12px;top:12px;font:700 13px 'Segoe UI';color:#71717a;letter-spacing:1px">VIDEO</div>
+   <div style="position:absolute;left:12px;top:70px;font:700 13px 'Segoe UI';color:#71717a;letter-spacing:1px">VOICE</div>
+   <div style="position:absolute;left:12px;top:112px;font:700 13px 'Segoe UI';color:#71717a;letter-spacing:1px">MUSIC</div>
+   <div id="clips" style="position:absolute;left:84px;top:8px;right:12px;height:48px"></div>
+   <div id="vox" style="position:absolute;left:84px;top:62px;right:12px;height:34px"></div>
+   <div id="mus" style="position:absolute;left:84px;top:104px;right:12px;height:34px"></div>
+   <div id="ph" style="position:absolute;top:0;bottom:0;width:2px;background:#fff;box-shadow:0 0 12px #fff"><i style="position:absolute;left:-6px;top:0;border:7px solid transparent;border-top:10px solid #fff;border-bottom:0"></i></div>
+ </div>`,'width:1560px;height:760px;border-radius:20px;background:#0c0e17;border:1.5px solid #262e52;box-shadow:0 50px 120px rgba(0,0,0,.7),0 0 120px rgba(99,102,241,.25)',G4);
+const KB=[...ED.querySelectorAll('.kb')],SUB=$('#sub',ED),PH=$('#ph',ED);
+const CL=['#d11f3d','#9b3a8f','#6366f1','#27508f','#e0a21b'];
+$('#clips',ED).innerHTML=CL.map((c,i)=>`<div style="position:absolute;left:${i*20}%;width:19.6%;top:0;bottom:0;border-radius:7px;background:linear-gradient(180deg,${c},#1b1340);border:1px solid rgba(255,255,255,.25)"></div>`).join('');
+const NB=150;
+const bars=(el,col,seed,amp)=>Array.from({length:NB},(_,i)=>{const b=document.createElement('i');const h=amp*(.25+.75*Math.abs(Math.sin(i*seed)*Math.cos(i*.13+seed)));b.style.cssText=`position:absolute;left:${i/NB*100}%;width:${100/NB*.6}%;height:${h}px;top:${(34-h)/2}px;border-radius:2px;background:${col}`;el.appendChild(b);return b});
+const vb=bars($('#vox',ED),'#a78bfa',.9,34),mb=bars($('#mus',ED),'#34d399',.37,26);
+const SUBS=['The city never sleeps… but tonight, it holds its breath.','Kai had one chance. One door. One dawn.','He saw it in their eyes — the war had begun.','Above them, the moon watched, and said nothing.','Then the world broke open.'];
+
+/* S5 features */
+const G5=grp();
+const t5=words(G5,'Built for creators who own their craft.',64,{width:1700});
+const ico=p=>`<div class="ic"><svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${p}</svg></div>`;
+const FE=[['Local-first','Your chapters, your GPU, your machine. Nothing leaves unless you say so.','<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>'],
+ ['Rights-verified','Every source is classified before a single frame is made. Unknown means no.','<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M8.5 12l2.5 2.5 4.5-5"/>'],
+ ['Bring any AI','Ollama, local voices or cloud models through one provider gateway.','<circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4M5 5l3 3M16 16l3 3M19 5l-3 3M8 16l-3 3"/>']];
+const fc=FE.map(f=>mk('a fcard',ico(f[2])+`<h3>${f[0]}</h3><p>${f[1]}</p>`,'',G5));
+
+/* S6 autopilot */
+const G6=grp();
+const t6=words(G6,'One click. Page to premiere.',78,{width:1700});
+const btn=mk('a','▶&nbsp;&nbsp;Auto-Pilot','width:520px;height:124px;border-radius:62px;background:linear-gradient(90deg,#4f46e5,#8b5cf6);display:flex;align-items:center;justify-content:center;font:800 46px "Segoe UI";letter-spacing:-.5px',G6);
+const rip=mk('a','','width:520px;height:124px;border-radius:62px;border:3px solid #c4b5fd',G6);
+const cur=mk('a','<svg width="54" height="54" viewBox="0 0 24 24"><path d="M5 3l14 8-6 2 4 7-3 1.5-4-7-5 4z" fill="#fff" stroke="#000" stroke-width="1.2" stroke-linejoin="round"/></svg>','',G6);
+const STN=['Detecting panels','Reading dialogue','Writing narration','Voicing characters','Composing score','Rendering video'];
+const PG=mk('a',`
+ <div style="position:absolute;left:50px;top:36px;font:800 18px 'Segoe UI';letter-spacing:4px;color:#818cf8">AUTO-PILOT · RUNNING</div>
+ <div id="pst" style="position:absolute;left:50px;top:70px;font:800 56px 'Segoe UI';letter-spacing:-1.5px;white-space:nowrap"></div>
+ <div id="ppc" style="position:absolute;right:50px;top:50px;font:800 96px 'Segoe UI';letter-spacing:-3px" class="grad"></div>
+ <div style="position:absolute;left:50px;right:50px;top:190px;height:16px;border-radius:8px;background:#1a2040"><i id="pbar" style="position:absolute;left:0;top:0;bottom:0;border-radius:8px;background:linear-gradient(90deg,#6366f1,#c084fc);box-shadow:0 0 24px #8b5cf6"></i></div>
+ <div id="pdots" style="position:absolute;left:50px;right:50px;top:232px;display:flex;justify-content:space-between;font:600 17px 'Segoe UI';color:#71717a"></div>
+ <div id="done" style="position:absolute;inset:0;border-radius:28px;background:linear-gradient(180deg,#10152e,#0c0e17);padding:34px 50px">
+   <div style="display:flex;align-items:center;gap:26px"><div style="width:84px;height:84px;border-radius:50%;background:#10b981;display:flex;align-items:center;justify-content:center;box-shadow:0 0 40px rgba(16,185,129,.55)"><svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
+   <div><div style="font:800 54px 'Segoe UI';letter-spacing:-1.5px">Your video is ready.</div><div style="font:500 24px 'Segoe UI';color:#a1a1aa">Rendered locally · MP4 · 1080p</div></div></div>
+   <div style="margin-top:22px;font:700 16px 'Segoe UI';letter-spacing:3px;color:#818cf8">YOUTUBE PACKAGE INCLUDED</div>
+   <div><span class="chip">Title</span><span class="chip">Description</span><span class="chip">Chapters</span><span class="chip">Tags</span><span class="chip">Thumbnail</span></div>
+ </div>`,'width:1300px;height:300px;border-radius:28px;background:linear-gradient(180deg,#141935,#0c0e17);border:1.5px solid #2b3358;box-shadow:0 40px 100px rgba(0,0,0,.6),0 0 100px rgba(99,102,241,.3)',G6);
+$('#pdots',PG).innerHTML=STN.map(s=>`<span>${s.split(' ')[0]}</span>`).join('');
+const pdots=[...$('#pdots',PG).children],DONE=$('#done',PG);
+
+/* S7 logo */
+const G7=grp();
+const flash=mk('a','','left:0;top:0;width:1920px;height:1080px;background:#fff;transform:none;opacity:0',G7);
+const sparks=Array.from({length:46},(_,i)=>({e:mk('a','',`width:${3+rnd()*5}px;height:${3+rnd()*5}px;border-radius:50%;background:#c7d2fe`,G7),x:rnd()*1920,y:rnd()*1080,s:.3+rnd()*.7,p:rnd()*6}));
+const mark=mk('a',`<svg width="220" height="220" viewBox="0 0 220 220"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4f46e5"/><stop offset="1" stop-color="#a855f7"/></linearGradient></defs><rect width="220" height="220" rx="56" fill="url(#lg)"/><rect x="38" y="38" width="62" height="62" rx="10" fill="#fff" opacity=".95"/><rect x="38" y="116" width="62" height="66" rx="10" fill="#fff" opacity=".6"/><rect x="118" y="38" width="64" height="144" rx="10" fill="#fff" opacity=".95"/><path d="M137 90v40l32-20z" fill="#5b4bd8"/></svg><div id="sweep" style="position:absolute;top:-20px;bottom:-20px;width:60px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.7),transparent);transform:skewX(-20deg)"></div>`,'width:220px;height:220px;border-radius:56px;overflow:hidden;box-shadow:0 30px 90px rgba(99,102,241,.6)',G7);
+const SW=$('#sweep',mark);
+const wm=mk('a','<span style="color:#fff">PanelFlow</span> <span class="grad" style="font-weight:600">Studio</span>','font:800 120px "Segoe UI";letter-spacing:-3px;white-space:nowrap',G7);
+const tag=words(G7,'From page to premiere.',64,{width:1500,cls:'grad'});
+const sub=mk('a t','Turn comics, manga &amp; webtoons into cinematic video.','font-size:32px;font-weight:500;letter-spacing:0;color:#a1a1aa',G7);
+const tri=mk('a t','LOCAL-FIRST  ·  RIGHTS-VERIFIED  ·  AI-POWERED','font-size:20px;font-weight:700;letter-spacing:6px;color:#6366f1',G7);
+const black=mk('a','','left:0;top:0;width:1920px;height:1080px;background:#000;transform:none;opacity:0;z-index:99');
+
+/* ---------- seek ---------- */
+window.seek=function(t){
+  tf(g1,700+Math.sin(t*.35)*260,260+Math.cos(t*.3)*120,1,0,.38);
+  tf(g2,1300+Math.cos(t*.28)*240,820+Math.sin(t*.33)*100,1,0,.28);
+  grid.style.backgroundPosition=`${-t*14}px ${-t*9}px`;
+
+  // G1 : page / panels
+  show(G1,vis(t,0,14.6,.01,.3)>0?1:0);
+  if(G1.style.display!=='none'){
+    const pr=eo(prog(t,0,1.4)),pa=pr*(1-eo(prog(t,5.9,6.6)));
+    tf(paper,PC[0],PC[1]+Math.sin(t*1.5)*6*(1-prog(t,5.8,6.4)),lerp(.78,PS,pr),lerp(-5,0,pr),pa);
+    pn.forEach((p,i)=>{const s=pstate(i,t);
+      p.style.width=s.w+'px';p.style.height=s.h+'px';tf(p,s.x,s.y,s.s,s.r,s.o);
+      const det=eo(prog(t,4.5+i*.25,4.8+i*.25))*(1-eo(prog(t,6.3,6.7)));$('.box',p).style.opacity=det});
+    const sy=135+eo(prog(t,4.4,5.8))*810;
+    tf(scan,PC[0],sy-75,1,0,prog(t,4.4,4.5)*(1-prog(t,5.75,5.9)));
+    tf(c1.el,590,500,1,0,1);reveal(c1,t,.5,3.6,.12);
+    tf(c1s,500,720,1,0,eo(prog(t,2,2.6))*(1-eo(prog(t,3.6,4.0))));
+    tf(c2.el,590,540,1,0,1);reveal(c2,t,4.3,5.9,.12);
+    tf(c3.el,960,190,1,0,1);reveal(c3,t,6.9,8.6,.12);
+  }
+  // G3 cards
+  show(G3,vis(t,9.2,14.7,.5,.5));
+  if(G3.style.display!=='none'){
+    tf(t3.el,960,92,1,0,1);reveal(t3,t,9.4,99,.08);
+    cards.forEach((c,i)=>{const a=9.9+i*.7,k=eb(prog(t,a-.5,a)),on=prog(t,a,a+.4);
+      tf(c,960+(i-2)*340,610+(1-eo(prog(t,a-.6,a)))*80,lerp(.9,1,k)*(1+Math.sin(on*Math.PI)*.03),0,eo(prog(t,a-.6,a-.1)));
+      c.style.borderColor=`rgba(129,140,248,${.25+.75*on})`;c.style.boxShadow=`0 0 ${50*on}px rgba(99,102,241,${.5*on})`;
+      $('.cs',c).style.opacity=eo(prog(t,a+1.4,a+1.8));
+      upd[i](Math.max(0,t-a))});
+    tf(track,960,880,1,0,.9);
+    const f=eio(prog(t,9.9,13.6));fill.style.width=1660*f+'px';tf(fill,960-830+830*f,880,1,0,1);
+    tf(t3b.el,960,950,1,0,1);reveal(t3b,t,12.8,99,.08);
+  }
+  // G4 editor
+  show(G4,vis(t,14.5,20.7,.5,.5));
+  if(G4.style.display!=='none'){
+    tf(t4.el,960,92,1,0,1);reveal(t4,t,14.8,99,.08);
+    const e=eo(prog(t,14.6,15.5));tf(ED,960,620+(1-e)*120,lerp(.94,1,e),0,e);
+    const p=prog(t,15.2,20.0);
+    KB.forEach((k,i)=>{const u=clamp((p-i/5)*5),op=p>=i/5?Math.min(1,(p-i/5)*5/.15):0;
+      k.style.opacity=i===0?1:op;k.style.zIndex=i;k.style.transform=`scale(${1.04+.14*u}) translateX(${(i%2?-1:1)*(u-.5)*34}px)`});
+    const si=Math.min(4,Math.floor(p*5)),su=clamp(p*5-si);
+    SUB.textContent=typed(SUBS[si],su*70);SUB.style.opacity=p>0?1:0;
+    PH.style.left=84+p*(1512-96)+'px';
+    vb.forEach((b,i)=>b.style.opacity=i/NB<p?1:.3);mb.forEach((b,i)=>b.style.opacity=i/NB<p?1:.3);
+    const sl=[.62+.2*Math.sin(t*2),.8,.55+.15*Math.sin(t*1.6),.7];
+    ['s1','s2','s3','s4'].forEach((id,i)=>$('#'+id,ED).style.width=sl[i]*100+'%');
+  }
+  // G5 features
+  show(G5,vis(t,20.5,24.8,.5,.5));
+  if(G5.style.display!=='none'){
+    tf(t5.el,960,170,1,0,1);reveal(t5,t,20.8,99,.08);
+    fc.forEach((c,i)=>{const a=21.5+i*.35,k=eo(prog(t,a,a+.7));tf(c,960+(i-1)*540,600+(1-k)*90+Math.sin(t*1.4+i)*5,lerp(.92,1,k),0,k)});
+  }
+  // G6 autopilot
+  show(G6,vis(t,24.5,29.7,.5,.4));
+  if(G6.style.display!=='none'){
+    tf(t6.el,960,190,1,0,1);reveal(t6,t,24.8,99,.1);
+    const press=prog(t,25.45,25.6)*(1-prog(t,25.6,25.8)),gone=eo(prog(t,25.85,26.25));
+    const bo=eo(prog(t,24.9,25.4))*(1-gone);
+    tf(btn,960,560,(1-.07*press)*lerp(1,1.15,gone)*lerp(.9,1,eo(prog(t,24.9,25.4))),0,bo);
+    btn.style.boxShadow=`0 0 ${50+30*Math.sin(t*5)}px rgba(139,92,246,.7)`;
+    const rk=prog(t,25.55,26.1);tf(rip,960,560,1+rk*.5,0,(1-rk)*(rk>0?1:0)*.8);
+    const cx=eio(prog(t,24.9,25.5));tf(cur,lerp(1500,985,cx),lerp(900,585,cx)+(t>25.5?press*4:0),1,0,(1-gone)*prog(t,24.9,25.1));
+    const pk=eio(prog(t,26.0,28.0)),pi=Math.min(5,Math.floor(pk*6));
+    const po=eo(prog(t,25.95,26.4));
+    tf(PG,960,620,lerp(.9,1.22,po),0,po);
+    $('#pst',PG).textContent=STN[pi]+'…';$('#ppc',PG).textContent=Math.round(pk*100)+'%';
+    $('#pbar',PG).style.width=pk*100+'%';
+    pdots.forEach((d,i)=>d.style.color=pk*6>i+.99||pk>=1?'#34d399':(i===pi?'#c7d2fe':'#71717a'));
+    DONE.style.opacity=eo(prog(t,28.1,28.5));DONE.style.display=t>28.05?'block':'none';
+  }
+  // G7 logo
+  show(G7,vis(t,29.4,34.1,.05,.01));
+  if(G7.style.display!=='none'){
+    tf(flash,960,540,1,0,0);flash.style.transform='none';flash.style.opacity=.55*Math.sin(clamp((t-29.4)/.6)*Math.PI);
+    sparks.forEach(s=>{const o=(.3+.7*Math.abs(Math.sin(t*s.s*2+s.p)))*eo(prog(t,29.8,30.6));tf(s.e,s.x,(s.y-t*18*s.s+2000)%1080,1,0,o*.7)});
+    const mk_=eb(prog(t,29.55,30.35));tf(mark,960,360,Math.max(.01,mk_),lerp(-14,0,eo(prog(t,29.55,30.35))),eo(prog(t,29.55,29.9)));
+    SW.style.left=lerp(-120,300,eio(prog(t,30.5,31.2)))+'px';
+    const wk=eo(prog(t,30.1,30.9));tf(wm,960,590,1,0,wk);wm.style.letterSpacing=lerp(14,-3,wk)+'px';wm.style.filter=`blur(${(1-wk)*14}px)`;
+    tf(tag.el,960,730,1,0,1);reveal(tag,t,31.0,99,.14);
+    tf(sub,960,815,1,0,eo(prog(t,31.9,32.5)));
+    tf(tri,960,930,1,0,eo(prog(t,32.5,33.1)));
+  }
+  black.style.opacity=eo(prog(t,33.55,34));
+};
+window.DUR=DUR;seek(0);
+</script>

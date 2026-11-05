@@ -43,6 +43,11 @@ GENRES: dict[str, Genre] = {
         "an ordinary world, a call to adventure, trials with an ally, a costly victory, a changed hero",
         8, (4, 5), "vivid colors, epic scenery, fantasy anime style, dramatic lighting",
         ALWAYS_FORBIDDEN | GORE),
+    "mythology": Genre(
+        "mythology", "epic, solemn, majestic, celestial, spiritual; cosmic scale and deep philosophical weight",
+        "a sacred prologue, a divine gathering, the eternal composition, the tragic conflict, an immortal proclamation",
+        8, (4, 5), "authentic Indian historical cinema, photorealistic film still, 35mm Arri Alexa cinematography, culturally authentic Indian heritage, photorealistic natural Indian skin texture, warm golden hour temple sunlight, brass diya oil lamp lighting, floating dust motes, sacred vibhuti bhasma, rudraksha beads, handwoven cotton dhoti, intricate gold zari brocade, cinematic depth of field, 8k resolution, documentary realism, devotional masterpiece",
+        ALWAYS_FORBIDDEN | GORE, caption_words=(15, 45)),
 }
 
 SHOTS = {"wide", "medium", "close", "extreme_close", "over_shoulder"}

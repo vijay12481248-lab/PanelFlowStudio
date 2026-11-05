@@ -221,3 +221,56 @@ def pose_sensitive(spec: ShotSpec) -> bool:
     text = " ".join([c.pose + " " + c.expression + " " + c.action for c in spec.characters] + spec.key_visuals).lower()
     return any(w in text for w in ("closed", "asleep", "sleeping", "from behind", "facing away", "turned away", "looking up", "looking down",
                                    "looking back", "curled", "lying", "hiding", "peeking"))
+
+
+CAMERA_MOTIONS = {
+    "push_in": "Slow cinematic camera push in towards the subject",
+    "pull_out": "Smooth slow camera pull back revealing the surroundings",
+    "pan_right": "Gentle camera pan from left to right across the scene",
+    "pan_left": "Gentle camera pan from right to left across the scene",
+    "tilt_up": "Slow camera tilt upwards",
+    "orbit": "Slow subtle camera orbit around the focal point",
+    "static": "Static camera framing, subtle ambient motion",
+}
+
+
+def compose_motion_prompt(
+    spec: ShotSpec | None = None,
+    camera_direction: str = "push_in",
+    custom_prompt: str = "",
+    action_hint: str = "",
+    intensity: str = "balanced",
+    fx_tags: str = "",
+) -> tuple[str, str]:
+    """Return (positive_prompt, negative_prompt) tailored for MiniMax Fast H3 Image-to-Video."""
+    parts = []
+    cam = CAMERA_MOTIONS.get(camera_direction, CAMERA_MOTIONS["push_in"])
+    parts.append(cam)
+
+    if intensity == "subtle":
+        parts.append("slow subtle gentle motion, calm and delicate pace")
+    elif intensity == "action":
+        parts.append("dynamic energetic movement, strong visual momentum, high impact anime motion")
+
+    if fx_tags and fx_tags.strip():
+        parts.append(fx_tags.strip())
+
+    if custom_prompt and custom_prompt.strip():
+        parts.append(custom_prompt.strip())
+    elif action_hint and action_hint.strip():
+        parts.append(action_hint.strip())
+    elif spec:
+        acts = []
+        for ch in spec.characters:
+            desc = ", ".join(x for x in (ch.action, ch.pose, ch.expression) if x)
+            if desc:
+                acts.append(desc)
+        if acts:
+            parts.append("character " + "; ".join(acts))
+        if spec.mood:
+            parts.append(f"{spec.mood} atmosphere")
+
+    parts.append("natural subtle movement, cloth and hair dynamics, cinematic lighting, highly detailed, steady frame rate, consistent character appearance, 24fps smooth motion")
+    pos = ", ".join(parts)
+    neg = "fast jerky motion, abrupt camera jump cut, morphing face, distorted hands, flickering, twitching, text, watermark, bad anatomy, jittery artifacts"
+    return pos, neg

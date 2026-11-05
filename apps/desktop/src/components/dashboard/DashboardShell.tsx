@@ -34,6 +34,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
   onOpenLibrary,
   onOpenAnimeReview,
   onOpenOriginalStories,
+  onOpenChronoFlow,
 }) => {
   const { reportError } = useError();
   // Navigation & view states
@@ -199,6 +200,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
           onSelectTab={setActiveNavTab}
           onOpenSettings={onOpenToolsModels}
           onOpenLibrary={onOpenLibrary}
+          onOpenChronoFlow={onOpenChronoFlow}
         />
 
         {/* Left Job Queue Sidebar (~310px) */}
@@ -241,6 +243,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
             onOpenPanels={onOpenPanels}
             onOpenFolder={handleOpenFolder}
             onDeleteProject={handleDeleteProject}
+            onOpenChronoFlow={onOpenChronoFlow}
           />
         </main>
 
@@ -264,6 +267,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
                 onOpenLibrary={onOpenLibrary}
                 onOpenAnimeReview={onOpenAnimeReview}
                 onOpenOriginalStories={onOpenOriginalStories}
+                onOpenChronoFlow={onOpenChronoFlow}
                 onModelSettings={onOpenToolsModels}
                 onEngineSettings={onOpenToolsModels}
               />

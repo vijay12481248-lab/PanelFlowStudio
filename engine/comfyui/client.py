@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import ipaddress
 import json
 import os
@@ -24,7 +25,7 @@ class _NoRedirect(HTTPRedirectHandler):
 
 
 _NO_REDIRECT_OPENER = build_opener(_NoRedirect())
-_MAX_RESPONSE_BYTES = 16 * 1024 * 1024
+_MAX_RESPONSE_BYTES = 128 * 1024 * 1024
 _LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
 
 
@@ -148,7 +149,12 @@ class ComfyUIClient:
     def _workflow_root(self) -> Path | None:
         if self.workflow_dir:
             return self.workflow_dir if self.workflow_dir.is_dir() and not self.workflow_dir.is_symlink() else None
-        for candidate in (Path.home() / "ComfyUI" / "workflow", Path.home() / "claude" / "ComfyUI" / "workflow"):
+        for candidate in (
+            Path.home() / "ComfyUI" / "workflow",
+            Path.home() / "claude" / "ComfyUI" / "workflow",
+            Path(r"E:\VIJAY SEKAR\ComfyUI\workflow"),
+            Path(r"E:\ComfyUI\workflow"),
+        ):
             if candidate.is_dir() and not candidate.is_symlink():
                 return candidate
         return None
@@ -181,7 +187,7 @@ class ComfyUIClient:
         query = urlencode({"filename": filename, "subfolder": subfolder, "type": folder_type})
         url = urljoin(self.base_url, "view") + "?" + query
         try:
-            with _NO_REDIRECT_OPENER.open(Request(url, headers={"Accept": "image/*,application/octet-stream"}), timeout=self.timeout_s) as response:
+            with _NO_REDIRECT_OPENER.open(Request(url, headers={"Accept": "video/*,image/*,application/octet-stream"}), timeout=self.timeout_s) as response:
                 content_length = response.headers.get("Content-Length")
                 if content_length and int(content_length) > _MAX_RESPONSE_BYTES:
                     raise ComfyUIError("ComfyUI output exceeded the configured size limit")
@@ -200,6 +206,22 @@ class ComfyUIClient:
             raise
         except (HTTPError, URLError, TimeoutError, OSError, ValueError) as exc:
             raise ComfyUIError(f"ComfyUI output retrieval failed for {filename}: {exc}") from exc
+
+
+    def upload_image(self, path: Path) -> str:
+        """Upload an image to ComfyUI's input directory and return the server filename."""
+        data = path.read_bytes()
+        digest = hashlib.sha256(data).hexdigest()
+        name, boundary = f"pf_{digest[:16]}.png", "pfboundary" + digest[:8]
+        head = (f"--{boundary}\r\nContent-Disposition: form-data; name=\"image\"; filename=\"{name}\"\r\nContent-Type: image/png\r\n\r\n").encode()
+        tail = (f"\r\n--{boundary}\r\nContent-Disposition: form-data; name=\"overwrite\"\r\n\r\ntrue\r\n--{boundary}--\r\n").encode()
+        req = Request(
+            urljoin(self.base_url, "upload/image"),
+            data=head + data + tail,
+            headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+        )
+        with _NO_REDIRECT_OPENER.open(req, timeout=self.timeout_s) as response:
+            return json.loads(response.read())["name"]
 
     def discover_workflows(self) -> list[str]:
         root = self._workflow_root()
@@ -222,7 +244,7 @@ class ComfyUIClient:
         if not models_root.is_dir() or models_root.is_symlink():
             return {}
         result: dict[str, list[str]] = {}
-        for category in ("checkpoints", "diffusion_models", "unet", "vae", "loras", "controlnet", "clip", "text_encoders", "ipadapter", "clip_vision"):
+        for category in ("checkpoints", "diffusion_models", "unet", "vae", "loras", "controlnet", "clip", "text_encoders", "ipadapter", "clip_vision", "pulid", "insightface"):
             category_dir = models_root / category
             if category_dir.is_dir() and not category_dir.is_symlink():
                 try:

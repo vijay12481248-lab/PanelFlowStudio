@@ -1667,6 +1667,32 @@ export class PanelFlowApiClient {
     return { approved: true, message: "Motion timeline approved" };
   }
 
+
+  async previewShotVideo(
+    projectId: string,
+    panelId: string,
+    cameraDirection: string = "push_in",
+    customPrompt?: string,
+    engine: string = "fast_h3",
+    intensity: string = "balanced",
+    fx: string = "none"
+  ): Promise<{ video_url: string; duration_sec: number; engine: string }> {
+    return this.request<{ video_url: string; duration_sec: number; engine: string }>(
+      `/api/projects/${projectId}/motion/preview-shot`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          panel_id: panelId,
+          camera_direction: cameraDirection,
+          custom_prompt: customPrompt || "",
+          engine,
+          intensity,
+          fx,
+        }),
+      }
+    );
+  }
+
   async approveMotionTimeline(projectId: string): Promise<{ approved: boolean; message: string }> {
     return this.approveMotion(projectId);
   }
@@ -1697,6 +1723,8 @@ export class PanelFlowApiClient {
       minPanelDuration?: number;
       panelZoomMode?: "fit" | "motion" | "cover";
       narrationSpeed?: number;
+      videoEngine?: string;
+      motionFx?: string;
     } = {}
   ): Promise<RenderJob> {
     return this.request<RenderJob>(`/api/projects/${projectId}/render/jobs`, {
@@ -1712,6 +1740,8 @@ export class PanelFlowApiClient {
         min_panel_duration: options.minPanelDuration ?? 4.0,
         panel_zoom_mode: options.panelZoomMode || "fit",
         narration_speed: options.narrationSpeed ?? 1.0,
+        video_engine: options.videoEngine || "fast_h3",
+        motion_fx: options.motionFx || "none",
       }),
     });
   }

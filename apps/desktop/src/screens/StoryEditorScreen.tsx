@@ -35,6 +35,7 @@ import type { AudioToTimelineContract } from "../components/audio-library/AudioL
 import { useTimelineAudioPlayback } from "../components/story-editor/useTimelineAudioPlayback";
 import { applyAudioContractToState, deleteAudioClip } from "../components/story-editor/audioAdapter";
 import { ExportVideoModal } from "../components/story-editor/ExportVideoModal";
+import { StoryEditorChronoFlowPanel } from "../components/story-editor/StoryEditorChronoFlowPanel";
 import { EngineJobStatus } from "../components/JobActivityPanel";
 import { createEmptyEditorState } from "../components/story-editor/editorWorkspace";
 import { resolveSceneTiming, sceneTimelineDuration, reconcileSceneDurationEdit, alignLinkedNarration, packSceneTiming, insertSceneTiming } from "../components/story-editor/sceneTiming";
@@ -71,6 +72,7 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
   // Engine & job status — integrates EngineJobStatus into toolbar
   const { engineHealthy, jobs, cancelJob: cancelJobContext } = useError();
   const [showEditorSettings, setShowEditorSettings] = useState(false);
+  const [showChronoFlowPanel, setShowChronoFlowPanel] = useState(false);
   const [activeLeftTab, setActiveLeftTab] = useState<LeftRailTab>(initialTab ?? "story");
   const [workflowStep, setWorkflowStep] = useState<WorkflowStepId>(initialWorkflowStep ?? 3);
   const [rightSidebarTab, setRightSidebarTab] = useState<"source" | "inspector">("source");
@@ -237,6 +239,8 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
     } else if (tab === "narration") {
       setWorkflowStep(5);
       setShowNarrationStudio(true);
+    } else if (tab === "chronoflow") {
+      setShowChronoFlowPanel(true);
     } else if (tab === "audio") {
       setWorkflowStep(6);
       handleOpenAudioLibrary();
@@ -1345,6 +1349,86 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
         editorState={editorState}
         onOpenNarrationStudio={() => setShowNarrationStudio(true)}
       />
+
+      {/* 8. ChronoFlow AI Generation Panel (Video, Image, Storyboard) */}
+      {(() => {
+        const currentActiveScene =
+          editorState.scenes.find((s) =>
+            editorState.selected_object?.type === "scene"
+              ? s.id === editorState.selected_object.id
+              : editorState.selected_object?.type === "layer"
+              ? s.id === editorState.selected_object.sceneId
+              : false
+          ) ||
+          editorState.scenes[0] ||
+          null;
+
+        return (
+          <StoryEditorChronoFlowPanel
+            isOpen={showChronoFlowPanel}
+            onClose={() => setShowChronoFlowPanel(false)}
+            project={project}
+            scene={currentActiveScene}
+            onApplyVideoToScene={(sceneId, videoUrl) => {
+              updateEditorState((prev) => ({
+                ...prev,
+                scenes: prev.scenes.map((sc) => {
+                  if (sc.id !== sceneId) return sc;
+                  if (sc.layers && sc.layers.length > 0) {
+                    return {
+                      ...sc,
+                      layers: sc.layers.map((l: VisualLayer, i: number) =>
+                        i === 0 ? { ...l, video_url: videoUrl } : l
+                      ),
+                    };
+                  }
+                  const newLayer: VisualLayer = {
+                    id: `layer_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+                    source_page_id: "chronoflow",
+                    image_url: videoUrl,
+                    video_url: videoUrl,
+                    page_sequence: 1,
+                    crop: { x: 0, y: 0, width: 100, height: 100 },
+                    transform: { x: 0, y: 0, scale: 1.0, rotation: 0, opacity: 1.0, z_index: 0 },
+                  };
+                  return { ...sc, layers: [newLayer] };
+                }),
+              }));
+              setShowChronoFlowPanel(false);
+            }}
+            onApplyImageToScene={(sceneId, imageUrl) => {
+              updateEditorState((prev) => ({
+                ...prev,
+                scenes: prev.scenes.map((sc) => {
+                  if (sc.id !== sceneId) return sc;
+                  if (sc.layers && sc.layers.length > 0) {
+                    return {
+                      ...sc,
+                      layers: sc.layers.map((l: VisualLayer, i: number) =>
+                        i === 0 ? { ...l, image_url: imageUrl } : l
+                      ),
+                    };
+                  }
+                  const newLayer: VisualLayer = {
+                    id: `layer_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+                    source_page_id: "chronoflow",
+                    image_url: imageUrl,
+                    page_sequence: 1,
+                    crop: { x: 0, y: 0, width: 100, height: 100 },
+                    transform: { x: 0, y: 0, scale: 1.0, rotation: 0, opacity: 1.0, z_index: 0 },
+                  };
+                  return { ...sc, layers: [newLayer] };
+                }),
+              }));
+              setShowChronoFlowPanel(false);
+            }}
+            onOpenFullStudio={() => {
+              setShowChronoFlowPanel(false);
+              onBack();
+            }}
+          />
+        );
+      })()}
     </div>
   );
 };

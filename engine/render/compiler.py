@@ -726,11 +726,9 @@ class TimelineCompiler:
 
 
 
-        # Measured speech already establishes the timeline. Stretching panels here
-        # creates silent gaps and moves visuals away from their narration cues.
-        if state.get("narration_clips"):
-            min_panel_duration = None
-        scenes = self._resolve_scene_timing(state.get("scenes", []), min_panel_duration=min_panel_duration)
+        # Enforce minimum panel duration (at least 4.5s) for smooth recap presentation
+        effective_min = max(4.0, float(min_panel_duration or 4.5))
+        scenes = self._resolve_scene_timing(state.get("scenes", []), min_panel_duration=effective_min)
 
         if not scenes:
 

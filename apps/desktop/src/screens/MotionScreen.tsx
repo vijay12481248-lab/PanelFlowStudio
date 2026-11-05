@@ -24,6 +24,56 @@ export const MotionScreen: React.FC<MotionScreenProps> = ({
   const [planning, setPlanning] = useState<boolean>(false);
   const [approving, setApproving] = useState<boolean>(false);
   const [selectedPreset, setSelectedPreset] = useState<MotionStylePreset>("cinematic");
+  const [videoEngine, setVideoEngine] = useState<"ken_burns" | "fast_h3">("fast_h3");
+  const [shotMotions, setShotMotions] = useState<Record<string, string>>({});
+  const [shotPrompts, setShotPrompts] = useState<Record<string, string>>({});
+  const [previewingShot, setPreviewingShot] = useState<string | null>(null);
+  const [shotVideoUrls, setShotVideoUrls] = useState<Record<string, string>>({});
+  const [shotIntensities, setShotIntensities] = useState<Record<string, string>>({});
+  const [shotFxs, setShotFxs] = useState<Record<string, string>>({});
+
+  const QUICK_VFX_TAGS = [
+    "💨 Wind in hair",
+    "🫁 Breathing motion",
+    "✨ Glowing aura",
+    "🌧️ Rain droplets",
+    "💥 Action speed lines",
+    "🎬 24fps cinema",
+    "🔍 Bokeh depth",
+  ];
+
+  const handleAddTag = (shotKey: string, tag: string) => {
+    const cleanTag = tag.replace(/^[^\w\s]+/, "").trim();
+    const cur = shotPrompts[shotKey] || "";
+    const next = cur ? `${cur}, ${cleanTag}` : cleanTag;
+    setShotPrompts((prev) => ({ ...prev, [shotKey]: next }));
+  };
+
+  const handlePreviewShot = async (shotKey: string, panelId?: string) => {
+    if (!panelId) return;
+    setPreviewingShot(shotKey);
+    try {
+      const motion = shotMotions[shotKey] || "push_in";
+      const prompt = shotPrompts[shotKey] || "";
+      const intensity = shotIntensities[shotKey] || "balanced";
+      const fx = shotFxs[shotKey] || "none";
+      const res = await (api as any).previewShotVideo(project.id, panelId, motion, prompt, videoEngine, intensity, fx);
+      if (res?.video_url) {
+        setShotVideoUrls((prev) => ({ ...prev, [shotKey]: res.video_url }));
+      }
+    } catch (err: any) {
+      reportError({
+        title: "Shot Video Preview Failed",
+        message: err.message || "Could not generate shot video preview.",
+        severity: "warning",
+        source: "pipeline",
+        projectId: project.id,
+        rawDetails: err,
+      });
+    } finally {
+      setPreviewingShot(null);
+    }
+  };
 
   const loadMotion = useCallback(async () => {
     setLoading(true);
@@ -119,6 +169,32 @@ export const MotionScreen: React.FC<MotionScreenProps> = ({
 
         {/* Action Controls */}
         <div className="flex flex-wrap items-center gap-2">
+          {/* Video Engine Toggle */}
+          <div className="flex items-center bg-zinc-900 border border-zinc-700 rounded-lg p-0.5 text-xs font-mono">
+            <button
+              type="button"
+              onClick={() => setVideoEngine("ken_burns")}
+              className={`px-2.5 py-1 rounded transition-colors ${
+                videoEngine === "ken_burns"
+                  ? "bg-zinc-700 text-white font-bold"
+                  : "text-zinc-400 hover:text-zinc-200"
+              }`}
+            >
+              Ken Burns 2D
+            </button>
+            <button
+              type="button"
+              onClick={() => setVideoEngine("fast_h3")}
+              className={`px-2.5 py-1 rounded transition-colors flex items-center gap-1 ${
+                videoEngine === "fast_h3"
+                  ? "bg-indigo-600 text-white font-bold"
+                  : "text-zinc-400 hover:text-zinc-200"
+              }`}
+            >
+              Fast H3 Motion
+            </button>
+          </div>
+
           {/* Style Preset Selector */}
           <select
             value={selectedPreset}
@@ -353,6 +429,106 @@ export const MotionScreen: React.FC<MotionScreenProps> = ({
                         </span>
                         <span className="text-zinc-500">· Easing: {easing}</span>
                       </div>
+
+                      {/* Fast H3 Motion Controls & VFX Prompt */}
+                      <div className="pt-2 border-t border-zinc-800/60 space-y-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          {/* Camera Motion */}
+                          <select
+                            value={shotMotions[shot.shot_id || idx] || "push_in"}
+                            onChange={(e) => setShotMotions({ ...shotMotions, [shot.shot_id || idx]: e.target.value })}
+                            className="bg-zinc-950 border border-zinc-800 text-[11px] text-zinc-300 rounded px-2 py-1 font-mono focus:outline-none focus:border-indigo-500"
+                          >
+                            <option value="push_in">Camera: Push In</option>
+                            <option value="pull_out">Camera: Pull Out</option>
+                            <option value="pan_left">Camera: Pan Left</option>
+                            <option value="pan_right">Camera: Pan Right</option>
+                            <option value="tilt_up">Camera: Tilt Up</option>
+                            <option value="orbit">Camera: Orbit</option>
+                            <option value="static">Camera: Static Hold</option>
+                          </select>
+
+                          {/* Motion Intensity */}
+                          <select
+                            value={shotIntensities[shot.shot_id || idx] || "balanced"}
+                            onChange={(e) => setShotIntensities({ ...shotIntensities, [shot.shot_id || idx]: e.target.value })}
+                            className="bg-zinc-950 border border-zinc-800 text-[11px] text-zinc-300 rounded px-2 py-1 font-mono focus:outline-none focus:border-indigo-500"
+                          >
+                            <option value="subtle">Intensity: Subtle (0.5x)</option>
+                            <option value="balanced">Intensity: Balanced (1.0x)</option>
+                            <option value="action">Intensity: Dynamic Action (1.8x)</option>
+                          </select>
+
+                          {/* Motion Graphics FX Overlay */}
+                          <select
+                            value={shotFxs[shot.shot_id || idx] || "none"}
+                            onChange={(e) => setShotFxs({ ...shotFxs, [shot.shot_id || idx]: e.target.value })}
+                            className="bg-zinc-950 border border-zinc-800 text-[11px] text-zinc-300 rounded px-2 py-1 font-mono focus:outline-none focus:border-indigo-500"
+                          >
+                            <option value="none">FX: Clean (None)</option>
+                            <option value="letterbox">FX: Cinematic 2.39:1 Scope</option>
+                            <option value="vignette">FX: Vignette & Tone</option>
+                            <option value="film_grain">FX: 35mm Film Grain</option>
+                            <option value="action_shake">FX: Action Camera Shake</option>
+                            <option value="warm_cinema">FX: Warm Cinema Grade</option>
+                          </select>
+
+                          {/* FL2V Continuity Tag */}
+                          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-800/80 text-zinc-400 border border-zinc-700/60 ml-auto">
+                            FL2V: Panel #{matchedPanel?.sequence ?? (idx + 1)}
+                          </span>
+                        </div>
+
+                        {/* Quick Tag Pills */}
+                        <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                          <span className="text-[10px] uppercase font-bold text-zinc-500 font-mono">Quick VFX:</span>
+                          {QUICK_VFX_TAGS.map((tag) => (
+                            <button
+                              key={tag}
+                              type="button"
+                              onClick={() => handleAddTag(shot.shot_id || String(idx), tag)}
+                              className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white transition-colors border border-zinc-700/50"
+                            >
+                              {tag}
+                            </button>
+                          ))}
+                        </div>
+
+                        {/* Prompt Input & Generate Preview Button */}
+                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                          <input
+                            type="text"
+                            placeholder="Motion prompt / VFX details (e.g. glowing aura, wind blowing hair, sharp focus)"
+                            value={shotPrompts[shot.shot_id || idx] || ""}
+                            onChange={(e) => setShotPrompts({ ...shotPrompts, [shot.shot_id || idx]: e.target.value })}
+                            className="bg-zinc-950 border border-zinc-800 text-[11px] text-zinc-300 rounded px-2.5 py-1.5 flex-1 font-mono placeholder:text-zinc-600 focus:outline-none focus:border-indigo-500"
+                          />
+
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => handlePreviewShot(shot.shot_id || String(idx), matchedPanel?.id)}
+                            disabled={previewingShot === (shot.shot_id || String(idx)) || !matchedPanel}
+                            className="text-[11px] px-3 py-1.5 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-200 border border-indigo-500/30"
+                          >
+                            <Icons.Play className={`w-3 h-3 mr-1.5 ${previewingShot === (shot.shot_id || String(idx)) ? "animate-pulse" : ""}`} />
+                            {previewingShot === (shot.shot_id || String(idx)) ? "Generating Video..." : "Preview Shot"}
+                          </Button>
+                        </div>
+                      </div>
+
+                      {/* Shot Preview Video if Generated */}
+                      {shotVideoUrls[shot.shot_id || String(idx)] && (
+                        <div className="mt-2 rounded overflow-hidden border border-zinc-800 bg-black">
+                          <video
+                            src={shotVideoUrls[shot.shot_id || String(idx)]}
+                            controls
+                            autoPlay
+                            loop
+                            className="w-full max-h-48 object-contain"
+                          />
+                        </div>
+                      )}
                     </div>
 
                     {/* Right: Duration pill & Panel Reference */}

@@ -19,8 +19,10 @@ from engine.anime.review.timeline import wav_seconds
 from engine.narration.runtime import audio as rt
 from engine.original.models import OriginalStory, Panel
 
-NARRATORS = {"bedtime": ("af_heart", 0.88), "horror": ("bm_george", 0.92), "mystery": ("am_adam", 0.95), "fantasy": ("bm_fable", 0.95)}
+NARRATORS = {"bedtime": ("af_heart", 0.88), "horror": ("bm_george", 0.92), "mystery": ("am_adam", 0.95), "fantasy": ("bm_fable", 0.95), "mythology": ("bm_george", 0.90)}
 CHARACTER_VOICES = ["af_sky", "am_adam", "af_nicole", "bm_fable", "af_bella", "am_michael"]  # voices cached offline
+MALE_VOICES = ["am_adam", "bm_fable", "am_michael", "bm_george"]
+FEMALE_VOICES = ["af_sky", "af_bella", "af_nicole", "af_heart"]
 GAP_SEC, END_PAUSE_SEC, MIN_PANEL_SEC = 0.25, 0.6, 3.0
 ZOOM_END = 1.12
 MOTIONS = ["in", "pan_right", "out", "pan_left"]
@@ -28,8 +30,23 @@ MOTIONS = ["in", "pan_right", "out", "pan_left"]
 
 def voices_for(story: OriginalStory, narrator: tuple[str, float] | None = None) -> tuple[tuple[str, float], dict[str, tuple[str, float]]]:
     narrator = narrator or NARRATORS.get(story.bible.premise.genre, NARRATORS["fantasy"])
-    pool = [v for v in CHARACTER_VOICES if v != narrator[0]]
-    return narrator, {c.id: (pool[i % len(pool)], 1.0) for i, c in enumerate(story.bible.characters)}
+    m_pool = [v for v in MALE_VOICES if v != narrator[0]] or MALE_VOICES
+    f_pool = [v for v in FEMALE_VOICES if v != narrator[0]] or FEMALE_VOICES
+    all_pool = [v for v in CHARACTER_VOICES if v != narrator[0]] or CHARACTER_VOICES
+    chars = {}
+    m_idx = f_idx = 0
+    for i, c in enumerate(story.bible.characters):
+        speed = 0.92 if getattr(c, "age_group", "") == "elder" else 1.0
+        if getattr(c, "gender", "") == "male":
+            v = m_pool[m_idx % len(m_pool)]
+            m_idx += 1
+        elif getattr(c, "gender", "") == "female":
+            v = f_pool[f_idx % len(f_pool)]
+            f_idx += 1
+        else:
+            v = all_pool[i % len(all_pool)]
+        chars[c.id] = (v, speed)
+    return narrator, chars
 
 
 def spoken_parts(panel: Panel) -> list[tuple[str, str | None]]:
@@ -62,8 +79,26 @@ def motion_filter(motion: str, frames: int) -> str:
     return f"zoompan=z='{z}':x='{x}':y='ih/2-ih/zoom/2':d={n}:s={rr.W}x{rr.H}:fps={{fps}}"
 
 
+
+def motion_fx_filters(fx: str | None) -> list[str]:
+    """Generates FFmpeg video filter fragments for motion graphics and visual atmosphere."""
+    if not fx or fx in ("none", "clean"):
+        return []
+    out = []
+    if fx == "letterbox":
+        out.append(f"drawbox=y=0:h={int(rr.H * 0.075)}:color=black:t=fill,drawbox=y={int(rr.H * 0.925)}:h={int(rr.H * 0.075)}:color=black:t=fill")
+    elif fx == "vignette":
+        out.append("vignette=angle=PI/5,eq=contrast=1.04:saturation=1.08")
+    elif fx == "film_grain":
+        out.append("noise=alls=9:allf=t+u")
+    elif fx == "action_shake":
+        out.append("crop=in_w-32:in_h-32:16+8*sin(n*1.5):16+8*cos(n*2),scale=1920:1080")
+    elif fx == "warm_cinema":
+        out.append("eq=contrast=1.06:saturation=1.12:gamma=0.98")
+    return out
+
 def render_panel(img: Path, wav: Path, dur: float, fps: float, text: str, motion: str, ws: Path, burn: bool, out: Path,
-                 fade_in: float = 0.0, fade_out: float = 0.0) -> None:
+                 fade_in: float = 0.0, fade_out: float = 0.0, fx: str | None = None) -> None:
     n = round(dur * fps)
     vf = [f"scale={rr.W * 2}:{rr.H * 2}:force_original_aspect_ratio=increase", f"crop={rr.W * 2}:{rr.H * 2}",
           motion_filter(motion, n).replace("{fps}", str(fps))]
@@ -74,10 +109,41 @@ def render_panel(img: Path, wav: Path, dur: float, fps: float, text: str, motion
     if burn and text.strip():
         (ws / "tmp_seg.srt").write_text(rr.srt_text(rr.caption_chunks(text, max(dur - END_PAUSE_SEC, 0.5))), encoding="utf-8")
         vf.append("subtitles=tmp_seg.srt:force_style='FontName=Arial,FontSize=20,Bold=1,Outline=2,Shadow=1,MarginV=48'")
+    vf.extend(motion_fx_filters(fx))
     vf.append("format=yuv420p")
     af = "aresample=48000" + (f",afade=t=in:st=0:d={fade_in}" if fade_in else "") + (
         f",afade=t=out:st={dur - fade_out:.3f}:d={fade_out}" if fade_out else "")
     head = ["ffmpeg", "-y", "-v", "error", "-i", str(img), "-i", str(wav), "-filter_complex", f"[0:v]{','.join(vf)}[v];[1:a]{af}[a]",
+            "-map", "[v]", "-map", "[a]"]
+    tail = ["-frames:v", str(n), "-t", f"{dur}", "-r", str(fps), "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2", str(out)]
+    try:
+        rr._run(head + rr.video_encoder() + tail, ws)
+    except RuntimeError:
+        if rr.video_encoder() == rr.CPU_ENCODER:
+            raise
+        rr._run(head + rr.CPU_ENCODER + tail, ws)
+
+
+
+
+def render_ai_panel(clip: Path, wav: Path, dur: float, fps: float, text: str, ws: Path, burn: bool, out: Path,
+                    fade_in: float = 0.0, fade_out: float = 0.0, fx: str | None = None) -> None:
+    """Takes an AI-generated video clip, joins it with narration audio, burns subtitles, and conforms duration."""
+    n = round(dur * fps)
+    vf = [f"scale={rr.W}:{rr.H}:force_original_aspect_ratio=decrease", f"pad={rr.W}:{rr.H}:(ow-iw)/2:(oh-ih)/2", f"fps={fps}"]
+    if fade_in:
+        vf.append(f"fade=t=in:st=0:d={fade_in}")
+    if fade_out:
+        vf.append(f"fade=t=out:st={dur - fade_out:.3f}:d={fade_out}")
+    if burn and text.strip():
+        (ws / "tmp_seg.srt").write_text(rr.srt_text(rr.caption_chunks(text, max(dur - END_PAUSE_SEC, 0.5))), encoding="utf-8")
+        vf.append("subtitles=tmp_seg.srt:force_style='FontName=Arial,FontSize=20,Bold=1,Outline=2,Shadow=1,MarginV=48'")
+    vf.extend(motion_fx_filters(fx))
+    vf.append("format=yuv420p")
+    af = "aresample=48000" + (f",afade=t=in:st=0:d={fade_in}" if fade_in else "") + (
+        f",afade=t=out:st={dur - fade_out:.3f}:d={fade_out}" if fade_out else "")
+    head = ["ffmpeg", "-y", "-v", "error", "-stream_loop", "-1", "-i", str(clip), "-i", str(wav),
+            "-filter_complex", f"[0:v]{','.join(vf)}[v];[1:a]{af}[a]",
             "-map", "[v]", "-map", "[a]"]
     tail = ["-frames:v", str(n), "-t", f"{dur}", "-r", str(fps), "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2", str(out)]
     try:
@@ -94,8 +160,10 @@ def _digest(*parts: str) -> str:
 
 def build_video(story: OriginalStory, ws: Path, tts=None, fps: float = 30.0, burn_captions: bool = True,
                 music: Path | None = rr.DEFAULT_MUSIC, name: str = "story_1080p.mp4",
-                progress: Callable[[float, str], None] = lambda p, m: None, narrator: tuple[str, float] | None = None) -> dict:
+                progress: Callable[[float, str], None] = lambda p, m: None, narrator: tuple[str, float] | None = None,
+                engine: str = "auto", fx: str = "none") -> dict:
     """Voices and renders every panel that has an image (missing panels are listed, not faked); reruns reuse unchanged work."""
+    ws = Path(ws).resolve()
     tts = tts or rt.KokoroTts()
     narrator, chars = voices_for(story, narrator)
     (ws / "voice").mkdir(parents=True, exist_ok=True)
@@ -117,10 +185,17 @@ def build_video(story: OriginalStory, ws: Path, tts=None, fps: float = 30.0, bur
             dur = wav_seconds(wav)
             last = i == len(panels) - 1
             rkey = _digest(vkey, hashlib.sha256(img.read_bytes()).hexdigest(), str(burn_captions), MOTIONS[i % 4], str(i == 0), str(last))
+            clip = ws / "clips" / f"{p.id}.mp4"
+            rkey = _digest(vkey, hashlib.sha256(img.read_bytes()).hexdigest(), str(burn_captions),
+                           MOTIONS[i % 4], str(i == 0), str(last), str(clip.exists() and engine != "ken_burns"), str(fx))
             if not (seg.exists() and meta.get(p.id, {}).get("render") == rkey):
-                text = " ".join(x for x, _ in spoken_parts(p))
-                render_panel(img, wav, dur, fps, text, MOTIONS[i % 4], ws, burn_captions, seg,
-                             fade_in=0.6 if i == 0 else 0.0, fade_out=1.2 if last else 0.0)
+                text_content = " ".join(x for x, _ in spoken_parts(p))
+                if clip.exists() and engine != "ken_burns":
+                    render_ai_panel(clip, wav, dur, fps, text_content, ws, burn_captions, seg,
+                                    fade_in=0.6 if i == 0 else 0.0, fade_out=1.2 if last else 0.0, fx=fx)
+                else:
+                    render_panel(img, wav, dur, fps, text_content, MOTIONS[i % 4], ws, burn_captions, seg,
+                                 fade_in=0.6 if i == 0 else 0.0, fade_out=1.2 if last else 0.0, fx=fx)
             meta[p.id] = {"voice": vkey, "render": rkey}
             entries.append({"panel_id": p.id, "scene_id": p.scene_id, "start": round(t, 4), "duration": round(dur, 4)})
             t += round(dur, 4)

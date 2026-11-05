@@ -19,6 +19,7 @@ import { ComfyImageScreen } from "./screens/ComfyImageScreen";
 import { StoryEditorScreen } from "./screens/StoryEditorScreen";
 import { AnimeReviewScreen } from "./screens/AnimeReviewScreen";
 import { OriginalStoriesScreen } from "./screens/OriginalStoriesScreen";
+import { ChronoFlowScreen } from "./screens/ChronoFlowScreen";
 import { PipelineNavbar } from "./components/PipelineNavbar";
 import { ProviderHealthModal } from "./components/ProviderHealthModal";
 import { AutoPilotModal } from "./components/AutoPilotModal";
@@ -47,7 +48,8 @@ type ScreenMode =
   | "ai_provider_management"
   | "comfy_image"
   | "anime_review"
-  | "original_stories";
+  | "original_stories"
+  | "chronoflow";
 
 const DesktopAppContent: React.FC = () => {
   const { selectedError, closeInspector, dismissError, retryJob, reportError } = useError();
@@ -137,6 +139,10 @@ const DesktopAppContent: React.FC = () => {
 
   const handleOpenProject = (proj: Project) => {
     setSelectedProject(proj);
+    if (proj.source_type === "CHRONOFLOW_AI" || (proj as any).settings?.workflow_type === "chronoflow") {
+      setCurrentScreen("chronoflow");
+      return;
+    }
     const stage = proj.current_stage;
     if (stage === "NEW" || stage === "RIGHTS_APPROVED") {
       setCurrentScreen("acquisition");
@@ -227,6 +233,18 @@ const DesktopAppContent: React.FC = () => {
     return <AnimeReviewScreen onBack={() => setCurrentScreen("projects")} />;
   }
 
+  if (currentScreen === "chronoflow") {
+    return (
+      <ChronoFlowScreen
+        project={selectedProject}
+        onBack={() => {
+          setCurrentScreen("projects");
+          setSelectedProject(null);
+        }}
+      />
+    );
+  }
+
   // Full-Window Redesigned Desktop Dashboard
   if (currentScreen === "projects") {
     return (
@@ -244,6 +262,10 @@ const DesktopAppContent: React.FC = () => {
           onNewProject={() => setCurrentScreen("new_project")}
           onOpenAnimeReview={() => setCurrentScreen("anime_review")}
           onOpenOriginalStories={() => setCurrentScreen("original_stories")}
+          onOpenChronoFlow={(proj) => {
+            if (proj) setSelectedProject(proj);
+            setCurrentScreen("chronoflow");
+          }}
           onOpenAcquisition={(proj) => {
             setSelectedProject(proj);
             setCurrentScreen("acquisition");
@@ -452,7 +474,11 @@ const DesktopAppContent: React.FC = () => {
                 onBack={() => setCurrentScreen("projects")}
                 onProjectCreated={(proj) => {
                   setSelectedProject(proj);
-                  setCurrentScreen("acquisition");
+                  if (proj.source_type === "CHRONOFLOW_AI" || (proj as any).settings?.workflow_type === "chronoflow") {
+                    setCurrentScreen("chronoflow");
+                  } else {
+                    setCurrentScreen("acquisition");
+                  }
                 }}
               />
             )}

@@ -257,6 +257,16 @@ $candidateApps = @($releaseApp, $portableApp) | Where-Object { $_ -and (Test-Pat
 $nativeApp = $candidateApps | Select-Object -First 1
 
 if (-not $Dev -and $nativeApp) {
+    # Check if frontend source code has been updated since the binary was compiled
+    $latestSrc = Get-ChildItem -Path (Join-Path $rootDir "apps\desktop\src") -Recurse -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    if ($latestSrc -and ($latestSrc.LastWriteTime -gt $nativeApp.LastWriteTime)) {
+        Write-Host "  -> Note: Source code in apps/desktop/src was modified ($($latestSrc.LastWriteTime)) after the release binary was built ($($nativeApp.LastWriteTime))." -ForegroundColor Yellow
+        Write-Host "  -> Automatically launching updated live desktop app so your latest features and changes are visible." -ForegroundColor Green
+        $nativeApp = $null
+    }
+}
+
+if (-not $Dev -and $nativeApp) {
     # Clean up leftover orphaned WebView2 processes from previous sessions
     Get-CimInstance Win32_Process -Filter "name = 'msedgewebview2.exe'" -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -like "*panelflow*" } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
 
@@ -275,8 +285,14 @@ if (-not $Dev -and $nativeApp) {
     Write-Host "  -> Launching in development mode (Vite live reload)..." -ForegroundColor Cyan
     Write-Host "  -> Keep this window open while using PanelFlow Studio." -ForegroundColor Cyan
 
-    # Start Vite dev server in background process
-    $viteProcess = Start-Process -FilePath "npm.cmd" -ArgumentList "--workspace=@panelflow/desktop", "run", "dev" -WorkingDirectory $rootDir -PassThru
+    # Start Vite dev server in background process if not already running on port 5173
+    $alreadyListening = Get-NetTCPConnection -LocalPort 5173 -State Listen -ErrorAction SilentlyContinue
+    $viteProcess = $null
+    if (-not $alreadyListening) {
+        $viteProcess = Start-Process -FilePath "npm.cmd" -ArgumentList "--workspace=@panelflow/desktop", "run", "dev" -WorkingDirectory $rootDir -PassThru
+    } else {
+        Write-Host "  -> Existing Vite dev server already active on port 5173." -ForegroundColor Green
+    }
     
     # Wait for Vite dev server on port 5173
     $viteReady = $false

@@ -18,7 +18,10 @@ from engine.security.local_api import (
     insecure_local_api_enabled,
 )
 from engine.api.routers import projects, pages, panels, ocr, jobs, adapters, system, story, audio, motion, render, music, comfyui
-from engine.api.routers import history, backgrounds, packaging, autopilot, series, browser_bridge, anime, anime_review, original, youtube, motion_graphics, narration
+from engine.api.routers import history, backgrounds, packaging, autopilot, series, browser_bridge, anime, anime_review, original, youtube, motion_graphics, narration, chronoflow
+from starlette.staticfiles import StaticFiles
+from engine.chronoflow.pipeline import STUDIO_OUTPUT_DIR, COMFY_INPUT_DIR
+from engine.chronoflow.supervisor import JobSupervisor
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("panelflow.engine")
@@ -48,6 +51,8 @@ async def lifespan(app: FastAPI):
                 logger.exception("Periodic job lease recovery failed")
 
     recovery_task = asyncio.create_task(recover_leases_periodically())
+    chronoflow_sup = JobSupervisor()
+    chronoflow_sup.start_watchdog()
     logger.info("PanelFlow Studio Engine started successfully.")
     try:
         yield
@@ -118,6 +123,19 @@ def create_app(
     app.include_router(browser_bridge.router)
     app.include_router(motion_graphics.router)
     app.include_router(narration.router)
+    app.include_router(chronoflow.router)
+
+    @app.get("/chronoflow/ui")
+    @app.get("/chronoflow")
+    def chronoflow_ui():
+        return chronoflow.get_chronoflow_ui()
+
+    STUDIO_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    app.mount("/chronoflow/outputs", StaticFiles(directory=str(STUDIO_OUTPUT_DIR)), name="chronoflow_outputs")
+    app.mount("/outputs", StaticFiles(directory=str(STUDIO_OUTPUT_DIR)), name="outputs")
+    if COMFY_INPUT_DIR.exists():
+        app.mount("/chronoflow/inputs", StaticFiles(directory=str(COMFY_INPUT_DIR)), name="chronoflow_inputs")
+        app.mount("/inputs", StaticFiles(directory=str(COMFY_INPUT_DIR)), name="inputs")
 
     @app.exception_handler(Exception)
     async def global_exception_handler(request: Request, exc: Exception):

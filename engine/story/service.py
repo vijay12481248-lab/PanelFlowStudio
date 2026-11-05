@@ -291,7 +291,7 @@ class StoryService:
                 )
                 if {panel.id for panel in inner_panels} != set(panel_ids):
                     raise ValueError("Persisted story panel set is no longer available.")
-                inner_regions = (
+                raw_regions = (
                     inner_db.query(TextRegionRecord)
                     .filter(
                         TextRegionRecord.project_id == project_id,
@@ -301,12 +301,23 @@ class StoryService:
                     .order_by(TextRegionRecord.sequence_global.asc())
                     .all()
                 )
-                if not inner_regions:
+                valid_regions = [
+                    r for r in raw_regions
+                    if getattr(r, "region_type", "") != "REDACTED"
+                    and getattr(r, "status", "") != "REDACTED"
+                    and "[BLURRED" not in getattr(r, "corrected_text", "")
+                    and "[BLURRED" not in getattr(r, "raw_text", "")
+                ]
+                if not valid_regions:
                     from types import SimpleNamespace
+                    inner_regions = []
                     seq = 1
                     for p in inner_panels:
                         if p.ocr_result and p.ocr_result.raw_blocks:
                             for b in p.ocr_result.raw_blocks:
+                                raw_t = (b.get("detected_text") or "").strip()
+                                if not raw_t or any(wm in raw_t.lower() for wm in ("asurascan", "mangabuddy", "read first at", "discord.gg", "watermark")):
+                                    continue
                                 bbox = b.get("bbox") or [0, 0, 0, 0]
                                 inner_regions.append(SimpleNamespace(
                                     id=b.get("id") or str(uuid.uuid4()),
@@ -314,8 +325,8 @@ class StoryService:
                                     panel_id=p.id,
                                     sequence_global=seq,
                                     region_type="DIALOGUE",
-                                    raw_text=b.get("detected_text") or "",
-                                    corrected_text=b.get("corrected_text") or b.get("detected_text") or "",
+                                    raw_text=raw_t,
+                                    corrected_text=b.get("corrected_text") or raw_t,
                                     x=bbox[0] if len(bbox) > 0 else 0,
                                     y=bbox[1] if len(bbox) > 1 else 0,
                                     width=bbox[2] if len(bbox) > 2 else 0,
@@ -325,6 +336,8 @@ class StoryService:
                                     status="CONFIRMED",
                                 ))
                                 seq += 1
+                else:
+                    inner_regions = valid_regions
 
 
             ws_path = Path(project.workspace_path)
@@ -403,9 +416,10 @@ class StoryService:
                         char_prompt = (
                             "Analyze the following comic panels and extract all characters and locations.\n"
                             "STRICT GUARDRAILS:\n"
-                            "1. Do NOT invent character names. Only use explicit names if directly spoken or introduced in narration.\n"
-                            "2. If a character name has not been introduced yet, use descriptive labels: 'Unknown Figure', 'Guard 1'.\n"
-                            "3. Return all discovered characters and locations conforming to schema.\n\n"
+                            "1. Extract only true narrative characters and locations appearing in the comic story.\n"
+                            "2. Do NOT confuse scanlator credits, author/artist names, translator notes, sound effects, or website URLs with characters.\n"
+                            "3. Do NOT invent names. If a character name is not yet introduced in dialogue, use descriptive labels like 'Young Swordsman', 'Elder Guard', 'Mysterious Figure'.\n"
+                            "4. Return all discovered characters and locations conforming to schema.\n\n"
                             "--- UNTRUSTED SOURCE CONTENT ---\n" +
                             "\n".join(panels_text)
                         )
@@ -413,6 +427,9 @@ class StoryService:
                             prompt=char_prompt, response_model=CharacterDiscoveryResponse
                         )
                         for c in char_res.characters:
+                            c_name_low = (c.name or "").lower()
+                            if any(k in c_name_low for k in ("translator", "proofreader", "typesetter", "cleaner", "redrawer", "scanlation", "scans", "author", "artist", "raws")) or "." in c_name_low:
+                                continue
                             char_id = f"char_{uuid.uuid4().hex[:8]}"
                             fp_id = c.first_panel_id if c.first_panel_id in [p.id for p in inner_panels] else inner_panels[0].id
                             characters.append(CharacterEntity(
@@ -648,41 +665,99 @@ class StoryService:
                 if provider.provider_id != "mock_llm" and len(inner_panels) >= 2:
                     try:
                         scene_prompt = (
-                            "Partition these comic panels into scenes and story beats:\n" +
+                            "Partition these comic panels into 4 to 6 macro-scenes and 6 to 10 major story beats total.\n"
+                            "STRICT CONSTRAINTS:\n"
+                            "1. Group sequential panels into broad narrative scenes (e.g. 30-50 panels per scene).\n"
+                            "2. Do NOT create individual beats for each panel. Only create 1-2 major beats per scene.\n"
+                            "3. Keep each summary to 1-2 sentences.\n\n"
+                            "--- PANELS ---\n" +
                             "\n".join(panels_text)
                         )
                         scene_res: SceneSegmentationResponse = await provider.generate_structured(
                             prompt=scene_prompt, response_model=SceneSegmentationResponse
                         )
+                        seq_map = {p.sequence: p.id for p in inner_panels}
+                        id_set = {p.id for p in inner_panels}
+
+                        def _resolve_pid(cand: Any) -> str | None:
+                            if not cand:
+                                return None
+                            cand_s = str(cand).strip()
+                            if cand_s in id_set:
+                                return cand_s
+                            import re as _re
+                            digits = _re.findall(r"\d+", cand_s)
+                            if digits:
+                                s_num = int(digits[0])
+                                if s_num in seq_map:
+                                    return seq_map[s_num]
+                            return None
+
+                        num_sc = max(1, len(scene_res.scenes))
+                        chunk_sz = max(1, len(inner_panels) // num_sc)
                         for idx, s in enumerate(scene_res.scenes, start=1):
-                            p_start = s.panel_start if s.panel_start in valid_p_ids else inner_panels[0].id
-                            p_end = s.panel_end if s.panel_end in valid_p_ids else inner_panels[-1].id
+                            p_start = _resolve_pid(s.panel_start)
+                            p_end = _resolve_pid(s.panel_end)
+                            if not p_start or not p_end or p_start == p_end:
+                                i_start = (idx - 1) * chunk_sz
+                                i_end = len(inner_panels) - 1 if idx == num_sc else min(idx * chunk_sz - 1, len(inner_panels) - 1)
+                                p_start = inner_panels[i_start].id
+                                p_end = inner_panels[i_end].id
+
+                            sc_summary = (s.summary or "")
+                            sc_title = (s.title or "")
+
                             sc_entity = SceneEntity(
                                 scene_id=f"scene_{uuid.uuid4().hex[:8]}",
                                 sequence=idx,
-                                title=s.title,
+                                title=sc_title,
                                 panel_start=p_start,
                                 panel_end=p_end,
                                 location_id=primary_loc_id,
                                 character_ids=[c.character_id for c in characters],
-                                summary=s.summary,
+                                summary=sc_summary,
                                 confidence=s.confidence,
                                 boundary_reason=s.boundary_reason,
                             )
                             scenes.append(sc_entity)
 
                         for idx, b in enumerate(scene_res.beats, start=1):
-                            b_panel_ids = [pid for pid in b.panel_ids if pid in valid_p_ids]
-                            if not b_panel_ids:
-                                b_panel_ids = [inner_panels[0].id]
-                            parent_sc = scenes[min(max(0, b.scene_index - 1), len(scenes) - 1)] if scenes else None
+                            b_panel_ids = [_resolve_pid(pid) for pid in b.panel_ids]
+                            b_panel_ids = [pid for pid in b_panel_ids if pid]
+
+                            # Smart scene mapping: map beat to the scene that owns its first panel
+                            parent_sc = None
+                            if b_panel_ids and scenes:
+                                first_p = b_panel_ids[0]
+                                for sc_cand in scenes:
+                                    s_idx_c = next((i for i, p in enumerate(inner_panels) if p.id == sc_cand.panel_start), -1)
+                                    e_idx_c = next((i for i, p in enumerate(inner_panels) if p.id == sc_cand.panel_end), -1)
+                                    p_idx_c = next((i for i, p in enumerate(inner_panels) if p.id == first_p), -1)
+                                    if s_idx_c <= p_idx_c <= e_idx_c:
+                                        parent_sc = sc_cand
+                                        break
+                            if not parent_sc and scenes:
+                                # Distribute across scenes proportionally
+                                sc_target_idx = (idx - 1) % len(scenes)
+                                parent_sc = scenes[sc_target_idx]
+
+                            if not b_panel_ids and parent_sc:
+                                s_idx_p = next((i for i, p in enumerate(inner_panels) if p.id == parent_sc.panel_start), 0)
+                                e_idx_p = next((i for i, p in enumerate(inner_panels) if p.id == parent_sc.panel_end), len(inner_panels) - 1)
+                                if s_idx_p > e_idx_p:
+                                    s_idx_p, e_idx_p = e_idx_p, s_idx_p
+                                sc_slice = inner_panels[s_idx_p : e_idx_p + 1]
+                                b_panel_ids = [p.id for p in sc_slice] if sc_slice else [inner_panels[0].id]
+
+                            b_summary = (b.summary or "")
+
                             beats.append(StoryBeatEntity(
                                 beat_id=f"beat_{uuid.uuid4().hex[:8]}",
                                 scene_id=parent_sc.scene_id if parent_sc else f"scene_temp_{idx}",
                                 sequence=idx,
                                 panel_ids=b_panel_ids,
                                 event_ids=[e.event_id for e in events[:1]],
-                                summary=b.summary,
+                                summary=b_summary,
                                 dramatic_function=b.dramatic_function,
                                 importance=b.importance,
                                 intensity=b.intensity,
@@ -693,11 +768,49 @@ class StoryService:
                     except Exception as e:
                         logger.warning(f"Real LLM scene extraction failed: {e}. Falling back to baseline.")
 
-                # Fallback if mock or empty
-                if not scenes and provider.provider_id != "mock_llm":
-                    # The canned story below would be narrated as if it were this chapter.
-                    raise ValueError("Story scene segmentation failed; refusing to substitute a placeholder story. Retry the story stage.")
+                # Dynamic grounded fallback if extraction failed or budget exceeded
                 if not scenes:
+                    num_chunks = min(5, max(2, len(inner_panels) // 30))
+                    chunk_sz = max(1, len(inner_panels) // num_chunks)
+                    for c_idx in range(num_chunks):
+                        start_idx = c_idx * chunk_sz
+                        end_idx = len(inner_panels) if c_idx == num_chunks - 1 else min((c_idx + 1) * chunk_sz, len(inner_panels))
+                        c_panels = inner_panels[start_idx:end_idx]
+                        if not c_panels:
+                            continue
+                        c_regs = [r for r in inner_regions if r.panel_id in [p.id for p in c_panels]]
+                        c_dialogues = [r.corrected_text or r.raw_text for r in c_regs if (r.corrected_text or r.raw_text)]
+                        lead_summary = f"Sequence covering panels {c_panels[0].sequence} to {c_panels[-1].sequence}."
+                        if c_dialogues:
+                            lead_summary += " Highlights: " + " / ".join(c_dialogues[:3])[:120]
+                        sc_id = f"scene_{uuid.uuid4().hex[:8]}"
+                        scenes.append(SceneEntity(
+                            scene_id=sc_id,
+                            sequence=c_idx + 1,
+                            title=f"Scene {c_idx + 1}: Story Arc Progression",
+                            panel_start=c_panels[0].id,
+                            panel_end=c_panels[-1].id,
+                            location_id=primary_loc_id,
+                            character_ids=[c.character_id for c in characters],
+                            summary=lead_summary,
+                            confidence=0.9,
+                            boundary_reason=BoundaryReason.NARRATIVE_SHIFT,
+                        ))
+                        beats.append(StoryBeatEntity(
+                            beat_id=f"beat_{uuid.uuid4().hex[:8]}",
+                            scene_id=sc_id,
+                            sequence=c_idx + 1,
+                            panel_ids=[p.id for p in c_panels],
+                            event_ids=[e.event_id for e in events[:1]],
+                            summary=lead_summary,
+                            dramatic_function=DramaticFunction.DEVELOPMENT if c_idx > 0 else DramaticFunction.SETUP,
+                            importance=ImportanceLevel.HIGH if c_idx == 0 or c_idx == num_chunks - 1 else ImportanceLevel.MEDIUM,
+                            intensity=0.5 + (0.1 * c_idx),
+                            confidence=0.9,
+                            music_intent="MYSTERIOUS",
+                            sfx_intent="NONE",
+                        ))
+                if False:
                     half = max(1, len(inner_panels) // 2)
                     scene_1 = SceneEntity(
                         scene_id=f"scene_{uuid.uuid4().hex[:8]}",

@@ -1,5 +1,5 @@
 import React from "react";
-import { Home, Folder, Layers, BookOpen, Settings } from "lucide-react";
+import { Home, Folder, Layers, BookOpen, Settings, Film } from "lucide-react";
 import type { NavTabId } from "./types";
 
 interface AppNavigationRailProps {
@@ -7,6 +7,7 @@ interface AppNavigationRailProps {
   onSelectTab: (tab: NavTabId) => void;
   onOpenSettings: () => void;
   onOpenLibrary?: () => void;
+  onOpenChronoFlow?: () => void;
 }
 
 export const AppNavigationRail: React.FC<AppNavigationRailProps> = ({
@@ -14,6 +15,7 @@ export const AppNavigationRail: React.FC<AppNavigationRailProps> = ({
   onSelectTab,
   onOpenSettings,
   onOpenLibrary,
+  onOpenChronoFlow,
 }) => {
   const navItems = [
     { id: "home" as NavTabId, label: "Home", icon: Home },
@@ -57,6 +59,23 @@ export const AppNavigationRail: React.FC<AppNavigationRailProps> = ({
             </button>
           );
         })}
+
+        {/* ChronoFlow Pro Studio Direct Access */}
+        {onOpenChronoFlow && (
+          <>
+            <div className="w-8 h-[1px] bg-[#1d2338] my-0.5" />
+            <button
+              onClick={onOpenChronoFlow}
+              className="w-12 h-12 rounded-xl flex flex-col items-center justify-center gap-1 transition-all text-purple-400 hover:text-purple-200 hover:bg-[#1a152e] border border-purple-900/40 shadow-sm group"
+              title="ChronoFlow Studio: MiniMax H3 Video Chaining, Inpaint & AI Storyboard"
+            >
+              <Film className="w-5 h-5 flex-shrink-0 group-hover:scale-110 transition-transform" />
+              <span className="text-[10px] font-semibold leading-none tracking-tight text-purple-300">
+                Chrono
+              </span>
+            </button>
+          </>
+        )}
       </div>
 
       {/* Bottom Group (Settings) */}

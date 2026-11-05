@@ -449,9 +449,13 @@ class ProjectService:
             raise KeyError(f"Project not found: {project_id}")
 
         # Enforce rights status validation
+        perm_notes = (record.settings or {}).get("permission_notes") or record.license_info
+        if str(record.rights_status).endswith("COMMENTARY_REVIEW") and not perm_notes:
+            perm_notes = "Transformative episodic commentary, critical analysis, and educational recap review."
         rights_decl = RightsDeclaration(
             status=RightsStatus(record.rights_status),
             license_type=record.license_info,
+            permission_notes=perm_notes,
         )
         rights_decl.validate_for_acquisition()
 

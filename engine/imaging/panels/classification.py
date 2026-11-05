@@ -59,25 +59,33 @@ class PanelCoverageReport(BaseModel):
 
 # Promotional and non-story OCR text patterns
 PROMO_PATTERNS = [
-    re.compile(r"\b(?:visit|read|support|join|follow)\s+(?:us\s+(?:at|on)\s+|our\s+(?:web)?site\b)", re.IGNORECASE),
+    # Call to action & social / site invitations
+    re.compile(r"\b(?:visit|support|join|follow|subscribe|donate)\s+(?:us\s+(?:at|on)\s+|our\s+(?:web)?site\b)", re.IGNORECASE),
+    re.compile(r"\b(?:read\s+first\s+(?:at|on)|faster\s*release|higher\s*quality|support\s*us|donate\s*(?:via|now)?|uploaded\s*to)\b", re.IGNORECASE),
+    re.compile(r"\b(?:if\s*you\s*enjoyed\s*this|thank\s*you\s*for\s*reading|leave\s*a\s*comment)\b", re.IGNORECASE),
     re.compile(r"\b(?:https?://|www\.)\S+", re.IGNORECASE),
-    re.compile(r"\b[\w-]+\.(?:com|net|org|io|gg)\b", re.IGNORECASE),
-    re.compile(r"manhuaplus", re.IGNORECASE),
-    re.compile(r"read\s*on\s*manhua", re.IGNORECASE),
-    re.compile(r"faster\s*release", re.IGNORECASE),
-    re.compile(r"enjoyed\s*this\s*series", re.IGNORECASE),
-    re.compile(r"support\s*us", re.IGNORECASE),
-    re.compile(r"patreon\.com", re.IGNORECASE),
-    re.compile(r"paypal", re.IGNORECASE),
-    re.compile(r"discord\.gg", re.IGNORECASE),
-    re.compile(r"donate", re.IGNORECASE),
-    re.compile(r"scanlation", re.IGNORECASE),
-    re.compile(r"translated\s*by", re.IGNORECASE),
-    re.compile(r"proofread\s*by", re.IGNORECASE),
-    re.compile(r"cleaned\s*by", re.IGNORECASE),
-    re.compile(r"typeset\s*by", re.IGNORECASE),
-    re.compile(r"uploaded\s*to", re.IGNORECASE),
-    re.compile(r"chapter\s*end", re.IGNORECASE),
+    # Domains (any .com, .net, .org, .gg, .me, etc.)
+    re.compile(r"\b[a-zA-Z0-9][a-zA-Z0-9-]{1,61}[a-zA-Z0-9]\.(?:com|net|org|io|gg|me|to|xyz|site|tv|cc|co|club|online|app|moe|fun|live|link)\b", re.IGNORECASE),
+    # Common scanlator social handles & donation platforms
+    re.compile(r"\b(?:discord\.(?:gg|com/invite)|patreon\.com|paypal(?:\.me)?|ko-fi\.com|t\.me|twitter\.com|x\.com)\b", re.IGNORECASE),
+    # Scanlation & credit role markers
+    re.compile(r"\b(?:translated\s*(?:by)?|translation|tl|proofread\s*(?:by)?|proofreader|pr|typeset\s*(?:by)?|typesetter|ts|cleaned\s*(?:by)?|cleaner|cl|redraw\s*(?:by)?|redrawer|rd|raw\s*provider|raws|qc|quality\s*check)\s*[:：\-\–]", re.IGNORECASE),
+    re.compile(r"\b(?:scanlation|scans\s+team|scanlations)\b", re.IGNORECASE),
+    re.compile(r"\bchapter\s*(?:end|\d+\s*end|finished)\b", re.IGNORECASE),
+]
+
+CREDIT_ROLE_TOKENS = {
+    "cl", "ts", "pr", "tl", "rd", "rwe", "qc", "raws", "raw", "c/rd", "scans", "scan"
+}
+
+GENERIC_CREDIT_TERMS = [
+    "translated", "proofread", "cleaned", "typeset", "redraw", "raws", "scanlation",
+    "credits", "presents", "team", "discord", "patreon", "paypal", "author", "artist"
+]
+
+GENERIC_OUTRO_PATTERNS = [
+    re.compile(r"\b(?:to\s*be\s*continued|end\s*of\s*(?:the\s*)?chapter|chapter\s*\d+\s*end|the\s*end|see\s*you\s*(?:in\s*the\s*)?next\s*chapter|thank(?:s|\s*you)\s*for\s*reading)\b", re.IGNORECASE),
+    re.compile(r"\b(?:next\s*chapter\s*(?:is|will\s*be)?\s*(?:available|coming|soon)?)\b", re.IGNORECASE),
 ]
 
 
@@ -200,9 +208,12 @@ class PanelClassifier:
                 )
 
         # 4. First / Last Page Splash Envelope Checks
-        if is_first_on_first_page and h > 1400:
-            # Check if it has title / credit splash
-            if any(term in combined_text for term in ["chapter", "magic emperor", "manhuaplus", "presents", "team"]):
+        if is_first_on_first_page:
+            words = set(re.findall(r"\b[a-z/]+\b", combined_text))
+            found_roles = words & CREDIT_ROLE_TOKENS
+            has_credit = bool(found_roles) or any(term in combined_text for term in GENERIC_CREDIT_TERMS)
+            has_promo = any(pattern.search(combined_text) for pattern in PROMO_PATTERNS)
+            if has_credit or has_promo:
                 return PanelCoverageItem(
                     panel_id=panel_id,
                     reading_order=reading_order,
@@ -213,14 +224,18 @@ class PanelClassifier:
                     aspect_ratio=aspect,
                     classification=PanelClassificationKind.NON_STORY_CONTENT,
                     subtype=NonStorySubtype.COVER_CREDITS,
-                    confidence=0.95,
-                    exclusion_reason="First page scanlation intro/title splash card",
+                    confidence=0.98,
+                    exclusion_reason="First page scanlation intro/cover credits splash card",
                     ocr_snippets=[ocr_text] if ocr_text else [],
                     vision_description=vision_summary,
                 )
 
-        if is_last_on_last_page and h > 1800:
-            if any(term in combined_text for term in ["to be continued", "end", "next chapter", "discord", "credits", "manhuaplus"]):
+        if is_last_on_last_page:
+            has_outro = any(p.search(combined_text) for p in GENERIC_OUTRO_PATTERNS)
+            has_promo = any(p.search(combined_text) for p in PROMO_PATTERNS)
+            has_credit = any(term in combined_text for term in ("discord", "credits", "patreon", "paypal", "support us", "donation", "scanlation"))
+            has_redacted = "[blurred" in combined_text or "[redacted" in combined_text
+            if (has_outro or has_promo or has_credit or has_redacted) and not story_content_present:
                 return PanelCoverageItem(
                     panel_id=panel_id,
                     reading_order=reading_order,
@@ -231,7 +246,7 @@ class PanelClassifier:
                     aspect_ratio=aspect,
                     classification=PanelClassificationKind.NON_STORY_CONTENT,
                     subtype=NonStorySubtype.OUTRO_CREDITS,
-                    confidence=0.95,
+                    confidence=0.98,
                     exclusion_reason="Last page scanlation outro/credits card",
                     ocr_snippets=[ocr_text] if ocr_text else [],
                     vision_description=vision_summary,

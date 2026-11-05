@@ -1,0 +1,11 @@
+{
+  "test_job_123": {
+    "id": "test_job_123",
+    "prompt": "Test cinematic prompt",
+    "status": "cancelled",
+    "created_at": 1000.0,
+    "status_msg": "Cancelled by user.",
+    "last_updated_at": 1793851393.7721508,
+    "cancelled": true
+  }
+}

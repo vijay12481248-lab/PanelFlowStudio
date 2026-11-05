@@ -83,7 +83,12 @@ class LocalApiSecurityMiddleware(BaseHTTPMiddleware):
                 request.scope["raw_path"] = clean_path.encode("ascii")
                 path = clean_path
 
-        if path == "/api/system/health":
+        if request.method in {"GET", "HEAD"} and path in {
+            "/api/system/health",
+            "/chronoflow/ui",
+            "/chronoflow",
+            "/api/chronoflow/ui",
+        }:
             response = await call_next(request)
             response.headers["Referrer-Policy"] = "no-referrer"
             return response
@@ -92,7 +97,8 @@ class LocalApiSecurityMiddleware(BaseHTTPMiddleware):
         if request.method == "OPTIONS" and origin in self.allowed_origins:
             return await call_next(request)
 
-        supplied = request.headers.get(TOKEN_HEADER, "") or resource_token
+        query_token = request.query_params.get("token") or request.query_params.get("pf-token") or ""
+        supplied = request.headers.get(TOKEN_HEADER, "") or resource_token or query_token
         if not supplied and request.headers.get("Authorization", "").startswith("Bearer "):
             supplied = request.headers.get("Authorization", "").split(" ", 1)[1].strip()
         if not self.engine_token or not hmac.compare_digest(supplied, self.engine_token):
@@ -111,5 +117,7 @@ class LocalApiSecurityMiddleware(BaseHTTPMiddleware):
         return (
             path.endswith(("/file", "/normalized-file", "/output", "/contact-sheet"))
             or "/samples/" in path
+            or "/chronoflow/" in path
+            or path.startswith(("/outputs/", "/inputs/"))
             or path == "/api/render/events"
         )
