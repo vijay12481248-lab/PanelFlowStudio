@@ -429,3 +429,16 @@ hard-coded Qwen and FLUX graphs (served twice: the aiohttp `server.py` and the F
 - **Not unified yet (needs a decision):** the SDXL stack - `anime_sdxl`, `anime_sdxl_ipa(2)`, `anime_sdxl_controlnet` (relabelled
   `sdxl_conditioning`), `anime_sdxl_inpaint`, `anime_alpha_matting` - and ChronoFlow's own FLUX-checkpoint inpaint graph. ControlNet pose/depth,
   IP-Adapter, inpaint and matting have no Qwen equivalent, and about a dozen tests of the rigging work are built on them.
+
+## Still, whole pictures (2026-11-06): no zoom, no pan, no shake, no cropping
+
+Reported on the cat explainer: pictures shook a little and parts of them were cut off (top/bottom). Causes, measured on the real video: the
+render zoomed/panned every picture with `zoompan` (it moves in whole-pixel steps, which jitters, and it crops the edges: up to 12%),
+and square or portrait pictures (11 of 24 here) were centre-cropped to 16:9, cutting heads, glasses and feeders.
+
+Now `engine/original/video.py` shows every picture whole and still: a picture within 3% of 16:9 is scaled to fill (the art step's
+1344x768 is 1.6% off, not visible); any other shape sits centred on a blurred, darkened copy of itself. `zoompan`, the 4-motion cycle and
+the `action_shake` effect are removed (the older "push-in / pan" description in S3 above is history). The cached-segment key includes
+`RENDER_LOOK`, so clips rendered by an older look are never reused. Measured per panel (picture change between near the start and near the end,
+captions masked): old video mean 33.6 (max 50.9), new video mean 0.10 (max 0.55 = encoder noise). The new file is 22 MB instead of 120 MB.
+Not changed: the anime-review renderer (`engine/anime/review/render.py`) has its own slow zoom.

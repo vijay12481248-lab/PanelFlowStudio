@@ -53,17 +53,68 @@ def test_voice_panel_is_frame_aligned_min_length_and_reads_caption_then_dialogue
     assert d * 30 == pytest.approx(round(d * 30), abs=1e-3) and d >= v.MIN_PANEL_SEC
 
 
-def test_render_panel_frame_count_is_exact_for_every_motion(tmp_path):
+def _marked_picture(path, w, h):
+    """64px colour blocks (compress cleanly, but any shift or zoom changes many pixels) with a 24px RED band along the top and a
+    24px BLUE band along the bottom (so any crop shows)."""
+    cells = np.random.default_rng(1).integers(60, 200, (h // 64 + 1, w // 64 + 1, 3), dtype=np.uint8)
+    a = np.kron(cells, np.ones((64, 64, 1), dtype=np.uint8))[:h, :w].copy()
+    a[:24], a[-24:] = (255, 0, 0), (0, 0, 255)
+    Image.fromarray(a).save(path)
+
+
+def _frame_at(video, seconds, out):
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-ss", str(seconds), "-i", str(video), "-frames:v", "1", str(out)], check=True)
+    return np.asarray(Image.open(out).convert("RGB")).astype(int)
+
+
+def _render_still(tmp_path, name, w, h):
+    (tmp_path / "panels").mkdir(exist_ok=True)
+    img = tmp_path / "panels" / f"{name}.png"
+    _marked_picture(img, w, h)
+    wav = tmp_path / "a.wav"
+    nar, chars = v.voices_for(story())
+    d = v.voice_panel(FakeTts(), story().panels[0], nar, chars, 30.0, wav)
+    out = tmp_path / f"{name}.mp4"
+    v.render_panel(img, wav, d, 30.0, "", tmp_path, False, out)
+    return out, d
+
+
+def test_render_panel_frame_count_is_exact(tmp_path):
     make_images(tmp_path, 1)
     wav = tmp_path / "a.wav"
     nar, chars = v.voices_for(story())
     d = v.voice_panel(FakeTts(), story().panels[0], nar, chars, 30.0, wav)
-    for m in v.MOTIONS:
-        out = tmp_path / f"{m}.mp4"
-        v.render_panel(tmp_path / "panels" / "p001.png", wav, d, 30.0, "Hello there little moon", m, tmp_path, True, out)
-        n = subprocess.run(["ffprobe", "-v", "error", "-count_frames", "-select_streams", "v:0", "-show_entries",
-                            "stream=nb_read_frames,width,height", "-of", "csv=p=0", str(out)], capture_output=True, text=True).stdout.strip()
-        assert n.split(",") == ["1920", "1080", str(round(d * 30))], m
+    out = tmp_path / "p.mp4"
+    v.render_panel(tmp_path / "panels" / "p001.png", wav, d, 30.0, "Hello there little moon", tmp_path, True, out)
+    n = subprocess.run(["ffprobe", "-v", "error", "-count_frames", "-select_streams", "v:0", "-show_entries",
+                        "stream=nb_read_frames,width,height", "-of", "csv=p=0", str(out)], capture_output=True, text=True).stdout.strip()
+    assert n.split(",") == ["1920", "1080", str(round(d * 30))]
+
+
+@pytest.mark.parametrize("name,w,h", [("wide", 1344, 768), ("square", 1024, 1024), ("portrait", 832, 1216)])
+def test_the_whole_picture_is_in_frame_and_nothing_moves(tmp_path, name, w, h):
+    out, d = _render_still(tmp_path, name, w, h)
+    first, last = _frame_at(out, 0.3, tmp_path / "f1.png"), _frame_at(out, d - 0.5, tmp_path / "f2.png")
+    cx = 960  # the picture is centred, so its top and bottom edges are at the middle column
+    top, bottom = first[6, cx], first[1073, cx]
+    assert top[0] > 170 and top[2] < 100, f"{name}: the top edge of the picture is cut off ({top})"
+    assert bottom[2] > 170 and bottom[0] < 100, f"{name}: the bottom edge of the picture is cut off ({bottom})"
+    assert np.abs(first - last).mean() < 1.5, f"{name}: the picture moves/shakes between frames"  # encoder noise only
+
+
+def test_no_shake_or_zoom_effect_exists_any_more():
+    assert not hasattr(v, "MOTIONS") and not hasattr(v, "motion_filter")
+    assert v.motion_fx_filters("action_shake") == []  # an unknown/removed effect adds nothing instead of wobbling the frame
+
+
+def test_render_cache_key_changes_with_the_look(tmp_path, monkeypatch):
+    make_images(tmp_path)
+    s = story()
+    v.build_video(s, tmp_path, FakeTts(), music=None)
+    keys = json.loads((tmp_path / "video_meta.json").read_text())
+    monkeypatch.setattr(v, "RENDER_LOOK", "something-else")
+    v.build_video(s, tmp_path, FakeTts(), music=None)
+    assert json.loads((tmp_path / "video_meta.json").read_text())["p001"]["render"] != keys["p001"]["render"]  # old clips are not reused
 
 
 def test_build_video_total_equals_sum_of_panel_audio_and_reruns_reuse_work(tmp_path):

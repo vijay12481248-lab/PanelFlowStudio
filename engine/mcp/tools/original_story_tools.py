@@ -97,7 +97,7 @@ async def panelflow_original_generate_art(
 
 @registry.tool(
     name="panelflow_original_render_video",
-    description="Render a fully voiced, animated 1080p episode video (Ken Burns motion, speech narration, music, captions) and generate YouTube packaging.",
+    description="Render a fully voiced, 1080p episode video (every picture shown whole and still - no zoom, pan or shake; speech narration, music, captions) and generate YouTube packaging.",
     input_schema={
         "type": "object",
         "properties": {
