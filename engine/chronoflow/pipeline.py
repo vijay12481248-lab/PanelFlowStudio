@@ -337,6 +337,9 @@ class ChronoFlowPipeline:
         return graph
 
     async def generate_art_image(self, prompt, negative_prompt, width=1024, height=1024, seed=None, refine: bool = False) -> str:
+        return (await self.generate_art_image_ex(prompt, negative_prompt, width, height, seed, refine))[0]
+
+    async def generate_art_image_ex(self, prompt, negative_prompt, width=1024, height=1024, seed=None, refine: bool = False) -> tuple[str, dict | None]:
         """One keyframe / reference image from the central ArtEngine, saved into ComfyUI's input/ folder (Character Vault, MiniMax H3).
 
         There is exactly one text-to-image workflow in PanelFlow (see engine/comfyui/art.py); ChronoFlow does not carry its own graphs.
@@ -344,13 +347,17 @@ class ChronoFlowPipeline:
         if refine:  # opt-in: review -> plan -> repair/redraw; candidates are kept under output/chronoflow/refine
             from engine.original.refine import refine_art_image
 
-            art, _ = await asyncio.to_thread(refine_art_image, prompt, negative_prompt, int(width), int(height), seed,
-                                             ws=STUDIO_OUTPUT_DIR / "refine", key=f"art_{uuid.uuid4().hex[:8]}")
+            from engine.original.refine import summary
+
+            art, refined = await asyncio.to_thread(refine_art_image, prompt, negative_prompt, int(width), int(height), seed,
+                                                   ws=STUDIO_OUTPUT_DIR / "refine", key=f"art_{uuid.uuid4().hex[:8]}")
+            info = summary(refined)
         else:
+            info = None
             art = await asyncio.to_thread(ArtEngine().generate, prompt, negative_prompt, int(width), int(height), seed, "chronoflow_art")
         filename = f"art_{uuid.uuid4().hex[:8]}.png"
         (COMFY_INPUT_DIR / filename).write_bytes(art.png)
-        return filename
+        return filename, info
 
     def build_inpaint_prompt(self, image_filename, mask_filename, prompt, denoise=0.85, steps=4, seed=None, model="flux"):
         if seed is None:

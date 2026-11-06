@@ -34,7 +34,7 @@ def wait_for_previous(store: SeriesStore, series_id: str, number: int, is_cancel
 
 
 def run_episode(store: SeriesStore, series_id: str, number: int, channel: ChannelPreset | None, provider, runner_factory,
-                progress: Progress, is_cancelled: Callable[[], bool], scenes: int | None = None, check: bool = True) -> dict:
+                progress: Progress, is_cancelled: Callable[[], bool], scenes: int | None = None, check: bool = True, refine: bool = False) -> dict:
     wait_for_previous(store, series_id, number, is_cancelled)
     series = store.get(series_id)
     ws = store.episode_dir(series_id, number)
@@ -72,7 +72,7 @@ def run_episode(store: SeriesStore, series_id: str, number: int, channel: Channe
         store.pull_sheets(series_id, ws)
         runner = runner_factory()
         report = art.generate_art(story, ws, runner, provider if check else None,
-                                  progress=lambda p, m: step(0.2 + 0.45 * p, m), is_cancelled=is_cancelled)
+                                  progress=lambda p, m: step(0.2 + 0.45 * p, m), is_cancelled=is_cancelled, refine=True if refine else None)
         store.push_sheets(series_id, ws)
 
         step(0.65, "Voicing and rendering the video")

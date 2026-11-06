@@ -115,8 +115,13 @@ def get_story(slug: str):
 
 
 @router.post("/story/{slug}/art")
-async def create_art(slug: str, limit: int | None = None, check: bool = True):
-    """Character sheets + panel images through ComfyUI (cached; reruns only redo changed panels). Long: minutes per ~10 panels."""
+async def create_art(slug: str, limit: int | None = None, check: bool = True, refine: bool = False):
+    """Character sheets + panel images through ComfyUI (cached; reruns only redo changed panels). Long: minutes per ~10 panels.
+
+    refine=true runs directed panels through the review -> plan -> repair/redraw loop (slower; needs the consistency check, i.e. check=true).
+    Every candidate is kept under panels/_candidates/ and repaired pictures are flagged for a look."""
+    if refine and not check:
+        raise HTTPException(status_code=422, detail="refine needs the picture review: it cannot run with check=false")
     ws = STORY_ROOT / Path(slug).name
     f = ws / "story.json"
     if not f.exists():
@@ -131,7 +136,7 @@ async def create_art(slug: str, limit: int | None = None, check: bool = True):
         runner = art_mod.ComfyRunner()
     except Exception as e:  # ComfyUI down or workflow/model missing
         raise HTTPException(status_code=503, detail=str(e))
-    return await asyncio.to_thread(art_mod.generate_art, story, ws, runner, provider, limit)
+    return await asyncio.to_thread(art_mod.generate_art, story, ws, runner, provider, limit, refine=True if refine else None)
 
 
 @router.post("/story/{slug}/video")
@@ -197,6 +202,7 @@ class EpisodesRequest(BaseModel):
     start_date: _date | None = None  # first publish day; default tomorrow, then one per day at 18:00
     scenes: int | None = Field(default=None, ge=3, le=14)
     check: bool = True
+    refine: bool = False  # review each picture, then repair or redraw it (slower; needs check=true)
 
 
 @router.post("/series")
@@ -235,13 +241,15 @@ def get_series(series_id: str):
 @router.post("/series/{series_id}/episodes")
 def queue_episodes(series_id: str, req: EpisodesRequest, db: Session = Depends(get_db)):
     """Queues `count` consecutive episodes as durable jobs with one publish slot per day (upload itself is not automated yet)."""
+    if req.refine and not req.check:
+        raise HTTPException(status_code=422, detail="refine needs the picture review: it cannot run with check=false")
     store = _store()
     try:
         store.get(series_id)
     except KeyError:
         raise HTTPException(status_code=404, detail="series not found")
     try:
-        return enqueue_episodes(db, store, series_id, req.count, publish_times(req.count, req.start_date), req.scenes, req.check)
+        return enqueue_episodes(db, store, series_id, req.count, publish_times(req.count, req.start_date), req.scenes, req.check, req.refine)
     except KeyError as e:
         raise HTTPException(status_code=422, detail=str(e))
 

@@ -491,3 +491,13 @@ Plan and research: the investigation report of 2026-11-06 (reuse the reviewer, n
   ("not resting on any surface"), so mounted / hanging / attached / stacked objects are anchored. Result: attempts 1 and 2 failed the count, the planner redrew with the missing
   item first, attempt 3 passed and I counted exactly seven apples in it (the clock at 3:00, teapot left, cup right). Limits: one prompt, one seed; the counter can be wrong for
   heavily overlapping objects; with the counter alone the earlier run kept the wrong-count picture because a false contact failure sank the correct one.
+- **Where `refine` is exposed (all default off):** `POST /api/projects/{id}/comfyui/image` (`refine` in the body, kept in the persisted job input; a job saved before this existed
+  rehydrates with it off), `POST /api/chronoflow/generate_image` (`refine` in; the response gains a `refine` summary only when it ran) and the MCP tool
+  `panelflow_chronoflow_generate_image`, `POST /api/original/story/{slug}/art?refine=true`, `POST /api/original/series/{id}/episodes` (`refine` in the body, carried through the durable job
+  spec to `generate_art`). `refine` without the picture review (`check=false`) is refused with 422. UI: a "check and fix pictures (slower)" checkbox on the Original Stories episode
+  queue, and "Check and fix the picture (slower)" in the ChronoFlow image panel, which shows how many tries it took and asks for a look when the picture was repaired or still failing.
+  `refine.summary()` is the one shape returned (status, selected, generations, repaired, reason, per-iteration review + crop check; no image bytes).
+- **Checked live through the real HTTP route** (`/api/chronoflow/generate_image`, `refine:true`, real engine): the first run ended `needs_review` after three identical 0.739 scores for a
+  red mug next to a green apple - the anatomy audit failed "correct number of limbs" on a picture with no creatures ("there are no limbs visible" counted as a defect). The story path
+  already skipped the audit for character-less shots; the prompt path now asks first whether any person, animal or creature is visible. Same prompt: accepted on the first try, 41 s.
+  Not exercised: the desktop UI in a real window (type-checked only), the episode queue and the Comfy image job with `refine` on a real engine.

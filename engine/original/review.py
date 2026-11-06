@@ -934,6 +934,17 @@ async def locate_failed_items(provider, image: Path, review: Review, limit: int 
     return found
 
 
+async def _has_living_subject(provider, image: Path) -> bool | None:
+    """Whether any person, animal or creature is in the picture (None: could not tell). The story path skips the anatomy audit when the shot has no
+    characters; a prompt has no shot spec, and a still life failed 'correct number of limbs' because 'there are no limbs visible' counted as a defect."""
+    try:
+        qa = await _vqa(provider, image, [("there is at least one person, animal or creature in the picture", True)])
+    except Exception:
+        return None
+    answer = qa[0].answer.strip().lower() if qa else ""
+    return False if answer.startswith("n") else True if answer.startswith("y") else None
+
+
 async def evaluate_prompt_image(provider, image: Path, prompt: str, audit_gates: bool = True, locate_defects: bool = True) -> Review:
     """Review one image against the prompt that made it. Raises nothing for an unusable model answer: those items come back 'uncertain'."""
     claims = await extract_prompt_requirements(provider, prompt)
@@ -957,7 +968,8 @@ async def evaluate_prompt_image(provider, image: Path, prompt: str, audit_gates:
             stated[n] = False
     audit_items: list[ItemVerdict] = []
     if audit_gates:
-        audit_items += await _audit_anatomy(provider, image, description=description)
+        if await _has_living_subject(provider, image) is not False:
+            audit_items += await _audit_anatomy(provider, image, description=description)
         audit_items += await _audit_spatial_contact(provider, image, claims=checked, description=description, caption=prompt)
     review = combine(checked, qa, stated, description, audit_items=audit_items)
     _annotate(review, checked, [grounded[k] for k in keep])

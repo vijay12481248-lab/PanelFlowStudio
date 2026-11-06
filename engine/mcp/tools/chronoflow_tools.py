@@ -233,6 +233,7 @@ async def panelflow_chronoflow_regenerate_shot(
             "negative_prompt": {"type": "string", "description": "What to avoid (optional)"},
             "width": {"type": "integer", "description": "Image width, multiple of 16 (default 1024)"},
             "height": {"type": "integer", "description": "Image height, multiple of 16 (default 1024)"},
+            "refine": {"type": "boolean", "description": "Review the picture against the prompt, then repair or redraw it (slower, needs Ollama; default false)"},
         },
         "required": ["prompt"],
     },
@@ -243,8 +244,9 @@ async def panelflow_chronoflow_generate_image(
     negative_prompt: str = "blurry, low quality, distorted, bad anatomy",
     width: int | None = None,
     height: int | None = None,
+    refine: bool = False,
 ) -> dict[str, Any]:
-    payload = {"prompt": prompt, "negative_prompt": negative_prompt, "width": width, "height": height}
+    payload = {"prompt": prompt, "negative_prompt": negative_prompt, "width": width, "height": height, "refine": refine}
     return await bridge.post("/api/chronoflow/generate_image", payload, timeout_s=3600.0)
 
 

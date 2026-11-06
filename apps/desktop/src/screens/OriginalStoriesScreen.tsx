@@ -21,6 +21,7 @@ export const OriginalStoriesScreen: React.FC<OriginalStoriesScreenProps> = ({ on
   const [channelId, setChannelId] = useState("");
   const [count, setCount] = useState(3);
   const [startDate, setStartDate] = useState("");
+  const [refine, setRefine] = useState(false);
   const [busy, setBusy] = useState(false);
   const [yt, setYt] = useState<YouTubeStatus | null>(null);
   const [ytId, setYtId] = useState("");
@@ -102,7 +103,7 @@ export const OriginalStoriesScreen: React.FC<OriginalStoriesScreenProps> = ({ on
   const queue = async (id: string) => {
     setBusy(true);
     try {
-      await api.queueOriginalEpisodes(id, { count, ...(startDate ? { start_date: startDate } : {}) });
+      await api.queueOriginalEpisodes(id, { count, ...(startDate ? { start_date: startDate } : {}), ...(refine ? { refine: true } : {}) });
       await refresh();
     } catch (e) {
       fail(e);
@@ -214,6 +215,13 @@ export const OriginalStoriesScreen: React.FC<OriginalStoriesScreenProps> = ({ on
             value={startDate}
             onChange={(e) => setStartDate(e.target.value)}
           />
+          <label
+            className="flex items-center gap-1.5 text-zinc-400"
+            title="Review every picture against its narration, then repair or redraw the ones that fail. Slower (about a minute more per picture); every try is kept, and repaired pictures are flagged for a look."
+          >
+            <input type="checkbox" checked={refine} onChange={(e) => setRefine(e.target.checked)} />
+            check and fix pictures (slower)
+          </label>
         </div>
         {series.length === 0 && <p className="text-sm text-zinc-500">No series yet.</p>}
         {series.map((s) => (

@@ -32,6 +32,8 @@ export const StoryEditorChronoFlowPanel: React.FC<StoryEditorChronoFlowPanelProp
   const [generating, setGenerating] = useState(false);
   const [generatedVideoUrl, setGeneratedVideoUrl] = useState<string | null>(null);
   const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
+  const [refine, setRefine] = useState(false);
+  const [refineNote, setRefineNote] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // Active frame image from scene layers
@@ -67,6 +69,7 @@ export const StoryEditorChronoFlowPanel: React.FC<StoryEditorChronoFlowPanelProp
   const handleGenerateImage = async () => {
     setGenerating(true);
     setError(null);
+    setRefineNote(null);
     try {
       // Generate replacement image through the single PanelFlow art workflow (Qwen Image 2.1)
       const res = await fetch("http://127.0.0.1:8765/api/chronoflow/generate_image", {
@@ -76,6 +79,7 @@ export const StoryEditorChronoFlowPanel: React.FC<StoryEditorChronoFlowPanelProp
           prompt,
           width: 1344,
           height: 768,
+          ...(refine ? { refine: true } : {}),
         }),
       });
       if (res.ok) {
@@ -83,6 +87,18 @@ export const StoryEditorChronoFlowPanel: React.FC<StoryEditorChronoFlowPanelProp
         if (data.url) {
           setGeneratedImageUrl(`http://127.0.0.1:8765${data.url}`);
         }
+        if (data.refine) {
+          const tries = data.refine.generations as number;
+          const how =
+            data.refine.status === "accept" ? "passed the check"
+            : data.refine.status === "accept_low" ? (data.refine.repaired ? "repaired; please look at the repaired area" : "kept with low confidence; please look")
+            : data.refine.status === "needs_review" ? "still failing the check; best try kept, please review"
+            : "could not be checked";
+          setRefineNote(`${tries} ${tries === 1 ? "try" : "tries"}: ${how}`);
+        }
+      } else {
+        const body = await res.json().catch(() => null);
+        setError(body?.detail || `Image generation failed (${res.status}).`);
       }
     } catch (err: any) {
       setError(err.message || "Failed to generate image.");
@@ -265,6 +281,15 @@ export const StoryEditorChronoFlowPanel: React.FC<StoryEditorChronoFlowPanelProp
                   <img src={generatedImageUrl} alt="Generated Art" className="w-full rounded-lg bg-black max-h-48 object-contain" />
                 </div>
               )}
+
+              <label
+                className="flex items-center gap-2 text-xs text-zinc-300"
+                title="Review the picture against the prompt, then repair or redraw it if it fails. Needs the local vision model; slower."
+              >
+                <input type="checkbox" checked={refine} onChange={(e) => setRefine(e.target.checked)} disabled={generating} />
+                Check and fix the picture (slower)
+              </label>
+              {refineNote && <p className="text-xs text-amber-300" role="status">{refineNote}</p>}
 
               <button
                 onClick={handleGenerateImage}

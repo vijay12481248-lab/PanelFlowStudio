@@ -26,6 +26,7 @@ class ComfyImageRequest(BaseModel):
     height: int = Field(default=1024, ge=256, le=2048)
     seed: int = Field(default=20261019, ge=0, le=2**63 - 1)
     timeout_s: float = Field(default=900.0, ge=30.0, le=3600.0)
+    refine: bool = Field(default=False, description="Review the picture, then repair or redraw it (slower: needs the local vision model); every candidate is kept")
 
 
 @router.get("/capabilities")
@@ -92,6 +93,7 @@ def submit_comfyui_image_job(project_id: str, request: ComfyImageRequest, db: Se
             height=request.height,
             seed=request.seed,
             timeout_s=request.timeout_s,
+            refine=request.refine,
         )
 
     job_id = enqueue_project_operation(
@@ -110,6 +112,7 @@ def submit_comfyui_image_job(project_id: str, request: ComfyImageRequest, db: Se
             "height": request.height,
             "seed": request.seed,
             "timeout_s": request.timeout_s,
+            "refine": request.refine,
         },
     )
     return {"job_id": job_id, "status": "QUEUED", "workflow_id": request.workflow_id}

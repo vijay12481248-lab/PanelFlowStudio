@@ -302,7 +302,7 @@ def test_refine_is_off_by_default_and_when_asked_stores_the_selected_image_with_
     raw = buf.getvalue()
     art = ArtImage(png=raw, width=64, height=64, prompt_id="p1", workflow_id=service.ART_WORKFLOW_ID, workflow_sha256="a" * 64, model_files=["m"],
                    source_output={"filename": "k.png", "subfolder": "", "type": "output"}, seed=5)
-    res = types.SimpleNamespace(status="accept", selected=2, generations=2, iterations=[
+    res = types.SimpleNamespace(status="accept", selected=2, generations=2, repaired=False, plan=None, iterations=[
         {"n": 1, "kind": "generate", "file": "f1", "sha256": "s1", "seed": 5, "review": {"decision": "regenerate"}},
         {"n": 2, "kind": "generate", "file": "f2", "sha256": "s2", "seed": 7919 + 5, "review": {"decision": "accept"}}])
     seen = {}

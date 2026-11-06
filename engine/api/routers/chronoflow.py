@@ -118,6 +118,7 @@ class GenerateImageRequest(BaseModel):
     width: int | None = None  # multiples of 16, 256..2048 (the art workflow's policy)
     height: int | None = None
     seed: int | None = None
+    refine: bool = False  # review the picture, then repair or redraw it (slower; needs the local vision model)
 
 
 class InpaintRequest(BaseModel):
@@ -719,8 +720,8 @@ def delete_character(char_id: str) -> dict[str, Any]:
 @router.post("/generate_image")
 async def generate_image(req: GenerateImageRequest) -> dict[str, Any]:
     try:
-        filename = await pipeline.generate_art_image(req.prompt, req.negative_prompt, req.width or 1024, req.height or 1024, req.seed)
-        return {"success": True, "filename": filename, "url": f"/chronoflow/inputs/{filename}"}
+        filename, refine = await pipeline.generate_art_image_ex(req.prompt, req.negative_prompt, req.width or 1024, req.height or 1024, req.seed, req.refine)
+        return {"success": True, "filename": filename, "url": f"/chronoflow/inputs/{filename}", **({"refine": refine} if refine else {})}
     except Exception as e:
         logger.exception("Image generation failed: %s", e)
         raise HTTPException(status_code=500, detail=str(e))

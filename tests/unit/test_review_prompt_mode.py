@@ -69,6 +69,8 @@ class FakeProvider:
             self.locate_calls += 1
             return json.dumps({"bbox_2d": self.locate_box or []})
         if title == "_VQA":
+            if "person, animal or creature" in prompt:  # the pre-check that decides whether the anatomy audit runs at all
+                return json.dumps({"answers": [{"n": 1, "answer": "no" if getattr(self, "no_creatures", False) else "yes", "evidence": "x"}]})
             n_questions = prompt.count("Is this true of the picture")
             return json.dumps({"answers": [
                 {"n": n, "answer": "no" if n == self.anatomy_no_on else "yes",
@@ -241,3 +243,17 @@ def test_a_really_floating_object_still_fails_the_contact_audit(tmp_path):
     img.write_bytes(b"png")
     out = asyncio.run(rv._audit_spatial_contact(_Contact("no", "A cup is floating in mid-air above the table."), img))
     assert [i.passed for i in out] == [False]
+
+
+def test_a_still_life_is_not_audited_for_anatomy(tmp_path):
+    # seen through the ChronoFlow route: a red mug and a green apple failed "correct number of limbs" because "there are no limbs visible" counted as a defect
+    img = tmp_path / "x.png"
+    img.write_bytes(b"png")
+    still = FakeProvider(GROUNDED[:1], REQS[:1], anatomy_no_on=1, stated=[True])
+    still.no_creatures = True
+    review = asyncio.run(rv.evaluate_prompt_image(still, img, PROMPT, locate_defects=False))
+    assert not [i for i in review.items if i.category == "anatomy"]  # (the fake answers "no" to every first question, so the contact audit still reports its own item)
+    assert not {"polycephaly", "extra_limbs", "missing_limbs", "distorted_digits", "limb_topology"} & set(review.defects)
+    alive = FakeProvider(GROUNDED[:1], REQS[:1], anatomy_no_on=1, stated=[True])  # a creature is present: the audit still runs and still catches a defect
+    assert [i.defect_type for i in asyncio.run(rv.evaluate_prompt_image(alive, img, PROMPT, locate_defects=False)).items if i.category == "anatomy" and not i.passed] == ["polycephaly"]
+    assert asyncio.run(rv._has_living_subject(object(), img)) is None  # a pre-check that cannot answer does not switch the audit off

@@ -2295,7 +2295,7 @@ export class PanelFlowApiClient {
     return this.request<OriginalSeries>("/api/original/series", { method: "POST", body: JSON.stringify(req) });
   }
 
-  async queueOriginalEpisodes(seriesId: string, req: { count: number; start_date?: string; scenes?: number }): Promise<{ episode: number; job_id: string }[]> {
+  async queueOriginalEpisodes(seriesId: string, req: { count: number; start_date?: string; scenes?: number; refine?: boolean }): Promise<{ episode: number; job_id: string }[]> {
     return this.request(`/api/original/series/${encodeURIComponent(seriesId)}/episodes`, { method: "POST", body: JSON.stringify(req) });
   }
 

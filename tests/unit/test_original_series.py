@@ -95,7 +95,7 @@ def test_queue_runs_episodes_in_order_through_job_manager(client, monkeypatch):
     s = store.create("Moon Tales", "bedtime", full_bible(), "main")
     order = []
 
-    def fake_run(st_, sid, number, channel, provider, runner_factory, progress, is_cancelled, scenes, check):
+    def fake_run(st_, sid, number, channel, provider, runner_factory, progress, is_cancelled, scenes, check, refine=False):
         order.append(number)
         progress(0.5, "half")
         st_.update_episode(sid, Episode(number=number, title=f"T{number}", summary=f"S{number}", status="done"))
@@ -146,3 +146,50 @@ def test_concurrent_episode_updates_neither_crash_nor_lose_records(tmp_path):
     [t.start() for t in threads]
     [t.join() for t in threads]
     assert errors == [] and [e.number for e in store.get(s.id).episodes] == [1, 2, 3, 4, 5]
+
+
+def test_refine_reaches_the_episode_run_only_when_asked_and_never_without_the_review(client, monkeypatch):
+    c, r, tmp = client
+    store = SeriesStore(tmp / "series")
+    s = store.create("Moon Tales", "bedtime", full_bible(), "main")
+    seen = []
+
+    def fake_run(st_, sid, number, channel, provider, runner_factory, progress, is_cancelled, scenes, check, refine=False):
+        seen.append((number, check, refine))
+        st_.update_episode(sid, Episode(number=number, title="T", summary="S", status="done"))
+        return {"episode": number}
+
+    class P:
+        async def health_check(self):
+            return True
+
+    monkeypatch.setattr(queue, "run_episode", fake_run)
+    from engine.llm.registry import llm_registry
+    monkeypatch.setattr(llm_registry, "get_ollama_provider", lambda: P())
+    # refine without the picture review is refused before anything is queued
+    before = len(c.get("/api/original/jobs").json())
+    bad = c.post(f"/api/original/series/{s.id}/episodes", json={"count": 1, "check": False, "refine": True})
+    assert bad.status_code == 422 and "refine needs the picture review" in bad.json()["detail"]
+    assert len(c.get("/api/original/jobs").json()) == before
+    assert c.post(f"/api/original/series/{s.id}/episodes", json={"count": 1}).status_code == 200  # default: off
+    assert c.post(f"/api/original/series/{s.id}/episodes", json={"count": 1, "refine": True}).status_code == 200
+    for _ in range(100):
+        jobs = c.get("/api/original/jobs").json()
+        if len(jobs) == before + 2 and all(j["status"] in ("SUCCEEDED", "FAILED") for j in jobs):
+            break
+        time.sleep(0.1)
+    assert sorted(seen) == [(1, True, False), (2, True, True)], (seen, jobs)
+
+
+def test_story_art_route_refuses_refine_without_the_review(client):
+    c, r, tmp = client
+    res = c.post("/api/original/story/whatever/art?refine=true&check=false")
+    assert res.status_code == 422 and "refine needs the picture review" in res.json()["detail"]
+
+
+def test_run_episode_hands_refine_to_generate_art_only_when_asked():
+    import inspect
+
+    assert inspect.signature(episode.run_episode).parameters["refine"].default is False
+    # None (not False) keeps PANELFLOW_REFINE_LOOP honoured when the caller did not ask
+    assert "refine=True if refine else None" in inspect.getsource(episode.run_episode)

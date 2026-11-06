@@ -127,8 +127,9 @@ def generate_image_operation(
         "source_output": art.source_output,
     }
     if refined is not None:
-        provenance["refine"] = {"status": refined.status, "selected": refined.selected, "generations": refined.generations,
-                                "iterations": [{k: i.get(k) for k in ("n", "kind", "file", "sha256", "seed", "parent", "kept", "review")} for i in refined.iterations]}
+        from engine.original.refine import summary
+
+        provenance["refine"] = summary(refined)
     asset = AssetRecord(
         id=asset_id,
         project_id=project_id,
@@ -174,6 +175,7 @@ def build_comfy_image_operation(project_id: str, payload: dict[str, Any]):
         height=payload["height"],
         seed=payload["seed"],
         timeout_s=payload.get("timeout_s", 900.0),
+        refine=bool(payload.get("refine", False)),
     )
 
 

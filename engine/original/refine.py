@@ -253,6 +253,13 @@ def refine_prompt_image(art_engine, provider, prompt: str, negative: str = "", w
                         record=lambda data, **meta: record_candidate(ws, key, iters, data, **meta))
 
 
+def summary(result: RefineResult) -> dict:
+    """What a caller or a UI needs to show about a refined picture: how it ended and what was tried (no image bytes)."""
+    return {"status": result.status, "selected": result.selected, "generations": result.generations, "repaired": result.repaired,
+            "reason": result.plan.reason if result.plan else "",
+            "iterations": [{k: i.get(k) for k in ("n", "kind", "file", "sha256", "seed", "parent", "kept", "review", "crop_check")} for i in result.iterations]}
+
+
 def refine_art_image(prompt: str, negative: str | None, width: int, height: int, seed: int | None, *, ws: Path, key: str, client=None,
                      timeout: float = 900.0, is_cancelled: Callable[[], bool] = lambda: False):
     """Opt-in drop-in for `ArtEngine.generate` at callers that only need a picture: returns (ArtImage, RefineResult). Local-first: if the local vision
