@@ -2493,11 +2493,18 @@
 
     
 
-    <!-- TAB 2: CHARACTER VAULT -->
+    <!-- TAB 2: GALLERY (master films, shots, images, characters) -->
     <div class="tab-content" id="tab-vault">
       <div class="card">
-        <div class="card-header">
-          <div class="card-title"><span>🎭</span> Character Design &amp; Turnaround Sheet Vault</div>
+        <div class="card-header" style="flex-wrap: wrap; gap: 10px;">
+          <div class="card-title"><span>🏛️</span> Gallery</div>
+          <div id="galleryFilters" style="display: flex; gap: 6px;">
+            <button type="button" class="btn-tool active" data-g="masters" onclick="setGalleryFilter('masters')">🎬 Master films</button>
+            <button type="button" class="btn-tool" data-g="chunks" onclick="setGalleryFilter('chunks')">🎞 Shots</button>
+            <button type="button" class="btn-tool" data-g="images" onclick="setGalleryFilter('images')">🖼 Images</button>
+            <button type="button" class="btn-tool" data-g="characters" onclick="setGalleryFilter('characters')">🎭 Characters</button>
+          </div>
+          <span id="galleryStats" style="margin-left: auto; font-size: 0.74rem; color: #94a3b8;"></span>
         </div>
         <div class="vault-grid" id="vaultGrid"></div>
       </div>
@@ -3925,6 +3932,59 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
     async function checkStatus() { studioStore.syncNow(); }
 
 
+    /* ---------------- Gallery ---------------- */
+    let galleryFilter = 'masters';
+    // media tags cannot send the token header, so engine-served files carry it as a query parameter
+    function mediaSrc(path) {
+      return ENGINE_TOKEN ? `${path}${path.includes('?') ? '&' : '?'}token=${encodeURIComponent(ENGINE_TOKEN)}` : path;
+    }
+    const escHtml = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+    function setGalleryFilter(f) {
+      galleryFilter = f;
+      document.querySelectorAll('#galleryFilters .btn-tool').forEach(b => b.classList.toggle('active', b.dataset.g === f));
+      loadMasterGallery();
+    }
+    function openGalleryJob(jobId) { onSelectProjectJob(jobId); switchTab('director'); }
+    function openGalleryImage(url, filename) { switchTab('image-studio'); loadCanvasImage(mediaSrc(url), filename); }
+
+    async function loadMasterGallery() {
+      const grid = document.getElementById('vaultGrid');
+      const statsEl = document.getElementById('galleryStats');
+      if (!grid) return;
+      if (galleryFilter === 'characters') { if (statsEl) statsEl.textContent = ''; return loadCharacters(); }
+      grid.innerHTML = '<div style="grid-column: 1 / -1; padding: 24px; color: #64748b;">Loading…</div>';
+      let data;
+      try {
+        const res = await fetch(`${API_BASE}/gallery?t=${Date.now()}`, { cache: 'no-store' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        data = await res.json();
+      } catch (e) {
+        grid.innerHTML = `<div style="grid-column: 1 / -1; padding: 24px; color: #fca5a5;">Could not load the gallery: ${escHtml(e.message)}</div>`;
+        return;
+      }
+      const st = data.stats || {};
+      if (statsEl) statsEl.textContent = `${st.total_videos || 0} videos · ${st.total_images || 0} images · ${st.total_storage_mb || 0} MB`;
+      const items = (data[galleryFilter] || []).slice().sort((a, b) => (b.created_at || 0) - (a.created_at || 0));
+      if (!items.length) { grid.innerHTML = '<div style="grid-column: 1 / -1; padding: 24px; color: #64748b;">Nothing here yet.</div>'; return; }
+      const when = (t) => new Date((t || 0) * 1000).toLocaleString();
+      grid.innerHTML = items.map((it) => {
+        if (galleryFilter === 'images') {
+          const canEdit = (it.url || '').includes('/inputs/');
+          return `<div class="char-card"><img class="char-img" loading="lazy" src="${mediaSrc(it.url)}" alt="${escHtml(it.filename)}">
+            <div class="char-body"><div style="font-size: 0.74rem; color: #a5b4fc;">${escHtml(it.model)}</div>
+            <div style="font-size: 0.72rem; color: #64748b; margin: 2px 0 6px;">${escHtml(it.filename)} · ${it.size_mb} MB<br>${when(it.created_at)}</div>
+            ${canEdit ? `<button type="button" class="btn-tool" style="width:100%; justify-content:center; font-size:0.7rem;" onclick="openGalleryImage('${it.url}', '${escHtml(it.filename)}')">🎨 Open in Image Studio</button>` : ''}</div></div>`;
+        }
+        const poster = mediaSrc(`${API_BASE}/media/filmstrip?file=${encodeURIComponent(it.filename)}&count=1&height=240`);
+        const title = galleryFilter === 'masters' ? escHtml((it.prompt || 'Master cut').slice(0, 70)) : `Shot ${escHtml(it.chunk_index)} · grade ${escHtml(it.grade)}`;
+        const sub = galleryFilter === 'masters' ? `${it.resolution} · ${it.size_mb} MB` : `${it.size_mb} MB`;
+        return `<div class="char-card"><video class="char-img" style="height: 200px;" controls preload="none" poster="${poster}" src="${mediaSrc(it.url)}"></video>
+          <div class="char-body"><div style="font-weight: 700; color: #f8fafc; font-size: 0.8rem;">${title}</div>
+          <div style="font-size: 0.72rem; color: #64748b; margin: 2px 0 6px;">job ${escHtml(it.job_id)} · ${sub}<br>${when(it.created_at)}</div>
+          <button type="button" class="btn-tool" style="width:100%; justify-content:center; font-size:0.7rem;" onclick="openGalleryJob('${escHtml(it.job_id)}')">✂ Open in editor</button></div></div>`;
+      }).join('');
+    }
+
     async function loadCharacters() {
       try {
         const res = await fetch(`${API_BASE}/characters?t=${Date.now()}`, { cache: "no-store" });
@@ -3935,7 +3995,7 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
           const card = document.createElement('div');
           card.className = 'char-card';
           card.innerHTML = `
-            <img class="char-img" src="/inputs/${c.image}" alt="${c.name}">
+            <img class="char-img" src="${mediaSrc('/inputs/' + c.image)}" alt="${c.name}">
             <div class="char-body">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
                 <span style="font-weight: 700; color: #f8fafc;">${c.name}</span>
