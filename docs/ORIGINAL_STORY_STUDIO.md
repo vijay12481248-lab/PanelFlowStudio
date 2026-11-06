@@ -442,3 +442,24 @@ the `action_shake` effect are removed (the older "push-in / pan" description in 
 `RENDER_LOOK`, so clips rendered by an older look are never reused. Measured per panel (picture change between near the start and near the end,
 captions masked): old video mean 33.6 (max 50.9), new video mean 0.10 (max 0.55 = encoder noise). The new file is 22 MB instead of 120 MB.
 Not changed: the anime-review renderer (`engine/anime/review/render.py`) has its own slow zoom.
+
+## Image refinement (2026-11-06): review any image, keep every candidate, plan the correction, repair on the art model
+
+Plan and research: the investigation report of 2026-11-06 (reuse the reviewer, no new model). Built in small committed steps:
+
+- **Review of any image against any prompt** (`review.evaluate_prompt_image`): requirements from the prompt, five-way status (correct / missing /
+  incorrect / uncertain / not_verifiable), a model-reported box (validated, never invented; none for an absent thing), severity,
+  `repairable_locally`. One full review took ~70 s on `qwen3.5:9b` (9 requirements + anatomy + contact + boxes). Measured on the real model:
+  `qwen3.5:9b` boxes on a 0-1000 grid matched what is in the picture (head, paw, plant, cat, table).
+- **Fixed false anatomy flags:** the negation check split on commas, so "no duplicate heads, fused faces, or polycephaly" flagged polycephaly.
+  Three stored cat-table panels were flagged that way. Two more (contact checks) were re-audited without the story's claims, so they are NOT shown fixed.
+- **History** (`ArtRecord.iterations`, `panels/_candidates/<panel>/`): every generated or repaired candidate is kept with seed, prompt, size, engine,
+  review summary, repair parent and mask; a re-run never overwrites; an older picture is archived as `imported`.
+- **Planner** (`engine/original/planner.py`): pure rules (accept / repair_local / regenerate / accept_low / human_review). Not wired into `generate_art` yet.
+- **Qwen masked redraw** (`qwen_image_21_inpaint`, `ComfyRunner.inpaint_qwen`, purpose `inpaint`, the art model's own files, nothing to download).
+  Measured on the real engine with the installed weights: (1) giving the picture as a *reference* plus an instruction ("make the collar red",
+  "remove the plant") **ignores the instruction** and returns a blurrier copy; (2) the picture as a reference seen only by the text encoder draws a
+  different scene; (3) **VAE-encode the picture + noise mask + a prompt that describes the whole picture with the corrected area** works: ~20-30 s, the
+  collar turned red with its tag intact. Outside the mask the raw result drifts by 0.8-0.9 (0-255 mean), so the original is spliced back
+  (`review.splice_repaired_image`): 0 pixels changed outside the mask. Weakness: the redraw also changes what is inside the mask box (a paw
+  shifted a little), so keep boxes tight. `generate_art` still repairs with the SDXL inpaint until the loop is wired.

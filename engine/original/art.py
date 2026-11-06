@@ -49,6 +49,7 @@ from engine.original.rigging import (
 
 W, H = 1344, 768  # SDXL-friendly 16:9, the video frame shape
 THRESHOLD = 0.6
+QWEN_INPAINT_ID = "qwen_image_21_inpaint"  # masked redraw on the art model's own weights (see ComfyRunner.inpaint_qwen)
 SHOT_TAGS = {"wide": "wide shot, scenery, from a distance", "full": "full body shot, head to toe, visible feet",
              "full_body": "full body shot, head to toe, visible feet", "medium": "cowboy shot",
              "close": "close-up, portrait", "extreme_close": "extreme close-up, detail focus",
@@ -162,6 +163,12 @@ class ComfyRunner:
                 self.inpaint_wf = (reg.load(inpaint_id)[0], reg.metadata(inpaint_id))
         except Exception:
             self.inpaint_wf = None
+        self.qwen_inpaint_wf = None  # same weights as the art workflow, so a repaired area matches the picture's style (the SDXL inpaint does not)
+        try:
+            if reg.preflight(QWEN_INPAINT_ID)["ready"]:
+                self.qwen_inpaint_wf = (reg.load(QWEN_INPAINT_ID)[0], reg.metadata(QWEN_INPAINT_ID))
+        except Exception:
+            self.qwen_inpaint_wf = None
         self.sdxl_controlnet = None
         try:
             if reg.preflight(controlnet_id)["ready"]:
@@ -255,6 +262,32 @@ class ComfyRunner:
             denoise=denoise,
         )
         return self.art.run(wf, timeout=timeout, is_cancelled=is_cancelled)[0]
+
+    def inpaint_qwen(self, base_image: Path | bytes, mask_image: Path | bytes, prompt: str, neg: str, seed: int, timeout: float = 300.0,
+                     is_cancelled: Callable[[], bool] = lambda: False) -> bytes:
+        """Redraw the white area of `mask_image` with the art model itself. `prompt` must describe the WHOLE picture with the corrected area as it
+        should look: this is a masked redraw, not an instruction edit (measured on the real engine: "make the collar red" given with the picture as
+        a reference is ignored). Outside the mask the result is the picture after a VAE round trip (mean difference ~0.9 on a 0-255 scale), so
+        splice the original back with `review.splice_repaired_image`. Not used by `generate_art` yet; `inpaint` (SDXL) is unchanged."""
+        if self.qwen_inpaint_wf is None:
+            raise RuntimeError(f"ComfyUI inpainting workflow {QWEN_INPAINT_ID} is not available")
+        base = base_image if isinstance(base_image, bytes) else Path(base_image).read_bytes()
+        mask = mask_image if isinstance(mask_image, bytes) else Path(mask_image).read_bytes()
+        with Image.open(io.BytesIO(base)) as im:
+            size = im.size
+        with Image.open(io.BytesIO(mask)) as mk:
+            if mk.size != size:
+                raise ValueError(f"mask is {mk.size[0]}x{mk.size[1]} but the picture is {size[0]}x{size[1]}")
+        if size[0] % 16 or size[1] % 16:
+            raise ValueError(f"the art model needs a picture whose sides are multiples of 16, got {size[0]}x{size[1]}")
+        wf = _patch_workflow(self.qwen_inpaint_wf[0], self.qwen_inpaint_wf[1]["patch_slots"], prompt=prompt, negative_prompt=neg, width=size[0],
+                             height=size[1], seed=seed, prefix="panelflow_qwen_inpaint", reference_image=self._upload_bytes(base),
+                             mask_image=self._upload_bytes(mask))
+        out = self.art.run(wf, timeout=timeout, is_cancelled=is_cancelled)[0]
+        with Image.open(io.BytesIO(out)) as res:
+            if res.size != size:
+                raise RuntimeError(f"ComfyUI returned {res.size[0]}x{res.size[1]} for a {size[0]}x{size[1]} picture")
+        return out
 
     def generate(self, pos: str, neg: str, seed: int, width: int, height: int, prefix: str, timeout: float = 300.0,
                  is_cancelled: Callable[[], bool] = lambda: False, reference: Path | None = None,

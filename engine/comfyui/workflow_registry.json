@@ -696,5 +696,73 @@
       "max": 2048,
       "multiple_of": 8
     }
+  },
+  {
+    "id": "qwen_image_21_inpaint",
+    "purpose": "inpaint",
+    "filename": "qwen_image_21_inpaint.api.json",
+    "sha256": "51d60480b573f18c277d23d7f0c18bfcddd80e63ea7449cb35bd6541281d593e",
+    "requires_gpu": true,
+    "gpu_vram_mb": 12000,
+    "model_files": [
+      "qwen_image_2.1_turbo_int8_convrot.safetensors",
+      "qwen3vl_8b_int8_convrot.safetensors",
+      "qwen_image_2.1_vae_bf16.safetensors"
+    ],
+    "required_nodes": [
+      "UNETLoader",
+      "CLIPLoader",
+      "VAELoader",
+      "TextEncodeQwenImage21",
+      "BasicGuider",
+      "KSamplerSelect",
+      "BasicScheduler",
+      "RandomNoise",
+      "SamplerCustomAdvanced",
+      "VAEDecode",
+      "SaveImage",
+      "LoadImage",
+      "LoadImageMask",
+      "VAEEncode",
+      "SetLatentNoiseMask"
+    ],
+    "patch_slots": {
+      "prompt": {
+        "node_id": "4",
+        "input": "prompt",
+        "class_type": "TextEncodeQwenImage21"
+      },
+      "negative_prompt": {
+        "node_id": "4",
+        "input": "negative_prompt",
+        "class_type": "TextEncodeQwenImage21"
+      },
+      "seed": {
+        "node_id": "8",
+        "input": "noise_seed",
+        "class_type": "RandomNoise"
+      },
+      "filename_prefix": {
+        "node_id": "11",
+        "input": "filename_prefix",
+        "class_type": "SaveImage"
+      },
+      "reference_image": {
+        "node_id": "13",
+        "input": "image",
+        "class_type": "LoadImage"
+      },
+      "mask_image": {
+        "node_id": "14",
+        "input": "image",
+        "class_type": "LoadImageMask"
+      }
+    },
+    "dimension_policy": {
+      "mode": "exact",
+      "min": 256,
+      "max": 2048,
+      "multiple_of": 16
+    }
   }
 ]
