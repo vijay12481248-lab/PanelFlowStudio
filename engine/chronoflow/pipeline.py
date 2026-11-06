@@ -563,6 +563,20 @@ class ChronoFlowPipeline:
             subprocess.run(cmd_alt, capture_output=True, text=True)
         return output_image_path.exists()
 
+    def mux_source_audio(self, video_path, source_path, offset_sec=0.0):
+        """Replace `video_path`'s audio with `source_path`'s audio from `offset_sec` on (padded/cut to the video length).
+
+        Used when a shot is re-animated from an edited frame: the new clip keeps the original narration for that stretch."""
+        _, _, vdur = self._probe_size_and_duration(video_path)
+        tmp = video_path.with_name(video_path.stem + ".mux.mp4")
+        cmd = ["ffmpeg", "-y", "-i", str(video_path), "-ss", f"{max(0.0, float(offset_sec)):.3f}", "-i", str(source_path),
+               "-map", "0:v", "-map", "1:a?", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-af", "apad", "-t", f"{vdur:.3f}", str(tmp)]
+        res = subprocess.run(cmd, capture_output=True, text=True)
+        if res.returncode != 0 or not tmp.exists():
+            return False
+        tmp.replace(video_path)
+        return True
+
     def stitch_chunks(self, chunk_paths, output_stitched_path, crossfade_sec=0.3):
         if not chunk_paths:
             return None
@@ -597,8 +611,47 @@ class ChronoFlowPipeline:
             return output_stitched_path
         return None
 
-    def render_timeline_edl(self, clips, output_master_path):
-        """Renders an NLE timeline Edit Decision List into a final mastered video."""
+    @staticmethod
+    def _probe_size_and_duration(path):
+        """(width, height, duration) of a media file via ffprobe; zeros when unreadable."""
+        out = subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height:format=duration",
+             "-of", "json", str(path)], capture_output=True, text=True)
+        try:
+            data = json.loads(out.stdout)
+            stream = (data.get("streams") or [{}])[0]
+            return int(stream.get("width") or 0), int(stream.get("height") or 0), float(data.get("format", {}).get("duration") or 0)
+        except (ValueError, TypeError):
+            return 0, 0, 0.0
+
+    def _apply_overlays(self, master_path, overlays, width, height):
+        """Burn still overlays (the editor's V2 'edited frame' clips) onto the stitched master, in place."""
+        _, _, dur = self._probe_size_and_duration(master_path)
+        inputs, graph, last, n = ["-i", str(master_path)], [], "[0:v]", 0
+        for o in overlays:
+            name = str(o.get("filename") or "")
+            img = next((d / name for d in (COMFY_INPUT_DIR, STUDIO_OUTPUT_DIR) if name and Path(name).name == name and (d / name).is_file()), None)
+            start = max(0.0, float(o.get("start") or 0))
+            end = min(dur, start + float(o.get("duration") or 0))
+            if img is None or end <= start:
+                continue
+            n += 1
+            inputs += ["-loop", "1", "-framerate", "24", "-t", f"{dur:.3f}", "-i", str(img)]
+            graph.append(f"[{n}:v]scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,format=rgba[ov{n}]")
+            graph.append(f"{last}[ov{n}]overlay=enable='between(t,{start:.3f},{end:.3f})'[v{n}]")
+            last = f"[v{n}]"
+        if not n:
+            return
+        tmp = master_path.with_name(master_path.stem + ".ovl.mp4")
+        cmd = ["ffmpeg", "-y", *inputs, "-filter_complex", ";".join(graph), "-map", last, "-map", "0:a?",
+               "-c:v", "libx264", "-crf", "18", "-pix_fmt", "yuv420p", "-c:a", "copy", str(tmp)]
+        res = subprocess.run(cmd, capture_output=True, text=True)
+        if res.returncode != 0 or not tmp.exists():
+            raise RuntimeError(f"overlay render failed: {res.stderr[-300:]}")
+        tmp.replace(master_path)
+
+    def render_timeline_edl(self, clips, output_master_path, overlays=None):
+        """Renders an NLE timeline Edit Decision List (V1 clips + V2 still overlays) into a final mastered video."""
         if not clips:
             return None
 
@@ -607,6 +660,15 @@ class ChronoFlowPipeline:
         temp_dir.mkdir(parents=True, exist_ok=True)
 
         processed_chunks = []
+        out_w, out_h = 1344, 768
+        for clip in clips:   # output size follows the first readable clip (the old fixed 1344x768 letterboxed square clips)
+            first = clip.get("filename") or Path(clip.get("url", "")).name
+            found = next((d / first for d in (STUDIO_OUTPUT_DIR, COMFY_OUTPUT_DIR, COMFY_INPUT_DIR) if first and (d / first).is_file()), None)
+            if found:
+                w, h, _ = self._probe_size_and_duration(found)
+                if w and h:
+                    out_w, out_h = w - w % 2, h - h % 2
+                break
         try:
             for idx, clip in enumerate(clips):
                 src_filename = clip.get("filename") or Path(clip.get("url", "")).name
@@ -636,7 +698,7 @@ class ChronoFlowPipeline:
 
                 # Filter complex for speed and volume
                 pts_factor = 1.0 / max(0.25, min(4.0, speed))
-                v_filter = f"setpts={pts_factor:.4f}*PTS,scale=1344:768:force_original_aspect_ratio=decrease,pad=1344:768:(ow-iw)/2:(oh-ih)/2"
+                v_filter = f"setpts={pts_factor:.4f}*PTS,scale={out_w}:{out_h}:force_original_aspect_ratio=decrease,pad={out_w}:{out_h}:(ow-iw)/2:(oh-ih)/2"
                 
                 # Audio tempo
                 atempo = max(0.5, min(2.0, speed))
@@ -675,7 +737,10 @@ class ChronoFlowPipeline:
             if not processed_chunks:
                 return None
 
-            return self.stitch_chunks(processed_chunks, output_master_path)
+            stitched = self.stitch_chunks(processed_chunks, output_master_path)
+            if stitched and overlays:
+                self._apply_overlays(output_master_path, overlays, out_w, out_h)
+            return stitched
         finally:
             import shutil
             try:

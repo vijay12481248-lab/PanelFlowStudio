@@ -109,6 +109,36 @@ async def test_watchdog_leaves_a_job_alone_while_comfyui_reports_it_is_busy():
     assert await _watchdog_verdict(busy) == ("starting", False)
 
 
+@pytest.mark.asyncio
+async def test_watchdog_sees_a_shot_regeneration_task_registered_under_a_regen_name():
+    # /regenerate_chunk registers its task as "<job>_regen_<n>", not "<job>": the watchdog used to conclude "no task running" and flip the
+    # regenerating job to completed seconds after it started, while ComfyUI was still rendering.
+    import time
+
+    sup = JobSupervisor()
+
+    async def fake_status():
+        return {"connected": True, "queue": {"busy": True, "reachable": True, "pending_count": 0}}
+
+    sup.pipeline = MagicMock(check_comfy_status=fake_status)
+    jid = "regen_job"
+    sup.register_new_job(jid, {"id": jid, "status": "regenerating", "chunks": ["a.mp4"], "created_at": time.time(), "last_updated_at": time.time()})
+    task = asyncio.create_task(asyncio.sleep(60))
+    sup._tasks[f"{jid}_regen_3"] = task
+    try:
+        await sup.reconcile_state()
+        assert sup.get_job(jid)["status"] == "regenerating"
+        task.cancel()
+        await asyncio.sleep(0)
+        sup._tasks.pop(f"{jid}_regen_3", None)
+        await sup.reconcile_state()              # the task is gone: now it really is finished
+        assert sup.get_job(jid)["status"] == "completed"
+    finally:
+        task.cancel()
+        sup._tasks.pop(f"{jid}_regen_3", None)
+        sup.active_jobs.pop(jid, None)
+
+
 def test_reviewer_nonexistent_file():
     critique = analyze_video_chunk("nonexistent.mp4", "Dark apocalyptic streets")
     assert critique["score"] == 80

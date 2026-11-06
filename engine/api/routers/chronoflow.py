@@ -27,6 +27,7 @@ from engine.chronoflow.pipeline import (
     STUDIO_OUTPUT_DIR,
     ChronoFlowPipeline,
 )
+from engine.chronoflow import media_tools
 from engine.chronoflow.reviewer import analyze_video_chunk
 from engine.chronoflow.supervisor import VAULT_DIR, JobSupervisor
 
@@ -107,6 +108,8 @@ class RegenerateChunkRequest(BaseModel):
     anchor_image: str | None = None
     prompt: str | None = None
     duration: float = Field(default=5.17)
+    variant: bool = False          # keep the original shot: save the new render as a separate file and do not re-stitch
+    audio_offset: float = 0.0      # variant only: carry the original shot's audio over starting at this second
 
 
 class GenerateImageRequest(BaseModel):
@@ -128,6 +131,7 @@ class InpaintRequest(BaseModel):
 
 class TimelineExportRequest(BaseModel):
     clips: list[dict[str, Any]] = Field(default_factory=list)
+    overlays: list[dict[str, Any]] = Field(default_factory=list)  # V2 still frames: {filename, start, duration}
 
 
 class AIDirectorPlanRequest(BaseModel):
@@ -427,6 +431,8 @@ async def run_chunk_regeneration(
     custom_anchor: str | None = None,
     custom_prompt: str | None = None,
     duration_sec: float = 5.17,
+    variant: bool = False,
+    audio_offset: float = 0.0,
 ) -> None:
     if job_id not in active_jobs:
         return
@@ -492,6 +498,17 @@ async def run_chunk_regeneration(
         )
 
         chunk_output = await pipeline.execute_prompt(graph, on_step=on_step)
+        if variant:
+            variant_name = f"{job_id}_chunk_{chunk_index}_v{int(time.time())}.mp4"
+            shutil.copy2(chunk_output, STUDIO_OUTPUT_DIR / variant_name)
+            original = STUDIO_OUTPUT_DIR / f"{job_id}_chunk_{chunk_index}.mp4"
+            if original.exists():
+                pipeline.mux_source_audio(STUDIO_OUTPUT_DIR / variant_name, original, audio_offset)
+            job["last_variant"] = {"chunk": chunk_index, "file": variant_name, "at": time.time()}
+            job["status"] = "completed"
+            job["status_msg"] = f"Shot {chunk_index} re-animated as a new variant (original kept)."
+            save_jobs()
+            return
         web_chunk_name = f"{job_id}_chunk_{chunk_index}.mp4"
         shutil.copy2(chunk_output, STUDIO_OUTPUT_DIR / web_chunk_name)
 
@@ -616,6 +633,8 @@ async def submit_regenerate_chunk(req: RegenerateChunkRequest) -> dict[str, Any]
             req.anchor_image,
             req.prompt,
             req.duration,
+            req.variant,
+            req.audio_offset,
         ),
     )
     return {
@@ -765,6 +784,35 @@ def save_frame(req: SaveFrameRequest) -> dict[str, Any]:
     except Exception as e:
         logger.exception("Save frame failed: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+def _media_or_404(file: str) -> Path:
+    path = media_tools.resolve_media(file)
+    if path is None:
+        raise HTTPException(status_code=404, detail="media file not found")
+    return path
+
+
+@router.get("/media/info")
+def media_info(file: str) -> dict[str, Any]:
+    return media_tools.probe(_media_or_404(file))
+
+
+@router.get("/media/filmstrip")
+def media_filmstrip(file: str, count: int = 12, height: int = 72) -> FileResponse:
+    try:
+        sprite = media_tools.filmstrip(_media_or_404(file), count, height)
+    except Exception as e:  # ffmpeg/ffprobe failure or an unreadable source
+        raise HTTPException(status_code=422, detail=f"filmstrip failed: {e}")
+    return FileResponse(sprite, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=3600"})
+
+
+@router.get("/media/waveform")
+def media_waveform(file: str, bins: int = 200) -> dict[str, Any]:
+    try:
+        return {"peaks": media_tools.waveform(_media_or_404(file), bins)}
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=f"waveform failed: {e}")
 
 
 @router.post("/upload_image")
@@ -1026,7 +1074,7 @@ def timeline_export(req: TimelineExportRequest) -> dict[str, Any]:
     master_name = f"chronoflow_timeline_master_{export_id}.mp4"
     master_path = STUDIO_OUTPUT_DIR / master_name
 
-    rendered_path = pipeline.render_timeline_edl(req.clips, master_path)
+    rendered_path = pipeline.render_timeline_edl(req.clips, master_path, req.overlays)
     if rendered_path and master_path.exists():
         return {
             "success": True,

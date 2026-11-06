@@ -189,8 +189,9 @@ class JobSupervisor:
         for jid, job in self.active_jobs.items():
             status = job.get("status")
             if status in ("starting", "regenerating"):
-                task = self._tasks.get(jid)
-                task_is_alive = task is not None and not task.done()
+                # a shot regeneration registers its task as "<job>_regen_<n>", the production run as "<job>"
+                task = next((t for k, t in self._tasks.items() if (k == jid or k.startswith(f"{jid}_regen_")) and not t.done()), None)
+                task_is_alive = task is not None
 
                 # If no Python task is running for this job
                 if not task_is_alive:

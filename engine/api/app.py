@@ -132,6 +132,7 @@ def create_app(
 
     STUDIO_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     app.mount("/chronoflow/outputs", StaticFiles(directory=str(STUDIO_OUTPUT_DIR)), name="chronoflow_outputs")
+    app.mount("/chronoflow/static", StaticFiles(directory=str(chronoflow.CHRONOFLOW_STATIC_DIR)), name="chronoflow_static")
     app.mount("/outputs", StaticFiles(directory=str(STUDIO_OUTPUT_DIR)), name="outputs")
     if COMFY_INPUT_DIR.exists():
         app.mount("/chronoflow/inputs", StaticFiles(directory=str(COMFY_INPUT_DIR)), name="chronoflow_inputs")

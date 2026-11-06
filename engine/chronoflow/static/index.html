@@ -1496,11 +1496,11 @@
     /* Top Row: 38% Media Pool | 62% Cinema Program Monitor */
     .davinci-top-row {
       display: grid;
-      grid-template-columns: 38% calc(62% - 8px);
+      grid-template-columns: 30% calc(70% - 8px);
       gap: 8px;
-      min-height: 380px;
-      max-height: 520px;
-      height: 46vh;
+      min-height: 440px;
+      max-height: 640px;
+      height: 56vh;
     }
     @media (max-width: 1100px) {
       .davinci-top-row {
@@ -2343,214 +2343,18 @@
                     <option value="">Loading jobs...</option>
                   </select>
                 </div>
-                <button type="button" class="btn-monitor-tool" onclick="extractFrameToImageStudio()" title="Send Current Frame to Image Studio">📸 Inpaint</button>
-                <a href="/chronoflow/outputs/chronoflow_master_vox_9ec801.mp4" class="btn-monitor-export" id="btnDownloadMaster" download="chronoflow_master.mp4">⬇ Export</a>
+                <button type="button" class="btn-monitor-tool" id="btnMagicBrush" onclick="NLEFrameEdit.toggleBrush()" title="Magic Brush: paint on the paused frame, describe the change, merge it into the timeline" style="border-color:#e58525;color:#f59e0b">✨ Magic Brush</button>
+                <button type="button" class="btn-monitor-tool" onclick="extractFrameToImageStudio()" title="Send the current frame to Image Studio">📸 Image Studio</button>
               </div>
             </div>
 
-            <!-- Monitor Stage: Screen + Master Stereo VU Meter -->
-            <div class="monitor-stage">
-              <div class="cinema-screen-container">
-                <div class="empty-state" id="emptyVideoState" style="display: none;">
-                  <div style="font-size: 38px; opacity: 0.35;">🎬</div>
-                  <div style="font-weight: 600;">Cinema Program Viewport Ready</div>
-                </div>
-                <video id="masterVideoPlayer" playsinline src="/chronoflow/outputs/chronoflow_master_vox_9ec801.mp4" class="cinema-video-element"></video>
-              </div>
-
-              <!-- DaVinci Master Stereo Vertical VU Meter Strip -->
-              <div class="cinema-vu-meter" title="Master Audio Output (Stereo VU Meter)">
-                <div class="vu-scale">
-                  <span>0</span>
-                  <span>-6</span>
-                  <span>-12</span>
-                  <span>-18</span>
-                  <span>-24</span>
-                  <span>-36</span>
-                  <span>-48</span>
-                </div>
-                <div class="vu-meters-pair">
-                  <div class="vu-channel">
-                    <div class="vu-meter-trough">
-                      <div class="vu-meter-bar" id="vuFillMasterL" style="height: 0%;"></div>
-                    </div>
-                    <span class="vu-label">L</span>
-                  </div>
-                  <div class="vu-channel">
-                    <div class="vu-meter-trough">
-                      <div class="vu-meter-bar" id="vuFillMasterR" style="height: 0%;"></div>
-                    </div>
-                    <span class="vu-label">R</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Monitor Transport Bar & SMPTE Timecode Display -->
-            <div class="monitor-transport-deck">
-              <div class="transport-center-cluster">
-                <button type="button" class="btn-transport" onclick="timelineSeek(0)" title="Jump to Start (Home)">⏮</button>
-                <button type="button" class="btn-transport" onclick="timelineStepFrame(-1)" title="Previous Frame (Left Arrow)">◀</button>
-                <button type="button" class="btn-transport btn-transport-play" id="btnTimelinePlay" onclick="timelineTogglePlay()" title="Play / Pause (Space)">▶</button>
-                <button type="button" class="btn-transport" onclick="timelineStepFrame(1)" title="Next Frame (Right Arrow)">▶</button>
-                <button type="button" class="btn-transport" onclick="timelineSeekToEnd()" title="Jump to End (End)">⏭</button>
-                <button type="button" class="btn-transport" id="btnLoopToggle" onclick="toggleTimelineLoop()" title="Loop Playback (Ctrl+L)">🔁</button>
-              </div>
-
-              <div class="monitor-timecode-box">
-                <span class="smpte-readout" id="smpteDisplay">01:00:36:15</span>
-              </div>
-            </div>
+            <!-- Program monitor + transport + frame-edit bar (built by static/nle/nle.js) -->
+            <div id="nleMonitorBody"></div>
           </div>
         </div>
 
-        <!-- Middle Editing Command Toolbar -->
-        <div class="davinci-mid-bar">
-          <div class="mid-tools-left">
-            <button type="button" class="btn-mid-tool active" id="btnToolSelect" onclick="setNLETool('select')" title="Selection Tool (V)">↖ Arrow</button>
-            <button type="button" class="btn-mid-tool" id="btnToolRazor" onclick="setNLETool('razor')" title="Blade Cut Tool (B/C)">✂ Blade</button>
-            <button type="button" class="btn-mid-tool" onclick="deleteSelectedClip()" title="Delete Selected Clip (Del)">🗑 Delete</button>
-            <button type="button" class="btn-mid-tool active" id="btnSnapToggle" onclick="toggleSnapping()" title="Magnetic Snap (N)">🧲 Snap</button>
-            <button type="button" class="btn-mid-tool" onclick="applyCrossDissolve()" title="Add Cross Dissolve">⧖ Dissolve</button>
-          </div>
-
-          <div class="mid-clip-badge" id="selectedClipInfoBadge">
-            Clip: <strong id="selectedClipBadge" style="color: #f59e0b;">Shot #1</strong>
-          </div>
-
-          <div class="mid-tools-right">
-            <button type="button" class="btn-mid-accent" onclick="regenerateSelectedShotDialog()">🔄 Regenerate Shot</button>
-            <button type="button" class="btn-mid-primary" onclick="exportTimelineCut()">🚀 Bake Master Cut</button>
-          </div>
-        </div>
-
-        <!-- Dual-Tier Timeline -->
-        <div class="davinci-dual-timeline">
-          <!-- Tier 1: Sequence Macro Minimap Ribbon (100% Sequence Overview) -->
-          <div class="macro-ribbon" id="macroTimelineRibbon" onclick="onMacroRibbonClick(event)" title="Full Sequence Macro Minimap">
-            <div class="macro-clips-track" id="macroClipsContainer"></div>
-            <div class="macro-playhead-needle" id="macroPlayhead"></div>
-          </div>
-
-          <!-- Tier 2: Detailed Multi-Track NLE Editor -->
-          <div class="detail-timeline-panel" id="tracksWrapper">
-            <div class="timeline-playhead-line" id="timelinePlayheadLine">
-              <div class="playhead-handle"></div>
-            </div>
-
-            <!-- Time Ruler Bar -->
-            <div class="timeline-ruler-bar" id="timelineRuler" onclick="onRulerClick(event)"></div>
-
-            <!-- Track V2: Overlay / Titles -->
-            <div class="track-row">
-              <div class="track-header-cell track-header-v2">
-                <div class="track-color-strip v-strip"></div>
-                <div class="track-info">
-                  <span class="track-name">V2</span>
-                  <span class="track-label">Overlay</span>
-                </div>
-                <div class="track-controls">
-                  <button type="button" class="track-btn" title="Lock Track" onclick="this.classList.toggle('active')">🔒</button>
-                  <button type="button" class="track-btn active" title="Auto Patch">&lt;&gt;</button>
-                </div>
-              </div>
-              <div class="track-lane-cell" id="trackLaneV2"></div>
-            </div>
-
-            <!-- Track V1: Master Video with Filmstrip Thumbnails -->
-            <div class="track-row">
-              <div class="track-header-cell track-header-v1">
-                <div class="track-color-strip v-strip"></div>
-                <div class="track-info">
-                  <span class="track-name">V1</span>
-                  <span class="track-label">Video</span>
-                </div>
-                <div class="track-controls">
-                  <button type="button" class="track-btn" title="Lock Track" onclick="this.classList.toggle('active')">🔒</button>
-                  <button type="button" class="track-btn active" title="Auto Patch">&lt;&gt;</button>
-                </div>
-              </div>
-              <div class="track-lane-cell" id="trackLaneV1"></div>
-            </div>
-
-            <!-- Track A1: Foley / SFX / Voiceover -->
-            <div class="track-row">
-              <div class="track-header-cell track-header-a1">
-                <div class="track-color-strip a-strip-sfx"></div>
-                <div class="track-info">
-                  <span class="track-name">A1</span>
-                  <span class="track-label">SFX</span>
-                </div>
-                <div class="track-controls">
-                  <button type="button" class="track-btn track-btn-mute" title="Mute Track" onclick="toggleTrackMute('A1', this)">M</button>
-                  <button type="button" class="track-btn track-btn-solo" title="Solo Track" onclick="this.classList.toggle('active')">S</button>
-                </div>
-                <div class="track-vu-meter" title="Fairlight Audio Meter">
-                  <div class="vu-bar left"><div class="vu-fill" id="vuFillA1L" style="height: 10%;"></div></div>
-                  <div class="vu-bar right"><div class="vu-fill" id="vuFillA1R" style="height: 12%;"></div></div>
-                </div>
-              </div>
-              <div class="track-lane-cell" id="trackLaneA1"></div>
-            </div>
-
-            <!-- Track A2: Score / Soundtrack -->
-            <div class="track-row">
-              <div class="track-header-cell track-header-a2">
-                <div class="track-color-strip a-strip-music"></div>
-                <div class="track-info">
-                  <span class="track-name">A2</span>
-                  <span class="track-label">Music</span>
-                </div>
-                <div class="track-controls">
-                  <button type="button" class="track-btn track-btn-mute" title="Mute Track" onclick="toggleTrackMute('A1', this)">M</button>
-                  <button type="button" class="track-btn track-btn-solo" title="Solo Track" onclick="this.classList.toggle('active')">S</button>
-                </div>
-                <div class="track-vu-meter" title="Fairlight Audio Meter">
-                  <div class="vu-bar left"><div class="vu-fill" id="vuFillA2L" style="height: 10%;"></div></div>
-                  <div class="vu-bar right"><div class="vu-fill" id="vuFillA2R" style="height: 12%;"></div></div>
-                </div>
-              </div>
-              <div class="track-lane-cell" id="trackLaneA2"></div>
-            </div>
-          </div>
-
-          <!-- Inspector & Parameters under timeline -->
-          <div style="display: flex; gap: 14px; margin-top: 4px; background: #15161d; padding: 5px 12px; border-radius: 3px; border: 1px solid #23252d; align-items: center; flex-wrap: wrap;">
-            <div style="font-size: 0.78rem; font-weight: 700; color: #f1f5f9;">
-              Inspector: <span id="selectedClipInspectorTitle" style="color: #f59e0b;">Shot #1</span>
-            </div>
-            <div style="display: flex; align-items: center; gap: 6px;">
-              <span style="font-size: 0.74rem; color: #94a3b8;">Speed:</span>
-              <select id="clipSpeedSelect" onchange="updateSelectedClipSpeed(this.value)" style="padding: 3px 6px; font-size: 0.74rem; width: auto; background: #0c0d11; border: 1px solid #282a35; color: #e2e8f0; border-radius: 3px;">
-                <option value="0.5">0.5x Slow</option>
-                <option value="0.75">0.75x</option>
-                <option value="1.0" selected>1.0x Normal</option>
-                <option value="1.25">1.25x</option>
-                <option value="1.5">1.5x</option>
-                <option value="2.0">2.0x Fast</option>
-              </select>
-            </div>
-            <div style="display: flex; align-items: center; gap: 6px;">
-              <span style="font-size: 0.74rem; color: #94a3b8;">Volume:</span>
-              <input type="range" id="clipVolumeRange" min="0" max="2" step="0.05" value="1.0" oninput="updateSelectedClipVolume(this.value)" style="width: 80px;">
-              <span id="clipVolLabel" style="font-size: 0.72rem; color: #34d399; font-weight: 700;">100%</span>
-            </div>
-            <div style="display: flex; align-items: center; gap: 6px;">
-              <span style="font-size: 0.74rem; color: #94a3b8;">Transition:</span>
-              <select id="clipTransitionSelect" onchange="updateSelectedClipTransition(this.value)" style="padding: 3px 6px; font-size: 0.74rem; width: auto; background: #0c0d11; border: 1px solid #282a35; color: #e2e8f0; border-radius: 3px;">
-                <option value="cut" selected>Hard Cut</option>
-                <option value="dissolve">Cross Dissolve</option>
-                <option value="morph">Continuity Morph</option>
-                <option value="fade_black">Dip to Black</option>
-              </select>
-            </div>
-            <div style="margin-left: auto;">
-              <button type="button" class="btn-tool" onclick="extractTailFrameFromSelectedClip()" style="font-size: 0.72rem; color: #a5b4fc; background: #1f2230; border: 1px solid #32364c; padding: 3px 8px; border-radius: 3px;">
-                📷 Extract Tail Frame
-              </button>
-            </div>
-          </div>
-        </div>
+        <!-- Multi-track NLE timeline (built by static/nle/nle.js) -->
+        <div id="nleTimeline"></div>
 
         <!-- DaVinci Resolve Signature Bottom Page Dock Bar -->
         <div class="davinci-bottom-dock">
@@ -3406,54 +3210,6 @@
       }
     }
 
-    // Capture Frame from Master Video and Send to Image Studio Inpaint Canvas
-    async function extractFrameToImageStudio() {
-      const video = document.getElementById('masterVideoPlayer');
-      if (!video) {
-        alert("Video player not found.");
-        return;
-      }
-      video.pause();
-
-      const offscreen = document.createElement('canvas');
-      offscreen.width = video.videoWidth || 1344;
-      offscreen.height = video.videoHeight || 768;
-      const oCtx = offscreen.getContext('2d');
-      oCtx.drawImage(video, 0, 0, offscreen.width, offscreen.height);
-      const frameData = offscreen.toDataURL('image/png');
-
-      try {
-        const res = await fetch(`${API_BASE}/save_frame`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            frame_data: frameData,
-            prefix: 'video_frame_extract'
-          })
-        });
-        const data = await res.json();
-        if (data.success) {
-          switchTab('image-studio');
-          loadCanvasImage(data.url, data.filename);
-
-          const strip = document.getElementById('imgHistoryStrip');
-          if (strip) {
-            const thumb = document.createElement('div');
-            thumb.className = 'thumb-item active';
-            thumb.onclick = () => loadCanvasImage(data.url, data.filename);
-            thumb.innerHTML = `<img src="${data.url}" alt="Extracted Frame">`;
-            strip.prepend(thumb);
-          }
-          addTerminalLog("INSPECT", `Extracted current video frame (${offscreen.width}x${offscreen.height}) to Image Studio.`, true);
-          alert(`📸 Current frame captured (${offscreen.width}x${offscreen.height}) and loaded onto Image Studio canvas!\nPaint any region with the brush to inpaint or modify.`);
-        } else {
-          alert(`Failed to save extracted frame: ${data.error}`);
-        }
-      } catch (err) {
-        alert(`Error: ${err.message}`);
-      }
-    }
-
     // Replace Frame in Video Shot & Dispatch Regeneration
     async function replaceFrameInVideoShot() {
       if (!canvas) {
@@ -3642,9 +3398,6 @@ The AI Director is modifying the prompt and rendering in ComfyUI.`);
       }
     }
 
-    function regenerateSelectedShotDialog() {
-      openShotDirectorModal(selectedClipIdx + 1);
-    }
 
 
     
@@ -4011,23 +3764,7 @@ The AI Director is modifying the prompt and rendering in ComfyUI.`);
           if (icon) icon.innerHTML = '<span class="spinner"></span>';
         }
 
-        if (job.master_video) {
-          const vPlayer = document.getElementById('masterVideoPlayer');
-          if (vPlayer && vPlayer.getAttribute('data-last-master') !== job.master_video) {
-            vPlayer.setAttribute('data-last-master', job.master_video);
-            vPlayer.src = `${job.master_video}?t=${Date.now()}`;
-            vPlayer.style.display = 'block';
-            const emptyState = document.getElementById('emptyVideoState');
-            if (emptyState) emptyState.style.display = 'none';
-
-            const dl = document.getElementById('btnDownloadMaster');
-            if (dl) {
-              dl.href = job.master_video;
-              dl.style.display = 'inline-flex';
-            }
-            if (typeof initTimeline === 'function') initTimeline();
-          }
-        }
+        if (window.NLE) NLE.loadJob(job);   // no-op unless the job's clip list changed
       }
     }
 
@@ -4053,37 +3790,6 @@ The AI Director is modifying the prompt and rendering in ComfyUI.`);
       }
     }
 
-    // Interactive Trim Handler for NLE Tracks
-    function startTrim(event, clipIdx, side) {
-      event.preventDefault();
-      event.stopPropagation();
-      const startX = event.clientX;
-      const clip = timelineClips[clipIdx];
-      if (!clip) return;
-      const origIn = clip.in_point;
-      const origOut = clip.out_point;
-      const pxPerSec = 45;
-
-      function onMouseMove(e) {
-        const deltaSec = (e.clientX - startX) / pxPerSec;
-        if (side === 'left') {
-          const newIn = Math.max(0, Math.min(origOut - 0.5, origIn + deltaSec));
-          clip.in_point = Math.round(newIn * 10) / 10;
-        } else {
-          const newOut = Math.max(clip.in_point + 0.5, Math.min(clip.duration || 5.2, origOut + deltaSec));
-          clip.out_point = Math.round(newOut * 10) / 10;
-        }
-        renderTimelineTracks();
-      }
-
-      function onMouseUp() {
-        window.removeEventListener('mousemove', onMouseMove);
-        window.removeEventListener('mouseup', onMouseUp);
-      }
-
-      window.addEventListener('mousemove', onMouseMove);
-      window.addEventListener('mouseup', onMouseUp);
-    }
 
     // Video Production Run Dispatcher (Command Pattern)
     async function startNewProductionRun() {
@@ -4554,151 +4260,38 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
     }
 
     /* ========================================================= */
-    /* PILLAR 2: $100-BILLION ENTERPRISE NLE TIMELINE            */
+    /* TIMELINE & PLAYER live in static/nle/ (NLE). These are the */
+    /* thin entry points the rest of this page calls.            */
     /* ========================================================= */
-    let timelineClips = [];
-    let selectedClipIdx = 0;
-    let timelineCurrentTime = 0.0;
-    let timelineTotalDuration = 15.6;
-    let isPlaying = false;
-    let playInterval = null;
-    let snappingEnabled = true;
-    let currentNLETool = 'select'; // 'select' or 'razor'
-
-    function initTimeline() {
-      const masterPlayer = document.getElementById('masterVideoPlayer');
-      
-      // Populate clips from active job
-      if (currentJobData && currentJobData.chunks && currentJobData.chunks.length > 0) {
-        timelineClips = currentJobData.chunks.map((url, idx) => ({
-          id: `clip_${idx + 1}`,
-          title: `Shot #${idx + 1}`,
-          url: url,
-          filename: url.split('/').pop(),
-          duration: 5.2,
-          in_point: 0.0,
-          out_point: 5.2,
-          speed: 1.0,
-          volume: 1.0,
-          transition: idx < currentJobData.chunks.length - 1 ? 'morph' : 'cut'
-        }));
-      } else {
-        timelineClips = [
-          { id: 'c1', title: 'Shot #1: Target Lock', url: '/outputs/66c76c556502_chunk_1.mp4', filename: '66c76c556502_chunk_1.mp4', duration: 5.2, in_point: 0, out_point: 5.2, speed: 1.0, volume: 1.0, transition: 'morph' },
-          { id: 'c2', title: 'Shot #2: Precision Strike', url: '/outputs/66c76c556502_chunk_2.mp4', filename: '66c76c556502_chunk_2.mp4', duration: 5.2, in_point: 0, out_point: 5.2, speed: 1.0, volume: 1.0, transition: 'morph' },
-          { id: 'c3', title: 'Shot #3: Rooftop Vault', url: '/outputs/66c76c556502_chunk_3.mp4', filename: '66c76c556502_chunk_3.mp4', duration: 5.2, in_point: 0, out_point: 5.2, speed: 1.0, volume: 1.0, transition: 'cut' }
-        ];
-      }
-
-      renderTimelineTracks();
-      selectTimelineClip(0);
-      updateSMPTEDisplay(0);
-
-      // Bind master player timeupdate to timeline playhead
-      if (masterPlayer && !masterPlayer._timelineBound) {
-        masterPlayer._timelineBound = true;
-        masterPlayer.addEventListener('timeupdate', () => {
-          updateSMPTEDisplay(masterPlayer.currentTime);
-          const pxPerSec = 45;
-          const playhead = document.getElementById('timelinePlayheadLine');
-          if (playhead) {
-            playhead.style.left = `${140 + (masterPlayer.currentTime * pxPerSec)}px`;
-          }
-          const macroPlayhead = document.getElementById('macroPlayhead');
-          if (macroPlayhead && timelineTotalDuration > 0) {
-            const macroPct = (masterPlayer.currentTime / timelineTotalDuration) * 100;
-            macroPlayhead.style.left = `${macroPct}%`;
-          }
-        });
-        masterPlayer.addEventListener('play', () => {
-          const btn = document.getElementById('btnTimelinePlay');
-          if (btn) btn.textContent = '⏸️';
-          startLiveVUMeters();
-        });
-        masterPlayer.addEventListener('pause', () => {
-          const btn = document.getElementById('btnTimelinePlay');
-          if (btn) btn.textContent = '▶';
-          if (vuAnimationId) cancelAnimationFrame(vuAnimationId);
-          startLiveVUMeters();
-        });
-      }
+    function initTimeline() { if (window.NLE) NLE.loadJob(currentJobData); }
+    function regenerateSelectedShotDialog() {
+      const c = window.NLE && NLE.selectedClip();
+      openShotDirectorModal(c && c.shot != null ? c.shot + 1 : 1);
     }
+    function exportTimelineCut() { if (window.NLE) NLE.exportCut(); }
 
-    
-    /* ========================================================= */
-    /* DAVINCI RESOLVE NLE LOGIC & VU METERS                     */
-    /* ========================================================= */
+    // Media pool: one card per source file on the timeline (first frame from the filmstrip endpoint)
     let currentMediaBin = 'all';
     let mediaPoolSearchQuery = '';
-    let vuMeterAnimFrame = null;
-    let isLoopingTimeline = false;
-
     function renderMediaPool() {
       const grid = document.getElementById('mediaPoolGrid');
       const badge = document.getElementById('mediaPoolCountBadge');
-      if (!grid) return;
-
-      const clips = (timelineClips && timelineClips.length > 0) ? timelineClips : [
-        { id: 'c1', title: 'Shot #1: Target Lock', url: '/outputs/66c76c556502_chunk_1.mp4', filename: '66c76c556502_chunk_1.mp4', duration: 5.2 },
-        { id: 'c2', title: 'Shot #2: Precision Strike', url: '/outputs/66c76c556502_chunk_2.mp4', filename: '66c76c556502_chunk_2.mp4', duration: 5.2 },
-        { id: 'c3', title: 'Shot #3: Rooftop Vault', url: '/outputs/66c76c556502_chunk_3.mp4', filename: '66c76c556502_chunk_3.mp4', duration: 5.2 }
-      ];
-
-      // Filter by bin and search
-      const filtered = clips.filter(c => {
-        if (currentMediaBin === 'chunks' && !c.url.endsWith('.mp4')) return false;
-        if (currentMediaBin === 'audio' && !c.url.endsWith('.wav') && !c.url.endsWith('.mp3')) return false;
-        if (currentMediaBin === 'inpaint' && !c.url.endsWith('.png') && !c.url.endsWith('.jpg')) return false;
-        if (mediaPoolSearchQuery) {
-          const q = mediaPoolSearchQuery.toLowerCase();
-          return c.title.toLowerCase().includes(q) || (c.filename && c.filename.toLowerCase().includes(q));
-        }
-        return true;
-      });
-
-      if (badge) badge.textContent = `${filtered.length} Clips`;
-
-      if (filtered.length === 0) {
-        grid.innerHTML = `<div style="grid-column: 1 / -1; text-align: center; padding: 30px; color: #64748b; font-size: 0.75rem;">No media clips in this bin</div>`;
-        return;
-      }
-
-      let html = '';
-      filtered.forEach((clip, idx) => {
-        const isSel = idx === selectedClipIdx;
-        const dur = (clip.duration || 5.2).toFixed(1);
-        const isVideo = clip.url && (clip.url.endsWith('.mp4') || clip.url.includes('chunk'));
-        
-        html += `
-          <div class="pool-card ${isSel ? 'active-pool-clip' : ''}" onclick="selectPoolClip(${idx})" ondblclick="insertClipToTimeline(${idx})" title="Click to preview • Double-click to duplicate into timeline">
-            <div class="pool-thumb-wrapper" onmouseenter="this.querySelector('video')?.play()" onmouseleave="const v = this.querySelector('video'); if (v) { v.pause(); v.currentTime = 0; }">
-              ${isVideo ? `
-                <video class="pool-thumb-video" src="${clip.url}" muted loop playsinline preload="metadata"></video>
-              ` : `
-                <div style="font-size: 28px; opacity: 0.7;">🎵</div>
-              `}
-              <span class="pool-badge-source">REC.709</span>
-              <span class="pool-dur-tag">${dur}s</span>
-            </div>
-            <div class="pool-card-meta">
-              <span class="pool-card-name">${clip.title}</span>
-              <div class="pool-card-sub">
-                <span>1080p24</span>
-                <span style="color: #34d399;">PRO-RES</span>
-              </div>
-            </div>
-          </div>
-        `;
-      });
-
-      grid.innerHTML = html;
+      if (!grid || !window.NLE) return;
+      const seen = new Set();
+      const q = mediaPoolSearchQuery.toLowerCase();
+      const items = NLE.tl.clips.filter(c => currentMediaBin !== 'audio' && currentMediaBin !== 'inpaint' && !seen.has(c.src) && seen.add(c.src) && (!q || (c.label + c.src).toLowerCase().includes(q)));
+      if (badge) badge.textContent = `${items.length} Clips`;
+      if (!items.length) { grid.innerHTML = '<div style="grid-column: 1 / -1; text-align: center; padding: 30px; color: #64748b; font-size: 0.75rem;">No media in this bin</div>'; return; }
+      grid.innerHTML = items.map(c => {
+        const thumb = NLE.apiUrl('/media/filmstrip', { file: c.src, count: 1, height: 72, v: c.version || 0 });
+        const sel = NLE.ui.sel && NLE.ui.sel.id === c.id ? 'active-pool-clip' : '';
+        return `<div class="pool-card ${sel}" onclick="NLE.select({type:'clip',id:'${c.id}'})" ondblclick="NLE.edit(()=>NLEModel.duplicateClip(NLE.tl,'${c.id}'))" title="Click to select · double-click to duplicate on the timeline">
+          <div class="pool-thumb-wrapper"><img class="pool-thumb-video" src="${thumb}" alt="" style="width:100%;height:100%;object-fit:cover"><span class="pool-dur-tag">${(c.srcDur).toFixed(1)}s</span></div>
+          <div class="pool-card-meta"><span class="pool-card-name">${c.label}</span><div class="pool-card-sub"><span>${c.src.slice(0, 22)}</span></div></div></div>`;
+      }).join('');
     }
-
-    function selectPoolClip(idx) {
-      selectTimelineClip(idx);
-      renderMediaPool();
-    }
-
+    let _poolTimer = null;
+    function refreshMediaPool() { clearTimeout(_poolTimer); _poolTimer = setTimeout(renderMediaPool, 150); }
     function selectMediaBin(bin) {
       currentMediaBin = bin;
       ['all', 'chunks', 'audio', 'inpaint'].forEach(b => {
@@ -4707,488 +4300,30 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
       });
       renderMediaPool();
     }
-
-    function filterMediaPool(val) {
-      mediaPoolSearchQuery = val;
-      renderMediaPool();
-    }
-
-    function refreshMediaPool() {
-      renderMediaPool();
-      renderMacroRibbon();
-    }
-
-    function renderMacroRibbon() {
-      const container = document.getElementById('macroClipsContainer');
-      if (!container) return;
-
-      const clips = (timelineClips && timelineClips.length > 0) ? timelineClips : [];
-      const totalDur = timelineTotalDuration || 15.6;
-
-      let html = '';
-      const colorPalette = [
-        '#3b82f6', '#8b5cf6', '#ec4899', '#10b981', '#f59e0b', '#06b6d4', '#6366f1'
-      ];
-
-      clips.forEach((c, i) => {
-        const clipDur = (c.out_point - c.in_point) / c.speed;
-        const pct = Math.max(3, (clipDur / totalDur) * 100);
-        const col = colorPalette[i % colorPalette.length];
-        html += `
-          <div class="macro-clip-block" style="width: ${pct}%; background: ${col};" title="${c.title} (${clipDur.toFixed(1)}s)">
-            ${c.title}
-          </div>
-        `;
-      });
-
-      container.innerHTML = html;
-    }
-
-    function onMacroRibbonClick(e) {
-      const ribbon = document.getElementById('macroTimelineRibbon');
-      if (!ribbon) return;
-      const rect = ribbon.getBoundingClientRect();
-      const clickX = e.clientX - rect.left;
-      const ratio = Math.max(0, Math.min(1, clickX / rect.width));
-      const targetTime = ratio * (timelineTotalDuration || 15.6);
-      timelineSeek(targetTime);
-    }
-
-    function toggleTimelineLoop() {
-      isLoopingTimeline = !isLoopingTimeline;
-      const btn = document.getElementById('btnLoopToggle');
-      if (btn) {
-        btn.classList.toggle('active', isLoopingTimeline);
-        btn.style.color = isLoopingTimeline ? '#f59e0b' : '#cbd5e1';
-      }
-    }
-
-    function applyCrossDissolve() {
-      if (timelineClips && timelineClips[selectedClipIdx]) {
-        timelineClips[selectedClipIdx].transition = 'dissolve';
-        renderTimelineTracks();
-        const sel = document.getElementById('clipTransitionSelect');
-        if (sel) sel.value = 'dissolve';
-      }
-    }
+    function filterMediaPool(val) { mediaPoolSearchQuery = val; renderMediaPool(); }
 
     function switchMainTab(tab) {
-      // Clean tab switcher for bottom dock
-      const tabs = ['director', 'image-studio', 'vault', 'storyboard'];
-      tabs.forEach(t => {
-        const el = document.getElementById(`tab-${t}`);
-        if (el) el.classList.remove('active');
-        const nav = document.getElementById(`navTab${t.charAt(0).toUpperCase() + t.slice(1)}`);
-        if (nav) nav.classList.remove('active');
+      ['director', 'image-studio', 'vault', 'storyboard'].forEach(t => {
+        const e = document.getElementById(`tab-${t}`);
+        if (e) e.classList.remove('active');
       });
       const activeEl = document.getElementById(`tab-${tab}`);
       if (activeEl) activeEl.classList.add('active');
     }
 
-    // Live Vertical Stereo VU Meter Animation (Fairlight Engine)
-    function setupVUMeterVisualizer() {
-      const masterPlayer = document.getElementById('masterVideoPlayer');
-      const fillL = document.getElementById('vuFillMasterL');
-      const fillR = document.getElementById('vuFillMasterR');
-      if (!fillL || !fillR) return;
-
-      let baseLevel = 0;
-      function animateVU() {
-        if (masterPlayer && !masterPlayer.paused && !masterPlayer.ended) {
-          // Dynamic organic speech/music level envelope
-          const t = performance.now() * 0.006;
-          const noise1 = Math.sin(t * 3.1) * 0.25 + Math.sin(t * 7.7) * 0.15;
-          const noise2 = Math.cos(t * 2.8) * 0.25 + Math.cos(t * 8.3) * 0.15;
-          
-          let levelL = Math.max(12, Math.min(94, 58 + noise1 * 40));
-          let levelR = Math.max(10, Math.min(92, 55 + noise2 * 40));
-
-          fillL.style.height = `${levelL}%`;
-          fillR.style.height = `${levelR}%`;
-        } else {
-          // Drop to resting silence
-          fillL.style.height = '0%';
-          fillR.style.height = '0%';
-        }
-        vuMeterAnimFrame = requestAnimationFrame(animateVU);
-      }
-
-      if (!vuMeterAnimFrame) {
-        vuMeterAnimFrame = requestAnimationFrame(animateVU);
-      }
-    }
-
-    function renderTimelineTracks() {
-      const v1Lane = document.getElementById('trackLaneV1');
-      const a1Lane = document.getElementById('trackLaneA1');
-      const a2Lane = document.getElementById('trackLaneA2');
-      const ruler = document.getElementById('timelineRuler');
-
-      // Calculate total duration
-      timelineTotalDuration = timelineClips.reduce((acc, c) => acc + (c.out_point - c.in_point) / c.speed, 0);
-      if (timelineTotalDuration <= 0) timelineTotalDuration = 15.6;
-
-      // Draw Ruler
-      const pxPerSec = 45; // 45px per second
-      const totalWidth = Math.max(900, Math.round(timelineTotalDuration * pxPerSec) + 100);
-      ruler.style.width = `${totalWidth}px`;
-      v1Lane.style.width = `${totalWidth}px`;
-      a1Lane.style.width = `${totalWidth}px`;
-      a2Lane.style.width = `${totalWidth}px`;
-
-      // Render ruler ticks
-      let rulerHtml = '';
-      for (let s = 0; s <= Math.ceil(timelineTotalDuration); s++) {
-        const left = s * pxPerSec;
-        rulerHtml += `
-          <div style="position: absolute; left: ${left}px; top: 0; font-size: 0.65rem; color: #64748b; font-family: monospace;">
-            <div style="height: 6px; width: 1px; background: rgba(255,255,255,0.2); margin-bottom: 2px;"></div>
-            ${s}s
-          </div>`;
-      }
-      ruler.innerHTML = rulerHtml;
-
-      // Render V1 Video Clips
-      let curLeft = 0;
-      let v1Html = '';
-      let a1Html = '';
-
-      timelineClips.forEach((c, idx) => {
-        const clipDur = (c.out_point - c.in_point) / c.speed;
-        const width = Math.max(60, clipDur * pxPerSec);
-        const isSel = idx === selectedClipIdx;
-
-        // Filmstrip frame tiles along clip
-        const frameCount = Math.max(1, Math.min(8, Math.floor(width / 48)));
-        let filmstripHtml = '<div class="filmstrip-strip">';
-        for (let f = 0; f < frameCount; f++) {
-          filmstripHtml += `<video class="filmstrip-frame" src="${c.url}" muted preload="metadata"></video>`;
-        }
-        filmstripHtml += '</div>';
-
-        const isDissolve = c.transition === 'dissolve' || c.transition === 'morph';
-
-        v1Html += `
-          <div class="timeline-clip-block ${isSel ? 'active-clip' : ''}" style="left: ${curLeft}px; width: ${width}px;" onclick="selectTimelineClip(${idx})">
-            ${filmstripHtml}
-            <div class="trim-handle trim-handle-left" onmousedown="startTrim(event, ${idx}, 'left')"></div>
-            <div style="display: flex; align-items: center; gap: 5px; overflow: hidden; width: calc(100% - 34px); position: relative; z-index: 2;">
-              <span style="font-size: 0.62rem; color: #60a5fa; font-weight: 800; background: rgba(59, 130, 246, 0.35); padding: 1px 4px; border-radius: 2px;">V1</span>
-              <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.73rem; text-shadow: 0 1px 2px #000;">${c.title} (${clipDur.toFixed(1)}s)</span>
-            </div>
-            <span style="font-size: 0.66rem; opacity: 0.95; font-family: monospace; background: rgba(0,0,0,0.6); padding: 1px 4px; border-radius: 2px; position: relative; z-index: 2;">${c.speed}x</span>
-            <div class="trim-handle trim-handle-right" onmousedown="startTrim(event, ${idx}, 'right')"></div>
-            ${isDissolve ? `<div class="dissolve-marker-box" title="Cross Dissolve (${c.transition})"></div>` : ''}
-          </div>`;
-
-        // Synced A1 Foley audio block with DaVinci waveform styling
-        const a1Bars = Math.max(8, Math.floor(width / 7));
-        a1Html += `
-          <div class="timeline-clip-block audio-clip" style="left: ${curLeft}px; width: ${width}px;" onclick="selectTimelineClip(${idx})">
-            <div style="display: flex; align-items: center; gap: 5px; overflow: hidden; width: calc(100% - 40px); z-index: 2;">
-              <span style="font-size: 0.62rem; color: #2dd4bf; font-weight: 800; background: rgba(20, 184, 166, 0.2); padding: 1px 4px; border-radius: 2px;">A1</span>
-              <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.72rem;">Foley: ${c.title}</span>
-            </div>
-            <span style="font-size: 0.66rem; opacity: 0.85; font-family: monospace; background: rgba(0,0,0,0.35); padding: 1px 4px; border-radius: 2px; z-index: 2;">${Math.round(c.volume * 100)}%</span>
-            ${generateWaveformHtml(a1Bars, '#2dd4bf')}
-          </div>`;
-
-        curLeft += width;
-      });
-
-      // Ambient Music Score Track A2 with Fairlight waveform styling
-      const a2Bars = Math.max(16, Math.floor(curLeft / 7));
-      const a2Html = `
-        <div class="timeline-clip-block audio-clip" style="left: 0px; width: ${curLeft}px; background: linear-gradient(180deg, #153a23 0%, #0e2717 100%); border-color: #22c55e; border-top: 3px solid #4ade80;">
-          <div style="display: flex; align-items: center; gap: 5px; z-index: 2;">
-            <span style="font-size: 0.62rem; color: #4ade80; font-weight: 800; background: rgba(34, 197, 94, 0.2); padding: 1px 4px; border-radius: 2px;">A2</span>
-            <span>🎵 Cinematic Tension Drone &amp; Synth Bass</span>
-          </div>
-          <span style="font-size: 0.68rem; opacity: 0.85; font-family: monospace; background: rgba(0,0,0,0.35); padding: 1px 4px; border-radius: 2px; z-index: 2;">100% Vol</span>
-          ${generateWaveformHtml(a2Bars, '#4ade80')}
-        </div>`;
-
-      v1Lane.innerHTML = v1Html;
-      a1Lane.innerHTML = a1Html;
-      a2Lane.innerHTML = a2Html;
-      renderMacroRibbon();
-    }
-
-    function selectTimelineClip(idx) {
-      if (currentNLETool === 'razor') {
-        splitClip(idx);
-        return;
-      }
-      selectedClipIdx = idx;
-      renderTimelineTracks();
-      const clip = timelineClips[idx];
-      if (!clip) return;
-
-      const badge = document.getElementById('selectedClipBadge');
-      if (badge) badge.textContent = clip.title;
-      const inspectorTitle = document.getElementById('selectedClipInspectorTitle');
-      if (inspectorTitle) inspectorTitle.textContent = `${clip.title} (${((clip.out_point - clip.in_point) / clip.speed).toFixed(1)}s)`;
-      const poolCards = document.querySelectorAll('.pool-card');
-      poolCards.forEach((c, i) => c.classList.toggle('active-pool-clip', i === idx));
-      const speedSel = document.getElementById('clipSpeedSelect');
-      if (speedSel) speedSel.value = String(clip.speed);
-      const volRange = document.getElementById('clipVolumeRange');
-      if (volRange) volRange.value = clip.volume;
-      const volLbl = document.getElementById('clipVolLabel');
-      if (volLbl) volLbl.textContent = `${Math.round(clip.volume * 100)}%`;
-      const transSel = document.getElementById('clipTransitionSelect');
-      if (transSel) transSel.value = clip.transition;
-
-      // If Dual View is active, update source video monitor
-      const srcVid = document.getElementById('sourceVideoPlayer');
-      if (srcVid && clip.url) {
-        srcVid.src = clip.url;
-      }
-
-      // Jump master cinema player to this clip's start time
-      let startTime = 0;
-      for (let i = 0; i < idx; i++) {
-        const c = timelineClips[i];
-        startTime += (c.out_point - c.in_point) / c.speed;
-      }
-      timelineSeek(startTime);
-    }
-
-    function updateSelectedClipSpeed(val) {
-      if (!timelineClips[selectedClipIdx]) return;
-      timelineClips[selectedClipIdx].speed = parseFloat(val);
-      renderTimelineTracks();
-    }
-
-    function updateSelectedClipVolume(val) {
-      if (!timelineClips[selectedClipIdx]) return;
-      timelineClips[selectedClipIdx].volume = parseFloat(val);
-      const lbl = document.getElementById('clipVolLabel');
-      if (lbl) lbl.textContent = `${Math.round(val * 100)}%`;
-      renderTimelineTracks();
-    }
-
-    function updateSelectedClipTransition(val) {
-      if (!timelineClips[selectedClipIdx]) return;
-      timelineClips[selectedClipIdx].transition = val;
-      renderTimelineTracks();
-    }
-
-    
-    function splitClip(idx) {
-      const clip = timelineClips[idx];
-      if (!clip) return;
-      const clipDur = (clip.out_point - clip.in_point);
-      if (clipDur <= 0.8) {
-        alert("Clip is too short to split further.");
-        return;
-      }
-      
-      const half = Math.round((clipDur / 2) * 10) / 10;
-      const part1 = {
-        ...clip,
-        id: `${clip.id}_a`,
-        title: `${clip.title} (A)`,
-        out_point: clip.in_point + half,
-        duration: half,
-        transition: 'cut'
-      };
-      const part2 = {
-        ...clip,
-        id: `${clip.id}_b`,
-        title: `${clip.title} (B)`,
-        in_point: clip.in_point + half,
-        duration: clipDur - half
-      };
-
-      timelineClips.splice(idx, 1, part1, part2);
-      selectedClipIdx = idx;
-      renderTimelineTracks();
-      renderMediaPool();
-      renderMacroRibbon();
-    }
-
-    function insertClipToTimeline(idx) {
-      const source = timelineClips[idx];
-      if (!source) return;
-      const newClip = {
-        ...source,
-        id: `clip_${Date.now()}`,
-        title: `${source.title} (Copy)`,
-        in_point: 0,
-        out_point: source.duration || 5.2
-      };
-      timelineClips.push(newClip);
-      selectedClipIdx = timelineClips.length - 1;
-      renderTimelineTracks();
-      renderMediaPool();
-      renderMacroRibbon();
-    }
-
-    function toggleTrackMute(trackName, btn) {
-      btn.classList.toggle('active');
-      const isMuted = btn.classList.contains('active');
-      const masterPlayer = document.getElementById('masterVideoPlayer');
-      if (masterPlayer) {
-        masterPlayer.muted = isMuted;
-      }
-    }
-
-    function setNLETool(tool) {
-      currentNLETool = tool;
-      document.getElementById('btnToolSelect').classList.toggle('active', tool === 'select');
-      document.getElementById('btnToolRazor').classList.toggle('active', tool === 'razor');
-    }
-
-    function toggleSnapping() {
-      snappingEnabled = !snappingEnabled;
-      const btn = document.getElementById('btnSnapToggle');
-      if (btn) {
-        btn.textContent = `🧲 Snap: ${snappingEnabled ? 'ON' : 'OFF'}`;
-        btn.classList.toggle('active', snappingEnabled);
-      }
-    }
-
-    function deleteSelectedClip() {
-      if (timelineClips.length <= 1) {
-        alert("At least one clip must remain on the timeline.");
-        return;
-      }
-      timelineClips.splice(selectedClipIdx, 1);
-      selectedClipIdx = Math.max(0, selectedClipIdx - 1);
-      renderTimelineTracks();
-      selectTimelineClip(selectedClipIdx);
-    }
-
-    async function extractTailFrameFromSelectedClip() {
-      const clip = timelineClips[selectedClipIdx];
-      if (!clip) return;
-      const chunkIdx = selectedClipIdx + 1;
-
-      // Calculate end time of clip
-      let endTime = 0;
-      for (let i = 0; i <= selectedClipIdx; i++) {
-        const c = timelineClips[i];
-        endTime += (c.out_point - c.in_point) / c.speed;
-      }
-      endTime = Math.max(0, endTime - 0.05);
-
-      const masterPlayer = document.getElementById('masterVideoPlayer');
-      if (!masterPlayer) return;
-      masterPlayer.pause();
-      masterPlayer.currentTime = endTime;
-
-      setTimeout(async () => {
-        const offscreen = document.createElement('canvas');
-        offscreen.width = masterPlayer.videoWidth || 1344;
-        offscreen.height = masterPlayer.videoHeight || 768;
-        const oCtx = offscreen.getContext('2d');
-        oCtx.drawImage(masterPlayer, 0, 0, offscreen.width, offscreen.height);
-        const frameData = offscreen.toDataURL('image/png');
-
-        try {
-          const res = await fetch(`${API_BASE}/save_frame`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              frame_data: frameData,
-              prefix: `shot_${chunkIdx}_tail`
-            })
-          });
-          const data = await res.json();
-          if (data.success) {
-            switchTab('image-studio');
-            loadCanvasImage(data.url, data.filename);
-            addTerminalLog("TAIL", `Extracted tail frame of Shot #${chunkIdx} to Image Studio.`, true);
-            alert(`📷 Extracted tail frame of Shot #${chunkIdx}!\nLoaded into Image Studio canvas for inpainting or next shot anchor.`);
-          }
-        } catch (e) {
-          alert(`Tail extract error: ${e.message}`);
-        }
-      }, 150);
-    }
-
-    function updateSMPTEDisplay(seconds) {
-      const h = String(Math.floor(seconds / 3600)).padStart(2, '0');
-      const m = String(Math.floor((seconds % 3600) / 60)).padStart(2, '0');
-      const s = String(Math.floor(seconds % 60)).padStart(2, '0');
-      const f = String(Math.floor((seconds % 1) * 24)).padStart(2, '0');
-      const el = document.getElementById('smpteDisplay');
-      if (el) el.textContent = `${h}:${m}:${s}:${f}`;
-    }
-
-    function onRulerClick(e) {
-      const ruler = document.getElementById('timelineRuler');
-      const rect = ruler.getBoundingClientRect();
-      const clickX = e.clientX - rect.left;
-      const pxPerSec = 45;
-      const time = Math.max(0, Math.min(timelineTotalDuration, clickX / pxPerSec));
-      timelineSeek(time);
-    }
-
-    function timelineSeek(seconds) {
-      timelineCurrentTime = seconds;
-      updateSMPTEDisplay(seconds);
-
-      const pxPerSec = 45;
-      const playhead = document.getElementById('timelinePlayheadLine');
-      if (playhead) {
-        playhead.style.left = `${140 + (seconds * pxPerSec)}px`;
-      }
-
-      const masterPlayer = document.getElementById('masterVideoPlayer');
-      if (masterPlayer && !isNaN(masterPlayer.duration) && masterPlayer.duration > 0) {
-        masterPlayer.currentTime = Math.min(masterPlayer.duration, Math.max(0, seconds));
-      }
-    }
-
-    function timelineStepFrame(frames) {
-      const step = frames * (1 / 24);
-      timelineSeek(Math.max(0, Math.min(timelineTotalDuration, timelineCurrentTime + step)));
-    }
-
-    function timelineSeekToEnd() {
-      timelineSeek(timelineTotalDuration);
-    }
-
-    function timelineTogglePlay() {
-      const masterPlayer = document.getElementById('masterVideoPlayer');
-      if (!masterPlayer) return;
-      if (masterPlayer.paused) {
-        masterPlayer.play();
-      } else {
-        masterPlayer.pause();
-      }
-    }
-
-    async async function exportTimelineCut() {
-      alert("🚀 Compiling multi-track Edit Decision List (EDL) and dispatching FFmpeg filtergraph render engine...");
-
+    // Capture the frame on the program monitor and open it on the Image Studio inpaint canvas
+    async function extractFrameToImageStudio() {
+      const shot = window.NLE && NLE.captureFrame();
+      if (!shot) { alert('No frame on the monitor yet.'); return; }
       try {
-        const res = await fetch(`${API_BASE}/timeline/export`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            clips: timelineClips
-          })
-        });
+        const res = await fetch(`${API_BASE}/save_frame`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ frame_data: shot.dataUrl, prefix: 'video_frame_extract' }) });
         const data = await res.json();
-        if (data.success && data.master_video) {
-          const masterPlayer = document.getElementById('masterVideoPlayer');
-          if (masterPlayer) {
-            masterPlayer.src = `${data.master_video}?t=${Date.now()}`;
-            masterPlayer.play();
-          }
-          addTerminalLog("EXPORT", `Baked master timeline cut via FFmpeg: ${data.master_video}`, true);
-          alert(`🎉 Timeline master video rendered successfully!\nSaved to: ${data.master_video}`);
-        } else {
-          alert(`Timeline render failed: ${data.error || 'Unknown error'}`);
-        }
-      } catch (e) {
-        alert(`Export failed: ${e.message}`);
-      }
+        if (!data.success) { alert(`Failed to save extracted frame: ${data.error || data.detail}`); return; }
+        switchTab('image-studio');
+        loadCanvasImage(data.url, data.filename);
+        addTerminalLog('INSPECT', `Extracted current frame (${shot.width}x${shot.height}) to Image Studio.`, true);
+      } catch (err) { alert(`Error: ${err.message}`); }
     }
-
     /* ========================================================= */
     /* PILLAR 4: AI STORYBOARD & SCENE BEAT DIRECTOR             */
     /* ========================================================= */
@@ -5826,81 +4961,6 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
 
     
     
-    // DaVinci Dual Viewer & Live Fairlight Audio Engine
-    let isDualViewerActive = false;
-    let vuAnimationId = null;
-
-    function toggleDualViewer() {
-      isDualViewerActive = !isDualViewerActive;
-      const vp = document.getElementById('cinemaVideoViewport');
-      const srcPane = document.getElementById('sourceMonitorPane');
-      const btn = document.getElementById('btnDualViewer');
-
-      if (isDualViewerActive) {
-        if (vp) vp.classList.add('dual-view');
-        if (srcPane) {
-          srcPane.style.display = 'flex';
-          const srcVid = document.getElementById('sourceVideoPlayer');
-          if (srcVid && timelineClips[selectedClipIdx]) {
-            srcVid.src = timelineClips[selectedClipIdx].url;
-          }
-        }
-        if (btn) {
-          btn.classList.add('active');
-          btn.style.borderColor = '#e58525';
-          btn.style.color = '#f59e0b';
-        }
-      } else {
-        if (vp) vp.classList.remove('dual-view');
-        if (srcPane) srcPane.style.display = 'none';
-        if (btn) {
-          btn.classList.remove('active');
-          btn.style.borderColor = '#363942';
-          btn.style.color = '#cbd5e1';
-        }
-      }
-    }
-
-    function generateWaveformHtml(barCount, colorHex) {
-      let bars = '';
-      for (let i = 0; i < barCount; i++) {
-        // Organic waveform height pattern
-        const h = Math.max(3, Math.floor(Math.sin(i * 0.45) * 6 + Math.cos(i * 0.9) * 4 + 7));
-        bars += `<div class="waveform-bar" style="height: ${h}px; color: ${colorHex};"></div>`;
-      }
-      return `<div class="waveform-strip">${bars}</div>`;
-    }
-
-    function startLiveVUMeters() {
-      if (vuAnimationId) cancelAnimationFrame(vuAnimationId);
-      function updateVU() {
-        const a1L = document.getElementById('vuFillA1L');
-        const a1R = document.getElementById('vuFillA1R');
-        const a2L = document.getElementById('vuFillA2L');
-        const a2R = document.getElementById('vuFillA2R');
-        const video = document.getElementById('masterVideoPlayer');
-
-        if (video && !video.paused) {
-          const t = Date.now() * 0.008;
-          const a1Val = Math.min(95, Math.max(15, (Math.sin(t * 3.2) * 25 + Math.cos(t * 5.1) * 20 + 50)));
-          const a2Val = Math.min(90, Math.max(20, (Math.cos(t * 2.8) * 20 + Math.sin(t * 4.4) * 15 + 55)));
-
-          if (a1L) a1L.style.height = `${a1Val}%`;
-          if (a1R) a1R.style.height = `${Math.min(95, a1Val + (Math.sin(t * 7) * 6))}%`;
-          if (a2L) a2L.style.height = `${a2Val}%`;
-          if (a2R) a2R.style.height = `${Math.min(90, a2Val + (Math.cos(t * 6) * 5))}%`;
-
-          vuAnimationId = requestAnimationFrame(updateVU);
-        } else {
-          // Smooth decay to rest
-          if (a1L) a1L.style.height = '6%';
-          if (a1R) a1R.style.height = '6%';
-          if (a2L) a2L.style.height = '8%';
-          if (a2R) a2R.style.height = '8%';
-        }
-      }
-      updateVU();
-    }
 
     // DaVinci Resolve Workflow Page Switcher
     function switchResolvePage(page) {
@@ -5934,7 +4994,30 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
       if (btn) btn.classList.add('active');
     }
 
+    // The timeline/player live in static/nle/*. Static files need the engine token as a query param (script/link tags cannot send headers).
+    const STATIC_BASE = API_BASE === '/api/chronoflow' ? '/chronoflow/static' : '';
+    function loadNLEAssets() {
+      const tq = ENGINE_TOKEN ? `?token=${encodeURIComponent(ENGINE_TOKEN)}` : '';
+      const css = document.createElement('link');
+      css.rel = 'stylesheet'; css.href = `${STATIC_BASE}/nle/nle.css${tq}`; document.head.appendChild(css);
+      const load = (f) => new Promise((res, rej) => { const s = document.createElement('script'); s.src = `${STATIC_BASE}/nle/${f}${tq}`; s.onload = res; s.onerror = () => rej(new Error(`could not load ${f}`)); document.head.appendChild(s); });
+      return ['model.js', 'nle.js', 'frame-edit.js'].reduce((p, f) => p.then(() => load(f)), Promise.resolve());
+    }
+
     async function initApp() {
+      try {
+        await loadNLEAssets();
+        NLE.mount({
+          api: API_BASE,
+          out: API_BASE === '/api/chronoflow' ? '/chronoflow/outputs' : '/outputs',
+          inp: API_BASE === '/api/chronoflow' ? '/chronoflow/inputs' : '/inputs',
+          token: ENGINE_TOKEN || '',
+        });
+        NLE.on('load', refreshMediaPool);
+        NLE.on('render', refreshMediaPool);
+      } catch (err) {
+        console.error('[ChronoFlow] timeline failed to load', err);
+      }
       initComfyWebSocket();
       await studioStore.syncNow(true);
       if (typeof initTimeline === 'function') initTimeline();
