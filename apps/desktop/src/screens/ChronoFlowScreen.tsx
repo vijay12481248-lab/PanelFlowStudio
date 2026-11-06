@@ -6,9 +6,11 @@ import type { Project } from "@panelflow/shared-types";
 interface ChronoFlowScreenProps {
   onBack: () => void;
   project?: Project | null;
+  /** open this ChronoFlow job in the studio (the dashboard's "Your creations" cards) */
+  jobId?: string | null;
 }
 
-export const ChronoFlowScreen: React.FC<ChronoFlowScreenProps> = ({ onBack, project }) => {
+export const ChronoFlowScreen: React.FC<ChronoFlowScreenProps> = ({ onBack, project, jobId }) => {
   const [iframeKey, setIframeKey] = useState(0);
   const [iframeLoading, setIframeLoading] = useState(true);
   const [selectedPort, setSelectedPort] = useState<"7860" | "8765">("7860");
@@ -73,8 +75,8 @@ export const ChronoFlowScreen: React.FC<ChronoFlowScreenProps> = ({ onBack, proj
   // Compute studio URL
   const studioUrl =
     selectedPort === "7860"
-      ? "http://127.0.0.1:7860/"
-      : `http://127.0.0.1:8765/chronoflow/ui${token ? `?token=${encodeURIComponent(token)}` : ""}`;
+      ? `http://127.0.0.1:7860/${jobId ? `?job=${encodeURIComponent(jobId)}` : ""}`
+      : `http://127.0.0.1:8765/chronoflow/ui?${[token ? `token=${encodeURIComponent(token)}` : "", jobId ? `job=${encodeURIComponent(jobId)}` : ""].filter(Boolean).join("&")}`;
 
   // Loading timeout fallback
   useEffect(() => {

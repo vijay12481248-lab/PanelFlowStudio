@@ -5080,6 +5080,8 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
       }
       initComfyWebSocket();
       await studioStore.syncNow(true);
+      const wantedJob = _urlParams.get('job');            // the dashboard's "Open in ChronoFlow" card
+      if (wantedJob) onSelectProjectJob(wantedJob);
       if (typeof initTimeline === 'function') initTimeline();
     }
 

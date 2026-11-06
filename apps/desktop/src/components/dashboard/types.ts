@@ -34,4 +34,5 @@ export interface DashboardShellProps {
   onOpenAnimeReview?: () => void;
   onOpenOriginalStories?: () => void;
   onOpenChronoFlow?: (project?: Project) => void;
+  onOpenChronoFlowJob?: (jobId: string) => void;
 }

@@ -5,6 +5,7 @@ export * from "./JobQueueSidebar";
 export * from "./SystemOverviewCards";
 export * from "./DashboardProjectCard";
 export * from "./ProjectsWorkspace";
+export * from "./CreationsPanel";
 export * from "./QuickActionsPanel";
 export * from "./RecentActivityPanel";
 export * from "./DashboardPromoCard";

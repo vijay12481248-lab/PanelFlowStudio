@@ -55,6 +55,7 @@ const DesktopAppContent: React.FC = () => {
   const { selectedError, closeInspector, dismissError, retryJob, reportError } = useError();
   const [currentScreen, setCurrentScreen] = useState<ScreenMode>("projects");
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  const [chronoJobId, setChronoJobId] = useState<string | null>(null);
   const [engineConnected, setEngineConnected] = useState<boolean>(false);
   const [engineVersion, setEngineVersion] = useState<string>("");
   const [healthModalOpen, setHealthModalOpen] = useState<boolean>(false);
@@ -237,9 +238,11 @@ const DesktopAppContent: React.FC = () => {
     return (
       <ChronoFlowScreen
         project={selectedProject}
+        jobId={chronoJobId}
         onBack={() => {
           setCurrentScreen("projects");
           setSelectedProject(null);
+          setChronoJobId(null);
         }}
       />
     );
@@ -264,6 +267,10 @@ const DesktopAppContent: React.FC = () => {
           onOpenOriginalStories={() => setCurrentScreen("original_stories")}
           onOpenChronoFlow={(proj) => {
             if (proj) setSelectedProject(proj);
+            setCurrentScreen("chronoflow");
+          }}
+          onOpenChronoFlowJob={(jobId) => {
+            setChronoJobId(jobId);
             setCurrentScreen("chronoflow");
           }}
           onOpenAcquisition={(proj) => {

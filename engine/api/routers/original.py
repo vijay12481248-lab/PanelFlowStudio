@@ -1,7 +1,10 @@
 """Original Story Studio endpoints (docs/ORIGINAL_STORY_STUDIO.md)."""
 import asyncio
+import json
+import os
 import uuid
 from pathlib import Path
+from typing import Literal
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -46,6 +49,61 @@ async def create_story(req: StoryRequest):
     (ws / "story.json").write_text(story.model_dump_json(indent=2), encoding="utf-8")
     return {"slug": slug, "title": story.bible.premise.title, "panels": len(story.panels), "scenes": len(story.scenes),
             "estimated_minutes": story_mod.estimated_minutes(story), "warnings": story.warnings}
+
+
+def _story_videos(folder: Path) -> list[Path]:
+    """Finished renders in a story folder, newest first (the *_backup and v*_prev copies are not listed)."""
+    return sorted(folder.glob("story_1080p*.mp4"), key=lambda p: p.stat().st_mtime, reverse=True)
+
+
+@router.get("/stories")
+def list_stories():
+    """Every story folder under output/Original_Stories: the dashboard shows these next to the database projects."""
+    out = []
+    if not STORY_ROOT.exists():
+        return out
+    for folder in STORY_ROOT.iterdir():
+        f = folder / "story.json"
+        if not folder.is_dir() or not f.exists():
+            continue
+        try:
+            data = json.loads(f.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue    # a half-written story must not hide the others
+        premise = (data.get("bible") or {}).get("premise") or {}
+        videos = _story_videos(folder)
+        out.append({
+            "slug": folder.name,
+            "title": premise.get("title") or folder.name,
+            "genre": premise.get("genre") or folder.name.split("_")[0],
+            "panels": len(data.get("panels") or []),
+            "has_video": bool(videos),
+            "video": videos[0].name if videos else None,
+            "updated_at": max(p.stat().st_mtime for p in (f, *videos)),
+        })
+    return sorted(out, key=lambda s: -s["updated_at"])
+
+
+class OpenStoryRequest(BaseModel):
+    target: Literal["folder", "video"] = "folder"
+
+
+@router.post("/story/{slug}/open")
+def open_story(slug: str, req: OpenStoryRequest):
+    """Open the story folder, or its newest finished video, with the desktop's default app."""
+    folder = STORY_ROOT / Path(slug).name
+    if not (folder / "story.json").exists():
+        raise HTTPException(status_code=404, detail="story not found")
+    target = folder
+    if req.target == "video":
+        videos = _story_videos(folder)
+        if not videos:
+            raise HTTPException(status_code=404, detail="this story has no rendered video yet")
+        target = videos[0]
+    if not hasattr(os, "startfile"):
+        raise HTTPException(status_code=501, detail="opening files is only supported on Windows")
+    os.startfile(str(target))
+    return {"opened": True, "path": str(target)}
 
 
 @router.get("/story/{slug}", response_model=OriginalStory)

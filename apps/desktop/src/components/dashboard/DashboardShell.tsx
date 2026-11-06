@@ -8,6 +8,7 @@ import { AppNavigationRail } from "./AppNavigationRail";
 import { JobQueueSidebar } from "./JobQueueSidebar";
 import { SystemOverviewCards } from "./SystemOverviewCards";
 import { ProjectsWorkspace } from "./ProjectsWorkspace";
+import { CreationsPanel } from "./CreationsPanel";
 import { QuickActionsPanel } from "./QuickActionsPanel";
 import { RecentActivityPanel } from "./RecentActivityPanel";
 import { DashboardPromoCard } from "./DashboardPromoCard";
@@ -35,6 +36,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
   onOpenAnimeReview,
   onOpenOriginalStories,
   onOpenChronoFlow,
+  onOpenChronoFlowJob,
 }) => {
   const { reportError } = useError();
   // Navigation & view states
@@ -245,6 +247,8 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
             onDeleteProject={handleDeleteProject}
             onOpenChronoFlow={onOpenChronoFlow}
           />
+
+          <CreationsPanel onOpenOriginalStories={onOpenOriginalStories} onOpenChronoFlowJob={onOpenChronoFlowJob} />
         </main>
 
         {/* Right Sidebar (~280px) */}

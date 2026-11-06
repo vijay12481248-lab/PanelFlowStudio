@@ -121,6 +121,7 @@ async def test_watchdog_sees_a_shot_regeneration_task_registered_under_a_regen_n
         return {"connected": True, "queue": {"busy": True, "reachable": True, "pending_count": 0}}
 
     sup.pipeline = MagicMock(check_comfy_status=fake_status)
+    sup._save_jobs_to_disk = lambda: None    # register_new_job would otherwise write this fake job into the real vault/jobs.json
     jid = "regen_job"
     sup.register_new_job(jid, {"id": jid, "status": "regenerating", "chunks": ["a.mp4"], "created_at": time.time(), "last_updated_at": time.time()})
     task = asyncio.create_task(asyncio.sleep(60))

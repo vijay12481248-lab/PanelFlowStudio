@@ -228,6 +228,25 @@ export interface YouTubeStatus {
   error: string | null;
 }
 
+export interface OriginalStorySummary {
+  slug: string;
+  title: string;
+  genre: string;
+  panels: number;
+  has_video: boolean;
+  video: string | null;
+  updated_at: number;
+}
+
+export interface ChronoFlowJobSummary {
+  id: string;
+  status: string;
+  prompt?: string;
+  chunks?: string[];
+  master_video?: string | null;
+  created_at?: number;
+}
+
 export interface OriginalSeries {
   id: string;
   name: string;
@@ -2278,6 +2297,19 @@ export class PanelFlowApiClient {
 
   async queueOriginalEpisodes(seriesId: string, req: { count: number; start_date?: string; scenes?: number }): Promise<{ episode: number; job_id: string }[]> {
     return this.request(`/api/original/series/${encodeURIComponent(seriesId)}/episodes`, { method: "POST", body: JSON.stringify(req) });
+  }
+
+  async listOriginalStories(): Promise<OriginalStorySummary[]> {
+    return this.request<OriginalStorySummary[]>("/api/original/stories");
+  }
+
+  async openOriginalStory(slug: string, target: "folder" | "video"): Promise<{ opened: boolean; path: string }> {
+    return this.request(`/api/original/story/${encodeURIComponent(slug)}/open`, { method: "POST", body: JSON.stringify({ target }) });
+  }
+
+  async listChronoFlowJobs(): Promise<ChronoFlowJobSummary[]> {
+    const res = await this.request<{ jobs: ChronoFlowJobSummary[] }>("/api/chronoflow/jobs");
+    return res.jobs ?? [];
   }
 
   async listOriginalJobs(): Promise<Job[]> {
