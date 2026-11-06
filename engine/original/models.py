@@ -52,6 +52,7 @@ class Panel(BaseModel):
     sfx: list[str] = Field(default_factory=list)
     key_visuals: list[str] = Field(default_factory=list)  # what the narration needs visible; checked on the image
     director: dict = Field(default_factory=dict)  # the ShotSpec the shot director wrote (see shotspec.py); empty for plain panels
+    motion: str = ""  # what moves during this shot, for the video model (film.py); one action, never a loop
 
 
 class Scene(BaseModel):
@@ -60,6 +61,9 @@ class Scene(BaseModel):
     character_ids: list[str]
     summary: str
     mood: str
+    score: str = ""  # music direction for this scene's cue (film.py / score.py); empty = derived from the mood
+    bpm: int = 0
+    key: str = ""
 
 
 class OriginalStory(BaseModel):

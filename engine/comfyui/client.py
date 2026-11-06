@@ -223,6 +223,18 @@ class ComfyUIClient:
         with _NO_REDIRECT_OPENER.open(req, timeout=self.timeout_s) as response:
             return json.loads(response.read())["name"]
 
+    def upload_audio(self, path: Path) -> str:
+        """Upload a wav to ComfyUI's input directory (for LoadAudio) and return the server filename."""
+        data = path.read_bytes()
+        digest = hashlib.sha256(data).hexdigest()
+        name, boundary = f"pf_{digest[:16]}.wav", "pfboundary" + digest[:8]
+        head = (f"--{boundary}\r\nContent-Disposition: form-data; name=\"image\"; filename=\"{name}\"\r\nContent-Type: audio/wav\r\n\r\n").encode()
+        tail = (f"\r\n--{boundary}\r\nContent-Disposition: form-data; name=\"overwrite\"\r\n\r\ntrue\r\n--{boundary}--\r\n").encode()
+        req = Request(urljoin(self.base_url, "upload/image"), data=head + data + tail,
+                      headers={"Content-Type": f"multipart/form-data; boundary={boundary}"})
+        with _NO_REDIRECT_OPENER.open(req, timeout=self.timeout_s) as response:
+            return json.loads(response.read())["name"]
+
     def discover_workflows(self) -> list[str]:
         root = self._workflow_root()
         if root is None:

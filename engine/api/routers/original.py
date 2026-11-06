@@ -334,3 +334,131 @@ async def create_beats(slug: str):
     story = await expand_story(OriginalStory.model_validate_json(f.read_text(encoding="utf-8")), provider)
     (ws / BEATS_FILE).write_text(story.model_dump_json(indent=2), encoding="utf-8")
     return {"beats": len(story.panels), "warnings": story.warnings}
+
+
+# ------------------------------------------------------------------ animated film (engine/original/film.py, film_master.py, score.py)
+_FILM_JOBS: dict[str, dict] = {}
+
+
+def _film_start(slug: str, kind: str, fn) -> dict:
+    """Runs one film stage in a background thread (a stage is minutes to hours). One at a time: the stages share one GPU."""
+    import threading
+
+    if any(j["status"] == "running" for j in _FILM_JOBS.values()):
+        raise HTTPException(status_code=409, detail="another film stage is running (one GPU); poll /film/job/{id} or cancel it")
+    job = {"id": uuid.uuid4().hex[:8], "slug": slug, "kind": kind, "status": "running", "progress": 0.0, "message": "starting", "result": None, "error": None,
+           "cancel": False}
+    _FILM_JOBS[job["id"]] = job
+
+    def run():
+        try:
+            job["result"] = fn(lambda p, m: job.update(progress=round(p, 3), message=m), lambda: job["cancel"])
+            job["status"] = "done"
+        except BaseException as e:  # recorded on the job; the thread must not die silently
+            job["status"], job["error"] = ("cancelled" if str(e) == "cancelled" else "failed"), str(e)[:600]
+
+    threading.Thread(target=run, daemon=True).start()
+    return {k: job[k] for k in ("id", "slug", "kind", "status")}
+
+
+def _film_story(slug: str) -> tuple[Path, OriginalStory]:
+    ws = STORY_ROOT / Path(slug).name
+    if not (ws / "story.json").exists():
+        raise HTTPException(status_code=404, detail="story not found")
+    return ws, OriginalStory.model_validate_json((ws / "story.json").read_text(encoding="utf-8"))
+
+
+def _ids(ids: str | None) -> list[str] | None:
+    return [i.strip() for i in ids.split(",") if i.strip()] if ids else None
+
+
+def _pairs(text: str | None) -> dict[str, int] | None:
+    return {k: int(v) for k, v in (kv.split(":") for kv in text.split(","))} if text else None
+
+
+@router.post("/story/{slug}/film/frames", status_code=202)
+def film_frames(slug: str, ids: str | None = None, rerolls: str | None = None):
+    """16:9 first frame per shot (`ids` = comma list; `rerolls` = `p003:1,p005:2` new seeds for pictures that were not good enough)."""
+    from engine.original import film
+
+    ws, story = _film_story(slug)
+    rer = _pairs(rerolls)
+    return _film_start(slug, "frames", lambda prog, cancelled: film.make_frames(story, ws, art_mod.ComfyRunner(), _ids(ids), rer, prog, cancelled))
+
+
+@router.post("/story/{slug}/film/clips", status_code=202)
+def film_clips(slug: str, ids: str | None = None, seeds: str | None = None):
+    """H3 clip per shot from its frame; a speaking shot gets its character's voice anchored to the face (lip sync). Hours for a whole film."""
+    from engine.original import film
+
+    ws, story = _film_story(slug)
+    sd = _pairs(seeds)
+    return _film_start(slug, "clips", lambda prog, cancelled: film.make_clips(story, ws, _ids(ids), sd, progress=prog, is_cancelled=cancelled))
+
+
+@router.post("/story/{slug}/film/score", status_code=202)
+def film_score(slug: str):
+    """One local ACE-Step cue per scene, sized from the clips already made (unloads ComfyUI and the LLM first)."""
+    from engine.original import film_master, score
+
+    ws, story = _film_story(slug)
+
+    def run(prog, cancelled):
+        secs: dict[str, float] = {}
+        for c in film_master.timeline(story, ws):
+            secs[c["scene"]] = secs.get(c["scene"], 0.0) + c["seconds"]
+        score.free_gpu()
+        return {k: str(v) for k, v in score.make_cues(story, ws, secs, prog).items()}
+
+    return _film_start(slug, "score", run)
+
+
+@router.post("/story/{slug}/film/master", status_code=202)
+def film_master_render(slug: str, ids: str | None = None, music: bool = True, name: str = "film_master"):
+    """Cuts every clip in story order, mixes the score under it (ducked), writes the 1080p mp4 and the SRT captions."""
+    from engine.original import film_master
+
+    ws, story = _film_story(slug)
+
+    def run(prog, cancelled):
+        cues = {sc.id: ws / "film" / "audio" / "music" / f"{sc.id}.wav" for sc in story.scenes} if music else None
+        out = film_master.render(story, ws, cues, _ids(ids), name)
+        return {**out, "loudness": film_master.loudness(Path(out["video"]))}
+
+    return _film_start(slug, "master", run)
+
+
+@router.get("/film/job/{job_id}")
+def film_job(job_id: str):
+    job = _FILM_JOBS.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="film job not found (jobs live in engine memory; a restart forgets them)")
+    return {k: v for k, v in job.items() if k != "cancel"}
+
+
+@router.post("/film/job/{job_id}/cancel")
+def film_job_cancel(job_id: str):
+    job = _FILM_JOBS.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="film job not found")
+    job["cancel"] = True
+    return {"id": job_id, "cancelling": True}
+
+
+@router.get("/story/{slug}/film/status")
+def film_status(slug: str):
+    """What exists per shot: frame, clip, its measured motion (a clip below the stillness limit is flagged), and the running job if any."""
+    from engine.original import film
+
+    ws, story = _film_story(slug)
+    fd = ws / "film"
+    clips = json.loads((fd / "clips.json").read_text(encoding="utf-8")) if (fd / "clips.json").exists() else {}
+    shots = []
+    for p in story.panels:
+        c = clips.get(p.id, {})
+        shots.append({"id": p.id, "scene": p.scene_id, "frame": (fd / "frames" / f"{p.id}.png").exists(), "clip": (fd / "clips" / f"{p.id}.mp4").exists(),
+                      "speaks": bool(p.dialogue), "seconds": c.get("stats", {}).get("seconds"), "motion": c.get("stats", {}).get("motion"),
+                      "too_still": bool(c) and c.get("stats", {}).get("motion", 9) < film.MIN_MOTION})
+    running = [{k: j[k] for k in ("id", "kind", "status", "progress", "message")} for j in _FILM_JOBS.values() if j["slug"] == Path(slug).name and j["status"] == "running"]
+    return {"shots": len(shots), "frames": sum(s["frame"] for s in shots), "clips": sum(s["clip"] for s in shots),
+            "seconds": round(sum(s["seconds"] or 0 for s in shots), 1), "too_still": [s["id"] for s in shots if s["too_still"]], "running": running, "detail": shots}

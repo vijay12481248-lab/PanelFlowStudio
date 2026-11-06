@@ -43,6 +43,12 @@ GENRES: dict[str, Genre] = {
         "an ordinary world, a call to adventure, trials with an ally, a costly victory, a changed hero",
         8, (4, 5), "vivid colors, epic scenery, fantasy anime style, dramatic lighting",
         ALWAYS_FORBIDDEN | GORE),
+    "anime_adventure": Genre(
+        "anime_adventure", "adventurous, funny, thrilling and heartfelt",
+        "a lively hook, a home in danger, a rival, a perilous race, a truce, a puzzle, a guardian fight, a costly choice, a changed home",
+        10, (10, 14),
+        "high-budget theatrical anime film, cinematic key frame, clean cel shading, crisp line art, rich painterly backgrounds, vivid colors, dramatic lighting",
+        ALWAYS_FORBIDDEN | GORE, caption_words=(0, 0)),
     "mythology": Genre(
         "mythology", "epic, solemn, majestic, celestial, spiritual; cosmic scale and deep philosophical weight",
         "a sacred prologue, a divine gathering, the eternal composition, the tragic conflict, an immortal proclamation",

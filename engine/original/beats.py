@@ -29,6 +29,7 @@ from engine.original.story import _ask, forbidden_hits, known_names, unknown_nam
 MAX_BEAT_WORDS = 24
 MIN_TAIL_WORDS = 8
 MAX_CHARACTERS = 2  # the art workflow draws at most two faces per picture
+FILM_MAX_CHARACTERS = 3  # the Qwen art model keeps three apart (two people and a small companion)
 FOCUS_WORDS = ("eyes", "asleep", "sleep", "yawn", "smile", "tear", "whisper", "face", "blink", "breath")
 BEATS_FILE = "beats.json"
 SIDES = {"left", "center", "right"}
@@ -96,7 +97,7 @@ def focus_character(text: str, bible: Bible) -> str | None:
 PRONOUN = re.compile(r"\b(he|she|they|his|her|their|him|them)\b", re.I)
 
 
-def _check(o: _Shot, bible: Bible, genre, text: str = "") -> list[str]:
+def _check(o: _Shot, bible: Bible, genre, text: str = "", max_chars: int = MAX_CHARACTERS) -> list[str]:
     p: list[str] = []
     ids = {c.id for c in bible.characters}
     names = {c.name.lower(): c.id for c in bible.characters}
@@ -111,8 +112,8 @@ def _check(o: _Shot, bible: Bible, genre, text: str = "") -> list[str]:
         c.side = c.side.strip().lower() if c.side.strip().lower() in SIDES else "center"
     if any(c.id not in ids for c in o.characters):
         p.append(f"characters must come from {sorted(ids)}")
-    if len(o.characters) > MAX_CHARACTERS:
-        p.append(f"show at most {MAX_CHARACTERS} characters: pick the ones the narration is about")
+    if len(o.characters) > max_chars:
+        p.append(f"show at most {max_chars} characters: pick the ones the narration is about")
     if len({c.id for c in o.characters}) != len(o.characters):
         p.append("each character appears once")
     for c in o.characters:
@@ -132,9 +133,9 @@ def _check(o: _Shot, bible: Bible, genre, text: str = "") -> list[str]:
     shown = {c.id for c in o.characters}
     named = named_characters(text, bible)
     missing = [n for n in named if n not in shown]
-    if missing and len(named) <= MAX_CHARACTERS:
+    if missing and len(named) <= max_chars:
         p.append(f"the narration names {missing}: they must be in the picture")
-    if named and len(named) <= MAX_CHARACTERS and shown - set(named):
+    if named and len(named) <= max_chars and shown - set(named):
         p.append(f"the narration is only about {named}: do not draw {sorted(shown - set(named))}")
     if not named and not PRONOUN.search(text) and shown:
         p.append("the narration names nobody: draw the place (a wide shot with no characters)")
@@ -149,12 +150,17 @@ def _summary(spec: ShotSpec, bible: Bible) -> str:
     return "; ".join(f"{names.get(c.id, c.id)} {c.pose}, {c.expression}" for c in spec.characters) + f" ({spec.setting}; {spec.lighting})"
 
 
-async def direct_shot(provider, story: OriginalStory, panel: Panel, text: str, previous: ShotSpec | None, notes: list[str]) -> ShotSpec | None:
+async def direct_shot(provider, story: OriginalStory, panel: Panel, text: str, previous: ShotSpec | None, notes: list[str],
+                      film: bool = False) -> ShotSpec | None:
     bible, genre = story.bible, GENRES[story.bible.premise.genre]
     cast = "\n".join(f"- {c.id} ({c.name}): {c.look}" for c in bible.characters)
     loc = next((x for x in bible.locations if x.id == panel.location_id), None)
+    max_chars = FILM_MAX_CHARACTERS if film else MAX_CHARACTERS
+    intro = ("You are the storyboard artist of an animated film. This is the description of ONE shot; the picture you design is its first frame, "
+             "the instant before the action starts:\n" if film else
+             "You are the storyboard artist of a narrated picture story. The narrator reads this aloud while the picture is on screen:\n")
     prompt = (
-        "You are the storyboard artist of a narrated picture story. The narrator reads this aloud while the picture is on screen:\n"
+        f"{intro}"
         f"\"{text}\"\n\nCast (use these ids):\n{cast}\nPlace: {(loc.name + ' - ' + loc.look) if loc else 'unspecified'}\n"
         f"Previous picture: {_summary(previous, bible) if previous else 'none yet'}.\n"
         # the author's note disambiguates nouns ("glass" of water vs a glass door); the narration still decides what is shown
@@ -169,7 +175,7 @@ async def direct_shot(provider, story: OriginalStory, panel: Panel, text: str, p
         "the narration says someone looks up or down. Keep clothes, place and time of day consistent with the "
         "previous picture unless the narration changes them. Do not repeat the previous picture. Use only the cast above.")
     try:
-        o = await _ask(provider, prompt, _Shot, lambda o: _check(o, bible, genre, text), temperature=0.5, attempts=4, max_tokens=900, notes=notes)
+        o = await _ask(provider, prompt, _Shot, lambda o: _check(o, bible, genre, text, max_chars), temperature=0.5, attempts=4, max_tokens=900, notes=notes)
     except ValueError as e:
         notes.append(f"{panel.id}: shot rejected - {str(e)[-160:]}")
         return None
@@ -217,6 +223,32 @@ async def expand_story(story: OriginalStory, provider, progress: Callable[[float
                 "action": "; ".join(f"{c.pose} {c.action}".strip() for c in spec.characters) or p.action, "caption": text,
                 "dialogue": dialogue, "sfx": p.sfx if last else [], "key_visuals": spec.key_visuals, "director": spec.model_dump()}))
             previous = spec
+    return story.model_copy(update={"panels": out, "warnings": list(story.warnings) + notes})
+
+
+async def expand_film(story: OriginalStory, provider, progress: Callable[[float, str], None] = lambda p, m: None, limit: int | None = None) -> OriginalStory:
+    """Film shots -> one directed first frame each. The shot description (`action`) is what the director draws; a speaker is always in the frame
+    with the mouth mid-word so the voice can be anchored to that face. A shot that cannot be directed falls back to a spec built from the words."""
+    notes: list[str] = []
+    out: list[Panel] = []
+    previous: ShotSpec | None = None
+    src = story.panels[:limit] if limit else story.panels
+    for n, p in enumerate(src, 1):
+        progress(n / len(src), f"Directing shot {n}/{len(src)}")
+        spec = await direct_shot(provider, story, p, p.action, previous, notes, film=True)
+        if spec is None:
+            notes.append(f"{p.id}: no shot could be directed, built it from the words")
+            spec = fallback_spec(story, p, p.action)
+        for ln in p.dialogue:
+            who = next((c for c in spec.characters if c.id == ln.speaker_id), None)
+            if who is None and len(spec.characters) < FILM_MAX_CHARACTERS:
+                who = CharPose(id=ln.speaker_id, side="center", pose="standing", expression="")
+                spec.characters.append(who)
+            if who is not None and "mouth" not in who.expression:
+                who.expression = (who.expression + ", " if who.expression else "") + "speaking, mouth open mid-sentence"
+        out.append(p.model_copy(update={"shot": spec.shot, "angle": spec.camera, "character_ids": [c.id for c in spec.characters], "key_visuals": spec.key_visuals,
+                                        "director": spec.model_dump()}))
+        previous = spec
     return story.model_copy(update={"panels": out, "warnings": list(story.warnings) + notes})
 
 

@@ -160,3 +160,71 @@ async def panelflow_original_render_video(
 )
 async def panelflow_original_compose_pages(slug: str) -> dict[str, Any]:
     return await bridge.post(f"/api/original/story/{slug}/pages")
+
+
+# ------------------------------------------------------------------ animated film: frames -> voiced H3 clips -> score -> master
+def _query(**kw: Any) -> str:
+    q = "&".join(f"{k}={v}" for k, v in kw.items() if v not in (None, ""))
+    return f"?{q}" if q else ""
+
+
+@registry.tool(
+    name="panelflow_original_film_frames",
+    description="Film step 1: draw one 16:9 first frame per shot with the single art workflow. Starts a background job; poll panelflow_original_film_job. "
+                "'ids' = comma list of shot ids (default all); 'rerolls' = e.g. p003:1,p005:2 to draw a better picture of a shot with a new seed.",
+    input_schema={"type": "object", "properties": {"slug": {"type": "string"}, "ids": {"type": "string"}, "rerolls": {"type": "string"}}, "required": ["slug"]},
+    domain="original",
+)
+async def panelflow_original_film_frames(slug: str, ids: str | None = None, rerolls: str | None = None) -> dict[str, Any]:
+    return await bridge.post(f"/api/original/story/{slug}/film/frames{_query(ids=ids, rerolls=rerolls)}")
+
+
+@registry.tool(
+    name="panelflow_original_film_clips",
+    description="Film step 2: make one MiniMax H3 clip per shot from its frame. A speaking shot gets its character's own voice anchored into H3, so the mouth is generated to the words (lip sync); "
+                "silent shots get H3's own sound effects. Nothing is looped. Minutes per clip; background job. 'seeds' = e.g. p004:7 to retry a shot.",
+    input_schema={"type": "object", "properties": {"slug": {"type": "string"}, "ids": {"type": "string"}, "seeds": {"type": "string"}}, "required": ["slug"]},
+    domain="original",
+)
+async def panelflow_original_film_clips(slug: str, ids: str | None = None, seeds: str | None = None) -> dict[str, Any]:
+    return await bridge.post(f"/api/original/story/{slug}/film/clips{_query(ids=ids, seeds=seeds)}")
+
+
+@registry.tool(
+    name="panelflow_original_film_score",
+    description="Film step 3: one instrumental local ACE-Step cue per scene, sized to the scene's real length. Unloads ComfyUI and the LLM first. Background job.",
+    input_schema={"type": "object", "properties": {"slug": {"type": "string"}}, "required": ["slug"]},
+    domain="original",
+)
+async def panelflow_original_film_score(slug: str) -> dict[str, Any]:
+    return await bridge.post(f"/api/original/story/{slug}/film/score")
+
+
+@registry.tool(
+    name="panelflow_original_film_master",
+    description="Film step 4: cut all clips in order, mix the score ducked under the clips' sound, normalise loudness, write the 1080p mp4 and SRT captions. Background job.",
+    input_schema={"type": "object", "properties": {"slug": {"type": "string"}, "ids": {"type": "string"}, "music": {"type": "boolean"}, "name": {"type": "string"}}, "required": ["slug"]},
+    domain="original",
+)
+async def panelflow_original_film_master(slug: str, ids: str | None = None, music: bool = True, name: str = "film_master") -> dict[str, Any]:
+    return await bridge.post(f"/api/original/story/{slug}/film/master{_query(ids=ids, music=str(music).lower(), name=name)}")
+
+
+@registry.tool(
+    name="panelflow_original_film_job",
+    description="Progress and result of a film job started by one of the panelflow_original_film_* tools (status, progress 0-1, message, result or error).",
+    input_schema={"type": "object", "properties": {"job_id": {"type": "string"}}, "required": ["job_id"]},
+    domain="original",
+)
+async def panelflow_original_film_job(job_id: str) -> dict[str, Any]:
+    return await bridge.get(f"/api/original/film/job/{job_id}")
+
+
+@registry.tool(
+    name="panelflow_original_film_status",
+    description="What exists for a film: frames, clips, total seconds, clips measured as too still, the running job, and per-shot detail.",
+    input_schema={"type": "object", "properties": {"slug": {"type": "string"}}, "required": ["slug"]},
+    domain="original",
+)
+async def panelflow_original_film_status(slug: str) -> dict[str, Any]:
+    return await bridge.get(f"/api/original/story/{slug}/film/status")
