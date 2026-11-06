@@ -501,3 +501,20 @@ Plan and research: the investigation report of 2026-11-06 (reuse the reviewer, n
   red mug next to a green apple - the anatomy audit failed "correct number of limbs" on a picture with no creatures ("there are no limbs visible" counted as a defect). The story path
   already skipped the audit for character-less shots; the prompt path now asks first whether any person, animal or creature is visible. Same prompt: accepted on the first try, 41 s.
   Not exercised: the desktop UI in a real window (type-checked only), the episode queue and the Comfy image job with `refine` on a real engine.
+
+## Animating key beats with the fast H3 workflow (2026-11-06)
+
+Owner's graph `video_fastvideo_fasth3_i2v.json` (model `fastvideo_fasth3_8step_v2_pruned_int8_convrot`, no LoRA, sparse attention, 0.4 MP sized from the picture, the duration is an
+input) is now the approved workflow `fastvideo_h3_i2v` (registry entry + checksummed file; preflight ready). To register it the registry no longer requires a `negative_prompt` slot
+(optional now, as is a `duration` slot) and `ArtEngine.run` can collect videos (`collect=`). `engine/original/animate.py`: `animate_beats` makes `clips/<beat>.mp4` (the place `video.py`
+already reads; it drops the clip's own audio and ping-pongs the clip to the narration length), `motion_prompt` composes the H3 text from the beat's ShotSpec + narration (nothing typed per story),
+`pick_beats` chooses the most active beat of each scene (about one in 4-5) unless `beats` are given, and Ollama is unloaded first (it and H3 do not fit together). A clip newer than its picture is reused;
+a failed beat stays a still. Entry points: `POST /api/original/story/{slug}/animate?beats=&max_clips=&seconds=`, MCP `panelflow_original_animate`, and `animate` on the episode queue (+ UI checkbox);
+inside an episode it is never fatal (warning, stills still render).
+
+**Measured, whole production run** (`vox_tuna_3am`, 18 narrated beats, 2:48, written for the channel: a tuna-ordering mystery that ends on the cat's credit score):
+shot director 5 min (it only directed 9 of 18 shots itself; unnamed actors like "it" or "a paw" drew the wrong subject until the narration named them), pictures with the refine loop 31 min
+(7 accepted, 3 flagged, 8 `needs_review` by the reviewer - several of those verdicts were wrong, e.g. "a biscuit is present" for the cat Biscuit, "the dog holds a phone"; the redraws mostly did not
+change the picture), **H3 about 63-69 s per 4.7 s clip at 864x480** (the earlier turbo graph was ~180 s expected), voice + 1080p render 59 s, -16.1 LUFS. Motion check on the final video: animated beats
+change 2.3-11.5 per frame step, still beats ~0. Through the new route p10 (the paw drawing a phone out of a hoodie pocket) took 64 s. Not verified: the narration was not listened to; the automatic choice for this
+story (p07, p10, p15, p18) is a heuristic on action length and skipped the best beat (p11, the phone held to the sleeping face), so give `beats` when you know the hero moments.

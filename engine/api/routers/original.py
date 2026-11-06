@@ -139,6 +139,27 @@ async def create_art(slug: str, limit: int | None = None, check: bool = True, re
     return await asyncio.to_thread(art_mod.generate_art, story, ws, runner, provider, limit, refine=True if refine else None)
 
 
+@router.post("/story/{slug}/animate")
+async def animate_story(slug: str, beats: str | None = None, max_clips: int | None = None, seconds: float = 3.6):
+    """Animates beats with the fast H3 image-to-video workflow (about a minute each) into clips/<beat>.mp4; the video step then shows them.
+    `beats` is a comma list of beat ids; without it the most active beat of each scene is chosen (about one in five, or `max_clips`)."""
+    from engine.original import animate as animate_mod
+
+    if not 1.0 <= seconds <= 8.0:
+        raise HTTPException(status_code=422, detail="seconds must be between 1 and 8")
+    ws = STORY_ROOT / Path(slug).name
+    if not (ws / "story.json").exists():
+        raise HTTPException(status_code=404, detail="story not found")
+    story = media_story(ws)
+    ids = [b.strip() for b in beats.split(",") if b.strip()] if beats else None
+    try:
+        return await asyncio.to_thread(animate_mod.animate_beats, story, ws, ids, max_clips, seconds=seconds)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:  # ComfyUI down, workflow or models missing
+        raise HTTPException(status_code=503, detail=str(e))
+
+
 @router.post("/story/{slug}/video")
 async def create_video(slug: str, burn_captions: bool = True):
     """Voices every panel with an image, renders the 1080p video (Ken Burns, captions, music) and writes the YouTube package."""
@@ -203,6 +224,7 @@ class EpisodesRequest(BaseModel):
     scenes: int | None = Field(default=None, ge=3, le=14)
     check: bool = True
     refine: bool = False  # review each picture, then repair or redraw it (slower; needs check=true)
+    animate: bool = False  # animate about one beat in five with the fast H3 workflow (about a minute each)
 
 
 @router.post("/series")
@@ -249,7 +271,7 @@ def queue_episodes(series_id: str, req: EpisodesRequest, db: Session = Depends(g
     except KeyError:
         raise HTTPException(status_code=404, detail="series not found")
     try:
-        return enqueue_episodes(db, store, series_id, req.count, publish_times(req.count, req.start_date), req.scenes, req.check, req.refine)
+        return enqueue_episodes(db, store, series_id, req.count, publish_times(req.count, req.start_date), req.scenes, req.check, req.refine, req.animate)
     except KeyError as e:
         raise HTTPException(status_code=422, detail=str(e))
 

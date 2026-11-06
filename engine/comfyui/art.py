@@ -52,14 +52,18 @@ def _patch_workflow(
     depth_image: str | None = None,
     pose_weight: float | None = None,
     depth_weight: float | None = None,
+    duration: float | None = None,
 ) -> dict[str, Any]:
     patched = deepcopy(workflow)
     values: dict[str, Any] = {
         "prompt": prompt,
-        "negative_prompt": negative_prompt or "",
         "seed": seed,
         "filename_prefix": prefix,
     }
+    if "negative_prompt" in patch_slots:  # a graph without a negative prompt input (the fast H3 video graph) simply has no slot for one
+        values["negative_prompt"] = negative_prompt or ""
+    if duration is not None and "duration" in patch_slots:
+        values["duration"] = duration
     if "width" in patch_slots:
         values["width"] = width
     if "height" in patch_slots:
@@ -84,6 +88,8 @@ def _patch_workflow(
         values["depth_weight"] = depth_weight
 
     optional_unsupplied = set()
+    if duration is None and "duration" in patch_slots:
+        optional_unsupplied.add("duration")
     if reference_weight is None and "reference_weight" in patch_slots:
         optional_unsupplied.add("reference_weight")
     if denoise is None and "denoise" in patch_slots:
@@ -197,8 +203,10 @@ class ArtEngine:
         is_cancelled: Callable[[], bool] = _never,
         progress: Callable[[float, str], None] | None = None,
         client_id: str | None = None,
+        collect: Callable[[dict[str, Any], str], list[dict[str, str]]] | None = None,
     ) -> tuple[bytes, str, dict[str, str]]:
-        """Submit an already patched graph and wait for its first image. Returns (bytes, prompt_id, history reference)."""
+        """Submit an already patched graph and wait for its first output (an image, or whatever `collect` extracts from the history, e.g. a video).
+        Returns (bytes, prompt_id, history reference)."""
         prompt_id = self.client.submit_prompt(workflow, client_id=client_id) if client_id else self.client.submit_prompt(workflow)
         if progress:
             progress(0.12, f"Submitted ComfyUI prompt {prompt_id}")
@@ -207,7 +215,7 @@ class ArtEngine:
         while time.monotonic() < deadline:
             if is_cancelled():
                 raise ComfyImageGenerationError("Image generation cancelled; ComfyUI execution may still finish")
-            images = _history_images(self.client.history(prompt_id), prompt_id)
+            images = (collect or _history_images)(self.client.history(prompt_id), prompt_id)
             if images:
                 ref = images[0]
                 return self.client.download_output(ref["filename"], ref["subfolder"], ref["type"]), prompt_id, ref

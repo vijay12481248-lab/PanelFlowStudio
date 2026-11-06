@@ -9,6 +9,7 @@ from typing import Callable
 
 from engine.anime.review.channels import ChannelPreset
 from engine.original import art, pages, video
+from engine.original.animate import animate_beats
 from engine.original.beats import BEATS_FILE, expand_story
 from engine.original.series import Episode, SeriesStore, episode_summary
 from engine.original.story import generate_story, estimated_minutes
@@ -33,8 +34,21 @@ def wait_for_previous(store: SeriesStore, series_id: str, number: int, is_cancel
     raise TimeoutError(f"episode {number - 1} did not finish within {limit / 3600:.0f} h")
 
 
+def animate_stage(story: OriginalStory, ws, step: Progress, is_cancelled: Callable[[], bool]) -> list[str]:
+    """Key moments move with the fast H3 workflow. Never fatal: a failed clip, or an animation that cannot run at all (ComfyUI or a model missing),
+    leaves those beats as stills and comes back as a warning; only a cancel propagates."""
+    step(0.55, "Animating key moments")
+    try:
+        made = animate_beats(story, ws, progress=lambda p, m: step(0.55 + 0.1 * p, m), is_cancelled=is_cancelled)
+        return [f"clip failed for {f['beat']}: {f['error']}" for f in made["failed"]]
+    except Exception as exc:
+        if str(exc) == "cancelled":
+            raise
+        return [f"animation skipped: {str(exc)[:160]}"]
+
+
 def run_episode(store: SeriesStore, series_id: str, number: int, channel: ChannelPreset | None, provider, runner_factory,
-                progress: Progress, is_cancelled: Callable[[], bool], scenes: int | None = None, check: bool = True, refine: bool = False) -> dict:
+                progress: Progress, is_cancelled: Callable[[], bool], scenes: int | None = None, check: bool = True, refine: bool = False, animate: bool = False) -> dict:
     wait_for_previous(store, series_id, number, is_cancelled)
     series = store.get(series_id)
     ws = store.episode_dir(series_id, number)
@@ -72,8 +86,10 @@ def run_episode(store: SeriesStore, series_id: str, number: int, channel: Channe
         store.pull_sheets(series_id, ws)
         runner = runner_factory()
         report = art.generate_art(story, ws, runner, provider if check else None,
-                                  progress=lambda p, m: step(0.2 + 0.45 * p, m), is_cancelled=is_cancelled, refine=True if refine else None)
+                                  progress=lambda p, m: step(0.2 + 0.35 * p, m), is_cancelled=is_cancelled, refine=True if refine else None)
         store.push_sheets(series_id, ws)
+
+        animate_note = animate_stage(story, ws, step, is_cancelled) if animate else []
 
         step(0.65, "Voicing and rendering the video")
         narrator = (channel.voice, channel.voice_rate) if channel else None
@@ -83,7 +99,7 @@ def run_episode(store: SeriesStore, series_id: str, number: int, channel: Channe
         step(0.9, "Packaging and comic pages")
         pkg = video.package(story, ws, channel.extra_tags if channel else None, channel.description_footer if channel else "")
         pg = pages.build_pages(story, ws)
-        warnings = list(story.warnings) + [f"panel {p} below the consistency threshold" for p in report["below_threshold"]]
+        warnings = list(story.warnings) + [f"panel {p} below the consistency threshold" for p in report["below_threshold"]] + animate_note
         ep = ep.model_copy(update={"status": "done", "video": out["video"], "pdf": pg["pdf"], "warnings": warnings})
         store.update_episode(series_id, ep)
         progress(1.0, f"Episode {number} ready")

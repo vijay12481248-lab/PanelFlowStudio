@@ -77,6 +77,7 @@ async def panelflow_original_direct_shots(slug: str) -> dict[str, Any]:
             "slug": {"type": "string", "description": "The unique story slug returned by panelflow_original_create_story"},
             "limit": {"type": "integer", "description": "Optional limit on panels to generate"},
             "check": {"type": "boolean", "description": "Run consistency verification check with local vision LLM (default: true)"},
+            "refine": {"type": "boolean", "description": "Review each picture, then repair or redraw it (slower, needs check; default false)"},
         },
         "required": ["slug"],
     },
@@ -86,13 +87,43 @@ async def panelflow_original_generate_art(
     slug: str,
     limit: int | None = None,
     check: bool = True,
+    refine: bool = False,
 ) -> dict[str, Any]:
     query_parts = []
     if limit is not None:
         query_parts.append(f"limit={limit}")
     query_parts.append(f"check={str(check).lower()}")
+    if refine:
+        query_parts.append("refine=true")
     query = f"?{'&'.join(query_parts)}" if query_parts else ""
     return await bridge.post(f"/api/original/story/{slug}/art{query}", timeout_s=LONG_JOB_S)
+
+
+@registry.tool(
+    name="panelflow_original_animate",
+    description=(
+        "Animate key beats of a story with the fast MiniMax H3 image-to-video workflow (about a minute per ~5 s clip). Run after generate_art and before render_video; "
+        "the video step shows each clip in place of its still. Without 'beats' the most active beat of each scene is chosen (about one in five)."
+    ),
+    input_schema={
+        "type": "object",
+        "properties": {
+            "slug": {"type": "string", "description": "The unique story slug"},
+            "beats": {"type": "string", "description": "Optional comma list of beat ids to animate, e.g. p08_1,p11_1"},
+            "max_clips": {"type": "integer", "description": "Optional cap on how many beats to animate when 'beats' is not given"},
+        },
+        "required": ["slug"],
+    },
+    domain="original",
+)
+async def panelflow_original_animate(slug: str, beats: str | None = None, max_clips: int | None = None) -> dict[str, Any]:
+    query_parts = []
+    if beats:
+        query_parts.append(f"beats={beats}")
+    if max_clips is not None:
+        query_parts.append(f"max_clips={max_clips}")
+    query = f"?{'&'.join(query_parts)}" if query_parts else ""
+    return await bridge.post(f"/api/original/story/{slug}/animate{query}", timeout_s=LONG_JOB_S)
 
 
 @registry.tool(

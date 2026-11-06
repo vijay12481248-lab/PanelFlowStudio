@@ -22,6 +22,7 @@ export const OriginalStoriesScreen: React.FC<OriginalStoriesScreenProps> = ({ on
   const [count, setCount] = useState(3);
   const [startDate, setStartDate] = useState("");
   const [refine, setRefine] = useState(false);
+  const [animate, setAnimate] = useState(false);
   const [busy, setBusy] = useState(false);
   const [yt, setYt] = useState<YouTubeStatus | null>(null);
   const [ytId, setYtId] = useState("");
@@ -103,7 +104,7 @@ export const OriginalStoriesScreen: React.FC<OriginalStoriesScreenProps> = ({ on
   const queue = async (id: string) => {
     setBusy(true);
     try {
-      await api.queueOriginalEpisodes(id, { count, ...(startDate ? { start_date: startDate } : {}), ...(refine ? { refine: true } : {}) });
+      await api.queueOriginalEpisodes(id, { count, ...(startDate ? { start_date: startDate } : {}), ...(refine ? { refine: true } : {}), ...(animate ? { animate: true } : {}) });
       await refresh();
     } catch (e) {
       fail(e);
@@ -221,6 +222,13 @@ export const OriginalStoriesScreen: React.FC<OriginalStoriesScreenProps> = ({ on
           >
             <input type="checkbox" checked={refine} onChange={(e) => setRefine(e.target.checked)} />
             check and fix pictures (slower)
+          </label>
+          <label
+            className="flex items-center gap-1.5 text-zinc-400"
+            title="Move about one picture in five with the fast H3 video model (about a minute each). The rest stay still. If a clip fails, that picture just stays still."
+          >
+            <input type="checkbox" checked={animate} onChange={(e) => setAnimate(e.target.checked)} />
+            animate key moments (slower)
           </label>
         </div>
         {series.length === 0 && <p className="text-sm text-zinc-500">No series yet.</p>}

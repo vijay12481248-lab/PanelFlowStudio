@@ -21,6 +21,7 @@ class EpisodeJobSpec(BaseModel):
     scenes: int | None = None
     check: bool = True
     refine: bool = False  # opt-in review -> repair/redraw loop for the pictures (see engine/original/refine.py)
+    animate: bool = False  # opt-in: animate key beats with the fast H3 workflow (see engine/original/animate.py)
     title: str = ""
 
 
@@ -43,7 +44,7 @@ def build_episode_operation(project_id: str, payload: dict):
             raise RuntimeError("Ollama is not reachable")
         channel = channel_store.get(series.channel_id) if series.channel_id else None
         return run_episode(store, spec.series_id, spec.number, channel, provider, _runner_factory, progress, is_cancelled,
-                           spec.scenes, spec.check, spec.refine)
+                           spec.scenes, spec.check, spec.refine, spec.animate)
 
     return operation
 
@@ -52,7 +53,7 @@ register_operation_factory(JOB_TYPE, build_episode_operation)
 
 
 def enqueue_episodes(db, store: SeriesStore, series_id: str, count: int, publish_at: list[str], scenes: int | None = None,
-                     check: bool = True, refine: bool = False) -> list[dict]:
+                     check: bool = True, refine: bool = False, animate: bool = False) -> list[dict]:
     """Queue `count` consecutive episodes. Each is its own job; an episode waits for the previous one's summary."""
     from engine.projects.service import project_service
 
@@ -70,7 +71,7 @@ def enqueue_episodes(db, store: SeriesStore, series_id: str, count: int, publish
             db, f"{series.name} - episode {n}", "LOCAL_FOLDER", "USER_OWNED", license_info="Original story created with AI tools",
             project_settings={"project_path": str(store.episode_dir(series_id, n) / "_project"), "kind": "original_episode",
                               "series_id": series_id})
-        spec = EpisodeJobSpec(root=str(store.root), series_id=series_id, number=n, scenes=scenes, check=check, refine=refine,
+        spec = EpisodeJobSpec(root=str(store.root), series_id=series_id, number=n, scenes=scenes, check=check, refine=refine, animate=animate,
                               title=f"{series.name} - episode {n}")
         payload = spec.model_dump(mode="json")
         job_id = enqueue_project_operation(project.id, JOB_TYPE, build_episode_operation(project.id, payload),

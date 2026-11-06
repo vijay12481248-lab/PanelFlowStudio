@@ -129,3 +129,21 @@ def test_refine_summary_has_what_a_ui_needs_and_no_image_bytes():
     out = rf.summary(res)
     assert out["status"] == "accept_low" and out["repaired"] and out["reason"] and [i["n"] for i in out["iterations"]] == [1, 2]
     assert "png" not in out["iterations"][0] and b"x" not in str(out).encode() and out["iterations"][1]["crop_check"][0]["answer"] == "yes"
+
+
+def test_the_mcp_animate_tool_forwards_its_choice_and_art_gets_refine(monkeypatch):
+    from engine.mcp.tools import original_story_tools as t
+
+    sent = []
+
+    async def fake_post(path, payload=None, **kw):
+        sent.append(path)
+        return {"ok": True}
+
+    monkeypatch.setattr(t.bridge, "post", fake_post)
+    asyncio.run(t.panelflow_original_animate("tale"))
+    asyncio.run(t.panelflow_original_animate("tale", beats="p01_1,p03_1", max_clips=2))
+    asyncio.run(t.panelflow_original_generate_art("tale", refine=True))
+    asyncio.run(t.panelflow_original_generate_art("tale"))
+    assert sent == ["/api/original/story/tale/animate", "/api/original/story/tale/animate?beats=p01_1,p03_1&max_clips=2",
+                    "/api/original/story/tale/art?check=true&refine=true", "/api/original/story/tale/art?check=true"]

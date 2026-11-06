@@ -764,5 +764,75 @@
       "max": 2048,
       "multiple_of": 16
     }
+  },
+  {
+    "id": "fastvideo_h3_i2v",
+    "purpose": "image_to_video",
+    "filename": "fastvideo_h3_i2v.api.json",
+    "sha256": "1f14ddd10d64b47d2424efb277e90a42d090f0506ed874d5bd6a665726462118",
+    "requires_gpu": true,
+    "gpu_vram_mb": 14000,
+    "model_files": [
+      "fastvideo_fasth3_8step_v2_pruned_int8_convrot.safetensors",
+      "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+      "minimax_h3_video_vae_int8_convrot.safetensors",
+      "minimax_h3_audio_vae_fp32.safetensors"
+    ],
+    "required_nodes": [
+      "BasicGuider",
+      "BasicScheduler",
+      "BlockSparseAttention",
+      "CLIPLoader",
+      "ComfyMathExpression",
+      "CreateVideo",
+      "GetImageSize",
+      "ImageScaleToTotalPixels",
+      "KSamplerSelect",
+      "LoadImage",
+      "MiniMaxH3ImageToVideo",
+      "MiniMaxH3SigmaShift",
+      "ModelAttentionBackend",
+      "PrimitiveFloat",
+      "RandomNoise",
+      "SamplerCustomAdvanced",
+      "SaveVideo",
+      "UNETLoader",
+      "VAEDecode",
+      "VAEDecodeAudio",
+      "VAELoader"
+    ],
+    "patch_slots": {
+      "prompt": {
+        "node_id": "105:104",
+        "input": "prompt",
+        "class_type": "MiniMaxH3ImageToVideo"
+      },
+      "seed": {
+        "node_id": "105:15",
+        "input": "noise_seed",
+        "class_type": "RandomNoise"
+      },
+      "filename_prefix": {
+        "node_id": "92",
+        "input": "filename_prefix",
+        "class_type": "SaveVideo"
+      },
+      "reference_image": {
+        "node_id": "136",
+        "input": "image",
+        "class_type": "LoadImage"
+      },
+      "duration": {
+        "node_id": "105:111",
+        "input": "value",
+        "class_type": "PrimitiveFloat"
+      }
+    },
+    "dimension_policy": {
+      "mode": "exact",
+      "min": 256,
+      "max": 2048,
+      "multiple_of": 32
+    }
   }
 ]
