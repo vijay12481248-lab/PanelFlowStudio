@@ -121,5 +121,10 @@ if __name__ == "__main__":
 
     if restart_requested:
         # Re-execute only after Uvicorn releases the listener and runs shutdown.
-        args = [sys.executable, *sys.argv[1:]] if getattr(sys, "frozen", False) else [sys.executable, str(Path(__file__).resolve())]
-        os.execv(sys.executable, args)
+        import subprocess
+        script_or_args = [sys.executable, *sys.argv[1:]] if getattr(sys, "frozen", False) else [sys.executable, str(Path(__file__).resolve()), *sys.argv[1:]]
+        if sys.platform == "win32":
+            subprocess.Popen(script_or_args)
+            sys.exit(0)
+        else:
+            os.execv(sys.executable, script_or_args)

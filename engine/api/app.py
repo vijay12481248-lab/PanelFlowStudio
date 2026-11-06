@@ -93,7 +93,8 @@ def create_app(
         allow_origins=sorted(origins),
         allow_credentials=False,
         allow_methods=["*"],
-        allow_headers=["Accept", "Content-Type", "X-PanelFlow-Control", "X-PanelFlow-Token"],
+        allow_origin_regex=r"^(https?://(localhost|127\.0\.0\.1|\[::1\])(:[0-9]+)?|tauri://localhost|https?://tauri\.localhost)$",
+        allow_headers=["*"],
     )
 
     # Include routers
@@ -131,8 +132,8 @@ def create_app(
         return chronoflow.get_chronoflow_ui()
 
     STUDIO_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    app.mount("/chronoflow/outputs", StaticFiles(directory=str(STUDIO_OUTPUT_DIR)), name="chronoflow_outputs")
     app.mount("/chronoflow/static", StaticFiles(directory=str(chronoflow.CHRONOFLOW_STATIC_DIR)), name="chronoflow_static")
+    app.mount("/chronoflow/outputs", StaticFiles(directory=str(STUDIO_OUTPUT_DIR)), name="chronoflow_outputs")
     app.mount("/outputs", StaticFiles(directory=str(STUDIO_OUTPUT_DIR)), name="outputs")
     if COMFY_INPUT_DIR.exists():
         app.mount("/chronoflow/inputs", StaticFiles(directory=str(COMFY_INPUT_DIR)), name="chronoflow_inputs")

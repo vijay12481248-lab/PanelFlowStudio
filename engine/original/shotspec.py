@@ -159,7 +159,8 @@ MARGIN_NATURAL: dict[str, str] = {
     "full": "Full body shot from head to toe with visible feet resting on the ground, generous margins around the subject, completely in frame with no cropping.",
     "full_body": "Full body shot from head to toe with visible feet resting on the ground, generous margins around the subject, completely in frame with no cropping.",
     "character_sheet": "Full length standing character reference from head to toe with clear empty margins around the subject, completely in frame.",
-    "close": "Centered framing focusing on the face and shoulders.",
+    "medium": "Medium shot from the waist up with generous headroom above the hair, subject completely in frame with no top cropping.",
+    "close": "Centered framing focusing on the face and shoulders, with generous headroom above the hair, completely in frame.",
     "extreme_close": "Macro framing focusing closely on facial details.",
 }
 
@@ -404,49 +405,18 @@ def unname(text: str, characters: list[Character]) -> str:
 
 
 def compose_natural(story: OriginalStory, spec: ShotSpec, location_id: str, emphasis: list[str] | None = None,
-                    simplify: bool = False) -> tuple[str, str]:
+                    simplify: bool = False, target: str = "natural") -> tuple[str, str]:
     """The same ShotSpec as a paragraph of plain English, for models that follow sentences instead of tags. (positive, negative='')"""
-    genre = GENRES[story.bible.premise.genre]
-    chars = {c.id: c for c in story.bible.characters}
-    un = lambda t: unname(t, story.bible.characters)  # noqa: E731
-    emphasis = [un(e) for e in emphasis] if emphasis else emphasis
-    loc = next((x for x in story.bible.locations if x.id == location_id), None)
-    shown = [c for c in spec.characters if c.id in chars][:2]
-    if len(shown) == 2:
-        shown.sort(key=lambda c: {"left": 0, "center": 1, "right": 2}.get(c.side, 1))
-    parts = [f"Most important: the picture must clearly show {'; '.join(emphasis)}."] if (emphasis and simplify) else []
-    style_tag = next((t.strip() for t in genre.art_style.split(",") if "style" in t), "anime illustration")  # the genre's own "... style" phrase
-    parts += [f"{style_tag[:1].upper() + style_tag[1:]}.", FRAMING.get(spec.shot, "")]
-    if not shown:
-        parts.append("There are no people in the picture.")
-    for k, c in enumerate(shown):
-        where = "" if len(shown) == 1 else ("On the left: " if k == 0 else "On the right: ")
-        doing = un(", ".join(x for x in (c.pose, c.expression, c.action) if x))
-        parts.append(f"{where}{describe_character(chars[c.id])}. {doing[:1].upper() + doing[1:]}." if doing else f"{where}{describe_character(chars[c.id])}.")
-    if not simplify:
-        action_texts = [c.action for c in shown if c.action] + [c.pose for c in shown if c.pose] + spec.key_visuals
-        binding_phrases = compile_interaction_bindings_natural(action_texts)
-        if binding_phrases:
-            parts.append(f"Physical contact: {'; '.join(binding_phrases)}.")
-        margin_phrase = MARGIN_NATURAL.get(spec.shot)
-        if margin_phrase:
-            parts.append(margin_phrase)
-    if simplify:  # last resort: fewer details compete with the thing the previous attempts kept missing
-        spec = spec.model_copy(update={"lighting": "", "mood": "", "setting": spec.setting.split(".")[0][:80]})
-    place = ". ".join(x for x in ((loc.name + ": " + ", ".join(_tokens(loc.look, 5))) if loc else "", spec.setting) if x)
-    if place:
-        parts.append(f"Setting: {place}.")
-    if spec.lighting or spec.mood:
-        parts.append(f"Lighting: {spec.lighting or 'natural'}. Mood: {spec.mood or 'calm'}.")
-    need = list(dict.fromkeys([un(k) for k in spec.key_visuals] + (emphasis or [])))
-    if need:
-        parts.append("The picture must clearly show: " + "; ".join(need) + ".")
-    if emphasis:
-        parts.append("Pay special attention to: " + "; ".join(emphasis) + ".")
-    if any(k in " ".join(spec.key_visuals).lower() for k in ("eyes closed", "closed eyes")):
-        parts.append("Her/his eyes are closed.")
-    parts.append(f"Style: {', '.join(_tokens(genre.art_style))}. {NATURAL_SUFFIX}")
-    return " ".join(x for x in parts if x), ""
+    from engine.original.prompt import PromptCompiler
+    compiled = PromptCompiler.compile_image_prompt(
+        story=story,
+        spec=spec,
+        location_id=location_id,
+        target=target,
+        emphasis=emphasis,
+        simplify=simplify,
+    )
+    return compiled.positive, compiled.negative
 
 
 def pose_sensitive(spec: ShotSpec) -> bool:
@@ -476,36 +446,13 @@ def compose_motion_prompt(
     fx_tags: str = "",
 ) -> tuple[str, str]:
     """Return (positive_prompt, negative_prompt) tailored for MiniMax Fast H3 Image-to-Video."""
-    parts = []
-    cam = CAMERA_MOTIONS.get(camera_direction, CAMERA_MOTIONS["push_in"])
-    parts.append(cam)
-
-    if intensity == "subtle":
-        parts.append("slow subtle gentle motion, calm and delicate pace")
-    elif intensity == "action":
-        parts.append("dynamic energetic movement, strong visual momentum, high impact anime motion")
-
-    if fx_tags and fx_tags.strip():
-        parts.append(fx_tags.strip())
-
-    if custom_prompt and custom_prompt.strip():
-        parts.append(custom_prompt.strip())
-    elif action_hint and action_hint.strip():
-        parts.append(action_hint.strip())
-    elif spec:
-        acts = []
-        for ch in spec.characters:
-            desc = ", ".join(x for x in (ch.action, ch.pose, ch.expression) if x)
-            if desc:
-                acts.append(desc)
-        if acts:
-            parts.append("character " + "; ".join(acts))
-        if spec.mood:
-            parts.append(f"{spec.mood} atmosphere")
-        if getattr(spec, "shot", "") == "wide" or getattr(spec, "camera", "") == "wide":
-            parts.append("shallow depth of field, sharp foreground character, soft background bokeh")
-
-    parts.append("natural subtle movement, cloth and hair dynamics, cinematic lighting, highly detailed, steady frame rate, consistent character appearance, 24fps smooth motion")
-    pos = ", ".join(parts)
-    neg = "fast jerky motion, abrupt camera jump cut, morphing face, distorted hands, flickering, twitching, text, watermark, bad anatomy, jittery artifacts, melted face, blurry facial features, faceless pedestrians"
-    return pos, neg
+    from engine.original.prompt import PromptCompiler
+    compiled = PromptCompiler.compile_video_prompt(
+        spec=spec,
+        camera_direction=camera_direction,
+        custom_prompt=custom_prompt,
+        action_hint=action_hint,
+        intensity=intensity,
+        fx_tags=fx_tags,
+    )
+    return compiled.positive, compiled.negative

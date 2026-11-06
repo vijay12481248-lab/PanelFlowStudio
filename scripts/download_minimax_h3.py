@@ -52,6 +52,13 @@ MODELS = [
         "size_bytes": 20970379616,
         "description": "MiniMax H3 FL2VA DiT Diffusion Model (Pruned INT8 ConvRot)",
     },
+    {
+        "subfolder": "ultralytics/bbox",
+        "filename": "face_yolov8m.pt",
+        "size_bytes": 52026019,
+        "description": "YOLOv8m Face Detector (for H3-FaceRefine per-frame tracking)",
+        "url": "https://huggingface.co/Bingsu/adetailer/resolve/main/face_yolov8m.pt",
+    },
 ]
 
 
@@ -133,7 +140,7 @@ def main():
         fn = item["filename"]
         if args.file != "all" and args.file not in fn:
             continue
-        url = f"{HF_BASE_URL}/{sub}/{fn}"
+        url = item.get("url") or f"{HF_BASE_URL}/{sub}/{fn}"
         dest = models_dir / sub / fn
         try:
             download_file(url, dest, item["size_bytes"], item["description"])

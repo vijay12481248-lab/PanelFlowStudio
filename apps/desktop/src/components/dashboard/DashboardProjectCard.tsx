@@ -229,9 +229,10 @@ export const DashboardProjectCard: React.FC<DashboardProjectCardProps> = ({
         <div className="flex items-center gap-1.5 flex-shrink-0">
           <button
             onClick={() => onToggleFavorite(project.id)}
-            className={`p-1.5 rounded hover:bg-[#1a2035] transition-colors ${
+            className={`p-2 rounded hover:bg-[#1a2035] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-indigo-400 ${
               isFavorite ? "text-amber-400" : "text-zinc-500 hover:text-amber-400"
             }`}
+            aria-label={isFavorite ? "Remove from favorites" : "Add to favorites"}
             title={isFavorite ? "Remove from favorites" : "Add to favorites"}
           >
             <Star className={`w-3.5 h-3.5 ${isFavorite ? "fill-amber-400" : ""}`} />
@@ -239,54 +240,55 @@ export const DashboardProjectCard: React.FC<DashboardProjectCardProps> = ({
 
           <button
             onClick={() => onOpenStoryEditor(project)}
-            className="bg-[#3b49df] hover:bg-[#4338ca] text-white text-[11px] font-semibold px-2.5 py-1.5 rounded-lg flex items-center gap-1 shadow-sm shadow-indigo-600/30 transition-all"
+            className="bg-[#3b49df] hover:bg-[#4338ca] text-white text-[11px] font-semibold px-2.5 py-1.5 rounded-lg flex items-center gap-1 shadow-sm shadow-indigo-600/30 transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-indigo-400"
             title="Open Video-First Story Editor"
           >
-            <Film className="w-3.5 h-3.5 text-white" />
+            <Film className="w-3.5 h-3.5 text-white" aria-hidden="true" />
             <span>Story Editor</span>
           </button>
 
           {onOpenChronoFlow && (
             <button
               onClick={() => onOpenChronoFlow(project)}
-              className="bg-[#241a4a] hover:bg-[#35256e] text-purple-200 border border-purple-700/60 text-[11px] font-semibold px-2 py-1.5 rounded-lg flex items-center gap-1 transition-all flex-shrink-0 shadow-sm"
+              className="bg-[#241a4a] hover:bg-[#35256e] text-purple-200 border border-purple-700/60 text-[11px] font-semibold px-2 py-1.5 rounded-lg flex items-center gap-1 transition-all flex-shrink-0 shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-purple-400"
               title="Open ChronoFlow: Video, Image & Panel Generation"
             >
-              <Film className="w-3.5 h-3.5 text-purple-400 flex-shrink-0" />
+              <Film className="w-3.5 h-3.5 text-purple-400 flex-shrink-0" aria-hidden="true" />
               <span>AI Video</span>
             </button>
           )}
 
           <button
             onClick={() => onOpenOCR(project)}
-            className="bg-[#151928] hover:bg-[#1f253d] text-zinc-200 border border-[#262f4c] text-[11px] font-medium px-2 py-1.5 rounded-lg flex items-center gap-1 transition-all"
+            className="bg-[#151928] hover:bg-[#1f253d] text-zinc-200 border border-[#262f4c] text-[11px] font-medium px-2 py-1.5 rounded-lg flex items-center gap-1 transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-indigo-400"
             title="Review OCR and Dialogue"
           >
-            <FileText className="w-3 h-3 text-zinc-400" />
+            <FileText className="w-3 h-3 text-zinc-400" aria-hidden="true" />
             <span>OCR</span>
           </button>
 
           <button
             onClick={() => onOpenPanels(project)}
-            className="bg-[#151928] hover:bg-[#1f253d] text-zinc-200 border border-[#262f4c] text-[11px] font-medium px-2 py-1.5 rounded-lg flex items-center gap-1 transition-all"
+            className="bg-[#151928] hover:bg-[#1f253d] text-zinc-200 border border-[#262f4c] text-[11px] font-medium px-2 py-1.5 rounded-lg flex items-center gap-1 transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-indigo-400"
             title="Review Panels"
           >
-            <LayoutGrid className="w-3 h-3 text-zinc-400" />
+            <LayoutGrid className="w-3 h-3 text-zinc-400" aria-hidden="true" />
             <span>Panels</span>
           </button>
 
           <button
             onClick={() => onOpenFolder(project.id)}
-            className="bg-[#151928] hover:bg-[#1f253d] text-zinc-200 border border-[#262f4c] text-[11px] font-medium px-2 py-1.5 rounded-lg flex items-center gap-1 transition-all"
+            className="bg-[#151928] hover:bg-[#1f253d] text-zinc-200 border border-[#262f4c] text-[11px] font-medium px-2 py-1.5 rounded-lg flex items-center gap-1 transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-indigo-400"
             title="Open workspace in File Explorer"
           >
-            <Folder className="w-3 h-3 text-zinc-400" />
+            <Folder className="w-3 h-3 text-zinc-400" aria-hidden="true" />
             <span>Files</span>
           </button>
 
           <button
             onClick={() => onDeleteProject(project.id)}
-            className="p-1.5 rounded text-zinc-500 hover:text-rose-400 hover:bg-rose-950/30 transition-colors"
+            className="p-2 rounded text-zinc-500 hover:text-rose-400 hover:bg-rose-950/30 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-rose-400"
+            aria-label="Delete project"
             title="Delete project"
           >
             <Trash2 className="w-3.5 h-3.5" />
@@ -319,9 +321,10 @@ export const DashboardProjectCard: React.FC<DashboardProjectCardProps> = ({
                 <button
                   type="button"
                   onClick={() => onToggleFavorite(project.id)}
-                  className={`p-1 rounded hover:bg-[#1a2035] transition-colors ${
+                  className={`p-2 rounded hover:bg-[#1a2035] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-indigo-400 ${
                     isFavorite ? "text-amber-400" : "text-zinc-500 hover:text-amber-400"
                   }`}
+                  aria-label={isFavorite ? "Remove from favorites" : "Add to favorites"}
                   title={isFavorite ? "Remove from favorites" : "Add to favorites"}
                 >
                   <Star className={`w-3.5 h-3.5 ${isFavorite ? "fill-amber-400" : ""}`} />
@@ -330,7 +333,8 @@ export const DashboardProjectCard: React.FC<DashboardProjectCardProps> = ({
                 <button
                   type="button"
                   onClick={() => setShowMenu(!showMenu)}
-                  className="p-1 rounded text-zinc-500 hover:text-zinc-200 hover:bg-[#1a2035] transition-colors"
+                  className="p-2 rounded text-zinc-500 hover:text-zinc-200 hover:bg-[#1a2035] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-indigo-400"
+                  aria-label="More actions"
                   title="More actions"
                 >
                   <MoreHorizontal className="w-3.5 h-3.5" />
@@ -342,6 +346,8 @@ export const DashboardProjectCard: React.FC<DashboardProjectCardProps> = ({
                     <div
                       className="fixed inset-0 z-20"
                       onClick={() => setShowMenu(false)}
+                      onKeyDown={(e) => { if (e.key === "Escape") setShowMenu(false); }}
+                      role="presentation"
                     />
                     <div className="absolute right-0 top-7 w-36 bg-[#151928] border border-[#262f4c] rounded-lg shadow-xl z-30 py-1 text-xs">
                       <button
@@ -413,17 +419,17 @@ export const DashboardProjectCard: React.FC<DashboardProjectCardProps> = ({
           className="bg-[#3b49df] hover:bg-[#4338ca] text-white text-[11px] font-semibold px-2.5 py-1.5 rounded-lg flex items-center gap-1 shadow-sm shadow-indigo-600/30 transition-all flex-shrink-0"
           title="Open Video-First Story Editor"
         >
-          <Film className="w-3.5 h-3.5 text-white flex-shrink-0" />
+          <Film className="w-3.5 h-3.5 text-white flex-shrink-0" aria-hidden="true" />
           <span>Story Editor</span>
         </button>
 
         {onOpenChronoFlow && (
           <button
             onClick={() => onOpenChronoFlow(project)}
-            className="bg-[#241a4a] hover:bg-[#35256e] text-purple-200 border border-purple-700/60 text-[11px] font-semibold px-2 py-1.5 rounded-lg flex items-center gap-1 transition-all flex-shrink-0 shadow-sm"
+            className="bg-[#241a4a] hover:bg-[#35256e] text-purple-200 border border-purple-700/60 text-[11px] font-semibold px-2 py-1.5 rounded-lg flex items-center gap-1 transition-all flex-shrink-0 shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-purple-400"
             title="Open ChronoFlow: Video, Image & Panel Generation"
           >
-            <Film className="w-3.5 h-3.5 text-purple-400 flex-shrink-0" />
+            <Film className="w-3.5 h-3.5 text-purple-400 flex-shrink-0" aria-hidden="true" />
             <span>AI Video</span>
           </button>
         )}
@@ -434,7 +440,7 @@ export const DashboardProjectCard: React.FC<DashboardProjectCardProps> = ({
             className="bg-[#151928] hover:bg-[#1f253d] text-zinc-200 border border-[#262f4c] text-[11px] font-medium px-2 py-1.5 rounded-lg flex items-center gap-1 transition-all flex-shrink-0"
             title="Review OCR and Dialogue"
           >
-            <FileText className="w-3 h-3 text-zinc-400 flex-shrink-0" />
+            <FileText className="w-3 h-3 text-zinc-400 flex-shrink-0" aria-hidden="true" />
             <span>OCR</span>
           </button>
 
@@ -443,7 +449,7 @@ export const DashboardProjectCard: React.FC<DashboardProjectCardProps> = ({
             className="bg-[#151928] hover:bg-[#1f253d] text-zinc-200 border border-[#262f4c] text-[11px] font-medium px-2 py-1.5 rounded-lg flex items-center gap-1 transition-all flex-shrink-0"
             title="Review Panels"
           >
-            <LayoutGrid className="w-3 h-3 text-zinc-400 flex-shrink-0" />
+            <LayoutGrid className="w-3 h-3 text-zinc-400 flex-shrink-0" aria-hidden="true" />
             <span>Panels</span>
           </button>
 
@@ -452,7 +458,7 @@ export const DashboardProjectCard: React.FC<DashboardProjectCardProps> = ({
             className="bg-[#151928] hover:bg-[#1f253d] text-zinc-200 border border-[#262f4c] text-[11px] font-medium px-2 py-1.5 rounded-lg flex items-center gap-1 transition-all flex-shrink-0"
             title="Open workspace in File Explorer"
           >
-            <Folder className="w-3 h-3 text-zinc-400 flex-shrink-0" />
+            <Folder className="w-3 h-3 text-zinc-400 flex-shrink-0" aria-hidden="true" />
             <span>Files</span>
           </button>
         </div>

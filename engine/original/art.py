@@ -15,7 +15,7 @@ import io
 import json
 import os
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 
 from PIL import Image
 from pydantic import BaseModel, Field
@@ -67,20 +67,43 @@ NEGATIVE = ("lowres, bad anatomy, bad hands, text, error, missing finger, extra 
 
 
 def build_prompt(story: OriginalStory, panel: Panel, emphasis: list[str] | None = None, style: str = "tags",
-                 must: list[str] | None = None, attempt: int = 0) -> tuple[str, str]:
+                 must: list[str] | None = None, attempt: int = 0, runner: Any = None,
+                 engine: str | None = None) -> tuple[str, str]:
+    target_engine = engine or (getattr(runner, "engine", None) if runner else None)
+    target_style = getattr(runner, "style", style) if runner else style
+
     if panel.director:  # a directed shot: the composer writes the detailed prompt from the structured spec
         spec = shotspec.ShotSpec(**panel.director)
-        if style == "natural":
+        if target_style == "natural" or style == "natural":
             spec = spec.model_copy(update={"key_visuals": list(dict.fromkeys(spec.key_visuals + (must or [])))[:8]})  # the narration's own facts
             if attempt >= 2:  # last attempt: widen the frame so the objects the narration names fit in with the character
                 spec = spec.model_copy(update={"shot": {"close": "medium", "extreme_close": "medium", "medium": "wide"}.get(spec.shot, spec.shot)})
-            return shotspec.compose_natural(story, spec, panel.location_id, emphasis, simplify=attempt >= 2)
+
+            from engine.original.prompt import PromptCompiler, TargetModel
+            if target_engine in ("flux", "natural"):
+                target_model = "flux"
+            elif target_engine in ("qwen", "qwen_image_21"):
+                target_model = TargetModel.QWEN_IMAGE_21
+            elif target_engine == "sdxl":
+                target_model = TargetModel.SDXL
+            else:
+                target_model = "natural"
+
+            compiled = PromptCompiler.compile_image_prompt(
+                story=story,
+                spec=spec,
+                location_id=panel.location_id,
+                target=target_model,
+                emphasis=emphasis,
+                simplify=attempt >= 2,
+            )
+            return compiled.positive, compiled.negative
         return shotspec.compose(story, spec, panel.location_id, emphasis)
     genre = GENRES[story.bible.premise.genre]
     chars = {c.id: c for c in story.bible.characters}
     shown = [chars[c] for c in panel.character_ids if c in chars][:2]
     loc = next((x for x in story.bible.locations if x.id == panel.location_id), None)
-    if style == "natural":
+    if style == "natural" or target_style == "natural":
         char_descs = [f"{c.name}: {c.look}" for c in shown]
         char_str = f"Featuring {', '.join(char_descs)}. " if char_descs else ""
         loc_str = f"Setting: {loc.look}. " if loc else ""
@@ -89,7 +112,7 @@ def build_prompt(story: OriginalStory, panel: Panel, emphasis: list[str] | None 
         contact_str = f"Physical contact: {'; '.join(bindings_nat)}. " if bindings_nat else ""
         margin_str = f"{shotspec.MARGIN_NATURAL.get(panel.shot, '')} " if shotspec.MARGIN_NATURAL.get(panel.shot) else ""
         pos = f"{panel.action.rstrip('.')}. {contact_str}{margin_str}{char_str}{loc_str}{shot_str}{genre.art_style}"
-        neg = "blurry, distorted, low quality, bad anatomy, text, watermark, extra limbs, floating objects, disconnected hands"
+        neg = "" if target_engine in ("flux", "natural") else "blurry, distorted, low quality, bad anatomy, text, watermark, extra limbs, floating objects, disconnected hands"
         return pos, neg
     looks = []
     for c in shown:
@@ -605,7 +628,7 @@ def generate_art(story: OriginalStory, ws: Path, runner: ComfyRunner, provider=N
             raise RuntimeError("cancelled")
         progress(n / len(panels), f"Panel {n}/{len(panels)}")
         style, engine = getattr(runner, "style", "tags"), getattr(runner, "engine", "sdxl")
-        pos, neg = build_prompt(story, p, style=style)
+        pos, neg = build_prompt(story, p, style=style, runner=runner, engine=engine)
         shown = [chars[c] for c in p.character_ids if c in chars][:2]
         spec = shotspec.ShotSpec(**p.director) if p.director else None
         spec_shot = spec.shot if spec else p.shot
@@ -673,7 +696,7 @@ def generate_art(story: OriginalStory, ws: Path, runner: ComfyRunner, provider=N
                 refs={"ref": ref, "ref_b": ref_b, "pose": pose_img, "depth": depth_img, "pose_wt": pose_wt, "depth_wt": depth_wt})
         for attempt in (range(DIRECTED_ATTEMPTS if p.director else MAX_ATTEMPTS) if best is None else ()):
             seed = seed_for(story, p.id, attempt)
-            pos_i, _ = build_prompt(story, p, emphasis, style, must, attempt)
+            pos_i, _ = build_prompt(story, p, emphasis, style, must, attempt, runner=runner, engine=engine)
             if attempt >= 2 and p.director and style == "natural":
                 widened_shot = {"close": "medium", "extreme_close": "medium", "medium": "wide"}.get(spec_shot, spec_shot)
                 pw, ph = shotspec.resolve_dimensions(widened_shot, num_characters=len(shown), default=(W, H))

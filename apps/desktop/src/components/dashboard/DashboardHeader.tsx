@@ -50,7 +50,7 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
         {onOpenProviderManagement && (
           <button
             onClick={onOpenProviderManagement}
-            className="text-xs text-indigo-200 hover:text-white rounded-lg border border-[#27324c] px-3 py-2 focus-visible:outline focus-visible:outline-indigo-400"
+            className="text-xs text-indigo-200 hover:text-white rounded-lg border border-[#27324c] px-3 py-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-indigo-400 transition-colors"
             title="AI Provider Management"
           >
             AI Providers
@@ -59,10 +59,10 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
 
         <button
           onClick={onOpenToolsModels}
-          className="bg-[#151b2a] hover:bg-[#20283d] border border-[#27324c] text-indigo-200 hover:text-white text-xs font-medium rounded-lg px-3 py-2 flex items-center gap-1.5 transition-colors shadow-sm"
+          className="bg-[#151b2a] hover:bg-[#20283d] border border-[#27324c] text-indigo-200 hover:text-white text-xs font-medium rounded-lg px-3 py-2 flex items-center gap-1.5 transition-colors shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-indigo-400"
           title="Inspect local models, workers, and tool engines"
         >
-          <Box className="w-3.5 h-3.5 text-indigo-300" />
+          <Box className="w-3.5 h-3.5 text-indigo-300" aria-hidden="true" />
           <span>Workspace health</span>
         </button>
 
@@ -89,7 +89,7 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
 
         {onRestartEngine && (
           <button onClick={onRestartEngine} disabled={!engineConnected || restartingEngine || retryingEngine}
-            className="text-xs text-zinc-300 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+            className="text-xs text-zinc-300 hover:text-white px-2.5 py-1.5 rounded-md hover:bg-zinc-800/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-indigo-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {restartingEngine ? "Restarting…" : "Restart Engine"}
           </button>
@@ -98,7 +98,7 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
           <button
             onClick={onRetryEngine}
             disabled={retryingEngine}
-            className="text-[11px] text-rose-300 hover:underline ml-1"
+            className="text-[11px] text-rose-300 hover:underline px-2 py-1 rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-rose-400 ml-1"
           >
             {retryingEngine ? "Connecting..." : "Retry"}
           </button>

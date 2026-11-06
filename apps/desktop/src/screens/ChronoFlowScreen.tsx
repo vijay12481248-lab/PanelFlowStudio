@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { ArrowLeft, ExternalLink, RefreshCw, Film, Radio, Cpu, AlertCircle } from "lucide-react";
+import { ArrowLeft, RefreshCw, AlertCircle } from "lucide-react";
 import { api } from "@panelflow/api-client";
 import type { Project } from "@panelflow/shared-types";
 
@@ -18,6 +18,17 @@ export const ChronoFlowScreen: React.FC<ChronoFlowScreenProps> = ({ onBack, proj
   const [detected7860, setDetected7860] = useState<boolean | null>(null);
   const [loadTimedOut, setLoadTimedOut] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  // Listen for navigation messages from the embedded studio header
+  useEffect(() => {
+    const handleMsg = (e: MessageEvent) => {
+      if (e.data?.type === "panelflow_back_to_dashboard") {
+        onBack();
+      }
+    };
+    window.addEventListener("message", handleMsg);
+    return () => window.removeEventListener("message", handleMsg);
+  }, [onBack]);
 
   // Read engine token from client, local storage, or Tauri
   useEffect(() => {
@@ -72,11 +83,11 @@ export const ChronoFlowScreen: React.FC<ChronoFlowScreenProps> = ({ onBack, proj
     };
   }, []);
 
-  // Compute studio URL
+  // Compute studio URL passing embedded=1 and project name for the unified single bar
   const studioUrl =
     selectedPort === "7860"
-      ? `http://127.0.0.1:7860/${jobId ? `?job=${encodeURIComponent(jobId)}` : ""}`
-      : `http://127.0.0.1:8765/chronoflow/ui?${[token ? `token=${encodeURIComponent(token)}` : "", jobId ? `job=${encodeURIComponent(jobId)}` : ""].filter(Boolean).join("&")}`;
+      ? `http://127.0.0.1:7860/?embedded=1${project?.title ? `&project=${encodeURIComponent(project.title)}` : ""}${jobId ? `&job=${encodeURIComponent(jobId)}` : ""}`
+      : `http://127.0.0.1:8765/chronoflow/ui?embedded=1${token ? `&token=${encodeURIComponent(token)}` : ""}${project?.title ? `&project=${encodeURIComponent(project.title)}` : ""}${jobId ? `&job=${encodeURIComponent(jobId)}` : ""}`;
 
   // Loading timeout fallback
   useEffect(() => {
@@ -96,104 +107,26 @@ export const ChronoFlowScreen: React.FC<ChronoFlowScreenProps> = ({ onBack, proj
   };
 
   const handleOpenBrowser = () => {
-    window.open(studioUrl, "_blank", "noopener,noreferrer");
+    const rawUrl = studioUrl.replace("?embedded=1&", "?").replace("?embedded=1", "");
+    window.open(rawUrl, "_blank", "noopener,noreferrer");
   };
 
   return (
     <div className="flex flex-col h-screen w-screen bg-[#090d16] text-zinc-100 overflow-hidden font-sans select-none">
-      {/* Top Header Bar */}
-      <header className="flex-none h-14 bg-[#111726]/90 backdrop-blur-md border-b border-[#1e293b] px-4 flex items-center justify-between z-20">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={onBack}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 hover:text-white text-xs font-semibold border border-zinc-700 transition-colors"
-            title="Return to PanelFlow Dashboard"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" />
-            <span>Dashboard</span>
-          </button>
-
-          <div className="h-5 w-[1px] bg-zinc-800 mx-1" />
-
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center shadow-lg shadow-indigo-500/20">
-              <Film className="w-4 h-4 text-white" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-sm font-bold tracking-tight text-white">ChronoFlow Pro Studio</h1>
-{project ? (
-                  <span className="text-[10px] font-semibold px-2.5 py-0.5 rounded-full bg-purple-500/25 text-purple-200 border border-purple-500/40 truncate max-w-xs">
-                    Project: {project.title}
-                  </span>
-                ) : (
-                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30">
-                    MiniMax H3 & FLUX.1
-                  </span>
-                )}
-              </div>
-              <p className="text-[11px] text-zinc-400">Sliding Window Video Chaining, Inpainting & AI Storyboard</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Right Status & Actions */}
-        <div className="flex items-center gap-2.5">
-          {/* Port / Backend Switcher */}
-          <div className="flex items-center bg-[#0d121f] rounded-lg p-0.5 border border-zinc-800 text-[11px]">
-            <button
-              onClick={() => {
-                setSelectedPort("7860");
-                setIframeLoading(true);
-              }}
-              className={`px-2.5 py-1 rounded-md font-medium transition-all ${
-                selectedPort === "7860"
-                  ? "bg-purple-600 text-white shadow-sm"
-                  : "text-zinc-400 hover:text-zinc-200"
-              }`}
-              title="Port 7860: Standalone ChronoFlow Studio Server"
-            >
-              Port 7860 {detected7860 ? "●" : ""}
-            </button>
-            <button
-              onClick={() => {
-                setSelectedPort("8765");
-                setIframeLoading(true);
-              }}
-              className={`px-2.5 py-1 rounded-md font-medium transition-all ${
-                selectedPort === "8765"
-                  ? "bg-indigo-600 text-white shadow-sm"
-                  : "text-zinc-400 hover:text-zinc-200"
-              }`}
-              title="Port 8765: Integrated PanelFlow Engine"
-            >
-              Port 8765 (Engine)
-            </button>
-          </div>
-
-          <button
-            onClick={handleRefresh}
-            className="p-1.5 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 hover:text-white border border-zinc-700 transition-colors"
-            title="Refresh Studio View"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-          </button>
-
-          <button
-            onClick={handleOpenBrowser}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-md shadow-indigo-600/30 transition-colors"
-            title="Open in Standalone Browser Window"
-          >
-            <ExternalLink className="w-3.5 h-3.5" />
-            <span>Open in Browser</span>
-          </button>
-        </div>
-      </header>
-
-      {/* Main Studio View Container */}
-      <main className="flex-1 relative w-full h-[calc(100vh-3.5rem)] bg-[#090d16]">
+      {/* Main Studio Viewport — Single Unified Bar (no duplicate header) */}
+      <main className="flex-1 relative w-full h-full bg-[#090d16]">
         {iframeLoading && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[#090d16] z-10">
+            {/* Quick exit to dashboard while connecting */}
+            <button
+              onClick={onBack}
+              className="absolute top-3 left-3 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-800/90 hover:bg-zinc-700 text-zinc-300 hover:text-white text-xs font-semibold border border-zinc-700 shadow-md transition-colors"
+              title="Return to PanelFlow Dashboard"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" aria-hidden="true" />
+              <span>Dashboard</span>
+            </button>
+
             <div className="w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
             <p className="text-xs text-zinc-400 font-medium">
               Connecting to ChronoFlow Studio ({studioUrl})...
@@ -202,7 +135,7 @@ export const ChronoFlowScreen: React.FC<ChronoFlowScreenProps> = ({ onBack, proj
             {loadTimedOut && (
               <div className="mt-4 p-4 rounded-xl bg-zinc-900/90 border border-zinc-800 max-w-md text-center space-y-3">
                 <div className="flex items-center justify-center gap-2 text-amber-400 text-xs font-semibold">
-                  <AlertCircle className="w-4 h-4" />
+                  <AlertCircle className="w-4 h-4" aria-hidden="true" />
                   <span>Studio Server Not Responding Fast Enough</span>
                 </div>
                 <p className="text-[11px] text-zinc-400 leading-relaxed">
@@ -210,10 +143,16 @@ export const ChronoFlowScreen: React.FC<ChronoFlowScreenProps> = ({ onBack, proj
                 </p>
                 <div className="flex justify-center gap-2 pt-1">
                   <button
+                    onClick={onBack}
+                    className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold border border-zinc-700"
+                  >
+                    Return to Dashboard
+                  </button>
+                  <button
                     onClick={handleOpenBrowser}
                     className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold"
                   >
-                    Open Standalone in Browser
+                    Open Standalone
                   </button>
                   <button
                     onClick={() => {

@@ -48,7 +48,12 @@ GENRES: dict[str, Genre] = {
         "a sacred prologue, a divine gathering, the eternal composition, the tragic conflict, an immortal proclamation",
         8, (4, 5), "authentic Indian historical cinema, photorealistic film still, 35mm Arri Alexa cinematography, culturally authentic Indian heritage, photorealistic natural Indian skin texture, warm golden hour temple sunlight, brass diya oil lamp lighting, floating dust motes, sacred vibhuti bhasma, rudraksha beads, handwoven cotton dhoti, intricate gold zari brocade, cinematic depth of field, 8k resolution, documentary realism, devotional masterpiece",
         ALWAYS_FORBIDDEN | GORE, caption_words=(15, 45)),
+    "vox": Genre(
+        "vox", "fast-paced, witty, deadpan humorous, energetic, Vox-style visual documentary explainer",
+        "a bizarre question or hilarious everyday phenomenon, comical evidence, escalating absurd theories, comical expert demonstration, hilarious scientific breakdown, unexpected twist conclusion",
+        5, (4, 5), "Signature Vox 2D motion explainer style, modern flat vector graphic illustration, crisp bold dark outlines, solid vibrant color palette with bright canary yellow and deep navy accents, minimalist clean cel shading, high-end YouTube visual journalism aesthetic, consistent 2D vector animation look, zero photographic textures, zero 3D CGI",
+        ALWAYS_FORBIDDEN | GORE, caption_words=(15, 30)),
 }
 
-SHOTS = {"wide", "medium", "close", "extreme_close", "over_shoulder"}
+SHOTS = {"wide", "medium", "close", "extreme_close", "over_shoulder", "full", "full_body"}
 ANGLES = {"eye_level", "low", "high", "dutch"}

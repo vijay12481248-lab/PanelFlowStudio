@@ -45,14 +45,14 @@ export const AppNavigationRail: React.FC<AppNavigationRailProps> = ({
                   onSelectTab(item.id);
                 }
               }}
-              className={`w-12 h-12 rounded-xl flex flex-col items-center justify-center gap-1 transition-all ${
+              className={`w-12 h-12 rounded-xl flex flex-col items-center justify-center gap-1 transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400 ${
                 isActive
                   ? "bg-[#3b49df] text-white shadow-md shadow-indigo-600/30"
                   : "text-zinc-400 hover:text-zinc-100 hover:bg-[#141826]"
               }`}
               title={item.label}
             >
-              <Icon className="w-5 h-5 flex-shrink-0" />
+              <Icon className="w-5 h-5 flex-shrink-0" aria-hidden="true" />
               <span className="text-[10px] font-medium leading-none tracking-tight">
                 {item.label}
               </span>
@@ -66,10 +66,11 @@ export const AppNavigationRail: React.FC<AppNavigationRailProps> = ({
             <div className="w-8 h-[1px] bg-[#1d2338] my-0.5" />
             <button
               onClick={onOpenChronoFlow}
-              className="w-12 h-12 rounded-xl flex flex-col items-center justify-center gap-1 transition-all text-purple-400 hover:text-purple-200 hover:bg-[#1a152e] border border-purple-900/40 shadow-sm group"
+              className="w-12 h-12 rounded-xl flex flex-col items-center justify-center gap-1 transition-all text-purple-400 hover:text-purple-200 hover:bg-[#1a152e] border border-purple-900/40 shadow-sm group focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-purple-400"
+              aria-label="Open ChronoFlow Studio"
               title="ChronoFlow Studio: MiniMax H3 Video Chaining, Inpaint & AI Storyboard"
             >
-              <Film className="w-5 h-5 flex-shrink-0 group-hover:scale-110 transition-transform" />
+              <Film className="w-5 h-5 flex-shrink-0 group-hover:scale-110 transition-transform" aria-hidden="true" />
               <span className="text-[10px] font-semibold leading-none tracking-tight text-purple-300">
                 Chrono
               </span>
@@ -82,14 +83,14 @@ export const AppNavigationRail: React.FC<AppNavigationRailProps> = ({
       <div className="flex flex-col items-center gap-2 w-full px-2 pb-1">
         <button
           onClick={onOpenSettings}
-          className={`w-12 h-12 rounded-xl flex flex-col items-center justify-center gap-1 transition-all ${
+          className={`w-12 h-12 rounded-xl flex flex-col items-center justify-center gap-1 transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400 ${
             activeTab === "settings"
               ? "bg-[#3b49df] text-white shadow-md shadow-indigo-600/30"
               : "text-zinc-400 hover:text-zinc-100 hover:bg-[#141826]"
           }`}
           title="Settings & Diagnostics"
         >
-          <Settings className="w-5 h-5 flex-shrink-0" />
+          <Settings className="w-5 h-5 flex-shrink-0" aria-hidden="true" />
           <span className="text-[10px] font-medium leading-none tracking-tight">
             Settings
           </span>

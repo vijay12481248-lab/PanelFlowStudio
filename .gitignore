@@ -1,4 +1,4 @@
-﻿# Python
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
@@ -80,3 +80,6 @@ chapter-923-panels.txt
 
 # Trained-model mirror; only the released registry versions are committed (via Git LFS, force-added)
 model_backups/
+
+apps/desktop/src-tauri/tauri.nobundle.conf.json
+.agents/

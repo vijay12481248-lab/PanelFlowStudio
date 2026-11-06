@@ -44,11 +44,14 @@ export const SystemOverviewCards: React.FC<SystemOverviewCardsProps> = ({
       {/* 1. GPU Slots */}
       <div
         onClick={onOpenToolsModels}
-        className="bg-[#111422] border border-[#1e2538] hover:border-zinc-700/70 rounded-xl p-3 flex items-center gap-2.5 shadow-sm cursor-pointer transition-colors"
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpenToolsModels?.(); } }}
+        className="bg-[#111422] border border-[#1e2538] hover:border-zinc-700/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-indigo-400 rounded-xl p-3 flex items-center gap-2.5 shadow-sm cursor-pointer transition-colors text-left"
         title="Click to view hardware resources and model settings"
       >
         <div className="w-8 h-8 rounded-lg bg-[#121b2d] border border-[#1d2a48] flex items-center justify-center text-cyan-400 flex-shrink-0">
-          <Cpu className="w-4 h-4" />
+          <Cpu className="w-4 h-4" aria-hidden="true" />
         </div>
         <div className="flex-1 min-w-0">
           <div className="text-[11px] text-zinc-400 font-medium leading-none">GPU Slots</div>
@@ -56,7 +59,7 @@ export const SystemOverviewCards: React.FC<SystemOverviewCardsProps> = ({
             <span className="text-base sm:text-lg font-bold text-white tracking-tight leading-none whitespace-nowrap">
               {activeGpuSlots}&nbsp;/&nbsp;{effectiveLimit}
             </span>
-            <span className="bg-[#1b2234] border border-zinc-700/50 text-zinc-300 text-[8.5px] px-1.5 py-0.5 rounded font-mono font-bold tracking-wider leading-none flex-shrink-0">
+            <span className="bg-[#1b2234] border border-zinc-700/50 text-zinc-300 text-[10px] px-1.5 py-0.5 rounded font-mono font-bold tracking-wider leading-none flex-shrink-0">
               {concurrencyMode}
             </span>
           </div>
@@ -69,11 +72,14 @@ export const SystemOverviewCards: React.FC<SystemOverviewCardsProps> = ({
       {/* 2. VRAM Usage */}
       <div
         onClick={onOpenToolsModels}
-        className="bg-[#111422] border border-[#1e2538] hover:border-zinc-700/70 rounded-xl p-3 flex items-center gap-2.5 shadow-sm cursor-pointer transition-colors"
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpenToolsModels?.(); } }}
+        className="bg-[#111422] border border-[#1e2538] hover:border-zinc-700/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-indigo-400 rounded-xl p-3 flex items-center gap-2.5 shadow-sm cursor-pointer transition-colors text-left"
         title="Click to view GPU memory headroom and allocations"
       >
         <div className="w-8 h-8 rounded-lg bg-[#151833] border border-[#222752] flex items-center justify-center text-indigo-400 flex-shrink-0">
-          <CircuitBoard className="w-4 h-4" />
+          <CircuitBoard className="w-4 h-4" aria-hidden="true" />
         </div>
         <div className="flex-1 min-w-0">
           <div className="text-[11px] text-zinc-400 font-medium leading-none">VRAM Usage</div>
@@ -87,7 +93,7 @@ export const SystemOverviewCards: React.FC<SystemOverviewCardsProps> = ({
                 style={{ width: `${Math.max(4, vramPercent)}%` }}
               />
             </div>
-            <span className="text-[9.5px] text-zinc-400 font-mono font-medium flex-shrink-0 leading-none">
+            <span className="text-[10.5px] text-zinc-300 font-mono font-medium flex-shrink-0 leading-none">
               {vramPercent}%
             </span>
           </div>
@@ -97,7 +103,10 @@ export const SystemOverviewCards: React.FC<SystemOverviewCardsProps> = ({
       {/* 3. Local Engine */}
       <div
         onClick={onOpenToolsModels}
-        className="bg-[#111422] border border-[#1e2538] hover:border-zinc-700/70 rounded-xl p-3 flex items-center gap-2.5 shadow-sm cursor-pointer transition-colors"
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpenToolsModels?.(); } }}
+        className="bg-[#111422] border border-[#1e2538] hover:border-zinc-700/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-indigo-400 rounded-xl p-3 flex items-center gap-2.5 shadow-sm cursor-pointer transition-colors text-left"
         title="Click to view engine status and diagnostics"
       >
         <div className="w-8 h-8 rounded-lg bg-[#0e2119] border border-[#133d2a] flex items-center justify-center flex-shrink-0">
@@ -128,11 +137,14 @@ export const SystemOverviewCards: React.FC<SystemOverviewCardsProps> = ({
       {/* 4. Jobs Today */}
       <div
         onClick={onFocusJobs}
-        className="bg-[#111422] border border-[#1e2538] hover:border-zinc-700/70 rounded-xl p-3 flex items-center gap-2.5 shadow-sm cursor-pointer transition-colors"
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onFocusJobs?.(); } }}
+        className="bg-[#111422] border border-[#1e2538] hover:border-zinc-700/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-indigo-400 rounded-xl p-3 flex items-center gap-2.5 shadow-sm cursor-pointer transition-colors text-left"
         title="Click to view full job queue history"
       >
         <div className="w-8 h-8 rounded-lg bg-[#131d33] border border-[#1b2b4d] flex items-center justify-center text-blue-400 flex-shrink-0">
-          <ListChecks className="w-4 h-4" />
+          <ListChecks className="w-4 h-4" aria-hidden="true" />
         </div>
         <div className="flex-1 min-w-0">
           <div className="text-[11px] text-zinc-400 font-medium leading-none">Jobs Today</div>

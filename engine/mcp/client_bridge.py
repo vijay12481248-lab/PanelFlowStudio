@@ -56,7 +56,7 @@ class EngineBridge:
             headers["X-PanelFlow-Control"] = "1"
         return headers
 
-    async def get(self, endpoint: str, timeout_s: float = 30.0) -> Any:
+    async def get(self, endpoint: str, timeout_s: float = 60.0) -> Any:
         url = f"{self.base_url}{endpoint}"
         async with aiohttp.ClientSession(headers=self.get_headers()) as session:
             async with session.get(url, timeout=aiohttp.ClientTimeout(total=timeout_s)) as resp:
@@ -65,7 +65,7 @@ class EngineBridge:
                     raise RuntimeError(f"Engine GET {endpoint} returned {resp.status}: {text}")
                 return await resp.json()
 
-    async def post(self, endpoint: str, json_data: dict[str, Any] | None = None, timeout_s: float = 60.0) -> Any:
+    async def post(self, endpoint: str, json_data: dict[str, Any] | None = None, timeout_s: float = 600.0) -> Any:
         url = f"{self.base_url}{endpoint}"
         async with aiohttp.ClientSession(headers=self.get_headers()) as session:
             async with session.post(url, json=json_data or {}, timeout=aiohttp.ClientTimeout(total=timeout_s)) as resp:

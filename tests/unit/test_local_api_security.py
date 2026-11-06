@@ -176,3 +176,23 @@ def test_resource_url_token_is_accepted_only_on_safe_resource_gets():
     assert response.headers["referrer-policy"] == "no-referrer"
 
     assert client.post(f"/api/test/file;pf-token={TOKEN}", headers={"Origin": APPROVED_ORIGIN}).status_code == 401
+
+
+def test_local_engine_and_iframe_origins_are_allowed():
+    from engine.api.app import create_app
+    app = create_app(engine_token=TOKEN, allow_insecure=False)
+    client = TestClient(app, base_url="http://127.0.0.1:8765")
+
+    for allowed_origin in [
+        "http://127.0.0.1:8765",
+        "http://localhost:8765",
+        "http://127.0.0.1:7860",
+        "http://localhost:7860",
+        "null",
+    ]:
+        resp = client.get(
+            "/api/system/health",
+            headers={"Origin": allowed_origin, "X-PanelFlow-Token": TOKEN},
+        )
+        assert resp.status_code == 200, f"Expected 200 for origin {allowed_origin}, got {resp.status_code}"
+
