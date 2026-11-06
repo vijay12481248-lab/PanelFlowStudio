@@ -105,7 +105,18 @@ class JobSupervisor:
 
     def start_task(self, job_id: str, coroutine):
         """Starts an asyncio task and stores a strong reference to prevent garbage collection."""
-        task = asyncio.create_task(coroutine)
+        try:
+            loop = asyncio.get_running_loop()
+            task = loop.create_task(coroutine)
+        except RuntimeError:
+            loop = getattr(self, "_loop", None)
+            if loop and loop.is_running():
+                future = asyncio.run_coroutine_threadsafe(coroutine, loop)
+                self._tasks[job_id] = future
+                return future
+            else:
+                task = asyncio.create_task(coroutine)
+
         self._tasks[job_id] = task
 
         def _on_done(t):
@@ -142,6 +153,10 @@ class JobSupervisor:
         return True
 
     def start_watchdog(self):
+        try:
+            self._loop = asyncio.get_running_loop()
+        except RuntimeError:
+            pass
         if self._watchdog_task is None or self._watchdog_task.done():
             self._watchdog_task = asyncio.create_task(self._watchdog_loop())
 
@@ -160,10 +175,16 @@ class JobSupervisor:
             return
 
         comfy_stat = await self.pipeline.check_comfy_status()
-        is_comfy_idle = not comfy_stat.get("queue", {}).get("busy", False) and comfy_stat.get("queue", {}).get("pending_count", 0) == 0
+        q = comfy_stat.get("queue", {})
+        # idle only when ComfyUI actually ANSWERED that its queue is empty: a slow or missing answer (a heavy render starves its web server) is "unknown", not idle
+        is_comfy_idle = bool(comfy_stat.get("connected")) and bool(q.get("reachable")) and not q.get("busy", False) and q.get("pending_count", 0) == 0
 
         changed = False
         now = time.time()
+        # how long ComfyUI has been CONTINUOUSLY idle: the gap between two shots (or after the last one, before the task has registered it) is a few
+        # seconds of idle that must never count as a hung job
+        self._idle_since = (getattr(self, "_idle_since", None) or now) if is_comfy_idle else None
+        idle_for = now - self._idle_since if self._idle_since else 0.0
 
         for jid, job in self.active_jobs.items():
             status = job.get("status")
@@ -183,7 +204,7 @@ class JobSupervisor:
                     changed = True
 
                 # If task is alive, but ComfyUI has been idle for > 45 seconds and step_progress hasn't moved
-                elif is_comfy_idle:
+                elif is_comfy_idle and idle_for > 45.0:
                     last_up = job.get("last_updated_at", job.get("created_at", now))
                     if now - last_up > 45.0:
                         # Recheck if media was completed in outputs/

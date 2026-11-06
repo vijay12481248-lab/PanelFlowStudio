@@ -135,24 +135,47 @@ def render_panel(img: Path, wav: Path, dur: float, fps: float, text: str, ws: Pa
         rr._run(head + rr.CPU_ENCODER + tail, ws)
 
 
+def clip_aspect(clip: Path) -> float:
+    """Width / height of a video file (ffprobe)."""
+    import subprocess
+
+    out = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "csv=p=0", str(clip)],
+                         capture_output=True, text=True, check=True).stdout.strip().split(",")
+    return int(out[0]) / max(int(out[1]), 1)
+
+
+def pingpong(clip: Path, ws: Path) -> Path:
+    """The clip played forward and then backward (cached beside it). A 5 s AI shot can then cover a longer narrated line with no visible
+    jump: the end of the cycle is the first frame again, which suits the small movements these shots have."""
+    pp = clip.with_suffix(".pingpong.mp4")
+    if not (pp.exists() and pp.stat().st_mtime >= clip.stat().st_mtime):
+        rr._run(["ffmpeg", "-y", "-v", "error", "-i", str(clip), "-an", "-filter_complex",
+                 "[0:v]split[a][b];[b]reverse[r];[a][r]concat=n=2:v=1:a=0[o]", "-map", "[o]",
+                 "-c:v", "libx264", "-crf", "12", "-preset", "fast", "-pix_fmt", "yuv420p", str(pp)], ws)
+    return pp
+
+
 def render_ai_panel(clip: Path, wav: Path, dur: float, fps: float, text: str, ws: Path, burn: bool, out: Path,
                     fade_in: float = 0.0, fade_out: float = 0.0, fx: str | None = None) -> None:
-    """Takes an AI-generated video clip, joins it with narration audio, burns subtitles, and conforms duration."""
+    """An AI-generated shot + the narration: the whole shot is shown (same fit as still pictures), its own sound is dropped, a shot shorter
+    than the line is stretched by a ping-pong, subtitles are burned, and the length is conformed to the narration."""
     n = round(dur * fps)
-    vf = [f"scale={rr.W}:{rr.H}:force_original_aspect_ratio=decrease", f"pad={rr.W}:{rr.H}:(ow-iw)/2:(oh-ih)/2", f"fps={fps}"]
+    vf = []
     if fade_in:
         vf.append(f"fade=t=in:st=0:d={fade_in}")
     if fade_out:
         vf.append(f"fade=t=out:st={dur - fade_out:.3f}:d={fade_out}")
     if burn and text.strip():
         (ws / "tmp_seg.srt").write_text(rr.srt_text(rr.caption_chunks(text, max(dur - END_PAUSE_SEC, 0.5))), encoding="utf-8")
-        vf.append("subtitles=tmp_seg.srt:force_style='FontName=Arial,FontSize=20,Bold=1,Outline=2,Shadow=1,MarginV=48'")
+        vf.append("subtitles=tmp_seg.srt:force_style='FontName=Arial,FontSize=20,Bold=1,Outline=1,Shadow=0,BackColour=&H80000000,BorderStyle=4,MarginV=36'")
     vf.extend(motion_fx_filters(fx))
     vf.append("format=yuv420p")
     af = "aresample=48000" + (f",afade=t=in:st=0:d={fade_in}" if fade_in else "") + (
         f",afade=t=out:st={dur - fade_out:.3f}:d={fade_out}" if fade_out else "")
-    head = ["ffmpeg", "-y", "-v", "error", "-stream_loop", "-1", "-i", str(clip), "-i", str(wav),
-            "-filter_complex", f"[0:v]{','.join(vf)}[v];[1:a]{af}[a]",
+    src = pingpong(clip, ws)
+    graph = fit_graph(clip_aspect(clip)).replace("[0:v]", "[c]", 1)  # the same whole-picture fit as stills, fed by the fps-conformed clip
+    head = ["ffmpeg", "-y", "-v", "error", "-stream_loop", "-1", "-i", str(src), "-i", str(wav),
+            "-filter_complex", f"[0:v]fps={fps}[c];{graph};[v0]{','.join(vf)}[v];[1:a]{af}[a]",
             "-map", "[v]", "-map", "[a]"]
     tail = ["-frames:v", str(n), "-t", f"{dur}", "-r", str(fps), "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2", str(out)]
     try:
@@ -194,11 +217,12 @@ def build_video(story: OriginalStory, ws: Path, tts=None, fps: float = 30.0, bur
             dur = wav_seconds(wav)
             last = i == len(panels) - 1
             clip = ws / "clips" / f"{p.id}.mp4"
-            rkey = _digest(vkey, hashlib.sha256(img.read_bytes()).hexdigest(), str(burn_captions), RENDER_LOOK,
-                           str(i == 0), str(last), str(clip.exists() and engine != "still"), str(fx))
+            use_clip = clip.exists() and engine != "still"
+            rkey = _digest(vkey, hashlib.sha256(img.read_bytes()).hexdigest(), str(burn_captions), RENDER_LOOK, str(i == 0), str(last),
+                           hashlib.sha256(clip.read_bytes()).hexdigest() if use_clip else "still", str(fx))  # a new clip invalidates its segment
             if not (seg.exists() and meta.get(p.id, {}).get("render") == rkey):
                 text_content = " ".join(x for x, _ in spoken_parts(p))
-                if clip.exists() and engine != "still":
+                if use_clip:
                     render_ai_panel(clip, wav, dur, fps, text_content, ws, burn_captions, seg,
                                     fade_in=0.6 if i == 0 else 0.0, fade_out=1.2 if last else 0.0, fx=fx)
                 else:

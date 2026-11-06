@@ -130,6 +130,10 @@ async def panelflow_chronoflow_ai_director_plan(
                 "enum": ["none", "2k_latent"],
                 "description": "Secondary upscale mode (e.g. '2k_latent' for crisp 2K video output)",
             },
+            "width": {"type": "integer", "description": "Frame width (default 1344). Use the aspect of your first frames: 768 x 768 for square pictures, so nothing is cropped."},
+            "height": {"type": "integer", "description": "Frame height (default 768)"},
+            "steps": {"type": "integer", "description": "Sampling steps (default 4 with the 4step turbo LoRA)"},
+            "lora_choice": {"type": "string", "enum": ["4step", "8step"], "description": "Turbo LoRA (default 4step: fastest)"},
         },
         "required": ["prompt"],
     },
@@ -145,8 +149,12 @@ async def panelflow_chronoflow_generate_video(
     scenes: list[dict[str, Any]] | None = None,
     face_refine: bool = False,
     upscale_mode: str = "none",
+    width: int | None = None,
+    height: int | None = None,
+    steps: int | None = None,
+    lora_choice: str | None = None,
 ) -> dict[str, Any]:
-    payload = {
+    payload: dict[str, Any] = {
         "prompt": prompt,
         "workflow_mode": workflow_mode,
         "total_duration": total_duration,
@@ -157,7 +165,23 @@ async def panelflow_chronoflow_generate_video(
         "face_refine": face_refine,
         "upscale_mode": upscale_mode,
     }
+    payload.update({k: v for k, v in (("width", width), ("height", height), ("steps", steps), ("lora_choice", lora_choice)) if v is not None})
     return await bridge.post("/api/chronoflow/generate", payload)
+
+
+@registry.tool(
+    name="panelflow_chronoflow_get_job",
+    description="Progress and results of a ChronoFlow video job started with panelflow_chronoflow_generate_video: status, current/total shot, "
+                "step progress, the finished shot files (chunks) and the stitched master video. Poll this; shots take minutes each.",
+    input_schema={
+        "type": "object",
+        "properties": {"job_id": {"type": "string", "description": "The job_id returned by panelflow_chronoflow_generate_video"}},
+        "required": ["job_id"],
+    },
+    domain="chronoflow",
+)
+async def panelflow_chronoflow_get_job(job_id: str) -> dict[str, Any]:
+    return await bridge.get(f"/api/chronoflow/job/{job_id}")
 
 
 @registry.tool(

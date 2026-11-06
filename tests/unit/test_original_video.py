@@ -102,6 +102,50 @@ def test_the_whole_picture_is_in_frame_and_nothing_moves(tmp_path, name, w, h):
     assert np.abs(first - last).mean() < 1.5, f"{name}: the picture moves/shakes between frames"  # encoder noise only
 
 
+def _clip_from_picture(tmp_path, name, w, h, seconds=2):
+    """A short 24 fps clip of a still picture (what an AI shot with almost no motion looks like), 24px red band on top, blue at the bottom."""
+    img = tmp_path / f"{name}.png"
+    _marked_picture(img, w, h)
+    clip = tmp_path / f"{name}.mp4"
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-loop", "1", "-framerate", "24", "-t", str(seconds), "-i", str(img), "-c:v", "libx264",
+                    "-pix_fmt", "yuv420p", str(clip)], check=True)
+    return clip
+
+
+def _panel_wav(tmp_path):
+    wav = tmp_path / "ai.wav"
+    nar, chars = v.voices_for(story())
+    return wav, v.voice_panel(FakeTts(), story().panels[0], nar, chars, 30.0, wav)
+
+
+@pytest.mark.parametrize("name,w,h", [("sq", 768, 768), ("wide", 1344, 768)])
+def test_ai_clip_is_shown_whole_with_the_exact_length(tmp_path, name, w, h):
+    clip = _clip_from_picture(tmp_path, name, w, h)
+    wav, d = _panel_wav(tmp_path)
+    out = tmp_path / f"{name}_seg.mp4"
+    v.render_ai_panel(clip, wav, d, 30.0, "", tmp_path, False, out)
+    n = subprocess.run(["ffprobe", "-v", "error", "-count_frames", "-select_streams", "v:0", "-show_entries", "stream=nb_read_frames,width,height",
+                        "-of", "csv=p=0", str(out)], capture_output=True, text=True).stdout.strip()
+    assert n.split(",") == ["1920", "1080", str(round(d * 30))]
+    f = _frame_at(out, 0.5, tmp_path / f"{name}.png")
+    assert f[6, 960][0] > 170 and f[6, 960][2] < 100, f"{name}: the top of the shot is cut off"
+    assert f[1073, 960][2] > 170 and f[1073, 960][0] < 100, f"{name}: the bottom of the shot is cut off"
+
+
+def test_a_short_ai_shot_covers_a_longer_line_by_ping_pong_without_a_jump(tmp_path):
+    clip = tmp_path / "moving.mp4"  # 2 s of moving test pattern at 24 fps, shorter than the 3 s the line needs
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "testsrc2=s=768x768:r=24:d=2", "-pix_fmt", "yuv420p", str(clip)], check=True)
+    wav, d = _panel_wav(tmp_path)
+    assert d >= 3.0
+    out = tmp_path / "pp.mp4"
+    v.render_ai_panel(clip, wav, d, 30.0, "", tmp_path, False, out)
+    diff = lambda a, b: np.abs(_frame_at(out, a, tmp_path / "a.png") - _frame_at(out, b, tmp_path / "b.png")).mean()
+    turn = diff(1.95, 2.05)   # across the turnaround at t = 2 s (the clip's end, played back from here)
+    normal = diff(0.95, 1.05)  # the same 0.1 s gap in the middle of the clip
+    assert turn < normal * 2 + 2, f"jump at the turnaround ({turn:.1f} vs {normal:.1f})"
+    assert (tmp_path / "moving.pingpong.mp4").exists()
+
+
 def test_no_shake_or_zoom_effect_exists_any_more():
     assert not hasattr(v, "MOTIONS") and not hasattr(v, "motion_filter")
     assert v.motion_fx_filters("action_shake") == []  # an unknown/removed effect adds nothing instead of wobbling the frame

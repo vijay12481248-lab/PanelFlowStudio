@@ -40,11 +40,12 @@ class ChronoFlowPipeline:
     async def check_comfy_status(self):
         try:
             async with aiohttp.ClientSession() as session:
-                queue_info = {"busy": False, "running_prompt_id": "", "running_prompt": "", "pending_count": 0}
+                queue_info = {"busy": False, "reachable": False, "running_prompt_id": "", "running_prompt": "", "pending_count": 0}  # reachable: the queue answer was really received
                 try:
-                    async with session.get(f"{self.comfy_url}/queue", timeout=aiohttp.ClientTimeout(total=2)) as q_resp:
+                    async with session.get(f"{self.comfy_url}/queue", timeout=aiohttp.ClientTimeout(total=10)) as q_resp:  # a busy ComfyUI answers slowly
                         if q_resp.status == 200:
                             q_data = await q_resp.json()
+                            queue_info["reachable"] = True
                             running = q_data.get("queue_running", [])
                             pending = q_data.get("queue_pending", [])
                             if running:
@@ -58,6 +59,7 @@ class ChronoFlowPipeline:
                                         break
                                 queue_info = {
                                     "busy": True,
+                                    "reachable": True,
                                     "running_prompt_id": p_id,
                                     "running_prompt": p_text,
                                     "pending_count": len(pending)
