@@ -471,5 +471,9 @@ Plan and research: the investigation report of 2026-11-06 (reuse the reviewer, n
 - **Real runs, live engine** (Qwen art + `qwen3.5:9b` review, 1344x768): a 10-requirement prompt was accepted on the first generation in 58 s; a 9-requirement
   prompt (mug in the right hand, umbrella in the left, crowned cat with a collar on a table, cactus on the sill) was first marked `needs_review` after
   3 redraws (176 s) although the picture matched: the contact audit read "the scene must take **place** in a kitchen" as holding an object called "place".
-  Fixed (idiom objects such as place/part/care are never held things); the same prompt and seed now accept in 55 s. **Not exercised on a real
-  engine yet: a redraw that fixes a real failure, and a repair inside the loop** (both only with scripted callables; the repair's graph itself was run in the spike).
+  Fixed (idiom objects such as place/part/care are never held things); the same prompt and seed now accept in 55 s.
+- **Real repair inside the loop** (seeded with a real picture whose cat has a blue collar, prompt asks for a red one; review, planner, Qwen repair and
+  re-review all real, 105 s): the reviewer marked the collar failed with a box, the planner chose `repair_local`, the collar became red, the re-review passed,
+  the repair was kept; 0 pixels changed outside the mask (3.4% of the picture). **Quality is not clean:** the redraw also changed the raised paw and
+  tongue inside the mask, and the gold tag came out small and faint, which the reviewer still accepted ("gold tag: correct"), so the 9B judge is lenient
+  on small details. Keep boxes tight and check repaired pictures by eye. Still untested on a real engine: a full redraw (regenerate) that fixes a real failure.
