@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import functools
+import inspect
 import hashlib
 import io
 import json
@@ -520,6 +521,10 @@ def _hash(pos: str, neg: str, ref: str = "", dims: tuple[int, int] | None = None
     return hashlib.sha256(f"{pos}\n{neg}\n{w}x{h}\n{ref}".encode()).hexdigest()[:16]
 
 
+# shortcut: tolerates a build_prompt without runner/engine (the older signature) until the prompt-compiler work is committed; delete this then.
+_BUILD_PROMPT_EXTRA = {"runner", "engine"} & set(inspect.signature(build_prompt).parameters)
+
+
 def _refine_directed_panel(*, story, p, ws, runner, provider, claims, chars, spec, style, engine, must, neg, dims, spec_shot, shown_n, refs,
                            iters, is_cancelled):
     """One directed panel through the generic refinement loop (engine/original/refine.py). Returns (best, attempt) in the shape generate_art stores.
@@ -528,7 +533,8 @@ def _refine_directed_panel(*, story, p, ws, runner, provider, claims, chars, spe
     state = {"pos": ""}
 
     def generate(attempt, plan):
-        pos_i, _ = build_prompt(story, p, plan.emphasis if plan else [], style, must, attempt, runner=runner, engine=engine)
+        extra = {k: v for k, v in (("runner", runner), ("engine", engine)) if k in _BUILD_PROMPT_EXTRA}
+        pos_i, _ = build_prompt(story, p, plan.emphasis if plan else [], style, must, attempt, **extra)
         w, h = pw, ph
         if attempt >= 2 and style == "natural":
             widened = {"close": "medium", "extreme_close": "medium", "medium": "wide"}.get(spec_shot, spec_shot)
