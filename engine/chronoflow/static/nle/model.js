@@ -3,6 +3,8 @@
 (function (root) {
   'use strict';
 
+  const TRANSITIONS = ['cut', 'dissolve', 'fadeblack'];
+  const DEFAULT_TRANS = 0.5;
   const MIN_FRAMES = 2;               // a clip never gets shorter than this many frames
   const SPEED_MIN = 0.25, SPEED_MAX = 4;
   const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
@@ -16,19 +18,37 @@
   const minDur = (tl) => MIN_FRAMES / tl.fps;
   const frame = (t, fps) => Math.round(t * fps) / fps;
 
-  function layout(tl) {
-    let t = 0;
-    return tl.clips.map((clip) => { const start = t; t += clipDur(clip); return { clip, start: r6(start), end: r6(t) }; });
+  /** Seconds the clip at index i overlaps the one before it (a transition eats half of each neighbour at most). */
+  function overlapAt(tl, i) {
+    const c = tl.clips[i];
+    if (!i || !c || !c.transition || c.transition === 'cut') return 0;
+    return r6(Math.min(c.transDur || DEFAULT_TRANS, clipDur(tl.clips[i - 1]) / 2, clipDur(c) / 2));
   }
-  const total = (tl) => r6(tl.clips.reduce((a, c) => a + clipDur(c), 0));
 
-  /** Clip under time t (the last clip owns its end frame). Returns {index, clip, start, end, srcTime} or null. */
+  /** Each clip starts where the previous one ends, minus its transition overlap. */
+  function layout(tl) {
+    let end = 0;
+    return tl.clips.map((clip, i) => {
+      const overlap = overlapAt(tl, i), start = i ? end - overlap : 0;
+      end = start + clipDur(clip);
+      return { clip, start: r6(start), end: r6(end), overlap };
+    });
+  }
+  const total = (tl) => { const L = layout(tl); return L.length ? L[L.length - 1].end : 0; };
+
+  /** Clip under time t (the incoming clip during a transition; the last clip owns its end frame).
+      Returns {index, clip, start, end, srcTime, blend} or null. blend = {from, fromSrc, progress, kind} while a transition is running. */
   function locate(tl, t) {
     const L = layout(tl);
-    for (let i = 0; i < L.length; i++) {
+    for (let i = L.length - 1; i >= 0; i--) {
       const last = i === L.length - 1;
       if (t >= L[i].start && (t < L[i].end || (last && t <= L[i].end))) {
-        return { index: i, clip: L[i].clip, start: L[i].start, end: L[i].end, srcTime: L[i].clip.in + (t - L[i].start) * L[i].clip.speed };
+        const c = L[i].clip, hit = { index: i, clip: c, start: L[i].start, end: L[i].end, srcTime: c.in + (t - L[i].start) * c.speed, blend: null };
+        if (L[i].overlap > 0 && t < L[i].start + L[i].overlap) {
+          const p = L[i - 1].clip;
+          hit.blend = { from: p, fromSrc: p.in + (t - L[i - 1].start) * p.speed, progress: (t - L[i].start) / L[i].overlap, kind: c.transition };
+        }
+        return hit;
       }
     }
     return null;
@@ -53,7 +73,7 @@
     const edge = minDur(tl);
     if (t - hit.start < edge || hit.end - t < edge) return null;
     const cut = r6(hit.srcTime);
-    const right = { ...hit.clip, id: newId(tl, 'c'), in: cut };
+    const right = { ...hit.clip, id: newId(tl, 'c'), in: cut, transition: 'cut' };   // two halves of one take join without a transition
     hit.clip.out = cut;
     tl.clips.splice(hit.index + 1, 0, right);
     return { left: hit.clip, right };
@@ -84,6 +104,13 @@
     return true;
   }
 
+  function setTransition(tl, id, kind, dur) {
+    const c = byId(tl, id);
+    if (!c || !TRANSITIONS.includes(kind)) return null;
+    c.transition = kind;
+    if (dur != null) c.transDur = clamp(+dur || DEFAULT_TRANS, 0.1, 3);
+    return c;
+  }
   const setSpeed = (tl, id, v) => { const c = byId(tl, id); if (c) c.speed = clamp(+v || 1, SPEED_MIN, SPEED_MAX); return c; };
   const setVolume = (tl, id, v) => { const c = byId(tl, id); if (c) c.volume = clamp(+v, 0, 2); return c; };
 
@@ -151,7 +178,7 @@
   /** Payload for POST /timeline/export (the server's EDL renderer). */
   function toEdl(tl) {
     return {
-      clips: tl.clips.map((c) => ({ filename: c.src, in_point: c.in, out_point: c.out, speed: c.speed, volume: c.volume })),
+      clips: tl.clips.map((c) => ({ filename: c.src, in_point: c.in, out_point: c.out, speed: c.speed, volume: c.volume, transition: c.transition || 'cut', trans_dur: c.transDur || DEFAULT_TRANS })),
       overlays: tl.overlays.map((o) => ({ filename: o.src, start: o.start, duration: o.dur })),
     };
   }
@@ -173,7 +200,7 @@
   }
 
   const api = {
-    SPEED_MIN, SPEED_MAX, create, clipDur, minDur, frame, layout, total, locate, addClip, byId, splitAt, trimEdge, moveClip,
+    SPEED_MIN, SPEED_MAX, TRANSITIONS, DEFAULT_TRANS, overlapAt, setTransition, create, clipDur, minDur, frame, layout, total, locate, addClip, byId, splitAt, trimEdge, moveClip,
     removeClip, setSpeed, setVolume, duplicateClip, snapPoints, snap, neighbour, addOverlay, updateOverlay, removeOverlay,
     addMarker, removeMarker, toTimecode, toEdl, createHistory,
   };

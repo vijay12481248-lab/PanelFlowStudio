@@ -108,7 +108,7 @@
     audio.master.gain.value = ui.muted ? 0 : 1;
     return audio;
   }
-  function applyGain(deckIdx, clip) { if (audio && clip) audio.nodes[deckIdx].gain.gain.value = clip.volume; }
+  function applyGain(deckIdx, clip, factor) { if (audio && clip) audio.nodes[deckIdx].gain.gain.value = clip.volume * (factor == null ? 1 : factor); }
   function meterTick() {
     const set = (id, an, buf) => {
       an.getFloatTimeDomainData(buf);
@@ -137,10 +137,23 @@
     await seekEl(d.el, srcTime);
   }
   function present(i) {
-    active = i;
+    active = i; styleBlend(null);
     decks.forEach((d, k) => { d.el.classList.toggle('on', k === i); if (k !== i) d.el.pause(); });
   }
   const standby = () => 1 - active;
+
+  /** Cross-fade the two decks while a transition runs. `inIdx` is the incoming deck; dissolve = incoming fades over the outgoing,
+      dip to black = outgoing fades out, then incoming fades in. Audio always cross-fades linearly (same as the export's acrossfade). */
+  let blendOn = false;
+  function styleBlend(blend, inIdx, inClip) {
+    blendOn = !!blend;
+    if (!blend) { decks.forEach((d) => { d.el.style.opacity = ''; d.el.style.zIndex = ''; }); return; }
+    const p = clamp(blend.progress, 0, 1), dip = blend.kind === 'fadeblack', out = decks[1 - inIdx].el, inn = decks[inIdx].el;
+    out.style.zIndex = 1; inn.style.zIndex = 2;
+    out.style.opacity = dip ? Math.max(0, 1 - 2 * p) : 1;
+    inn.style.opacity = dip ? Math.max(0, 2 * p - 1) : p;
+    applyGain(1 - inIdx, blend.from, 1 - p); applyGain(inIdx, inClip, p);
+  }
 
   /** Put the picture for timeline time t on screen (paused or while the clock is running). */
   async function show(t) {
@@ -148,6 +161,13 @@
     const hit = M.locate(tl, t);
     updateOverlayImg(t);
     if (!hit) { return; }
+    if (hit.blend) {                                   // inside a transition: both clips are on screen
+      const inIdx = decks[active].clipId === hit.clip.id ? active : standby();
+      await Promise.all([loadDeck(decks[inIdx], hit.clip, hit.srcTime), loadDeck(decks[1 - inIdx], hit.blend.from, hit.blend.fromSrc)]);
+      if (tok !== seekTok) return;
+      active = inIdx; styleBlend(hit.blend, inIdx, hit.clip);
+      return;
+    }
     const d = decks[active];
     if (d.clipId === hit.clip.id && d.url === mediaUrl(clipItem(hit.clip))) { await seekEl(d.el, hit.srcTime); }
     else {
@@ -156,6 +176,7 @@
       if (tok !== seekTok) return;
       present(sb);
     }
+    if (blendOn) { styleBlend(null); decks[standby()].el.pause(); }
     applyGain(active, hit.clip);
   }
 
@@ -186,7 +207,11 @@
     ui.rate = rate || 1; ui.playing = true;
     clockT0 = performance.now(); clockBase = ui.t;
     const hit = M.locate(tl, ui.t);
-    show(ui.t).then(() => { if (!ui.playing) return; const v = decks[active].el; v.playbackRate = clamp(hit.clip.speed * Math.max(ui.rate, 0.0625), 0.0625, 16); if (ui.rate > 0) v.play().catch(() => {}); });
+    show(ui.t).then(() => {
+      if (!ui.playing) return;
+      const v = decks[active].el; v.playbackRate = clamp(hit.clip.speed * Math.max(ui.rate, 0.0625), 0.0625, 16); if (ui.rate > 0) v.play().catch(() => {});
+      if (hit.blend && ui.rate > 0) { const o = decks[standby()].el; o.playbackRate = clamp(hit.blend.from.speed * ui.rate, 0.0625, 16); o.play().catch(() => {}); }
+    });
     cancelAnimationFrame(raf); raf = requestAnimationFrame(tick);
     root.playBtn.textContent = '⏸'; root.playBtn.classList.add('on');
   }
@@ -216,25 +241,40 @@
     if (hit) {
       const d = decks[active];
       if (ui.rate < 0) { if (now - lastBoundaryCheck > 90) { lastBoundaryCheck = now; show(t); } }
-      else if (d.clipId !== hit.clip.id) { switchTo(hit, t); }
+      else if (d.clipId !== hit.clip.id) { if (!switching) switchTo(hit, t); }
       else {
         if (d.el.paused && ui.rate > 0) d.el.play().catch(() => {});
         if (Math.abs(d.el.currentTime - hit.srcTime) > 0.3) d.el.currentTime = hit.srcTime;     // drift correction
-        const nxt = tl.clips[hit.index + 1];
-        if (nxt && hit.end - t < 1.5 && decks[standby()].clipId !== nxt.id) loadDeck(decks[standby()], nxt, nxt.in);   // preload next clip
+        if (hit.blend) {
+          const o = decks[standby()];                  // the outgoing clip keeps playing until the transition ends
+          if (o.clipId === hit.blend.from.id) {
+            if (o.el.paused && ui.rate > 0) o.el.play().catch(() => {});
+            if (Math.abs(o.el.currentTime - hit.blend.fromSrc) > 0.3) o.el.currentTime = hit.blend.fromSrc;
+          }
+          styleBlend(hit.blend, active, hit.clip);
+        } else {
+          if (blendOn) { styleBlend(null); decks[standby()].el.pause(); }
+          const nxt = tl.clips[hit.index + 1];
+          if (nxt && hit.end - t < 2.5 && decks[standby()].clipId !== nxt.id) loadDeck(decks[standby()], nxt, nxt.in);   // preload next clip
+        }
       }
       updateOverlayImg(t);
     }
     paintTime(); meterTick();
     raf = requestAnimationFrame(tick);
   }
+  let switching = false;
   async function switchTo(hit, t) {
-    const sb = standby(), d = decks[sb];
-    if (d.clipId !== hit.clip.id) await loadDeck(d, hit.clip, hit.srcTime);
-    else if (Math.abs(d.el.currentTime - hit.srcTime) > 0.1) d.el.currentTime = hit.srcTime;
-    d.el.playbackRate = clamp(hit.clip.speed * Math.max(ui.rate, 0.0625), 0.0625, 16);
-    present(sb); applyGain(sb, hit.clip);
-    if (ui.playing) d.el.play().catch(() => {});
+    switching = true;
+    try {
+      const sb = standby(), d = decks[sb];
+      if (d.clipId !== hit.clip.id) await loadDeck(d, hit.clip, hit.srcTime);
+      else if (Math.abs(d.el.currentTime - hit.srcTime) > 0.1) d.el.currentTime = hit.srcTime;
+      d.el.playbackRate = clamp(hit.clip.speed * Math.max(ui.rate, 0.0625), 0.0625, 16);
+      if (hit.blend) { active = sb; styleBlend(hit.blend, sb, hit.clip); }       // keep the outgoing deck playing under the fade
+      else { present(sb); applyGain(sb, hit.clip); }
+      if (ui.playing) d.el.play().catch(() => {});
+    } finally { switching = false; }
   }
 
   // ---------- painting ----------
@@ -337,11 +377,11 @@
     // ----- V1
     const lane = root.v1;
     const seen = new Set();
-    M.layout(tl).forEach(({ clip, start, end }, i) => {
+    M.layout(tl).forEach(({ clip, start, end, overlap }, i) => {
       seen.add(clip.id);
       let d = lane.querySelector(`[data-id="${clip.id}"]`);
       if (!d) {
-        d = el('div', 'nle-clip', '<div class="nle-film"></div><div class="lbl"></div><div class="spd"></div><div class="nle-handle l" data-edge="in"></div><div class="nle-handle r" data-edge="out"></div>');
+        d = el('div', 'nle-clip', '<div class="nle-film"></div><div class="lbl"></div><div class="spd"></div><div class="nle-trans"></div><div class="nle-handle l" data-edge="in"></div><div class="nle-handle r" data-edge="out"></div>');
         d.dataset.id = clip.id; lane.appendChild(d);
       }
       d.dataset.src = clip.src;
@@ -349,6 +389,11 @@
       Object.assign(d.style, { left: `${tToX(start)}px`, width: `${Math.max(4, tToX(end - start))}px` });
       d.querySelector('.lbl').textContent = `${clip.label} · ${(end - start).toFixed(2)}s`;
       d.querySelector('.spd').textContent = clip.speed !== 1 ? `${clip.speed}×` : '';
+      const tb = d.querySelector('.nle-trans');
+      tb.style.display = overlap > 0 ? 'block' : 'none';
+      tb.style.width = `${tToX(overlap)}px`;
+      tb.className = `nle-trans ${clip.transition === 'fadeblack' ? 'dip' : ''}`;
+      tb.title = overlap > 0 ? `${clip.transition === 'fadeblack' ? 'Dip to black' : 'Cross dissolve'} ${overlap.toFixed(2)}s` : '';
       applyFilm(d.firstChild, clip); ensureFilm(clip);
     });
     lane.querySelectorAll('.nle-clip').forEach((n) => { if (!seen.has(n.dataset.id)) n.remove(); });
@@ -376,9 +421,15 @@
     i.innerHTML = `<span>Inspector: <b>${c.label}</b> · ${dur.toFixed(2)}s · src ${M.toTimecode(c.in, fps()).slice(3)}–${M.toTimecode(c.out, fps()).slice(3)}</span>
       <label>Speed <input type="number" id="inspSpeed" min="0.25" max="4" step="0.05" value="${c.speed}">×</label>
       <label>Volume <input type="range" id="inspVol" min="0" max="2" step="0.05" value="${c.volume}"> <span id="inspVolL">${Math.round(c.volume * 100)}%</span></label>
+      <label title="How this clip joins the previous one. A transition overlaps both clips, so the timeline gets shorter by its length.">Transition in
+        <select id="inspTrans" ${tl.clips[0] === c ? 'disabled' : ''}><option value="cut">Cut</option><option value="dissolve">Cross dissolve</option><option value="fadeblack">Dip to black</option></select>
+        <input type="number" id="inspTD" min="0.1" max="3" step="0.1" value="${c.transDur || M.DEFAULT_TRANS}" ${c.transition && c.transition !== 'cut' ? '' : 'disabled'}> s</label>
       <span class="grow" style="flex:1"></span>
       <button class="nle-btn" id="inspRegen">🔄 Regenerate shot</button>`;
     $('#inspSpeed', i).onchange = (e) => edit(() => M.setSpeed(tl, c.id, e.target.value));
+    $('#inspTrans', i).value = c.transition || 'cut';
+    $('#inspTrans', i).onchange = (e) => edit(() => M.setTransition(tl, c.id, e.target.value, c.transDur));
+    $('#inspTD', i).onchange = (e) => edit(() => M.setTransition(tl, c.id, c.transition, e.target.value));
     const vol = $('#inspVol', i);
     vol.oninput = () => { c.volume = +vol.value; $('#inspVolL', i).textContent = `${Math.round(c.volume * 100)}%`; applyGain(active, c); };
     vol.onchange = () => { persist(); renderAudio(); };
@@ -488,6 +539,11 @@
     if (c) { if (tl.clips.length <= 1) return status('At least one clip must remain on V1.'); edit(() => { M.removeClip(tl, c.id); ui.sel = null; }); }
     else if (o) edit(() => { M.removeOverlay(tl, o.id); ui.sel = null; });
   }
+  function toggleDissolve() {
+    const c = selClip();
+    if (!c || tl.clips[0] === c) return status('Select a clip after the first one to add a dissolve at its start.');
+    edit(() => M.setTransition(tl, c.id, c.transition === 'dissolve' ? 'cut' : 'dissolve', c.transDur || M.DEFAULT_TRANS));
+  }
   const duplicateSel = () => { const c = selClip(); if (c) edit(() => { ui.sel = { type: 'clip', id: M.duplicateClip(tl, c.id).id }; }); };
   const setTool = (t) => { ui.tool = t; renderAll(); };
   function markIn() { edit(() => { tl.inPoint = M.frame(ui.t, fps()); if (tl.outPoint != null && tl.outPoint <= tl.inPoint) tl.outPoint = null; }); syncLoopRange(); }
@@ -532,12 +588,12 @@
       ArrowUp: () => seek(M.neighbour(tl, ui.t, -1)), ArrowDown: () => seek(M.neighbour(tl, ui.t, 1)),
       Home: () => seek(0), End: () => seek(total()), i: markIn, o: markOut, m: addMarker, v: () => setTool('select'), b: () => (ctrl ? splitAtPlayhead() : setTool('blade')),
       s: splitAtPlayhead, n: () => { ui.snap = !ui.snap; renderAll(); }, Delete: deleteSelection, Backspace: deleteSelection,
-      d: () => ctrl && duplicateSel(), z: () => (ctrl ? (e.shiftKey ? redo() : undo()) : e.shiftKey && zoomFit()), y: () => ctrl && redo(),
+      d: () => ctrl && duplicateSel(), t: () => ctrl && toggleDissolve(), z: () => (ctrl ? (e.shiftKey ? redo() : undo()) : e.shiftKey && zoomFit()), y: () => ctrl && redo(),
       '=': () => setZoom(ui.pps * 1.4), '+': () => setZoom(ui.pps * 1.4), '-': () => setZoom(ui.pps / 1.4), x: () => e.altKey && clearRange(),
     };
     const fn = map[k.length === 1 ? k.toLowerCase() : k];
     if (!fn) return;
-    if (/^[dy]$/i.test(k) && !ctrl) return;                      // D / Y only act with Ctrl
+    if (/^[dyt]$/i.test(k) && !ctrl) return;                     // D / Y / T only act with Ctrl
     e.preventDefault(); fn();
   }
 
@@ -581,6 +637,7 @@
         <button class="nle-btn" data-t="blade" title="Blade (B) · split at playhead: S or Ctrl+B">✂ Blade</button>
         <button class="nle-btn" data-t="split" title="Split at playhead (S)">⎍ Split</button>
         <button class="nle-btn" data-t="dup" title="Duplicate (Ctrl+D)">⧉ Duplicate</button>
+        <button class="nle-btn" data-t="dissolve" title="Add / remove a cross dissolve at the start of the selected clip (Ctrl+T)">⧖ Dissolve</button>
         <button class="nle-btn" data-t="del" title="Ripple delete (Del)">🗑 Delete</button>
         <span class="nle-sep"></span>
         <button class="nle-btn" data-t="undo" title="Undo (Ctrl+Z)">↶</button><button class="nle-btn" data-t="redo" title="Redo (Ctrl+Shift+Z)">↷</button>
@@ -631,7 +688,7 @@
       loop: () => { ui.loop = !ui.loop; renderAll(); },
       mute: (b) => { ui.muted = !ui.muted; if (audio) audio.master.gain.value = ui.muted ? 0 : 1; b.textContent = ui.muted ? '🔇' : '🔊'; $('[data-t=amute]', tlMount).classList.toggle('on', ui.muted); } };
     body.addEventListener('click', (e) => { const b = e.target.closest('[data-a]'); if (b && act[b.dataset.a]) act[b.dataset.a](b); });
-    const tools = { select: () => setTool('select'), blade: () => setTool('blade'), split: splitAtPlayhead, dup: duplicateSel, del: deleteSelection, undo, redo, in: markIn, out: markOut, clr: clearRange, mk: addMarker,
+    const tools = { select: () => setTool('select'), blade: () => setTool('blade'), split: splitAtPlayhead, dup: duplicateSel, dissolve: toggleDissolve, del: deleteSelection, undo, redo, in: markIn, out: markOut, clr: clearRange, mk: addMarker,
       snap: () => { ui.snap = !ui.snap; renderAll(); }, zin: () => setZoom(ui.pps * 1.4), zout: () => setZoom(ui.pps / 1.4), fit: () => zoomFit(), frames: () => setZoom(fps() * 40),
       export: exportCut, amute: () => act.mute($('[data-a=mute]', body)) };
     tlMount.addEventListener('click', (e) => { const b = e.target.closest('[data-t]'); if (b && tools[b.dataset.t]) tools[b.dataset.t](); });

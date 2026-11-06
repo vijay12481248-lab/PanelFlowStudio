@@ -62,3 +62,52 @@ def test_mux_source_audio_carries_original_narration_onto_a_silent_variant(tmp_p
     assert "audio" in streams and "video" in streams
     _, _, dur = pl.ChronoFlowPipeline._probe_size_and_duration(var)
     assert dur == pytest.approx(1.5, abs=0.15)                                             # video length is preserved
+
+
+def _dur(path):
+    return pl.ChronoFlowPipeline._probe_size_and_duration(path)[2]
+
+
+@pytest.fixture()
+def trio(tmp_path, monkeypatch):
+    out = tmp_path / "out"
+    out.mkdir()
+    monkeypatch.setattr(pl, "STUDIO_OUTPUT_DIR", out)
+    monkeypatch.setattr(pl, "COMFY_INPUT_DIR", tmp_path / "in")
+    monkeypatch.setattr(pl, "COMFY_OUTPUT_DIR", tmp_path / "none")
+    for name, color in (("a", "blue"), ("b", "red"), ("c", "blue")):
+        _clip(out / f"{name}.mp4", color)
+    return out, tmp_path
+
+
+def _edl(*spec):
+    return [{"filename": f"{n}.mp4", "in_point": 0, "out_point": 2, "transition": t, "trans_dur": 0.5} for n, t in spec]
+
+
+def test_dissolve_overlaps_clips_and_blends_the_middle(trio):
+    out, tmp = trio
+    master = out / "m.mp4"
+    assert pl.ChronoFlowPipeline().render_timeline_edl(_edl(("a", "cut"), ("b", "dissolve")), master)
+    assert _dur(master) == pytest.approx(3.5, abs=0.1)            # 2 + 2 - 0.5 overlap, exactly what the timeline shows
+    _, early = _pixel_at(master, 0.8, tmp)
+    _, mid = _pixel_at(master, 1.75, tmp)
+    _, late = _pixel_at(master, 3.0, tmp)
+    assert early[2] > 150 and early[0] < 60                       # still blue
+    assert mid[0] > 60 and mid[2] > 60                            # both colours present: a real crossfade
+    assert late[0] > 150 and late[2] < 60                         # red
+
+
+def test_dip_to_black_goes_dark_mid_transition_and_a_cut_after_it_stays_exact(trio):
+    out, tmp = trio
+    master = out / "m.mp4"
+    assert pl.ChronoFlowPipeline().render_timeline_edl(_edl(("a", "cut"), ("b", "fadeblack"), ("c", "cut")), master)
+    assert _dur(master) == pytest.approx(5.5, abs=0.1)            # 6 s of clips minus one 0.5 s overlap; the cut adds no loss
+    _, mid = _pixel_at(master, 1.75, tmp)
+    assert max(mid) < 40                                          # black at the midpoint (the editor previews a symmetric dip)
+    _, quarter = _pixel_at(master, 1.625, tmp)
+    _, three_q = _pixel_at(master, 1.875, tmp)
+    assert max(quarter) > max(mid) and max(three_q) > max(mid)    # brighter on both sides of the dip, not just one
+    _, last = _pixel_at(master, 4.5, tmp)
+    assert last[2] > 150 and last[0] < 60                         # clip c after the hard cut
+    streams = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "stream=codec_type", "-of", "csv=p=0", str(master)], capture_output=True, text=True).stdout
+    assert "audio" in streams

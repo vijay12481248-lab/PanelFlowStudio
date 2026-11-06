@@ -624,6 +624,57 @@ class ChronoFlowPipeline:
         except (ValueError, TypeError):
             return 0, 0, 0.0
 
+    @staticmethod
+    def _has_audio(path):
+        out = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "a:0", "-show_entries", "stream=codec_type", "-of", "csv=p=0", str(path)],
+                             capture_output=True, text=True)
+        return "audio" in out.stdout
+
+    def stitch_with_transitions(self, paths, transitions, output_path):
+        """Join clips like an NLE: transitions[i] = (kind, seconds) overlaps clip i-1 -> i (xfade + acrossfade), None is a hard cut.
+
+        Runs of transition-joined clips become one filter chain; hard cuts between runs use concat, so a cut is exact (xfade with
+        duration 0 truncates the video). The result is shorter than the sum of the clips by the total overlap, as on the timeline."""
+        n = len(paths)
+        durs = [self._probe_size_and_duration(p)[2] for p in paths]
+        inputs = [x for p in paths for x in ("-i", str(p))]
+        graph, silent = [], n
+        for i, p in enumerate(paths):
+            graph.append(f"[{i}:v]fps=24,format=yuv420p,setsar=1[sv{i}]")
+            if self._has_audio(p):
+                graph.append(f"[{i}:a]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo[sa{i}]")
+            else:   # a clip without a track still needs one, or acrossfade/concat cannot line up
+                inputs += ["-f", "lavfi", "-t", f"{durs[i]:.3f}", "-i", "anullsrc=r=48000:cl=stereo"]
+                graph.append(f"[{silent}:a]aformat=sample_fmts=fltp:channel_layouts=stereo[sa{i}]")
+                silent += 1
+        groups, cur_v, cur_a, cur_len = [], "[sv0]", "[sa0]", durs[0]
+        for i in range(1, n):
+            spec = transitions[i] if i < len(transitions) else None
+            if spec:
+                kind, d = spec[0], max(0.04, min(float(spec[1]), cur_len / 2, durs[i] / 2))
+                # ffmpeg's built-in fadeblack is lopsided (black at ~20%); the editor previews a symmetric dip: black exactly at the midpoint
+                dip = ("custom:expr='st(0,if(lt(P,0.5),1-2*P,2*P-1));st(1,if(eq(PLANE,0),16,128));"
+                       "ld(1)+(if(lt(P,0.5),A,B)-ld(1))*ld(0)'")
+                name = dip if kind == "fadeblack" else "fade"
+                graph.append(f"{cur_v}[sv{i}]xfade=transition={name}:duration={d:.3f}:offset={cur_len - d:.3f}[xv{i}]")
+                graph.append(f"{cur_a}[sa{i}]acrossfade=d={d:.3f}[xa{i}]")
+                cur_v, cur_a, cur_len = f"[xv{i}]", f"[xa{i}]", cur_len + durs[i] - d
+            else:
+                groups.append((cur_v, cur_a))
+                cur_v, cur_a, cur_len = f"[sv{i}]", f"[sa{i}]", durs[i]
+        groups.append((cur_v, cur_a))
+        if len(groups) == 1:
+            out_v, out_a = groups[0]
+        else:
+            graph.append("".join(v + a for v, a in groups) + f"concat=n={len(groups)}:v=1:a=1[outv][outa]")
+            out_v, out_a = "[outv]", "[outa]"
+        cmd = ["ffmpeg", "-y", *inputs, "-filter_complex", ";".join(graph), "-map", out_v, "-map", out_a,
+               "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-c:a", "aac", "-b:a", "192k", str(output_path)]
+        res = subprocess.run(cmd, capture_output=True, text=True)
+        if res.returncode != 0 or not Path(output_path).exists():
+            raise RuntimeError(f"transition render failed: {res.stderr[-400:]}")
+        return output_path
+
     def _apply_overlays(self, master_path, overlays, width, height):
         """Burn still overlays (the editor's V2 'edited frame' clips) onto the stitched master, in place."""
         _, _, dur = self._probe_size_and_duration(master_path)
@@ -660,6 +711,7 @@ class ChronoFlowPipeline:
         temp_dir.mkdir(parents=True, exist_ok=True)
 
         processed_chunks = []
+        transitions = []   # parallel to processed_chunks: (kind, seconds) into that clip, or None
         out_w, out_h = 1344, 768
         for clip in clips:   # output size follows the first readable clip (the old fixed 1344x768 letterboxed square clips)
             first = clip.get("filename") or Path(clip.get("url", "")).name
@@ -717,8 +769,10 @@ class ChronoFlowPipeline:
                 ])
 
                 res = subprocess.run(cmd, capture_output=True, text=True)
+                join = (clip.get("transition"), float(clip.get("trans_dur") or 0.5)) if clip.get("transition") in ("dissolve", "fadeblack") else None
                 if res.returncode == 0 and out_chunk.exists():
                     processed_chunks.append(out_chunk)
+                    transitions.append(join)
                 else:
                     # Fallback copy if audio filter fails (e.g. no audio stream)
                     cmd_no_a = [
@@ -733,11 +787,15 @@ class ChronoFlowPipeline:
                     res_alt = subprocess.run(cmd_no_a, capture_output=True, text=True)
                     if res_alt.returncode == 0 and out_chunk.exists():
                         processed_chunks.append(out_chunk)
+                        transitions.append(join)
 
             if not processed_chunks:
                 return None
 
-            stitched = self.stitch_chunks(processed_chunks, output_master_path)
+            if any(transitions[1:]):
+                stitched = self.stitch_with_transitions(processed_chunks, transitions, output_master_path)
+            else:
+                stitched = self.stitch_chunks(processed_chunks, output_master_path)
             if stitched and overlays:
                 self._apply_overlays(output_master_path, overlays, out_w, out_h)
             return stitched

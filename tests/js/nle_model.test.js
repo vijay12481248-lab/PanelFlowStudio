@@ -111,3 +111,48 @@ test('history undoes and redoes in place', () => {
   assert.equal(h.canUndo, false);
   assert.equal(h.undo(), false);
 });
+
+test('a dissolve overlaps the neighbours: later clips move earlier and the total shrinks by the overlap', () => {
+  const tl = three();                                   // 3 x 4 s
+  M.setTransition(tl, tl.clips[1].id, 'dissolve', 1);
+  assert.deepEqual(M.layout(tl).map((l) => [l.start, l.end]), [[0, 4], [3, 7], [7, 11]]);
+  near(M.total(tl), 11);
+  M.setTransition(tl, tl.clips[2].id, 'fadeblack', 0.5);
+  assert.deepEqual(M.layout(tl).map((l) => [l.start, l.end]), [[0, 4], [3, 7], [6.5, 10.5]]);
+});
+
+test('transition length is clamped to half of each neighbour; the first clip never has one; cut restores the join', () => {
+  const tl = three();
+  M.setTransition(tl, tl.clips[1].id, 'dissolve', 99);          // setTransition clamps to 3 s, the layout to half the clip (2 s)
+  near(M.layout(tl)[1].overlap, 2);
+  M.setTransition(tl, tl.clips[0].id, 'dissolve', 1);
+  assert.equal(M.layout(tl)[0].overlap, 0);
+  M.setTransition(tl, tl.clips[1].id, 'cut');
+  near(M.total(tl), 12);
+  assert.equal(M.setTransition(tl, tl.clips[1].id, 'wipe'), null);   // unknown kinds are refused
+});
+
+test('locate reports the blend (outgoing clip, its source time, progress) only inside the overlap', () => {
+  const tl = three();
+  M.setTransition(tl, tl.clips[1].id, 'dissolve', 1);            // clip b runs 3..7, overlap 3..4
+  let hit = M.locate(tl, 3.25);
+  assert.equal(hit.index, 1);
+  assert.equal(hit.blend.from.id, tl.clips[0].id);
+  near(hit.blend.progress, 0.25); near(hit.blend.fromSrc, 3.25); near(hit.srcTime, 0.25);
+  assert.equal(hit.blend.kind, 'dissolve');
+  assert.equal(M.locate(tl, 2.9).blend, null);
+  assert.equal(M.locate(tl, 4.5).blend, null);
+  assert.equal(M.locate(tl, 4.5).index, 1);
+});
+
+test('splitting a clip leaves a plain cut between its halves, and the EDL carries the transition', () => {
+  const tl = three();
+  M.setTransition(tl, tl.clips[1].id, 'dissolve', 1);
+  const { left, right } = M.splitAt(tl, 5.5);
+  assert.equal(left.transition, 'dissolve');
+  assert.equal(right.transition, 'cut');
+  const edl = M.toEdl(tl);
+  assert.equal(edl.clips[1].transition, 'dissolve');
+  assert.equal(edl.clips[1].trans_dur, 1);
+  assert.equal(edl.clips[2].transition, 'cut');
+});
