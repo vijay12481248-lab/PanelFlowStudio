@@ -66,7 +66,10 @@ def film_spec(story: OriginalStory, panel: Panel) -> ShotSpec:
                              action=panel.action if k == 0 else ""))
     scene = next((s for s in story.scenes if s.id == panel.scene_id), None)
     loc = next((x for x in story.bible.locations if x.id == panel.location_id), None)
-    return ShotSpec(shot=panel.shot, camera=panel.angle, setting=loc.name if loc else "", lighting="", mood=scene.mood if scene else "",
+    where = loc.name if loc else ""
+    if not cast:  # a shot with nobody in it (landscape, object): the description is the scene
+        where = f"{where}. {panel.action}" if where else panel.action
+    return ShotSpec(shot=panel.shot, camera=panel.angle, setting=where, lighting="", mood=scene.mood if scene else "",
                     key_visuals=panel.key_visuals, characters=cast)
 
 
@@ -151,13 +154,27 @@ def voice_shot(story: OriginalStory, ws: Path, panel: Panel, tts=None, voices=No
     return out, frames / FPS
 
 
+def silent_shot(ws: Path, panel: Panel) -> tuple[Path, float]:
+    """A silent wav on the H3 frame grid for a shot that must carry no voice at all."""
+    seconds = snap_frames(HOLD.get(panel.shot, 3.75)) / FPS
+    out = film_dir(ws) / "voice" / f"{panel.id}.silent.wav"
+    rt.write_wav_atomic(out, np.zeros(int(round(seconds * rt.SR)), dtype=np.float32))
+    return out, seconds
+
+
 # ------------------------------------------------------------------ motion prompt and clips
 def motion_prompt(story: OriginalStory, panel: Panel) -> str:
     """H3 text for one shot: only the motion (the picture already carries how everyone looks, and re-describing it makes faces melt)."""
     names = {c.id: c.name for c in story.bible.characters}
     cam = CAMERA.get(panel.shot, CAMERA["medium"])
-    parts = [f"{panel.motion.rstrip('.')}.", f"The camera does {cam}.",
+    motion = panel.motion.rstrip(".")
+    vehicle = "flying machine" in panel.motion + panel.action
+    if vehicle:  # H3 reads "flying machine" as a real aircraft and swaps in jets or propeller planes: name what it is
+        motion = motion.replace("flying machines", "cloth-winged gliders").replace("flying machine", "cloth-winged glider")
+    parts = [f"{motion}.", f"The camera does {cam}.",
              "Single continuous take, anime film animation, smooth natural motion, consistent character appearance in every frame."]
+    if vehicle:
+        parts.append("The vehicles are hand-built wooden gliders with big patched canvas wings in a fantasy anime world: no jets, no airplanes, no propellers, no modern aircraft.")
     if panel.dialogue:
         ln = panel.dialogue[0]
         parts.insert(1, f"{names.get(ln.speaker_id, ln.speaker_id)}'s lips move in exact sync with the words, with natural blinks, expressive eyebrows and small head movements. "
@@ -206,9 +223,10 @@ MIN_MOTION = 0.9  # mean frame-to-frame difference below this reads as a still p
 
 def make_clips(story: OriginalStory, ws: Path, ids: list[str] | None = None, seeds: dict[str, int] | None = None, client: ComfyUIClient | None = None,
                timeout: float = 1500.0, progress: Callable[[float, str], None] = lambda p, m: None, is_cancelled: Callable[[], bool] = lambda: False,
-               free_llm_memory: bool = True) -> dict:
+               free_llm_memory: bool = True, quiet: list[str] | None = None) -> dict:
     """`film/clips/<shot>.mp4` (video + its own audio) for each shot with a frame. A clip newer than its frame, voice and prompt is reused; a clip
-    that fails or comes out still is reported and the others continue."""
+    that fails or comes out still is reported and the others continue. `quiet` = shots whose sound is anchored to silence: H3 sometimes invents speech
+    (an unscripted voice) in a silent shot; a retry with a new seed usually fixes it, silence always does (at the cost of its sound effects)."""
     from engine.comfyui.service import _history_videos
 
     fd = film_dir(ws)
@@ -232,6 +250,8 @@ def make_clips(story: OriginalStory, ws: Path, ids: list[str] | None = None, see
             raise RuntimeError("cancelled")
         frame, out = fd / "frames" / f"{p.id}.png", fd / "clips" / f"{p.id}.mp4"
         spoken = voice_shot(story, ws, p, tts, voices)
+        if spoken is None and p.id in (quiet or []):
+            spoken = silent_shot(ws, p)
         seconds = spoken[1] if spoken else snap_frames(HOLD.get(p.shot, 3.75)) / FPS
         prompt = motion_prompt(story, p)
         seed = (seeds or {}).get(p.id, int(hashlib.sha256(f"{story.bible.premise.title}|{p.id}|clip".encode()).hexdigest()[:12], 16))

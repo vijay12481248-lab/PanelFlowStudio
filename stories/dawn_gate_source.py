@@ -19,7 +19,7 @@ CHARS = [
               look="teenage girl, short messy copper-red hair, big amber eyes, green scarf, brown leather jacket, brass compass pendant on a chain, flight goggles pushed up on her forehead",
               personality="reckless, warm, fiercely loyal"),
     Character(id="pip", name="Pip", role="companion", age_group="child", species="sky-fox kit", gender="neutral",
-              look="tiny round white sky-fox kit the size of a cat that floats in the air, huge blue eyes, fluffy cloud-like tail, small brass bell on a blue ribbon collar",
+              look="tiny round pure white fluffy sky-fox kit like a puffball, white fur only and never orange, the size of a cat, floats in the air, huge blue eyes, fluffy cloud-like tail, small brass bell on a blue ribbon collar",
               personality="brave, comic, never speaks (squeaks)"),
     Character(id="rook", name="Rook", role="rival", age_group="teen", gender="male",
               look="teenage boy, spiky silver-white hair, cold grey eyes, long black coat with red lining, fingerless black gloves, silver flight goggles around his neck",
@@ -30,6 +30,9 @@ CHARS = [
     Character(id="guardian", name="Guardian", role="antagonist", age_group="adult", species="stone golem", gender="neutral",
               look="colossal moss-covered stone golem, glowing cyan rune eyes, massive stone fists, ancient carved body",
               personality="ancient protector of the ruins; does not speak"),
+    Character(id="guardian_gold", name="Awakened", role="antagonist", age_group="adult", species="stone golem", gender="neutral",
+              look="colossal moss-covered stone golem, bright warm gold glowing rune eyes, soft golden light on its mossy stone body, massive stone fists, ancient carved body",
+              personality="the Guardian after the crystal woke: gentle, helpful; does not speak"),
     Character(id="crystal", name="Crystal", role="other", age_group="adult", species="living crystal", gender="female",
               look="huge radiant floating golden crystal, faceted, glowing warm light",
               personality="ancient, calm, speaks in echoing words"),
@@ -37,8 +40,8 @@ CHARS = [
 
 LOCS = [
     Location(id="sky", name="Sky above the Drift", look="open sky among floating rock islands with waterfalls pouring into clouds, golden hour light"),
-    Location(id="isle", name="Lantern Isle", look="small floating village island, timber houses, hanging paper lanterns, clotheslines, rope bridges, cobblestone square"),
-    Location(id="lamp", name="The Great Lantern", look="stone tower square holding a huge glowing blue crystal lantern, cobblestones, villagers"),
+    Location(id="isle", name="Lantern Isle", look="small floating village island, timber houses, hanging paper lanterns, clotheslines, rope bridges, cobblestone square, late afternoon warm golden sunlight"),
+    Location(id="lamp", name="The Great Lantern", look="stone tower square holding a huge glowing blue crystal lantern, cobblestones, villagers, late afternoon warm golden sunlight, long soft shadows"),
     Location(id="dock", name="Sky dock", look="wooden sky dock at the island's edge, glider racks, rope rails, sunset sky, open clouds below"),
     Location(id="canyon", name="Storm canyon", look="canyon of towering floating rock pillars and stone arches inside black storm clouds, lightning, night"),
     Location(id="jungle", name="Jungle clearing", look="overgrown jungle clearing at night on a floating island, giant ferns, glowing fireflies, ruins on a cliff in the distance"),
@@ -46,6 +49,7 @@ LOCS = [
     Location(id="mirrors", name="Hall of Mirrors", look="ancient temple hall with tall polished bronze mirrors on stone pillars, dust motes, shafts of light"),
     Location(id="bridge", name="Chasm bridge", look="narrow ancient stone bridge across a bottomless chasm glowing orange from below, carved pillars"),
     Location(id="vault", name="Crystal vault", look="round stone chamber with a huge radiant golden crystal floating above a carved altar, god rays, warm golden light"),
+    Location(id="lamp_gold", name="The Great Lantern relit", look="stone tower square holding a huge warm golden glowing crystal lantern, golden sunrise light, villagers cheering, lanterns glowing gold"),
     Location(id="flashback", name="Memory", look="warm soft-focus memory of the sky dock at golden hour"),
     Location(id="ruinsky", name="Above the ruins", look="open morning sky above collapsing stone ruins, sunrise, dust and golden sparks"),
 ]
@@ -144,8 +148,8 @@ P("s3", "close", "eye_level", "dock", ["mira"], "Mira close-up, a competitive gr
   "her grin widens, she pulls her goggles down over her eyes, speaking", ("mira", "Funny, I was about to say the same thing. Race you?"))
 P("s3", "close", "eye_level", "dock", ["rook"], "Rook close-up with a tiny smirk, silver goggles at his neck.",
   "he lifts his goggles over his eyes with one hand, speaking low", ("rook", "Try to keep up."))
-P("s3", "wide", "eye_level", "dock", ["mira", "rook", "pip"], "Mira and Rook mounting their flying machines side by side at the dock's edge, sunset behind them, Pip floating up beside Mira.",
-  "both riders grip their flying machines, Pip floats up beside Mira, wind lifts their hair and coats")
+P("s3", "wide", "eye_level", "dock", ["mira", "rook", "pip"], "Mira and Rook climbing into the open cockpits of their two winged flying machines side by side at the dock's edge, sunset behind them.",
+  "both riders grip their flying machines, wind lifts their hair and coats")
 P("s3", "close", "eye_level", "dock", ["pip"], "Pip the white sky-fox kit floating in mid-air puffing its cheeks, a determined face, eyes narrowed.",
   "Pip puffs its cheeks and narrows its eyes, tail bristling")
 P("s3", "extreme_close", "eye_level", "dock", ["rook"], "Extreme close-up of Rook's silver goggles snapping down over his grey eyes, sunset reflected in the lenses.",
@@ -157,7 +161,7 @@ P("s3", "wide", "low", "sky", ["mira", "rook"], "Mira's wooden flying machine wi
 
 # ---------------------------------------------------------------- S4 storm canyon race (action)
 scene("s4", "canyon", ["mira", "rook", "pip"], "The race through the storm canyon; Rook is struck and Mira saves him.", "thrilling, then tender")
-P("s4", "wide", "eye_level", "canyon", ["mira", "rook"], "Mira and Rook on their two flying machines entering a canyon of tall floating rock pillars inside a black storm, lightning flickering across the clouds.",
+P("s4", "wide", "eye_level", "canyon", ["mira", "rook"], "Mira and Rook flying in their two winged flying machines with wide canvas wings spread, entering a canyon of tall floating rock pillars inside a black storm, lightning flickering across the clouds.",
   "the flying machines plunge into the canyon, lightning flashes across the pillars")
 P("s4", "medium", "eye_level", "canyon", ["mira", "pip"], "Mira flying through the storm, rain streaming off her goggles, shouting over the wind, Pip floating beside her.",
   "rain streaks past, she shouts to the side, mouth moving", ("mira", "Pip, call the turns! Left pillar, now!"))
@@ -232,8 +236,8 @@ P("s5", "medium", "eye_level", "jungle", ["rook", "pip"], "Pip sitting on Rook's
   "Pip adjusts the oversized goggles proudly, Rook doesn't move")
 P("s5", "close", "eye_level", "jungle", ["rook"], "Rook close-up, totally deadpan, a small fox's tail hanging across his forehead.",
   "he stays perfectly still, one eye twitching, speaking flatly", ("rook", "...Get it off."))
-P("s5", "wide", "eye_level", "jungle", ["mira", "rook", "pip"], "Mira laughing while the three walk up a mossy stone path toward the ruins, Rook scowling, Pip floating overhead, blue pre-dawn light.",
-  "they walk up the path, Mira laughing, Rook scowling, blue light growing")
+P("s5", "wide", "eye_level", "jungle", ["mira", "rook", "pip"], "Mira laughing while she and Rook walk up a mossy stone path toward the ruins, Rook scowling, blue pre-dawn light.",
+  "they walk up the path, Mira laughing, Rook scowling, the blue light growing")
 
 # ---------------------------------------------------------------- S6 ruins and the mirror puzzle
 scene("s6", "gate", ["mira", "rook", "pip"], "The gate is sealed; the compass reveals a side way and the mirrors open the path.", "wonder, teamwork, comic")
@@ -280,7 +284,7 @@ P("s7", "medium", "eye_level", "bridge", ["rook"], "Rook shouting in alarm, eyes
   "he spins and shouts, pointing back", ("rook", "Run!"))
 P("s7", "wide", "eye_level", "bridge", ["guardian", "mira", "rook"], "The Guardian's giant stone fist smashing down onto the bridge where they stood a heartbeat ago, stone slabs flying.",
   "the fist crashes down, slabs fly, the bridge cracks")
-P("s7", "wide", "eye_level", "bridge", ["mira", "rook", "pip"], "Mira and Rook sprinting along the cracking bridge as slabs break off and fall behind them, Pip floating beside Mira.",
+P("s7", "wide", "eye_level", "bridge", ["mira", "rook", "pip"], "Mira and Rook sprinting along the cracking bridge as slabs break off and fall behind them.",
   "they sprint, slabs crumbling and dropping away right behind their heels")
 P("s7", "medium", "eye_level", "bridge", ["pip"], "Pip the white sky-fox kit floating in mid-air, ears flapping back, mouth wide open in a silent scream.",
   "Pip's ears flap, mouth wide, bouncing with each stride")
@@ -385,10 +389,25 @@ P("s10", "extreme_close", "eye_level", "lamp", ["mira"], "Extreme close-up of th
   "the needle spins, slows and settles pointing up toward them, glowing warmly")
 P("s10", "close", "eye_level", "lamp", ["mira"], "Mira close-up looking at the compass, then up, a happy tearful smile.",
   "she looks up from the compass to her friends, smiling, speaking softly", ("mira", "It points to home. It always did."))
-P("s10", "wide", "low", "sky", ["mira", "rook", "pip", "oren"], "Mira and Rook racing their flying machines again into the golden sunrise side by side, Pip floating beside Mira, Lantern Isle glowing below with Oren waving.",
+P("s10", "wide", "low", "sky", ["mira", "rook", "pip", "oren"], "Mira and Rook racing their flying machines again into the golden sunrise side by side, Lantern Isle glowing far below.",
   "the two flying machines streak toward the sun, Pip's ears streaming, the glowing island shrinking below")
-P("s10", "wide", "eye_level", "sky", ["mira", "rook"], "A breathtaking golden sunrise over the floating islands of the Drift, Mira and Rook as two tiny flying machines flying toward the sun, clouds glowing.",
-  "the camera slowly rises over the glowing islands as the flying machines become two tiny sparks in the sun")
+P("s10", "wide", "eye_level", "sky", [], "A breathtaking wide landscape of golden sunrise over the floating islands of the Drift, glowing clouds, waterfalls and, very small in the distance, two tiny flying machines flying toward the sun.",
+  "the camera slowly rises over the glowing islands as the two tiny flying machines shrink into sparks in the sun")
+
+# ---- post-processing (generic rules, applied to every shot)
+ONLY = {"p109": [], "p068": ["rook"]}
+NAMES = {"mira": "Mira", "pip": "Pip", "rook": "Rook", "oren": "Oren", "guardian": "Guardian", "crystal": "Crystal"}
+for p in PANELS:
+    if p.id in ONLY:  # shots drawn better with an explicit cast (a flashback has no present-day Mira; Pip drawn twice when also on Rook's head)
+        p.character_ids = ONLY[p.id]
+        continue
+    for cid, nm in NAMES.items():  # whoever the description names is in the frame (an unlisted name is drawn as a stranger)
+        if nm in p.action and cid not in p.character_ids and len(p.character_ids) < 3:
+            p.character_ids.append(cid)
+    if p.scene_id == "s9":  # after the crystal wakes the Guardian's eyes are gold
+        p.character_ids = ["guardian_gold" if c == "guardian" else c for c in p.character_ids]
+    if p.scene_id == "s10" and p.location_id == "lamp":  # and the Great Lantern glows gold once the Dawn Crystal is set
+        p.location_id = "lamp_gold"
 
 bible = Bible(
     premise=Premise(title="The Dawn Gate", genre="anime_adventure",

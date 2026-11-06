@@ -49,7 +49,7 @@ def timeline(story: OriginalStory, ws: Path, ids: list[str] | None = None) -> li
 
 def normalize(cut: dict, ws: Path) -> Path:
     """1080p / 24 fps / yuv420p picture and 48 kHz stereo sound with 12 ms edge fades (no clicks at cuts), to an intermediate mkv."""
-    out = ws / "film" / "norm" / f"{cut['id']}.mkv"
+    out = ws.resolve() / "film" / "norm" / f"{cut['id']}.mkv"
     out.parent.mkdir(parents=True, exist_ok=True)
     if out.exists() and out.stat().st_mtime >= cut["clip"].stat().st_mtime:
         return out
@@ -131,7 +131,23 @@ def srt(cuts: list[dict], ws: Path) -> str:
     return "".join(f"{i}\n{stamp(a)} --> {stamp(b)}\n{t}\n\n" for i, (a, b, t) in enumerate(rows, 1))
 
 
-def render(story: OriginalStory, ws: Path, cues: dict[str, Path] | None = None, ids: list[str] | None = None, name: str = "film_master") -> dict:
+TITLE_FONT = r"C\:/Windows/Fonts/impact.ttf"  # ffmpeg filter syntax: the drive colon is escaped
+
+
+def title_filter(title: str, total: float, at: float = 6.0) -> str:
+    """Opening title (fades in at `at`, holds, fades out) and a closing card over the last shot's final seconds; drawn on the picture, nothing is added to the cut."""
+    t = title.replace("'", "").replace(":", " ")
+    a = f"if(lt(t,{at}),0,if(lt(t,{at + 1}),t-{at},if(lt(t,{at + 3.5}),1,if(lt(t,{at + 4.5}),{at + 4.5}-t,0))))"
+    e0 = max(0.0, total - 4.0)
+    b = f"if(lt(t,{e0}),0,if(lt(t,{e0 + 1}),t-{e0},1))"
+    common = f"fontfile='{TITLE_FONT}':fontcolor=white:shadowcolor=black@0.7:shadowx=5:shadowy=5:x=(w-text_w)/2"
+    return (f"drawtext=text='{t.upper()}':fontsize=104:y=h*0.06:alpha='{a}':{common},"
+            f"drawtext=text='{t.upper()}':fontsize=96:y=h*0.44:alpha='{b}':{common},"
+            f"drawtext=text='Made with PanelFlow Studio':fontsize=34:y=h*0.58:alpha='{b}':{common}")
+
+
+def render(story: OriginalStory, ws: Path, cues: dict[str, Path] | None = None, ids: list[str] | None = None, name: str = "film_master",
+           title: str = "") -> dict:
     cuts = timeline(story, ws, ids)
     if not cuts:
         raise ValueError("no clips to cut")
@@ -143,9 +159,11 @@ def render(story: OriginalStory, ws: Path, cues: dict[str, Path] | None = None, 
         bed = music_bed(cuts, ws, cues, total)
         fc = ("[0:a]asplit=2[sc][dry];[1:a]volume=1.0[m];[m][sc]sidechaincompress=threshold=0.03:ratio=9:attack=15:release=450:makeup=1[duck];"
               f"[dry][duck]amix=inputs=2:duration=first:normalize=0,loudnorm=I={TARGET_LUFS}:TP=-1.5:LRA=11[a]")
-        args = base + ["-i", str(bed), "-filter_complex", fc, "-map", "0:v", "-map", "[a]"]
+        if title:
+            fc = f"[0:v]{title_filter(title, total)}[v];" + fc
+        args = base + ["-i", str(bed), "-filter_complex", fc, "-map", "[v]" if title else "0:v", "-map", "[a]"]
     else:
-        args = base + ["-af", f"loudnorm=I={TARGET_LUFS}:TP=-1.5:LRA=11", "-map", "0:v", "-map", "0:a"]
+        args = base + (["-vf", title_filter(title, total)] if title else []) + ["-af", f"loudnorm=I={TARGET_LUFS}:TP=-1.5:LRA=11", "-map", "0:v", "-map", "0:a"]
     _run(args + ["-c:v", "libx264", "-crf", "17", "-preset", "medium", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k", "-ar", str(SR), "-movflags", "+faststart", str(out)])
     (ws / f"{name}.srt").write_text(srt(cuts, ws), encoding="utf-8")
     return {"video": str(out), "seconds": round(total, 2), "shots": len(cuts), "music": bool(cues), "srt": str(ws / f"{name}.srt")}

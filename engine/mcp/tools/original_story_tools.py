@@ -183,11 +183,11 @@ async def panelflow_original_film_frames(slug: str, ids: str | None = None, rero
     name="panelflow_original_film_clips",
     description="Film step 2: make one MiniMax H3 clip per shot from its frame. A speaking shot gets its character's own voice anchored into H3, so the mouth is generated to the words (lip sync); "
                 "silent shots get H3's own sound effects. Nothing is looped. Minutes per clip; background job. 'seeds' = e.g. p004:7 to retry a shot.",
-    input_schema={"type": "object", "properties": {"slug": {"type": "string"}, "ids": {"type": "string"}, "seeds": {"type": "string"}}, "required": ["slug"]},
+    input_schema={"type": "object", "properties": {"slug": {"type": "string"}, "ids": {"type": "string"}, "seeds": {"type": "string"}, "quiet": {"type": "string", "description": "comma list of shots whose sound is anchored to silence (use when H3 invented speech in a silent shot and a new seed did not fix it)"}}, "required": ["slug"]},
     domain="original",
 )
-async def panelflow_original_film_clips(slug: str, ids: str | None = None, seeds: str | None = None) -> dict[str, Any]:
-    return await bridge.post(f"/api/original/story/{slug}/film/clips{_query(ids=ids, seeds=seeds)}")
+async def panelflow_original_film_clips(slug: str, ids: str | None = None, seeds: str | None = None, quiet: str | None = None) -> dict[str, Any]:
+    return await bridge.post(f"/api/original/story/{slug}/film/clips{_query(ids=ids, seeds=seeds, quiet=quiet)}")
 
 
 @registry.tool(

@@ -387,13 +387,13 @@ def film_frames(slug: str, ids: str | None = None, rerolls: str | None = None):
 
 
 @router.post("/story/{slug}/film/clips", status_code=202)
-def film_clips(slug: str, ids: str | None = None, seeds: str | None = None):
+def film_clips(slug: str, ids: str | None = None, seeds: str | None = None, quiet: str | None = None):
     """H3 clip per shot from its frame; a speaking shot gets its character's voice anchored to the face (lip sync). Hours for a whole film."""
     from engine.original import film
 
     ws, story = _film_story(slug)
     sd = _pairs(seeds)
-    return _film_start(slug, "clips", lambda prog, cancelled: film.make_clips(story, ws, _ids(ids), sd, progress=prog, is_cancelled=cancelled))
+    return _film_start(slug, "clips", lambda prog, cancelled: film.make_clips(story, ws, _ids(ids), sd, progress=prog, is_cancelled=cancelled, quiet=_ids(quiet)))
 
 
 @router.post("/story/{slug}/film/score", status_code=202)
@@ -422,7 +422,7 @@ def film_master_render(slug: str, ids: str | None = None, music: bool = True, na
 
     def run(prog, cancelled):
         cues = {sc.id: ws / "film" / "audio" / "music" / f"{sc.id}.wav" for sc in story.scenes} if music else None
-        out = film_master.render(story, ws, cues, _ids(ids), name)
+        out = film_master.render(story, ws, cues, _ids(ids), name, story.bible.premise.title)
         return {**out, "loudness": film_master.loudness(Path(out["video"]))}
 
     return _film_start(slug, "master", run)
