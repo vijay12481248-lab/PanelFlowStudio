@@ -1,7 +1,7 @@
 """ChronoFlow Studio — Sliding Window Video Chaining Engine & AI Cinematography.
 
 Integrates MiniMax Fast H3 video chaining with tail-frame extraction, FLF2V bridging,
-character sheet reference consistency, FLUX.1 & Qwen-Image generation, canvas inpainting,
+character sheet reference consistency, Qwen Image 2.1 generation (engine/comfyui/art.py), canvas inpainting,
 NLE timeline EDL mastering, and autonomous video chunk quality reviewing.
 """
 

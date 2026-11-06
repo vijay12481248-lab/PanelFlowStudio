@@ -10,8 +10,12 @@ episodes and original stories into narrated YouTube videos. Everything runs on t
 - Engine API on `127.0.0.1:8765`. Tests isolate state through `tests/conftest.py` (temp app-data dir and database).
 - Local LLM: Ollama `qwen3.5:9b` (text + vision) on `:11434`. Local-first: never fall back silently to cloud or mock.
 - Images: ComfyUI in `E:\VIJAY SEKAR\ComfyUI` (own venv), start with `venv\Scripts\python.exe main.py --listen 127.0.0.1 --port 8188`;
-  set `PANELFLOW_COMFYUI_WORKFLOW_DIR=E:\VIJAY SEKAR\ComfyUI\workflow` so PanelFlow finds the models. Models: Animagine XL 4.0 +
-  IP-Adapter (SDXL), FLUX.1 schnell fp8. `PANELFLOW_IMAGE_ENGINE=auto|flux|sdxl`.
+  set `PANELFLOW_COMFYUI_WORKFLOW_DIR=E:\VIJAY SEKAR\ComfyUI\workflow` so PanelFlow finds the models.
+- **One art workflow: `qwen_image_21` (Qwen Image 2.1 Turbo), run only by `engine/comfyui/art.py` (`ArtEngine`).** Original Stories,
+  ChronoFlow, the Comfy image screen, YouTube thumbnails and autopilot all call it; do not add a second text-to-image workflow or a
+  private submit/poll loop - extend `ArtEngine`. `tests/unit/test_art_engine.py` fails if the registry gains another `text_to_image`
+  workflow. The SDXL entries (`purpose: sdxl_conditioning`, `inpaint`, `matting`) are the legacy substrate of the ControlNet / IP-Adapter /
+  inpaint / matting tools, not art workflows. `PANELFLOW_IMAGE_ENGINE` is `qwen` (default) or `sdxl` (for those tools' tests).
 - ComfyUI and Ollama together use ~13 GB of VRAM; the job manager holds GPU jobs back when memory is not free (by design).
 
 ## What exists (read these docs first)

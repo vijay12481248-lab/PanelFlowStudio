@@ -1,0 +1,44 @@
+{
+  "title": "AGENT WHISKERS: MIDNIGHT SYNDICATE",
+  "duration": 15.6,
+  "protagonist": {
+    "id": "char_whiskers",
+    "name": "Agent Whiskers",
+    "role": "Cyber-Feline Infiltrator / Protagonist",
+    "image": "agent_whiskers_anchor.png",
+    "description": "Sleek Scottish Fold cat wearing miniature matte-black Kevlar tactical vest with glowing cyan fiber-optic seams, micro-retinal monocle HUD on left eye, and carbon-fiber stealth booties.",
+    "tag": "<Picture 1>"
+  },
+  "anchor_images": {
+    "start": "agent_whiskers_anchor.png",
+    "climax": "agent_whiskers_rooftop.png",
+    "concept": "agent_whiskers_concept.png"
+  },
+  "scenes": [
+    {
+      "shot_index": 1,
+      "title": "Shot 1: The Rooftop Infiltration",
+      "shot_type": "Wide Establishing",
+      "duration": 5.2,
+      "workflow": "reference",
+      "first_frame": "agent_whiskers_anchor.png",
+      "prompt": "subject_definitions:\nAgent Whiskers: Sleek Scottish Fold cat wearing miniature matte-black Kevlar tactical vest with glowing cyan fiber-optic seams, micro-retinal monocle HUD on left eye.\n\nsummary:\nCinematic spy thriller: Agent Whiskers perches on a rain-slicked gargoyle overlooking a neon-drenched metropolis.\n\nretention_analysis:\nSubject feline fur markings, cyan harness seams, glowing monocle HUD, neon rain reflections, and blade-runner noir atmosphere strictly preserved.\n\ndetailed_description:\ncamera_movement: Slow downward crane shot pivoting into an extreme low-angle tracking push toward the gargoyle edge. subject_description: Agent Whiskers sits with razor-sharp tactical poise on the stone gargoyle, his whiskers twitching as digital holographic target reticles dance across his amber left eye monocle. environmental_details: Cascades of rain shimmering under neon magenta and cobalt advertising holograms across towering cyberpunk skyscrapers. lighting_and_atmosphere: High-contrast neo-noir with volumetric rain streaks and intense cyan rim-light. overall_soundscape: Steady rain hiss, distant flying spinner engines, subtle electronic HUD chirp. Strict rule: absolutely no human speech or dialogue. non_diegetic_music: Deep pulsing synth-bass arp with suspenseful string sustains.\n\noverall_soundscape:\nSteady rain hiss, distant flying spinner engines, subtle electronic HUD chirp.\n\nnon_diegetic_music:\nDeep pulsing synth-bass arp with suspenseful string sustains."
+    },
+    {
+      "shot_index": 2,
+      "title": "Shot 2: The Skylight Descent",
+      "shot_type": "Medium Tracking",
+      "duration": 5.2,
+      "workflow": "sliding_window",
+      "prompt": "subject_definitions:\nAgent Whiskers: Sleek Scottish Fold cat wearing miniature matte-black Kevlar tactical vest with glowing cyan fiber-optic seams, micro-retinal monocle HUD on left eye.\n\nsummary:\nCinematic action sequence: Whiskers fires a micro-grapple line from his tactical vest and descends silently through a shattered glass atrium.\n\nretention_analysis:\nSubject feline fur markings, cyan harness seams, glowing monocle HUD, neon rain reflections, and blade-runner noir atmosphere strictly preserved.\n\ndetailed_description:\ncamera_movement: Vertical downward tracking shot descending parallel with Whiskers as he lowers into the penthouse gallery. subject_description: Whiskers drops silently on a high-tensile carbon cable, paws tucked in aerodynamic stealth form, amber monocle scanning the laser defense grid below. environmental_details: Sleek obsidian museum gallery illuminated by intersecting crimson infrared tripwires. lighting_and_atmosphere: Low-key atmospheric amber downlight cutting through smoky dust motes, crimson laser grids slicing across darkness. overall_soundscape: Whispering cable reel whine, faint air rushing past whiskers, silent landing thud on velvet pedestal. Strict rule: absolutely no human speech or dialogue. non_diegetic_music: Tense staccato orchestral strings driving accelerating heartbeat tempo.\n\noverall_soundscape:\nWhispering cable reel whine, faint air rushing past whiskers, silent landing thud on velvet pedestal.\n\nnon_diegetic_music:\nTense staccato orchestral strings driving accelerating heartbeat tempo."
+    },
+    {
+      "shot_index": 3,
+      "title": "Shot 3: The Microchip Extraction",
+      "shot_type": "Dynamic Climax",
+      "duration": 5.2,
+      "workflow": "sliding_window",
+      "prompt": "subject_definitions:\nAgent Whiskers: Sleek Scottish Fold cat wearing miniature matte-black Kevlar tactical vest with glowing cyan fiber-optic seams, micro-retinal monocle HUD on left eye.\n\nsummary:\nCinematic resolution: Whiskers deftly snatches the glowing quantum data-core in his jaws and leaps into the shadows as alarms erupt.\n\nretention_analysis:\nSubject feline fur markings, cyan harness seams, glowing monocle HUD, neon rain reflections, and blade-runner noir atmosphere strictly preserved.\n\ndetailed_description:\ncamera_movement: Rapid dynamic whip-pan stabilizing into a high-speed tracking shot following Whiskers as he sprints across the marble floor. subject_description: Whiskers dashes with athletic agility, the glowing violet quantum data-drive clutched firmly between sharp teeth, dodging sweeping searchlights. environmental_details: Flashing emergency strobes, shattered glass shards scattering across reflective marble. lighting_and_atmosphere: Blinding rotating red warning strobes casting dramatic silhouettes against the shadows. overall_soundscape: Sudden blaring klaxon siren, sharp mechanical shutter snaps, rapid soft paw sprint. Strict rule: absolutely no human speech or dialogue. non_diegetic_music: Explosive cinematic orchestral crescendo merging with high-tempo breakbeats.\n\noverall_soundscape:\nSudden blaring klaxon siren, sharp mechanical shutter snaps, rapid soft paw sprint.\n\nnon_diegetic_music:\nExplosive cinematic orchestral crescendo merging with high-tempo breakbeats."
+    }
+  ]
+}

@@ -1,70 +1,7 @@
 [
   {
-    "id": "manga_image_generation",
-    "purpose": "text_to_image",
-    "filename": "manga_image_generation.api.json",
-    "sha256": "6c87dbc3cde2b4b2fe9cbf0985eab18f17f2dc277f6876d6d814188de557d9b4",
-    "requires_gpu": true,
-    "gpu_vram_mb": 0,
-    "model_files": [
-      "longcat_image_bf16_3.safetensors",
-      "qwen_2.5_vl_7b_fp8_scaled.safetensors",
-      "ae.safetensors"
-    ],
-    "required_nodes": [
-      "UNETLoader",
-      "CLIPLoader",
-      "VAELoader",
-      "FluxGuidance",
-      "CFGNorm",
-      "EmptySD3LatentImage",
-      "VAEDecodeTiled",
-      "KSampler",
-      "SaveImage",
-      "PrimitiveInt"
-    ],
-    "patch_slots": {
-      "prompt": {
-        "node_id": "4",
-        "input": "text",
-        "class_type": "CLIPTextEncode"
-      },
-      "negative_prompt": {
-        "node_id": "5",
-        "input": "text",
-        "class_type": "CLIPTextEncode"
-      },
-      "seed": {
-        "node_id": "14",
-        "input": "value",
-        "class_type": "PrimitiveInt"
-      },
-      "width": {
-        "node_id": "6",
-        "input": "width",
-        "class_type": "EmptySD3LatentImage"
-      },
-      "height": {
-        "node_id": "6",
-        "input": "height",
-        "class_type": "EmptySD3LatentImage"
-      },
-      "filename_prefix": {
-        "node_id": "13",
-        "input": "filename_prefix",
-        "class_type": "SaveImage"
-      }
-    },
-    "dimension_policy": {
-      "mode": "exact",
-      "min": 256,
-      "max": 2048,
-      "multiple_of": 8
-    }
-  },
-  {
     "id": "anime_sdxl",
-    "purpose": "text_to_image",
+    "purpose": "sdxl_conditioning",
     "filename": "anime_sdxl.api.json",
     "sha256": "68f55a4e068c11590924b0c45bf4ee255aefbefb8f7b1aa9abbc3a29fb0f0af4",
     "requires_gpu": true,
@@ -121,7 +58,7 @@
   },
   {
     "id": "anime_sdxl_ipa",
-    "purpose": "text_to_image",
+    "purpose": "sdxl_conditioning",
     "filename": "anime_sdxl_ipa.api.json",
     "sha256": "094eed69c26402b18d0110c39799318c3b22b30b99cb6a4c45484cf829358311",
     "requires_gpu": true,
@@ -193,9 +130,9 @@
   },
   {
     "id": "anime_sdxl_ipa2",
-    "purpose": "text_to_image",
+    "purpose": "sdxl_conditioning",
     "filename": "anime_sdxl_ipa2.api.json",
-    "sha256": "d8de4d7dd24108d007dbcb1da821d957182f95e57abf141e4fd033a7d1def09a",
+    "sha256": "3f28b30b8ba083191174560d43bc34505c28677b9cec7195a3d5d703bd680cef",
     "requires_gpu": true,
     "gpu_vram_mb": 11000,
     "model_files": [
@@ -267,140 +204,10 @@
     }
   },
   {
-    "id": "flux_schnell",
-    "purpose": "text_to_image",
-    "filename": "flux_schnell.api.json",
-    "sha256": "6cbfe91eace6b4ef646da0d13973e97c5cce7a5eca0c02682f54d597837e1939",
-    "requires_gpu": true,
-    "gpu_vram_mb": 14000,
-    "model_files": [
-      "flux1-schnell-fp8.safetensors"
-    ],
-    "required_nodes": [
-      "CheckpointLoaderSimple",
-      "CLIPTextEncode",
-      "EmptySD3LatentImage",
-      "KSampler",
-      "VAEDecode",
-      "SaveImage"
-    ],
-    "patch_slots": {
-      "prompt": {
-        "node_id": "2",
-        "input": "text",
-        "class_type": "CLIPTextEncode"
-      },
-      "negative_prompt": {
-        "node_id": "3",
-        "input": "text",
-        "class_type": "CLIPTextEncode"
-      },
-      "seed": {
-        "node_id": "5",
-        "input": "seed",
-        "class_type": "KSampler"
-      },
-      "width": {
-        "node_id": "4",
-        "input": "width",
-        "class_type": "EmptySD3LatentImage"
-      },
-      "height": {
-        "node_id": "4",
-        "input": "height",
-        "class_type": "EmptySD3LatentImage"
-      },
-      "filename_prefix": {
-        "node_id": "7",
-        "input": "filename_prefix",
-        "class_type": "SaveImage"
-      }
-    },
-    "dimension_policy": {
-      "mode": "exact",
-      "min": 256,
-      "max": 2048,
-      "multiple_of": 16
-    }
-  },
-  {
-    "id": "flux_pulid",
-    "purpose": "text_to_image",
-    "filename": "flux_pulid.api.json",
-    "sha256": "ac9d92a5ab780a9d78e4737b1c5bb536b3b59f61bfa039ee2543c2323a4f753f",
-    "requires_gpu": true,
-    "gpu_vram_mb": 14000,
-    "model_files": [
-      "flux1-schnell-fp8.safetensors",
-      "pulid_flux_v0.9.0.safetensors"
-    ],
-    "required_nodes": [
-      "CheckpointLoaderSimple",
-      "CLIPTextEncode",
-      "EmptySD3LatentImage",
-      "KSampler",
-      "VAEDecode",
-      "SaveImage",
-      "LoadImage",
-      "PulidFluxModelLoader",
-      "PulidFluxInsightFaceLoader",
-      "PulidFluxEvaClipLoader",
-      "ApplyPulidFlux"
-    ],
-    "patch_slots": {
-      "prompt": {
-        "node_id": "2",
-        "input": "text",
-        "class_type": "CLIPTextEncode"
-      },
-      "negative_prompt": {
-        "node_id": "3",
-        "input": "text",
-        "class_type": "CLIPTextEncode"
-      },
-      "seed": {
-        "node_id": "5",
-        "input": "seed",
-        "class_type": "KSampler"
-      },
-      "width": {
-        "node_id": "4",
-        "input": "width",
-        "class_type": "EmptySD3LatentImage"
-      },
-      "height": {
-        "node_id": "4",
-        "input": "height",
-        "class_type": "EmptySD3LatentImage"
-      },
-      "filename_prefix": {
-        "node_id": "7",
-        "input": "filename_prefix",
-        "class_type": "SaveImage"
-      },
-      "reference_image": {
-        "node_id": "8",
-        "input": "image",
-        "class_type": "LoadImage"
-      },
-      "reference_weight": {
-        "node_id": "12",
-        "input": "weight",
-        "class_type": "ApplyPulidFlux"
-      }
-    },
-    "dimension_policy": {
-      "mode": "exact",
-      "min": 256,
-      "max": 2048,
-      "multiple_of": 16
-    }
-  },
-  {
     "id": "minimax_h3_turbo_i2v",
     "purpose": "image_to_video",
     "filename": "minimax_h3_turbo_i2v.api.json",
-    "sha256": "7dd9b5d55ce7ffab0cc3752decbcb40498de70f2eea16134d670c52eee3bd156",
+    "sha256": "77afb4b99b11ea828bddc9e07d5f68563bb302cb3f8b15a6a99b0d6c004d266e",
     "requires_gpu": true,
     "gpu_vram_mb": 14000,
     "model_files": [
@@ -471,5 +278,423 @@
       "multiple_of": 32
     },
     "checksum": "77afb4b99b11ea828bddc9e07d5f68563bb302cb3f8b15a6a99b0d6c004d266e"
+  },
+  {
+    "id": "minimax_h3_facerefine_i2v",
+    "purpose": "image_to_video",
+    "filename": "minimax_h3_facerefine_i2v.api.json",
+    "sha256": "9a872d98d2fa33f500cc9ebfaa89e55ed8c1637e82059c825df7f3736bf2c5f9",
+    "requires_gpu": true,
+    "gpu_vram_mb": 14000,
+    "model_files": [
+      "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+      "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+      "minimax_h3_video_vae_int8_convrot.safetensors",
+      "minimax_h3_audio_vae_fp32.safetensors",
+      "minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors",
+      "face_yolov8m.pt"
+    ],
+    "required_nodes": [
+      "UNETLoader",
+      "CLIPLoader",
+      "VAELoader",
+      "LoraLoaderModelOnly",
+      "LoadImage",
+      "CLIPTextEncode",
+      "MiniMaxH3ImageToVideo",
+      "KSamplerSelect",
+      "BasicScheduler",
+      "BasicGuider",
+      "RandomNoise",
+      "SamplerCustomAdvanced",
+      "VAEDecode",
+      "CreateVideo",
+      "SaveVideo",
+      "H3FaceTrackCrop",
+      "H3FaceStitch"
+    ],
+    "patch_slots": {
+      "prompt": {
+        "node_id": "7",
+        "input": "prompt",
+        "class_type": "MiniMaxH3ImageToVideo"
+      },
+      "negative_prompt": {
+        "node_id": "6",
+        "input": "text",
+        "class_type": "CLIPTextEncode"
+      },
+      "seed": {
+        "node_id": "11",
+        "input": "noise_seed",
+        "class_type": "RandomNoise"
+      },
+      "width": {
+        "node_id": "7",
+        "input": "width",
+        "class_type": "MiniMaxH3ImageToVideo"
+      },
+      "height": {
+        "node_id": "7",
+        "input": "height",
+        "class_type": "MiniMaxH3ImageToVideo"
+      },
+      "filename_prefix": {
+        "node_id": "15",
+        "input": "filename_prefix",
+        "class_type": "SaveVideo"
+      },
+      "reference_image": {
+        "node_id": "5",
+        "input": "image",
+        "class_type": "LoadImage"
+      }
+    },
+    "dimension_policy": {
+      "mode": "exact",
+      "min": 256,
+      "max": 2048,
+      "multiple_of": 32
+    }
+  },
+  {
+    "id": "minimax_h3_upscale_2k",
+    "purpose": "image_to_video",
+    "filename": "minimax_h3_upscale_2k.api.json",
+    "sha256": "9a8227189ac92ea2770895fda80d21a154202c4d7b11a9c6551cad9b8d6b8931",
+    "requires_gpu": true,
+    "gpu_vram_mb": 14000,
+    "model_files": [
+      "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+      "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+      "minimax_h3_video_vae_int8_convrot.safetensors",
+      "minimax_h3_audio_vae_fp32.safetensors",
+      "minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors"
+    ],
+    "required_nodes": [
+      "UNETLoader",
+      "CLIPLoader",
+      "VAELoader",
+      "LoraLoaderModelOnly",
+      "LoadImage",
+      "CLIPTextEncode",
+      "MiniMaxH3ImageToVideo",
+      "KSamplerSelect",
+      "BasicScheduler",
+      "BasicGuider",
+      "RandomNoise",
+      "SamplerCustomAdvanced",
+      "VAEDecode",
+      "ImageScaleBy",
+      "CreateVideo",
+      "SaveVideo"
+    ],
+    "patch_slots": {
+      "prompt": {
+        "node_id": "7",
+        "input": "prompt",
+        "class_type": "MiniMaxH3ImageToVideo"
+      },
+      "negative_prompt": {
+        "node_id": "6",
+        "input": "text",
+        "class_type": "CLIPTextEncode"
+      },
+      "seed": {
+        "node_id": "11",
+        "input": "noise_seed",
+        "class_type": "RandomNoise"
+      },
+      "width": {
+        "node_id": "7",
+        "input": "width",
+        "class_type": "MiniMaxH3ImageToVideo"
+      },
+      "height": {
+        "node_id": "7",
+        "input": "height",
+        "class_type": "MiniMaxH3ImageToVideo"
+      },
+      "filename_prefix": {
+        "node_id": "16",
+        "input": "filename_prefix",
+        "class_type": "SaveVideo"
+      },
+      "reference_image": {
+        "node_id": "5",
+        "input": "image",
+        "class_type": "LoadImage"
+      }
+    },
+    "dimension_policy": {
+      "mode": "exact",
+      "min": 256,
+      "max": 2048,
+      "multiple_of": 32
+    }
+  },
+  {
+    "id": "qwen_image_21",
+    "purpose": "text_to_image",
+    "filename": "qwen_image_21.api.json",
+    "sha256": "3990f7744ffa8c7e9713f167bbd2183595359ea2fe425a13fc0dba819cc09b41",
+    "requires_gpu": true,
+    "gpu_vram_mb": 12000,
+    "model_files": [
+      "qwen_image_2.1_turbo_int8_convrot.safetensors",
+      "qwen3vl_8b_int8_convrot.safetensors",
+      "qwen_image_2.1_vae_bf16.safetensors"
+    ],
+    "required_nodes": [
+      "UNETLoader",
+      "CLIPLoader",
+      "VAELoader",
+      "TextEncodeQwenImage21",
+      "BasicGuider",
+      "KSamplerSelect",
+      "BasicScheduler",
+      "RandomNoise",
+      "SamplerCustomAdvanced",
+      "VAEDecode",
+      "SaveImage",
+      "EmptySD3LatentImage"
+    ],
+    "patch_slots": {
+      "prompt": {
+        "node_id": "4",
+        "input": "prompt",
+        "class_type": "TextEncodeQwenImage21"
+      },
+      "negative_prompt": {
+        "node_id": "4",
+        "input": "negative_prompt",
+        "class_type": "TextEncodeQwenImage21"
+      },
+      "seed": {
+        "node_id": "8",
+        "input": "noise_seed",
+        "class_type": "RandomNoise"
+      },
+      "width": {
+        "node_id": "12",
+        "input": "width",
+        "class_type": "EmptySD3LatentImage"
+      },
+      "height": {
+        "node_id": "12",
+        "input": "height",
+        "class_type": "EmptySD3LatentImage"
+      },
+      "filename_prefix": {
+        "node_id": "11",
+        "input": "filename_prefix",
+        "class_type": "SaveImage"
+      }
+    },
+    "dimension_policy": {
+      "mode": "exact",
+      "min": 256,
+      "max": 2048,
+      "multiple_of": 16
+    }
+  },
+  {
+    "id": "anime_sdxl_inpaint",
+    "purpose": "inpaint",
+    "filename": "anime_sdxl_inpaint.api.json",
+    "sha256": "dea21ed7a59e9fc1b998e21ede833c4c696b9bb7289ed3c7aa3e06b998d92dcd",
+    "requires_gpu": true,
+    "gpu_vram_mb": 8000,
+    "model_files": [
+      "animagine-xl-4.0.safetensors"
+    ],
+    "required_nodes": [
+      "CheckpointLoaderSimple",
+      "CLIPTextEncode",
+      "LoadImage",
+      "LoadImageMask",
+      "VAEEncode",
+      "SetLatentNoiseMask",
+      "KSampler",
+      "VAEDecode",
+      "ImageCompositeMasked",
+      "SaveImage"
+    ],
+    "patch_slots": {
+      "prompt": {
+        "node_id": "2",
+        "input": "text",
+        "class_type": "CLIPTextEncode"
+      },
+      "negative_prompt": {
+        "node_id": "3",
+        "input": "text",
+        "class_type": "CLIPTextEncode"
+      },
+      "seed": {
+        "node_id": "8",
+        "input": "seed",
+        "class_type": "KSampler"
+      },
+      "filename_prefix": {
+        "node_id": "11",
+        "input": "filename_prefix",
+        "class_type": "SaveImage"
+      },
+      "reference_image": {
+        "node_id": "4",
+        "input": "image",
+        "class_type": "LoadImage"
+      },
+      "mask_image": {
+        "node_id": "5",
+        "input": "image",
+        "class_type": "LoadImageMask"
+      },
+      "denoise": {
+        "node_id": "8",
+        "input": "denoise",
+        "class_type": "KSampler"
+      }
+    },
+    "dimension_policy": {
+      "mode": "exact",
+      "min": 256,
+      "max": 2048,
+      "multiple_of": 8
+    }
+  },
+  {
+    "id": "anime_sdxl_controlnet",
+    "purpose": "sdxl_conditioning",
+    "filename": "anime_sdxl_controlnet.api.json",
+    "sha256": "f0a59be4310260255249cdd5e9663768f23774092bc3105b53fd13b37e4a67fd",
+    "requires_gpu": true,
+    "gpu_vram_mb": 11000,
+    "model_files": [
+      "animagine-xl-4.0.safetensors",
+      "controlnet-openpose-sdxl-1.0.safetensors",
+      "controlnet-depth-sdxl-1.0.safetensors"
+    ],
+    "required_nodes": [
+      "CheckpointLoaderSimple",
+      "CLIPTextEncode",
+      "EmptyLatentImage",
+      "ControlNetLoader",
+      "LoadImage",
+      "ControlNetApplyAdvanced",
+      "KSampler",
+      "VAEDecode",
+      "SaveImage"
+    ],
+    "patch_slots": {
+      "prompt": {
+        "node_id": "2",
+        "input": "text",
+        "class_type": "CLIPTextEncode"
+      },
+      "negative_prompt": {
+        "node_id": "3",
+        "input": "text",
+        "class_type": "CLIPTextEncode"
+      },
+      "seed": {
+        "node_id": "11",
+        "input": "seed",
+        "class_type": "KSampler"
+      },
+      "width": {
+        "node_id": "4",
+        "input": "width",
+        "class_type": "EmptyLatentImage"
+      },
+      "height": {
+        "node_id": "4",
+        "input": "height",
+        "class_type": "EmptyLatentImage"
+      },
+      "filename_prefix": {
+        "node_id": "13",
+        "input": "filename_prefix",
+        "class_type": "SaveImage"
+      },
+      "pose_image": {
+        "node_id": "6",
+        "input": "image",
+        "class_type": "LoadImage"
+      },
+      "depth_image": {
+        "node_id": "9",
+        "input": "image",
+        "class_type": "LoadImage"
+      },
+      "pose_weight": {
+        "node_id": "7",
+        "input": "strength",
+        "class_type": "ControlNetApplyAdvanced"
+      },
+      "depth_weight": {
+        "node_id": "10",
+        "input": "strength",
+        "class_type": "ControlNetApplyAdvanced"
+      }
+    },
+    "dimension_policy": {
+      "mode": "exact",
+      "min": 256,
+      "max": 2048,
+      "multiple_of": 8
+    }
+  },
+  {
+    "id": "anime_alpha_matting",
+    "purpose": "matting",
+    "filename": "anime_alpha_matting.api.json",
+    "sha256": "444c649f842ca35929a9a6f8ca425106c73779e4f2423b3c3d11d2b90cf9ecd2",
+    "requires_gpu": true,
+    "gpu_vram_mb": 4000,
+    "model_files": [
+      "birefnet-general.safetensors"
+    ],
+    "required_nodes": [
+      "LoadImage",
+      "LoadBackgroundRemovalModel",
+      "RemoveBackground",
+      "JoinImageWithAlpha",
+      "SaveImage"
+    ],
+    "patch_slots": {
+      "prompt": {
+        "node_id": "6",
+        "input": "text",
+        "class_type": "CLIPTextEncode"
+      },
+      "negative_prompt": {
+        "node_id": "7",
+        "input": "text",
+        "class_type": "CLIPTextEncode"
+      },
+      "seed": {
+        "node_id": "8",
+        "input": "noise_seed",
+        "class_type": "RandomNoise"
+      },
+      "filename_prefix": {
+        "node_id": "5",
+        "input": "filename_prefix",
+        "class_type": "SaveImage"
+      },
+      "reference_image": {
+        "node_id": "1",
+        "input": "image",
+        "class_type": "LoadImage"
+      }
+    },
+    "dimension_policy": {
+      "mode": "exact",
+      "min": 256,
+      "max": 2048,
+      "multiple_of": 8
+    }
   }
 ]

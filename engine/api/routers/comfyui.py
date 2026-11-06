@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from engine.comfyui import ComfyUIClient, ComfyUIError, ComfyWorkflowRegistry, WorkflowRegistryError
+from engine.comfyui.art import ART_WORKFLOW_ID
 from engine.comfyui.service import generate_image_operation
 from engine.database.models import AssetRecord, ProjectRecord
 from engine.database.session import get_db
@@ -18,7 +19,7 @@ project_router = APIRouter(prefix="/api/projects", tags=["project-assets"])
 
 
 class ComfyImageRequest(BaseModel):
-    workflow_id: str = Field(default="manga_image_generation", min_length=3, max_length=64, pattern=r"^[a-z][a-z0-9_-]+$")
+    workflow_id: str = Field(default=ART_WORKFLOW_ID, min_length=3, max_length=64, pattern=r"^[a-z][a-z0-9_-]+$")
     prompt: str = Field(..., min_length=10, max_length=12000)
     negative_prompt: str | None = Field(default=None, max_length=12000)
     width: int = Field(default=768, ge=256, le=2048)
@@ -65,6 +66,8 @@ def submit_comfyui_image_job(project_id: str, request: ComfyImageRequest, db: Se
     if not project:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
     try:
+        if request.workflow_id != ART_WORKFLOW_ID:
+            raise WorkflowRegistryError(f"The only image workflow is {ART_WORKFLOW_ID!r}; got {request.workflow_id!r}")
         registry = ComfyWorkflowRegistry()
         metadata = registry.metadata(request.workflow_id)
         registry.load(request.workflow_id)
@@ -73,8 +76,6 @@ def submit_comfyui_image_job(project_id: str, request: ComfyImageRequest, db: Se
             raise WorkflowRegistryError(
                 f"ComfyUI workflow preflight failed: missing nodes={preflight['missing_nodes']}, missing models={preflight['missing_models']}"
             )
-        if metadata.get("purpose") != "text_to_image":
-            raise WorkflowRegistryError("This endpoint currently accepts only approved text-to-image workflows")
     except (ComfyUIError, WorkflowRegistryError) as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 

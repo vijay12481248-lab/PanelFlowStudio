@@ -13,7 +13,7 @@ def test_minimax_h3_workflow_registration():
     workflow, checksum = registry.load("minimax_h3_turbo_i2v")
     assert isinstance(workflow, dict)
     assert len(workflow) == 15
-    assert checksum == "7dd9b5d55ce7ffab0cc3752decbcb40498de70f2eea16134d670c52eee3bd156"
+    assert checksum == "77afb4b99b11ea828bddc9e07d5f68563bb302cb3f8b15a6a99b0d6c004d266e"
 
     meta = registry.metadata("minimax_h3_turbo_i2v")
     assert meta["id"] == "minimax_h3_turbo_i2v"

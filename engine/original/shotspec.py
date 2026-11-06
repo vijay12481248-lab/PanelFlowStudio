@@ -8,11 +8,13 @@ tags the image model understands, and weights what the narration needs. The same
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
 from pydantic import BaseModel, Field
 
 from engine.original.genres import GENRES
 from engine.original.models import Character, OriginalStory
+from engine.original.rigging import RiggingSpec
 
 # plain-English fragment -> image-model tags. Longest fragments are matched first; unmatched words still go in as plain text.
 EXPRESSIONS = {
@@ -34,8 +36,10 @@ POSES = {
     "facing away": "facing away", "turned away": "from behind", "peeking": "peeking", "floating": "floating", "flying": "flying",
     "dancing": "dancing", "resting": "resting, relaxed", "huddled": "huddling together", "side by side": "side by side",
 }
-CAMERA = {"wide": "wide shot, full body, scenery", "medium": "cowboy shot", "close": "close-up, portrait, face focus",
-          "extreme_close": "extreme close-up, detail focus", "over_shoulder": "from behind, over the shoulder"}
+CAMERA = {"wide": "wide shot, full body, scenery", "full": "full body shot, head to toe, visible feet",
+          "full_body": "full body shot, head to toe, visible feet", "medium": "cowboy shot",
+          "close": "close-up, portrait, face focus", "extreme_close": "extreme close-up, detail focus",
+          "over_shoulder": "from behind, over the shoulder"}
 ANGLE = {"eye_level": "", "low": "from below", "high": "from above", "dutch": ""}  # dutch angles distort this model's anatomy: dropped
 LIGHT = {"warm": "warm lighting, golden light", "moon": "moonlight, soft blue light", "glow": "soft glow, bioluminescent", "dark": "dim lighting, shadows",
          "sunset": "sunset, orange sky", "sunrise": "sunrise, soft morning light", "fog": "fog, mist", "candle": "candlelight", "rain": "rain, wet",
@@ -43,10 +47,145 @@ LIGHT = {"warm": "warm lighting, golden light", "moon": "moonlight, soft blue li
 QUALITY = "safe, masterpiece, high score, great score, absurdres"
 NEGATIVE = ("lowres, bad anatomy, bad hands, text, error, missing finger, extra digits, fewer digits, cropped, worst quality, "
             "low quality, low score, bad score, average score, signature, watermark, username, blurry, nsfw, nude, "
-            "suggestive, revealing clothes, speech bubble")
+            "suggestive, revealing clothes, speech bubble, floating objects, disconnected hands")
 EYES_CLOSED_NEGATIVE = ", open eyes, looking at viewer"
 LOOK_AT_VIEWER_NEGATIVE = ", looking at viewer"  # for from-behind / looking-away shots
 WEIGHTED = {"closed eyes", "sleeping, closed eyes", "crying, tears", "yawning", "from behind", "facing away", "lying down", "curled up, lying on side"}
+
+# Standard 1-Megapixel resolution buckets optimized for SDXL, Flux, and Qwen
+SHOT_DIMENSIONS: dict[str, tuple[int, int]] = {
+    "wide": (1344, 768),
+    "extreme_wide": (1344, 768),
+    "landscape": (1344, 768),
+    "over_shoulder": (1152, 896),
+    "medium": (1024, 1024),
+    "cowboy": (1024, 1024),
+    "close": (1024, 1024),
+    "extreme_close": (1024, 1024),
+    "full": (832, 1216),
+    "full_body": (832, 1216),
+    "character_sheet": (832, 1216),
+    "sheet": (832, 1216),
+    "portrait": (832, 1216),
+    "turnaround": (1536, 768),
+    "turnaround_sheet": (1536, 768),
+    "rigging": (832, 1216),
+    "rigging_view": (832, 1216),
+}
+
+
+def resolve_dimensions(
+    shot: str | None,
+    num_characters: int = 1,
+    default: tuple[int, int] = (1344, 768),
+) -> tuple[int, int]:
+    """Resolve standard 1-MP (width, height) bucket for a given shot type and character count.
+    Two or more characters side-by-side need landscape widescreen (1344x768) to prevent occlusion.
+    Single full-body shots use portrait (832x1216) to prevent cutting off head or feet.
+    Single close-up or medium shots use square (1024x1024) for centered framing.
+    Turnaround sheets use ultra-wide landscape (1536x768) regardless of character count.
+    """
+    if shot:
+        normalized = shot.strip().lower().replace("-", "_").replace(" ", "_")
+        if normalized in ("turnaround", "turnaround_sheet"):
+            return SHOT_DIMENSIONS["turnaround"]
+    if num_characters >= 2:
+        return (1344, 768)
+    if not shot:
+        return default
+    normalized = shot.strip().lower().replace("-", "_").replace(" ", "_")
+    return SHOT_DIMENSIONS.get(normalized, default)
+
+
+INTERACTION_BINDING_TAGS: dict[str, list[str]] = {
+    "holding": ["firmly gripped in hands", "fingers wrapped around object", "physical contact visible", "zero gap"],
+    "holds": ["firmly gripped in hands", "fingers wrapped around object", "physical contact visible", "zero gap"],
+    "gripping": ["firmly gripped in hands", "fingers tightly wrapped around object", "physical contact visible"],
+    "grips": ["firmly gripped in hands", "fingers tightly wrapped around object", "physical contact visible"],
+    "carrying": ["holding securely against body", "physical contact visible", "hands supporting object"],
+    "carries": ["holding securely against body", "physical contact visible", "hands supporting object"],
+    "wielding": ["firmly gripped in hand", "fingers wrapped around handle", "physical contact visible"],
+    "wields": ["firmly gripped in hand", "fingers wrapped around handle", "physical contact visible"],
+    "reading": ["holding book in hands", "hands gripping pages", "physical contact visible"],
+    "reads": ["holding book in hands", "hands gripping pages", "physical contact visible"],
+    "reaching": ["extended hand", "fingers reaching toward target"],
+    "reaches": ["extended hand", "fingers reaching toward target"],
+    "touching": ["hand resting directly on surface", "physical contact visible", "zero gap"],
+    "touches": ["hand resting directly on surface", "physical contact visible", "zero gap"],
+    "grabbing": ["fingers grasping object", "firm grip", "physical contact visible"],
+    "grabs": ["fingers grasping object", "firm grip", "physical contact visible"],
+    "hugging": ["arms wrapped tightly around", "physical contact visible", "embracing"],
+    "hug": ["arms wrapped tightly around", "physical contact visible", "embracing"],
+    "drinking": ["holding cup to lips", "physical contact visible", "hand gripping cup"],
+    "drinks": ["holding cup to lips", "physical contact visible", "hand gripping cup"],
+    "eating": ["holding food in hand", "physical contact visible"],
+    "eats": ["holding food in hand", "physical contact visible"],
+}
+
+INTERACTION_BINDING_NATURAL: dict[str, str] = {
+    "holding": "hands firmly gripping the object with fingers visibly curled around it, maintaining unbroken physical contact",
+    "holds": "hands firmly gripping the object with fingers visibly curled around it, maintaining unbroken physical contact",
+    "gripping": "hands tightly gripping the object with fingers wrapped firmly around it, establishing solid physical contact",
+    "grips": "hands tightly gripping the object with fingers wrapped firmly around it, establishing solid physical contact",
+    "carrying": "arms securely supporting and carrying the object against the body with visible physical contact",
+    "carries": "arms securely supporting and carrying the object against the body with visible physical contact",
+    "wielding": "hand firmly gripping the handle with fingers wrapped tightly around it, showing true physical connection",
+    "wields": "hand firmly gripping the handle with fingers wrapped tightly around it, showing true physical connection",
+    "reading": "hands holding the book with visible finger contact on the cover or pages",
+    "reads": "hands holding the book with visible finger contact on the cover or pages",
+    "reaching": "hand extending forward toward the target with fingers opened in direction of reach",
+    "reaches": "hand extending forward toward the target with fingers opened in direction of reach",
+    "touching": "hand and fingers resting directly against the surface with no air gap between them",
+    "touches": "hand and fingers resting directly against the surface with no air gap between them",
+    "grabbing": "hand firmly grasping the object with fingers closed around it",
+    "grabs": "hand firmly grasping the object with fingers closed around it",
+    "hugging": "arms wrapped securely around with direct body and arm contact",
+    "hug": "arms wrapped securely around with direct body and arm contact",
+    "drinking": "hands holding the vessel securely against the lips with visible physical contact",
+    "drinks": "hands holding the vessel securely against the lips with visible physical contact",
+    "eating": "hand holding the food close to the mouth with clear physical contact",
+    "eats": "hand holding the food close to the mouth with clear physical contact",
+}
+
+MARGIN_TAGS: dict[str, list[str]] = {
+    "full": ["full body", "head to toe", "feet on ground", "visible feet", "wide margins", "subject completely in frame"],
+    "full_body": ["full body", "head to toe", "feet on ground", "visible feet", "wide margins", "subject completely in frame"],
+    "character_sheet": ["full body", "standing", "head to toe", "feet on ground", "visible feet", "wide margins", "subject completely in frame"],
+    "close": ["centered face focus", "face and shoulders in frame"],
+    "extreme_close": ["macro detail focus", "face focus"],
+}
+
+MARGIN_NATURAL: dict[str, str] = {
+    "full": "Full body shot from head to toe with visible feet resting on the ground, generous margins around the subject, completely in frame with no cropping.",
+    "full_body": "Full body shot from head to toe with visible feet resting on the ground, generous margins around the subject, completely in frame with no cropping.",
+    "character_sheet": "Full length standing character reference from head to toe with clear empty margins around the subject, completely in frame.",
+    "close": "Centered framing focusing on the face and shoulders.",
+    "extreme_close": "Macro framing focusing closely on facial details.",
+}
+
+
+def compile_interaction_bindings_tags(actions: list[str]) -> list[str]:
+    """Extract kinematic contact binding tags for any detected physical interaction."""
+    bindings: list[str] = []
+    text = " ".join(actions).lower()
+    words = set(re.findall(r"\b\w+\b", text))
+    for verb, tags in INTERACTION_BINDING_TAGS.items():
+        if verb in words:
+            for t in tags:
+                if t not in bindings:
+                    bindings.append(t)
+    return bindings
+
+
+def compile_interaction_bindings_natural(actions: list[str]) -> list[str]:
+    """Extract natural-language kinematic contact directives for any detected physical interaction."""
+    bindings: list[str] = []
+    text = " ".join(actions).lower()
+    words = set(re.findall(r"\b\w+\b", text))
+    for verb, phrase in INTERACTION_BINDING_NATURAL.items():
+        if verb in words and phrase not in bindings:
+            bindings.append(phrase)
+    return bindings
 
 
 PERSON = {  # (age group, gender) -> the words an anime model needs to draw the right kind of person
@@ -79,6 +218,22 @@ class ShotSpec(BaseModel):
     lighting: str = ""
     mood: str = ""
     key_visuals: list[str] = Field(default_factory=list)
+    pose_image: str | Path | None = None
+    depth_image: str | Path | None = None
+    control_pose: str | Path | None = None
+    control_depth: str | Path | None = None
+    pose_weight: float | None = 0.75
+    depth_weight: float | None = 0.6
+
+    # Rigging & Turnaround reference specifications (Phase 5 M1)
+    rigging: RiggingSpec | None = None
+    is_rigging: bool = False
+    rigging_pose: str = "a_pose"
+    turnaround_views: list[str] = Field(
+        default_factory=lambda: ["front", "three_quarter", "side", "back"]
+    )
+    orthographic: bool = True
+    limb_separation: bool = True
 
     def required_text(self, chars: dict[str, Character]) -> str:
         """Plain-language list of what the picture must show, for the judge."""
@@ -91,6 +246,49 @@ class ShotSpec(BaseModel):
             lines.append(f"Setting: {self.setting}")
         lines += [f"Must be visible: {k}" for k in self.key_visuals]
         return "\n".join(lines)
+
+
+def compile_controlnet_conditioning(spec: ShotSpec, dims: tuple[int, int]) -> dict:
+    """Compile pose and depth conditioning descriptors and paths for ControlNet from ShotSpec."""
+    pose_img = str(spec.pose_image) if spec.pose_image is not None else None
+    depth_img = str(spec.depth_image) if spec.depth_image is not None else None
+
+    # Resolve control_pose from explicit field or character pose tags
+    ctrl_pose = str(spec.control_pose) if spec.control_pose is not None else None
+    if not ctrl_pose and not pose_img:
+        for c in spec.characters:
+            low = f"{c.pose} {c.action}".lower()
+            for k, tag in POSES.items():
+                if k in low:
+                    ctrl_pose = tag
+                    break
+            if ctrl_pose:
+                break
+
+    # Resolve control_depth from explicit field or camera shot framing
+    ctrl_depth = str(spec.control_depth) if spec.control_depth is not None else None
+    if not ctrl_depth and not depth_img:
+        if spec.shot in ("close", "extreme_close"):
+            ctrl_depth = "depth_foreground_portrait"
+        elif spec.shot in ("wide", "full", "full_body"):
+            ctrl_depth = "depth_wide_landscape"
+        elif spec.shot == "medium":
+            ctrl_depth = "depth_midground"
+
+    return {
+        "pose_image": pose_img,
+        "depth_image": depth_img,
+        "pose_weight": spec.pose_weight if spec.pose_weight is not None else 0.75,
+        "depth_weight": spec.depth_weight if spec.depth_weight is not None else 0.6,
+        "control_pose": ctrl_pose,
+        "control_depth": ctrl_depth,
+        "camera": spec.camera,
+        "shot": spec.shot,
+        "dims": dims,
+        "width": dims[0],
+        "height": dims[1],
+        "has_conditioning": bool(pose_img or depth_img or spec.control_pose or spec.control_depth),
+    }
 
 
 def tags_for(text: str, vocab: dict[str, str]) -> list[str]:
@@ -107,7 +305,7 @@ def light_tags(text: str) -> list[str]:
     return [v for k, v in LIGHT.items() if k in low]
 
 
-WORD_BUDGET = 90  # the image model's text encoder reads about 77 tokens with full attention; later words fade, so priority order matters
+WORD_BUDGET = 110  # extended to accommodate explicit kinematic contact binding and margin tags
 
 
 def _tokens(text: str, limit: int | None = None) -> list[str]:
@@ -136,11 +334,17 @@ def compose(story: OriginalStory, spec: ShotSpec, location_id: str, emphasis: li
         detail = list(dict.fromkeys(tags_for(c.expression, EXPRESSIONS) + tags_for(c.pose, POSES) + tags_for(c.action, POSES)
                                     + tags_for(c.action, EXPRESSIONS)))
         groups.append(_tokens(person_tags(ch)) + _tokens(ch.look, 6) + detail + [x for x in (c.pose, c.action) if x])
+    # Kinematic interaction binding tokens (prevent floating objects and disconnected grip)
+    action_texts = [c.action for c in shown if c.action] + [c.pose for c in shown if c.pose] + spec.key_visuals
+    interaction_tags = compile_interaction_bindings_tags(action_texts)
+    if interaction_tags:
+        groups.append(interaction_tags)
     groups.append([f"({e}:1.4)" for e in emphasis if e not in spec.key_visuals])
     groups.append([f"({k}:1.3)" if k in emphasis else k for k in spec.key_visuals])
     groups.append(_tokens(spec.setting) + _tokens(loc.look, 5 if loc else 0))
     groups.append(light_tags(spec.lighting + " " + spec.mood) + _tokens(spec.lighting) + _tokens(spec.mood))
-    groups.append([CAMERA.get(spec.shot, ""), ANGLE.get(spec.camera, "")])
+    margin_tags = MARGIN_TAGS.get(spec.shot, [])
+    groups.append([CAMERA.get(spec.shot, ""), ANGLE.get(spec.camera, "")] + margin_tags)
     tokens: list[str] = []
     words = 0
     for group in groups:
@@ -170,7 +374,8 @@ NATURAL_PERSON = {
     ("elder", "male"): "an old man with a wrinkled face", ("elder", "female"): "an old woman with a wrinkled face",
     ("elder", "neutral"): "an elderly person",
 }
-FRAMING = {"wide": "Wide shot showing the whole scene and the surroundings.", "medium": "Medium shot from the waist up.",
+FRAMING = {"wide": "Wide shot showing the whole scene and the surroundings.", "full": "Full-body shot showing the character from head to toe.",
+           "full_body": "Full-body shot showing the character from head to toe.", "medium": "Medium shot from the waist up.",
            "close": "Close-up of the face and shoulders.", "extreme_close": "Extreme close-up on the face and eyes.",
            "over_shoulder": "Over-the-shoulder shot from behind the character."}
 NATURAL_SUFFIX = "No text, no captions, no speech bubbles, no watermark. A single clean illustration with consistent character design."
@@ -218,6 +423,14 @@ def compose_natural(story: OriginalStory, spec: ShotSpec, location_id: str, emph
         where = "" if len(shown) == 1 else ("On the left: " if k == 0 else "On the right: ")
         doing = un(", ".join(x for x in (c.pose, c.expression, c.action) if x))
         parts.append(f"{where}{describe_character(chars[c.id])}. {doing[:1].upper() + doing[1:]}." if doing else f"{where}{describe_character(chars[c.id])}.")
+    if not simplify:
+        action_texts = [c.action for c in shown if c.action] + [c.pose for c in shown if c.pose] + spec.key_visuals
+        binding_phrases = compile_interaction_bindings_natural(action_texts)
+        if binding_phrases:
+            parts.append(f"Physical contact: {'; '.join(binding_phrases)}.")
+        margin_phrase = MARGIN_NATURAL.get(spec.shot)
+        if margin_phrase:
+            parts.append(margin_phrase)
     if simplify:  # last resort: fewer details compete with the thing the previous attempts kept missing
         spec = spec.model_copy(update={"lighting": "", "mood": "", "setting": spec.setting.split(".")[0][:80]})
     place = ". ".join(x for x in ((loc.name + ": " + ", ".join(_tokens(loc.look, 5))) if loc else "", spec.setting) if x)
@@ -289,8 +502,10 @@ def compose_motion_prompt(
             parts.append("character " + "; ".join(acts))
         if spec.mood:
             parts.append(f"{spec.mood} atmosphere")
+        if getattr(spec, "shot", "") == "wide" or getattr(spec, "camera", "") == "wide":
+            parts.append("shallow depth of field, sharp foreground character, soft background bokeh")
 
     parts.append("natural subtle movement, cloth and hair dynamics, cinematic lighting, highly detailed, steady frame rate, consistent character appearance, 24fps smooth motion")
     pos = ", ".join(parts)
-    neg = "fast jerky motion, abrupt camera jump cut, morphing face, distorted hands, flickering, twitching, text, watermark, bad anatomy, jittery artifacts"
+    neg = "fast jerky motion, abrupt camera jump cut, morphing face, distorted hands, flickering, twitching, text, watermark, bad anatomy, jittery artifacts, melted face, blurry facial features, faceless pedestrians"
     return pos, neg

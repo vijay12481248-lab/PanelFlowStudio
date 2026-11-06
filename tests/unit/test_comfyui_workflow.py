@@ -145,7 +145,7 @@ def test_mismatched_output_is_rejected_before_asset_file_or_database_persistence
                     lambda *_: None,
                     lambda: False,
                     project_id="project",
-                    workflow_id="approved",
+                    workflow_id=service.ART_WORKFLOW_ID,
                     prompt="valid prompt text",
                     negative_prompt="negative",
                     width=640,

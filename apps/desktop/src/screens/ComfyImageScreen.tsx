@@ -50,7 +50,7 @@ export const ComfyImageScreen: React.FC<ComfyImageScreenProps> = ({ project, onB
   // Local ComfyUI state
   const [workflows, setWorkflows] = useState<ComfyWorkflowInfo[]>([]);
   const [assets, setAssets] = useState<GeneratedAsset[]>([]);
-  const [workflowId, setWorkflowId] = useState("manga_image_generation");
+  const [workflowId, setWorkflowId] = useState("qwen_image_21");
   const [comfyPrompt, setComfyPrompt] = useState(SAMPLE_PROMPTS[1]);
   const [negativePrompt, setNegativePrompt] = useState("photorealism, 3D render, blurry, malformed hands, text, watermark, logo, gore");
   const [width, setWidth] = useState(512);

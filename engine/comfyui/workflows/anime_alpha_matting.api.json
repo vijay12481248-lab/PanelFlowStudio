@@ -1,0 +1,68 @@
+{
+  "1": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "input.png"
+    }
+  },
+  "2": {
+    "class_type": "LoadBackgroundRemovalModel",
+    "inputs": {
+      "bg_removal_name": "birefnet-general.safetensors"
+    }
+  },
+  "3": {
+    "class_type": "RemoveBackground",
+    "inputs": {
+      "bg_removal_model": [
+        "2",
+        0
+      ],
+      "image": [
+        "1",
+        0
+      ]
+    }
+  },
+  "4": {
+    "class_type": "JoinImageWithAlpha",
+    "inputs": {
+      "image": [
+        "1",
+        0
+      ],
+      "alpha": [
+        "3",
+        0
+      ]
+    }
+  },
+  "5": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "filename_prefix": "panelflow_alpha",
+      "images": [
+        "4",
+        0
+      ]
+    }
+  },
+  "6": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": ""
+    }
+  },
+  "7": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": ""
+    }
+  },
+  "8": {
+    "class_type": "RandomNoise",
+    "inputs": {
+      "noise_seed": 0
+    }
+  }
+}

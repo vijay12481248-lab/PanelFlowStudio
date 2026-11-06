@@ -35,7 +35,7 @@ async def panelflow_system_resources() -> dict[str, Any]:
 
 @registry.tool(
     name="panelflow_models_status",
-    description="Inspect availability and health of local AI backends (Ollama qwen3.5:9b vision/text, ComfyUI :8188, ACE-Step :8001, MiniMax H3, FLUX.1).",
+    description="Inspect availability and health of local AI backends (Ollama qwen3.5:9b vision/text, ComfyUI :8188, ACE-Step :8001, MiniMax H3, Qwen Image 2.1).",
     input_schema={
         "type": "object",
         "properties": {},

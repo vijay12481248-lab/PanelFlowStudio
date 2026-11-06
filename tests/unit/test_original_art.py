@@ -1,4 +1,6 @@
 import json
+
+import pytest
 import asyncio
 import io
 
@@ -302,37 +304,23 @@ def test_claims_are_positive_visible_statements_from_this_narration():
     assert kept == ["a single silver bell hangs high on the wall", "her head is turned upward"]  # no names, no negations, no cast parroting, no duplicates
 
 
-def test_flux_uses_pulid_when_character_reference_is_provided(tmp_path):
-    from unittest.mock import MagicMock
-    from pathlib import Path
-    
-    mock_client = MagicMock()
-    mock_client.base_url = 'http://127.0.0.1:8188/'
-    mock_client.submit_prompt.return_value = 'pid123'
-    mock_client.history.return_value = {'pid123': {'outputs': {'7': {'images': [{'filename': 'out.png', 'subfolder': '', 'type': 'output'}]}}}}
-    mock_client.download_output.return_value = b'fakepng'
-    
+def test_qwen_generation_goes_through_the_central_art_engine():
+    calls = []
+
+    class FakeArt:
+        def generate(self, *args, **kwargs):
+            calls.append((args, kwargs))
+            return type("Img", (), {"png": b"png-bytes"})()
+
     runner = art.ComfyRunner.__new__(art.ComfyRunner)
-    runner.client = mock_client
-    runner.engine = 'flux'
-    runner.style = 'natural'
-    mock_inputs = {'text': '', 'neg': '', 'seed': 0, 'w': 100, 'h': 100, 'p': ''}
-    runner.flux = ({'1': {'class_type': 'TestNode', 'inputs': mock_inputs.copy()}}, {'patch_slots': {'prompt': {'node_id': '1', 'input': 'text', 'class_type': 'TestNode'}, 'negative_prompt': {'node_id': '1', 'input': 'neg', 'class_type': 'TestNode'}, 'seed': {'node_id': '1', 'input': 'seed', 'class_type': 'TestNode'}, 'width': {'node_id': '1', 'input': 'w', 'class_type': 'TestNode'}, 'height': {'node_id': '1', 'input': 'h', 'class_type': 'TestNode'}, 'filename_prefix': {'node_id': '1', 'input': 'p', 'class_type': 'TestNode'}}})
-    runner.flux_pulid = ({'1': {'class_type': 'TestNode', 'inputs': mock_inputs.copy()}, '8': {'class_type': 'LoadImage', 'inputs': {'image': ''}}, '12': {'class_type': 'ApplyPulidFlux', 'inputs': {'weight': 0.85}}}, {'patch_slots': {'prompt': {'node_id': '1', 'input': 'text', 'class_type': 'TestNode'}, 'negative_prompt': {'node_id': '1', 'input': 'neg', 'class_type': 'TestNode'}, 'seed': {'node_id': '1', 'input': 'seed', 'class_type': 'TestNode'}, 'width': {'node_id': '1', 'input': 'w', 'class_type': 'TestNode'}, 'height': {'node_id': '1', 'input': 'h', 'class_type': 'TestNode'}, 'filename_prefix': {'node_id': '1', 'input': 'p', 'class_type': 'TestNode'}, 'reference_image': {'node_id': '8', 'input': 'image', 'class_type': 'LoadImage'}, 'reference_weight': {'node_id': '12', 'input': 'weight', 'class_type': 'ApplyPulidFlux'}}})
-    runner.ipa = None
-    runner.ipa2 = None
-    runner._upload = lambda p: 'uploaded_' + p.name
-    
-    ref_file = tmp_path / 'char.png'
-    ref_file.write_bytes(b'abc')
-    
-    # 1. With reference -> uses flux_pulid
-    runner.generate('hero portrait', '', 42, 1344, 768, 'test', reference=ref_file)
-    submitted_wf = mock_client.submit_prompt.call_args[0][0]
-    assert '8' in submitted_wf and submitted_wf['8']['inputs']['image'] == 'uploaded_char.png'
-    
-    # 2. Without reference -> uses flux_schnell
-    mock_client.reset_mock()
-    runner.generate('landscape view', '', 42, 1344, 768, 'test', reference=None)
-    submitted_wf2 = mock_client.submit_prompt.call_args[0][0]
-    assert '8' not in submitted_wf2
+    runner.engine, runner.style, runner.sdxl_controlnet, runner.art = "qwen", "natural", None, FakeArt()
+    assert runner.generate("hero portrait", "", 42, 1344, 768, "test", reference=None, timeout=5.0) == b"png-bytes"
+    assert calls == [(("hero portrait", "", 1344, 768, 42, "test"), {"timeout": 5.0, "is_cancelled": calls[0][1]["is_cancelled"]})]
+
+
+def test_removed_image_engines_fail_loudly_instead_of_falling_back():
+    from unittest.mock import MagicMock
+
+    for engine in ("flux", "pulid", "manga"):
+        with pytest.raises(ValueError, match="qwen_image_21"):
+            art.ComfyRunner(client=MagicMock(), engine=engine)

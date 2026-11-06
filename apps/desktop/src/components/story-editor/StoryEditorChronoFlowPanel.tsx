@@ -68,21 +68,20 @@ export const StoryEditorChronoFlowPanel: React.FC<StoryEditorChronoFlowPanelProp
     setGenerating(true);
     setError(null);
     try {
-      // Generate replacement image via ChronoFlow / FLUX.1 endpoint
+      // Generate replacement image through the single PanelFlow art workflow (Qwen Image 2.1)
       const res = await fetch("http://127.0.0.1:8765/api/chronoflow/generate_image", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt,
-          model: "flux",
           width: 1344,
           height: 768,
         }),
       });
       if (res.ok) {
         const data = await res.json();
-        if (data.image_url) {
-          setGeneratedImageUrl(`http://127.0.0.1:8765${data.image_url}`);
+        if (data.url) {
+          setGeneratedImageUrl(`http://127.0.0.1:8765${data.url}`);
         }
       }
     } catch (err: any) {
@@ -108,7 +107,7 @@ export const StoryEditorChronoFlowPanel: React.FC<StoryEditorChronoFlowPanelProp
                   Scene #{scene?.id?.slice(-4) || "1"}
                 </span>
               </div>
-              <p className="text-[11px] text-zinc-400">MiniMax Fast H3 Video Chaining & FLUX.1 Image Art</p>
+              <p className="text-[11px] text-zinc-400">MiniMax Fast H3 Video Chaining & Qwen Image 2.1 Art</p>
             </div>
           </div>
 
@@ -152,7 +151,7 @@ export const StoryEditorChronoFlowPanel: React.FC<StoryEditorChronoFlowPanelProp
             }`}
           >
             <ImageIcon className="w-3.5 h-3.5" />
-            <span>FLUX.1 Panel Art</span>
+            <span>Qwen Panel Art</span>
           </button>
           <button
             onClick={() => setActiveTab("chaining")}
@@ -248,7 +247,7 @@ export const StoryEditorChronoFlowPanel: React.FC<StoryEditorChronoFlowPanelProp
           {activeTab === "image" && (
             <div className="space-y-4 pt-1">
               <p className="text-xs text-zinc-400">
-                Generate high-resolution replacement panel art using FLUX.1 Schnell fp8, preserving the narrative tone and character consistency.
+                Generate high-resolution replacement panel art using Qwen Image 2.1 Turbo, preserving the narrative tone and character consistency.
               </p>
 
               {generatedImageUrl && (
@@ -273,7 +272,7 @@ export const StoryEditorChronoFlowPanel: React.FC<StoryEditorChronoFlowPanelProp
                 className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-semibold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-indigo-900/30 transition-all"
               >
                 {generating ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                <span>{generating ? "Generating with FLUX.1 Schnell..." : "Generate Panel Image"}</span>
+                <span>{generating ? "Generating with Qwen Image 2.1..." : "Generate Panel Image"}</span>
               </button>
             </div>
           )}

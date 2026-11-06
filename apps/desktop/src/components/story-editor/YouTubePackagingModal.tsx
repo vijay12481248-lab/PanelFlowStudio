@@ -21,7 +21,7 @@ export const YouTubePackagingModal: React.FC<YouTubePackagingModalProps> = ({
   const [loading, setLoading] = useState<boolean>(true);
   const [packaging, setPackaging] = useState<YouTubePackagingData | null>(null);
   const [workflows, setWorkflows] = useState<ComfyWorkflowInfo[]>([]);
-  const [selectedWorkflow, setSelectedWorkflow] = useState<string>("manga_image_generation");
+  const [selectedWorkflow, setSelectedWorkflow] = useState<string>("qwen_image_21");
 
   // Editable Research State
   const [selectedTitle, setSelectedTitle] = useState<string>("");
@@ -338,7 +338,7 @@ export const YouTubePackagingModal: React.FC<YouTubePackagingModalProps> = ({
                           </option>
                         ))
                       ) : (
-                        <option value="manga_image_generation">manga_image_generation (default)</option>
+                        <option value="qwen_image_21">qwen_image_21 (default)</option>
                       )}
                     </select>
                   </div>

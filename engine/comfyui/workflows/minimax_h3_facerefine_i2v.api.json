@@ -1,0 +1,208 @@
+{
+  "1": {
+    "class_type": "UNETLoader",
+    "inputs": {
+      "unet_name": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+      "weight_dtype": "default"
+    }
+  },
+  "2": {
+    "class_type": "CLIPLoader",
+    "inputs": {
+      "clip_name": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+      "type": "minimax"
+    }
+  },
+  "3": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "minimax_h3_video_vae_int8_convrot.safetensors"
+    }
+  },
+  "4": {
+    "class_type": "LoraLoaderModelOnly",
+    "inputs": {
+      "model": [
+        "1",
+        0
+      ],
+      "lora_name": "minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors",
+      "strength_model": 1.0
+    }
+  },
+  "5": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "panel_input.png"
+    }
+  },
+  "6": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "bad video, low quality, jitter, blur, distortion, morphing face, melted face, bad anatomy",
+      "clip": [
+        "2",
+        0
+      ]
+    }
+  },
+  "7": {
+    "class_type": "MiniMaxH3ImageToVideo",
+    "inputs": {
+      "clip": [
+        "2",
+        0
+      ],
+      "vae": [
+        "3",
+        0
+      ],
+      "prompt": "cinematic camera motion, high detail, smooth 24fps",
+      "width": 1344,
+      "height": 768,
+      "length": 124,
+      "first_frame": [
+        "5",
+        0
+      ]
+    }
+  },
+  "8": {
+    "class_type": "KSamplerSelect",
+    "inputs": {
+      "sampler_name": "euler"
+    }
+  },
+  "9": {
+    "class_type": "BasicScheduler",
+    "inputs": {
+      "model": [
+        "4",
+        0
+      ],
+      "scheduler": "simple",
+      "steps": 8,
+      "denoise": 1.0
+    }
+  },
+  "10": {
+    "class_type": "BasicGuider",
+    "inputs": {
+      "model": [
+        "4",
+        0
+      ],
+      "conditioning": [
+        "7",
+        0
+      ]
+    }
+  },
+  "11": {
+    "class_type": "RandomNoise",
+    "inputs": {
+      "noise_seed": 0
+    }
+  },
+  "12": {
+    "class_type": "SamplerCustomAdvanced",
+    "inputs": {
+      "noise": [
+        "11",
+        0
+      ],
+      "guider": [
+        "10",
+        0
+      ],
+      "sampler": [
+        "8",
+        0
+      ],
+      "sigmas": [
+        "9",
+        0
+      ],
+      "latent_image": [
+        "7",
+        1
+      ]
+    }
+  },
+  "13": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": [
+        "12",
+        0
+      ],
+      "vae": [
+        "3",
+        0
+      ]
+    }
+  },
+  "14": {
+    "class_type": "CreateVideo",
+    "inputs": {
+      "images": [
+        "17",
+        0
+      ],
+      "fps": 24.0
+    }
+  },
+  "15": {
+    "class_type": "SaveVideo",
+    "inputs": {
+      "video": [
+        "14",
+        0
+      ],
+      "filename_prefix": "panelflow_h3_facerefine",
+      "format": "auto"
+    }
+  },
+  "16": {
+    "class_type": "H3FaceTrackCrop",
+    "inputs": {
+      "images": [
+        "13",
+        0
+      ],
+      "detector": "face_yolov8m.pt",
+      "confidence": 0.45,
+      "crop_factor": 1.5,
+      "canvas_width": 512,
+      "canvas_height": 512,
+      "canvas_mode": "pad_to_target",
+      "smooth_window": 5,
+      "size_smooth_window": 5,
+      "smooth_method": "gaussian",
+      "size_mode": "target_longest"
+    }
+  },
+  "17": {
+    "class_type": "H3FaceStitch",
+    "inputs": {
+      "base_images": [
+        "13",
+        0
+      ],
+      "refined_crops": [
+        "16",
+        0
+      ],
+      "transform": [
+        "16",
+        1
+      ],
+      "paste_region": "face_box",
+      "mask_dilation": 8,
+      "feather": 16,
+      "colour_match": "none",
+      "blend": 1.0,
+      "undetected_frames": "pass_through"
+    }
+  }
+}

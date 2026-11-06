@@ -1,7 +1,7 @@
 """ChronoFlow Pro Studio API Router for PanelFlow Studio.
 
 Sliding Window Video Chaining Engine & AI Cinematography using MiniMax Fast H3,
-FLUX.1 Schnell fp8, Qwen-Image-2.1 Turbo, character turnaround reference consistency,
+Qwen Image 2.1 Turbo (the single PanelFlow art workflow), character turnaround reference consistency,
 and autonomous video chunk quality inspection.
 """
 
@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field
 
 from engine.chronoflow.pipeline import (
@@ -96,6 +96,8 @@ class GenerateRequest(BaseModel):
     ref_images: list[str] = Field(default_factory=list)
     scenes: list[dict[str, Any]] = Field(default_factory=list)
     pre_existing_chunks: list[str] = Field(default_factory=list)
+    face_refine: bool = Field(default=False)
+    upscale_mode: str = Field(default="none")
 
 
 class RegenerateChunkRequest(BaseModel):
@@ -108,12 +110,10 @@ class RegenerateChunkRequest(BaseModel):
 
 
 class GenerateImageRequest(BaseModel):
-    model: str = Field(default="flux")  # flux or qwen
     prompt: str = Field(default="Cinematic character turnaround sheet, white background.")
     negative_prompt: str = Field(default="blurry, low quality, distorted, bad anatomy")
-    width: int | None = None
+    width: int | None = None  # multiples of 16, 256..2048 (the art workflow's policy)
     height: int | None = None
-    steps: int | None = None
     seed: int | None = None
 
 
@@ -133,6 +133,28 @@ class TimelineExportRequest(BaseModel):
 class AIDirectorPlanRequest(BaseModel):
     idea: str = Field(default="A lone scavenger navigates an infected city at dusk.")
     duration: int = Field(default=15, ge=5, le=300)
+    genre: str = Field(default="sci-fi")
+    protagonist_name: str | None = None
+    protagonist_tag: str | None = None
+
+
+class SaveScreenplayRequest(BaseModel):
+    filename: str | None = None
+    title: str = Field(default="Untitled Storyboard")
+    duration: float = Field(default=15.6)
+    protagonist: dict[str, Any] = Field(default_factory=dict)
+    anchor_images: dict[str, Any] = Field(default_factory=dict)
+    scenes: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class RenderShotRequest(BaseModel):
+    scene: dict[str, Any]
+    shot_index: int = Field(default=1, ge=1)
+    width: int = Field(default=1344)
+    height: int = Field(default=768)
+    steps: int = Field(default=4)
+    lora_choice: str = Field(default="4step")
+    first_frame: str | None = None
 
 
 class SaveFrameRequest(BaseModel):
@@ -151,6 +173,14 @@ class ReviewPayload(BaseModel):
 # Production Pipelines (Async Coroutines managed by Supervisor)
 # =====================================================================
 
+def resolve_h3_lora_name(choice: str | None) -> str:
+    """Resolve LoRA choice to exact safetensors filename registered in ComfyUI."""
+    choice_str = str(choice or "").lower()
+    if "8step" in choice_str:
+        return "minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors"
+    return "minimax_h3_fl2v_turbo_4step_v1.0_768p_comfyui_bf16.safetensors"
+
+
 async def run_production_job(job_id: str, data: dict[str, Any]) -> None:
     if job_id not in active_jobs:
         return
@@ -162,11 +192,9 @@ async def run_production_job(job_id: str, data: dict[str, Any]) -> None:
         height = int(data.get("height", 768))
         steps = int(data.get("steps", 4))
         lora_choice = data.get("lora_choice", "4step")
-        lora_name = (
-            "minimax_h3_fl2v_turbo_4step_v1.0_768p_comfyui_bf16.safetensors"
-            if lora_choice == "4step"
-            else "minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors"
-        )
+        lora_name = resolve_h3_lora_name(lora_choice)
+        face_refine = bool(data.get("face_refine", False))
+        upscale_mode = str(data.get("upscale_mode", "none"))
 
         chunk_files: list[Path] = []
         pre_existing = data.get("pre_existing_chunks", [])
@@ -203,6 +231,8 @@ async def run_production_job(job_id: str, data: dict[str, Any]) -> None:
                 workflow_mode="flf2v",
                 first_frame_filename=first_frame,
                 last_frame_filename=last_frame,
+                face_refine=face_refine,
+                upscale_mode=upscale_mode,
             )
             out_video = await pipeline.execute_prompt(graph, on_step=on_step)
             chunk_files.append(out_video)
@@ -237,6 +267,8 @@ async def run_production_job(job_id: str, data: dict[str, Any]) -> None:
                     lora_name=lora_name,
                     workflow_mode="reference",
                     ref_images=ref_images,
+                    face_refine=face_refine,
+                    upscale_mode=upscale_mode,
                 )
                 chunk_output = await pipeline.execute_prompt(graph, on_step=on_step)
                 chunk_files.append(chunk_output)
@@ -293,6 +325,8 @@ async def run_production_job(job_id: str, data: dict[str, Any]) -> None:
                     first_frame_filename=s_first,
                     last_frame_filename=s_last,
                     ref_images=s_refs,
+                    face_refine=face_refine,
+                    upscale_mode=upscale_mode,
                 )
                 chunk_output = await pipeline.execute_prompt(graph, on_step=on_step)
                 chunk_files.append(chunk_output)
@@ -334,6 +368,8 @@ async def run_production_job(job_id: str, data: dict[str, Any]) -> None:
                     lora_name=lora_name,
                     workflow_mode="sliding_window",
                     first_frame_filename=current_guide_frame,
+                    face_refine=face_refine,
+                    upscale_mode=upscale_mode,
                 )
                 chunk_output = await pipeline.execute_prompt(graph, on_step=on_step)
                 chunk_files.append(chunk_output)
@@ -539,7 +575,7 @@ def get_chronoflow_job(job_id: str) -> dict[str, Any]:
 
 
 @router.post("/generate")
-def submit_generate_job(req: GenerateRequest) -> dict[str, Any]:
+async def submit_generate_job(req: GenerateRequest) -> dict[str, Any]:
     job_id = uuid.uuid4().hex[:12]
     new_job = {
         "id": job_id,
@@ -566,7 +602,7 @@ def submit_generate_job(req: GenerateRequest) -> dict[str, Any]:
 
 
 @router.post("/regenerate_chunk")
-def submit_regenerate_chunk(req: RegenerateChunkRequest) -> dict[str, Any]:
+async def submit_regenerate_chunk(req: RegenerateChunkRequest) -> dict[str, Any]:
     if req.job_id not in active_jobs:
         raise HTTPException(status_code=404, detail="Job not found")
 
@@ -596,7 +632,7 @@ def cancel_job(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 @router.post("/job/{job_id}/review")
-def submit_job_review(job_id: str, payload: ReviewPayload) -> dict[str, Any]:
+async def submit_job_review(job_id: str, payload: ReviewPayload) -> dict[str, Any]:
     data = payload.model_dump()
     if job_id not in reviews_store:
         reviews_store[job_id] = []
@@ -664,41 +700,8 @@ def delete_character(char_id: str) -> dict[str, Any]:
 @router.post("/generate_image")
 async def generate_image(req: GenerateImageRequest) -> dict[str, Any]:
     try:
-        model_choice = req.model.lower()
-        width = req.width or (1344 if "flux" in model_choice else 1024)
-        height = req.height or (768 if "flux" in model_choice else 1024)
-        steps = req.steps or (4 if "flux" in model_choice else 8)
-
-        if "flux" in model_choice:
-            graph = pipeline.build_flux_image_prompt(
-                prompt=req.prompt,
-                width=width,
-                height=height,
-                steps=steps,
-                seed=req.seed,
-            )
-            prefix = "flux_gen"
-        else:
-            graph = pipeline.build_qwen_image_prompt(
-                prompt=req.prompt,
-                negative_prompt=req.negative_prompt,
-                width=width,
-                height=height,
-                steps=steps,
-                seed=req.seed,
-            )
-            prefix = "qwen_gen"
-
-        out_path = await pipeline.execute_prompt(graph)
-        new_filename = f"{prefix}_{uuid.uuid4().hex[:8]}.png"
-        target_path = COMFY_INPUT_DIR / new_filename
-        shutil.copy2(out_path, target_path)
-
-        return {
-            "success": True,
-            "filename": new_filename,
-            "url": f"/chronoflow/inputs/{new_filename}",
-        }
+        filename = await pipeline.generate_art_image(req.prompt, req.negative_prompt, req.width or 1024, req.height or 1024, req.seed)
+        return {"success": True, "filename": filename, "url": f"/chronoflow/inputs/{filename}"}
     except Exception as e:
         logger.exception("Image generation failed: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
@@ -779,46 +782,237 @@ async def upload_image(request: Request) -> dict[str, Any]:
 
 
 # =====================================================================
-# AI Director & Timeline Export
+# Storyboard, Screenplays & AI Director
 # =====================================================================
+
+@router.get("/screenplays")
+def list_screenplays() -> dict[str, Any]:
+    """List available screenplays from vault."""
+    screenplays = []
+    if VAULT_DIR.exists():
+        for path in sorted(VAULT_DIR.glob("screenplay_*.json")):
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                scenes = data.get("scenes", [])
+                screenplays.append({
+                    "filename": path.name,
+                    "title": data.get("title", path.stem.replace("_", " ").title()),
+                    "duration": float(data.get("duration", len(scenes) * 5.2)),
+                    "scenes_count": len(scenes),
+                    "protagonist": data.get("protagonist", {}),
+                    "anchor_images": data.get("anchor_images", {}),
+                })
+            except Exception as e:
+                logger.warning("Could not read screenplay %s: %s", path.name, e)
+    return {"screenplays": screenplays}
+
+
+@router.get("/screenplay/{filename}")
+def get_screenplay(filename: str) -> dict[str, Any]:
+    """Retrieve full screenplay JSON by filename."""
+    if not filename.endswith(".json") or "/" in filename or "\\" in filename or ".." in filename:
+        raise HTTPException(status_code=400, detail="Invalid screenplay filename")
+
+    file_path = VAULT_DIR / filename
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail=f"Screenplay '{filename}' not found")
+
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        scenes = data.get("scenes", [])
+        norm_scenes = []
+        for idx, sc in enumerate(scenes):
+            shot_num = sc.get("shot_index", idx + 1)
+            raw_title = sc.get("title", f"Shot {shot_num}")
+
+            shot_type = sc.get("shot_type")
+            if not shot_type:
+                lower_t = raw_title.lower()
+                if "establishing" in lower_t or "wide" in lower_t or shot_num == 1:
+                    shot_type = "Wide Establishing"
+                elif "climax" in lower_t or "conclusion" in lower_t or shot_num == len(scenes):
+                    shot_type = "Dynamic Climax"
+                elif "close" in lower_t or "scan" in lower_t or "analysis" in lower_t:
+                    shot_type = "Macro Close-Up"
+                else:
+                    shot_type = "Medium Tracking"
+
+            norm_scenes.append({
+                "shot_index": shot_num,
+                "title": raw_title,
+                "shot_type": shot_type,
+                "duration": float(sc.get("duration", 5.2)),
+                "workflow": sc.get("workflow", "sliding_window" if shot_num > 1 else "reference"),
+                "first_frame": sc.get("first_frame", ""),
+                "last_frame": sc.get("last_frame", ""),
+                "ref_images": sc.get("ref_images", []),
+                "prompt": sc.get("prompt", ""),
+            })
+
+        data["scenes"] = norm_scenes
+        data["filename"] = filename
+        data["duration"] = float(data.get("duration", len(norm_scenes) * 5.2))
+        return data
+    except Exception as e:
+        logger.error("Failed to load screenplay %s: %s", filename, e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/screenplay/save")
+def save_screenplay(req: SaveScreenplayRequest) -> dict[str, Any]:
+    """Save or update a screenplay in the vault."""
+    filename = req.filename
+    if not filename:
+        safe_title = "".join(c for c in req.title.lower() if c.isalnum() or c in ("_", "-")).strip()
+        filename = f"screenplay_{safe_title or 'custom'}.json"
+
+    if not filename.endswith(".json") or "/" in filename or "\\" in filename or ".." in filename:
+        raise HTTPException(status_code=400, detail="Invalid screenplay filename")
+
+    payload = {
+        "title": req.title,
+        "duration": req.duration,
+        "protagonist": req.protagonist,
+        "anchor_images": req.anchor_images,
+        "scenes": req.scenes,
+    }
+
+    try:
+        temp_file = VAULT_DIR / f"screenplay_tmp_{int(time.time() * 1000)}.json"
+        with open(temp_file, "w", encoding="utf-8") as f:
+            json.dump(payload, f, indent=2)
+        target_file = VAULT_DIR / filename
+        temp_file.replace(target_file)
+        return {"success": True, "filename": filename, "title": req.title, "scenes_count": len(req.scenes)}
+    except Exception as e:
+        logger.error("Failed to save screenplay %s: %s", filename, e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/storyboard/render_shot")
+async def render_storyboard_shot(req: RenderShotRequest) -> dict[str, Any]:
+    """Render a single shot directly from a storyboard card."""
+    scene = req.scene
+    shot_num = req.shot_index
+    prompt = scene.get("prompt", "Cinematic action scene.")
+    first_frame = req.first_frame or scene.get("first_frame")
+    last_frame = scene.get("last_frame")
+    ref_images = scene.get("ref_images", [])
+
+    # Validate image files exist in COMFY_INPUT_DIR to avoid ComfyUI LoadImage validation error
+    if first_frame and not (COMFY_INPUT_DIR / first_frame).exists():
+        logger.warning("First frame '%s' not found in ComfyUI input dir, generating text-to-video instead.", first_frame)
+        first_frame = None
+
+    if last_frame and not (COMFY_INPUT_DIR / last_frame).exists():
+        logger.warning("Last frame '%s' not found in ComfyUI input dir, ignoring.", last_frame)
+        last_frame = None
+
+    if ref_images:
+        ref_images = [img for img in ref_images if (COMFY_INPUT_DIR / img).exists()]
+
+    workflow_mode = "reference" if ref_images else ("flf2v" if (first_frame and last_frame) else ("sliding_window" if first_frame else "sliding_window"))
+    lora_name = resolve_h3_lora_name(req.lora_choice)
+
+    try:
+        graph = pipeline.build_h3_prompt(
+            prompt=prompt,
+            width=req.width,
+            height=req.height,
+            length=124,
+            steps=req.steps,
+            lora_name=lora_name,
+            workflow_mode=workflow_mode,
+            first_frame_filename=first_frame,
+            last_frame_filename=last_frame,
+            ref_images=ref_images,
+        )
+        chunk_output = await pipeline.execute_prompt(graph)
+        chunk_filename = f"shot_{shot_num}_{uuid.uuid4().hex[:6]}.mp4"
+        dest_path = STUDIO_OUTPUT_DIR / chunk_filename
+        shutil.copy2(chunk_output, dest_path)
+
+        return {
+            "success": True,
+            "shot_index": shot_num,
+            "video_url": f"/chronoflow/outputs/{chunk_filename}",
+            "filename": chunk_filename,
+        }
+    except Exception as e:
+        logger.error("Failed to render storyboard shot %d: %s", shot_num, e)
+        raise HTTPException(status_code=500, detail=f"Shot render failed: {e}")
+
 
 @router.post("/ai_director/plan")
 def ai_director_plan(req: AIDirectorPlanRequest) -> dict[str, Any]:
+    """Generates a structured multi-scene storyboard breakdown from a high-level story idea."""
     num_scenes = max(1, round(req.duration / 5.2))
     scenes = []
+
+    shot_types = [
+        ("Wide Establishing", "Wide panoramic establishing shot sweeping across the scene, introducing environment and spatial scale."),
+        ("Low-Angle Tracking", "Deliberate low-angle tracking shot moving with ground-level tension and atmospheric particle drift."),
+        ("Medium Action", "Dynamic medium shot capturing decisive subject interaction, kinetic energy, and environmental focus."),
+        ("Macro Close-Up", "Extreme close-up revealing intricate tactical details, subtle expressions, and digital HUD reflections."),
+        ("High-Angle Crane", "Sweeping high-angle crane shot descending from high vantage point, tracking spatial orientation."),
+        ("Dynamic Climax", "High-velocity whip-pan stabilizing into an intense kinetic reaction shot with dramatic lighting shifts."),
+        ("Resolution Vista", "Majestic slow-pull vista shot resolving scene momentum into expansive cinematic composition."),
+    ]
+
+    actor_name = req.protagonist_name or "The Operative"
+    actor_tag = req.protagonist_tag or "<Picture 1>"
 
     for i in range(num_scenes):
         shot_num = i + 1
         if shot_num == 1:
-            desc = f"Establishing Shot: Wide panoramic view introducing the scene. {req.idea}. The camera drifts forward slowly through atmospheric haze."
-            shot_type = "Wide Establishing"
+            stype, sdesc = shot_types[0]
+            camera_mov = "Slow deliberate low-angle forward tracking push through swirling atmospheric mist."
         elif shot_num == num_scenes:
-            desc = f"Climactic Shot: Low angle dynamic reaction. High tension conclusion, quick camera pan and dramatic lighting."
-            shot_type = "Dynamic Climax"
+            stype, sdesc = shot_types[5] if num_scenes > 2 else shot_types[1]
+            camera_mov = "Rapid whip-pan stabilizing into dynamic low-angle reaction shot with dramatic lighting."
         else:
-            desc = f"Subject Action Shot: Medium close-up focusing on character movement, environmental interaction, and mounting suspense."
-            shot_type = "Medium Tracking"
+            type_idx = 1 + ((i - 1) % (len(shot_types) - 2))
+            stype, sdesc = shot_types[type_idx]
+            camera_mov = f"Smooth cinematic tracking shot following {actor_name} with shallow depth of field."
+
+        detailed_desc = (
+            f"camera_movement: {camera_mov} "
+            f"subject_description: {actor_name} performs decisive tactical actions in the heart of the environment. "
+            f"environmental_details: {req.idea}. Cinematic atmosphere with volumetric haze and rich texture detail. "
+            f"lighting_and_atmosphere: High-contrast cinematic chiaroscuro with vivid accent edge highlights. "
+            f"overall_soundscape: Ambient atmospheric resonance, subtle environmental movement, mechanical hum. Strict rule: absolutely no human speech or dialogue. "
+            f"non_diegetic_music: Pulse-driving cinematic synth pads with deep sub-bass momentum."
+        )
 
         formatted_h3 = pipeline.compile_h3_prompt(
-            detailed_description=f"[Shot {shot_num}] {desc}",
-            summary=f"Scene {shot_num} of {num_scenes}: {shot_type}",
-            retention_analysis="Subject appearance and lighting atmosphere are preserved.",
-            soundscape="Subtle ambient wind, distant electrical hum, metallic creaks.",
-            music="Tense low cinematic bass drone.",
+            detailed_description=detailed_desc,
+            summary=f"Scene {shot_num} of {num_scenes}: {stype} - {req.idea[:60]}",
+            retention_analysis=f"Subject {actor_name} appearance, costume details, lighting palette, and environment are strictly preserved.",
+            soundscape="Atmospheric wind resonance, faint electrical humming, crisp movement.",
+            music="Deep cinematic bass drone with evolving harmonic tension.",
+            subject_definitions=f"{actor_name}: Primary character {actor_tag} in high-tech cinematic attire."
         )
 
         scenes.append({
             "shot_index": shot_num,
-            "title": f"Shot {shot_num}: {shot_type}",
+            "title": f"Shot {shot_num}: {stype}",
+            "shot_type": stype,
             "prompt": formatted_h3,
             "duration": 5.2,
             "workflow": "sliding_window" if shot_num > 1 else "reference",
+            "first_frame": "",
+            "last_frame": "",
+            "ref_images": [],
         })
 
     return {
         "success": True,
-        "title": f"Cinematic Project: {req.idea[:40]}...",
-        "total_duration": num_scenes * 5.2,
+        "title": f"Storyboard: {req.idea[:45]}...",
+        "duration": num_scenes * 5.2,
+        "scenes_count": num_scenes,
         "scenes": scenes,
     }
 
@@ -904,11 +1098,11 @@ def get_gallery() -> dict[str, Any]:
             if not f.is_file():
                 continue
             name = f.name
-            if name.startswith(("flux_gen_", "qwen_gen_", "inpaint_", "chronoflow_tail_", "zombie_", "char_")):
+            if name.startswith(("art_", "flux_gen_", "qwen_gen_", "inpaint_", "chronoflow_tail_", "zombie_", "char_")):
                 size_bytes = f.stat().st_size
                 total_bytes += size_bytes
                 mtime = f.stat().st_mtime
-                model_tag = "FLUX.1 Schnell" if "flux" in name else "Qwen-Image-2.1" if "qwen" in name else "Inpaint Asset"
+                model_tag = "FLUX.1 Schnell (legacy)" if "flux" in name else "Qwen-Image-2.1" if name.startswith(("art_", "qwen_gen_")) else "Inpaint Asset"
                 assets["images"].append({
                     "filename": name,
                     "url": f"/chronoflow/inputs/{name}",
@@ -934,8 +1128,13 @@ CHRONOFLOW_STATIC_DIR = Path(__file__).resolve().parents[2] / "chronoflow" / "st
 
 
 @router.get("/ui")
-def get_chronoflow_ui() -> FileResponse:
+def get_chronoflow_ui() -> Response:
     index_path = CHRONOFLOW_STATIC_DIR / "index.html"
     if not index_path.exists():
         raise HTTPException(status_code=404, detail="ChronoFlow UI index.html not found")
-    return FileResponse(index_path, headers={"Cache-Control": "no-cache"})
+    content = index_path.read_text(encoding="utf-8")
+    token = os.getenv("PANELFLOW_ENGINE_TOKEN", "")
+    if token:
+        injection = f'<script>window.__PANELFLOW_ENGINE_TOKEN__ = "{token}";</script>'
+        content = content.replace("<head>", f"<head>\n  {injection}", 1)
+    return HTMLResponse(content, headers={"Cache-Control": "no-cache", "Referrer-Policy": "no-referrer"})

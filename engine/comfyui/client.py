@@ -41,7 +41,7 @@ class ComfyUIClient:
         self,
         base_url: str | None = None,
         workflow_dir: str | Path | None = None,
-        timeout_s: float = 5.0,
+        timeout_s: float = 30.0,
     ) -> None:
         raw_url = base_url or os.environ.get("PANELFLOW_COMFYUI_URL", "http://127.0.0.1:8188")
         try:
@@ -244,7 +244,7 @@ class ComfyUIClient:
         if not models_root.is_dir() or models_root.is_symlink():
             return {}
         result: dict[str, list[str]] = {}
-        for category in ("checkpoints", "diffusion_models", "unet", "vae", "loras", "controlnet", "clip", "text_encoders", "ipadapter", "clip_vision", "pulid", "insightface"):
+        for category in ("checkpoints", "diffusion_models", "unet", "vae", "loras", "controlnet", "clip", "text_encoders", "ipadapter", "clip_vision", "pulid", "insightface", "background_removal"):
             category_dir = models_root / category
             if category_dir.is_dir() and not category_dir.is_symlink():
                 try:

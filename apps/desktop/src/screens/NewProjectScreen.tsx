@@ -430,7 +430,7 @@ export const NewProjectScreen: React.FC<NewProjectScreenProps> = ({
                 type: "CHRONOFLOW_AI",
                 label: "ChronoFlow AI Studio",
                 icon: Icons.Sparkles,
-                desc: "MiniMax H3 video chaining, FLUX.1 image art & AI panels",
+                desc: "MiniMax H3 video chaining, Qwen Image 2.1 art & AI panels",
               },
             ].map((s) => {
               const IconComp = s.icon;
@@ -565,11 +565,11 @@ export const NewProjectScreen: React.FC<NewProjectScreenProps> = ({
                   ChronoFlow Studio: Core Generation Pipeline
                 </h3>
               </div>
-              <Badge variant="accent">MiniMax H3 & FLUX.1 Schnell</Badge>
+              <Badge variant="accent">MiniMax H3 & Qwen Image 2.1</Badge>
             </div>
 
             <p className="text-xs text-zinc-400 leading-relaxed">
-              Start with video generation, image generation, or multi-shot panel storyboarding. If you start with video generation, you can synthesize the initial keyframe using FLUX.1 or let ChronoFlow dynamically generate starting and continuation video chunks.
+              Start with video generation, image generation, or multi-shot panel storyboarding. If you start with video generation, you can synthesize the initial keyframe using Qwen Image 2.1 or let ChronoFlow dynamically generate starting and continuation video chunks.
             </p>
 
             {/* Workflow Mode Selector */}
@@ -588,7 +588,7 @@ export const NewProjectScreen: React.FC<NewProjectScreenProps> = ({
                     id: "image",
                     title: "Image Generation",
                     icon: Icons.Image,
-                    badge: "FLUX.1 Schnell fp8",
+                    badge: "Qwen Image 2.1 Turbo",
                     desc: "Character consistency turnaround sheets, panel art & inpainting",
                   },
                   {
@@ -704,7 +704,7 @@ export const NewProjectScreen: React.FC<NewProjectScreenProps> = ({
                 <Icons.CheckCircle className="w-4 h-4 text-purple-400" />
                 <span>
                   {chronoWorkflow === "video"
-                    ? "Continuous Chaining: Starts with FLUX.1 image synthesis if keyframe is needed, then chains MiniMax H3 video."
+                    ? "Continuous Chaining: Starts with Qwen Image 2.1 image synthesis if keyframe is needed, then chains MiniMax H3 video."
                     : chronoWorkflow === "image"
                     ? "Asset Locking: Produces master character & scene images ready to chain into video."
                     : "AI Director: Generates multi-scene storyboard panels with automatic 6-heading prompts."}

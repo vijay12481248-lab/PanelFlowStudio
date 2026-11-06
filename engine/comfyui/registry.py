@@ -15,8 +15,8 @@ from engine.security.paths import read_contained_bytes, resolve_contained_path
 _WORKFLOW_ID = re.compile(r"^[a-z][a-z0-9_-]{2,63}$")
 _REGISTRY_FILE = Path(__file__).with_name("workflow_registry.json")
 _MAX_WORKFLOW_BYTES = 4 * 1024 * 1024
-_REQUIRED_PATCH_SLOTS = frozenset({"prompt", "negative_prompt", "seed", "width", "height", "filename_prefix"})
-_OPTIONAL_PATCH_SLOTS = frozenset({"reference_image", "reference_image_b", "reference_weight"})  # character-likeness workflows (IP-Adapter)
+_REQUIRED_PATCH_SLOTS = frozenset({"prompt", "negative_prompt", "seed", "filename_prefix"})
+_OPTIONAL_PATCH_SLOTS = frozenset({"width", "height", "reference_image", "reference_image_b", "reference_weight", "mask_image", "denoise", "pose_image", "depth_image", "pose_weight", "depth_weight", "control_weight"})
 
 
 class WorkflowRegistryError(RuntimeError):

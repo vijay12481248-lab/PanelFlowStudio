@@ -1,4 +1,4 @@
-"""Generate a Mahabharata story episode and render panels using PanelFlow Studio's FLUX workflow."""
+"""Generate a Mahabharata story episode and render panels using PanelFlow Studio's single art workflow (Qwen Image 2.1)."""
 import json
 import os
 import sys
@@ -10,7 +10,6 @@ sys.path.insert(0, ".")
 
 # Set up ComfyUI environment
 os.environ["PANELFLOW_COMFYUI_WORKFLOW_DIR"] = r"E:\VIJAY SEKAR\ComfyUI\workflow"
-os.environ["PANELFLOW_IMAGE_ENGINE"] = "flux"
 
 from engine.original.models import (
     Bible, Character, Location, Premise, OriginalStory, Panel, Scene
@@ -192,7 +191,7 @@ for char in [arjuna, krishna]:
     print(f"  Saved {sheet_path.name} in {time.time()-t0:.1f}s ({len(png_bytes)/1024:.1f} KB)")
 
 # Story Panels
-print("\n=== Generating Story Panels with FLUX Natural Prompts ===")
+print("\n=== Generating Story Panels with Natural Prompts (Qwen Image 2.1) ===")
 for item in shots_data:
     pid = item["panel_id"]
     spec = item["spec"]
@@ -205,14 +204,6 @@ for item in shots_data:
     print(f"Composed Prompt: {prompt[:160]}...")
     
     seed = seed_for(story, pid)
-    chars_in_shot = spec.characters
-    ref = None
-    if chars_in_shot:
-        char_id = chars_in_shot[0].id
-        candidate = SHEETS_DIR / f"{char_id}.png"
-        if candidate.exists():
-            ref = candidate
-            print(f"  [PuLID-FLUX] Pinning face from reference: {candidate.name}")
 
     t0 = time.time()
     png_bytes = runner.generate(
@@ -222,7 +213,6 @@ for item in shots_data:
         width=1344,
         height=768,
         prefix=f"panel_{pid}",
-        reference=ref
     )
     out_img.write_bytes(png_bytes)
     dur = time.time() - t0
@@ -275,7 +265,7 @@ html_content = f"""<!DOCTYPE html>
 </head>
 <body>
     <h1>The Chariot at Kurukshetra</h1>
-    <div class="subtitle">Generated with PanelFlow Studio FLUX.1 schnell Engine (1344x768 16:9)</div>
+    <div class="subtitle">Generated with PanelFlow Studio Qwen Image 2.1 engine (1344x768 16:9)</div>
     <div class="gallery">
         {''.join(html_rows)}
     </div>

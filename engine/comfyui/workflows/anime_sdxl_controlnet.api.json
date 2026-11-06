@@ -1,0 +1,107 @@
+{
+  "1": {
+    "class_type": "CheckpointLoaderSimple",
+    "inputs": {
+      "ckpt_name": "animagine-xl-4.0.safetensors"
+    }
+  },
+  "2": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "clip": ["1", 1],
+      "text": ""
+    }
+  },
+  "3": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "clip": ["1", 1],
+      "text": ""
+    }
+  },
+  "4": {
+    "class_type": "EmptyLatentImage",
+    "inputs": {
+      "batch_size": 1,
+      "height": 1216,
+      "width": 832
+    }
+  },
+  "5": {
+    "class_type": "ControlNetLoader",
+    "inputs": {
+      "control_net_name": "controlnet-openpose-sdxl-1.0.safetensors"
+    }
+  },
+  "6": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "pose.png"
+    }
+  },
+  "7": {
+    "class_type": "ControlNetApplyAdvanced",
+    "inputs": {
+      "control_net": ["5", 0],
+      "end_percent": 1.0,
+      "image": ["6", 0],
+      "negative": ["3", 0],
+      "positive": ["2", 0],
+      "start_percent": 0.0,
+      "strength": 0.75
+    }
+  },
+  "8": {
+    "class_type": "ControlNetLoader",
+    "inputs": {
+      "control_net_name": "controlnet-depth-sdxl-1.0.safetensors"
+    }
+  },
+  "9": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "depth.png"
+    }
+  },
+  "10": {
+    "class_type": "ControlNetApplyAdvanced",
+    "inputs": {
+      "control_net": ["8", 0],
+      "end_percent": 1.0,
+      "image": ["9", 0],
+      "negative": ["7", 1],
+      "positive": ["7", 0],
+      "start_percent": 0.0,
+      "strength": 0.6
+    }
+  },
+  "11": {
+    "class_type": "KSampler",
+    "inputs": {
+      "cfg": 5.0,
+      "denoise": 1.0,
+      "latent_image": ["4", 0],
+      "model": ["1", 0],
+      "negative": ["10", 1],
+      "positive": ["10", 0],
+      "sampler_name": "euler_ancestral",
+      "scheduler": "normal",
+      "seed": 0,
+      "steps": 28
+    }
+  },
+  "12": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": ["11", 0],
+      "vae": ["1", 2]
+    }
+  },
+  "13": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "filename_prefix": "panelflow_controlnet",
+      "images": ["12", 0]
+    }
+  }
+}

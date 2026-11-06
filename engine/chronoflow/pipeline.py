@@ -8,6 +8,8 @@ from pathlib import Path
 
 from urllib.parse import urlsplit
 
+from engine.comfyui.art import ArtEngine
+
 def _resolve_comfy_base_dir() -> Path:
     env_dir = os.environ.get("PANELFLOW_COMFYUI_DIR") or os.environ.get("COMFYUI_DIR")
     if env_dir and Path(env_dir).exists():
@@ -89,7 +91,8 @@ class ChronoFlowPipeline:
         return {"connected": False, "gpu": "Unknown", "vram_free_gb": 0, "vram_total_gb": 0, "queue": {"busy": False}}
 
     def compile_h3_prompt(self, detailed_description, subject_definitions=None, summary=None, 
-                          retention_analysis=None, soundscape=None, music=None):
+                          retention_analysis=None, soundscape=None, music=None,
+                          bokeh_background=False):
         """Compiles a prompt conforming to MiniMax H3's native 6-heading schema."""
         lines = []
         if subject_definitions:
@@ -99,7 +102,10 @@ class ChronoFlowPipeline:
         if retention_analysis:
             lines.append("retention_analysis:\n" + retention_analysis.strip())
         if detailed_description:
-            lines.append("detailed_description:\n" + detailed_description.strip())
+            desc = detailed_description.strip()
+            if bokeh_background and "bokeh" not in desc.lower() and "depth of field" not in desc.lower():
+                desc += " Cinematic shallow depth of field, sharp foreground subject, background softly blurred in lens bokeh."
+            lines.append("detailed_description:\n" + desc)
         if soundscape:
             lines.append("overall_soundscape:\n" + soundscape.strip())
         if music:
@@ -109,7 +115,8 @@ class ChronoFlowPipeline:
 
     def build_h3_prompt(self, prompt, width, height, length, steps, lora_name, 
                         workflow_mode="sliding_window", first_frame_filename=None, 
-                        last_frame_filename=None, ref_images=None, seed=None):
+                        last_frame_filename=None, ref_images=None, seed=None,
+                        face_refine=False, upscale_mode="none"):
         if seed is None:
             import random
             seed = random.randint(1, 1000000000)
@@ -259,175 +266,83 @@ class ChronoFlowPipeline:
                     "vae": ["5", 0]
                 }
             },
-            "15": {
-                "class_type": "CreateVideo",
+        })
+
+        last_image_source = ["13", 0]
+
+        if face_refine:
+            graph["face_track_crop"] = {
+                "class_type": "H3FaceTrackCrop",
                 "inputs": {
                     "images": ["13", 0],
-                    "audio": ["14", 0],
-                    "fps": 24.0
-                }
-            },
-            "16": {
-                "class_type": "SaveVideo",
-                "inputs": {
-                    "video": ["15", 0],
-                    "filename_prefix": "video/chronoflow_chunk",
-                    "format": "auto",
-                    "codec": "auto"
-                }
+                    "detector": "face_yolov8m.pt",
+                    "confidence": 0.45,
+                    "crop_factor": 1.5,
+                    "canvas_width": 512,
+                    "canvas_height": 512,
+                    "canvas_mode": "pad_to_target",
+                    "smooth_window": 5,
+                    "size_smooth_window": 5,
+                    "smooth_method": "gaussian",
+                    "size_mode": "target_longest",
+                },
             }
-        })
+            graph["face_stitch"] = {
+                "class_type": "H3FaceStitch",
+                "inputs": {
+                    "base_images": ["13", 0],
+                    "refined_crops": ["face_track_crop", 0],
+                    "transform": ["face_track_crop", 1],
+                    "paste_region": "face_box",
+                    "mask_dilation": 8,
+                    "feather": 16,
+                    "colour_match": "none",
+                    "blend": 1.0,
+                    "undetected_frames": "pass_through",
+                },
+            }
+            last_image_source = ["face_stitch", 0]
+
+        if upscale_mode in ("2k", "2k_latent", "upscale_2k"):
+            graph["upscale_2k"] = {
+                "class_type": "ImageScaleBy",
+                "inputs": {
+                    "images": last_image_source,
+                    "upscale_method": "bicubic",
+                    "scale_by": 1.5,
+                },
+            }
+            last_image_source = ["upscale_2k", 0]
+
+        graph["15"] = {
+            "class_type": "CreateVideo",
+            "inputs": {
+                "images": last_image_source,
+                "audio": ["14", 0],
+                "fps": 24.0,
+            },
+        }
+        graph["16"] = {
+            "class_type": "SaveVideo",
+            "inputs": {
+                "video": ["15", 0],
+                "filename_prefix": "video/chronoflow_chunk",
+                "format": "auto",
+                "codec": "auto",
+            },
+        }
 
         return graph
 
-    def build_qwen_image_prompt(self, prompt, negative_prompt="blurry, low quality, distorted, bad anatomy", 
-                                 width=1024, height=1024, steps=8, seed=None):
-        if seed is None:
-            import random
-            seed = random.randint(1, 1000000000)
-            
-        return {
-            "1": {
-                "class_type": "UNETLoader",
-                "inputs": {
-                    "unet_name": "qwen_image_2.1_turbo_int8_convrot.safetensors",
-                    "weight_dtype": "default"
-                }
-            },
-            "2": {
-                "class_type": "CLIPLoader",
-                "inputs": {
-                    "clip_name": "qwen3vl_8b_int8_convrot.safetensors",
-                    "type": "qwen_image",
-                    "device": "default"
-                }
-            },
-            "3": {
-                "class_type": "VAELoader",
-                "inputs": {
-                    "vae_name": "qwen_image_2.1_vae_bf16.safetensors"
-                }
-            },
-            "4": {
-                "class_type": "TextEncodeQwenImage21",
-                "inputs": {
-                    "clip": ["2", 0],
-                    "prompt": prompt,
-                    "negative_prompt": negative_prompt,
-                    "vae": ["3", 0],
-                    "resolution": int(width)
-                }
-            },
-            "5": {
-                "class_type": "BasicGuider",
-                "inputs": {
-                    "model": ["1", 0],
-                    "conditioning": ["4", 0]
-                }
-            },
-            "6": {
-                "class_type": "KSamplerSelect",
-                "inputs": {
-                    "sampler_name": "euler"
-                }
-            },
-            "7": {
-                "class_type": "BasicScheduler",
-                "inputs": {
-                    "model": ["1", 0],
-                    "scheduler": "simple",
-                    "steps": int(steps),
-                    "denoise": 1.0
-                }
-            },
-            "8": {
-                "class_type": "RandomNoise",
-                "inputs": {
-                    "noise_seed": seed
-                }
-            },
-            "9": {
-                "class_type": "SamplerCustomAdvanced",
-                "inputs": {
-                    "noise": ["8", 0],
-                    "guider": ["5", 0],
-                    "sampler": ["6", 0],
-                    "sigmas": ["7", 0],
-                    "latent_image": ["4", 2]
-                }
-            },
-            "10": {
-                "class_type": "VAEDecode",
-                "inputs": {
-                    "samples": ["9", 0],
-                    "vae": ["3", 0]
-                }
-            },
-            "11": {
-                "class_type": "SaveImage",
-                "inputs": {
-                    "images": ["10", 0],
-                    "filename_prefix": "qwen_char"
-                }
-            }
-        }
+    async def generate_art_image(self, prompt, negative_prompt, width=1024, height=1024, seed=None) -> str:
+        """One keyframe / reference image from the central ArtEngine, saved into ComfyUI's input/ folder (Character Vault, MiniMax H3).
 
-    def build_flux_image_prompt(self, prompt, width=1344, height=768, steps=4, seed=None):
-        if seed is None:
-            import random
-            seed = random.randint(1, 1000000000)
-        return {
-            "1": {
-                "class_type": "CheckpointLoaderSimple",
-                "inputs": {
-                    "ckpt_name": "flux1-schnell-fp8.safetensors"
-                }
-            },
-            "2": {
-                "class_type": "CLIPTextEncode",
-                "inputs": {
-                    "clip": ["1", 1],
-                    "text": prompt
-                }
-            },
-            "3": {
-                "class_type": "EmptyLatentImage",
-                "inputs": {
-                    "width": int(width),
-                    "height": int(height),
-                    "batch_size": 1
-                }
-            },
-            "4": {
-                "class_type": "KSampler",
-                "inputs": {
-                    "model": ["1", 0],
-                    "positive": ["2", 0],
-                    "negative": ["2", 0],
-                    "latent_image": ["3", 0],
-                    "seed": int(seed),
-                    "steps": int(steps),
-                    "cfg": 1.0,
-                    "sampler_name": "euler",
-                    "scheduler": "simple",
-                    "denoise": 1.0
-                }
-            },
-            "5": {
-                "class_type": "VAEDecode",
-                "inputs": {
-                    "samples": ["4", 0],
-                    "vae": ["1", 2]
-                }
-            },
-            "6": {
-                "class_type": "SaveImage",
-                "inputs": {
-                    "images": ["5", 0],
-                    "filename_prefix": "chronoflow_flux"
-                }
-            }
-        }
+        There is exactly one text-to-image workflow in PanelFlow (see engine/comfyui/art.py); ChronoFlow does not carry its own graphs.
+        """
+        art = await asyncio.to_thread(ArtEngine().generate, prompt, negative_prompt, int(width), int(height), seed, "chronoflow_art")
+        filename = f"art_{uuid.uuid4().hex[:8]}.png"
+        (COMFY_INPUT_DIR / filename).write_bytes(art.png)
+        return filename
 
     def build_inpaint_prompt(self, image_filename, mask_filename, prompt, denoise=0.85, steps=4, seed=None, model="flux"):
         if seed is None:

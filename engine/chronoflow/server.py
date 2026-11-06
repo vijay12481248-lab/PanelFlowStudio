@@ -158,6 +158,13 @@ async def handle_ai_director_plan(request):
         "scenes": scenes
     })
 
+def resolve_h3_lora_name(choice: str | None) -> str:
+    choice_str = str(choice or "").lower()
+    if "8step" in choice_str:
+        return "minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors"
+    return "minimax_h3_fl2v_turbo_4step_v1.0_768p_comfyui_bf16.safetensors"
+
+
 async def run_production_job(job_id, data):
     job = active_jobs[job_id]
     try:
@@ -167,7 +174,7 @@ async def run_production_job(job_id, data):
         height = int(data.get("height", 768))
         steps = int(data.get("steps", 4))
         lora_choice = data.get("lora_choice", "4step")
-        lora_name = "minimax_h3_fl2v_turbo_4step_v1.0_768p_comfyui_bf16.safetensors" if lora_choice == "4step" else "minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors"
+        lora_name = resolve_h3_lora_name(lora_choice)
 
         chunk_files = []
         pre_existing = data.get("pre_existing_chunks", [])
@@ -612,50 +619,16 @@ async def handle_unified_sync(request):
     )
 
 async def handle_generate_image(request):
-    """Generates an image/character sheet using FLUX.1 or Qwen-Image-2.1."""
+    """Generates an image / character sheet with the central art engine (Qwen Image 2.1)."""
     try:
         data = await request.json()
-        model_choice = data.get("model", "flux").lower()
-        prompt = data.get("prompt", "Cinematic character turnaround sheet, white background.")
-        negative_prompt = data.get("negative_prompt", "blurry, low quality, distorted, bad anatomy")
-        width = int(data.get("width", 1344 if model_choice == "flux" else 1024))
-        height = int(data.get("height", 768 if model_choice == "flux" else 1024))
-        steps = int(data.get("steps", 4 if model_choice == "flux" else 8))
-        seed = data.get("seed")
-
-        if "flux" in model_choice:
-            graph = pipeline.build_flux_image_prompt(
-                prompt=prompt,
-                width=width,
-                height=height,
-                steps=steps,
-                seed=seed
-            )
-            prefix = "flux_gen"
-        else:
-            graph = pipeline.build_qwen_image_prompt(
-                prompt=prompt,
-                negative_prompt=negative_prompt,
-                width=width,
-                height=height,
-                steps=steps,
-                seed=seed
-            )
-            prefix = "qwen_gen"
-
-        out_path = await pipeline.execute_prompt(graph)
-        
-        # Copy to input/ directory for immediate use in Character Vault & MiniMax H3
-        new_filename = f"{prefix}_{uuid.uuid4().hex[:8]}.png"
-        target_path = COMFY_INPUT_DIR / new_filename
-        import shutil
-        shutil.copy2(out_path, target_path)
-
-        return web.json_response({
-            "success": True,
-            "filename": new_filename,
-            "url": f"/inputs/{new_filename}"
-        }, headers={"Cache-Control": "no-store, no-cache, must-revalidate"})
+        filename = await pipeline.generate_art_image(
+            data.get("prompt", "Cinematic character turnaround sheet, white background."),
+            data.get("negative_prompt", "blurry, low quality, distorted, bad anatomy"),
+            int(data.get("width") or 1024), int(data.get("height") or 1024), data.get("seed"),
+        )
+        return web.json_response({"success": True, "filename": filename, "url": f"/inputs/{filename}"},
+                                 headers={"Cache-Control": "no-store, no-cache, must-revalidate"})
     except Exception as e:
         return web.json_response({"success": False, "error": str(e)}, status=500)
 
@@ -839,11 +812,11 @@ async def handle_gallery(request):
         if not f.is_file():
             continue
         name = f.name
-        if name.startswith(("flux_gen_", "qwen_gen_", "inpaint_", "chronoflow_tail_", "zombie_", "char_")) or name in ("beetle_rider.png", "zombie_survivor_anchor.jpg", "zombie_outpost_start.jpg"):
+        if name.startswith(("art_", "flux_gen_", "qwen_gen_", "inpaint_", "chronoflow_tail_", "zombie_", "char_")) or name in ("beetle_rider.png", "zombie_survivor_anchor.jpg", "zombie_outpost_start.jpg"):
             size_bytes = f.stat().st_size
             total_bytes += size_bytes
             mtime = f.stat().st_mtime
-            model_tag = "FLUX.1 Schnell" if "flux" in name else "Qwen-Image-2.1" if "qwen" in name else "Inpaint Asset" if "inpaint" in name else "Concept Keyframe"
+            model_tag = "FLUX.1 Schnell (legacy)" if "flux" in name else "Qwen-Image-2.1" if name.startswith(("art_", "qwen_gen_")) else "Inpaint Asset" if "inpaint" in name else "Concept Keyframe"
             assets["images"].append({
                 "filename": name,
                 "url": f"/inputs/{name}",

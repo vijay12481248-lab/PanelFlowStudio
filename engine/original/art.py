@@ -8,32 +8,57 @@ e.g. by IP-Adapter) with data.
 from __future__ import annotations
 
 import asyncio
+import functools
 import hashlib
+import io
 import json
 import os
-import time
 from pathlib import Path
 from typing import Callable
 
+from PIL import Image
 from pydantic import BaseModel, Field
 
 from engine.comfyui import ComfyUIClient, ComfyWorkflowRegistry
-from engine.comfyui.service import _history_images, _patch_workflow
+from engine.comfyui.art import ART_WORKFLOW_ID, ArtEngine, _patch_workflow
 from engine.original.genres import GENRES
 from engine.original.models import Character, OriginalStory, Panel
 from engine.original import review as review_mod
 from engine.original import shotspec
+from engine.original.rigging import (
+    RIGGING_NEGATIVE,
+    RiggingPose,
+    RiggingView,
+    RiggingSpec,
+    TurnaroundSheet,
+    MattingResult,
+    DecomposedLayer,
+    LayerStack,
+    compile_turnaround_prompt,
+    compile_rigging_view_prompt,
+    generate_turnaround_sheet,
+    generate_rigging_views,
+    slice_turnaround_sheet,
+    remove_background,
+    defringe_alpha,
+    guided_filter_alpha,
+    extract_subject_and_prop_masks,
+    inpaint_background_plate,
+    decompose_layers,
+)
 
 W, H = 1344, 768  # SDXL-friendly 16:9, the video frame shape
 THRESHOLD = 0.6
-SHOT_TAGS = {"wide": "wide shot, scenery, from a distance", "medium": "cowboy shot", "close": "close-up, portrait",
-             "extreme_close": "extreme close-up, detail focus", "over_shoulder": "from behind, over the shoulder"}
+SHOT_TAGS = {"wide": "wide shot, scenery, from a distance", "full": "full body shot, head to toe, visible feet",
+             "full_body": "full body shot, head to toe, visible feet", "medium": "cowboy shot",
+             "close": "close-up, portrait", "extreme_close": "extreme close-up, detail focus",
+             "over_shoulder": "from behind, over the shoulder"}
 ANGLE_TAGS = {"eye_level": "", "low": "from below", "high": "from above", "dutch": "dutch angle"}
 POSE_KEYS = {"eyes closed", "sleeping", "yawning", "smiling", "tears"}  # deterministic requirements from the narration
 QUALITY = "safe, masterpiece, high score, great score, absurdres"
 NEGATIVE = ("lowres, bad anatomy, bad hands, text, error, missing finger, extra digits, fewer digits, cropped, worst quality, "
             "low quality, low score, bad score, average score, signature, watermark, username, blurry, nsfw, nude, "
-            "suggestive, revealing clothes, speech bubble")
+            "suggestive, revealing clothes, speech bubble, floating objects, disconnected hands")
 
 
 def build_prompt(story: OriginalStory, panel: Panel, emphasis: list[str] | None = None, style: str = "tags",
@@ -50,6 +75,17 @@ def build_prompt(story: OriginalStory, panel: Panel, emphasis: list[str] | None 
     chars = {c.id: c for c in story.bible.characters}
     shown = [chars[c] for c in panel.character_ids if c in chars][:2]
     loc = next((x for x in story.bible.locations if x.id == panel.location_id), None)
+    if style == "natural":
+        char_descs = [f"{c.name}: {c.look}" for c in shown]
+        char_str = f"Featuring {', '.join(char_descs)}. " if char_descs else ""
+        loc_str = f"Setting: {loc.look}. " if loc else ""
+        shot_str = f"{panel.shot.replace('_', ' ')} shot, {panel.angle.replace('_', ' ')} angle. "
+        bindings_nat = shotspec.compile_interaction_bindings_natural([panel.action] + panel.key_visuals)
+        contact_str = f"Physical contact: {'; '.join(bindings_nat)}. " if bindings_nat else ""
+        margin_str = f"{shotspec.MARGIN_NATURAL.get(panel.shot, '')} " if shotspec.MARGIN_NATURAL.get(panel.shot) else ""
+        pos = f"{panel.action.rstrip('.')}. {contact_str}{margin_str}{char_str}{loc_str}{shot_str}{genre.art_style}"
+        neg = "blurry, distorted, low quality, bad anatomy, text, watermark, extra limbs, floating objects, disconnected hands"
+        return pos, neg
     looks = []
     for c in shown:
         tags = c.look
@@ -58,7 +94,9 @@ def build_prompt(story: OriginalStory, panel: Panel, emphasis: list[str] | None 
         looks.append(tags)
     count = {0: "no humans", 1: "solo", 2: "2others"}.get(len(shown), "multiple others")
     keys = [f"({k}:1.4)" if (k in (emphasis or []) or k in POSE_KEYS) else k for k in panel.key_visuals]
-    parts = [count, *looks, *keys, panel.action.rstrip("."), SHOT_TAGS.get(panel.shot, ""), ANGLE_TAGS.get(panel.angle, ""),
+    bindings = shotspec.compile_interaction_bindings_tags([panel.action] + panel.key_visuals)
+    margins = shotspec.MARGIN_TAGS.get(panel.shot, [])
+    parts = [count, *looks, *keys, panel.action.rstrip("."), *bindings, SHOT_TAGS.get(panel.shot, ""), *margins, ANGLE_TAGS.get(panel.angle, ""),
              loc.look if loc else "", genre.art_style, QUALITY]
     neg = NEGATIVE + (", open eyes, looking at viewer" if "eyes closed" in panel.key_visuals else "")
     return ", ".join(p for p in parts if p), neg
@@ -82,36 +120,30 @@ def seed_for(story: OriginalStory, key: str, attempt: int = 0) -> int:
 
 
 class ComfyRunner:
-    """Runs the approved anime_sdxl workflow (anime_sdxl_ipa when a character reference is given); returns PNG bytes."""
+    """Text to image through the central ArtEngine (qwen_image_21); the SDXL tools (ControlNet, inpaint, matting, IP-Adapter) run on the same poll loop. Returns PNG bytes."""
 
     def __init__(self, client: ComfyUIClient | None = None, workflow_id: str = "anime_sdxl", ipa_id: str = "anime_sdxl_ipa",
-                 ipa2_id: str = "anime_sdxl_ipa2", engine: str | None = None, flux_id: str = "flux_schnell",
-                 flux_pulid_id: str = "flux_pulid"):
+                 ipa2_id: str = "anime_sdxl_ipa2", engine: str | None = None, inpaint_id: str = "anime_sdxl_inpaint",
+                 controlnet_id: str = "anime_sdxl_controlnet"):
         self.client = client or ComfyUIClient()
         reg = ComfyWorkflowRegistry(self.client)
-        engine = engine or os.environ.get("PANELFLOW_IMAGE_ENGINE", "auto")  # auto | flux | sdxl
-        self.flux = None  # a prompt-following model: it reads sentences, so objects and actions in the narration survive
-        self.flux_pulid = None  # PuLID reference face conditioning for FLUX
-        if engine in ("auto", "flux"):
+        self.art = ArtEngine(self.client, reg)  # the one text-to-image engine; every submit/poll/download below goes through it
+        engine = engine or os.environ.get("PANELFLOW_IMAGE_ENGINE", "qwen")  # qwen (default) | sdxl (the legacy base the ControlNet/IP-Adapter tools were built on)
+        if engine in ("auto", "qwen", "qwen21", ART_WORKFLOW_ID):
             try:
-                if reg.preflight(flux_id)["ready"]:
-                    self.flux = (reg.load(flux_id)[0], reg.metadata(flux_id))
-            except Exception:
-                self.flux = None
-            if self.flux is not None:
-                try:
-                    if reg.preflight(flux_pulid_id)["ready"]:
-                        self.flux_pulid = (reg.load(flux_pulid_id)[0], reg.metadata(flux_pulid_id))
-                except Exception:
-                    self.flux_pulid = None
-            if engine == "flux" and self.flux is None:
-                raise RuntimeError("FLUX was requested but its workflow is not ready (model file missing or ComfyUI down)")
-        self.engine = "flux" if self.flux is not None else "sdxl"
-        self.style = "natural" if self.flux is not None else "tags"
-        pre = reg.preflight(workflow_id) if self.flux is None or engine == "auto" else {"ready": True}
-        if not pre["ready"] and self.flux is None:
-            raise RuntimeError(f"ComfyUI workflow not ready: missing nodes {pre['missing_nodes']}, models {pre['missing_models']}")
-        self.workflow, self.meta = (reg.load(workflow_id)[0], reg.metadata(workflow_id)) if pre["ready"] else (None, None)
+                self.art.require_ready()
+            except Exception as exc:
+                raise RuntimeError(f"Qwen Image 2.1 ({ART_WORKFLOW_ID}) is not ready: {exc}") from exc
+            self.engine, self.style = "qwen", "natural"  # a prompt-following model: it reads sentences, so objects and actions in the narration survive
+            self.workflow = self.meta = None
+        elif engine == "sdxl":
+            pre = reg.preflight(workflow_id)
+            if not pre["ready"]:
+                raise RuntimeError(f"ComfyUI workflow not ready: missing nodes {pre['missing_nodes']}, models {pre['missing_models']}")
+            self.engine, self.style = "sdxl", "tags"
+            self.workflow, self.meta = reg.load(workflow_id)[0], reg.metadata(workflow_id)
+        else:
+            raise ValueError(f"Unknown image engine {engine!r}: the art workflow is {ART_WORKFLOW_ID!r} (FLUX and the other text-to-image workflows were removed)")
         self.ipa = None  # optional: without its nodes/models panels fall back to prompt-only consistency
         try:
             if reg.preflight(ipa_id)["ready"]:
@@ -124,14 +156,39 @@ class ComfyRunner:
                 self.ipa2 = (reg.load(ipa2_id)[0], reg.metadata(ipa2_id))
         except Exception:
             self.ipa2 = None
+        self.inpaint_wf = None
+        try:
+            if reg.preflight(inpaint_id)["ready"]:
+                self.inpaint_wf = (reg.load(inpaint_id)[0], reg.metadata(inpaint_id))
+        except Exception:
+            self.inpaint_wf = None
+        self.sdxl_controlnet = None
+        try:
+            if reg.preflight(controlnet_id)["ready"]:
+                self.sdxl_controlnet = (reg.load(controlnet_id)[0], reg.metadata(controlnet_id))
+        except Exception:
+            self.sdxl_controlnet = None
+        self.controlnet_ready = self.sdxl_controlnet is not None
+        matting_id = "anime_alpha_matting"
+        self.matting_wf = None
+        try:
+            if reg.preflight(matting_id)["ready"]:
+                self.matting_wf = (reg.load(matting_id)[0], reg.metadata(matting_id))
+        except Exception:
+            self.matting_wf = None
+        self.matting_ready = self.matting_wf is not None
 
-    def _upload(self, path: Path) -> str:
-        """Copy a reference image into ComfyUI's input folder (name derived from content, so reruns reuse it)."""
+    @functools.cached_property
+    def art(self) -> ArtEngine:
+        """The central engine. Built on first use so a runner assembled without __init__ (tests, tools) still has one."""
+        return ArtEngine(self.client)
+
+    def _upload_bytes(self, data: bytes, suffix: str = ".png") -> str:
+        """Upload raw image bytes into ComfyUI's input folder."""
         import urllib.request
 
-        data = path.read_bytes()
         digest = hashlib.sha256(data).hexdigest()
-        name, boundary = f"pf_{digest[:16]}.png", "pfboundary" + digest[:8]
+        name, boundary = f"pf_{digest[:16]}{suffix}", "pfboundary" + digest[:8]
         head = (f"--{boundary}\r\nContent-Disposition: form-data; name=\"image\"; filename=\"{name}\"\r\nContent-Type: image/png\r\n\r\n").encode()
         tail = (f"\r\n--{boundary}\r\nContent-Disposition: form-data; name=\"overwrite\"\r\n\r\ntrue\r\n--{boundary}--\r\n").encode()
         req = urllib.request.Request(self.client.base_url + "upload/image", data=head + data + tail,
@@ -139,15 +196,94 @@ class ComfyRunner:
         with urllib.request.urlopen(req, timeout=60) as r:
             return json.loads(r.read())["name"]
 
+    def _upload(self, path: Path) -> str:
+        """Copy a reference image into ComfyUI's input folder (name derived from content, so reruns reuse it)."""
+        return self._upload_bytes(path.read_bytes())
+
+    def _resolve_upload(self, item: Path | str | bytes | Image.Image | None) -> str | None:
+        """Resolve conditioning or reference input into an uploaded ComfyUI image filename."""
+        if item is None:
+            return None
+        if isinstance(item, Image.Image):
+            buf = io.BytesIO()
+            item.save(buf, format="PNG")
+            return self._upload_bytes(buf.getvalue())
+        if isinstance(item, bytes):
+            return self._upload_bytes(item)
+        if isinstance(item, Path):
+            return self._upload(item)
+        if isinstance(item, str):
+            p = Path(item)
+            try:
+                if p.exists() and p.is_file():
+                    return self._upload(p)
+            except OSError:
+                pass
+            return item
+        return str(item)
+
+    def inpaint(self, base_image: Path | bytes, mask_image: Path | bytes, prompt: str, neg: str, seed: int,
+                denoise: float = 0.75, timeout: float = 300.0,
+                is_cancelled: Callable[[], bool] = lambda: False, **kw) -> bytes:
+        if self.inpaint_wf is None:
+            raise RuntimeError("ComfyUI inpainting workflow anime_sdxl_inpaint is not available")
+        if isinstance(base_image, Path):
+            ref_name = self._upload(base_image)
+        elif isinstance(base_image, bytes):
+            ref_name = self._upload_bytes(base_image)
+        else:
+            raise TypeError(f"Unsupported base_image type: {type(base_image)}")
+
+        if isinstance(mask_image, Path):
+            mask_name = self._upload(mask_image)
+        elif isinstance(mask_image, bytes):
+            mask_name = self._upload_bytes(mask_image)
+        else:
+            raise TypeError(f"Unsupported mask_image type: {type(mask_image)}")
+
+        wf = _patch_workflow(
+            self.inpaint_wf[0],
+            self.inpaint_wf[1]["patch_slots"],
+            prompt=prompt,
+            negative_prompt=neg,
+            width=0,
+            height=0,
+            seed=seed,
+            prefix="panelflow_inpaint",
+            reference_image=ref_name,
+            mask_image=mask_name,
+            denoise=denoise,
+        )
+        return self.art.run(wf, timeout=timeout, is_cancelled=is_cancelled)[0]
+
     def generate(self, pos: str, neg: str, seed: int, width: int, height: int, prefix: str, timeout: float = 300.0,
                  is_cancelled: Callable[[], bool] = lambda: False, reference: Path | None = None,
-                 reference_b: Path | None = None, reference_weight: float | None = None) -> bytes:
-        if self.flux is not None:
-            if reference is not None and self.flux_pulid is not None:
-                wf = _patch_workflow(self.flux_pulid[0], self.flux_pulid[1]["patch_slots"], pos, neg, width, height, seed, prefix,
-                                     reference_image=self._upload(reference), reference_weight=reference_weight or 0.85)
-            else:
-                wf = _patch_workflow(self.flux[0], self.flux[1]["patch_slots"], pos, neg, width, height, seed, prefix)
+                 reference_b: Path | None = None, reference_weight: float | None = None,
+                 pose_image: Path | str | bytes | None = None, depth_image: Path | str | bytes | None = None,
+                 pose_weight: float | None = None, depth_weight: float | None = None) -> bytes:
+        has_controlnet = (pose_image is not None or depth_image is not None)
+        if has_controlnet and getattr(self, "sdxl_controlnet", None) is not None:
+            pose_name = self._resolve_upload(pose_image)
+            depth_name = self._resolve_upload(depth_image)
+            p_weight = pose_weight if pose_weight is not None else 0.75
+            d_weight = depth_weight if depth_weight is not None else 0.6
+            if depth_name is None and pose_name is not None:
+                depth_name = pose_name
+                d_weight = 0.0
+            elif pose_name is None and depth_name is not None:
+                pose_name = depth_name
+                p_weight = 0.0
+            wf = _patch_workflow(
+                self.sdxl_controlnet[0],
+                self.sdxl_controlnet[1]["patch_slots"],
+                pos, neg, width, height, seed, prefix,
+                pose_image=pose_name,
+                depth_image=depth_name,
+                pose_weight=p_weight,
+                depth_weight=d_weight,
+            )
+        elif self.engine == "qwen":
+            return self.art.generate(pos, neg, width, height, seed, prefix, timeout=timeout, is_cancelled=is_cancelled).png
         elif reference is not None and reference_b is not None and self.ipa2 is not None and (width, height) == (W, H):
             wf = _patch_workflow(self.ipa2[0], self.ipa2[1]["patch_slots"], pos, neg, width, height, seed, prefix,
                                  reference_image=self._upload(reference), reference_image_b=self._upload(reference_b))
@@ -156,17 +292,81 @@ class ComfyRunner:
                                  reference_image=self._upload(reference), reference_weight=reference_weight)
         else:
             wf = _patch_workflow(self.workflow, self.meta["patch_slots"], pos, neg, width, height, seed, prefix)
-        pid = self.client.submit_prompt(wf)
-        deadline = time.monotonic() + timeout
-        while time.monotonic() < deadline:
-            if is_cancelled():
-                raise RuntimeError("cancelled")
-            imgs = _history_images(self.client.history(pid), pid)
-            if imgs:
-                i = imgs[0]
-                return self.client.download_output(i["filename"], i["subfolder"], i["type"])
-            time.sleep(1.5)
-        raise TimeoutError(f"ComfyUI produced no image within {timeout:.0f}s")
+        return self.art.run(wf, timeout=timeout, is_cancelled=is_cancelled)[0]
+
+    def generate_turnaround(self, char: Character, story: OriginalStory, ws: Path,
+                            spec: RiggingSpec | None = None) -> TurnaroundSheet:
+        """Generate or retrieve a character turnaround sheet using this runner."""
+        return generate_turnaround_sheet(char, story, ws, runner=self, spec=spec)
+
+    def remove_background(
+        self,
+        image: Path | bytes | Image.Image | str,
+        timeout: float = 120.0,
+        is_cancelled: Callable[[], bool] = lambda: False,
+        defringe: bool = True,
+    ) -> bytes:
+        """Remove background to produce transparent RGBA PNG bytes with clean alpha and zero halo."""
+        from engine.original import rigging
+
+        if getattr(self, "matting_wf", None) is not None:
+            try:
+                img_name = self._resolve_upload(image)
+                wf = _patch_workflow(
+                    self.matting_wf[0],
+                    self.matting_wf[1]["patch_slots"],
+                    prompt="",
+                    negative_prompt="",
+                    width=0,
+                    height=0,
+                    seed=0,
+                    prefix="panelflow_alpha",
+                    reference_image=img_name,
+                )
+                raw_png = self.art.run(wf, timeout=timeout, is_cancelled=is_cancelled)[0]
+                if defringe:
+                    return rigging.remove_background(raw_png, runner=None, defringe=True).rgba_bytes
+                return raw_png
+            except Exception:
+                pass  # Fall back cleanly to local engine
+
+        # Offline / graceful fallback to local Python engine
+        result = rigging.remove_background(image, runner=None, defringe=defringe)
+        return result.rgba_bytes
+
+    def inpaint_background_plate(
+        self,
+        base_image: Image.Image | bytes | Path | str,
+        occlusion_mask: Image.Image | bytes | Path | str,
+        dilation_px: int = 12,
+        prompt_hint: str = "",
+    ) -> Image.Image:
+        """Inpaint occluded background plate with dilated mask and hole-free guarantee."""
+        from engine.original import rigging
+
+        return rigging.inpaint_background_plate(
+            base_image=base_image,
+            occlusion_mask=occlusion_mask,
+            runner=self,
+            dilation_px=dilation_px,
+            prompt_hint=prompt_hint,
+        )
+
+    def decompose_layers(
+        self,
+        image: Image.Image | bytes | Path | str,
+        panel_id: str = "panel_0",
+        prompt_hint: str = "",
+    ) -> LayerStack:
+        """Decompose a panel into multi-plane LayerStack using this runner for matting and inpainting."""
+        from engine.original import rigging
+
+        return rigging.decompose_layers(
+            image=image,
+            panel_id=panel_id,
+            runner=self,
+            prompt_hint=prompt_hint,
+        )
 
 
 class _TagCheck(BaseModel):
@@ -277,8 +477,9 @@ class ArtRecord(BaseModel):
     missing: list[str] = Field(default_factory=list)
 
 
-def _hash(pos: str, neg: str, ref: str = "") -> str:
-    return hashlib.sha256(f"{pos}\n{neg}\n{W}x{H}\n{ref}".encode()).hexdigest()[:16]
+def _hash(pos: str, neg: str, ref: str = "", dims: tuple[int, int] | None = None) -> str:
+    w, h = dims if dims else (W, H)
+    return hashlib.sha256(f"{pos}\n{neg}\n{w}x{h}\n{ref}".encode()).hexdigest()[:16]
 
 
 def generate_art(story: OriginalStory, ws: Path, runner: ComfyRunner, provider=None, limit: int | None = None,
@@ -293,10 +494,14 @@ def generate_art(story: OriginalStory, ws: Path, runner: ComfyRunner, provider=N
     def save():
         db_path.write_text(json.dumps([r.model_dump() for r in db.values()], indent=1), encoding="utf-8")
 
+    sheet_dims = shotspec.resolve_dimensions("character_sheet", default=(832, 1216))
     for c in story.bible.characters:
         f = ws / "sheets" / f"{c.id}.png"
         if not f.exists():
-            f.write_bytes(runner.generate(sheet_prompt(c, story, getattr(runner, "style", "tags")), "" if getattr(runner, "style", "tags") == "natural" else SHEET_NEGATIVE, seed_for(story, "sheet_" + c.id), W, H, f"sheet_{c.id}"))
+            f.write_bytes(runner.generate(sheet_prompt(c, story, getattr(runner, "style", "tags")),
+                                          "" if getattr(runner, "style", "tags") == "natural" else SHEET_NEGATIVE,
+                                          seed_for(story, "sheet_" + c.id),
+                                          sheet_dims[0], sheet_dims[1], f"sheet_{c.id}"))
     chars = {c.id: c for c in story.bible.characters}
     panels = story.panels[:limit] if limit else story.panels
     done = reused = 0
@@ -307,18 +512,53 @@ def generate_art(story: OriginalStory, ws: Path, runner: ComfyRunner, provider=N
         style, engine = getattr(runner, "style", "tags"), getattr(runner, "engine", "sdxl")
         pos, neg = build_prompt(story, p, style=style)
         shown = [chars[c] for c in p.character_ids if c in chars][:2]
+        spec = shotspec.ShotSpec(**p.director) if p.director else None
+        spec_shot = spec.shot if spec else p.shot
+        pw, ph = shotspec.resolve_dimensions(spec_shot, num_characters=len(shown), default=(W, H))
         # the first character on screen has its face pinned to its sheet
-        ref = ws / "sheets" / f"{shown[0].id}.png" if shown and (getattr(runner, "ipa", None) is not None or getattr(runner, "flux_pulid", None) is not None) else None
+        ref = ws / "sheets" / f"{shown[0].id}.png" if shown and getattr(runner, "ipa", None) is not None else None
         # two characters: the first is pinned to the left half, the second to the right half (needs the masked workflow)
         ref_b = ws / "sheets" / f"{shown[1].id}.png" if len(shown) == 2 and getattr(runner, "ipa2", None) is not None else None
+        pose_img = None
+        depth_img = None
+        pose_wt = None
+        depth_wt = None
+        cond_sig = ""
+        if spec is not None:
+            cond = shotspec.compile_controlnet_conditioning(spec, (pw, ph))
+            pose_raw = cond.get("pose_image")
+            depth_raw = cond.get("depth_image")
+            pose_wt = cond.get("pose_weight")
+            depth_wt = cond.get("depth_weight")
+            if pose_raw:
+                if hasattr(runner, "_upload") and isinstance(pose_raw, Path):
+                    pose_img = runner._upload(pose_raw)
+                elif hasattr(runner, "_upload_bytes") and isinstance(pose_raw, bytes):
+                    pose_img = runner._upload_bytes(pose_raw)
+                elif hasattr(runner, "_upload") and isinstance(pose_raw, str) and Path(pose_raw).exists():
+                    pose_img = runner._upload(Path(pose_raw))
+                else:
+                    pose_img = pose_raw
+            if depth_raw:
+                if hasattr(runner, "_upload") and isinstance(depth_raw, Path):
+                    depth_img = runner._upload(depth_raw)
+                elif hasattr(runner, "_upload_bytes") and isinstance(depth_raw, bytes):
+                    depth_img = runner._upload_bytes(depth_raw)
+                elif hasattr(runner, "_upload") and isinstance(depth_raw, str) and Path(depth_raw).exists():
+                    depth_img = runner._upload(Path(depth_raw))
+                else:
+                    depth_img = depth_raw
+            if pose_raw or depth_raw:
+                cond_sig = f"|pose:{pose_raw}:{pose_wt}|depth:{depth_raw}:{depth_wt}"
+
         rec, img = db.get(p.id), ws / "panels" / f"{p.id}.png"
-        if rec and rec.prompt_hash == _hash(pos, neg, engine + (ref.name if ref else "") + (ref_b.name if ref_b else "")) and img.exists():
+        ref_sig = engine + (ref.name if ref else "") + (ref_b.name if ref_b else "") + cond_sig
+        if rec and rec.prompt_hash == _hash(pos, neg, ref_sig, dims=(pw, ph)) and img.exists():
             reused += 1
             continue
         best: tuple | None = None
         emphasis: list[str] = []
         claims: list[review_mod.Claim] = []
-        spec = shotspec.ShotSpec(**p.director) if p.director else None
         if provider is not None and spec is not None and p.caption:
             try:  # the narration's own visible facts, extracted independently of the shot director
                 claims = asyncio.run(review_mod.extract_claims(provider, p.caption))
@@ -328,8 +568,13 @@ def generate_art(story: OriginalStory, ws: Path, runner: ComfyRunner, provider=N
         for attempt in range(DIRECTED_ATTEMPTS if p.director else MAX_ATTEMPTS):
             seed = seed_for(story, p.id, attempt)
             pos_i, _ = build_prompt(story, p, emphasis, style, must, attempt)
-            png = runner.generate(pos_i, neg, seed, W, H, f"panel_{p.id}", reference=ref, reference_b=ref_b,
-                                  reference_weight=POSE_WEIGHT if (pose_sensitive(p) or attempt > 0) else None)  # retries loosen the pin
+            if attempt >= 2 and p.director and style == "natural":
+                widened_shot = {"close": "medium", "extreme_close": "medium", "medium": "wide"}.get(spec_shot, spec_shot)
+                pw, ph = shotspec.resolve_dimensions(widened_shot, num_characters=len(shown), default=(W, H))
+            png = runner.generate(pos_i, neg, seed, pw, ph, f"panel_{p.id}", reference=ref, reference_b=ref_b,
+                                  reference_weight=POSE_WEIGHT if (pose_sensitive(p) or attempt > 0) else None,
+                                  pose_image=pose_img, depth_image=depth_img,
+                                  pose_weight=pose_wt, depth_weight=depth_wt)
             score, missing, match, unmatched, desc, rev = 1.0, [], 1.0, [], "", None
             if provider is not None and (shown or p.key_visuals):
                 tmp = ws / "panels" / f"_try_{p.id}.png"
@@ -340,6 +585,45 @@ def generate_art(story: OriginalStory, ws: Path, runner: ComfyRunner, provider=N
                         match, desc = rev.score, rev.description
                     except Exception as e:  # a model hiccup must not stop a whole episode: keep the picture, mark it unverified
                         desc = f"(not verified: {str(e)[:80]})"
+                    if rev is not None and hasattr(runner, "inpaint") and (not rev.anatomy_passed or not rev.spatial_contact_passed or rev.defects):
+                        mask = review_mod.extract_defect_mask((pw, ph), rev.items)
+                        if mask is not None:
+                            try:
+                                pos_inpaint, neg_inpaint = review_mod.build_inpaint_correction_prompt(rev.items, pos_i)
+                                buf_m = io.BytesIO()
+                                mask.save(buf_m, format="PNG")
+                                repaired_bytes = runner.inpaint(
+                                    base_image=png,
+                                    mask_image=buf_m.getvalue(),
+                                    prompt=pos_inpaint,
+                                    neg=neg_inpaint,
+                                    seed=seed + 1,
+                                    denoise=0.75,
+                                )
+                                base_pil = Image.open(io.BytesIO(png))
+                                rep_pil = Image.open(io.BytesIO(repaired_bytes))
+                                spliced_pil = review_mod.splice_repaired_image(base_pil, rep_pil, mask)
+                                buf_s = io.BytesIO()
+                                spliced_pil.save(buf_s, format="PNG")
+                                candidate_png = buf_s.getvalue()
+
+                                tmp_rep = ws / "panels" / f"_try_rep_{p.id}.png"
+                                tmp_rep.write_bytes(candidate_png)
+                                try:
+                                    rep_rev = asyncio.run(review_mod.review_image(provider, tmp_rep, claims, spec, chars))
+                                finally:
+                                    tmp_rep.unlink(missing_ok=True)
+
+                                score_improved = (
+                                    (rep_rev.anatomy_passed and rep_rev.spatial_contact_passed and (rep_rev.score >= rev.score - 0.05))
+                                    or (len(rep_rev.defects) < len(rev.defects) and rep_rev.score > rev.score)
+                                )
+                                if score_improved:
+                                    png = candidate_png
+                                    rev = rep_rev
+                                    match, desc = rev.score, rev.description
+                            except Exception:
+                                pass  # Repair failed; keep original panel and fall back
                 else:
                     if shown:
                         score, missing = asyncio.run(check_panel(provider, tmp, shown, p.shot))
@@ -355,7 +639,7 @@ def generate_art(story: OriginalStory, ws: Path, runner: ComfyRunner, provider=N
         key, png, seed, missing, score, match, unmatched, desc, rev = best
         img.write_bytes(png)
         status = ("" if spec is None else "unverified" if rev is None else {"accept": "accept", "accept_low": "accept_low"}.get(rev.decision, "needs_review"))
-        db[p.id] = ArtRecord(panel_id=p.id, image=str(img), prompt_hash=_hash(pos, neg, engine + (ref.name if ref else "") + (ref_b.name if ref_b else "")),
+        db[p.id] = ArtRecord(panel_id=p.id, image=str(img), prompt_hash=_hash(pos, neg, ref_sig, dims=(pw, ph)),
                              seed=seed, attempts=attempt + 1, score=score if provider is not None and shown and spec is None else None,
                              match_score=match if provider is not None and (p.key_visuals or spec is not None) and (rev is not None or spec is None) else None,
                              missing=(rev.missing_critical if rev else missing + unmatched), description=desc, status=status,

@@ -42,7 +42,7 @@ const mockPackaging: YouTubePackagingData = {
     recommended_height: 720,
     prompt: "masterpiece anime YouTube thumbnail key art, Lin Xia, teal-haired warrior in crimson robes...",
     negative_prompt: "text, watermark, logo, bad anatomy, deformed hands...",
-    workflow_id: "manga_image_generation",
+    workflow_id: "qwen_image_21",
     seed: 20261023,
     text_hooks: ["HE AWAKENED?!", "THE TRUTH REVEALED!"],
     composition_guidance: "Position main subject off-center with high contrast.",
@@ -93,7 +93,7 @@ test("YouTube packaging interactive modal loads research, toggles aspect ratios,
   api.getYoutubePackaging = async () => mockPackaging;
   api.listApprovedComfyWorkflows = async () => ({
     workflows: [
-      { id: "manga_image_generation", purpose: "text_to_image", filename: "manga.json", sha256: "abc", available: true, model_files: [] },
+      { id: "qwen_image_21", purpose: "text_to_image", filename: "qwen.json", sha256: "abc", available: true, model_files: [] },
     ],
     errors: [],
   });
@@ -101,7 +101,7 @@ test("YouTube packaging interactive modal loads research, toggles aspect ratios,
   api.generateComfyImage = async (_pid, req) => {
     comfyJobTriggered = true;
     requestedDims = { width: req.width ?? 0, height: req.height ?? 0 };
-    return { job_id: "comfy_job_123", status: "QUEUED", workflow_id: req.workflow_id || "manga_image_generation" };
+    return { job_id: "comfy_job_123", status: "QUEUED", workflow_id: req.workflow_id || "qwen_image_21" };
   };
   api.waitForWorkflowJob = async () => ({
     job_id: "comfy_job_123",

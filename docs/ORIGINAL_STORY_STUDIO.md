@@ -409,3 +409,23 @@ Real run, hospital story, 8 beats on FLUX (9.5 min): 4 accepted, 2 accepted with
 The two needs_review are honest: "the windows rattle" cannot be drawn, and "her hand touches a metal desk" is not clearly shown.
 Limits: the reviewer is the same 9B vision/text model family as the other steps, so confidence is a calibrated-by-agreement signal, not
 ground truth; it adds ~20 s per attempt; claims about sound or ideas are flagged for a human instead of fixed.
+
+## One art workflow (2026-11-06): Qwen Image 2.1 for everything
+
+There were four copies of "patch a graph, submit to ComfyUI, poll, download": `ComfyRunner` (Qwen / FLUX / SDXL branches), ChronoFlow's
+hard-coded Qwen and FLUX graphs (served twice: the aiohttp `server.py` and the FastAPI router), the Comfy image screen's
+`generate_image_operation` (`manga_image_generation`), and three private poll loops in `ComfyRunner` itself. Now:
+
+- `engine/comfyui/art.py` - `ArtEngine.generate(...)` is the only text-to-image path; it runs the registered `qwen_image_21` workflow,
+  rejects sizes the workflow cannot honour (multiples of 16, 256-2048) before any GPU time, verifies the returned PNG, and
+  `ArtEngine.run(...)` is the shared submit/poll/download used by the SDXL edit tools too.
+- Callers: `ComfyRunner.generate` (Original Stories), `ChronoFlowPipeline.generate_art_image` (ChronoFlow API + MCP tool),
+  `generate_image_operation` (Comfy image screen, job-queued, asset persisted), YouTube thumbnails (`packaging.py`, which maps old saved
+  `workflow_id`s to the single workflow), autopilot.
+- Removed: `flux_schnell`, `flux_pulid`, `manga_image_generation` (registry entries, files), `PANELFLOW_IMAGE_ENGINE=flux|auto`, ChronoFlow's
+  `build_qwen_image_prompt` / `build_flux_image_prompt`, the `model` / `steps` options of the image APIs and MCP tools, the FLUX/PuLID scripts.
+- Verified on the real engine: a ChronoFlow MCP image (1344x768) and an Original Stories picture (one attempt) were made by `qwen_image_21`
+  only (embedded ComfyUI workflow read back from the PNGs); the ChronoFlow gallery lists the new `art_*` files.
+- **Not unified yet (needs a decision):** the SDXL stack - `anime_sdxl`, `anime_sdxl_ipa(2)`, `anime_sdxl_controlnet` (relabelled
+  `sdxl_conditioning`), `anime_sdxl_inpaint`, `anime_alpha_matting` - and ChronoFlow's own FLUX-checkpoint inpaint graph. ControlNet pose/depth,
+  IP-Adapter, inpaint and matting have no Qwen equivalent, and about a dozen tests of the rigging work are built on them.

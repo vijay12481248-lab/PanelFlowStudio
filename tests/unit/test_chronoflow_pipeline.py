@@ -93,25 +93,29 @@ def test_build_h3_prompt_reference_locking():
     assert graph["ref_img_3"]["inputs"]["image"] == "turnaround_back.png"
 
 
-def test_build_flux_image_prompt():
-    pipeline = ChronoFlowPipeline()
-    graph = pipeline.build_flux_image_prompt("Concept art of futuristic explorer", width=1344, height=768, steps=4, seed=555)
-
-    assert graph["1"]["class_type"] == "CheckpointLoaderSimple"
-    assert graph["1"]["inputs"]["ckpt_name"] == "flux1-schnell-fp8.safetensors"
-    assert graph["2"]["inputs"]["text"] == "Concept art of futuristic explorer"
-    assert graph["3"]["inputs"]["width"] == 1344
-    assert graph["3"]["inputs"]["height"] == 768
-    assert graph["4"]["inputs"]["seed"] == 555
+def test_chronoflow_has_no_graphs_of_its_own_for_text_to_image():
+    # one text-to-image workflow for all of PanelFlow: engine/comfyui/art.py
+    assert not hasattr(ChronoFlowPipeline, "build_qwen_image_prompt")
+    assert not hasattr(ChronoFlowPipeline, "build_flux_image_prompt")
 
 
-def test_build_qwen_image_prompt():
-    pipeline = ChronoFlowPipeline()
-    graph = pipeline.build_qwen_image_prompt("Anime girl with cyberpunk visor", width=1024, height=1024, steps=8, seed=777)
+def test_generate_art_image_uses_the_central_art_engine_and_saves_into_the_input_folder(tmp_path, monkeypatch):
+    import asyncio
 
-    assert graph["1"]["inputs"]["unet_name"] == "qwen_image_2.1_turbo_int8_convrot.safetensors"
-    assert graph["4"]["class_type"] == "TextEncodeQwenImage21"
-    assert graph["8"]["inputs"]["noise_seed"] == 777
+    from engine.chronoflow import pipeline as pl
+
+    seen = []
+
+    class FakeArt:
+        def generate(self, prompt, negative, width, height, seed, prefix):
+            seen.append((prompt, negative, width, height, seed, prefix))
+            return type("Img", (), {"png": b"png-bytes"})()
+
+    monkeypatch.setattr(pl, "ArtEngine", FakeArt)
+    monkeypatch.setattr(pl, "COMFY_INPUT_DIR", tmp_path)
+    name = asyncio.run(ChronoFlowPipeline().generate_art_image("a fox", "blurry", "1344", 768, 5))
+    assert seen == [("a fox", "blurry", 1344, 768, 5, "chronoflow_art")]
+    assert (tmp_path / name).read_bytes() == b"png-bytes" and name.startswith("art_") and name.endswith(".png")
 
 
 def test_build_inpaint_prompt():

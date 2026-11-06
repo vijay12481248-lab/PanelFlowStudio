@@ -10,9 +10,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
+from engine.comfyui.art import ART_WORKFLOW_ID
 from engine.database.models import CharacterRecord, ProjectRecord, RenderJobRecord, SceneRecord
 from engine.security.paths import resolve_contained_path
 
@@ -25,10 +26,15 @@ class YouTubeThumbnailResearch(BaseModel):
     recommended_height: int = Field(default=720, ge=256, le=2048)
     prompt: str = Field(..., description="Prompt for ComfyUI thumbnail generation")
     negative_prompt: str = Field(..., description="Negative prompt for ComfyUI")
-    workflow_id: str = Field(default="manga_image_generation")
+    workflow_id: str = Field(default=ART_WORKFLOW_ID)
     seed: int = Field(default=20261023)
     text_hooks: List[str] = Field(default_factory=list)
     composition_guidance: str = Field(default="")
+
+    @field_validator("workflow_id", mode="before")
+    @classmethod
+    def _only_the_art_workflow(cls, _value: object) -> str:
+        return ART_WORKFLOW_ID  # packaging saved before the single art workflow named another one (e.g. manga_image_generation)
 
 
 class YouTubeChapter(BaseModel):
@@ -271,7 +277,7 @@ def generate_heuristic_packaging(
         recommended_height=rec_h,
         prompt=prompt,
         negative_prompt=negative_prompt,
-        workflow_id="manga_image_generation",
+        workflow_id=ART_WORKFLOW_ID,
         seed=20261023,
         text_hooks=text_hooks,
         composition_guidance=composition_guidance,

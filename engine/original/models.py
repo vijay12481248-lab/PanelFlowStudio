@@ -1,5 +1,5 @@
 """Data contracts for original stories: premise -> bible -> scenes -> panels."""
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class Premise(BaseModel):
@@ -67,3 +67,90 @@ class OriginalStory(BaseModel):
     scenes: list[Scene]
     panels: list[Panel]
     warnings: list[str] = Field(default_factory=list)
+
+
+class Claim(BaseModel):
+    text: str
+    critical: bool = True
+    category: str = "narration"  # narration | anatomy | spatial_contact
+    defect_type: str = ""  # polycephaly | extra_limbs | missing_limbs | distorted_digits | limb_topology | unanchored_object | disconnected_interaction
+    interaction_target: str = ""
+
+
+class ItemVerdict(BaseModel):
+    item: str
+    critical: bool
+    verdict: str  # shown | partial | missing
+    confidence: float
+    vision: str  # yes | partly | no
+    description_says: bool
+    evidence: str = ""
+    category: str = "narration"  # narration | anatomy | spatial_contact
+    defect_type: str = ""  # polycephaly | extra_limbs | missing_limbs | distorted_digits | limb_topology | unanchored_object | disconnected_interaction
+    passed: bool = True
+    bbox: list[int | float] | None = None
+
+    def model_post_init(self, __context) -> None:
+        if self.verdict != "shown" or not self.passed:
+            self.passed = False
+        if not self.passed and self.category in ("anatomy", "spatial_contact"):
+            self.verdict = "missing"
+
+
+class Review(BaseModel):
+    items: list[ItemVerdict]
+    score: float
+    confidence: float
+    decision: str  # accept | accept_low | regenerate
+    reasons: list[str] = Field(default_factory=list)
+    description: str = ""
+    anatomy_passed: bool = True
+    spatial_contact_passed: bool = True
+    defects: list[str] = Field(default_factory=list)
+
+    @property
+    def missing_critical(self) -> list[str]:
+        return [i.item for i in self.items if i.critical and i.verdict != "shown" and i.category == "narration"]
+
+    @property
+    def all_missing_critical(self) -> list[str]:
+        return [i.item for i in self.items if i.critical and i.verdict != "shown"]
+
+    @property
+    def anatomical_failures(self) -> list[ItemVerdict]:
+        return [i for i in self.items if i.category == "anatomy" and (not i.passed or i.verdict != "shown")]
+
+    @property
+    def spatial_contact_failures(self) -> list[ItemVerdict]:
+        return [i for i in self.items if i.category == "spatial_contact" and (not i.passed or i.verdict != "shown")]
+
+    @property
+    def spatial_failures(self) -> list[ItemVerdict]:
+        return self.spatial_contact_failures
+
+    @model_validator(mode="after")
+    def _enforce_quality_gates(self) -> Review:
+        af = self.anatomical_failures
+        sf = self.spatial_contact_failures
+
+        ANATOMY_DEFECT_TYPES = {"polycephaly", "extra_limbs", "missing_limbs", "distorted_digits", "limb_topology"}
+        SPATIAL_DEFECT_TYPES = {"unanchored_object", "disconnected_interaction"}
+
+        has_anatomy_defect = bool(af) or not self.anatomy_passed or any(d in ANATOMY_DEFECT_TYPES for d in self.defects)
+        has_spatial_defect = bool(sf) or not self.spatial_contact_passed or any(d in SPATIAL_DEFECT_TYPES for d in self.defects)
+
+        if has_anatomy_defect:
+            self.anatomy_passed = False
+            self.decision = "regenerate"
+        if has_spatial_defect:
+            self.spatial_contact_passed = False
+            self.decision = "regenerate"
+
+        new_defects = [i.defect_type or i.item for i in af + sf if (i.defect_type or i.item)]
+        merged_defects = list(dict.fromkeys(self.defects + new_defects))
+        self.defects = merged_defects
+
+        if self.defects or not self.anatomy_passed or not self.spatial_contact_passed:
+            self.decision = "regenerate"
+        return self
+

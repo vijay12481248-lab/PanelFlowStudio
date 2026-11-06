@@ -106,16 +106,14 @@ TOOLS = [
     },
     {
         "name": "chronoflow_generate_image",
-        "description": "Generate high-quality reference image or keyframe using Qwen-Image-2.1 or FLUX.1.",
+        "description": "Generate a high-quality reference image or keyframe with the single PanelFlow art workflow (Qwen Image 2.1).",
         "inputSchema": {
             "type": "object",
             "properties": {
-                "model": {"type": "string", "enum": ["qwen", "flux"], "description": "Model to use (default: qwen for Qwen-Image-2.1)"},
                 "prompt": {"type": "string", "description": "Detailed image generation prompt"},
                 "negative_prompt": {"type": "string", "description": "Negative prompt"},
                 "width": {"type": "integer", "description": "Image width (e.g. 1024 or 1344)"},
-                "height": {"type": "integer", "description": "Image height (e.g. 1024 or 768)"},
-                "steps": {"type": "integer", "description": "Sampling steps (default: 8)"}
+                "height": {"type": "integer", "description": "Image height (e.g. 1024 or 768)"}
             },
             "required": ["prompt"]
         }

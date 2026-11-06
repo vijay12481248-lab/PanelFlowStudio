@@ -70,7 +70,7 @@ async def panelflow_original_direct_shots(slug: str) -> dict[str, Any]:
 
 @registry.tool(
     name="panelflow_original_generate_art",
-    description="Generate character turnaround sheets and comic panel art using ComfyUI (Animagine XL 4.0 / FLUX.1). Run panelflow_original_direct_shots first so pictures follow the narration.",
+    description="Generate character turnaround sheets and comic panel art with the single PanelFlow art workflow (Qwen Image 2.1 Turbo via ComfyUI). Run panelflow_original_direct_shots first so pictures follow the narration.",
     input_schema={
         "type": "object",
         "properties": {

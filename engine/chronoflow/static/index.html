@@ -386,10 +386,10 @@
     }
     .ticker-item { display: flex; align-items: center; gap: 6px; }
 
-    /* Main Container */
+    /* Main Container — Edge-to-edge DaVinci Resolve layout */
     main {
-      flex: 1; max-width: 1640px; width: 100%; margin: 0 auto;
-      padding: 18px 24px; display: flex; flex-direction: column; gap: 18px;
+      flex: 1; max-width: 100%; width: 100%; margin: 0;
+      padding: 6px 10px; display: flex; flex-direction: column; gap: 8px;
     }
 
     .tab-content { display: none; }
@@ -494,18 +494,24 @@
     .btn-primary:hover:not(:disabled) { opacity: 0.93; transform: translateY(-1px); }
     .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
 
-    /* Sleek Compact Inline Progress Strip */
+    /* Sleek Floating Non-Intrusive Progress Toast — Does NOT occupy workspace space */
     .progress-box {
-      background: rgba(14, 20, 34, 0.95);
-      backdrop-filter: blur(12px);
-      border: 1px solid rgba(99, 102, 241, 0.35);
-      border-radius: 8px;
-      padding: 6px 12px;
-      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
-      margin-bottom: 6px;
-      position: relative;
+      position: fixed;
+      bottom: 56px;
+      right: 20px;
+      max-width: 440px;
+      width: calc(100vw - 40px);
+      z-index: 9999;
+      background: rgba(18, 19, 24, 0.96);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 6px;
+      padding: 8px 14px;
+      box-shadow: 0 12px 36px rgba(0, 0, 0, 0.8), 0 0 1px rgba(255, 255, 255, 0.2);
+      margin: 0;
       overflow: hidden;
-      transition: all 0.2s ease;
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      pointer-events: auto;
     }
     .prog-compact-row {
       display: flex;
@@ -1145,6 +1151,22 @@
     }
     .trim-handle-left { left: 0; }
     .trim-handle-right { right: 0; }
+    
+    .dissolve-marker-box {
+      position: absolute;
+      width: 26px;
+      height: 100%;
+      right: -13px;
+      top: 0;
+      z-index: 8;
+      background: rgba(236, 72, 153, 0.22);
+      border: 1px solid #ec4899;
+      background-image: linear-gradient(to top right, transparent 47%, #ec4899 48%, #ec4899 52%, transparent 53%),
+                        linear-gradient(to bottom right, transparent 47%, #ec4899 48%, #ec4899 52%, transparent 53%);
+      pointer-events: none;
+      box-shadow: 0 0 6px rgba(236, 72, 153, 0.4);
+    }
+
     .transition-marker {
       position: absolute;
       width: 18px;
@@ -1455,6 +1477,679 @@
       font-size: 0.72rem;
       padding: 5px 9px;
     }
+  
+    /* ========================================================= */
+    /* DAVINCI RESOLVE NLE WORKSPACE & CUT/EDIT PAGE STYLING     */
+    /* ========================================================= */
+    .davinci-nle-wrapper {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      width: 100%;
+      background: #101115;
+      border: 1px solid #1f2128;
+      border-radius: 6px;
+      padding: 6px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+    }
+
+    /* Top Row: 38% Media Pool | 62% Cinema Program Monitor */
+    .davinci-top-row {
+      display: grid;
+      grid-template-columns: 38% calc(62% - 8px);
+      gap: 8px;
+      min-height: 380px;
+      max-height: 520px;
+      height: 46vh;
+    }
+    @media (max-width: 1100px) {
+      .davinci-top-row {
+        grid-template-columns: 1fr;
+        height: auto;
+        max-height: none;
+      }
+    }
+
+    /* MEDIA POOL / CLIP BINS (Left 38%) */
+    .davinci-media-pool {
+      background: #14151a;
+      border: 1px solid #23252d;
+      border-radius: 4px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .pool-header-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 6px 10px;
+      background: #1a1b22;
+      border-bottom: 1px solid #282a34;
+      gap: 8px;
+    }
+    .pool-title-group {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+    }
+    .pool-title-text {
+      font-size: 0.76rem;
+      font-weight: 800;
+      color: #e2e8f0;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+    .pool-count-badge {
+      font-size: 0.65rem;
+      font-weight: 700;
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+      border: 1px solid rgba(99, 102, 241, 0.4);
+      padding: 1px 6px;
+      border-radius: 10px;
+    }
+    .pool-tools-group {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex: 1;
+      justify-content: flex-end;
+    }
+    .pool-search-input {
+      background: #0f1014;
+      border: 1px solid #2c2e39;
+      color: #cbd5e1;
+      font-size: 0.72rem;
+      padding: 3px 8px;
+      border-radius: 4px;
+      max-width: 140px;
+      outline: none;
+    }
+    .pool-search-input:focus {
+      border-color: #6366f1;
+    }
+    .btn-pool-action {
+      background: #24252e;
+      border: 1px solid #363844;
+      color: #94a3b8;
+      border-radius: 4px;
+      padding: 3px 6px;
+      font-size: 0.72rem;
+      cursor: pointer;
+    }
+    .btn-pool-action:hover {
+      background: #323440;
+      color: #fff;
+    }
+
+    /* Bin Selector Tabs */
+    .pool-bins-tabs {
+      display: flex;
+      gap: 4px;
+      padding: 5px 8px;
+      background: #111216;
+      border-bottom: 1px solid #20222a;
+    }
+    .pool-bin-btn {
+      background: transparent;
+      border: 1px solid transparent;
+      color: #828a9b;
+      font-size: 0.7rem;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 3px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .pool-bin-btn:hover {
+      color: #e2e8f0;
+      background: rgba(255,255,255,0.04);
+    }
+    .pool-bin-btn.active {
+      background: #232530;
+      color: #f59e0b;
+      border-color: #3b3e4f;
+    }
+
+    /* Pool Grid of Thumbnail Cards */
+    .pool-content-area {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+      gap: 8px;
+      align-content: start;
+    }
+    .pool-card {
+      background: #181920;
+      border: 1px solid #262832;
+      border-radius: 4px;
+      overflow: hidden;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+    .pool-card:hover {
+      border-color: #3b82f6;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    }
+    .pool-card.active-pool-clip {
+      border-color: #f59e0b;
+      box-shadow: 0 0 0 1px #f59e0b;
+    }
+    .pool-thumb-wrapper {
+      width: 100%;
+      height: 74px;
+      background: #090a0d;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .pool-thumb-video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .pool-thumb-img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .pool-dur-tag {
+      position: absolute;
+      bottom: 3px;
+      right: 3px;
+      background: rgba(0, 0, 0, 0.75);
+      color: #e2e8f0;
+      font-size: 0.62rem;
+      font-family: monospace;
+      padding: 1px 4px;
+      border-radius: 2px;
+    }
+    .pool-badge-source {
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      font-size: 0.58rem;
+      font-weight: 700;
+      background: rgba(16, 185, 129, 0.85);
+      color: #fff;
+      padding: 1px 4px;
+      border-radius: 2px;
+    }
+    .pool-card-meta {
+      padding: 4px 6px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      background: #14151a;
+    }
+    .pool-card-name {
+      font-size: 0.7rem;
+      font-weight: 700;
+      color: #f1f5f9;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .pool-card-sub {
+      font-size: 0.62rem;
+      color: #64748b;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    /* CINEMA PROGRAM MONITOR (Right 62%) */
+    .davinci-cinema-monitor {
+      background: #0c0d11;
+      border: 1px solid #23252d;
+      border-radius: 4px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .monitor-top-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 5px 10px;
+      background: #17181f;
+      border-bottom: 1px solid #23252d;
+      gap: 8px;
+    }
+    .monitor-title-box {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .monitor-seq-title {
+      font-size: 0.78rem;
+      font-weight: 800;
+      color: #f8fafc;
+      letter-spacing: 0.04em;
+    }
+    .monitor-badge-tag {
+      font-size: 0.64rem;
+      font-weight: 700;
+      color: #94a3b8;
+      background: #232530;
+      padding: 1px 6px;
+      border-radius: 3px;
+    }
+    .monitor-top-controls {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .job-select-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      background: #0f1014;
+      border: 1px solid #2a2c38;
+      border-radius: 4px;
+      padding: 2px 6px;
+    }
+    .monitor-job-select {
+      background: transparent;
+      border: none;
+      color: #38bdf8;
+      font-weight: 700;
+      font-size: 0.72rem;
+      outline: none;
+      cursor: pointer;
+      max-width: 180px;
+    }
+    .btn-monitor-tool {
+      background: #232633;
+      border: 1px solid #36394a;
+      color: #cbd5e1;
+      font-size: 0.72rem;
+      font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 3px;
+      cursor: pointer;
+    }
+    .btn-monitor-tool:hover {
+      background: #313547;
+      color: #fff;
+    }
+    .btn-monitor-export {
+      background: #1e293b;
+      border: 1px solid #334155;
+      color: #38bdf8;
+      font-size: 0.72rem;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 3px;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .btn-monitor-export:hover {
+      background: #0284c7;
+      color: #fff;
+      border-color: #38bdf8;
+    }
+
+    /* Monitor Stage: Screen + Master VU Meter */
+    .monitor-stage {
+      flex: 1;
+      display: flex;
+      background: #050608;
+      position: relative;
+      overflow: hidden;
+      min-height: 200px;
+    }
+    .cinema-screen-container {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .cinema-video-element {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      background: #000;
+    }
+
+    /* DaVinci Master Vertical Stereo VU Meter */
+    .cinema-vu-meter {
+      width: 36px;
+      background: #0e0f14;
+      border-left: 1px solid #20222a;
+      display: flex;
+      padding: 6px 3px;
+      gap: 2px;
+      user-select: none;
+    }
+    .vu-scale {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      height: 100%;
+      font-size: 0.52rem;
+      font-family: monospace;
+      color: #555b6d;
+      text-align: right;
+      line-height: 1;
+      padding-right: 2px;
+    }
+    .vu-meters-pair {
+      display: flex;
+      gap: 3px;
+      height: 100%;
+      flex: 1;
+    }
+    .vu-channel {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      height: 100%;
+      flex: 1;
+    }
+    .vu-meter-trough {
+      flex: 1;
+      width: 7px;
+      background: #181920;
+      border-radius: 1px;
+      overflow: hidden;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+    }
+    .vu-meter-bar {
+      width: 100%;
+      background: linear-gradient(to top, #16a34a 0%, #22c55e 65%, #eab308 82%, #ef4444 100%);
+      transition: height 0.08s ease-out;
+    }
+    .vu-label {
+      font-size: 0.55rem;
+      font-weight: 700;
+      color: #71717a;
+      margin-top: 2px;
+    }
+
+    /* Monitor Transport & SMPTE Timecode */
+    .monitor-transport-deck {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 5px 12px;
+      background: #15161d;
+      border-top: 1px solid #23252d;
+    }
+    .transport-center-cluster {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .btn-transport {
+      background: #20222b;
+      border: 1px solid #2e313d;
+      color: #cbd5e1;
+      width: 28px;
+      height: 26px;
+      border-radius: 3px;
+      font-size: 0.72rem;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s;
+    }
+    .btn-transport:hover {
+      background: #2e3241;
+      color: #fff;
+    }
+    .btn-transport-play {
+      background: #262936;
+      border-color: #f59e0b;
+      color: #f59e0b;
+      width: 34px;
+      height: 28px;
+      font-size: 0.85rem;
+    }
+    .btn-transport-play:hover {
+      background: #f59e0b;
+      color: #000;
+    }
+    .monitor-timecode-box {
+      display: flex;
+      align-items: center;
+    }
+    .smpte-readout {
+      font-family: "Courier New", Courier, monospace;
+      font-size: 1.05rem;
+      font-weight: 800;
+      color: #ffffff;
+      background: #090a0d;
+      border: 1px solid #22242e;
+      padding: 2px 10px;
+      border-radius: 3px;
+      letter-spacing: 0.08em;
+    }
+
+    /* MIDDLE COMMAND TOOLBAR */
+    .davinci-mid-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #16171e;
+      border: 1px solid #23252d;
+      border-radius: 4px;
+      padding: 4px 8px;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .mid-tools-left, .mid-tools-right {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .btn-mid-tool {
+      background: #1f212a;
+      border: 1px solid #2b2e3b;
+      color: #94a3b8;
+      padding: 4px 8px;
+      border-radius: 3px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      transition: all 0.15s;
+    }
+    .btn-mid-tool:hover {
+      background: #2c2f3d;
+      color: #fff;
+    }
+    .btn-mid-tool.active {
+      background: #2c2921;
+      border-color: #f59e0b;
+      color: #f59e0b;
+    }
+    .mid-clip-badge {
+      font-size: 0.74rem;
+      color: #cbd5e1;
+      background: #101115;
+      padding: 3px 10px;
+      border-radius: 3px;
+      border: 1px solid #23252d;
+    }
+    .btn-mid-accent {
+      background: rgba(245, 158, 11, 0.18);
+      border: 1px solid rgba(245, 158, 11, 0.4);
+      color: #fbbf24;
+      padding: 4px 10px;
+      border-radius: 3px;
+      font-size: 0.74rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .btn-mid-accent:hover {
+      background: #f59e0b;
+      color: #000;
+    }
+    .btn-mid-primary {
+      background: linear-gradient(135deg, #10b981, #059669);
+      border: 1px solid #10b981;
+      color: #fff;
+      padding: 4px 12px;
+      border-radius: 3px;
+      font-size: 0.74rem;
+      font-weight: 800;
+      cursor: pointer;
+    }
+    .btn-mid-primary:hover {
+      box-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
+    }
+
+    /* DUAL-TIER TIMELINE */
+    .davinci-dual-timeline {
+      background: #121317;
+      border: 1px solid #23252d;
+      border-radius: 4px;
+      padding: 6px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    /* Tier 1: Macro Sequence Minimap Ribbon */
+    .macro-ribbon {
+      height: 26px;
+      background: #171820;
+      border: 1px solid #282a35;
+      border-radius: 2px;
+      position: relative;
+      cursor: pointer;
+      user-select: none;
+      overflow: hidden;
+      display: flex;
+    }
+    .macro-clips-track {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      position: relative;
+    }
+    .macro-clip-block {
+      height: 100%;
+      border-right: 1px solid rgba(0, 0, 0, 0.6);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.58rem;
+      font-weight: 700;
+      color: rgba(255, 255, 255, 0.85);
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      padding: 0 2px;
+      opacity: 0.9;
+      transition: opacity 0.15s;
+    }
+    .macro-clip-block:hover {
+      opacity: 1;
+      filter: brightness(1.2);
+    }
+    .macro-playhead-needle {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 2px;
+      background: #ff3344;
+      box-shadow: 0 0 6px #ff3344;
+      pointer-events: none;
+      z-index: 10;
+      left: 0;
+    }
+
+    /* Tier 2: Detailed Multi-Track NLE Editor */
+    .detail-timeline-panel {
+      background: #0d0e12;
+      border: 1px solid #20222a;
+      border-radius: 2px;
+      position: relative;
+      overflow-x: auto;
+    }
+
+    /* Filmstrip thumbnails on Track V1 */
+    .filmstrip-strip {
+      display: flex;
+      height: 100%;
+      width: 100%;
+      background: #0a0b0e;
+      overflow: hidden;
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      opacity: 0.35;
+      pointer-events: none;
+    }
+    .filmstrip-frame {
+      height: 100%;
+      width: 50px;
+      object-fit: cover;
+      border-right: 1px solid rgba(0,0,0,0.5);
+      flex-shrink: 0;
+    }
+
+    /* DAVINCI BOTTOM PAGE DOCK */
+    .davinci-bottom-dock {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: #0f1014;
+      border: 1px solid #23252d;
+      border-radius: 4px;
+      padding: 3px 6px;
+      gap: 2px;
+    }
+    .dock-tab-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: transparent;
+      border: 1px solid transparent;
+      color: #828a9b;
+      padding: 4px 14px;
+      border-radius: 3px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .dock-tab-btn:hover {
+      color: #e2e8f0;
+      background: rgba(255, 255, 255, 0.04);
+    }
+    .dock-tab-btn.active {
+      background: #1f212a;
+      border-color: #3b3e4f;
+      color: #f59e0b;
+    }
+    .dock-tab-icon {
+      font-size: 0.85rem;
+    }
+
   </style>
 </head>
 <body>
@@ -1584,248 +2279,290 @@
   <!-- Main Workspace -->
   <main>
     <div class="tab-content active" id="tab-director">
-      <div class="studio-grid" id="studioGrid">
-        <!-- Full-Width Workspace (Controls accessible via Prompt modal) -->
-        <!-- Right Column: Live Pipeline Viewer & Clip Reviewer -->
-        <div style="display: flex; flex-direction: column; gap: 18px;">
-          <!-- Sleek Compact Task Notification Strip (Hidden by default when idle) -->
-          <div class="progress-box" id="progressBox" style="display: none;">
-            <div class="prog-compact-row">
-              <div class="prog-status" id="progStatusContainer">
-                <span id="statusIcon" style="color: #34d399; font-size: 14px; font-weight: 800;">✓</span>
-                <span id="statusMessage">Task Ready</span>
+      <div class="davinci-nle-wrapper">
+        <!-- Sleek Task Progress Notification Strip (Auto-hides when idle) -->
+        <div class="progress-box" id="progressBox" style="display: none;">
+          <div class="prog-compact-row">
+            <div class="prog-status" id="progStatusContainer">
+              <span id="statusIcon" style="color: #34d399; font-size: 14px; font-weight: 800;">✓</span>
+              <span id="statusMessage">Task Ready</span>
+            </div>
+            <div class="prog-compact-right">
+              <span id="chunkStepText" style="font-size: 0.73rem;">100% Complete</span>
+              <span id="overallChunkText" style="color: #34d399; font-weight: 700; font-size: 0.73rem;">All Chunks Ready</span>
+              <span class="prog-timer" id="timerDisplay">00:00</span>
+              <button type="button" class="btn-dismiss-prog" onclick="dismissProgressBox()" title="Dismiss notification">&times;</button>
+            </div>
+          </div>
+          <div class="progress-bar-container">
+            <div class="progress-bar-fill" id="chunkProgressFill" style="width: 0%;"></div>
+          </div>
+        </div>
+
+        <!-- Top Row: 38% Media Pool / Bins | 62% Cinema Program Monitor -->
+        <div class="davinci-top-row">
+          <!-- Left 38%: Media Pool / Clip Bins -->
+          <div class="davinci-media-pool">
+            <div class="pool-header-bar">
+              <div class="pool-title-group">
+                <span class="pool-icon">📁</span>
+                <span class="pool-title-text">MEDIA POOL</span>
+                <span class="pool-count-badge" id="mediaPoolCountBadge">0 Clips</span>
               </div>
-              <div class="prog-compact-right">
-                <span id="chunkStepText" style="font-size: 0.73rem;">100% Complete</span>
-                <span id="overallChunkText" style="color: #34d399; font-weight: 700; font-size: 0.73rem;">All Chunks Ready</span>
-                <span class="prog-timer" id="timerDisplay">00:00</span>
-                <button type="button" class="btn-dismiss-prog" onclick="dismissProgressBox()" title="Dismiss notification">&times;</button>
+              <div class="pool-tools-group">
+                <input type="text" id="poolSearchInput" placeholder="Filter clips..." oninput="filterMediaPool(this.value)" class="pool-search-input">
+                <button type="button" class="btn-pool-action" onclick="refreshMediaPool()" title="Refresh Pool">🔄</button>
               </div>
             </div>
-            <div class="progress-bar-container">
-              <div class="progress-bar-fill" id="chunkProgressFill" style="width: 0%;"></div>
+
+            <!-- Bin Categories Bar -->
+            <div class="pool-bins-tabs">
+              <button type="button" class="pool-bin-btn active" id="binTabAll" onclick="selectMediaBin('all')">All</button>
+              <button type="button" class="pool-bin-btn" id="binTabChunks" onclick="selectMediaBin('chunks')">🎬 Chunks</button>
+              <button type="button" class="pool-bin-btn" id="binTabAudio" onclick="selectMediaBin('audio')">🎵 Audio</button>
+              <button type="button" class="pool-bin-btn" id="binTabInpaint" onclick="selectMediaBin('inpaint')">🎨 Inpaint</button>
+            </div>
+
+            <!-- Media Pool Grid Cards -->
+            <div class="pool-content-area" id="mediaPoolGrid">
+              <!-- Dynamically populated by renderMediaPool() -->
             </div>
           </div>
 
-          <!-- Master Stitched Cinema Player -->
-          <div class="master-player-container">
-            <div class="player-header">
-              <div class="player-title" style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
-                <span>🎞️ Master Cinema Viewport</span>
-                <div style="display: flex; align-items: center; gap: 6px; font-size: 0.76rem; background: rgba(15, 23, 42, 0.85); border: 1px solid rgba(255,255,255,0.12); border-radius: 6px; padding: 3px 8px;">
-                  <span style="color: #94a3b8; font-weight: 600;">📁 Project Job:</span>
-                  <select id="projectJobSelect" onchange="onSelectProjectJob(this.value)" style="background: transparent; border: none; color: #38bdf8; font-weight: 700; font-size: 0.76rem; outline: none; cursor: pointer; max-width: 260px;">
+          <!-- Right 62%: Cinema Program Monitor with Live VU Meter -->
+          <div class="davinci-cinema-monitor">
+            <div class="monitor-top-bar">
+              <div class="monitor-title-box">
+                <span class="monitor-seq-title" id="monitorSequenceTitle">MATT GOSS PROMO v2</span>
+                <span class="monitor-badge-tag">1080p24 • Rec.709</span>
+              </div>
+              <div class="monitor-top-controls">
+                <div class="job-select-wrapper">
+                  <span style="color: #64748b; font-size: 0.72rem; font-weight: 700;">JOB:</span>
+                  <select id="projectJobSelect" onchange="onSelectProjectJob(this.value)" class="monitor-job-select">
                     <option value="">Loading jobs...</option>
                   </select>
                 </div>
-                <button type="button" id="btnCancelActiveJob" onclick="cancelCurrentActiveJob()" title="Cancel or reset the active job" style="background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.5); color: #fca5a5; border-radius: 6px; padding: 3px 8px; font-size: 0.74rem; font-weight: 700; cursor: pointer; display: none;">✕ Cancel Job</button>
-              </div>
-              <div class="player-actions" style="display: flex; gap: 8px; align-items: center;">
-                <button type="button" class="btn-tool" id="btnDualViewer" onclick="toggleDualViewer()" title="Toggle DaVinci Dual Monitor View (Source | Timeline)" style="border-radius: 2px; background: #202228; border-color: #363942; color: #cbd5e1;">
-                  ◫ Dual Monitor
-                </button>
-                <button type="button" class="btn-tool" onclick="extractFrameToImageStudio()" style="background: #202228; border-color: #363942; color: #a5b4fc; border-radius: 2px;">
-                  📸 Send Frame to Studio
-                </button>
-                <a href="/outputs/chronoflow_master_66c76c556502.mp4" class="btn-download" id="btnDownloadMaster" download="zombie_master_film.mp4">
-                  Download Master Video
-                </a>
+                <button type="button" class="btn-monitor-tool" onclick="extractFrameToImageStudio()" title="Send Current Frame to Image Studio">📸 Inpaint</button>
+                <a href="/chronoflow/outputs/chronoflow_master_vox_9ec801.mp4" class="btn-monitor-export" id="btnDownloadMaster" download="chronoflow_master.mp4">⬇ Export</a>
               </div>
             </div>
 
-            <div class="video-viewport" id="cinemaVideoViewport">
-              <!-- Left: Source Clip Monitor (Visible in Dual-View Mode) -->
-              <div class="monitor-pane" id="sourceMonitorPane" style="display: none;">
-                <div class="monitor-badge">Source Clip [V1]</div>
-                <video id="sourceVideoPlayer" controls playsinline style="width: 100%; height: 100%; object-fit: contain;"></video>
+            <!-- Monitor Stage: Screen + Master Stereo VU Meter -->
+            <div class="monitor-stage">
+              <div class="cinema-screen-container">
+                <div class="empty-state" id="emptyVideoState" style="display: none;">
+                  <div style="font-size: 38px; opacity: 0.35;">🎬</div>
+                  <div style="font-weight: 600;">Cinema Program Viewport Ready</div>
+                </div>
+                <video id="masterVideoPlayer" playsinline src="/chronoflow/outputs/chronoflow_master_vox_9ec801.mp4" class="cinema-video-element"></video>
               </div>
 
-              <!-- Right: Master Timeline Program Monitor -->
-              <div class="monitor-pane" id="masterMonitorPane" style="width: 100%;">
-                <div class="monitor-badge rec">Timeline Program [REC]</div>
-                <div class="empty-state" id="emptyVideoState" style="display: none; height: 100%; justify-content: center;">
-                  <div style="font-size: 32px; opacity: 0.35;">🎥</div>
-                  <div style="font-weight: 600;">Master Continuous Video Ready</div>
+              <!-- DaVinci Master Stereo Vertical VU Meter Strip -->
+              <div class="cinema-vu-meter" title="Master Audio Output (Stereo VU Meter)">
+                <div class="vu-scale">
+                  <span>0</span>
+                  <span>-6</span>
+                  <span>-12</span>
+                  <span>-18</span>
+                  <span>-24</span>
+                  <span>-36</span>
+                  <span>-48</span>
                 </div>
-                <video id="masterVideoPlayer" controls playsinline src="/outputs/chronoflow_master_66c76c556502.mp4" style="display: block; width: 100%; height: 100%; object-fit: contain;"></video>
+                <div class="vu-meters-pair">
+                  <div class="vu-channel">
+                    <div class="vu-meter-trough">
+                      <div class="vu-meter-bar" id="vuFillMasterL" style="height: 0%;"></div>
+                    </div>
+                    <span class="vu-label">L</span>
+                  </div>
+                  <div class="vu-channel">
+                    <div class="vu-meter-trough">
+                      <div class="vu-meter-bar" id="vuFillMasterR" style="height: 0%;"></div>
+                    </div>
+                    <span class="vu-label">R</span>
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
 
-          <!-- Bottom Docked Integrated Timeline Studio -->
-          <div class="timeline-card" style="margin-top: 4px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255, 255, 255, 0.08); padding-bottom: 10px; margin-bottom: 14px; flex-wrap: wrap; gap: 10px;">
-              <div style="display: flex; gap: 8px;">
-                <button type="button" class="btn-tool active" id="btnSubtabChunks" onclick="switchBottomTimelineTab('chunks')">⛓️ Storyboard Chunks &amp; Reviews</button>
-                <button type="button" class="btn-tool" id="btnSubtabNLE" onclick="switchBottomTimelineTab('nle')">✂️ Multi-Track NLE Timeline</button>
-              </div>
-              <div style="display: flex; align-items: center; gap: 10px;">
-                <button type="button" class="btn-tool" onclick="extractFrameToImageStudio()" style="font-size: 0.72rem; color: #a5b4fc;">📸 Extract Frame to Inpaint</button>
-                <span style="font-size: 0.78rem; color: #34d399; font-weight: 700;" id="timelineChunkCount">3 of 3 chunks completed</span>
-              </div>
-            </div>
-
-            <!-- Subtab 1: Quick Chunks Rail -->
-            <div id="subtabChunksContent">
-              <div class="chunks-rail" id="chunksRail"></div>
-            </div>
-
-            <!-- Subtab 2: Multi-Track NLE Editor -->
-            <div id="subtabNLEContent" style="display: none;">
-              <!-- Transport & Tools Bar -->
-              <div class="transport-bar" style="margin-bottom: 12px; flex-wrap: wrap; gap: 10px;">
-                <div class="transport-btn-group">
-                  <button type="button" class="btn-transport" onclick="timelineSeek(0)" title="Jump to Start">⏮️</button>
-                  <button type="button" class="btn-transport" onclick="timelineStepFrame(-1)" title="Previous Frame (1/24s)">◀</button>
-                  <button type="button" class="btn-transport btn-play" id="btnTimelinePlay" onclick="timelineTogglePlay()" title="Play / Pause (Space)">▶</button>
-                  <button type="button" class="btn-transport" onclick="timelineStepFrame(1)" title="Next Frame (1/24s)">▶</button>
-                  <button type="button" class="btn-transport" onclick="timelineSeekToEnd()" title="Jump to End">⏭️</button>
-                </div>
-
-                <div class="smpte-display" id="smpteDisplay" style="font-size: 1.15rem; padding: 4px 12px;">00:00:00:00</div>
-
-                <div style="display: flex; align-items: center; gap: 8px;">
-                  <button type="button" class="btn-tool active" id="btnToolSelect" onclick="setNLETool('select')">↖️ Select (V)</button>
-                  <button type="button" class="btn-tool" id="btnToolRazor" onclick="setNLETool('razor')">✂️ Split (C)</button>
-                  <button type="button" class="btn-tool" onclick="deleteSelectedClip()">🗑️ Delete (Del)</button>
-                  <button type="button" class="btn-tool" id="btnSnapToggle" onclick="toggleSnapping()">🧲 Snap</button>
-                </div>
-
-                <div style="display: flex; align-items: center; gap: 8px;">
-                  <button type="button" class="btn-tool" onclick="regenerateSelectedShotDialog()" style="background: rgba(245, 158, 11, 0.2); border-color: rgba(245, 158, 11, 0.5); color: #fcd34d;">
-                    🔄 Regenerate Selected Shot
-                  </button>
-                  <button type="button" class="btn-primary" onclick="exportTimelineCut()" style="padding: 6px 14px; font-size: 0.82rem; background: linear-gradient(135deg, #10b981, #059669);">
-                    <span>🚀 Bake Master Cut (FFmpeg)</span>
-                  </button>
-                </div>
+            <!-- Monitor Transport Bar & SMPTE Timecode Display -->
+            <div class="monitor-transport-deck">
+              <div class="transport-center-cluster">
+                <button type="button" class="btn-transport" onclick="timelineSeek(0)" title="Jump to Start (Home)">⏮</button>
+                <button type="button" class="btn-transport" onclick="timelineStepFrame(-1)" title="Previous Frame (Left Arrow)">◀</button>
+                <button type="button" class="btn-transport btn-transport-play" id="btnTimelinePlay" onclick="timelineTogglePlay()" title="Play / Pause (Space)">▶</button>
+                <button type="button" class="btn-transport" onclick="timelineStepFrame(1)" title="Next Frame (Right Arrow)">▶</button>
+                <button type="button" class="btn-transport" onclick="timelineSeekToEnd()" title="Jump to End (End)">⏭</button>
+                <button type="button" class="btn-transport" id="btnLoopToggle" onclick="toggleTimelineLoop()" title="Loop Playback (Ctrl+L)">🔁</button>
               </div>
 
-              <!-- Multi-Track Timeline Canvas -->
-              <div class="tracks-wrapper" id="tracksWrapper">
-                <div class="timeline-playhead-line" id="timelinePlayheadLine">
-                  <div class="playhead-handle"></div>
-                </div>
-
-                <!-- Ruler -->
-                <div class="timeline-ruler-bar" id="timelineRuler" onclick="onRulerClick(event)"></div>
-
-                <!-- Track V2: Overlay / Titles -->
-                <div class="track-row">
-                  <div class="track-header-cell track-header-v2">
-                    <div class="track-color-strip v-strip"></div>
-                    <div class="track-info">
-                      <span class="track-name">V2</span>
-                      <span class="track-label">Overlay</span>
-                    </div>
-                    <div class="track-controls">
-                      <button type="button" class="track-btn" title="Lock Track" onclick="this.classList.toggle('active')">🔒</button>
-                      <button type="button" class="track-btn active" title="Auto Patch">&lt;&gt;</button>
-                    </div>
-                  </div>
-                  <div class="track-lane-cell" id="trackLaneV2"></div>
-                </div>
-
-                <!-- Track V1: Main Video Shots -->
-                <div class="track-row">
-                  <div class="track-header-cell track-header-v1">
-                    <div class="track-color-strip v-strip"></div>
-                    <div class="track-info">
-                      <span class="track-name">V1</span>
-                      <span class="track-label">Video</span>
-                    </div>
-                    <div class="track-controls">
-                      <button type="button" class="track-btn" title="Lock Track" onclick="this.classList.toggle('active')">🔒</button>
-                      <button type="button" class="track-btn active" title="Auto Patch">&lt;&gt;</button>
-                    </div>
-                  </div>
-                  <div class="track-lane-cell" id="trackLaneV1"></div>
-                </div>
-
-                <!-- Track A1: Foley / Dialog -->
-                <div class="track-row">
-                  <div class="track-header-cell track-header-a1">
-                    <div class="track-color-strip a-strip-sfx"></div>
-                    <div class="track-info">
-                      <span class="track-name">A1</span>
-                      <span class="track-label">SFX</span>
-                    </div>
-                    <div class="track-controls">
-                      <button type="button" class="track-btn track-btn-mute" title="Mute Track" onclick="this.classList.toggle('active')">M</button>
-                      <button type="button" class="track-btn track-btn-solo" title="Solo Track" onclick="this.classList.toggle('active')">S</button>
-                    </div>
-                    <div class="track-vu-meter" title="Fairlight Audio Meter">
-                      <div class="vu-bar left"><div class="vu-fill" id="vuFillA1L" style="height: 10%;"></div></div>
-                      <div class="vu-bar right"><div class="vu-fill" id="vuFillA1R" style="height: 12%;"></div></div>
-                    </div>
-                  </div>
-                  <div class="track-lane-cell" id="trackLaneA1"></div>
-                </div>
-
-                <!-- Track A2: Score / Soundtrack -->
-                <div class="track-row">
-                  <div class="track-header-cell track-header-a2">
-                    <div class="track-color-strip a-strip-music"></div>
-                    <div class="track-info">
-                      <span class="track-name">A2</span>
-                      <span class="track-label">Music</span>
-                    </div>
-                    <div class="track-controls">
-                      <button type="button" class="track-btn track-btn-mute" title="Mute Track" onclick="this.classList.toggle('active')">M</button>
-                      <button type="button" class="track-btn track-btn-solo" title="Solo Track" onclick="this.classList.toggle('active')">S</button>
-                    </div>
-                    <div class="track-vu-meter" title="Fairlight Audio Meter">
-                      <div class="vu-bar left"><div class="vu-fill" id="vuFillA2L" style="height: 10%;"></div></div>
-                      <div class="vu-bar right"><div class="vu-fill" id="vuFillA2R" style="height: 12%;"></div></div>
-                    </div>
-                  </div>
-                  <div class="track-lane-cell" id="trackLaneA2"></div>
-                </div>
-              </div>
-
-              <!-- Inspector & Parameters under timeline -->
-              <div style="display: flex; gap: 14px; margin-top: 10px; background: #17181d; padding: 6px 12px; border-radius: 2px; border: 1px solid var(--card-border); align-items: center; flex-wrap: wrap;">
-                <div style="font-size: 0.8rem; font-weight: 700; color: #f1f5f9;">
-                  Clip: <span id="selectedClipBadge" style="color: #f59e0b;">Shot #1</span>
-                </div>
-                <div style="display: flex; align-items: center; gap: 6px;">
-                  <span style="font-size: 0.75rem; color: #94a3b8;">Speed:</span>
-                  <select id="clipSpeedSelect" onchange="updateSelectedClipSpeed(this.value)" style="padding: 4px 8px; font-size: 0.78rem; width: auto;">
-                    <option value="0.5">0.5x Slow</option>
-                    <option value="0.75">0.75x</option>
-                    <option value="1.0" selected>1.0x Normal</option>
-                    <option value="1.25">1.25x</option>
-                    <option value="1.5">1.5x</option>
-                    <option value="2.0">2.0x Fast</option>
-                  </select>
-                </div>
-                <div style="display: flex; align-items: center; gap: 6px;">
-                  <span style="font-size: 0.75rem; color: #94a3b8;">Volume:</span>
-                  <input type="range" id="clipVolumeRange" min="0" max="2" step="0.05" value="1.0" oninput="updateSelectedClipVolume(this.value)" style="width: 80px;">
-                  <span id="clipVolLabel" style="font-size: 0.72rem; color: #34d399; font-weight: 700;">100%</span>
-                </div>
-                <div style="display: flex; align-items: center; gap: 6px;">
-                  <span style="font-size: 0.75rem; color: #94a3b8;">Transition:</span>
-                  <select id="clipTransitionSelect" onchange="updateSelectedClipTransition(this.value)" style="padding: 4px 8px; font-size: 0.78rem; width: auto;">
-                    <option value="cut" selected>Hard Cut</option>
-                    <option value="dissolve">Cross Dissolve</option>
-                    <option value="morph">Continuity Morph</option>
-                    <option value="fade_black">Dip to Black</option>
-                  </select>
-                </div>
-                <div style="margin-left: auto;">
-                  <button type="button" class="btn-tool" onclick="extractTailFrameFromSelectedClip()" style="font-size: 0.72rem; color: #a5b4fc;">
-                    📷 Extract Clip Tail Frame
-                  </button>
-                </div>
+              <div class="monitor-timecode-box">
+                <span class="smpte-readout" id="smpteDisplay">01:00:36:15</span>
               </div>
             </div>
           </div>
         </div>
+
+        <!-- Middle Editing Command Toolbar -->
+        <div class="davinci-mid-bar">
+          <div class="mid-tools-left">
+            <button type="button" class="btn-mid-tool active" id="btnToolSelect" onclick="setNLETool('select')" title="Selection Tool (V)">↖ Arrow</button>
+            <button type="button" class="btn-mid-tool" id="btnToolRazor" onclick="setNLETool('razor')" title="Blade Cut Tool (B/C)">✂ Blade</button>
+            <button type="button" class="btn-mid-tool" onclick="deleteSelectedClip()" title="Delete Selected Clip (Del)">🗑 Delete</button>
+            <button type="button" class="btn-mid-tool active" id="btnSnapToggle" onclick="toggleSnapping()" title="Magnetic Snap (N)">🧲 Snap</button>
+            <button type="button" class="btn-mid-tool" onclick="applyCrossDissolve()" title="Add Cross Dissolve">⧖ Dissolve</button>
+          </div>
+
+          <div class="mid-clip-badge" id="selectedClipInfoBadge">
+            Clip: <strong id="selectedClipBadge" style="color: #f59e0b;">Shot #1</strong>
+          </div>
+
+          <div class="mid-tools-right">
+            <button type="button" class="btn-mid-accent" onclick="regenerateSelectedShotDialog()">🔄 Regenerate Shot</button>
+            <button type="button" class="btn-mid-primary" onclick="exportTimelineCut()">🚀 Bake Master Cut</button>
+          </div>
+        </div>
+
+        <!-- Dual-Tier Timeline -->
+        <div class="davinci-dual-timeline">
+          <!-- Tier 1: Sequence Macro Minimap Ribbon (100% Sequence Overview) -->
+          <div class="macro-ribbon" id="macroTimelineRibbon" onclick="onMacroRibbonClick(event)" title="Full Sequence Macro Minimap">
+            <div class="macro-clips-track" id="macroClipsContainer"></div>
+            <div class="macro-playhead-needle" id="macroPlayhead"></div>
+          </div>
+
+          <!-- Tier 2: Detailed Multi-Track NLE Editor -->
+          <div class="detail-timeline-panel" id="tracksWrapper">
+            <div class="timeline-playhead-line" id="timelinePlayheadLine">
+              <div class="playhead-handle"></div>
+            </div>
+
+            <!-- Time Ruler Bar -->
+            <div class="timeline-ruler-bar" id="timelineRuler" onclick="onRulerClick(event)"></div>
+
+            <!-- Track V2: Overlay / Titles -->
+            <div class="track-row">
+              <div class="track-header-cell track-header-v2">
+                <div class="track-color-strip v-strip"></div>
+                <div class="track-info">
+                  <span class="track-name">V2</span>
+                  <span class="track-label">Overlay</span>
+                </div>
+                <div class="track-controls">
+                  <button type="button" class="track-btn" title="Lock Track" onclick="this.classList.toggle('active')">🔒</button>
+                  <button type="button" class="track-btn active" title="Auto Patch">&lt;&gt;</button>
+                </div>
+              </div>
+              <div class="track-lane-cell" id="trackLaneV2"></div>
+            </div>
+
+            <!-- Track V1: Master Video with Filmstrip Thumbnails -->
+            <div class="track-row">
+              <div class="track-header-cell track-header-v1">
+                <div class="track-color-strip v-strip"></div>
+                <div class="track-info">
+                  <span class="track-name">V1</span>
+                  <span class="track-label">Video</span>
+                </div>
+                <div class="track-controls">
+                  <button type="button" class="track-btn" title="Lock Track" onclick="this.classList.toggle('active')">🔒</button>
+                  <button type="button" class="track-btn active" title="Auto Patch">&lt;&gt;</button>
+                </div>
+              </div>
+              <div class="track-lane-cell" id="trackLaneV1"></div>
+            </div>
+
+            <!-- Track A1: Foley / SFX / Voiceover -->
+            <div class="track-row">
+              <div class="track-header-cell track-header-a1">
+                <div class="track-color-strip a-strip-sfx"></div>
+                <div class="track-info">
+                  <span class="track-name">A1</span>
+                  <span class="track-label">SFX</span>
+                </div>
+                <div class="track-controls">
+                  <button type="button" class="track-btn track-btn-mute" title="Mute Track" onclick="toggleTrackMute('A1', this)">M</button>
+                  <button type="button" class="track-btn track-btn-solo" title="Solo Track" onclick="this.classList.toggle('active')">S</button>
+                </div>
+                <div class="track-vu-meter" title="Fairlight Audio Meter">
+                  <div class="vu-bar left"><div class="vu-fill" id="vuFillA1L" style="height: 10%;"></div></div>
+                  <div class="vu-bar right"><div class="vu-fill" id="vuFillA1R" style="height: 12%;"></div></div>
+                </div>
+              </div>
+              <div class="track-lane-cell" id="trackLaneA1"></div>
+            </div>
+
+            <!-- Track A2: Score / Soundtrack -->
+            <div class="track-row">
+              <div class="track-header-cell track-header-a2">
+                <div class="track-color-strip a-strip-music"></div>
+                <div class="track-info">
+                  <span class="track-name">A2</span>
+                  <span class="track-label">Music</span>
+                </div>
+                <div class="track-controls">
+                  <button type="button" class="track-btn track-btn-mute" title="Mute Track" onclick="toggleTrackMute('A1', this)">M</button>
+                  <button type="button" class="track-btn track-btn-solo" title="Solo Track" onclick="this.classList.toggle('active')">S</button>
+                </div>
+                <div class="track-vu-meter" title="Fairlight Audio Meter">
+                  <div class="vu-bar left"><div class="vu-fill" id="vuFillA2L" style="height: 10%;"></div></div>
+                  <div class="vu-bar right"><div class="vu-fill" id="vuFillA2R" style="height: 12%;"></div></div>
+                </div>
+              </div>
+              <div class="track-lane-cell" id="trackLaneA2"></div>
+            </div>
+          </div>
+
+          <!-- Inspector & Parameters under timeline -->
+          <div style="display: flex; gap: 14px; margin-top: 4px; background: #15161d; padding: 5px 12px; border-radius: 3px; border: 1px solid #23252d; align-items: center; flex-wrap: wrap;">
+            <div style="font-size: 0.78rem; font-weight: 700; color: #f1f5f9;">
+              Inspector: <span id="selectedClipInspectorTitle" style="color: #f59e0b;">Shot #1</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <span style="font-size: 0.74rem; color: #94a3b8;">Speed:</span>
+              <select id="clipSpeedSelect" onchange="updateSelectedClipSpeed(this.value)" style="padding: 3px 6px; font-size: 0.74rem; width: auto; background: #0c0d11; border: 1px solid #282a35; color: #e2e8f0; border-radius: 3px;">
+                <option value="0.5">0.5x Slow</option>
+                <option value="0.75">0.75x</option>
+                <option value="1.0" selected>1.0x Normal</option>
+                <option value="1.25">1.25x</option>
+                <option value="1.5">1.5x</option>
+                <option value="2.0">2.0x Fast</option>
+              </select>
+            </div>
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <span style="font-size: 0.74rem; color: #94a3b8;">Volume:</span>
+              <input type="range" id="clipVolumeRange" min="0" max="2" step="0.05" value="1.0" oninput="updateSelectedClipVolume(this.value)" style="width: 80px;">
+              <span id="clipVolLabel" style="font-size: 0.72rem; color: #34d399; font-weight: 700;">100%</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <span style="font-size: 0.74rem; color: #94a3b8;">Transition:</span>
+              <select id="clipTransitionSelect" onchange="updateSelectedClipTransition(this.value)" style="padding: 3px 6px; font-size: 0.74rem; width: auto; background: #0c0d11; border: 1px solid #282a35; color: #e2e8f0; border-radius: 3px;">
+                <option value="cut" selected>Hard Cut</option>
+                <option value="dissolve">Cross Dissolve</option>
+                <option value="morph">Continuity Morph</option>
+                <option value="fade_black">Dip to Black</option>
+              </select>
+            </div>
+            <div style="margin-left: auto;">
+              <button type="button" class="btn-tool" onclick="extractTailFrameFromSelectedClip()" style="font-size: 0.72rem; color: #a5b4fc; background: #1f2230; border: 1px solid #32364c; padding: 3px 8px; border-radius: 3px;">
+                📷 Extract Tail Frame
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- DaVinci Resolve Signature Bottom Page Dock Bar -->
+        <div class="davinci-bottom-dock">
+          <button type="button" class="dock-tab-btn" onclick="selectMediaBin('all')"><span class="dock-tab-icon">📁</span><span>Media</span></button>
+          <button type="button" class="dock-tab-btn active" onclick="switchMainTab('director')"><span class="dock-tab-icon">✂️</span><span>Cut</span></button>
+          <button type="button" class="dock-tab-btn" onclick="switchMainTab('director')"><span class="dock-tab-icon">🎬</span><span>Edit</span></button>
+          <button type="button" class="dock-tab-btn" onclick="openShotDirectorModal()"><span class="dock-tab-icon">🎨</span><span>Color &amp; Prompts</span></button>
+          <button type="button" class="dock-tab-btn" onclick="switchMainTab('image-studio')"><span class="dock-tab-icon">🎙️</span><span>Fairlight</span></button>
+          <button type="button" class="dock-tab-btn" onclick="exportTimelineCut()"><span class="dock-tab-icon">🚀</span><span>Deliver</span></button>
+        </div>
       </div>
     </div>
-
-    
 
     <!-- TAB: IMAGE STUDIO & INPAINT CANVAS -->
     <div class="tab-content" id="tab-image-studio">
@@ -1837,11 +2574,8 @@
           </div>
           
           <div class="form-group">
-            <label>Model Architecture</label>
-            <select id="imgModelSelect" onchange="onImgModelChange()">
-              <option value="flux" selected>FLUX.1 [Schnell] (4-Step Turbo, Standalone)</option>
-              <option value="qwen">Qwen-Image-2.1 (8-Step MMDiT, High-Resolution)</option>
-            </select>
+            <label>Model</label>
+            <div>Qwen Image 2.1 Turbo &mdash; PanelFlow's single art workflow</div>
           </div>
 
           <div class="form-group">
@@ -1867,10 +2601,6 @@
                 <option value="768x1344">9:16 Portrait (768×1344)</option>
                 <option value="1024x1024">1:1 Square (1024×1024)</option>
               </select>
-            </div>
-            <div class="form-group">
-              <label>Sampling Steps</label>
-              <input type="number" id="imgSteps" value="4" min="1" max="25" style="width: 100%; background: #0d121f; border: 1px solid var(--card-border); border-radius: var(--radius-sm); color: var(--text-main); padding: 8px 12px; font-size: 0.88rem;">
             </div>
           </div>
 
@@ -3678,40 +4408,26 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
       }
     }
 
-    function onImgModelChange() {
-      const model = document.getElementById('imgModelSelect').value;
-      const stepsInput = document.getElementById('imgSteps');
-      if (model === 'flux') {
-        stepsInput.value = 4;
-      } else {
-        stepsInput.value = 8;
-      }
-    }
-
     async function generateImage() {
       const btn = document.getElementById('btnGenerateImage');
-      const model = document.getElementById('imgModelSelect').value;
       const prompt = document.getElementById('imgPrompt').value;
       const negPrompt = document.getElementById('imgNegativePrompt').value;
       const aspect = document.getElementById('imgAspectSelect').value.split('x');
       const width = parseInt(aspect[0]);
       const height = parseInt(aspect[1]);
-      const steps = parseInt(document.getElementById('imgSteps').value);
 
       btn.disabled = true;
-      btn.innerHTML = `<span class="spinner"></span> Generating with ${model.toUpperCase()}...`;
+      btn.innerHTML = `<span class="spinner"></span> Generating with Qwen Image 2.1...`;
 
       try {
         const res = await fetch(`${API_BASE}/generate_image`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            model: model,
             prompt: prompt,
             negative_prompt: negPrompt,
             width: width,
-            height: height,
-            steps: steps
+            height: height
           })
         });
         const data = await res.json();
@@ -3725,7 +4441,7 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
           strip.prepend(thumb);
 
           loadCanvasImage(data.url, data.filename);
-          alert(`✓ Image generated successfully with ${model.toUpperCase()}! Loaded onto inpaint canvas.`);
+          alert(`✓ Image generated successfully with Qwen Image 2.1! Loaded onto inpaint canvas.`);
         } else {
           alert(`Image generation error: ${data.error || 'Unknown error'}`);
         }
@@ -3888,6 +4604,11 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
           if (playhead) {
             playhead.style.left = `${140 + (masterPlayer.currentTime * pxPerSec)}px`;
           }
+          const macroPlayhead = document.getElementById('macroPlayhead');
+          if (macroPlayhead && timelineTotalDuration > 0) {
+            const macroPct = (masterPlayer.currentTime / timelineTotalDuration) * 100;
+            macroPlayhead.style.left = `${macroPct}%`;
+          }
         });
         masterPlayer.addEventListener('play', () => {
           const btn = document.getElementById('btnTimelinePlay');
@@ -3900,6 +4621,200 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
           if (vuAnimationId) cancelAnimationFrame(vuAnimationId);
           startLiveVUMeters();
         });
+      }
+    }
+
+    
+    /* ========================================================= */
+    /* DAVINCI RESOLVE NLE LOGIC & VU METERS                     */
+    /* ========================================================= */
+    let currentMediaBin = 'all';
+    let mediaPoolSearchQuery = '';
+    let vuMeterAnimFrame = null;
+    let isLoopingTimeline = false;
+
+    function renderMediaPool() {
+      const grid = document.getElementById('mediaPoolGrid');
+      const badge = document.getElementById('mediaPoolCountBadge');
+      if (!grid) return;
+
+      const clips = (timelineClips && timelineClips.length > 0) ? timelineClips : [
+        { id: 'c1', title: 'Shot #1: Target Lock', url: '/outputs/66c76c556502_chunk_1.mp4', filename: '66c76c556502_chunk_1.mp4', duration: 5.2 },
+        { id: 'c2', title: 'Shot #2: Precision Strike', url: '/outputs/66c76c556502_chunk_2.mp4', filename: '66c76c556502_chunk_2.mp4', duration: 5.2 },
+        { id: 'c3', title: 'Shot #3: Rooftop Vault', url: '/outputs/66c76c556502_chunk_3.mp4', filename: '66c76c556502_chunk_3.mp4', duration: 5.2 }
+      ];
+
+      // Filter by bin and search
+      const filtered = clips.filter(c => {
+        if (currentMediaBin === 'chunks' && !c.url.endsWith('.mp4')) return false;
+        if (currentMediaBin === 'audio' && !c.url.endsWith('.wav') && !c.url.endsWith('.mp3')) return false;
+        if (currentMediaBin === 'inpaint' && !c.url.endsWith('.png') && !c.url.endsWith('.jpg')) return false;
+        if (mediaPoolSearchQuery) {
+          const q = mediaPoolSearchQuery.toLowerCase();
+          return c.title.toLowerCase().includes(q) || (c.filename && c.filename.toLowerCase().includes(q));
+        }
+        return true;
+      });
+
+      if (badge) badge.textContent = `${filtered.length} Clips`;
+
+      if (filtered.length === 0) {
+        grid.innerHTML = `<div style="grid-column: 1 / -1; text-align: center; padding: 30px; color: #64748b; font-size: 0.75rem;">No media clips in this bin</div>`;
+        return;
+      }
+
+      let html = '';
+      filtered.forEach((clip, idx) => {
+        const isSel = idx === selectedClipIdx;
+        const dur = (clip.duration || 5.2).toFixed(1);
+        const isVideo = clip.url && (clip.url.endsWith('.mp4') || clip.url.includes('chunk'));
+        
+        html += `
+          <div class="pool-card ${isSel ? 'active-pool-clip' : ''}" onclick="selectPoolClip(${idx})" ondblclick="insertClipToTimeline(${idx})" title="Click to preview • Double-click to duplicate into timeline">
+            <div class="pool-thumb-wrapper" onmouseenter="this.querySelector('video')?.play()" onmouseleave="const v = this.querySelector('video'); if (v) { v.pause(); v.currentTime = 0; }">
+              ${isVideo ? `
+                <video class="pool-thumb-video" src="${clip.url}" muted loop playsinline preload="metadata"></video>
+              ` : `
+                <div style="font-size: 28px; opacity: 0.7;">🎵</div>
+              `}
+              <span class="pool-badge-source">REC.709</span>
+              <span class="pool-dur-tag">${dur}s</span>
+            </div>
+            <div class="pool-card-meta">
+              <span class="pool-card-name">${clip.title}</span>
+              <div class="pool-card-sub">
+                <span>1080p24</span>
+                <span style="color: #34d399;">PRO-RES</span>
+              </div>
+            </div>
+          </div>
+        `;
+      });
+
+      grid.innerHTML = html;
+    }
+
+    function selectPoolClip(idx) {
+      selectTimelineClip(idx);
+      renderMediaPool();
+    }
+
+    function selectMediaBin(bin) {
+      currentMediaBin = bin;
+      ['all', 'chunks', 'audio', 'inpaint'].forEach(b => {
+        const btn = document.getElementById(`binTab${b.charAt(0).toUpperCase() + b.slice(1)}`);
+        if (btn) btn.classList.toggle('active', b === bin);
+      });
+      renderMediaPool();
+    }
+
+    function filterMediaPool(val) {
+      mediaPoolSearchQuery = val;
+      renderMediaPool();
+    }
+
+    function refreshMediaPool() {
+      renderMediaPool();
+      renderMacroRibbon();
+    }
+
+    function renderMacroRibbon() {
+      const container = document.getElementById('macroClipsContainer');
+      if (!container) return;
+
+      const clips = (timelineClips && timelineClips.length > 0) ? timelineClips : [];
+      const totalDur = timelineTotalDuration || 15.6;
+
+      let html = '';
+      const colorPalette = [
+        '#3b82f6', '#8b5cf6', '#ec4899', '#10b981', '#f59e0b', '#06b6d4', '#6366f1'
+      ];
+
+      clips.forEach((c, i) => {
+        const clipDur = (c.out_point - c.in_point) / c.speed;
+        const pct = Math.max(3, (clipDur / totalDur) * 100);
+        const col = colorPalette[i % colorPalette.length];
+        html += `
+          <div class="macro-clip-block" style="width: ${pct}%; background: ${col};" title="${c.title} (${clipDur.toFixed(1)}s)">
+            ${c.title}
+          </div>
+        `;
+      });
+
+      container.innerHTML = html;
+    }
+
+    function onMacroRibbonClick(e) {
+      const ribbon = document.getElementById('macroTimelineRibbon');
+      if (!ribbon) return;
+      const rect = ribbon.getBoundingClientRect();
+      const clickX = e.clientX - rect.left;
+      const ratio = Math.max(0, Math.min(1, clickX / rect.width));
+      const targetTime = ratio * (timelineTotalDuration || 15.6);
+      timelineSeek(targetTime);
+    }
+
+    function toggleTimelineLoop() {
+      isLoopingTimeline = !isLoopingTimeline;
+      const btn = document.getElementById('btnLoopToggle');
+      if (btn) {
+        btn.classList.toggle('active', isLoopingTimeline);
+        btn.style.color = isLoopingTimeline ? '#f59e0b' : '#cbd5e1';
+      }
+    }
+
+    function applyCrossDissolve() {
+      if (timelineClips && timelineClips[selectedClipIdx]) {
+        timelineClips[selectedClipIdx].transition = 'dissolve';
+        renderTimelineTracks();
+        const sel = document.getElementById('clipTransitionSelect');
+        if (sel) sel.value = 'dissolve';
+      }
+    }
+
+    function switchMainTab(tab) {
+      // Clean tab switcher for bottom dock
+      const tabs = ['director', 'image-studio', 'vault', 'storyboard'];
+      tabs.forEach(t => {
+        const el = document.getElementById(`tab-${t}`);
+        if (el) el.classList.remove('active');
+        const nav = document.getElementById(`navTab${t.charAt(0).toUpperCase() + t.slice(1)}`);
+        if (nav) nav.classList.remove('active');
+      });
+      const activeEl = document.getElementById(`tab-${tab}`);
+      if (activeEl) activeEl.classList.add('active');
+    }
+
+    // Live Vertical Stereo VU Meter Animation (Fairlight Engine)
+    function setupVUMeterVisualizer() {
+      const masterPlayer = document.getElementById('masterVideoPlayer');
+      const fillL = document.getElementById('vuFillMasterL');
+      const fillR = document.getElementById('vuFillMasterR');
+      if (!fillL || !fillR) return;
+
+      let baseLevel = 0;
+      function animateVU() {
+        if (masterPlayer && !masterPlayer.paused && !masterPlayer.ended) {
+          // Dynamic organic speech/music level envelope
+          const t = performance.now() * 0.006;
+          const noise1 = Math.sin(t * 3.1) * 0.25 + Math.sin(t * 7.7) * 0.15;
+          const noise2 = Math.cos(t * 2.8) * 0.25 + Math.cos(t * 8.3) * 0.15;
+          
+          let levelL = Math.max(12, Math.min(94, 58 + noise1 * 40));
+          let levelR = Math.max(10, Math.min(92, 55 + noise2 * 40));
+
+          fillL.style.height = `${levelL}%`;
+          fillR.style.height = `${levelR}%`;
+        } else {
+          // Drop to resting silence
+          fillL.style.height = '0%';
+          fillR.style.height = '0%';
+        }
+        vuMeterAnimFrame = requestAnimationFrame(animateVU);
+      }
+
+      if (!vuMeterAnimFrame) {
+        vuMeterAnimFrame = requestAnimationFrame(animateVU);
       }
     }
 
@@ -3943,16 +4858,27 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
         const width = Math.max(60, clipDur * pxPerSec);
         const isSel = idx === selectedClipIdx;
 
+        // Filmstrip frame tiles along clip
+        const frameCount = Math.max(1, Math.min(8, Math.floor(width / 48)));
+        let filmstripHtml = '<div class="filmstrip-strip">';
+        for (let f = 0; f < frameCount; f++) {
+          filmstripHtml += `<video class="filmstrip-frame" src="${c.url}" muted preload="metadata"></video>`;
+        }
+        filmstripHtml += '</div>';
+
+        const isDissolve = c.transition === 'dissolve' || c.transition === 'morph';
+
         v1Html += `
           <div class="timeline-clip-block ${isSel ? 'active-clip' : ''}" style="left: ${curLeft}px; width: ${width}px;" onclick="selectTimelineClip(${idx})">
+            ${filmstripHtml}
             <div class="trim-handle trim-handle-left" onmousedown="startTrim(event, ${idx}, 'left')"></div>
-            <div style="display: flex; align-items: center; gap: 5px; overflow: hidden; width: calc(100% - 34px);">
-              <span style="font-size: 0.62rem; color: #60a5fa; font-weight: 800; background: rgba(59, 130, 246, 0.2); padding: 1px 4px; border-radius: 2px;">V1</span>
-              <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.73rem;">${c.title} (${clipDur.toFixed(1)}s)</span>
+            <div style="display: flex; align-items: center; gap: 5px; overflow: hidden; width: calc(100% - 34px); position: relative; z-index: 2;">
+              <span style="font-size: 0.62rem; color: #60a5fa; font-weight: 800; background: rgba(59, 130, 246, 0.35); padding: 1px 4px; border-radius: 2px;">V1</span>
+              <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.73rem; text-shadow: 0 1px 2px #000;">${c.title} (${clipDur.toFixed(1)}s)</span>
             </div>
-            <span style="font-size: 0.66rem; opacity: 0.85; font-family: monospace; background: rgba(0,0,0,0.35); padding: 1px 4px; border-radius: 2px;">${c.speed}x</span>
+            <span style="font-size: 0.66rem; opacity: 0.95; font-family: monospace; background: rgba(0,0,0,0.6); padding: 1px 4px; border-radius: 2px; position: relative; z-index: 2;">${c.speed}x</span>
             <div class="trim-handle trim-handle-right" onmousedown="startTrim(event, ${idx}, 'right')"></div>
-            ${c.transition !== 'cut' ? `<div class="transition-marker" title="${c.transition}" style="right: -10px;">${c.transition[0].toUpperCase()}</div>` : ''}
+            ${isDissolve ? `<div class="dissolve-marker-box" title="Cross Dissolve (${c.transition})"></div>` : ''}
           </div>`;
 
         // Synced A1 Foley audio block with DaVinci waveform styling
@@ -3985,9 +4911,14 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
       v1Lane.innerHTML = v1Html;
       a1Lane.innerHTML = a1Html;
       a2Lane.innerHTML = a2Html;
+      renderMacroRibbon();
     }
 
     function selectTimelineClip(idx) {
+      if (currentNLETool === 'razor') {
+        splitClip(idx);
+        return;
+      }
       selectedClipIdx = idx;
       renderTimelineTracks();
       const clip = timelineClips[idx];
@@ -3995,6 +4926,10 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
 
       const badge = document.getElementById('selectedClipBadge');
       if (badge) badge.textContent = clip.title;
+      const inspectorTitle = document.getElementById('selectedClipInspectorTitle');
+      if (inspectorTitle) inspectorTitle.textContent = `${clip.title} (${((clip.out_point - clip.in_point) / clip.speed).toFixed(1)}s)`;
+      const poolCards = document.querySelectorAll('.pool-card');
+      poolCards.forEach((c, i) => c.classList.toggle('active-pool-clip', i === idx));
       const speedSel = document.getElementById('clipSpeedSelect');
       if (speedSel) speedSel.value = String(clip.speed);
       const volRange = document.getElementById('clipVolumeRange');
@@ -4037,6 +4972,66 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
       if (!timelineClips[selectedClipIdx]) return;
       timelineClips[selectedClipIdx].transition = val;
       renderTimelineTracks();
+    }
+
+    
+    function splitClip(idx) {
+      const clip = timelineClips[idx];
+      if (!clip) return;
+      const clipDur = (clip.out_point - clip.in_point);
+      if (clipDur <= 0.8) {
+        alert("Clip is too short to split further.");
+        return;
+      }
+      
+      const half = Math.round((clipDur / 2) * 10) / 10;
+      const part1 = {
+        ...clip,
+        id: `${clip.id}_a`,
+        title: `${clip.title} (A)`,
+        out_point: clip.in_point + half,
+        duration: half,
+        transition: 'cut'
+      };
+      const part2 = {
+        ...clip,
+        id: `${clip.id}_b`,
+        title: `${clip.title} (B)`,
+        in_point: clip.in_point + half,
+        duration: clipDur - half
+      };
+
+      timelineClips.splice(idx, 1, part1, part2);
+      selectedClipIdx = idx;
+      renderTimelineTracks();
+      renderMediaPool();
+      renderMacroRibbon();
+    }
+
+    function insertClipToTimeline(idx) {
+      const source = timelineClips[idx];
+      if (!source) return;
+      const newClip = {
+        ...source,
+        id: `clip_${Date.now()}`,
+        title: `${source.title} (Copy)`,
+        in_point: 0,
+        out_point: source.duration || 5.2
+      };
+      timelineClips.push(newClip);
+      selectedClipIdx = timelineClips.length - 1;
+      renderTimelineTracks();
+      renderMediaPool();
+      renderMacroRibbon();
+    }
+
+    function toggleTrackMute(trackName, btn) {
+      btn.classList.toggle('active');
+      const isMuted = btn.classList.contains('active');
+      const masterPlayer = document.getElementById('masterVideoPlayer');
+      if (masterPlayer) {
+        masterPlayer.muted = isMuted;
+      }
     }
 
     function setNLETool(tool) {
@@ -4166,7 +5161,7 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
       }
     }
 
-    async function exportTimelineCut() {
+    async async function exportTimelineCut() {
       alert("🚀 Compiling multi-track Edit Decision List (EDL) and dispatching FFmpeg filtergraph render engine...");
 
       try {
@@ -4942,6 +5937,7 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
     async function initApp() {
       initComfyWebSocket();
       await studioStore.syncNow(true);
+      if (typeof initTimeline === 'function') initTimeline();
     }
 
     // Start timer
