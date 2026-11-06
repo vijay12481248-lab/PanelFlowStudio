@@ -7,6 +7,8 @@ tags the image model understands, and weights what the narration needs. The same
 """
 from __future__ import annotations
 
+import re
+
 from pydantic import BaseModel, Field
 
 from engine.original.genres import GENRES
@@ -180,23 +182,41 @@ def describe_character(ch: Character) -> str:
     return f"{who} with {ch.look}"
 
 
+NAME_TITLES = {"dr", "mr", "mrs", "ms", "miss", "sir", "lady", "lord", "professor", "prof", "captain", "doctor"}
+
+
+def unname(text: str, characters: list[Character]) -> str:
+    """An image model reads a character's NAME as a thing ("Biscuit" drew cookies): refer to each character by what they are."""
+    for c in characters:
+        noun = "the " + (re.sub(r"^(an?|the)\s+", "", NATURAL_PERSON.get((c.age_group, c.gender), "person").split(" with ")[0])
+                         if c.species == "human" else c.species)
+        for name in sorted({t for t in re.findall(r"[A-Za-z]{3,}", c.name) if t.lower() not in NAME_TITLES}, key=len, reverse=True):
+            # LLM-written claims lowercase the name as a noun ("the biscuit nudges the glass"): an article in front gives it away
+            text = re.sub(rf"\b(?:the|an?)\s+{re.escape(name)}\b", lambda m, n=noun: n.capitalize() if m.group(0)[0].isupper() else n, text, flags=re.I)
+            text = re.sub(rf"\b{re.escape(name)}\b", lambda m, n=noun: n.capitalize() if m.start() == 0 or text[max(0, m.start() - 2):m.start()] in (". ", "! ", "? ") else n,
+                          text)
+    return text
+
+
 def compose_natural(story: OriginalStory, spec: ShotSpec, location_id: str, emphasis: list[str] | None = None,
                     simplify: bool = False) -> tuple[str, str]:
     """The same ShotSpec as a paragraph of plain English, for models that follow sentences instead of tags. (positive, negative='')"""
     genre = GENRES[story.bible.premise.genre]
     chars = {c.id: c for c in story.bible.characters}
+    un = lambda t: unname(t, story.bible.characters)  # noqa: E731
+    emphasis = [un(e) for e in emphasis] if emphasis else emphasis
     loc = next((x for x in story.bible.locations if x.id == location_id), None)
     shown = [c for c in spec.characters if c.id in chars][:2]
     if len(shown) == 2:
         shown.sort(key=lambda c: {"left": 0, "center": 1, "right": 2}.get(c.side, 1))
     parts = [f"Most important: the picture must clearly show {'; '.join(emphasis)}."] if (emphasis and simplify) else []
-    parts += [f"{genre.art_style.split(',')[-1].strip().capitalize() if 'style' in genre.art_style.split(',')[-1] else 'Anime illustration'}.",
-             FRAMING.get(spec.shot, "")]
+    style_tag = next((t.strip() for t in genre.art_style.split(",") if "style" in t), "anime illustration")  # the genre's own "... style" phrase
+    parts += [f"{style_tag[:1].upper() + style_tag[1:]}.", FRAMING.get(spec.shot, "")]
     if not shown:
         parts.append("There are no people in the picture.")
     for k, c in enumerate(shown):
         where = "" if len(shown) == 1 else ("On the left: " if k == 0 else "On the right: ")
-        doing = ", ".join(x for x in (c.pose, c.expression, c.action) if x)
+        doing = un(", ".join(x for x in (c.pose, c.expression, c.action) if x))
         parts.append(f"{where}{describe_character(chars[c.id])}. {doing[:1].upper() + doing[1:]}." if doing else f"{where}{describe_character(chars[c.id])}.")
     if simplify:  # last resort: fewer details compete with the thing the previous attempts kept missing
         spec = spec.model_copy(update={"lighting": "", "mood": "", "setting": spec.setting.split(".")[0][:80]})
@@ -205,7 +225,7 @@ def compose_natural(story: OriginalStory, spec: ShotSpec, location_id: str, emph
         parts.append(f"Setting: {place}.")
     if spec.lighting or spec.mood:
         parts.append(f"Lighting: {spec.lighting or 'natural'}. Mood: {spec.mood or 'calm'}.")
-    need = list(dict.fromkeys(spec.key_visuals + (emphasis or [])))
+    need = list(dict.fromkeys([un(k) for k in spec.key_visuals] + (emphasis or [])))
     if need:
         parts.append("The picture must clearly show: " + "; ".join(need) + ".")
     if emphasis:

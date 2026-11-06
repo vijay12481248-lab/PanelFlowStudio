@@ -27,6 +27,7 @@ from engine.original.shotspec import CharPose, ShotSpec
 from engine.original.story import _ask, forbidden_hits, known_names, unknown_names
 
 MAX_BEAT_WORDS = 24
+MIN_TAIL_WORDS = 8
 MAX_CHARACTERS = 2  # the art workflow draws at most two faces per picture
 FOCUS_WORDS = ("eyes", "asleep", "sleep", "yawn", "smile", "tear", "whisper", "face", "blink", "breath")
 BEATS_FILE = "beats.json"
@@ -43,6 +44,9 @@ def split_caption(text: str, max_words: int = MAX_BEAT_WORDS) -> list[str]:
             groups[-1].append(s)
         else:
             groups.append([s])
+    if len(groups) > 1 and sum(len(x.split()) for x in groups[-1]) < MIN_TAIL_WORDS:
+        tail = groups.pop()
+        groups[-1] += tail  # a 2-6 word fragment ("Cat juggling.") gets no picture of its own: the model invents one from nothing
     return [" ".join(g) for g in groups]
 
 
@@ -152,7 +156,9 @@ async def direct_shot(provider, story: OriginalStory, panel: Panel, text: str, p
     prompt = (
         "You are the storyboard artist of a narrated picture story. The narrator reads this aloud while the picture is on screen:\n"
         f"\"{text}\"\n\nCast (use these ids):\n{cast}\nPlace: {(loc.name + ' - ' + loc.look) if loc else 'unspecified'}\n"
-        f"Previous picture: {_summary(previous, bible) if previous else 'none yet'}.\n\n"
+        f"Previous picture: {_summary(previous, bible) if previous else 'none yet'}.\n"
+        # the author's note disambiguates nouns ("glass" of water vs a glass door); the narration still decides what is shown
+        f"{('Author note on this panel (only to resolve ambiguous words): ' + panel.action + chr(10)) if panel.action.strip() else ''}\n"
         "Design the ONE picture that shows exactly what the narration says. For each visible character give their pose (body), "
         "expression (eyes and mouth) and action (hands, objects), and where they stand. Add the specific visible details of the place, "
         "the light and the mood. List the 2-4 things that must be clearly visible, including every physical claim in the narration. "

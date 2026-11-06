@@ -202,7 +202,7 @@ def check_bible(o: _Bible, genre: Genre) -> list[str]:
     if genre.child_safe and any(c.role == "antagonist" for c in o.characters):
         p.append("a bedtime story has no antagonist; use a gentle worry or a misunderstanding instead")
     for c in o.characters:
-        others = [x.name for x in o.characters if x is not c and x.name.split()[0].lower() in c.look.lower()]
+        others = [x.name for x in o.characters if x is not c and (t := name_tokens(x.name)) and t[0] in c.look.lower()]
         if others:
             p.append(f"{c.name}: look must describe only this character, not {others}")
     blob = " ".join(x.look for x in o.characters + o.locations) + " " + " ".join(o.rules)
@@ -236,9 +236,18 @@ ABSTRACT_WORDS = {"realizes", "realises", "realized", "realised", "understands",
                   "essence", "embodiment", "testament", "tapestry", "sanctuary", "legacy", "destiny", "significance", "profound", "transcend"}
 
 
+NAME_TITLES = {"dr", "mr", "mrs", "ms", "miss", "sir", "lady", "lord", "professor", "prof", "captain", "doctor", "the"}
+
+
+def name_tokens(name: str) -> list[str]:
+    """Lowercase words of a name that identify the character: no honorifics ('Dr.'), none shorter than 3 letters; [] for a blank name."""
+    return [t for t in re.findall(r"[a-z]{3,}", name.lower()) if t not in NAME_TITLES]
+
+
 def caption_visual_problem(caption: str, shown: list[Character]) -> str:
     """The picture is drawn from the caption, so a caption must say who is on screen and describe something that can be seen."""
-    if shown and not any(c.name.split()[0].lower() in caption.lower() for c in shown):
+    words = set(re.findall(r"[a-z]+", caption.lower()))
+    if shown and not any(t in words for c in shown for t in name_tokens(c.name)):
         return f"the caption must name who is on screen ({', '.join(c.name for c in shown)}) and what they visibly do"
     hits = sorted({w.strip(".,;:!?").lower() for w in caption.split()} & ABSTRACT_WORDS)
     return f"the caption is abstract ({hits}): describe what we SEE - body, face, objects, place" if hits else ""

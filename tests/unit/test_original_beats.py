@@ -13,6 +13,13 @@ def test_split_caption_groups_sentences_up_to_the_word_limit():
     assert beats.split_caption("One short line.") == ["One short line."] and beats.split_caption("") == []
 
 
+def test_a_short_tail_fragment_is_merged_into_the_previous_beat():
+    t = "So he does what bored cats do and shoves a pencil off the table, keys off the shelf, the remote off the sofa. Cat juggling."
+    assert beats.split_caption(t, 14) == [t]
+    long_tail = "He pushes the glass to the very edge of the table. The glass wobbles for a second and then it falls down."
+    assert len(beats.split_caption(long_tail, 11)) == 2  # a full sentence still gets its own beat
+
+
 def story():
     p = Panel(id="p010", scene_id="sc01", shot="wide", angle="eye_level", location_id="attic", character_ids=["mira", "pip"],
               action="old action", caption="The attic glows softly tonight and everything is still and quiet and warm, with moonlight on the old wooden floor. "

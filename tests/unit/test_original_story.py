@@ -194,6 +194,15 @@ def test_captions_must_name_who_is_on_screen_and_be_visual():
     assert st.caption_visual_problem("The night is quiet.", []) == ""  # nobody on screen: nothing to name
 
 
+def test_titled_and_blank_names_do_not_break_validation():
+    doc = _char(id="dr_gravity", name="Dr. Gravity", role="other", age_group="adult", look="a, b, c, d", personality="p")
+    assert st.caption_visual_problem("Gravity tugs the glass off the table.", [doc]) == ""  # 'Dr.' is not the name
+    assert "must name who is on screen" in st.caption_visual_problem("Maya sleeps.", [doc])
+    blank = _char(id="x", name="  ", role="other", age_group="adult", look="a, b, c, d", personality="p")
+    b = bible(chars=[_char(id="mira", name="Mira", role="protagonist", age_group="child", look="brown hair, green eyes, raincoat, boots", personality="p"), blank])
+    assert any("proper name" in m for m in st.check_bible(b, BED))  # reported as feedback, no IndexError
+
+
 def test_a_human_without_a_gender_is_rejected_because_it_decides_how_they_are_drawn():
     b = bible(chars=[_char(id="a", name="Ann", role="protagonist", age_group="adult", gender="neutral", look="a, b, c, d", personality="p"),
                      _char(id="b", name="Bo", role="other", age_group="adult", species="fox cub", gender="neutral", look="a, b, c, d", personality="p")])

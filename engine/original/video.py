@@ -19,7 +19,8 @@ from engine.anime.review.timeline import wav_seconds
 from engine.narration.runtime import audio as rt
 from engine.original.models import OriginalStory, Panel
 
-NARRATORS = {"bedtime": ("af_heart", 0.88), "horror": ("bm_george", 0.92), "mystery": ("am_adam", 0.95), "fantasy": ("bm_fable", 0.95), "mythology": ("bm_george", 0.90)}
+NARRATORS = {"bedtime": ("af_heart", 0.88), "horror": ("bm_george", 0.92), "mystery": ("am_adam", 0.95), "fantasy": ("bm_fable", 0.95), "mythology": ("bm_george", 0.90),
+             "vox": ("am_michael", 1.06)}  # brisk, deadpan explainer pace
 CHARACTER_VOICES = ["af_sky", "am_adam", "af_nicole", "bm_fable", "af_bella", "am_michael"]  # voices cached offline
 MALE_VOICES = ["am_adam", "bm_fable", "am_michael", "bm_george"]
 FEMALE_VOICES = ["af_sky", "af_bella", "af_nicole", "af_heart"]

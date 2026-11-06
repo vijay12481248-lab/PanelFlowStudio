@@ -61,6 +61,47 @@ def test_natural_language_prompt_for_prompt_following_models():
     assert "There are no people in the picture." in none
 
 
+def test_natural_prompt_uses_the_genres_own_style_phrase_not_a_generic_anime_label():
+    fantasy = STORY.model_copy(deep=True)
+    fantasy.bible.premise.genre = "fantasy"  # its art_style ends in "dramatic lighting": the old code fell back to "Anime illustration"
+    pos, _ = ss.compose_natural(fantasy, spec(), "attic")
+    assert pos.startswith("Fantasy anime style.") and "Anime illustration" not in pos
+
+
+def test_character_names_never_reach_the_image_prompt_as_words():
+    from engine.original.models import Character
+
+    cat = Character(id="biscuit", name="Biscuit", role="protagonist", age_group="adult", species="cat", gender="male", look="orange fur", personality="p")
+    doc = Character(id="gravity", name="Dr. Gravity", role="other", age_group="elder", species="human", gender="female", look="white coat", personality="p")
+    out = ss.unname("Biscuit taps the glass. So Biscuit's paw hovers while Gravity watches, then Dr. Gravity nods.", [cat, doc])
+    assert "Biscuit" not in out and "Gravity" not in out and "Dr." in out  # the title is not a name, the person is
+    assert out.startswith("The cat taps the glass. So the cat's paw hovers") and "the old woman" in out
+    assert ss.unname("the biscuit nudges a glass off the table", [cat]) == "the cat nudges a glass off the table"  # LLM claims lowercase names
+    assert ss.unname("The Biscuit blinks", [cat]) == "The cat blinks"
+    s = STORY.model_copy(deep=True)
+    pos, _ = ss.compose_natural(s, spec(characters=[ss.CharPose(id="mira", pose="standing", expression="smiling", action="Mira waves at Pip")],
+                                        key_visuals=["Mira waving"]), "attic")
+    assert "Mira waves" not in pos and "Mira waving" not in pos  # names removed from actions and key visuals
+
+
+def test_director_prompt_carries_the_panel_author_note_to_resolve_ambiguous_nouns():
+    import asyncio
+    from engine.original import beats
+    from engine.original.models import Panel
+
+    seen = []
+
+    class P:
+        async def generate_structured(self, prompt, *a, **kw):
+            seen.append(prompt)
+            raise ValueError("stop")  # direct_shot turns a ValueError into None; only the prompt matters here
+
+    panel = Panel(id="p1", scene_id="s", shot="medium", angle="eye_level", location_id="attic", character_ids=["mira"],
+                  action="Mira pushes a drinking glass of water off a table", caption="She taps the glass.")
+    asyncio.run(beats.direct_shot(P(), STORY, panel, "She taps the glass.", None, []))
+    assert "Author note" in seen[0] and "drinking glass of water" in seen[0]
+
+
 def test_character_description_is_the_same_words_every_time():
     elder = full_bible().characters[0].model_copy(update={"age_group": "elder", "gender": "male"})
     assert ss.describe_character(elder).startswith("an old man with a wrinkled face with ")
