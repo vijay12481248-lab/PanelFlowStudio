@@ -475,6 +475,31 @@ class ArtRecord(BaseModel):
     review: dict = Field(default_factory=dict)  # the full Review: every requirement, both witnesses, confidence, decision
     claims: list[dict] = Field(default_factory=list)  # what the narration asserts that must be visible
     missing: list[str] = Field(default_factory=list)
+    iterations: list[dict] = Field(default_factory=list)  # every candidate ever made for this panel, oldest first (see _record_candidate)
+    selected: int | None = None  # the `n` of the iteration whose picture is panels/<id>.png
+
+
+def _sha(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def _record_candidate(ws: Path, panel_id: str, iterations: list[dict], data: bytes, **meta) -> dict:
+    """Keep one candidate under panels/_candidates/<panel>/ and append its generation record. Candidate files are never overwritten or deleted,
+    so a redraw, a repair or a re-run can always be compared with, or rolled back to, what came before."""
+    n = max((i["n"] for i in iterations), default=0) + 1
+    folder = ws / "panels" / "_candidates" / panel_id
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / f"c{n:03d}.png").write_bytes(data)
+    entry = {"n": n, "file": f"panels/_candidates/{panel_id}/c{n:03d}.png", "sha256": _sha(data), **meta}
+    iterations.append(entry)
+    return entry
+
+
+def _review_summary(rev) -> dict | None:
+    if rev is None:
+        return None
+    return {"decision": rev.decision, "score": rev.score, "confidence": rev.confidence, "defects": list(rev.defects),
+            "failed": [i.item for i in rev.items if not i.passed][:8]}
 
 
 def _hash(pos: str, neg: str, ref: str = "", dims: tuple[int, int] | None = None) -> str:
@@ -556,6 +581,11 @@ def generate_art(story: OriginalStory, ws: Path, runner: ComfyRunner, provider=N
         if rec and rec.prompt_hash == _hash(pos, neg, ref_sig, dims=(pw, ph)) and img.exists():
             reused += 1
             continue
+        iters = list(rec.iterations) if rec else []
+        if img.exists():
+            old = img.read_bytes()
+            if _sha(old) not in {i["sha256"] for i in iters}:  # a picture made before candidates were kept: archive it, never overwrite it
+                _record_candidate(ws, p.id, iters, old, kind="imported", note="panel picture that existed before this run")
         best: tuple | None = None
         emphasis: list[str] = []
         claims: list[review_mod.Claim] = []
@@ -575,6 +605,8 @@ def generate_art(story: OriginalStory, ws: Path, runner: ComfyRunner, provider=N
                                   reference_weight=POSE_WEIGHT if (pose_sensitive(p) or attempt > 0) else None,
                                   pose_image=pose_img, depth_image=depth_img,
                                   pose_weight=pose_wt, depth_weight=depth_wt)
+            cur = cand = _record_candidate(ws, p.id, iters, png, kind="generate", attempt=attempt, seed=seed, prompt=pos_i, negative=neg,
+                                           width=pw, height=ph, engine=engine, workflow=ART_WORKFLOW_ID if engine == "qwen" else "")
             score, missing, match, unmatched, desc, rev = 1.0, [], 1.0, [], "", None
             if provider is not None and (shown or p.key_visuals):
                 tmp = ws / "panels" / f"_try_{p.id}.png"
@@ -582,6 +614,7 @@ def generate_art(story: OriginalStory, ws: Path, runner: ComfyRunner, provider=N
                 if spec is not None:
                     try:
                         rev = asyncio.run(review_mod.review_image(provider, tmp, claims, spec, chars))
+                        cand["review"] = _review_summary(rev)
                         match, desc = rev.score, rev.description
                     except Exception as e:  # a model hiccup must not stop a whole episode: keep the picture, mark it unverified
                         desc = f"(not verified: {str(e)[:80]})"
@@ -618,7 +651,12 @@ def generate_art(story: OriginalStory, ws: Path, runner: ComfyRunner, provider=N
                                     (rep_rev.anatomy_passed and rep_rev.spatial_contact_passed and (rep_rev.score >= rev.score - 0.05))
                                     or (len(rep_rev.defects) < len(rev.defects) and rep_rev.score > rev.score)
                                 )
+                                rep_cand = _record_candidate(ws, p.id, iters, candidate_png, kind="repair", parent=cand["n"], attempt=attempt,
+                                                             seed=seed + 1, prompt=pos_inpaint, negative=neg_inpaint, denoise=0.75,
+                                                             review=_review_summary(rep_rev), kept=bool(score_improved))
+                                (ws / "panels" / "_candidates" / p.id / f"c{rep_cand['n']:03d}_mask.png").write_bytes(buf_m.getvalue())
                                 if score_improved:
+                                    cur = rep_cand
                                     png = candidate_png
                                     rev = rep_rev
                                     match, desc = rev.score, rev.description
@@ -632,18 +670,19 @@ def generate_art(story: OriginalStory, ws: Path, runner: ComfyRunner, provider=N
             rank = review_mod.RANK[rev.decision] if rev is not None else (1.5 if spec is not None else (2 if match >= MATCH_THRESHOLD else 0))
             key = (rank, match)
             if best is None or key > best[0]:
-                best = (key, png, seed, missing, score, match, unmatched, desc, rev)
+                best = (key, png, seed, missing, score, match, unmatched, desc, rev, cur["n"])
             if provider is None or rank >= 2 or (rev is None and spec is not None):
                 break  # accepted, or unverifiable (a model error): do not burn attempts on a judge that is not answering
             emphasis = (rev.missing_critical + [i.item for i in rev.items if not i.critical and i.verdict != "shown"][:2]) if rev else missing + unmatched
-        key, png, seed, missing, score, match, unmatched, desc, rev = best
+        key, png, seed, missing, score, match, unmatched, desc, rev, selected = best
         img.write_bytes(png)
         status = ("" if spec is None else "unverified" if rev is None else {"accept": "accept", "accept_low": "accept_low"}.get(rev.decision, "needs_review"))
         db[p.id] = ArtRecord(panel_id=p.id, image=str(img), prompt_hash=_hash(pos, neg, ref_sig, dims=(pw, ph)),
                              seed=seed, attempts=attempt + 1, score=score if provider is not None and shown and spec is None else None,
                              match_score=match if provider is not None and (p.key_visuals or spec is not None) and (rev is not None or spec is None) else None,
                              missing=(rev.missing_critical if rev else missing + unmatched), description=desc, status=status,
-                             review=rev.model_dump() if rev else {}, claims=[c.model_dump() for c in claims])
+                             review=rev.model_dump() if rev else {}, claims=[c.model_dump() for c in claims],
+                             iterations=iters, selected=selected)
         save()
         done += 1
     scores = [r.score for r in db.values() if r.score is not None]

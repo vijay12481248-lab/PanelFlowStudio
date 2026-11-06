@@ -324,3 +324,69 @@ def test_removed_image_engines_fail_loudly_instead_of_falling_back():
     for engine in ("flux", "pulid", "manga"):
         with pytest.raises(ValueError, match="qwen_image_21"):
             art.ComfyRunner(client=MagicMock(), engine=engine)
+
+
+class NumberedRunner(FakeRunner):
+    """Every picture is different, so a test can tell which one ended up where."""
+
+    def generate(self, pos, neg, seed, w, h, prefix, **kw):
+        self.calls.append((prefix, seed, pos))
+        buf = io.BytesIO()
+        Image.new("RGB", (8, 8), (len(self.calls) % 256, 0, 0)).save(buf, "PNG")
+        return buf.getvalue()
+
+
+def _sha(path):
+    import hashlib
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def test_every_candidate_is_kept_with_its_generation_record_and_the_selected_one_is_the_panel_picture(tmp_path):
+    s = story()
+    s.panels = [directed_panel(s)]
+    art.generate_art(s, tmp_path, NumberedRunner(), provider=Reviewer(always_no=True))
+    rec = json.loads((tmp_path / "art.json").read_text())[0]
+    gens = [i for i in rec["iterations"] if i["kind"] == "generate"]
+    assert [i["attempt"] for i in gens] == [0, 1, 2] and [i["n"] for i in rec["iterations"]] == [1, 2, 3]
+    for i in gens:
+        f = tmp_path / i["file"]
+        assert f.exists() and _sha(f) == i["sha256"] and i["seed"] and i["prompt"] and i["review"]["decision"] == "regenerate"
+    assert len({i["sha256"] for i in gens}) == 3  # three different pictures were kept, not just the best
+    chosen = next(i for i in rec["iterations"] if i["n"] == rec["selected"])
+    assert _sha(tmp_path / "panels" / "p002.png") == chosen["sha256"]
+
+
+def test_a_rerun_never_overwrites_what_was_there_before(tmp_path):
+    s = story()
+    art.generate_art(s, tmp_path, NumberedRunner())
+    before = {i["file"]: _sha(tmp_path / i["file"]) for r in json.loads((tmp_path / "art.json").read_text()) for i in r["iterations"]}
+    first_picture = _sha(tmp_path / "panels" / "p002.png")
+    s.panels[1].action = "Mira opens the window."
+    art.generate_art(s, tmp_path, NumberedRunner())
+    recs = {r["panel_id"]: r for r in json.loads((tmp_path / "art.json").read_text())}
+    assert len(recs["p002"]["iterations"]) == 2 and recs["p001"]["iterations"][0]["n"] == 1  # history accumulates; untouched panels are untouched
+    assert all(_sha(tmp_path / f) == sha for f, sha in before.items())  # earlier candidates are byte-identical
+    assert first_picture in {i["sha256"] for i in recs["p002"]["iterations"]} and _sha(tmp_path / "panels" / "p002.png") != first_picture
+
+
+def test_a_picture_from_before_history_existed_is_archived_not_lost(tmp_path):
+    s = story()
+    art.generate_art(s, tmp_path, NumberedRunner())
+    old = _sha(tmp_path / "panels" / "p002.png")
+    recs = json.loads((tmp_path / "art.json").read_text())
+    for r in recs:
+        r["iterations"], r["selected"] = [], None  # what an art.json written before candidates were kept looks like
+    (tmp_path / "art.json").write_text(json.dumps(recs))
+    s.panels[1].action = "Mira opens the window."
+    art.generate_art(s, tmp_path, NumberedRunner())
+    rec = next(r for r in json.loads((tmp_path / "art.json").read_text()) if r["panel_id"] == "p002")
+    imported = [i for i in rec["iterations"] if i["kind"] == "imported"]
+    assert len(imported) == 1 and imported[0]["sha256"] == old and _sha(tmp_path / imported[0]["file"]) == old
+
+
+def test_a_reused_panel_keeps_its_history_unchanged(tmp_path):
+    s = story()
+    art.generate_art(s, tmp_path, NumberedRunner())
+    first = (tmp_path / "art.json").read_text()
+    out = art.generate_art(s, tmp_path, NumberedRunner())
+    assert out["reused"] == 3 and (tmp_path / "art.json").read_text() == first

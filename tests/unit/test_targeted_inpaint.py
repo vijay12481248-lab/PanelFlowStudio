@@ -512,6 +512,13 @@ def test_art_repair_loop_accepts_when_score_improves(tmp_path):
     assert record["review"]["anatomy_passed"] is True
     assert out["accepted"] == ["p001"]
 
+    # the repair is a recorded candidate that points at the picture it repaired, with its mask, and it is the selected one
+    reps = [i for i in record["iterations"] if i["kind"] == "repair"]
+    assert len(reps) == 1 and reps[0]["kept"] is True and record["selected"] == reps[0]["n"]
+    parent = next(i for i in record["iterations"] if i["n"] == reps[0]["parent"])
+    assert parent["kind"] == "generate" and parent["review"]["decision"] == "regenerate"  # the unrepaired original is still on disk
+    assert (tmp_path / parent["file"]).exists() and (tmp_path / reps[0]["file"].replace(".png", "_mask.png")).exists()
+
 
 def test_art_repair_loop_rejects_and_falls_back_when_unimproved(tmp_path):
     story = _make_story()
@@ -529,6 +536,8 @@ def test_art_repair_loop_rejects_and_falls_back_when_unimproved(tmp_path):
     # Panel is not accepted because defects persisted across all attempts
     assert record["status"] == "needs_review"
     assert out["needs_review"] == ["p001"]
+    assert all(i["kind"] == "repair" and i["kept"] is False for i in record["iterations"] if i["kind"] == "repair")
+    assert record["selected"] in {i["n"] for i in record["iterations"]}
 
 
 def test_art_repair_loop_falls_back_gracefully_when_inpaint_raises(tmp_path):
