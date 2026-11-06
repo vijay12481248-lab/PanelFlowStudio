@@ -310,9 +310,27 @@ def _has_defect_keyword(text: str, defect_type: str) -> bool:
         for m in re.finditer(r'\b' + re.escape(kw) + r'\b', t):
             prefix = t[:m.start()]
             clause = re.split(r'[,;.\!?\n]', prefix)[-1]
-            if not NEGATION_PREFIX_PATTERN.search(clause):
-                return True
+            if NEGATION_PREFIX_PATTERN.search(clause):
+                continue
+            if _negated_in_list(prefix):
+                continue
+            return True
     return False
+
+
+_CLAUSE_BREAK = re.compile(r'\b(?:but|however|although|though|yet|except|whereas)\b|,\s*and\b', re.IGNORECASE)
+_NEGATION_WORD = re.compile(r'\b(?:no|not|without|zero|neither|nor|none|never|free\s+of|lack(?:s|ing)?|absence\s+of|devoid\s+of)\b', re.IGNORECASE)
+
+
+def _negated_in_list(prefix: str) -> bool:
+    """True when the keyword closes a negated list such as 'no duplicate heads, fused faces, or <keyword>'.
+
+    The comma split above loses the 'no' for every item after the first, so a clean picture whose evidence says
+    'there are no duplicate heads, fused faces, or polycephaly' was flagged as polycephaly (seen on a real panel).
+    """
+    sentence = re.split(r'[.\!?\n;]', prefix)[-1]
+    segment = _CLAUSE_BREAK.split(sentence)[-1]
+    return bool(_NEGATION_WORD.search(" ".join(segment.split()[-12:])))
 
 
 INTERACTION_VERBS = {
@@ -687,6 +705,7 @@ async def review_image(
     chars: dict[str, Character],
     audit_gates: bool = True,
     caption: str = "",
+    locate_defects: bool = False,  # off by default: the story loop keeps its heuristic repair mask until the planner uses real boxes
 ) -> Review:
     reqs = requirements(claims, spec, chars)
     if not reqs and not audit_gates:
@@ -703,7 +722,195 @@ async def review_image(
         audit_items.extend(anatomy_items)
         audit_items.extend(spatial_items)
 
-    return combine(reqs, qa, stated, description, audit_items=audit_items)
+    review = combine(reqs, qa, stated, description, audit_items=audit_items)
+    if locate_defects:
+        await locate_failed_items(provider, image, review)
+    return review
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Evidence-grade review of ANY image against ANY prompt (not only story narration).
+# Same two-witness decision as `review_image`; the new parts are: requirements come from the prompt, witness A answers with one of
+# five statuses plus a model-reported box, and every failed item carries severity and whether a masked edit could fix it.
+# ---------------------------------------------------------------------------------------------------------------------
+REQUIREMENT_KINDS = {"subject", "attribute", "object", "placement", "clothing", "pose", "environment", "camera", "framing", "style"}
+LOCAL_KINDS = {"object", "attribute", "clothing", "placement"}  # things a masked edit can change without redrawing the picture
+STATUSES = ("correct", "missing", "incorrect", "uncertain", "not_verifiable")
+STATUS_TO_ANSWER = {"correct": "yes", "incorrect": "no", "missing": "no", "uncertain": "partly"}
+MIN_BOX_AREA, MAX_BOX_AREA = 0.0005, 0.9  # a box smaller than a speck or covering nearly the whole picture says nothing about where
+DEFECT_LOCATE = {
+    "polycephaly": "the head or heads that look duplicated or fused",
+    "extra_limbs": "the extra or duplicated limb",
+    "missing_limbs": "the body part that is cut off or missing a limb",
+    "distorted_digits": "the hand or foot with wrong, extra or fused fingers",
+    "limb_topology": "the limb bent at an impossible angle",
+    "unanchored_object": "the object that floats without support",
+    "disconnected_interaction": "the object and the hand that should be holding it",
+}
+
+
+class _PromptReq(BaseModel):
+    text: str = Field(description="one short positive statement a viewer could check in the picture")
+    kind: str = Field(default="object", description="subject, attribute, object, placement, clothing, pose, environment, camera, framing or style")
+    critical: bool = Field(default=True, description="true if the picture is wrong without it")
+
+
+class _PromptReqs(BaseModel):
+    requirements: list[_PromptReq] = Field(description="at most 10")
+
+
+class _Grounded(BaseModel):
+    n: int
+    status: str = Field(description="correct, missing, incorrect, uncertain or not_verifiable")
+    evidence: str = Field(default="", description="what is visible that supports the status, at most 15 words")
+    bbox_1000: list[int] = Field(default_factory=list, description="[x1,y1,x2,y2] of the visible evidence on a 0-1000 grid, or [] when absent or not locatable")
+
+
+class _GroundedList(BaseModel):
+    items: list[_Grounded]
+
+
+class _Box(BaseModel):
+    bbox_2d: list[int] = Field(default_factory=list)
+
+
+def clean_prompt_requirements(reqs: list[_PromptReq], prompt: str) -> list[Claim]:
+    """Positive, de-duplicated statements that share content words with THIS prompt (a small model otherwise invents requirements)."""
+    said = _content(prompt)
+    seen, out = set(), []
+    for r in reqs:
+        t = " ".join(r.text.split())
+        kind = r.kind.strip().lower()
+        if not t or t.lower() in seen or any(n in t.lower() for n in NEGATIVE_CLAIM) or not (_content(t) & said):
+            continue
+        seen.add(t.lower())
+        out.append(Claim(text=t[:140], critical=r.critical, kind=kind if kind in REQUIREMENT_KINDS else "object"))
+    return out[:10]
+
+
+async def extract_prompt_requirements(provider, prompt: str) -> list[Claim]:
+    """The prompt as an explicit checklist: subject, appearance, environment, pose, objects and which side they are on, clothing, camera, framing."""
+    text = ("Image prompt:\n\"" + prompt + "\"\n\nList what a viewer must be able to SEE for the picture to match this prompt: the subject, "
+            "its appearance, the environment, the pose, each object and exactly where it is (which hand, which side), the clothing, the camera "
+            "angle, the framing and the art style. Use only what the prompt says. One short positive statement each, with a kind. Mark a "
+            "requirement critical if the picture is wrong without it.")
+    out = await provider.generate_structured(text, _PromptReqs, system_prompt="You turn image prompts into precise visual checklists.",
+                                             temperature=0.0, max_tokens=700, num_ctx=8192)
+    reqs = out.get("requirements", []) if isinstance(out, dict) else out.requirements
+    return clean_prompt_requirements([r if isinstance(r, _PromptReq) else _PromptReq(**r) for r in reqs], prompt)
+
+
+def _valid_box(raw) -> list[float] | None:
+    """A model-reported box on a 0-1000 grid, as normalised 0..1, or None. Never repaired or guessed: an unusable box is dropped."""
+    try:
+        x1, y1, x2, y2 = (float(v) for v in raw)
+    except (TypeError, ValueError):
+        return None
+    if not all(0 <= v <= 1000 for v in (x1, y1, x2, y2)) or x2 <= x1 or y2 <= y1:
+        return None
+    area = (x2 - x1) * (y2 - y1) / 1_000_000
+    if not (MIN_BOX_AREA <= area <= MAX_BOX_AREA):
+        return None
+    return [round(v / 1000, 4) for v in (x1, y1, x2, y2)]
+
+
+def _parse(raw, model: type[BaseModel]):
+    try:
+        if isinstance(raw, dict):
+            return model(**raw)
+        if isinstance(raw, model):
+            return raw
+        return model.model_validate_json(raw)
+    except Exception:
+        return None
+
+
+async def _grounded_check(provider, image: Path, claims: list[Claim]) -> list[_Grounded]:
+    """Witness A for prompt mode: a status and the box of the visible evidence for each requirement. An answer that cannot be parsed is 'uncertain'."""
+    lst = "\n".join(f"{i + 1}. {c.text}" for i, c in enumerate(claims))
+    prompt = ("Check this picture against each requirement. status: correct only if clearly visible; incorrect if it is there but wrong (wrong place, "
+              "side, colour or kind); missing if absent; uncertain if you cannot tell; not_verifiable if a picture cannot show it. Give the visible "
+              "evidence, and the box of that evidence on a 0-1000 grid [x1,y1,x2,y2], or [] when the thing is absent.\n" + lst)
+    raw = await provider.analyze_vision(image, prompt, format_schema=_GroundedList.model_json_schema(), max_tokens=1400, temperature=0.0)
+    parsed = _parse(raw, _GroundedList)
+    by_n = {g.n: g for g in parsed.items} if parsed else {}
+    out = []
+    for i in range(len(claims)):
+        g = by_n.get(i + 1)
+        if g is None:
+            g = _Grounded(n=i + 1, status="uncertain", evidence="no answer")
+        status = g.status.strip().lower().replace(" ", "_").replace("-", "_")
+        out.append(g.model_copy(update={"status": status if status in STATUSES else "uncertain"}))
+    return out
+
+
+def _annotate(review: Review, claims: list[Claim], grounded: list[_Grounded]) -> None:
+    """Attach status, severity, the model's box and 'repairable locally' to the items that came from the prompt requirements."""
+    for item, claim, g in zip(review.items, claims, grounded):
+        if item.verdict == "shown":
+            item.status = "correct"
+        elif item.verdict == "partial":
+            item.status = "uncertain"
+        else:
+            item.status = g.status if g.status in ("missing", "incorrect") else "missing"
+        if not item.passed:
+            item.severity = "critical" if item.critical else "minor"
+        box = _valid_box(g.bbox_1000) if item.status != "missing" else None  # a box for an absent thing is only a guess
+        if box:
+            item.bbox, item.bbox_source = box, "vlm"
+        item.repairable_locally = bool(not item.passed and item.status == "incorrect" and box and claim.kind in LOCAL_KINDS)
+    for item in review.items:  # anatomy / contact failures too
+        if not item.passed and not item.severity:
+            item.severity = "critical" if item.critical else "minor"
+
+
+def _says_absent(evidence: str) -> bool:
+    e = evidence.lower()
+    return any(p in e for p in (*NEGATIVE_CLAIM, "absent", "does not appear", "not present", "nothing "))
+
+
+async def locate_failed_items(provider, image: Path, review: Review, limit: int = 3) -> int:
+    """Ask the vision model where each failed anatomy / contact defect is. Returns how many boxes were accepted; the rest keep no box."""
+    found = 0
+    # a contact check on an object the model says is not in the picture has nothing to locate: asking anyway returns a box on something else
+    todo = [i for i in review.items if not i.passed and i.category in ("anatomy", "spatial_contact") and not i.bbox
+            and not (i.category == "spatial_contact" and _says_absent(i.evidence))][:limit]
+    for item in todo:
+        what = DEFECT_LOCATE.get(item.defect_type, item.item)
+        try:
+            raw = await provider.analyze_vision(image, f"Locate {what}. Reply only with JSON {{\"bbox_2d\":[x1,y1,x2,y2]}} on a 0-1000 grid.",
+                                                format_schema=_Box.model_json_schema(), max_tokens=100, temperature=0.0)
+        except Exception:
+            continue
+        parsed = _parse(raw, _Box)
+        box = _valid_box(parsed.bbox_2d) if parsed else None
+        if box:
+            item.bbox, item.bbox_source, item.repairable_locally, item.severity = box, "vlm", True, "critical"
+            found += 1
+    return found
+
+
+async def evaluate_prompt_image(provider, image: Path, prompt: str, audit_gates: bool = True, locate_defects: bool = True) -> Review:
+    """Review one image against the prompt that made it. Raises nothing for an unusable model answer: those items come back 'uncertain'."""
+    claims = await extract_prompt_requirements(provider, prompt)
+    description = await _describe(provider, image)
+    grounded = await _grounded_check(provider, image, claims) if claims else []
+    keep = [k for k, g in enumerate(grounded) if g.status != "not_verifiable"]
+    checked = [claims[k] for k in keep]
+    unverifiable = [c.text for k, c in enumerate(claims) if k not in set(keep)]
+    qa = [_QA(n=n + 1, answer=STATUS_TO_ANSWER[grounded[k].status], evidence=grounded[k].evidence) for n, k in enumerate(keep)]
+    stated = await _description_states(provider, description, [(c.text, c.critical) for c in checked]) if checked else []
+    audit_items: list[ItemVerdict] = []
+    if audit_gates:
+        audit_items += await _audit_anatomy(provider, image, description=description)
+        audit_items += await _audit_spatial_contact(provider, image, claims=checked, description=description, caption=prompt)
+    review = combine(checked, qa, stated, description, audit_items=audit_items)
+    _annotate(review, checked, [grounded[k] for k in keep])
+    if locate_defects:
+        await locate_failed_items(provider, image, review)
+    review.unverifiable = unverifiable
+    review.reasons += [f"not visually verifiable (for a human): {t}" for t in unverifiable]
+    return review
 
 
 def write_report(story_panels: list, ws: Path, records: list[dict]) -> Path:

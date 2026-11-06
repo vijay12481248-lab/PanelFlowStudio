@@ -75,6 +75,7 @@ class Claim(BaseModel):
     category: str = "narration"  # narration | anatomy | spatial_contact
     defect_type: str = ""  # polycephaly | extra_limbs | missing_limbs | distorted_digits | limb_topology | unanchored_object | disconnected_interaction
     interaction_target: str = ""
+    kind: str = ""  # prompt requirements only: subject | attribute | object | placement | clothing | pose | environment | camera | framing | style
 
 
 class ItemVerdict(BaseModel):
@@ -88,13 +89,19 @@ class ItemVerdict(BaseModel):
     category: str = "narration"  # narration | anatomy | spatial_contact
     defect_type: str = ""  # polycephaly | extra_limbs | missing_limbs | distorted_digits | limb_topology | unanchored_object | disconnected_interaction
     passed: bool = True
-    bbox: list[int | float] | None = None
+    bbox: list[int | float] | None = None  # normalised 0..1 [x1, y1, x2, y2]; only ever set from a model-reported, validated box
+    bbox_source: str = ""  # "vlm" | "" (a region the reviewer did not locate is never invented)
+    status: str = ""  # correct | missing | incorrect | uncertain | not_verifiable (derived from verdict when the reviewer did not set it)
+    severity: str = ""  # critical | minor, only for items that did not pass
+    repairable_locally: bool = False  # a located, existing-but-wrong thing: a masked edit can fix it without redrawing the picture
 
     def model_post_init(self, __context) -> None:
         if self.verdict != "shown" or not self.passed:
             self.passed = False
         if not self.passed and self.category in ("anatomy", "spatial_contact"):
             self.verdict = "missing"
+        if not self.status:
+            self.status = {"shown": "correct", "partial": "uncertain"}.get(self.verdict, "missing")
 
 
 class Review(BaseModel):
@@ -107,6 +114,7 @@ class Review(BaseModel):
     anatomy_passed: bool = True
     spatial_contact_passed: bool = True
     defects: list[str] = Field(default_factory=list)
+    unverifiable: list[str] = Field(default_factory=list)  # requirements a picture cannot show (sound, ideas): for a human, never "fixed"
 
     @property
     def missing_critical(self) -> list[str]:
