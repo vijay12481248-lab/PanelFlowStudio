@@ -390,3 +390,34 @@ def test_a_reused_panel_keeps_its_history_unchanged(tmp_path):
     first = (tmp_path / "art.json").read_text()
     out = art.generate_art(s, tmp_path, NumberedRunner())
     assert out["reused"] == 3 and (tmp_path / "art.json").read_text() == first
+
+
+def test_refine_loop_on_directed_panels_redraws_until_accepted_and_keeps_every_candidate(tmp_path):
+    s = story()
+    s.panels = [directed_panel(s)]
+    out = art.generate_art(s, tmp_path, NumberedRunner(), provider=Reviewer(good_from_attempt=1), refine=True)
+    rec = json.loads((tmp_path / "art.json").read_text())[0]
+    assert rec["status"] == "accept" and out["accepted"] == ["p002"] and rec["attempts"] == 2
+    assert [(i["kind"], i["attempt"]) for i in rec["iterations"]] == [("generate", 0), ("generate", 1)]
+    assert rec["selected"] == 2 and _sha(tmp_path / "panels" / "p002.png") == rec["iterations"][1]["sha256"]
+    assert rec["iterations"][0]["review"]["decision"] != "accept" and rec["iterations"][1]["review"]["decision"] == "accept"  # accept_low is not good enough to stop
+
+
+def test_refine_loop_never_silently_accepts_a_picture_that_keeps_failing(tmp_path, monkeypatch):
+    s = story()
+    s.panels = [directed_panel(s)]
+    monkeypatch.setenv("PANELFLOW_REFINE_LOOP", "1")  # the env switch is the same as refine=True
+    out = art.generate_art(s, tmp_path, NumberedRunner(), provider=Reviewer(always_no=True))
+    rec = json.loads((tmp_path / "art.json").read_text())[0]
+    assert rec["status"] == "needs_review" and out["needs_review"] == ["p002"] and rec["attempts"] == 3
+    assert len([i for i in rec["iterations"] if i["kind"] == "generate"]) == 3
+
+
+def test_the_original_loop_is_used_unless_the_refine_loop_is_asked_for(tmp_path, monkeypatch):
+    monkeypatch.delenv("PANELFLOW_REFINE_LOOP", raising=False)
+    s = story()
+    s.panels = [directed_panel(s)]
+    called = []
+    monkeypatch.setattr(art, "_refine_directed_panel", lambda **kw: called.append(1))
+    art.generate_art(s, tmp_path, NumberedRunner(), provider=Reviewer(good_from_attempt=1))
+    assert called == []

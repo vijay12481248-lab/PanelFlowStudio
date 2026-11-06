@@ -24,6 +24,9 @@ from engine.comfyui.art import ART_WORKFLOW_ID, ArtEngine, _patch_workflow
 from engine.original.genres import GENRES
 from engine.original.models import Character, OriginalStory, Panel
 from engine.original import review as review_mod
+from engine.original.planner import Budget
+from engine.original.refine import (mask_from_boxes, qwen_repair, record_candidate as _record_candidate, refine_image,
+                                    review_summary as _review_summary, sha256_hex as _sha)
 from engine.original import shotspec
 from engine.original.rigging import (
     RIGGING_NEGATIVE,
@@ -512,38 +515,63 @@ class ArtRecord(BaseModel):
     selected: int | None = None  # the `n` of the iteration whose picture is panels/<id>.png
 
 
-def _sha(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
-
-
-def _record_candidate(ws: Path, panel_id: str, iterations: list[dict], data: bytes, **meta) -> dict:
-    """Keep one candidate under panels/_candidates/<panel>/ and append its generation record. Candidate files are never overwritten or deleted,
-    so a redraw, a repair or a re-run can always be compared with, or rolled back to, what came before."""
-    n = max((i["n"] for i in iterations), default=0) + 1
-    folder = ws / "panels" / "_candidates" / panel_id
-    folder.mkdir(parents=True, exist_ok=True)
-    (folder / f"c{n:03d}.png").write_bytes(data)
-    entry = {"n": n, "file": f"panels/_candidates/{panel_id}/c{n:03d}.png", "sha256": _sha(data), **meta}
-    iterations.append(entry)
-    return entry
-
-
-def _review_summary(rev) -> dict | None:
-    if rev is None:
-        return None
-    return {"decision": rev.decision, "score": rev.score, "confidence": rev.confidence, "defects": list(rev.defects),
-            "failed": [i.item for i in rev.items if not i.passed][:8]}
-
-
 def _hash(pos: str, neg: str, ref: str = "", dims: tuple[int, int] | None = None) -> str:
     w, h = dims if dims else (W, H)
     return hashlib.sha256(f"{pos}\n{neg}\n{w}x{h}\n{ref}".encode()).hexdigest()[:16]
 
 
+def _refine_directed_panel(*, story, p, ws, runner, provider, claims, chars, spec, style, engine, must, neg, dims, spec_shot, shown_n, refs,
+                           iters, is_cancelled):
+    """One directed panel through the generic refinement loop (engine/original/refine.py). Returns (best, attempt) in the shape generate_art stores.
+    Repairs run only on the Qwen art engine (a masked redraw of reviewer-reported boxes); otherwise a located defect is redrawn as a whole."""
+    pw, ph = dims
+    state = {"pos": ""}
+
+    def generate(attempt, plan):
+        pos_i, _ = build_prompt(story, p, plan.emphasis if plan else [], style, must, attempt, runner=runner, engine=engine)
+        w, h = pw, ph
+        if attempt >= 2 and style == "natural":
+            widened = {"close": "medium", "extreme_close": "medium", "medium": "wide"}.get(spec_shot, spec_shot)
+            w, h = shotspec.resolve_dimensions(widened, num_characters=shown_n, default=(W, H))
+        seed = seed_for(story, p.id, attempt)
+        png = runner.generate(pos_i, neg, seed, w, h, f"panel_{p.id}", reference=refs["ref"], reference_b=refs["ref_b"],
+                              reference_weight=POSE_WEIGHT if (pose_sensitive(p) or attempt > 0) else None,
+                              pose_image=refs["pose"], depth_image=refs["depth"], pose_weight=refs["pose_wt"], depth_weight=refs["depth_wt"])
+        state["pos"], state["seed"] = pos_i, seed
+        return png, {"seed": seed, "prompt": pos_i, "negative": neg, "width": w, "height": h, "engine": str(engine),
+                     "workflow": ART_WORKFLOW_ID if engine == "qwen" else ""}
+
+    def look(png):
+        tmp = ws / "panels" / f"_try_{p.id}.png"
+        tmp.write_bytes(png)
+        try:
+            return asyncio.run(review_mod.review_image(provider, tmp, claims, spec, chars, locate_defects=True))
+        finally:
+            tmp.unlink(missing_ok=True)
+
+    can_edit = engine == "qwen" and getattr(runner, "qwen_inpaint_wf", None) is not None
+    result = refine_image(
+        generate=generate, review=look, budget=Budget(max_attempts=DIRECTED_ATTEMPTS), is_cancelled=is_cancelled,
+        repair=(lambda png, rev, plan: qwen_repair(runner, png, plan, state["pos"], neg, state["seed"] + 1)) if can_edit else None,
+        record=lambda data, **meta: _record_candidate(ws, p.id, iters, data, **meta))
+    rev = result.review
+    chosen = next(i for i in result.iterations if i["n"] == result.selected)
+    origin = next(i for i in result.iterations if i["n"] == (chosen.get("parent") or chosen["n"]))
+    rank = review_mod.RANK[rev.decision] if rev is not None else 1.5
+    desc = rev.description if rev is not None else "(not verified: the reviewer returned no verdict)"
+    best = ((rank, rev.score if rev is not None else 1.0), result.png, origin["seed"], [], 1.0, rev.score if rev is not None else 1.0, [], desc, rev,
+            result.selected)
+    return best, result.generations - 1
+
+
 def generate_art(story: OriginalStory, ws: Path, runner: ComfyRunner, provider=None, limit: int | None = None,
                  progress: Callable[[float, str], None] = lambda p, m: None,
-                 is_cancelled: Callable[[], bool] = lambda: False) -> dict:
-    """Character sheets first, then panels in story order. Existing images with an unchanged prompt are reused."""
+                 is_cancelled: Callable[[], bool] = lambda: False, refine: bool | None = None) -> dict:
+    """Character sheets first, then panels in story order. Existing images with an unchanged prompt are reused.
+
+    refine=True (or PANELFLOW_REFINE_LOOP=1) runs directed panels through the generic refinement loop: planner-driven redraws, masked Qwen repair
+    of reviewer-reported boxes, every candidate kept. Default off: the original loop is untouched."""
+    use_refine = os.environ.get("PANELFLOW_REFINE_LOOP") == "1" if refine is None else refine
     (ws / "sheets").mkdir(parents=True, exist_ok=True)
     (ws / "panels").mkdir(exist_ok=True)
     db_path = ws / "art.json"
@@ -628,7 +656,13 @@ def generate_art(story: OriginalStory, ws: Path, runner: ComfyRunner, provider=N
             except Exception:
                 claims = []
         must = [c.text for c in claims if c.critical]
-        for attempt in range(DIRECTED_ATTEMPTS if p.director else MAX_ATTEMPTS):
+        attempt = 0
+        if use_refine and provider is not None and spec is not None and p.director:
+            best, attempt = _refine_directed_panel(
+                story=story, p=p, ws=ws, runner=runner, provider=provider, claims=claims, chars=chars, spec=spec, style=style, engine=engine,
+                must=must, neg=neg, dims=(pw, ph), spec_shot=spec_shot, shown_n=len(shown), iters=iters, is_cancelled=is_cancelled,
+                refs={"ref": ref, "ref_b": ref_b, "pose": pose_img, "depth": depth_img, "pose_wt": pose_wt, "depth_wt": depth_wt})
+        for attempt in (range(DIRECTED_ATTEMPTS if p.director else MAX_ATTEMPTS) if best is None else ()):
             seed = seed_for(story, p.id, attempt)
             pos_i, _ = build_prompt(story, p, emphasis, style, must, attempt)
             if attempt >= 2 and p.director and style == "natural":
@@ -639,7 +673,7 @@ def generate_art(story: OriginalStory, ws: Path, runner: ComfyRunner, provider=N
                                   pose_image=pose_img, depth_image=depth_img,
                                   pose_weight=pose_wt, depth_weight=depth_wt)
             cur = cand = _record_candidate(ws, p.id, iters, png, kind="generate", attempt=attempt, seed=seed, prompt=pos_i, negative=neg,
-                                           width=pw, height=ph, engine=engine, workflow=ART_WORKFLOW_ID if engine == "qwen" else "")
+                                           width=pw, height=ph, engine=str(engine), workflow=ART_WORKFLOW_ID if engine == "qwen" else "")
             score, missing, match, unmatched, desc, rev = 1.0, [], 1.0, [], "", None
             if provider is not None and (shown or p.key_visuals):
                 tmp = ws / "panels" / f"_try_{p.id}.png"

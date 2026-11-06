@@ -161,3 +161,14 @@ def test_old_items_derive_a_status():
     assert ItemVerdict(item="x", critical=True, verdict="shown", confidence=0.9, vision="yes", description_says=True).status == "correct"
     assert ItemVerdict(item="x", critical=True, verdict="partial", confidence=0.5, vision="partly", description_says=True).status == "uncertain"
     assert ItemVerdict(item="x", critical=True, verdict="missing", confidence=0.9, vision="no", description_says=False).status == "missing"
+
+
+@pytest.mark.parametrize("text", ["The scene must take place in a kitchen.", "She takes care of the plants.", "The crowd took part in the march.",
+                                  "He holds control of the room."])
+def test_idioms_with_a_verb_are_not_contact_checks(text):
+    # seen on a real run: "the scene must take place in a kitchen" became "the place is physically held", which failed every attempt on a correct picture
+    assert rv._extract_interaction_targets(caption=text) == []
+
+
+def test_a_real_held_object_is_still_a_contact_check():
+    assert [o for _, o in rv._extract_interaction_targets(caption="the girl holds a red mug in her right hand")] == ["red mug"]

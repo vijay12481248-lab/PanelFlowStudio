@@ -77,6 +77,8 @@ def best_iteration(iterations: list[dict]) -> dict | None:
         return (-1, 0.0, 0.0) if not r else (RANK.get(r["decision"], 0), r.get("score") or 0.0, r.get("confidence") or 0.0)
     best = None
     for i in iterations:
+        if i.get("kept") is False:  # a repair that made the picture no better is on disk for comparison but is never the one to keep
+            continue
         if best is None or key(i) > key(best):
             best = i
     return best

@@ -371,6 +371,8 @@ NON_PROP_OBJECTS = {
     "breath", "eye", "eyes", "tear", "tears", "gaze", "sight", "voice",
     "silence", "peace", "attention", "focus", "still", "stillness", "pace",
     "step", "steps", "seat", "pose",
+    # "take place", "take part", "take care", "hold control": the verb is real, the object is not something a hand can hold
+    "place", "places", "part", "care", "time", "notice", "shape", "effect", "charge", "control", "turn", "advantage", "note", "position",
     # Adverbs / particles / directions
     "up", "down", "on", "out", "away", "off", "back", "fast", "tight",
     "tightly", "firmly", "gently", "softly", "carefully", "closely", "slowly",

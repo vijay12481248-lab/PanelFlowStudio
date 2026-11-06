@@ -286,3 +286,45 @@ def test_asset_response_does_not_open_swapped_junction_at_delivery(tmp_path):
             assert asyncio.run(body()) == b"approved"
     finally:
         engine.dispose()
+
+
+def test_refine_is_off_by_default_and_when_asked_stores_the_selected_image_with_its_iterations(tmp_path, monkeypatch):
+    import io
+    import types
+
+    from PIL import Image
+
+    from engine.comfyui.art import ArtImage
+    from engine.original import refine as refine_mod
+
+    buf = io.BytesIO()
+    Image.new("RGB", (64, 64), "red").save(buf, "PNG")
+    raw = buf.getvalue()
+    art = ArtImage(png=raw, width=64, height=64, prompt_id="p1", workflow_id=service.ART_WORKFLOW_ID, workflow_sha256="a" * 64, model_files=["m"],
+                   source_output={"filename": "k.png", "subfolder": "", "type": "output"}, seed=5)
+    res = types.SimpleNamespace(status="accept", selected=2, generations=2, iterations=[
+        {"n": 1, "kind": "generate", "file": "f1", "sha256": "s1", "seed": 5, "review": {"decision": "regenerate"}},
+        {"n": 2, "kind": "generate", "file": "f2", "sha256": "s2", "seed": 7919 + 5, "review": {"decision": "accept"}}])
+    seen = {}
+
+    def fake_refine(prompt, negative, width, height, seed, **kw):
+        seen.update(kw, prompt=prompt)
+        return art, res
+
+    monkeypatch.setattr(refine_mod, "refine_art_image", fake_refine)
+    monkeypatch.setattr(service, "ComfyUIClient", lambda: types.SimpleNamespace(base_url="http://x/"))
+    monkeypatch.setattr(service, "ArtEngine", lambda *a, **k: (_ for _ in ()).throw(AssertionError("plain ArtEngine must not run when refine=True")))
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    Base.metadata.create_all(engine)
+    try:
+        with Session(engine) as db:
+            db.add(ProjectRecord(id="project", title="t", source_type="LOCAL_FOLDER", workspace_path=str(tmp_path)))
+            db.commit()
+            out = service.generate_image_operation(db, lambda *_: None, lambda: False, project_id="project", workflow_id=service.ART_WORKFLOW_ID,
+                                                   prompt="a lamp", negative_prompt="", width=64, height=64, seed=1, refine=True)
+            asset = db.query(AssetRecord).one()
+            assert out["sha256"] == asset.sha256 and (tmp_path / asset.relative_path).read_bytes() == raw
+            assert asset.provenance["refine"]["selected"] == 2 and [i["n"] for i in asset.provenance["refine"]["iterations"]] == [1, 2]
+            assert seen["ws"] == tmp_path / "generated" / "comfyui_candidates"
+    finally:
+        engine.dispose()

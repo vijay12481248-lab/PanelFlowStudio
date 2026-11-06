@@ -71,8 +71,12 @@ def generate_image_operation(
     height: int,
     seed: int,
     timeout_s: float = 900.0,
+    refine: bool = False,
 ) -> dict[str, Any]:
-    """Generate one image with the central ArtEngine and persist it as a project asset."""
+    """Generate one image with the central ArtEngine and persist it as a project asset.
+
+    refine=True runs the review -> plan -> repair/redraw loop (engine/original/refine.py) and keeps every candidate under generated/comfyui_candidates/;
+    the stored image is the selected one and its provenance lists the iterations. Default off: behaviour is unchanged."""
     project = db.query(ProjectRecord).filter(ProjectRecord.id == project_id).first()
     if not project:
         raise ComfyImageGenerationError("Project not found")
@@ -86,11 +90,18 @@ def generate_image_operation(
         raise ComfyImageGenerationError("ComfyUI output directory is not a safe directory")
 
     client = ComfyUIClient()
+    refined = None
     try:
-        art = ArtEngine(client, ComfyWorkflowRegistry(client)).generate(
-            prompt, negative_prompt, width, height, seed, f"panelflow/{project_id}/{ART_WORKFLOW_ID}",
-            timeout=timeout_s, is_cancelled=is_cancelled, progress=progress, client_id=f"panelflow-{project_id}",
-        )
+        if refine:
+            from engine.original.refine import refine_art_image
+
+            art, refined = refine_art_image(prompt, negative_prompt, width, height, seed, ws=workspace / "generated" / "comfyui_candidates",
+                                            key=f"{project_id}_{uuid.uuid4().hex[:8]}", client=client, timeout=timeout_s, is_cancelled=is_cancelled)
+        else:
+            art = ArtEngine(client, ComfyWorkflowRegistry(client)).generate(
+                prompt, negative_prompt, width, height, seed, f"panelflow/{project_id}/{ART_WORKFLOW_ID}",
+                timeout=timeout_s, is_cancelled=is_cancelled, progress=progress, client_id=f"panelflow-{project_id}",
+            )
     except (ComfyUIError, WorkflowRegistryError, ValueError) as exc:
         raise ComfyImageGenerationError(str(exc)) from exc
 
@@ -115,6 +126,9 @@ def generate_image_operation(
         "requested_height": height,
         "source_output": art.source_output,
     }
+    if refined is not None:
+        provenance["refine"] = {"status": refined.status, "selected": refined.selected, "generations": refined.generations,
+                                "iterations": [{k: i.get(k) for k in ("n", "kind", "file", "sha256", "seed", "parent", "kept", "review")} for i in refined.iterations]}
     asset = AssetRecord(
         id=asset_id,
         project_id=project_id,

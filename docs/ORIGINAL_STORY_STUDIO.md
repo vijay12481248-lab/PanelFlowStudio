@@ -463,3 +463,13 @@ Plan and research: the investigation report of 2026-11-06 (reuse the reviewer, n
   collar turned red with its tag intact. Outside the mask the raw result drifts by 0.8-0.9 (0-255 mean), so the original is spliced back
   (`review.splice_repaired_image`): 0 pixels changed outside the mask. Weakness: the redraw also changes what is inside the mask box (a paw
   shifted a little), so keep boxes tight. `generate_art` still repairs with the SDXL inpaint until the loop is wired.
+- **Generic loop** (`engine/original/refine.py`): `refine_image` (generate -> review -> `plan_correction` -> repair | redraw | stop, callables injected) and
+  `refine_prompt_image` / `refine_art_image` for any prompt. Opt-in everywhere, default off: `generate_art(..., refine=True)` or `PANELFLOW_REFINE_LOOP=1`
+  (directed panels; repairs only on the Qwen engine), `generate_image_operation(..., refine=True)` (Comfy image screen operation; candidates under
+  `generated/comfyui_candidates/`, iterations in the asset provenance), `ChronoFlowPipeline.generate_art_image(..., refine=True)`. If the local vision model is
+  unreachable `refine_art_image` raises rather than returning an unreviewed picture. Not exposed in the HTTP/MCP schemas or the desktop UI yet.
+- **Real runs, live engine** (Qwen art + `qwen3.5:9b` review, 1344x768): a 10-requirement prompt was accepted on the first generation in 58 s; a 9-requirement
+  prompt (mug in the right hand, umbrella in the left, crowned cat with a collar on a table, cactus on the sill) was first marked `needs_review` after
+  3 redraws (176 s) although the picture matched: the contact audit read "the scene must take **place** in a kitchen" as holding an object called "place".
+  Fixed (idiom objects such as place/part/care are never held things); the same prompt and seed now accept in 55 s. **Not exercised on a real
+  engine yet: a redraw that fixes a real failure, and a repair inside the loop** (both only with scripted callables; the repair's graph itself was run in the spike).
