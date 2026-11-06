@@ -477,3 +477,10 @@ Plan and research: the investigation report of 2026-11-06 (reuse the reviewer, n
   the repair was kept; 0 pixels changed outside the mask (3.4% of the picture). **Quality is not clean:** the redraw also changed the raised paw and
   tongue inside the mask, and the gold tag came out small and faint, which the reviewer still accepted ("gold tag: correct"), so the 9B judge is lenient
   on small details. Keep boxes tight and check repaired pictures by eye. Still untested on a real engine: a full redraw (regenerate) that fixes a real failure.
+- **Tightening repairs (same real collar case, 4 variants):** (1) first version, padding fixed at 12 px: collar red but the raised paw changed (mean diff 48 in its box)
+  and the tag came out faint; (2) padding 8% + passing small boxes cut out of the mask: paw intact (3.3) but a strip of the old blue collar left, because the model's collar box
+  began ~36 px inside the collar; (3) padding 30%: collar and tag good but part of the arm below was redrawn (a second paw-like blob); (4) **padding 15% (shipped)**: collar red, tag clear,
+  paw intact, with a thin blue sliver and a small red smear near the paw. None is clean. Kept: `protect` boxes (the plan lists boxes of passing items; small ones overlapping a
+  target are cut out), proportional padding (15%, 6-48 px), a close-up check of each repaired target (`verify_targets`, crop enlarged to 448 px), and **a repaired picture is
+  accepted only as `accept_low`** ("check the repaired area by eye"). The close-up check is weak: it said "yes" to the faint tag and to the strip; a stricter "is every part red"
+  question caught the strip but also fired on gold hardware, and "is the old appearance gone" missed it, so none of them was made a hard gate.

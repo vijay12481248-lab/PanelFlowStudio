@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
-from PIL import Image, ImageDraw, ImageFilter
+from PIL import Image, ImageChops, ImageDraw, ImageFilter
 
 from engine.original import review as review_mod
 from engine.original.models import Review
@@ -57,22 +57,68 @@ def repair_improved(after: Review, before: Review) -> bool:
                 or (len(after.defects) < len(before.defects) and after.score > before.score))
 
 
-def mask_from_boxes(size: tuple[int, int], targets: list[PlanTarget], padding: int = 12, blur: int = 8) -> bytes | None:
-    """White = redraw. Only boxes the reviewer reported are used (normalised 0..1); no box, no mask."""
+def _area(b: list[float]) -> float:
+    return max(0.0, b[2] - b[0]) * max(0.0, b[3] - b[1])
+
+
+def _overlap(a: list[float], b: list[float]) -> float:
+    return max(0.0, min(a[2], b[2]) - max(a[0], b[0])) * max(0.0, min(a[3], b[3]) - max(a[1], b[1]))
+
+
+def mask_from_boxes(size: tuple[int, int], targets: list[PlanTarget], protect: list[list[float]] | tuple = (), padding: int | None = None,
+                    blur: int = 6) -> bytes | None:
+    """White = redraw. Only boxes the reviewer reported are used (normalised 0..1); no box, no mask. The model's boxes run short at the edges (measured: a
+    collar box began ~36 px inside the collar, leaving a strip of the old colour), so padding is 15% of the box (6-48 px; 8% left the strip, 30%
+    redrew part of the arm below, 15% was the best of the three on the real collar case). To keep neighbours, `protect` boxes (things that pass) that are small and overlap a target are cut out: a raised paw that the box touches keeps its original
+    pixels, while a large passing box (the whole figure) is never cut out."""
     w, h = size
-    mask = Image.new("L", (w, h), 0)
-    draw, drawn = ImageDraw.Draw(mask), 0
-    for t in targets:
-        if not t.bbox:
-            continue
-        x1, y1, x2, y2 = t.bbox[0] * w, t.bbox[1] * h, t.bbox[2] * w, t.bbox[3] * h
-        draw.rectangle([max(0, x1 - padding), max(0, y1 - padding), min(w, x2 + padding), min(h, y2 + padding)], fill=255)
-        drawn += 1
-    if not drawn:
+    boxes = [t.bbox for t in targets if t.bbox]
+    if not boxes:
         return None
+    mask = Image.new("L", (w, h), 0)
+    draw = ImageDraw.Draw(mask)
+    for x1, y1, x2, y2 in boxes:
+        pad = padding if padding is not None else min(48, max(6, round(0.15 * max((x2 - x1) * w, (y2 - y1) * h))))
+        draw.rectangle([max(0, x1 * w - pad), max(0, y1 * h - pad), min(w, x2 * w + pad), min(h, y2 * h + pad)], fill=255)
+    if blur:
+        mask = mask.filter(ImageFilter.GaussianBlur(blur))
+    keep = Image.new("L", (w, h), 0)
+    kd, cut = ImageDraw.Draw(keep), 0
+    for p in protect:
+        if any(_overlap(p, b) > 0 and _area(p) <= 0.6 * _area(b) for b in boxes):
+            kd.rectangle([p[0] * w, p[1] * h, p[2] * w, p[3] * h], fill=255)
+            cut += 1
+    if cut:
+        mask = ImageChops.multiply(mask, ImageChops.invert(keep.filter(ImageFilter.GaussianBlur(2))))
     buf = io.BytesIO()
-    (mask.filter(ImageFilter.GaussianBlur(blur)) if blur else mask).save(buf, "PNG")
+    mask.save(buf, "PNG")
     return buf.getvalue()
+
+
+def verify_targets(provider, png: bytes, targets: list[PlanTarget], margin: float = 0.3, min_side: int = 448) -> tuple[bool, list[dict]]:
+    """After a repair, ask the vision model about each repaired target on a close, enlarged crop: the whole-picture review is lenient on small details
+    (it accepted a collar tag that came out faint). Passes only if every answer is a plain yes; an unclear answer does not pass."""
+    async def ask() -> list[dict]:
+        out = []
+        with Image.open(io.BytesIO(png)) as im:
+            w, h = im.size
+            for t in targets:
+                if not t.bbox:
+                    continue
+                x1, y1, x2, y2 = t.bbox
+                mw, mh = (x2 - x1) * margin, (y2 - y1) * margin
+                crop = im.crop((round(max(0.0, x1 - mw) * w), round(max(0.0, y1 - mh) * h), round(min(1.0, x2 + mw) * w), round(min(1.0, y2 + mh) * h))).convert("RGB")
+                if max(crop.size) < min_side:
+                    k = min_side / max(crop.size)
+                    crop = crop.resize((round(crop.width * k), round(crop.height * k)), Image.Resampling.LANCZOS)
+                buf = io.BytesIO()
+                crop.save(buf, "PNG")
+                qa = (await review_mod._vqa(provider, buf.getvalue(), [(t.item, True)]))[0]
+                out.append({"item": t.item, "answer": qa.answer, "evidence": qa.evidence[:120]})
+        return out
+
+    detail = asyncio.run(ask())
+    return all(d["answer"].strip().lower().startswith("y") for d in detail), detail
 
 
 def repair_prompt(prompt: str, targets: list[PlanTarget]) -> str:
@@ -86,7 +132,7 @@ def qwen_repair(editor, png: bytes, plan: CorrectionPlan, prompt: str, negative:
     """Masked redraw of the plan's located targets on the art model, with the original spliced back outside the mask. None when no target has a box."""
     with Image.open(io.BytesIO(png)) as im:
         size = im.size
-    mask = mask_from_boxes(size, plan.targets)
+    mask = mask_from_boxes(size, plan.targets, plan.protect)
     if mask is None:
         return None
     text = repair_prompt(prompt, plan.targets)
@@ -106,12 +152,14 @@ class RefineResult:
     plan: CorrectionPlan
     iterations: list[dict]
     generations: int
+    repaired: bool = False  # the selected picture is a masked repair: accepted, but flagged (see refine_image)
 
 
 def refine_image(*, generate: Callable[[int, CorrectionPlan | None], tuple[bytes, dict]], review: Callable[[bytes], Review | None],
                  record: Callable[..., dict], repair: Callable[[bytes, Review, CorrectionPlan], tuple[bytes, dict] | None] | None = None,
                  budget: Budget = Budget(), allow_heuristic_masks: bool = False,
-                 is_cancelled: Callable[[], bool] = lambda: False) -> RefineResult:
+                 is_cancelled: Callable[[], bool] = lambda: False,
+                 verify: Callable[[bytes, CorrectionPlan], tuple[bool, list[dict]]] | None = None) -> RefineResult:
     """generate(attempt, plan) -> (png, meta); review(png) -> Review (may raise: the candidate is then 'unverified');
     repair(png, review, plan) -> (png, meta) or None when no repair can be made; record(png, **meta) -> the iteration entry."""
     history: list[dict] = []
@@ -150,15 +198,24 @@ def refine_image(*, generate: Callable[[int, CorrectionPlan | None], tuple[bytes
             pngs[rep["n"]], reviews[rep["n"]] = rpng, look(rpng)
             rep["review"] = review_summary(reviews[rep["n"]])
             before, after = reviews[cur["n"]], reviews[rep["n"]]
-            rep["kept"] = bool(after is not None and before is not None and repair_improved(after, before))
+            ok = bool(after is not None and before is not None and repair_improved(after, before))
+            if ok and verify is not None:  # the whole-picture review is lenient on small details: look at the repaired area up close too
+                try:
+                    ok, rep["crop_check"] = verify(rpng, plan)
+                except Exception as exc:
+                    ok, rep["crop_check"] = False, [{"error": str(exc)[:100]}]
+            rep["kept"] = ok
             if rep["kept"]:
                 cur = rep
         if plan.final:
             break
     sel = plan.select if plan.select is not None else gen["n"]
     rev = reviews.get(sel)
-    return RefineResult(png=pngs[sel], selected=sel, review=rev, status="unverified" if rev is None else STATUS[plan.action], plan=plan,
-                        iterations=history, generations=generations)
+    repaired = next(i for i in history if i["n"] == sel)["kind"] == "repair"
+    status = "unverified" if rev is None else STATUS[plan.action]
+    if repaired and status == "accept":
+        status = "accept_low"  # the vision judge is lenient on small repaired details (a faint tag, a leftover strip): a person should glance at it
+    return RefineResult(png=pngs[sel], selected=sel, review=rev, status=status, plan=plan, iterations=history, generations=generations, repaired=repaired)
 
 
 def refine_prompt_image(art_engine, provider, prompt: str, negative: str = "", width: int = 1344, height: int = 768, *, ws: Path, key: str,
@@ -192,6 +249,7 @@ def refine_prompt_image(art_engine, provider, prompt: str, negative: str = "", w
 
     can_edit = editor is not None and getattr(editor, "qwen_inpaint_wf", None) is not None
     return refine_image(generate=generate, review=look, repair=fix if can_edit else None, budget=budget, is_cancelled=is_cancelled,
+                        verify=(lambda png, plan: verify_targets(provider, png, plan.targets)) if can_edit else None,
                         record=lambda data, **meta: record_candidate(ws, key, iters, data, **meta))
 
 

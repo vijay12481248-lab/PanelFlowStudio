@@ -61,6 +61,7 @@ class CorrectionPlan(BaseModel):
     select: int | None = None  # for a final plan: the iteration `n` to keep
     targets: list[PlanTarget] = Field(default_factory=list)
     mask_source: str = ""  # "vlm" (a model-reported box) | "heuristic" (guessed from the defect type, only when allowed) | ""
+    protect: list[list[float]] = Field(default_factory=list)  # repair_local: boxes of things that PASS; small ones inside a target are cut out of the mask
     emphasis: list[str] = Field(default_factory=list)  # regenerate: what the next prompt must state first
     avoid_defects: list[str] = Field(default_factory=list)  # regenerate: defect types to steer away from
     widen_frame: bool = False
@@ -137,7 +138,8 @@ def plan_correction(review: Review | None, history: list[dict], *, budget: Budge
                   and len(repairs) < budget.max_repairs_per_generation)
     if can_repair:
         return CorrectionPlan(action="repair_local", reason=f"{len(targets)} located defect(s); everything else in the picture passes",
-                              targets=[_target(i) for i in targets], mask_source="vlm" if not guessed else "heuristic", flags=flags)
+                              targets=[_target(i) for i in targets], mask_source="vlm" if not guessed else "heuristic", flags=flags,
+                              protect=[list(i.bbox) for i in review.items if i.passed and i.bbox and i.bbox_source == "vlm"])
 
     if attempts >= budget.max_attempts:
         kept = (best or {}).get("review") or {}

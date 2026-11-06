@@ -2,6 +2,7 @@
 import asyncio
 import io
 import itertools
+import json
 
 import pytest
 from PIL import Image
@@ -87,7 +88,7 @@ def test_a_picture_that_never_passes_is_needs_review_with_the_best_candidate_kep
 def test_a_located_defect_is_repaired_in_place_and_the_repair_is_kept_when_it_helps():
     h = Harness([HAND()], repair=lambda d, rev, plan: (d + b"R", {"seed": 9}), repair_reviews=[PASS()])
     r = h.run()
-    assert r.status == "accept" and r.generations == 1 and len(h.repair_calls) == 1
+    assert r.status == "accept_low" and r.repaired and r.generations == 1 and len(h.repair_calls) == 1  # accepted, but flagged for a human glance
     rep = h.iters[1]
     assert rep["kind"] == "repair" and rep["parent"] == 1 and rep["kept"] is True and r.selected == 2
     assert h.repair_calls[0].targets[0].bbox == [0.4, 0.4, 0.6, 0.6]
@@ -178,10 +179,86 @@ def test_prompt_mode_repair_redraws_the_box_and_splices_the_original_back(tmp_pa
             Image.new("RGB", (160, 160), "blue").save(buf, "PNG")
             return buf.getvalue()
 
+    class Eyes:  # the vision model answering the close-up check of the repaired area
+        crops = []
+
+        async def analyze_vision(self, image, prompt, **kw):
+            Eyes.crops.append(Image.open(io.BytesIO(image)).size)
+            return json.dumps({"answers": [{"n": 1, "answer": "yes", "evidence": "sword in the right hand"}]})
+
     ed = Editor()
-    r = rf.refine_prompt_image(Engine(), object(), "a warrior holding a sword", "", 160, 160, ws=tmp_path, key="k", seed=1, editor=ed)
-    assert r.status == "accept" and [i["kind"] for i in r.iterations] == ["generate", "repair"] and r.iterations[1]["kept"] is True
+    r = rf.refine_prompt_image(Engine(), Eyes(), "a warrior holding a sword", "", 160, 160, ws=tmp_path, key="k", seed=1, editor=ed)
+    assert r.status == "accept_low" and r.repaired and [i["kind"] for i in r.iterations] == ["generate", "repair"] and r.iterations[1]["kept"] is True
     assert "The redrawn area must show: the sword is in his right hand." in ed.calls[0]
     out = Image.open(io.BytesIO(r.png)).convert("RGB")
     assert out.getpixel((1, 1)) == (1, 0, 0) and out.getpixel((100, 100)) == (0, 0, 255)  # original outside the box, redraw inside
     assert (tmp_path / r.iterations[1]["mask"]).exists()
+    assert r.iterations[1]["crop_check"][0]["answer"] == "yes" and max(Eyes.crops[0]) >= 448  # looked at up close, enlarged
+
+
+def test_a_repair_that_fails_the_close_up_check_is_not_kept_even_if_the_whole_picture_passes():
+    h = Harness([HAND(), PASS()], repair=lambda d, rev, plan: (d + b"R", {}), repair_reviews=[PASS()])
+    r = h.run(verify=lambda png, plan: (False, [{"item": "natural hands", "answer": "partly", "evidence": "blurred"}]))
+    assert h.iters[1]["kind"] == "repair" and h.iters[1]["kept"] is False and h.iters[1]["crop_check"][0]["answer"] == "partly"
+    assert r.selected == 3  # a fresh generation replaced it; the unkept repair is only on disk for comparison
+
+
+def test_a_verifier_that_crashes_does_not_keep_the_repair():
+    def boom(png, plan):
+        raise RuntimeError("model down")
+
+    h = Harness([HAND(), PASS()], repair=lambda d, rev, plan: (d + b"R", {}), repair_reviews=[PASS()])
+    h.run(verify=boom)
+    assert h.iters[1]["kept"] is False and "model down" in h.iters[1]["crop_check"][0]["error"]
+
+
+def _mask(targets, protect=(), size=(200, 100), **kw):
+    return Image.open(io.BytesIO(rf.mask_from_boxes(size, targets, protect, blur=0, **kw))).convert("L")
+
+
+def test_a_small_passing_detail_inside_the_target_box_is_cut_out_of_the_mask():
+    target = PlanTarget(item="collar", status="incorrect", correction="c", bbox=[0.5, 0.4, 0.8, 0.7])
+    paw = [0.5, 0.4, 0.58, 0.55]  # touches the target's corner, a fraction of its size
+    m = _mask([target], [paw])
+    assert m.getpixel((105, 45)) == 0  # inside the paw: original pixels stay
+    assert m.getpixel((150, 60)) == 255  # inside the target, outside the paw: redrawn
+
+
+def test_a_large_passing_box_is_never_cut_out_so_the_mask_cannot_vanish():
+    target = PlanTarget(item="collar", status="incorrect", correction="c", bbox=[0.5, 0.4, 0.8, 0.7])
+    whole_cat = [0.3, 0.1, 0.95, 1.0]
+    assert _mask([target], [whole_cat]).getpixel((150, 60)) == 255
+    assert _mask([target], [[0.0, 0.0, 0.1, 0.1]]).getpixel((150, 60)) == 255  # far away: irrelevant
+
+
+def test_padding_follows_the_box_size_not_a_fixed_margin():
+    small = PlanTarget(item="x", status="incorrect", correction="c", bbox=[0.5, 0.5, 0.55, 0.6])  # 10 x 10 px on 200 x 100
+    m = _mask([small])
+    assert m.getpixel((97, 47)) == 255 and m.getpixel((92, 42)) == 0  # a 6 px margin around a 10 px box (the floor), not a fixed 12 or 48
+    assert _mask([small], padding=12).getpixel((92, 42)) == 255  # an explicit padding still wins
+
+
+def test_verify_targets_asks_about_each_located_target_and_needs_a_plain_yes():
+    class Eyes:
+        def __init__(self, answer):
+            self.answer, self.calls = answer, 0
+
+        async def analyze_vision(self, image, prompt, **kw):
+            self.calls += 1
+            return json.dumps({"answers": [{"n": 1, "answer": self.answer, "evidence": "e"}]})
+
+    t = [PlanTarget(item="a", status="incorrect", correction="c", bbox=[0.2, 0.2, 0.4, 0.4]),
+         PlanTarget(item="b", status="missing", correction="c")]  # no box: nothing to look at
+    ok, detail = rf.verify_targets(Eyes("yes"), png(1, 100), t)
+    assert ok and [d["item"] for d in detail] == ["a"]
+    assert not rf.verify_targets(Eyes("partly"), png(1, 100), t)[0]
+    assert rf.verify_targets(Eyes("no"), png(1, 100), [t[1]]) == (True, [])
+
+
+def test_padding_grows_with_the_box_but_is_capped():
+    big = PlanTarget(item="x", status="incorrect", correction="c", bbox=[0.1, 0.1, 0.9, 0.9])
+    m = _mask([big], size=(1000, 1000))
+    assert m.getpixel((100 - 45, 500)) == 255 and m.getpixel((100 - 55, 500)) == 0  # capped at 48 px
+    mid = PlanTarget(item="x", status="incorrect", correction="c", bbox=[0.5, 0.5, 0.6, 0.6])  # 100 px box -> 15 px
+    m2 = _mask([mid], size=(1000, 1000))
+    assert m2.getpixel((500 - 13, 550)) == 255 and m2.getpixel((500 - 18, 550)) == 0

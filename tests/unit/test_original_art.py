@@ -421,3 +421,24 @@ def test_the_original_loop_is_used_unless_the_refine_loop_is_asked_for(tmp_path,
     monkeypatch.setattr(art, "_refine_directed_panel", lambda **kw: called.append(1))
     art.generate_art(s, tmp_path, NumberedRunner(), provider=Reviewer(good_from_attempt=1))
     assert called == []
+
+
+def test_a_repaired_panel_is_accepted_but_flagged_for_a_human_glance(tmp_path, monkeypatch):
+    from engine.original import refine as rf
+    from engine.original.models import ItemVerdict, Review
+
+    s = story()
+    s.panels = [directed_panel(s)]
+    ok = Review(items=[ItemVerdict(item="x", critical=True, verdict="shown", confidence=0.9, vision="yes", description_says=True)], score=1.0, confidence=0.9,
+                decision="accept")
+
+    def fake_refine(**kw):
+        entries = [kw["record"](b"g", kind="generate", attempt=0, seed=1, prompt="p", negative="", width=8, height=8, engine="qwen"),
+                   kw["record"](b"r", kind="repair", parent=1, attempt=0, seed=2, prompt="p", negative="")]
+        return rf.RefineResult(png=b"r", selected=2, review=ok, status="accept_low", plan=None, iterations=entries, generations=1, repaired=True)
+
+    monkeypatch.setattr(art, "refine_image", fake_refine)
+    out = art.generate_art(s, tmp_path, NumberedRunner(), provider=Reviewer(good_from_attempt=0), refine=True)
+    rec = json.loads((tmp_path / "art.json").read_text())[0]
+    assert rec["status"] == "accept_low" and out["accepted_low_confidence"] == ["p002"] and rec["selected"] == 2
+    assert "check the repaired area by eye" in " ".join(rec["review"]["reasons"])

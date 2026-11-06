@@ -27,7 +27,7 @@ from engine.original.models import Character, OriginalStory, Panel
 from engine.original import review as review_mod
 from engine.original.planner import Budget
 from engine.original.refine import (mask_from_boxes, qwen_repair, record_candidate as _record_candidate, refine_image,
-                                    review_summary as _review_summary, sha256_hex as _sha)
+                                    review_summary as _review_summary, sha256_hex as _sha, verify_targets)
 from engine.original import shotspec
 from engine.original.rigging import (
     RIGGING_NEGATIVE,
@@ -559,8 +559,11 @@ def _refine_directed_panel(*, story, p, ws, runner, provider, claims, chars, spe
     result = refine_image(
         generate=generate, review=look, budget=Budget(max_attempts=DIRECTED_ATTEMPTS), is_cancelled=is_cancelled,
         repair=(lambda png, rev, plan: qwen_repair(runner, png, plan, state["pos"], neg, state["seed"] + 1)) if can_edit else None,
+        verify=(lambda png, plan: verify_targets(provider, png, plan.targets)) if can_edit else None,
         record=lambda data, **meta: _record_candidate(ws, p.id, iters, data, **meta))
     rev = result.review
+    if result.repaired and rev is not None and rev.decision == "accept":  # the judge is lenient on repaired details: accepted, but flagged
+        rev = rev.model_copy(update={"decision": "accept_low", "reasons": rev.reasons + ["repaired by a masked redraw: check the repaired area by eye"]})
     chosen = next(i for i in result.iterations if i["n"] == result.selected)
     origin = next(i for i in result.iterations if i["n"] == (chosen.get("parent") or chosen["n"]))
     rank = review_mod.RANK[rev.decision] if rev is not None else 1.5

@@ -129,3 +129,9 @@ def test_best_iteration_orders_by_decision_then_score_and_keeps_the_earlier_tie(
     assert best_iteration(h[:3])["n"] == 2
     assert best_iteration([{"n": 1, "kind": "generate", "review": None}, h[0] | {"n": 2}])["n"] == 2  # an unreviewed candidate only wins alone
     assert best_iteration([]) is None
+
+
+def test_a_repair_plan_carries_the_boxes_of_everything_that_passes_so_the_mask_can_avoid_them():
+    detail = item("the cat licks its paw", ok=True, bbox=[0.65, 0.53, 0.7, 0.6])
+    plan = plan_correction(review([detail, item(**HAND)]), FIRST, edit_available=True)
+    assert plan.action == "repair_local" and plan.protect == [[0.65, 0.53, 0.7, 0.6]]
