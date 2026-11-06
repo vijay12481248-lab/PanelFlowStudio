@@ -172,3 +172,72 @@ def test_idioms_with_a_verb_are_not_contact_checks(text):
 
 def test_a_real_held_object_is_still_a_contact_check():
     assert [o for _, o in rv._extract_interaction_targets(caption="the girl holds a red mug in her right hand")] == ["red mug"]
+
+
+@pytest.mark.parametrize("text,expected", [
+    ("The image must show exactly seven red apples.", (7, "red apples")),
+    ("two glasses on the table", (2, "glasses")),
+    ("A girl holds 2 mugs", (2, "mugs")),
+    ("The wall clock must display the time as exactly three o'clock.", None),  # a time, not a count
+    ("She waited three minutes", None),
+    ("one apple", None),
+    ("a glass of water", None),
+])
+def test_count_expectation_only_matches_counts_of_things(text, expected):
+    assert rv.count_expectation(text) == expected
+
+
+def test_a_stated_number_is_checked_by_counting_not_by_recognising(tmp_path):
+    class Counter(FakeProvider):
+        def __init__(self, counted, *a, **kw):
+            super().__init__(*a, **kw)
+            self.counted, self.asked = counted, []
+
+        async def analyze_vision(self, image, prompt, **kw):
+            if (kw.get("format_schema") or {}).get("title") == "_Count":
+                self.asked.append(prompt)
+                return json.dumps({"count": self.counted, "evidence": "five on the left"})
+            return await super().analyze_vision(image, prompt, **kw)
+
+    reqs = [rv._PromptReq(text="exactly seven red apples are in the bowl", kind="object")]
+    grounded = [{"n": 1, "status": "correct", "evidence": "exactly seven red apples", "bbox_1000": [100, 100, 500, 500]}]
+    img = tmp_path / "x.png"
+    img.write_bytes(b"png")
+    wrong = Counter(5, grounded, reqs, stated=[True])
+    review = asyncio.run(rv.evaluate_prompt_image(wrong, img, "exactly seven red apples in a bowl", audit_gates=False, locate_defects=False))
+    item = review.items[0]
+    assert item.status != "correct" and not item.passed and "counted 5" in item.evidence and review.decision == "regenerate"
+    assert item.verdict == "missing"  # the count is evidence: the description that "states" seven does not turn it into a mere disagreement
+    assert "seven" not in wrong.asked[0] and "7" not in wrong.asked[0]  # the expected number is never leaked to the counter
+    right = Counter(7, grounded, reqs, stated=[True])
+    assert asyncio.run(rv.evaluate_prompt_image(right, img, "exactly seven red apples in a bowl", audit_gates=False, locate_defects=False)).items[0].passed
+    assert asyncio.run(rv._count_check(object(), img, "apples")) is None  # a counter that cannot answer changes nothing
+
+
+class _Contact:
+    def __init__(self, answer, evidence):
+        self.answer, self.evidence = answer, evidence
+
+    async def analyze_vision(self, image, prompt, **kw):
+        if (kw.get("format_schema") or {}).get("title") == "_VQA":
+            return json.dumps({"answers": [{"n": 1, "answer": self.answer, "evidence": self.evidence}]})
+        return "A room."
+
+
+@pytest.mark.parametrize("evidence", [
+    "The clock is mounted on the wall and not resting on any surface.",  # seen on a real picture: a wall clock failed the audit
+    "A lamp hangs from the ceiling on a cord.",
+    "The apples are piled in the bowl, resting on each other.",
+])
+def test_mounted_hanging_and_stacked_objects_are_not_unanchored(evidence, tmp_path):
+    img = tmp_path / "x.png"
+    img.write_bytes(b"png")
+    out = asyncio.run(rv._audit_spatial_contact(_Contact("no", evidence), img))
+    assert [i.passed for i in out] == [True]
+
+
+def test_a_really_floating_object_still_fails_the_contact_audit(tmp_path):
+    img = tmp_path / "x.png"
+    img.write_bytes(b"png")
+    out = asyncio.run(rv._audit_spatial_contact(_Contact("no", "A cup is floating in mid-air above the table."), img))
+    assert [i.passed for i in out] == [False]

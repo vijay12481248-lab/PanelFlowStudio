@@ -289,6 +289,12 @@ BENIGN_SPATIAL_EXPLANATION_PATTERN = re.compile(
     r'scenery\s+only|'
     r'landscape\s+only|'
     r'nothing\s+floating|'
+    r'(?:wall[- ]?)?mounted|'
+    r'hang(?:s|ing)\s+(?:on|from)|'
+    r'attached\s+to|'
+    r'stacked|'
+    r'piled|'
+    r'heaped|'
     r'reaching(?:\s+for)?|'
     r'not\s+yet\s+touching|'
     r'approaching|'
@@ -550,7 +556,7 @@ async def _audit_spatial_contact(
 ) -> AuditVerdictList:
     """Vision-based spatial contact and grasp verification via two-witness pattern."""
     checks: list[tuple[str, str]] = [
-        ("all objects, props, and furniture are physically supported or resting on surfaces with no unanchored floating objects", "unanchored_object")
+        ("all objects, props, and furniture are physically supported (resting on a surface, mounted on a wall, hanging, attached or stacked on other objects) with no unanchored floating objects", "unanchored_object")
     ]
 
     interactions = _extract_interaction_targets(claims, spec, caption)
@@ -776,6 +782,42 @@ class _Box(BaseModel):
     bbox_2d: list[int] = Field(default_factory=list)
 
 
+class _Count(BaseModel):
+    count: int = Field(description="how many are clearly visible")
+    evidence: str = Field(default="", description="where they are, at most 15 words")
+
+
+NUMBER_WORDS = {"two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10, "eleven": 11, "twelve": 12}
+_COUNT_RE = re.compile(r"\b(\d{1,2}|" + "|".join(NUMBER_WORDS) + r")\s+((?:[a-z'-]+\s+){0,2}[a-z'-]+)", re.IGNORECASE)
+_NOT_THINGS = {"seconds", "minutes", "hours", "days", "weeks", "months", "years", "times", "o'clock", "percent"}
+_NOT_NOUNS = {"is", "was", "has", "this", "as", "its", "his", "us", "was", "does", "yes"}
+
+
+def count_expectation(text: str) -> tuple[int, str] | None:
+    """('exactly seven red apples') -> (7, 'red apples'). Only counts of 2-20 things named by a plural noun; times, durations and 'three o'clock' are not counts."""
+    for m in _COUNT_RE.finditer(text):
+        n = NUMBER_WORDS.get(m.group(1).lower()) or (int(m.group(1)) if m.group(1).isdigit() else None)
+        words = m.group(2).lower().split()
+        end = next((i for i, w in enumerate(words) if w.endswith("s") and not w.endswith("ss") and w not in _NOT_NOUNS), None)  # the first plural noun
+        if n is None or not 2 <= n <= 20 or end is None or _NOT_THINGS & set(words[:end + 1]):
+            continue
+        return n, " ".join(words[:end + 1])
+    return None
+
+
+async def _count_check(provider, image: Path, phrase: str) -> int | None:
+    """An independent witness for a stated number: the model is asked how many are visible WITHOUT being told the expected number. The whole-picture
+    check parroted 'exactly seven red apples' for a picture with five clear apples, so a number is never taken from that check alone."""
+    try:
+        raw = await provider.analyze_vision(image, f"How many {phrase} are clearly visible in this picture? Count only the ones you can actually see; do not guess "
+                                            "hidden ones. Reply as JSON {\"count\": <number>, \"evidence\": \"<where they are>\"}.",
+                                            format_schema=_Count.model_json_schema(), max_tokens=120, temperature=0.0)
+    except Exception:
+        return None
+    parsed = _parse(raw, _Count)
+    return parsed.count if parsed else None
+
+
 def clean_prompt_requirements(reqs: list[_PromptReq], prompt: str) -> list[Claim]:
     """Positive, de-duplicated statements that share content words with THIS prompt (a small model otherwise invents requirements)."""
     said = _content(prompt)
@@ -897,11 +939,22 @@ async def evaluate_prompt_image(provider, image: Path, prompt: str, audit_gates:
     claims = await extract_prompt_requirements(provider, prompt)
     description = await _describe(provider, image)
     grounded = await _grounded_check(provider, image, claims) if claims else []
+    miscounted: set[int] = set()
+    for k, (c, g) in enumerate(zip(claims, grounded)):  # a stated number needs its own witness: counted, not recognised
+        want = count_expectation(c.text)
+        if want and g.status == "correct":
+            seen = await _count_check(provider, image, want[1])
+            if seen is not None and seen != want[0]:
+                grounded[k] = g.model_copy(update={"status": "incorrect", "evidence": f"counted {seen}, the prompt asks for {want[0]}: {g.evidence}"[:200]})
+                miscounted.add(k)
     keep = [k for k, g in enumerate(grounded) if g.status != "not_verifiable"]
     checked = [claims[k] for k in keep]
     unverifiable = [c.text for k, c in enumerate(claims) if k not in set(keep)]
     qa = [_QA(n=n + 1, answer=STATUS_TO_ANSWER[grounded[k].status], evidence=grounded[k].evidence) for n, k in enumerate(keep)]
     stated = await _description_states(provider, description, [(c.text, c.critical) for c in checked]) if checked else []
+    for n, k in enumerate(keep):  # a counted mismatch is evidence, not a disagreement: the description that "states" the number does not overrule it
+        if k in miscounted and n < len(stated):
+            stated[n] = False
     audit_items: list[ItemVerdict] = []
     if audit_gates:
         audit_items += await _audit_anatomy(provider, image, description=description)

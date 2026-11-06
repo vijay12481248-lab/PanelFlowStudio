@@ -228,7 +228,7 @@ def refine_prompt_image(art_engine, provider, prompt: str, negative: str = "", w
     state: dict[str, Any] = {}
 
     def generate(attempt: int, plan: CorrectionPlan | None):
-        text = f"Most important: {'; '.join(plan.emphasis)}. {prompt}" if plan and plan.emphasis else prompt
+        text = f"Most important: {'; '.join(e.rstrip('. ') for e in plan.emphasis)}. {prompt}" if plan and plan.emphasis else prompt
         s = base_seed + attempt * 7919
         art = art_engine.generate(text, negative, width, height, s, prefix, timeout=timeout, is_cancelled=is_cancelled)
         state["prompt"] = text

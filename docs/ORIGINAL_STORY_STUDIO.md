@@ -484,3 +484,10 @@ Plan and research: the investigation report of 2026-11-06 (reuse the reviewer, n
   target are cut out), proportional padding (15%, 6-48 px), a close-up check of each repaired target (`verify_targets`, crop enlarged to 448 px), and **a repaired picture is
   accepted only as `accept_low`** ("check the repaired area by eye"). The close-up check is weak: it said "yes" to the faint tag and to the strip; a stricter "is every part red"
   question caught the strip but also fired on gold hardware, and "is the old appearance gone" missed it, so none of them was made a hard gate.
+- **Real redraw (regenerate branch), live engine:** prompt "exactly seven red apples in a bowl, blue teapot left, yellow cup right, wall clock at three o'clock"
+  (no repair tool attached, 158 s). The first picture had five clear apples (plus slivers) yet the whole-picture review said "exactly seven: shown" - it only restated the
+  requirement. Fixes made because of this run: (1) **counts are checked by an independent witness** (`count_expectation` + `_count_check`: the model is asked how many are
+  visible without being told the expected number; a mismatch is a hard miss, the description judge cannot overrule it); (2) the contact audit failed a **wall-mounted clock**
+  ("not resting on any surface"), so mounted / hanging / attached / stacked objects are anchored. Result: attempts 1 and 2 failed the count, the planner redrew with the missing
+  item first, attempt 3 passed and I counted exactly seven apples in it (the clock at 3:00, teapot left, cup right). Limits: one prompt, one seed; the counter can be wrong for
+  heavily overlapping objects; with the counter alone the earlier run kept the wrong-count picture because a false contact failure sank the correct one.
