@@ -19,9 +19,9 @@ A guide for agents. It does not generate anything itself: the tools below do. It
 | Mode | Local status |
 |---|---|
 | I2VA (first frame + text) | **Works.** Workflows `fastvideo_h3_i2v`, `fastvideo_h3_film_free`, `fastvideo_h3_film_voice` (voice-anchored) |
-| FL2VA / L2VA (last frame) | Node supports it, but **no registered workflow wires `last_frame`**: needs a new approved workflow |
-| T2VA | Same node with no frames; no registered workflow, never run here |
-| Ref2VA (images/video/audio references) | **No Ref2VA weights on disk.** `MiniMaxH3ReferenceToVideo` node exists; do not use ChronoFlow "reference" mode |
+| FL2VA / L2VA (last frame) | **Works** (2026-11-07): workflows `fastvideo_h3_film_fl2va` / `_l2va`, `engine/original/h3_modes.py` (`make_clip`, prompt builders). Clips generated and looked at; the last frame is landed (gray diff ~3 of 255) |
+| T2VA | **Works**: `fastvideo_h3_film_t2va` (canvas 960x544); nothing is anchored, so the prompt must carry the look |
+| Ref2VA (image references) | `fastvideo_h3_omniref` (FastH3 OmniRef, 8 steps) registered; weights downloaded with the owner's approval - see `references/local-capabilities.md` for whether it has been run |
 
 ## Procedure
 1. **Plan the shot** - one clip = one shot, one action, 3-5 s, a Qwen first frame that already shows the look. Write its state card (`references/multi-clip.md`).
@@ -46,4 +46,4 @@ A guide for agents. It does not generate anything itself: the tools below do. It
 | Many clips / a 5+ minute video | `references/multi-clip.md` |
 
 ## Not built yet (do not pretend they exist)
-The `quiet` lever, a metric that shows scene-continuity gains (the evaluator missed `p005`'s), API/MCP/UI hook for the loop (command line only), identity/object checks (no face/CLIP/SAM3 measurement yet), FL2VA workflow, reference mode weights, ChronoFlow UI still shows constant fake scores from the deprecated `chronoflow/reviewer.py`.
+The `quiet` lever, a metric that shows scene-continuity gains (the evaluator missed `p005`'s), a working colour/outfit-drift check (the VLM missed 2 of 2), SAM3/LTX (no weights found), a restart of the engine (the new routes/tools need it).

@@ -28,12 +28,12 @@ Contact sheet base: the face fills the frame by 3.0 s and the glow is in his eye
 | # | Scenario | Pass condition | Status |
 |---|---|---|---|
 | 1 | Animate an existing character without changing its look | no confirmed consistency flag; frames 0 and last match the card by eye | done for `p012` (static): pass |
-| 2 | Stickman walking, static camera | `camera` no flag; subject keeps size; by eye | not run |
-| 3 | Character interacts with an object | object keeps shape/colour on the sheet; end state as named | not run |
-| 4 | First + last frame | last frame reached by the end; no cut flag | blocked: no FL2VA workflow |
+| 2 | Stickman walking, static camera | `camera` no flag; subject keeps size; by eye | done: static camera, consistent figure, walks in place; evaluator shows a false `suspected` zoom on the thin figure |
+| 3 | Character interacts with an object | object keeps shape/colour on the sheet; end state as named | done (cup): shape and colour kept; camera -4.2% flagged |
+| 4 | First + last frame | last frame reached by the end; no cut flag | done (FL2VA and L2VA): last frame landed (gray diff ~3), no cut |
 | 5 | Multiple reference images | references visible in the result | blocked: no Ref2VA weights |
 | 6 | Detect an unwanted zoom | `camera` confirmed with border agreeing; synthetic test + `p046` base | passes (`tests/unit/test_clip_eval.py`, Phase 1) |
-| 7 | Detect an identity/look change | drift flag fires and the contact sheet confirms | partial: `p004_1`, `p019_1`, `p070`; identity itself unmeasured |
-| 8 | Flicker / vanishing object | flicker flag; sheet shows the object missing | flicker measured (`p060`); object loss not measured |
+| 7 | Detect an identity/look change | drift flag fires and the contact sheet confirms | partial: drift trigger caught `p004_1`, `p019_1`, `p070`; the colour VLM answer missed 2 of 2 |
+| 8 | Flicker / vanishing object | flicker flag; sheet shows the object missing | done: flicker (`p060`); vanishing character (Pip in `p005`, 2 of 2, 0 of 6 false alarms) |
 | 9 | Correct a failed generation | one lever; defect gone; no regression on other axes | camera case done (Phase 1); full loop not built |
-| 10 | Continuity between two clips | outgoing state of n matches incoming of n+1; no visible jump | not run; boundary check not built |
+| 10 | Continuity between two clips | outgoing state of n matches incoming of n+1; no visible jump | done: B started from A's last frame (hist 0.139, gray 3.4); an unrelated clip measured 0.997 / 123 |

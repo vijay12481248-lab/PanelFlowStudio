@@ -15,7 +15,9 @@ Tool: `engine/original/clip_eval.py` (details and calibration data in `docs/H3_C
 | Motion quality | mean frame step < 0.3 = still | measured |
 | Lighting / colour consistency | histogram drift > 0.35 vs frame 0 | trigger only: 3/3 bad cat clips, 0/18 good; 35/140 Dawn Gate flags unlabelled |
 | Audio presence/level | `audio_stats`, loudness, ASR WER | measured |
-| Character consistency, composition, object integrity | contact sheet by eye; VLM witness | **no deterministic measure yet** |
+| Character/object presence | `engine/original/clip_identity.py`: per-frame yes/no about each named character, two wordings, flag only where both agree (`suspected`): caught both clips where Pip leaves, 0/5 false alarms | measured (VLM, 9 clips) |
+| Colour/outfit look of a character | same module, colour answer | **does not work** (0 of 2 known drifts): information only; use the histogram drift trigger |
+| Composition, other objects | contact sheet by eye | **no measure yet** |
 | Prompt adherence | by eye against the prompt; VLM only to explain | not measured |
 | Audio-visual sync | anchored voice by construction; ASR | timing not measured |
 

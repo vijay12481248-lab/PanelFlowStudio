@@ -102,3 +102,31 @@ and length. For temporal defects it is tried after `static_camera`. Run on `p005
 Residual problems seen on the kept clip: Pip (the cat) leaves the frame after 0.5 s; one fast move around 1.0 s (the wing fills the frame; the evaluator still marks `temporal` suspected);
 camera stays above the 3% limit. The evaluator's flags did NOT show the improvement (the suspected transition flag is unchanged), so this result rests on looking at the frames.
 Conclusion (1 shot): when the first frame does not show what the action needs, a wider first frame fixes the scene jump where reroll, text cut and seed did not.
+
+## Phase 5: the open items (2026-11-07)
+**Camera default** (commit 24efde2): Static Shot is the default; a move is explicit per shot (`Panel.camera`). The loop now tracks the exact camera sentence a clip was made with.
+
+**Character presence** (`engine/original/clip_identity.py`, `tools/h3_identity_calibration.py`; 9 clips judged by eye): a narrow yes/no question per named character and frame, asked twice in different words; a frame counts only where both
+answers agree; a flag is only ever `suspected`.
+| Clip | Truth | Result |
+|---|---|---|
+| `p005` r4_a2, r3_a3 | Pip leaves after 0.5 s / ~1.6 s | **flagged** (`PP....`) both |
+| `p012`, `p046`, `p070` x2, cat `p001_1`, `p010_1` | everyone stays | no flag (6 of 6; Pip is not in `p070`'s first frame so cannot vanish) |
+| `p070` r3_a0 (outfits wash out), cat `p004_1` (hair turns blue) | colour drift | colour answer said "matches": **missed 2 of 2**, so it is information only and never flags |
+Presence works on this sample (2 of 2, 0 false alarms). The colour check does not; the histogram drift trigger remains the colour/lighting detector. ~15-60 s per clip.
+
+**Boundary check** (`engine/original/continuity.py`). Measured: 157 adjacent Dawn Gate pairs, same-scene histogram distance median 0.46 vs 0.56 across scenes (148 of 157 pairs are the same scene), edge audio level step median 8 dB (90th percentile 21 dB):
+these cannot separate a continuity break from a normal cut, so a cut is never flagged. A boundary the caller declares continuous is checked: a real continuation pair (clip B generated from clip A's last frame, scenario 10) measured
+histogram 0.139 / gray 3.4; the same clip followed by an unrelated one measured 0.997 / 123 (thresholds 0.25 / 25, provisional, one continuation pair).
+
+**Modes** (`engine/original/h3_modes.py`; workflows `fastvideo_h3_film_{fl2va,l2va,t2va}`; official-skeleton prompt builders). Clips made and looked at, 3.75 s each, 68-92 s per clip:
+| Scenario | Result |
+|---|---|
+| 2 stickman walking, I2VA, Static Shot | static camera, same figure and line style throughout; it walks **in place** (the prompt also said "same distance"). The evaluator's "zoom -21%" is `suspected` only: a thin figure on white gives the tracker almost nothing to hold |
+| 3 girl lifts a cup and drinks (I2VA) | the cup keeps its shape and colour; camera -4.2% (confirmed, just above the 3% limit even with Static Shot) |
+| 4 first + last frame (FL2VA) / last frame only (L2VA) | both drink and land on the supplied last frame (gray difference 3.1 / 3.4 of 255); no cut; camera -4.2% / -2.2% |
+| T2VA stickman, text only | walks left to right across the frame, static camera, consistent figure; the drift flag (0.52) is a false alarm on a white page |
+| 10 continuity: clip B from clip A's last frame, "sets the cup down" | B starts exactly where A ended, the cup ends on the table; boundary measured as above |
+
+**Engine hooks:** `GET /api/original/story/{slug}/film/clip/{shot}/eval`, `POST .../improve` (background job), `GET .../history`; MCP `panelflow_original_clip_eval|improve|history`; ChronoFlow's reviewer now returns real measurements
+(no score or grade) and its UI no longer shows the hard-coded "94% (A) APPROVED FOR MASTER CUT". The running engine must be restarted to load them.

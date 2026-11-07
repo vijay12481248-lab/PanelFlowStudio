@@ -4,7 +4,7 @@
 - `diffusion_models`: `minimax_h3_fl2va_pruned_int8_convrot`, `fastvideo_fasth3_8step_v2_pruned_int8_convrot` (8-step distill), `qwen_image_2.1_turbo_int8_convrot` (stills).
 - `loras`: `minimax_h3_fl2v_turbo_{4,8}step_*`. `text_encoders`: `qwen3vl_32b_minimax_h3_nvfp4_awq` (H3's encoder, not a judge). `vae`: H3 video VAE (int8), H3 audio VAE (fp32).
 - Only VLM: Ollama `qwen3.5:9b` (vision), via `OllamaProvider.analyze_vision` (one image per call: use a contact sheet).
-- **Not found** (searched names under `E:\VIJAY SEKAR`): Ref2VA transformer, SAM3 weights, LTX weights, H3 Fun ControlNet weights (`model_patches` empty). ComfyUI nodes/blueprints for them exist; nodes without weights do nothing.
+- **Not found** (searched names under `E:\VIJAY SEKAR`): SAM3 weights, LTX weights, H3 Fun ControlNet weights (`model_patches` empty). Ref2VA: `fasth3_omniref_8step_pruned_int8_convrot.safetensors` (22.21 GB, FastVideo/FastH3-Omni-Comfy) was downloaded 2026-11-07 with the owner's approval; see the Ref2VA note below. ComfyUI nodes/blueprints exist for the rest; nodes without weights do nothing.
 - Hosted-only `[official]`: H3-Context-IR (prompt enhancer) and Regenerate-2K. Paid; no pricing found; not open-sourced. Do not use without the owner's approval.
 
 ## Workflows `[verified]` (registered in `engine/comfyui/workflow_registry.json`)
@@ -22,7 +22,7 @@ Median 84 s per clip overall (39-192 frames, median 107). Short silent shots 47-
 ## Nodes `[verified]` from `comfy_extras/nodes_minimax_h3.py`
 - `MiniMaxH3ImageToVideo`: text, optional `first_frame` (stretched to canvas) and `last_frame` (cover-cropped). Tooltip: trained range about 124-362 frames; longer is untested.
 - `MiniMaxH3AddGuide`: anchor an image, a clip (cropped to 5, 22, 39 ... frames) and/or audio at any `frame_idx` (negative = from the end).
-- `MiniMaxH3ReferenceToVideo`: `<Picture i>/<Video k>/<Audio j>` references (needs the Ref2VA checkpoint).
+- `MiniMaxH3ReferenceToVideo`: `<Picture i>/<Video k>/<Audio j>` references; the registered graph `fastvideo_h3_omniref` wires two reference images (identity + location), euler/simple 8 steps, video shift 12, audio shift 3, VSA attention (FastH3 must never run plain block-sparse).
 
 ## Official limits `[official]` (hosted API docs; local H3 follows the same model family, not guaranteed identical)
 4-15 s, 24 fps, 32 kHz stereo audio, short side 768 by default. Ratios 21:9, 16:9, 4:3, 1:1, 3:4, 9:16. Dialogue stable in 11 languages (Arabic, Chinese, English, French, German, Italian, Japanese, Korean, Portuguese, Russian, Spanish). Reference mode: <=9 images, <=3 videos, <=3 audios, first/last-frame and reference inputs cannot be mixed. No negative prompt, seed or fps field in the API schema (our local graph has a seed).
