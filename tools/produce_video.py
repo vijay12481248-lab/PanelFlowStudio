@@ -1,6 +1,6 @@
 """One abstract brief -> a finished informative video, end to end, with long takes (docs/H3_CLIP_EVAL.md, "Director").
 
-  python tools/produce_video.py "<brief>" <slug> [--seconds 60] [--max-take 15] [--stage plan|frames|clips|qa|master|all]
+  python tools/produce_video.py "<brief>" <slug> [--seconds 60] [--max-take 15] [--stage plan|frames|clips|stabilize|qa|master|all]
 
 Stages are resumable (files under output/Original_Stories/<slug>/):
   plan    the Director (local LLM) writes the whole production plan: story.json + plan.md (read it)
@@ -20,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from engine.llm.registry import llm_registry  # noqa: E402
 from engine.original import art as art_mod  # noqa: E402
 from engine.original import clip_identity as ci  # noqa: E402
-from engine.original import director, film, film_master, storyboard  # noqa: E402
+from engine.original import director, film, film_master, stabilize, storyboard  # noqa: E402
 from engine.original.animate import release_ollama  # noqa: E402
 from engine.original.clip_eval import evaluate  # noqa: E402
 from engine.original.models import OriginalStory  # noqa: E402
@@ -88,6 +88,20 @@ def stage_clips(story: OriginalStory, ws: Path, board: bool = False, ids: list[s
     return res
 
 
+def stage_stabilize(story: OriginalStory, ws: Path) -> dict:
+    """Undo a small camera drift in each clip (the raw clip is kept as <id>_raw.mp4). A drift beyond the stabiliser's limit is reported: that shot's pictures need redrawing."""
+    clips, out = ws / "film" / "clips", {}
+    for p in story.panels:
+        raw, cur = clips / f"{p.id}_raw.mp4", clips / f"{p.id}.mp4"
+        res = stabilize.stabilize(cur, clips / f"{p.id}_stab.mp4")  # an already stabilised clip measures steady and is left alone
+        if res["applied"]:
+            cur.replace(raw)
+            (clips / f"{p.id}_stab.mp4").replace(cur)
+        out[p.id] = res
+        print(f"  stabilize {p.id}: {res}", flush=True)
+    return out
+
+
 def shot_at(panel, t: float) -> dict:
     """The planned shot playing at time t of a take."""
     return [s for s in panel.shots if s["at"] <= t + 1e-6][-1] if panel.shots else {"characters": panel.character_ids}
@@ -123,7 +137,7 @@ def main() -> None:
     ap.add_argument("slug")
     ap.add_argument("--seconds", type=float, default=60.0)
     ap.add_argument("--max-take", type=float, default=director.MAX_TAKE)
-    ap.add_argument("--stage", default="all", choices=["plan", "frames", "clips", "qa", "master", "all"])
+    ap.add_argument("--stage", default="all", choices=["plan", "frames", "clips", "stabilize", "qa", "master", "all"])
     ap.add_argument("--ids", default="", help="only these shots (comma list), e.g. t1,t6")
     ap.add_argument("--attempt", type=int, default=0, help="retry number: a new seed for the shots in --ids")
     ap.add_argument("--storyboard", action="store_true", help="storyboard approach: draw and check a start and an end picture per shot, then animate between them (FL2VA)")
@@ -141,6 +155,8 @@ def main() -> None:
             print("frames:", asyncio.run(stage_frames(story, ws)), flush=True)
     if want("clips"):
         print("clips:", json.dumps(stage_clips(story, ws, a.storyboard, [i for i in a.ids.split(",") if i] or None, a.attempt)), flush=True)
+    if want("stabilize"):
+        stage_stabilize(story, ws)
     if want("qa"):
         asyncio.run(stage_qa(story, ws))
     if want("master"):

@@ -106,6 +106,27 @@ def camera_motion(gray: list, ring: float | None = None) -> dict:
             "zoom_curve_pct": [round(path[min(len(path) - 1, round(k * (len(path) - 1) / 4))][0] * 100, 2) for k in range(5)]}
 
 
+def camera_motion_area(gray: list, step: int = 6) -> dict:
+    """Camera zoom/pan weighted by AREA, not by detail: dense optical flow on a regular grid of points, one robust similarity fit per frame pair `step` frames apart, accumulated.
+    `camera_motion` tracks corner features, which sit on the most detailed object (a character), so a girl who steps toward the camera or an animal that moves reads as a camera zoom
+    (measured: Dawn-Gate-style storyboard clips showed -35% zoom and -195% pan while the background did not move). Here every region of the frame has one vote and a subject covering
+    less than half the frame is out-voted. Textureless sky gives ~zero flow, so a real camera move can read a little low: use it with `camera_motion`, not instead (flag only when both agree)."""
+    h, w = gray[0].shape
+    ys, xs = np.mgrid[h // 16:h:h // 8, w // 16:w:w // 8]
+    pts = np.stack([xs.ravel(), ys.ravel()], axis=1).astype(np.float32)
+    centre = np.array([w / 2, h / 2], dtype=np.float32)
+    log_s = tx = ty = 0.0
+    for a, b in zip(gray[::step], gray[step::step]):
+        a, b = (cv2.normalize(x, None, 0, 255, cv2.NORM_MINMAX) for x in (a, b))  # dark storm scenes have little contrast: stretch it, or the flow reads low
+        flow = cv2.calcOpticalFlowFarneback(a, b, None, 0.5, 3, 15, 3, 5, 1.2, 0)
+        moved = pts + flow[pts[:, 1].astype(int), pts[:, 0].astype(int)]
+        m, _ = cv2.estimateAffinePartial2D(pts - centre, moved - centre, method=cv2.RANSAC, ransacReprojThreshold=0.6)
+        if m is not None:
+            log_s += math.log(max(1e-6, math.hypot(m[0, 0], m[1, 0])))
+            tx, ty = tx + float(m[0, 2]), ty + float(m[1, 2])
+    return {"zoom_pct": round((math.exp(log_s) - 1) * 100, 2), "pan_x_pct": round(tx / w * 100, 2), "pan_y_pct": round(ty / h * 100, 2)}
+
+
 def step_diffs(gray: list) -> np.ndarray:
     return np.array([float(np.abs(b.astype(np.float32) - a.astype(np.float32)).mean()) for a, b in zip(gray, gray[1:])])
 
@@ -197,12 +218,17 @@ def evaluate(path: Path, expect_camera: str = "static", reference: np.ndarray | 
     ring = camera_motion(clip.gray, RING)
     # confirmed only when the whole frame and its border agree in sign, the tracker kept most points, and the numbers are sane
     trust = cam["inliers"] >= CAMERA_MIN_INLIERS and ring["inliers"] >= CAMERA_MIN_INLIERS and (abs(cam["zoom_pct"]) <= CAMERA_MAX_PCT or min(cam["inliers"], ring["inliers"]) >= CAMERA_SURE_INLIERS) and cam["zoom_pct"] * ring["zoom_pct"] > 0
+    area = camera_motion_area(clip.gray)
+    # the AREA-weighted estimate is the arbiter: the feature tracker follows the most detailed object, so a girl stepping toward the camera read as a zoom (storyboard clips: features +9.8%,
+    # area +0.5%, background still by eye). A flag needs the area estimate to see it too; features alone are the subject moving, not the camera.
+    big = lambda v, lim: abs(v) > lim  # noqa: E731
     if expect_camera == "static":
-        if abs(cam["zoom_pct"]) > ZOOM_STATIC_PCT:
-            flag("camera", "confirmed" if trust else "suspected", None,
-                 f"total zoom {cam['zoom_pct']:+.1f}% (border only {ring['zoom_pct']:+.1f}%) over {clip.t(clip.n - 1)}s, inliers {cam['inliers']}/{ring['inliers']}")
-        if max(abs(cam["pan_x_pct"]), abs(cam["pan_y_pct"])) > PAN_STATIC_PCT:
-            flag("camera", "confirmed" if trust else "suspected", None, f"total pan x {cam['pan_x_pct']:+.1f}% y {cam['pan_y_pct']:+.1f}% (border {ring['pan_x_pct']:+.1f}/{ring['pan_y_pct']:+.1f})")
+        if big(area["zoom_pct"], ZOOM_STATIC_PCT) and big(cam["zoom_pct"], ZOOM_STATIC_PCT / 2):
+            flag("camera", "confirmed" if trust or big(area["zoom_pct"], 2 * ZOOM_STATIC_PCT) else "suspected", None,
+                 f"total zoom {area['zoom_pct']:+.1f}% by area (features {cam['zoom_pct']:+.1f}%, border {ring['zoom_pct']:+.1f}%) over {clip.t(clip.n - 1)}s")
+        if max(abs(area["pan_x_pct"]), abs(area["pan_y_pct"])) > PAN_STATIC_PCT and max(abs(cam["pan_x_pct"]), abs(cam["pan_y_pct"])) > PAN_STATIC_PCT / 2:
+            flag("camera", "confirmed" if trust or max(abs(area["pan_x_pct"]), abs(area["pan_y_pct"])) > 2 * PAN_STATIC_PCT else "suspected", None,
+                 f"total pan x {area['pan_x_pct']:+.1f}% y {area['pan_y_pct']:+.1f}% by area (features {cam['pan_x_pct']:+.1f}/{cam['pan_y_pct']:+.1f}, border {ring['pan_x_pct']:+.1f}/{ring['pan_y_pct']:+.1f})")
     if cam["lost_steps"] >= LOST_STEPS and not cuts:
         flag("temporal", "suspected", clip.t(cam["first_lost"]), f"tracker lost the picture in {cam['lost_steps']} frame steps (first at {clip.t(cam['first_lost'])}s): a scene transition or violent motion, look at the frames")
     for c in cuts:
@@ -215,7 +241,7 @@ def evaluate(path: Path, expect_camera: str = "static", reference: np.ndarray | 
         flag("consistency", "suspected", drift["at_s"], f"colour histogram distance {drift['max']} from frame 0 (outfit/colour change or lighting)")
     if expect_audio and not audio["has_audio"]:
         flag("audio", "confirmed", None, "no audio stream")
-    return {"clip": str(path), "frames": clip.n, "seconds": clip.t(clip.n - 1) + round(1 / clip.fps, 2), "camera": cam, "camera_border": ring, "cuts_s": [clip.t(c) for c in cuts],
+    return {"clip": str(path), "frames": clip.n, "seconds": clip.t(clip.n - 1) + round(1 / clip.fps, 2), "camera": cam, "camera_border": ring, "camera_area": area, "cuts_s": [clip.t(c) for c in cuts],
             "flicker": flick, "drift": drift, "audio": audio, **mot, "flags": flags}
 
 

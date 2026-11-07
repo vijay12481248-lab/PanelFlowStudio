@@ -128,3 +128,20 @@ def test_a_planned_cut_that_lands_a_little_early_is_still_planned(tmp_path):
     path = _write(tmp_path / "early.mp4", [_view(a)] * 36 + [_view(b)] * 44)  # the cut is at 1.5 s; the plan said 1.9 s
     r = ce.evaluate(path, expect_audio=False, planned_cuts=[1.9])
     assert not any(f["axis"] == "temporal" for f in r["flags"]) and r["cut_deviation_s"] and abs(r["cut_deviation_s"][0] + 0.4) < 0.1
+
+
+def test_area_weighted_camera_is_not_fooled_by_a_big_moving_subject_but_sees_a_real_zoom(tmp_path):
+    s = _scene()
+    still = []
+    for i in range(N):  # a fixed camera; a big detailed subject grows from 20% to 60% of the frame width
+        f = _view(s).copy()
+        r = int(20 + 60 * i / (N - 1))
+        cv2.circle(f, (W // 3, H // 2), r, (30, 200, 240), -1)
+        for k in range(8):
+            cv2.line(f, (W // 3 - r, H // 2 - r + 6 * k * r // 8), (W // 3 + r, H // 2 - r + 6 * k * r // 8), (10, 10, 10), 2)  # detail on the subject: the corner tracker clings to it
+        still.append(f)
+    r = ce.camera_motion_area([cv2.cvtColor(f, cv2.COLOR_BGR2GRAY) for f in still])
+    assert abs(r["zoom_pct"]) < 4  # the subject grew, the camera did not move
+    zoom = [cv2.cvtColor(_view(s, 1 + 0.12 * i / (N - 1)), cv2.COLOR_BGR2GRAY) for i in range(N)]
+    z = ce.camera_motion_area(zoom)
+    assert z["zoom_pct"] == pytest.approx(12, abs=4)
