@@ -148,6 +148,17 @@ async def picture_problems(story: OriginalStory, panel: Panel, png: bytes, provi
     return bad
 
 
+async def visual_problems(panel: Panel, pictures: dict[str, bytes], provider) -> list[str]:
+    """The thing the narration talks about (`Panel.key_visuals`) must be in both pictures: two VLM witnesses, a redraw only when both say it is missing
+    (a disagreement is not a problem; the 9B is a noisy judge)."""
+    bad = []
+    for k in panel.key_visuals:
+        for which, png in pictures.items():
+            if ci.agree(await ci.ask(provider, png, k, k, ci.OBJECT_PROMPTS), "visible") is False:
+                bad.append(f"{which} picture does not show: {k}")
+    return bad
+
+
 def hist_distance(a: bytes, b: bytes) -> float:
     from engine.original.clip_eval import SIZE as SZ, _hist
 
@@ -186,6 +197,7 @@ async def draw(story: OriginalStory, ws: Path, runner, provider, tries: int = 4,
             pos, neg = keyframe_prompt(story, p, "end")
             end.write_bytes(runner.generate(pos, neg, seed, SIZE[0], SIZE[1], f"sb_{p.id}_end"))  # the same seed: the same characters, a different moment
             info["problems"] = {w: await picture_problems(story, p, f.read_bytes(), provider) for w, f in (("start", start), ("end", end))}
+            info["problems"]["visual"] = await visual_problems(p, {"start": start.read_bytes(), "end": end.read_bytes()}, provider)
             if info["direction"] and panel_first_kind(story, p):  # a walker must really start on one side and end on the other
                 kind = panel_first_kind(story, p)
                 walk = ci.walk_ok(info["direction"], await ci.side_of(provider, start.read_bytes(), kind), await ci.side_of(provider, end.read_bytes(), kind))
@@ -195,6 +207,8 @@ async def draw(story: OriginalStory, ws: Path, runner, provider, tries: int = 4,
             progress(f"  {p.id}: try {attempt + 1}{' (start = previous end)' if chained else ''}: {info['problems'] or 'cast counts match the plan'}")
             if not info["problems"]:
                 break
+            if chained and any(v.startswith("start picture") for v in info["problems"].get("visual", [])):
+                chained = info["chained"] = False  # the previous end cannot show THIS shot's subject: draw its own start (measured: 4 wasted redraws of a copied start)
         info["start_end_colour_distance"] = hist_distance(start.read_bytes(), end.read_bytes())
         report[p.id] = info
         prev = p
@@ -241,8 +255,8 @@ def make_clips(story: OriginalStory, ws: Path, ids: list[str] | None = None, tim
         if not (start.exists() and end.exists()):
             failed.append({"shot": p.id, "error": "no storyboard pictures"})
             continue
-        spoken = film.voice_shot(story, ws, p, tts, voices)  # the narration wav (also fixes the take's minimum length)
-        secs = max(film.snap_frames(p.seconds) / film.FPS, spoken[1] if spoken else 0)
+        spoken = film.voice_shot(story, ws, p, tts, voices)  # the narration wav, padded to the H3 frame grid
+        secs = spoken[1] if spoken else film.snap_frames(p.seconds) / film.FPS  # the clip lasts as long as its line (measured: a fixed 8 s left ~3 s of silence after every line)
         silent, secs = film.silent_shot(ws, p, secs)
         prompt = clip_prompt(story, p, secs)
         seed = int(hashlib.sha256(f"{story.bible.premise.title}|{p.id}|storyboard{f'|retry{attempt}' if attempt else ''}".encode()).hexdigest()[:12], 16)  # a retry is a new seed, nothing else

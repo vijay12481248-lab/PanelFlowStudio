@@ -167,3 +167,26 @@ Remaining: camera still moves 3-7% in 6 of 8 shots (`camera` confirmed; the walk
 - **Sky arc:** in storyboard mode the Writer plans one `atmosphere` (sky and light, 5-14 words) per take, neighbours must differ (`check_writer`); it goes into the take's prompt and into BOTH keyframes
   (`ShotSpec.lighting`, `Panel.atmosphere`). Measured on the second storm video: sunny -> grey -> purple storm with lightning -> clearing with sun rays -> rainbow, where the first video was sunny throughout.
   Known weakness: the image model over-draws the middle of the arc (take 3 "grey clouds gathering" came out as a full purple storm), so the build-up is a jump from take 2 to take 3 rather than gradual.
+
+## Voice, picture and sound acting together (Phase 1, 2026-11-07)
+
+Owner's complaint on the second storm video: audio and animation "are not acting together". Measured cause (not the image model): the narration explained invisible
+science (ice crystals colliding, charge separating) while all eight pictures showed the guide and her cat standing in a field; two takes said the same sentence; speech
+filled 59 % of 64 s (about 3 s of silence after every line); lightning was shown in silence (clips are animated with a silent anchor and there was no sound bed).
+
+- **Picture first** (`director.picture_first`, storyboard mode): every take names a `visual` (the visible thing that carries its fact; it becomes `Panel.key_visuals`, goes into
+  both picture prompts and is checked on both pictures by two VLM witnesses, `storyboard.visual_problems`); the narration must mention it; a take whose narration shares
+  more than 70 % of its content words with the earlier narration is rejected. A chained shot whose copied start lacks its visual draws its own start.
+- **The clip lasts as long as its line** (storyboard `make_clips`): the clip length is the padded narration on the H3 frame grid, not a fixed 7.5 s. Pace budget 2.8 words/s
+  (Kokoro measured 2.86). The 9B often writes 10-12 words where 16 were asked, so after 4 tries a short line is accepted (it costs screen time, not silence).
+- **Weather sound** (`ambience.py`, used by `film_master.normalize` for clips without their own sound): a faint outdoor air bed, rain / wind / thunder layers from the shot's
+  own words (weather that has ended - "as rain stops" - is ignored), thunder 0.4-1.2 s after each lightning flash found in the picture (a brightness jump), or one distant roll
+  when the shot names a storm but no flash is seen. Local noise synthesis, no model.
+- **Planning robustness** (all seen on real runs): the 9B writes character ids as "maya: center facing right" or "maya stands center-left..." (`character_id` reads the
+  leading id); it sometimes loops to the token limit (5 rounds of retries now); the visual comes as a full sentence (up to 30 words accepted).
+
+Third storm video (`storm_board4`): each shot shows what its line talks about (a rising warm-air bubble, a cumulonimbus tower, ice crystals, a lightning bolt, rain from
+leaves, wind bending trees, a rainbow); QA flags on 0 of 8 clips (first time); speech fills ~81 % of the video; sound gaps measured -44 dB (sunny air bed), rain -28 dB,
+wind -29 dB under speech at about -16 dB, thunder in the lightning shot. The drift loop redrew 3 shots (t2 25.9 %, t7 13.2 %, t8 not stabilisable) and all landed under 1.4 %.
+**Not good yet:** the video is 39 s, not 60 (short lines -> short clips); the sky arc was weak in this plan (a rainbow in the ice-crystal shot, rain under a blue sky);
+the lightning is a static bolt in both pictures, so no flash is seen and the thunder is the fallback roll; the "shockwave" shot was drawn as literal rings.

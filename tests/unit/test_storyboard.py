@@ -128,7 +128,7 @@ def test_make_clips_anchors_silence_and_lands_between_the_two_pictures(story, tm
     monkeypatch.setattr(an, "release_ollama", lambda: None)
     res = sb.make_clips(st, tmp_path, progress=lambda m: None)
     assert res["made"] == ["m1"] and seen["mode"] == "fl2va" and seen["first"].name == "m1.png" and seen["last"].name == "m1_end.png" and seen["voice"].name == "m1.silent.wav"
-    assert seen["seconds"] == pytest.approx(film.snap_frames(7.5) / film.FPS)
+    assert seen["seconds"] == pytest.approx(3.0)  # the clip lasts as long as its (padded, grid-snapped) narration, not the planned 7.5 s
     assert sb.make_clips(st, tmp_path, progress=lambda m: None)["reused"] == ["m1"]  # unchanged inputs: reused
 
 
@@ -274,3 +274,37 @@ def test_draw_can_redo_only_some_shots_with_new_seeds_and_keeps_the_rest(story, 
     rep = asyncio.run(sb.draw(st, tmp_path, Runner(), Provider(), tries=2, progress=lambda m: None, ids=["a2"], round_=1))
     assert set(seeds) == {"sb_a2_start", "sb_a2_end"} and seeds["sb_a2_end"][0] != first["sb_a2_end"] and rep["a2"]["chained"] is False  # only a2, new seed, own start picture
     assert (fd / "a1.png").read_bytes() == kept and set(rep) == {"a1", "a2", "a3"}  # the other shots and their report stay
+
+
+def test_a_picture_missing_the_narrated_visual_is_redrawn_only_when_both_witnesses_agree(story):
+    p = _panel(story, key_visuals=["a towering dark storm cloud"])
+
+    def provider(visible):
+        class P:
+            async def analyze_vision(self, png, prompt, **kw):
+                return json.dumps({"visible": visible.pop(0), "colours_match": True, "note": ""})
+        return P()
+
+    assert asyncio.run(sb.visual_problems(p, {"start": _png()}, provider([False, False]))) == ["start picture does not show: a towering dark storm cloud"]
+    assert asyncio.run(sb.visual_problems(p, {"start": _png()}, provider([False, True]))) == []  # the witnesses disagree: not a defect
+
+
+def test_a_chained_shot_whose_start_lacks_its_visual_draws_its_own_start(story, tmp_path):
+    p1 = _panel(story, 0, id="c1", character_ids=["mira", "pip"], action="Mira stands in the field with Pip beside her", key_visuals=[])
+    p2 = p1.model_copy(update={"id": "c2", "key_visuals": ["a towering dark storm cloud"]})
+    st = story.model_copy(update={"panels": [p1, p2]})
+    names = []
+
+    class Runner:
+        def generate(self, pos, neg, seed, w, h, prefix):
+            names.append(prefix)
+            return _png(len(names) * 11 % 250)
+
+    class Provider:  # counts always match; the storm cloud is missing from c2's first (copied) start, present once c2 draws its own
+        async def analyze_vision(self, png, prompt, **kw):
+            if "storm cloud" in prompt:
+                return json.dumps({"visible": "sb_c2_start" in names, "colours_match": True, "note": ""})
+            return json.dumps({"count": 1})
+
+    rep = asyncio.run(sb.draw(st, tmp_path, Runner(), Provider(), tries=3, progress=lambda m: None))
+    assert rep["c2"]["chained"] is False and "sb_c2_start" in names and not rep["c2"]["problems"]

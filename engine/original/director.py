@@ -26,7 +26,7 @@ from engine.original.genres import GENRES, Genre
 from engine.original.models import Line, OriginalStory, Panel, Scene
 
 MAX_TAKE = 15.0  # seconds: the official H3 limit; the measured feasible length on this machine goes in docs/H3_CLIP_EVAL.md
-WORDS_PER_SECOND = 2.4  # narration pace budget (Kokoro speaks ~2.6 words/s; the margin keeps the last word inside the take)
+WORDS_PER_SECOND = 2.8  # narration pace budget: Kokoro af_heart measured 2.86 words/s (108 words in 37.8 s, storm video); at 2.4 with a 65% floor the voice filled only 59% of the video
 FRAMINGS = {"wide", "medium", "close"}
 FIXED_WORDS = {"static", "fixed", "locked", "none", "still", "tripod", "no movement", "no camera movement", "stationary", "locked off"}  # a model's many ways of saying "the camera does not move"
 CAMERA_MOVES = {"", "slow push-in", "slow pan left", "slow pan right"}
@@ -82,6 +82,7 @@ class _ShotOut(BaseModel):
 class _TakeOut(BaseModel):
     location_id: str
     end_state: str = Field(default="", description="STORYBOARD only: what the LAST picture of the shot shows in the same framing: who stands where in the frame and what they are doing then")
+    visual: str = ""  # STORYBOARD only: what the picture shows to carry the narration (becomes Panel.key_visuals, checked on both pictures)
     narration: str = Field(description="the voice-over for this take: friendly spoken sentences that explain the take's facts, no stage directions")
     shots: list[_ShotOut]
 
@@ -113,12 +114,19 @@ class _BoardTake(BaseModel):
     narration: str = Field(description="the voice-over for this take: friendly spoken sentences that explain the take's facts, no stage directions")
     shot: _ShotOut
     end_state: str = Field(description="what the LAST picture of the shot shows in the same framing: who stands where in the frame (left, center or right side) and what they are doing then; at least 8 words")
+    visual: str = Field(description="the ONE thing in the picture that SHOWS this take's fact - weather, an object or an event the viewer can see, e.g. 'a tall dark anvil-shaped cloud towering over the hills'; 4-14 words. The characters only watch it")
 
 
 def stacked(text: str, names: list[str]) -> str | None:
     """A character ridden, carried or perched on another ('Luna sits on her right shoulder', 'Maya carries Luna'): the image model draws BOTH the carried and a separate one (measured: a second cat in 3 of 8 storyboard pictures), so characters stay apart. Returns the offending name or None."""
+    on_body = re.compile(r"\b(?:on|onto|to|in|atop)\s+(?:her|his|their|its|the \w+'s)\s+(?:\w+\s+)?(?:shoulders?|lap|arms|head|back)\b|\bperch\w*", re.I)
+    for m in on_body.finditer(text):  # the rider is the character named last before 'on her back' in the same sentence
+        before = re.split(r"[.;]", text[:m.start()])[-1]  # (a 40-character window missed 'pip on the right side of the frame jumping to her back')
+        hits = [(before.lower().rfind(n.lower()), n) for n in names if re.search(rf"\b{re.escape(n)}\b", before, re.I)]
+        if hits:
+            return max(hits)[1]
     for n in names:
-        if re.search(rf"{n}.{{0,40}}"+r"\b(shoulder|lap|arms|head|back|perch\w*)\b", text, re.I) or re.search(r"\b(carr\w+|cradl\w+|hug\w+|lift\w+|hold\w*)\s+(?:her\s+|his\s+|the\s+)?"+n, text, re.I):
+        if re.search(r"\b(carr\w+|cradl\w+|hug\w+|lift\w+|hold\w*)\s+(?:her\s+|his\s+|the\s+)?" + n, text, re.I):
             return n
     return None
 
@@ -128,7 +136,7 @@ def take_count(total_seconds: float, max_take: float = MAX_TAKE) -> int:
 
 
 def narration_budget(seconds: float) -> int:
-    return int(seconds * WORDS_PER_SECOND)
+    return int(max(1.0, seconds - 0.8) * WORDS_PER_SECOND)  # the voice starts ~0.25 s in and needs a breath before the cut
 
 
 def split_facts(facts: list[str], takes: int) -> list[list[str]]:
@@ -166,9 +174,38 @@ def check_writer(o: _Writer, takes: int, genre: Genre, brief: str = "", sky: boo
     return p
 
 
-def check_take(o: _TakeOut, bible, seconds: float, facts: list[str], genre: Genre, take_index: int = 0, storyboard: bool = False) -> list[str]:
+def character_id(text: str, chars: dict) -> str:
+    """A cast id from the model's wording: 'maya', 'Maya', 'maya: center facing right' (measured) -> 'maya'; unknown wording is returned as is (and reported)."""
+    t = text.strip().lower()
+    if t in chars:
+        return t
+    head = re.split(r"[:(,\-]", t, maxsplit=1)[0].strip()
+    for cid, c in chars.items():
+        if head in (cid, c.name.lower()) or any(t.startswith(w + " ") for w in (cid, c.name.lower())):  # 'maya stands center-left pointing at the sky' (measured)
+            return cid
+    return t
+
+
+def picture_first(o: _TakeOut, prev: str = "") -> list[str]:
+    """Storyboard rules that tie the voice to the picture (measured on the second storm video: the narration explained ice crystals and electric charge while every
+    picture showed the guide and her cat standing in a field, and two takes said the same sentence)."""
+    p: list[str] = []
+    vis = content_words(o.visual)
+    if not 2 <= len(o.visual.split()) <= 30:  # the 9B writes it as a full sentence (21 words measured); that is still a usable picture requirement
+        p.append(f"visual is {o.visual!r} ({len(o.visual.split())} words): name the ONE thing the picture shows to carry this take's fact (weather, an object or an event the viewer can see) in 4-25 words")
+    elif not vis & content_words(o.narration):
+        p.append(f"the narration must talk about what the viewer sees: mention the visual ({o.visual!r}) in it")
+    said = content_words(prev)
+    mine = content_words(o.narration)
+    if said and mine and len(mine & said) / len(mine) > 0.7:  # against ALL earlier narration, so topic words (storm, cloud, air) recur; the measured repeat shared ~80%
+        p.append("the narration repeats what an earlier take already said; explain the NEXT step instead")
+    return p
+
+
+def check_take(o: _TakeOut, bible, seconds: float, facts: list[str], genre: Genre, take_index: int = 0, storyboard: bool = False, prev: str = "") -> list[str]:
     p: list[str] = []
     if storyboard:
+        p += picture_first(o, prev)
         if len(o.shots) != 1:
             p.append("STORYBOARD: exactly ONE shot per take (one framing, one continuous action between a first and a last picture)")
         if len(o.end_state.split()) < 8:
@@ -180,7 +217,7 @@ def check_take(o: _TakeOut, bible, seconds: float, facts: list[str], genre: Genr
     for s in o.shots:  # tolerate wording, not substance: any framing / camera wording maps to the nearest allowed value
         s.framing = normalize_framing(s.framing)
         s.camera = normalize_camera(s.camera)
-        s.characters = [c.strip().lower() for c in s.characters]
+        s.characters = [character_id(c, chars) for c in s.characters]
         s.action = fix_direction(s.action, take_index)
     by_name = {x.name.lower(): x.id for x in bible.locations}
     o.location_id = by_name.get(o.location_id.strip().lower(), o.location_id.strip().lower())
@@ -188,8 +225,9 @@ def check_take(o: _TakeOut, bible, seconds: float, facts: list[str], genre: Genr
         p.append(f"location_id must be one of {sorted(locs)}")
     words = len(o.narration.split())
     budget = narration_budget(seconds)
-    if not budget * 0.65 <= words <= budget:
-        p.append(f"narration has {words} words; write {int(budget * 0.85)} words (allowed {int(budget * 0.65)}-{budget}) so it fills the {seconds:.0f} s (measured: 9-13 words in an 18-word slot left half the video silent)")
+    low = math.ceil(budget * (0.6 if storyboard else 0.7))  # in storyboard mode the clip is cut to the voice's length, so a shorter line costs screen time, not silence
+    if not low <= words <= budget:
+        p.append(f"narration has {words} words; write {int(budget * 0.9)} words (allowed {low}-{budget}) so it fills the {seconds:.0f} s")
     if SPEECH.search(" ".join(s.action for s in o.shots)):
         p.append("nobody speaks on screen: the narration is a voice-over; describe what the viewer sees, not speech")
     if not storyboard and not 2 <= len(o.shots) <= 3:
@@ -225,7 +263,8 @@ def check_take(o: _TakeOut, bible, seconds: float, facts: list[str], genre: Genr
 
 STOP_WORDS = {"the", "a", "an", "and", "or", "of", "to", "in", "on", "at", "with", "her", "his", "their", "she", "he", "they", "it", "is", "are", "be", "for", "by", "as", "that", "this",
               "through", "along", "one", "two", "young", "own", "pet", "video", "viewer", "shows", "show", "shown",
-              "guide", "landscape", "scene", "woman", "girl", "man", "boy", "person", "character", "characters", "across"}  # roles and generic places say nothing about WHAT is shown
+              "guide", "landscape", "scene", "woman", "girl", "man", "boy", "person", "character", "characters", "across",
+              "over", "under", "into", "from", "up", "down", "then", "while", "there", "near", "above", "below", "around", "behind", "beside", "time"}  # roles and generic places say nothing about WHAT is shown
 
 
 def content_words(text: str) -> set[str]:
@@ -259,7 +298,10 @@ def uncovered(must_show: list[str], panels: list[Panel], cast_text: str = "") ->
 
 STORYBOARD_ASK = ("STORYBOARD: this take is ONE continuous shot with ONE framing, drawn as two pictures: `action` = what the FIRST picture shows and what then happens, `end_state` = what the "
                   "LAST picture shows, in the same framing. Use the frame: say where each character stands in the frame at the start and at the end (left, center or right side); if somebody "
-                  "walks, they end at a clearly different place (walking to the right = left side at the start, right side at the end). Keep the same characters in both pictures.")
+                  "walks, they end at a clearly different place (walking to the right = left side at the start, right side at the end). Keep the same characters in both pictures.\n"
+                  "PICTURE FIRST: the picture must SHOW this take's fact as something visible in the scene - weather, an object or an event (`visual`), drawn large in the frame; "
+                  "the characters watch it or point at it, they are not the subject. If a fact is invisible (molecules, charges, temperatures), show its visible result instead. "
+                  "The narration explains what the viewer sees in this picture and mentions the visual.")
 
 
 async def _take(provider, bible, premise, genre, i: int, n: int, seconds: float, facts: list[str], prev: str, extra: str = "", storyboard: bool = False) -> _TakeOut:
@@ -273,16 +315,24 @@ async def _take(provider, bible, premise, genre, i: int, n: int, seconds: float,
            "unless a shot truly needs a slow move. Nobody speaks on screen; the narration is a voice-over." + (f"\n{STORYBOARD_ASK}" if storyboard else "") + (f"\n{extra}" if extra else ""))
     from engine.llm.errors import GenerationLimitError
 
-    as_take = lambda o: _TakeOut(location_id=o.location_id, narration=o.narration, shots=[o.shot], end_state=o.end_state) if storyboard else o  # noqa: E731
-    for temperature, tokens in ((0.7, 1800), (0.5, 2800), (0.3, 4000)):  # the 9B sometimes runs on until the token limit: ask again, cooler and with more room
+    as_take = lambda o: _TakeOut(location_id=o.location_id, narration=o.narration, shots=[o.shot], end_state=o.end_state, visual=o.visual) if storyboard else o  # noqa: E731
+    for temperature, tokens in ((0.7, 1800), (0.5, 2800), (0.8, 2800), (0.3, 4000), (0.6, 4000)):  # the 9B sometimes loops until the token limit (3 in a row on one storm take, then 195 tokens on a rerun): ask again
         try:
-            got = await sm._ask(provider, ask, _BoardTake if storyboard else _TakeOut, lambda o: check_take(as_take(o), bible, seconds, facts, genre, i, storyboard), temperature=temperature, max_tokens=tokens, attempts=7)
+            tries = {"n": 0}
+
+            def check(o, tries=tries):
+                tries["n"] += 1
+                found = check_take(as_take(o), bible, seconds, facts, genre, i, storyboard, prev)
+                # storyboard clips last as long as their line, so after 4 tries a short line is accepted (it costs screen time, not silence)
+                return [f for f in found if not (storyboard and tries["n"] > 4 and f.startswith("narration has"))]
+
+            got = await sm._ask(provider, ask, _BoardTake if storyboard else _TakeOut, check, temperature=temperature, max_tokens=tokens, attempts=7)
             out = as_take(got)
-            check_take(out, bible, seconds, facts, genre, i, storyboard)  # normalises wording on the object that is returned
+            check_take(out, bible, seconds, facts, genre, i, storyboard, prev)  # normalises wording on the object that is returned
             return out
         except GenerationLimitError:
             continue
-    raise ValueError("the model ran past its length limit three times for this take")
+    raise ValueError("the model ran past its length limit five times for this take")
 
 
 def _panel(i: int, t: _TakeOut, seconds: float, facts: list[str], genre: Genre, sky: str = "") -> tuple[Scene, Panel]:
@@ -291,7 +341,8 @@ def _panel(i: int, t: _TakeOut, seconds: float, facts: list[str], genre: Genre, 
     first = t.shots[0]
     return (Scene(id=f"s{i + 1}", location_id=t.location_id, character_ids=first.characters, summary=" ".join(facts), mood=genre.tone),
             Panel(id=f"t{i + 1}", scene_id=f"s{i + 1}", shot=first.framing, angle="eye_level", location_id=t.location_id, character_ids=first.characters, action=first.action.strip(),
-                  dialogue=[Line(speaker_id="narrator", text=t.narration.strip())], caption="", motion=first.action.strip(), seconds=seconds, shots=shots, end_state=t.end_state.strip(), atmosphere=sky.strip()))
+                  dialogue=[Line(speaker_id="narrator", text=t.narration.strip())], caption="", motion=first.action.strip(), seconds=seconds, shots=shots, end_state=t.end_state.strip(), atmosphere=sky.strip(),
+                  key_visuals=[t.visual.strip()] if t.visual.strip() else []))
 
 
 async def direct(brief: str, provider, total_seconds: float = 60.0, max_take: float = MAX_TAKE, progress=lambda pct, msg: None, storyboard: bool = False) -> OriginalStory:

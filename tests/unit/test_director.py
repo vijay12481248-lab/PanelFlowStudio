@@ -161,8 +161,8 @@ def test_fix_direction_alternates_sides_and_leaves_stated_directions_alone():
 
 def test_storyboard_take_needs_one_shot_and_an_end_state_about_the_same_cast():
     b = _real_bible()
-    one = d._TakeOut(location_id="open_field", narration=" ".join(["word"] * 34), shots=[_shot()],
-                     end_state="Mira and Pip stand at the right side of the frame and look up at the dark clouds.")
+    one = d._TakeOut(location_id="open_field", narration="The growing white clouds " + " ".join(["word"] * 30), shots=[_shot()],
+                     end_state="Mira and Pip stand at the right side of the frame and look up at the dark clouds.", visual="growing white clouds above the field")
     assert d.check_take(one, b, 15, [], G, storyboard=True) == []
     two = one.model_copy(update={"shots": [_shot(), _shot()]})
     assert any("exactly ONE shot" in p for p in d.check_take(two, b, 15, [], G, storyboard=True))
@@ -183,7 +183,7 @@ def test_direct_storyboard_mode_asks_for_one_shot_with_an_end_state(monkeypatch)
                                  atmosphere=[f"sky number {i} with {'dark' if i % 2 else 'bright'} clouds and {'dim' if i % 2 else 'warm'} light" for i in range(8)])
             if model is sm._Bible:
                 return _bible()
-            return d._BoardTake(location_id="open_field", narration=" ".join(["word"] * 17), shot=_shot(action="Mira walks to the right across the meadow while Pip trots beside her."),
+            return d._BoardTake(location_id="open_field", narration="The meadow clouds " + " ".join(f"q{chr(97 + len(seen) % 26)}{chr(97 + k)}ab" for k in range(13)), visual="tall clouds above the meadow", shot=_shot(action="Mira walks to the right across the meadow under tall clouds while Pip trots beside her."),
                                 end_state="Mira and Pip are at the right side of the frame and both look up at the clouds.")
 
     story = asyncio.run(d.direct("a one minute video on storms", Fake(), 60, 7.5, storyboard=True))
@@ -224,3 +224,22 @@ def test_writer_must_plan_a_different_sky_for_every_part_in_storyboard_mode():
     assert not any("atmosphere" in p for p in d.check_writer(w, 2, g, "", False))  # not asked for outside storyboard mode
     w.atmosphere = ["bright blue sky with warm sunshine", "towering dark clouds gather and the light turns grey"]
     assert not any("atmosphere" in p for p in d.check_writer(w, 2, g, "", True))
+
+
+def test_storyboard_take_must_show_its_fact_and_say_what_is_seen():
+    t = d._TakeOut(location_id="open_field", narration="Look at that huge dark anvil cloud: warm wet air rose and cooled into it.", shots=[_shot(action="A huge dark anvil cloud towers over the hills while Mira points at it from the left.")],
+                   end_state="Mira stands at the left side of the frame and looks up at the cloud with Pip.", visual="a huge dark anvil cloud over the hills")
+    assert d.picture_first(t) == []
+    assert any("mention the visual" in p for p in d.picture_first(t.model_copy(update={"narration": "Ice crystals collide inside and build up electric charge over time."})))
+    assert any("repeats" in p for p in d.picture_first(t, prev=t.narration))
+
+
+def test_a_character_on_another_characters_back_is_stacked_even_far_from_the_name():
+    assert d.stacked("pip on the right side of the frame jumping to her back as wind bends grass", ["Elara", "Pip"]) == "Pip"
+    assert d.stacked("Elara turns her back to the camera while Pip sits on the grass", ["Elara", "Pip"]) is None
+
+
+def test_character_ids_tolerate_the_models_wording():
+    chars = {c.id: c for c in _real_bible().characters}
+    assert d.character_id("Mira: center facing right", chars) == "mira" and d.character_id(" PIP ", chars) == "pip" and d.character_id("dragon", chars) == "dragon"
+    assert d.character_id("mira stands center-left pointing at the sky", chars) == "mira"

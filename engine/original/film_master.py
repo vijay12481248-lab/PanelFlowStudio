@@ -13,7 +13,7 @@ from pathlib import Path
 import numpy as np
 import soundfile as sf
 
-from engine.original import film
+from engine.original import ambience, film
 from engine.original.models import OriginalStory
 
 SR = 48000
@@ -57,28 +57,31 @@ def voice_gain_db(wav: Path, target: float = VOICE_MEAN_DB, cap: float = 12.0) -
 
 
 def normalize(cut: dict, ws: Path) -> Path:
-    """1080p / 24 fps / yuv420p picture and 48 kHz stereo sound with 12 ms edge fades (no clicks at cuts), to an intermediate mkv."""
+    """1080p / 24 fps / yuv420p picture and 48 kHz stereo sound with 12 ms edge fades (no clicks at cuts), to an intermediate mkv.
+    A silent clip gets the weather its shot describes (`ambience.py`), under the narrator."""
     out = ws.resolve() / "film" / "norm" / f"{cut['id']}.mkv"
     out.parent.mkdir(parents=True, exist_ok=True)
-    voice_file = ws / "film" / "voice" / f"{cut['id']}.wav"
-    newest = max(cut["clip"].stat().st_mtime, voice_file.stat().st_mtime if voice_file.exists() else 0)
-    if out.exists() and out.stat().st_mtime >= newest:
-        return out
     d = cut["seconds"]
     p = cut["panel"]
     voice = ws / "film" / "voice" / f"{p.id}.wav"
+    amb = ambience.ensure(cut["clip"], " ".join([p.atmosphere, p.action, p.end_state]), ws / "film" / "ambience" / f"{p.id}.wav", d, seed=sum(map(ord, p.id)))
+    newest = max(cut["clip"].stat().st_mtime, voice.stat().st_mtime if voice.exists() else 0, amb.stat().st_mtime if amb else 0)
+    if out.exists() and out.stat().st_mtime >= newest:
+        return out
     fade = f"afade=t=in:d=0.012,afade=t=out:st={max(0, d - 0.012):.3f}:d=0.012"
     vf = f"scale={W}:{H}:flags=lanczos,unsharp=5:5:0.45:5:5:0.0,fps={film.FPS},format=yuv420p,setsar=1"
+    inputs, chains, labels = ["-i", str(cut["clip"])], [f"[0:a]aresample={SR},aformat=channel_layouts=stereo[a0]"], ["[a0]"]
     if p.dialogue and p.dialogue[0].speaker_id in film.FACELESS and voice.exists() and p.id not in native_ids(ws):  # a faceless speaker's TTS voice is laid over the picture
-        _run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(cut["clip"]), "-i", str(voice), "-vf", vf,
-              "-filter_complex", f"[0:a]aresample={SR},aformat=channel_layouts=stereo[a0];"
-                                 f"[1:a]volume={voice_gain_db(voice):.1f}dB,alimiter=limit=0.9,aresample={SR},aformat=channel_layouts=stereo[a1];"
-                                 f"[a0][a1]amix=inputs=2:duration=first:normalize=0,{fade}[a]",
-              "-map", "0:v", "-map", "[a]", "-c:v", "libx264", "-crf", "12", "-preset", "fast", "-c:a", "pcm_s16le", str(out)])
-        return out
-    _run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(cut["clip"]), "-vf", vf,
-          "-af", f"aresample={SR},aformat=channel_layouts=stereo,{fade}",
-          "-c:v", "libx264", "-crf", "12", "-preset", "fast", "-c:a", "pcm_s16le", str(out)])
+        inputs += ["-i", str(voice)]
+        chains.append(f"[{len(labels)}:a]volume={voice_gain_db(voice):.1f}dB,alimiter=limit=0.9,aresample={SR},aformat=channel_layouts=stereo[a{len(labels)}]")
+        labels.append(f"[a{len(labels)}]")
+    if amb:
+        inputs += ["-i", str(amb)]
+        chains.append(f"[{len(labels)}:a]aresample={SR},aformat=channel_layouts=stereo[a{len(labels)}]")
+        labels.append(f"[a{len(labels)}]")
+    mix = f"{''.join(labels)}amix=inputs={len(labels)}:duration=first:normalize=0,{fade}[a]" if len(labels) > 1 else f"[a0]{fade}[a]"
+    _run(["ffmpeg", "-y", "-loglevel", "error", *inputs, "-vf", vf, "-filter_complex", ";".join(chains + [mix]),
+          "-map", "0:v", "-map", "[a]", "-c:v", "libx264", "-crf", "12", "-preset", "fast", "-c:a", "pcm_s16le", str(out)])
     return out
 
 
