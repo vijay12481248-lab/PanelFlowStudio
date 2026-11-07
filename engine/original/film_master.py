@@ -69,7 +69,7 @@ def normalize(cut: dict, ws: Path) -> Path:
     voice = ws / "film" / "voice" / f"{p.id}.wav"
     fade = f"afade=t=in:d=0.012,afade=t=out:st={max(0, d - 0.012):.3f}:d=0.012"
     vf = f"scale={W}:{H}:flags=lanczos,unsharp=5:5:0.45:5:5:0.0,fps={film.FPS},format=yuv420p,setsar=1"
-    if p.dialogue and p.dialogue[0].speaker_id in film.FACELESS and voice.exists():  # a faceless speaker's voice is laid over the picture
+    if p.dialogue and p.dialogue[0].speaker_id in film.FACELESS and voice.exists() and p.id not in native_ids(ws):  # a faceless speaker's TTS voice is laid over the picture
         _run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(cut["clip"]), "-i", str(voice), "-vf", vf,
               "-filter_complex", f"[0:a]aresample={SR},aformat=channel_layouts=stereo[a0];"
                                  f"[1:a]volume={voice_gain_db(voice):.1f}dB,alimiter=limit=0.9,aresample={SR},aformat=channel_layouts=stereo[a1];"
@@ -136,18 +136,34 @@ def spoken_span(wav: Path) -> tuple[float, float]:
     return (idx[0] / sr, idx[-1] / sr) if idx.size else (0.0, 0.0)
 
 
+def native_ids(ws: Path) -> set[str]:
+    """Shots whose clip carries H3's own generated voice: clips.json `native_voice`, or (older log entries) the native prompt's soundscape sentence."""
+    f = ws / "film" / "clips.json"
+    return {k for k, v in json.loads(f.read_text(encoding="utf-8")).items() if v.get("native_voice") or "speaks the line aloud" in v.get("prompt", "")} if f.exists() else set()
+
+
+def clip_speech_span(clip: Path) -> tuple[float, float]:
+    """(first, last) second of speech in a clip's own sound: 20 ms RMS frames above 4x the quiet floor and 15% of the loudest."""
+    raw = subprocess.run(["ffmpeg", "-loglevel", "error", "-i", str(clip), "-vn", "-ac", "1", "-ar", "16000", "-f", "f32le", "-"], capture_output=True, check=True).stdout
+    x = np.frombuffer(raw, dtype=np.float32)
+    n = 320
+    rms = np.sqrt(np.mean(x[: len(x) // n * n].reshape(-1, n) ** 2, axis=1)) if len(x) >= n else np.zeros(1)
+    idx = np.flatnonzero(rms > max(4 * float(np.percentile(rms, 20)), 0.15 * float(rms.max()), 1e-5))
+    return (idx[0] * n / 16000, (idx[-1] + 1) * n / 16000) if idx.size else (0.0, 0.0)
+
+
 def srt(cuts: list[dict], ws: Path) -> str:
     def stamp(t: float) -> str:
         ms = int(round(t * 1000))
         return f"{ms // 3600000:02d}:{ms // 60000 % 60:02d}:{ms // 1000 % 60:02d},{ms % 1000:03d}"
 
-    rows = []
+    rows, native = [], native_ids(ws)
     for c in cuts:
         p = c["panel"]
         wav = ws / "film" / "voice" / f"{p.id}.wav"
-        if not p.dialogue or not wav.exists():
+        if not p.dialogue or not (p.id in native or wav.exists()):
             continue
-        a, b = spoken_span(wav)
+        a, b = clip_speech_span(c["clip"]) if p.id in native else spoken_span(wav)
         rows.append((c["start"] + a, c["start"] + b + 0.15, p.dialogue[0].text))
     return "".join(f"{i}\n{stamp(a)} --> {stamp(b)}\n{t}\n\n" for i, (a, b, t) in enumerate(rows, 1))
 

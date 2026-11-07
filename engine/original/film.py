@@ -164,8 +164,23 @@ def silent_shot(ws: Path, panel: Panel, seconds: float | None = None) -> tuple[P
 
 
 # ------------------------------------------------------------------ motion prompt and clips
-def motion_prompt(story: OriginalStory, panel: Panel) -> str:
-    """H3 text for one shot: only the motion (the picture already carries how everyone looks, and re-describing it makes faces melt)."""
+AGE_VOICE = {"child": "a child's high, light", "teen": "a young", "adult": "an adult", "elder": "an old, slow, warm"}
+
+
+def voice_look(c) -> str:
+    """The voice H3 should give a character, derived from the story bible (same words every shot, so the voice stays the same)."""
+    who = {"female": "woman's" if c.age_group != "teen" else "girl's", "male": "man's" if c.age_group != "teen" else "boy's"}.get(c.gender, "")
+    return f"{AGE_VOICE.get(c.age_group, 'an adult')} {who} voice, {c.personality}".replace("  ", " ")
+
+
+def native_seconds(text: str) -> float:
+    """Clip length for a line H3 will speak itself: ~2.6 words a second plus a breath before and after, on the H3 frame grid."""
+    return snap_frames(0.35 + len(text.split()) / 2.6 + 0.5) / FPS
+
+
+def motion_prompt(story: OriginalStory, panel: Panel, native: bool = False) -> str:
+    """H3 text for one shot: only the motion (the picture already carries how everyone looks, and re-describing it makes faces melt).
+    `native`: H3 speaks the line itself (no anchored voice), so the prompt names the voice and the soundscape is that voice alone."""
     names = {c.id: c.name for c in story.bible.characters}
     cam = CAMERA.get(panel.shot, CAMERA["medium"])
     motion = panel.motion.rstrip(".")
@@ -176,7 +191,18 @@ def motion_prompt(story: OriginalStory, panel: Panel) -> str:
              "Single continuous take, anime film animation, smooth natural motion, consistent character appearance in every frame."]
     if vehicle:
         parts.append("The vehicles are hand-built wooden gliders with big patched canvas wings in a fantasy anime world: no jets, no airplanes, no propellers, no modern aircraft.")
-    if panel.dialogue and panel.dialogue[0].speaker_id not in FACELESS:
+    chars = {c.id: c for c in story.bible.characters}
+    if native and panel.dialogue:
+        ln = panel.dialogue[0]
+        who = names.get(ln.speaker_id, ln.speaker_id)
+        look = voice_look(chars[ln.speaker_id]) if ln.speaker_id in chars else "a natural voice"
+        if ln.speaker_id in FACELESS:  # no face to sync: the voice comes out of the picture, not from a mouth
+            parts.insert(1, f"{who} has no mouth and no face; it glows and pulses softly as its echoing voice says: \"{ln.text}\"")
+        else:
+            parts.insert(1, f"{who}'s lips move in exact sync with the words, with natural blinks, expressive eyebrows and small head movements. "
+                            f"{who} says: \"{ln.text}\"")
+        sound = f"{who} speaks the line aloud in {look}. Only the spoken voice and quiet ambience, no other speech, no singing."
+    elif panel.dialogue and panel.dialogue[0].speaker_id not in FACELESS:
         ln = panel.dialogue[0]
         parts.insert(1, f"{names.get(ln.speaker_id, ln.speaker_id)}'s lips move in exact sync with the words, with natural blinks, expressive eyebrows and small head movements. "
                         f"{names.get(ln.speaker_id, ln.speaker_id)} says: \"{ln.text}\"")
@@ -224,7 +250,7 @@ MIN_MOTION = 0.9  # mean frame-to-frame difference below this reads as a still p
 
 def make_clips(story: OriginalStory, ws: Path, ids: list[str] | None = None, seeds: dict[str, int] | None = None, client: ComfyUIClient | None = None,
                timeout: float = 1500.0, progress: Callable[[float, str], None] = lambda p, m: None, is_cancelled: Callable[[], bool] = lambda: False,
-               free_llm_memory: bool = True, quiet: list[str] | None = None) -> dict:
+               free_llm_memory: bool = True, quiet: list[str] | None = None, native_voice: bool = False) -> dict:
     """`film/clips/<shot>.mp4` (video + its own audio) for each shot with a frame. A clip newer than its frame, voice and prompt is reused; a clip
     that fails or comes out still is reported and the others continue. `quiet` = shots whose sound is anchored to silence: H3 sometimes invents speech
     (an unscripted voice) in a silent shot; a retry with a new seed usually fixes it, silence always does (at the cost of its sound effects)."""
@@ -241,7 +267,7 @@ def make_clips(story: OriginalStory, ws: Path, ids: list[str] | None = None, see
     engine = ArtEngine(client, registry)
     log_path = fd / "clips.json"
     log = json.loads(log_path.read_text(encoding="utf-8")) if log_path.exists() else {}
-    tts, voices = rt.KokoroTts(), film_voices(story, ws)
+    tts, voices = (None, {}) if native_voice else (rt.KokoroTts(), film_voices(story, ws))  # native: H3 speaks, Kokoro is never loaded
     todo = [p for p in story.panels if (not ids or p.id in ids) and (fd / "frames" / f"{p.id}.png").exists()]
     if free_llm_memory:
         release_ollama()
@@ -250,13 +276,14 @@ def make_clips(story: OriginalStory, ws: Path, ids: list[str] | None = None, see
         if is_cancelled():
             raise RuntimeError("cancelled")
         frame, out = fd / "frames" / f"{p.id}.png", fd / "clips" / f"{p.id}.mp4"
-        spoken = voice_shot(story, ws, p, tts, voices)
-        if spoken is None and p.id in (quiet or []):
+        talks = native_voice and bool(p.dialogue)  # H3 speaks the line itself: no TTS, no anchored audio
+        spoken = None if talks else voice_shot(story, ws, p, tts, voices)
+        if spoken is None and p.id in (quiet or []) and not talks:
             spoken = silent_shot(ws, p)
         elif spoken is not None and p.dialogue[0].speaker_id in FACELESS:  # the voice stays in voice/<id>.wav for the master; H3 gets silence
             spoken = silent_shot(ws, p, spoken[1])
-        seconds = spoken[1] if spoken else snap_frames(HOLD.get(p.shot, 3.75)) / FPS
-        prompt = motion_prompt(story, p)
+        seconds = native_seconds(p.dialogue[0].text) if talks else spoken[1] if spoken else snap_frames(HOLD.get(p.shot, 3.75)) / FPS
+        prompt = motion_prompt(story, p, native=talks)
         seed = (seeds or {}).get(p.id, int(hashlib.sha256(f"{story.bible.premise.title}|{p.id}|clip".encode()).hexdigest()[:12], 16))
         sig = hashlib.sha256(f"{prompt}|{seed}|{seconds}|{frame.stat().st_mtime_ns}|{spoken[0].stat().st_mtime_ns if spoken else 0}".encode()).hexdigest()[:16]
         if out.exists() and log.get(p.id, {}).get("sig") == sig:
@@ -277,7 +304,7 @@ def make_clips(story: OriginalStory, ws: Path, ids: list[str] | None = None, see
             continue
         out.write_bytes(raw)
         stats = clip_stats(out)
-        log[p.id] = {"sig": sig, "seed": seed, "seconds": seconds, "prompt": prompt, "workflow": VOICE_ID if spoken else FREE_ID, "prompt_id": prompt_id,
+        log[p.id] = {"sig": sig, "seed": seed, "seconds": seconds, "prompt": prompt, "workflow": VOICE_ID if spoken else FREE_ID, "prompt_id": prompt_id, "native_voice": talks,
                      "elapsed_s": round(time.monotonic() - started, 1), "stats": stats}
         log_path.write_text(json.dumps(log, indent=1), encoding="utf-8")
         done.append(p.id)

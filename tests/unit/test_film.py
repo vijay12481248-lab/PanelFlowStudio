@@ -94,6 +94,17 @@ def test_a_quiet_faceless_voice_is_lifted_to_the_level_of_the_other_voices(tmp_p
     assert film_master.voice_gain_db(wav) == 0.0
 
 
+def test_native_voice_prompt_names_the_voice_and_needs_no_tts(story):
+    talk = next(p for p in story.panels if p.dialogue and p.dialogue[0].speaker_id == "mira")
+    t = film.motion_prompt(story, talk, native=True)
+    assert talk.dialogue[0].text in t and "speaks the line aloud in" in t and "girl's voice" in t and "only the spoken voice" not in t
+    crystal = next(p for p in story.panels if p.dialogue and p.dialogue[0].speaker_id in film.FACELESS)
+    c = film.motion_prompt(story, crystal, native=True)
+    assert "no mouth" in c and "lips move" not in c  # a faceless speaker must not get a drawn mouth
+    assert film.native_seconds("Hi.") >= 1.5 and film.native_seconds("word " * 20) > film.native_seconds("word " * 5)
+    assert round(film.native_seconds("a b c") * film.FPS) % 17 == 5
+
+
 def test_inserted_shots_keep_every_other_shots_id(story):
     ids = [p.id for p in story.panels]
     assert ids.index("q01") == ids.index("p070") + 1 and ids.index("p071") == ids.index("q18") + 1

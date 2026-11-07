@@ -387,13 +387,14 @@ def film_frames(slug: str, ids: str | None = None, rerolls: str | None = None):
 
 
 @router.post("/story/{slug}/film/clips", status_code=202)
-def film_clips(slug: str, ids: str | None = None, seeds: str | None = None, quiet: str | None = None):
-    """H3 clip per shot from its frame; a speaking shot gets its character's voice anchored to the face (lip sync). Hours for a whole film."""
+def film_clips(slug: str, ids: str | None = None, seeds: str | None = None, quiet: str | None = None, native_voice: bool = False):
+    """H3 clip per shot from its frame; a speaking shot gets its character's voice anchored to the face (lip sync), or with native_voice=true
+    H3 speaks the line itself in a voice described from the character (no TTS). Hours for a whole film."""
     from engine.original import film
 
     ws, story = _film_story(slug)
     sd = _pairs(seeds)
-    return _film_start(slug, "clips", lambda prog, cancelled: film.make_clips(story, ws, _ids(ids), sd, progress=prog, is_cancelled=cancelled, quiet=_ids(quiet)))
+    return _film_start(slug, "clips", lambda prog, cancelled: film.make_clips(story, ws, _ids(ids), sd, progress=prog, is_cancelled=cancelled, quiet=_ids(quiet), native_voice=native_voice))
 
 
 @router.post("/story/{slug}/film/score", status_code=202)
