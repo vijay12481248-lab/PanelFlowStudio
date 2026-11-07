@@ -35,7 +35,7 @@ scene: s6 | cafe | hopeful | The meeting | The moment arrives.
 beat: medium | cafe | dev | The door opens. Someone walks in with a big smile. Dev stands up, and his stomach does one last somersault. | Dev standing up from the cafe chair looking toward the door with wide excited eyes, brushing down his sweater.
 beat: close | cafe | dev | Then he smiles. A real, easy smile. The butterflies were never a warning. They were a signal that this matters. | Dev smiling warmly and easily, his eyes bright, the nervousness gone from his face.
 beat: medium | cafe | maya | Maya slips out through the door, grinning, her work done. | Maya leaving the cafe with a proud grin, glancing back over her shoulder.
-beat: close | living_room | maya | Later, her phone buzzes. His text is one word: butterflies. She types back: good ones? He replies: the best. | Maya on the sofa smiling at her phone screen with a soft happy face, Biscuit sleeping beside her.
+beat: close | living_room | maya,biscuit | Later, her phone buzzes. His text is one word: butterflies. She types back: good ones? He replies: the best. | Maya on the sofa smiling at her phone screen with a soft happy face, Biscuit the orange tabby cat sleeping curled up beside her.
 scene: s7 | living_room | warm | The answer | Wrap up.
 beat: medium | living_room | maya,biscuit | So why do we get butterflies? Your brain and gut are wired together, and alert mode changes how your belly feels. | Maya on the sofa with Biscuit, one hand on her stomach and a knowing smile.
 beat: close | living_room | maya | Butterflies are not a flaw. They are your body saying: pay attention, this matters to you. | Maya smiling at the viewer with a hand on her heart.

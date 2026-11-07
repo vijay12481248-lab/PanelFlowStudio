@@ -40,4 +40,4 @@ beat: close | living_room | biscuit | Even Biscuit tilts his head once, at the s
 scene: s8 | living_room | warm | The answer | Wrap up.
 beat: medium | living_room | maya,mochi | Maya tries an experiment. She says walk, treat, and ball. Mochi tilts for all three. He has opinions about broccoli. | Maya holding a leash, a treat and a ball in her hands with a mischievous grin, Mochi sitting in front of her with a very serious deep tilt.
 beat: close | living_room | maya | So why do dogs tilt their heads? To hear better, to see faces, to focus on words that matter, and because it works. | Maya smiling at the viewer with her own head tilted to the side in an imitation of a dog tilt.
-beat: close | living_room | maya | Does your dog tilt for a special word? Tell us in the comments, and describe the tilt. | Maya grinning with her head tilted and Mochi's tilted head popping up beside her.
+beat: close | living_room | maya,mochi | Does your dog tilt for a special word? Tell us in the comments, and describe the tilt. | Maya grinning with her head tilted and Mochi's tilted head popping up beside her.

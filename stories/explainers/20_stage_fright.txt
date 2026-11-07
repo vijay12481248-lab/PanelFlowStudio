@@ -27,7 +27,7 @@ beat: medium | diagram | priya | A little nervous energy can actually help. Mode
 scene: s5 | living_room | funny | Breathing and practice | Calming tools.
 beat: medium | diagram | priya | Slow breathing helps too. Breathe in for four, out for six. A longer out-breath tells your body it can settle. | Priya breathing out slowly with a calm smile, a soft blue glow around her.
 beat: close | stage | maya | Maya breathes. In, two, three, four. Out, two, three, four, five, six. Her shoulders drop. | Maya with her eyes closed taking a slow breath and her shoulders lowering, a calm face.
-beat: medium | diagram | priya | Practice helps most. Practice out loud, in front of a mirror, a friend, or your cat. Familiar feels safer. | Priya practicing a speech in front of a flat yellow mirror shape with an animated smile.
+beat: medium | diagram | priya | Practice helps most. Practice out loud, in front of a mirror, a friend, or your cat. Familiar feels safer. | Priya with her natural brown skin and an animated smile mid-speech, one hand gesturing, a tall flat yellow rectangle frame standing beside her on the left.
 beat: medium | living_room | maya,biscuit | Maya's practice audience is Biscuit. He has attended eighty rehearsals and has never once clapped. | Maya reciting her poem with a paper in her hand and dramatic gestures in the living room, Biscuit sitting on the sofa watching with a deadpan face.
 scene: s6 | diagram | helpful | More ideas | Outward focus and help.
 beat: medium | diagram | priya | Another trick: focus on your message, not yourself. Think about what the audience will learn or feel, not how you look. | Priya pointing outward from herself toward the viewer with a warm smile, a small flat yellow heart beside her.
