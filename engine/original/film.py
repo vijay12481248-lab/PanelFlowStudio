@@ -178,11 +178,11 @@ def native_seconds(text: str) -> float:
     return snap_frames(0.35 + len(text.split()) / 2.6 + 0.5) / FPS
 
 
-def motion_prompt(story: OriginalStory, panel: Panel, native: bool = False) -> str:
+def motion_prompt(story: OriginalStory, panel: Panel, native: bool = False, camera: str | None = None) -> str:
     """H3 text for one shot: only the motion (the picture already carries how everyone looks, and re-describing it makes faces melt).
     `native`: H3 speaks the line itself (no anchored voice), so the prompt names the voice and the soundscape is that voice alone."""
     names = {c.id: c.name for c in story.bible.characters}
-    cam = CAMERA.get(panel.shot, CAMERA["medium"])
+    cam = camera or CAMERA.get(panel.shot, CAMERA["medium"])  # `camera`: one sentence for every shot (e.g. clip_loop.STATIC_CAMERA)
     motion = panel.motion.rstrip(".")
     vehicle = "flying machine" in panel.motion + panel.action
     if vehicle:  # H3 reads "flying machine" as a real aircraft and swaps in jets or propeller planes: name what it is
@@ -250,7 +250,7 @@ MIN_MOTION = 0.9  # mean frame-to-frame difference below this reads as a still p
 
 def make_clips(story: OriginalStory, ws: Path, ids: list[str] | None = None, seeds: dict[str, int] | None = None, client: ComfyUIClient | None = None,
                timeout: float = 1500.0, progress: Callable[[float, str], None] = lambda p, m: None, is_cancelled: Callable[[], bool] = lambda: False,
-               free_llm_memory: bool = True, quiet: list[str] | None = None, native_voice: bool = False) -> dict:
+               free_llm_memory: bool = True, quiet: list[str] | None = None, native_voice: bool = False, camera: str | None = None) -> dict:
     """`film/clips/<shot>.mp4` (video + its own audio) for each shot with a frame. A clip newer than its frame, voice and prompt is reused; a clip
     that fails or comes out still is reported and the others continue. `quiet` = shots whose sound is anchored to silence: H3 sometimes invents speech
     (an unscripted voice) in a silent shot; a retry with a new seed usually fixes it, silence always does (at the cost of its sound effects)."""
@@ -283,7 +283,7 @@ def make_clips(story: OriginalStory, ws: Path, ids: list[str] | None = None, see
         elif spoken is not None and p.dialogue[0].speaker_id in FACELESS:  # the voice stays in voice/<id>.wav for the master; H3 gets silence
             spoken = silent_shot(ws, p, spoken[1])
         seconds = native_seconds(p.dialogue[0].text) if talks else spoken[1] if spoken else snap_frames(HOLD.get(p.shot, 3.75)) / FPS
-        prompt = motion_prompt(story, p, native=talks)
+        prompt = motion_prompt(story, p, native=talks, camera=camera)
         seed = (seeds or {}).get(p.id, int(hashlib.sha256(f"{story.bible.premise.title}|{p.id}|clip".encode()).hexdigest()[:12], 16))
         sig = hashlib.sha256(f"{prompt}|{seed}|{seconds}|{frame.stat().st_mtime_ns}|{spoken[0].stat().st_mtime_ns if spoken else 0}".encode()).hexdigest()[:16]
         if out.exists() and log.get(p.id, {}).get("sig") == sig:

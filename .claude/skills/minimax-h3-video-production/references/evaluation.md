@@ -9,8 +9,8 @@ Tool: `engine/original/clip_eval.py` (details and calibration data in `docs/H3_C
 ## Axes and how each is measured
 | Axis | Measured by | Status |
 |---|---|---|
-| Camera control | whole-frame and border-ring zoom/pan/roll (LK + RANSAC about the centre); `confirmed` only if both agree, inliers >= 0.5 and |zoom| <= 50% | measured |
-| Temporal / unexpected transition | hard cut: step >= 8x median and >= 40 gray levels | measured (caught `p005`) |
+| Camera control | whole-frame and border-ring zoom/pan/roll (LK + RANSAC about the centre); `confirmed` only if both agree, inliers >= 0.5, and |zoom| <= 50% or tracker inliers >= 0.9 (a +164% zoom with inliers 0.99 was real) | measured |
+| Temporal / unexpected transition | hard cut: step >= 8x median and >= 40 gray levels (`confirmed`); tracker loses the picture in >= 5 frame steps (`suspected`: whip/morph transitions or violent motion; flags 19/140 Dawn clips at >=3 steps; cross-dissolves are NOT detected) | measured (caught `p005`'s cut; its later fast transition only as suspected) |
 | Visual artifacts / flicker | luminance second difference > 1.5 | measured, content dependent |
 | Motion quality | mean frame step < 0.3 = still | measured |
 | Lighting / colour consistency | histogram drift > 0.35 vs frame 0 | trigger only: 3/3 bad cat clips, 0/18 good; 35/140 Dawn Gate flags unlabelled |

@@ -23,7 +23,9 @@ SAMPLES = 8  # frames in a contact sheet
 # provisional thresholds (percent of frame, gray levels, ...)
 ZOOM_STATIC_PCT = 3.0  # |total zoom| above this in a clip that must have a fixed camera
 PAN_STATIC_PCT = 3.0  # |total pan| (percent of width/height) above this in a fixed-camera clip
-CAMERA_MAX_PCT = 50.0  # beyond this the tracker has almost certainly lost the picture (fast motion): never `confirmed`
+CAMERA_MAX_PCT = 50.0  # beyond this the tracker may have lost the picture (fast motion): `confirmed` only if the tracker also kept nearly all points
+CAMERA_SURE_INLIERS = 0.9  # measured: Dawn Gate p046 +164% zoom had inliers 0.99 (real); the lost-track cases had 0.61-0.81
+LOST_RATIO, LOST_STEPS = 0.3, 5  # a frame step where fewer than 30% of tracked points agree is a lost picture; this many in a clip = suspected transition (p005 variants 7-10, 19/140 Dawn clips >=3)
 RING = 0.18  # outer band of the frame used to tell a camera move from a subject move
 CAMERA_MIN_INLIERS = 0.5  # below this the dominant motion is probably the subject, not the camera: report `suspected`, never `confirmed`
 CUT_RATIO, CUT_MIN = 8.0, 40.0  # a frame step this many times the median step (and at least this many gray levels) is a cut; measured: fast continuous action reaches ~28 (Dawn Gate p078, not a cut), a real scene change 57-92 (p005)
@@ -80,8 +82,8 @@ def camera_motion(gray: list, ring: float | None = None) -> dict:
     centre = np.array([w / 2, h / 2], dtype=np.float32)
     mask = _ring_mask(gray[0].shape, ring) if ring else np.full((h, w), 255, np.uint8)
     log_s = rot = tx = ty = 0.0
-    inliers, path = [], [(0.0, 0.0, 0.0)]
-    for a, b in zip(gray, gray[1:]):
+    inliers, path, lost = [], [(0.0, 0.0, 0.0)], []
+    for i, (a, b) in enumerate(zip(gray, gray[1:])):
         pts = cv2.goodFeaturesToTrack(a, 300, 0.01, 7, mask=mask)
         ratio = 0.0
         if pts is not None and len(pts) >= 12:
@@ -95,10 +97,12 @@ def camera_motion(gray: list, ring: float | None = None) -> dict:
                     rot += math.atan2(m[1, 0], m[0, 0])
                     tx, ty = tx + float(m[0, 2]), ty + float(m[1, 2])
                     ratio = float(agree.sum()) / len(p0)
+                    if ratio < LOST_RATIO:
+                        lost.append(i + 1)
         inliers.append(ratio)
         path.append((math.exp(log_s) - 1, tx / w, ty / h))
     return {"zoom_pct": round((math.exp(log_s) - 1) * 100, 2), "pan_x_pct": round(tx / w * 100, 2), "pan_y_pct": round(ty / h * 100, 2),
-            "roll_deg": round(math.degrees(rot), 2), "inliers": round(float(np.median(inliers)), 2),
+            "roll_deg": round(math.degrees(rot), 2), "lost_steps": len(lost), "first_lost": lost[0] if lost else None, "inliers": round(float(np.median(inliers)), 2),
             "zoom_curve_pct": [round(path[min(len(path) - 1, round(k * (len(path) - 1) / 4))][0] * 100, 2) for k in range(5)]}
 
 
@@ -188,13 +192,15 @@ def evaluate(path: Path, expect_camera: str = "static", reference: np.ndarray | 
 
     ring = camera_motion(clip.gray, RING)
     # confirmed only when the whole frame and its border agree in sign, the tracker kept most points, and the numbers are sane
-    trust = cam["inliers"] >= CAMERA_MIN_INLIERS and ring["inliers"] >= CAMERA_MIN_INLIERS and abs(cam["zoom_pct"]) <= CAMERA_MAX_PCT and cam["zoom_pct"] * ring["zoom_pct"] > 0
+    trust = cam["inliers"] >= CAMERA_MIN_INLIERS and ring["inliers"] >= CAMERA_MIN_INLIERS and (abs(cam["zoom_pct"]) <= CAMERA_MAX_PCT or min(cam["inliers"], ring["inliers"]) >= CAMERA_SURE_INLIERS) and cam["zoom_pct"] * ring["zoom_pct"] > 0
     if expect_camera == "static":
         if abs(cam["zoom_pct"]) > ZOOM_STATIC_PCT:
             flag("camera", "confirmed" if trust else "suspected", None,
                  f"total zoom {cam['zoom_pct']:+.1f}% (border only {ring['zoom_pct']:+.1f}%) over {clip.t(clip.n - 1)}s, inliers {cam['inliers']}/{ring['inliers']}")
         if max(abs(cam["pan_x_pct"]), abs(cam["pan_y_pct"])) > PAN_STATIC_PCT:
             flag("camera", "confirmed" if trust else "suspected", None, f"total pan x {cam['pan_x_pct']:+.1f}% y {cam['pan_y_pct']:+.1f}% (border {ring['pan_x_pct']:+.1f}/{ring['pan_y_pct']:+.1f})")
+    if cam["lost_steps"] >= LOST_STEPS and not cuts:
+        flag("temporal", "suspected", clip.t(cam["first_lost"]), f"tracker lost the picture in {cam['lost_steps']} frame steps (first at {clip.t(cam['first_lost'])}s): a scene transition or violent motion, look at the frames")
     for c in cuts:
         flag("temporal", "confirmed", clip.t(c), f"hard cut: frame step {diffs[c - 1]:.1f} vs median {float(np.median(diffs)):.1f}")
     if flick > FLICKER_MAX:

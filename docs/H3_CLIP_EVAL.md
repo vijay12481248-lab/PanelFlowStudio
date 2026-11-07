@@ -65,3 +65,20 @@ gives the same clip, so single-lever comparisons are real, not noise.
 
 **Recommendation (not applied; `film.py` has the owner's uncommitted edits):** default the camera sentence to the Static Shot wording and make a push-in or move an explicit per-shot
 choice; keep clip length as is.
+
+## Phase 3: correction loop (`engine/original/clip_loop.py`)
+`python -m engine.original.clip_loop <story_dir> <shot> [--attempts 3] [--camera any] [--suspected] [--apply]`. Levers implemented: `static_camera`, `seed`. Judged by the
+worst defect in severity order (temporal > consistency > camera > artifacts > motion > audio); same axis: at least 25% smaller; a tie falls through to the next defect. History:
+`<ws>/film/history/<shot>.json`; attempt clips: `<ws>/film/attempts/<shot>/`; the real clip is replaced only with `--apply`. Tests: `tests/unit/test_clip_loop.py` (fake generator, no GPU).
+
+Real runs on an isolated copy of Dawn Gate (2026-11-07, 1-3 attempts each, ~80-110 s per attempt), outcomes checked on contact sheets:
+| Shot | Start | Result | Verdict |
+|---|---|---|---|
+| `p046` | zoom +163.7%, camera confirmed | `static_camera`, 1 attempt: zoom +0.4%, no flags; frames show a fixed camera and the goggle glow as prompted | **fixed** |
+| `p070` (dialogue, anchored voice) | zoom -19.9%, drift 0.60 | camera fixed on attempt 2-3 (-2.2%); drift unchanged (0.59): jackets and the whole scene still wash to blue-white by 2.5 s | camera fixed, **colour/outfit drift NOT fixed** |
+| `p005` | hard cut at 0.58 s | cut removed by `static_camera`; the new seed kept still jumps from the close-up to the glider at about 1.6 s (flagged only as suspected transition) | **transition not fixed**; loop says "no confirmed defect left; SUSPECTED remain" |
+
+What the real runs taught (fixed in the same phase): the first version ignored a +164% zoom because the evaluator capped confirmation at 50% (now: confirmed when the tracker kept >=90% of points),
+compared flag counts instead of size (rejected `p070`'s zoom fix), rejected a fix of a worse defect for adding a minor one (`p005`), and reported "no defect left" while a fast transition was
+only suspected (the evaluator now flags a tracker-lost run as a suspected transition and the loop lists remaining suspected flags).
+With only camera and seed levers the loop fixes camera defects; drift and scene transitions need the not-yet-built levers (redraw the first frame, simplify the action text). Sample: 3 shots.
