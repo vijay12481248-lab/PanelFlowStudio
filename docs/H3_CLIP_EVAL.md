@@ -161,8 +161,9 @@ Remaining: camera still moves 3-7% in 6 of 8 shots (`camera` confirmed; the walk
 - **`engine/original/stabilize.py`** removes a drift of 3-12 % (a straight ramp to the net drift, then a crop zoom that hides the borders) and **keeps the original unless the evaluator measures the result as
   at least 40 % steadier** (a first version with a coarser flow made a walking shot worse; that check is what caught it). Above 12 % it refuses: the cause is a different scale between the start and end picture,
   and the fix is to redraw the shot's pictures. `produce_video.py --stage stabilize` runs it (the raw clip is kept as `<id>_raw.mp4`).
-  Second storm video: t2 4.5 -> 0.9 %, t6 3.6 -> 1.1 % fixed; t5 (14.7 %) and t8 (24.2 %) refused. **Not solved:** redrawing those two shots automatically. A cheap pre-check on the two pictures (SIFT background
-  agreement) did not separate the bad pairs from the good ones, so it was not built.
+  Second storm video: t2 4.5 -> 0.9 %, t6 3.6 -> 1.1 % fixed; t5 (14.7 %) and t8 (24.2 %) refused. **`stage_fix_drift`** (default 2 rounds, `--fix-drift N`) then redraws such a shot's pictures with new seeds
+  (unchained), makes the clip again and stabilises again: t5 14.7 -> 0.3 % and t8 24.2 -> 0.3 % after ONE round. It is a retry loop, not a prevention: a cheap pre-check on the pictures (SIFT background
+  agreement) did not separate the bad pairs from the good ones, so the GPU time of the bad clip (about 3 min each) is still spent once. A redrawn shot no longer starts from the previous shot's end picture.
 - **Sky arc:** in storyboard mode the Writer plans one `atmosphere` (sky and light, 5-14 words) per take, neighbours must differ (`check_writer`); it goes into the take's prompt and into BOTH keyframes
   (`ShotSpec.lighting`, `Panel.atmosphere`). Measured on the second storm video: sunny -> grey -> purple storm with lightning -> clearing with sun rays -> rainbow, where the first video was sunny throughout.
   Known weakness: the image model over-draws the middle of the arc (take 3 "grey clouds gathering" came out as a full purple storm), so the build-up is a jump from take 2 to take 3 rather than gradual.
