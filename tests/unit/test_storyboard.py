@@ -203,3 +203,36 @@ def test_a_walker_must_end_on_the_other_side(story, tmp_path):
 
     rep = asyncio.run(sb.draw(st, tmp_path, Runner(), Provider(), tries=2, progress=lambda m: None))
     assert rep["w1"]["attempts"] == 2 and rep["w1"]["problems"].get("walk")
+
+
+def test_the_end_picture_keeps_the_start_scenery_and_only_moves_the_characters(story):
+    p = _panel(story, 0, character_ids=["mira", "pip"], action="Mira stands on the left looking up; dark clouds swirl overhead and a bolt flashes in the distance",
+               end_state="Mira walks to the right side of the frame; the sky is clear and calm")
+    text = sb.end_text(story, p)
+    assert "Mira walks to the right side" in text and "dark clouds swirl overhead" in text and "bolt flashes" in text and "clear and calm" not in text
+    assert sb.end_text(story, _panel(story, 0, action="dark clouds", end_state="the sky clears")) == "the sky clears"  # no character clause at all: keep the end state as written
+
+
+def test_the_clip_prompt_names_only_the_characters_end_places(story):
+    p = _panel(story, 0, character_ids=["mira"], action="Mira stands left; clouds swirl", end_state="Mira stands on the right side; a lightning bolt strikes behind her")
+    text = sb.clip_prompt(story, p, 8.0)
+    assert "The last picture shows: Mira stands on the right side" in text and "lightning bolt" not in text and "no smoke, dust clouds, rings, bolts or glow" in text
+
+
+def test_a_walker_does_not_start_from_an_end_picture_on_the_side_it_walks_to(story, tmp_path):
+    a = _panel(story, 0, id="c1", character_ids=["mira"], action="Mira walks to the right across the meadow", end_state="Mira is on the right side of the frame")
+    b = a.model_copy(update={"id": "c2"})
+    st = story.model_copy(update={"panels": [a, b]})
+    drawn = []
+
+    class Runner:
+        def generate(self, pos, neg, seed, w, h, prefix):
+            drawn.append(prefix)
+            return _png(90)
+
+    class Provider:  # the girl is on the RIGHT in every picture
+        async def analyze_vision(self, png, prompt, **kw):
+            return json.dumps({"side": "right"} if "third" in prompt or "mostly on" in prompt else {"count": 1})
+
+    asyncio.run(sb.draw(st, tmp_path, Runner(), Provider(), tries=1, progress=lambda m: None))
+    assert "sb_c2_start" in drawn  # c2 walks right but c1 ended on the right: it is drawn fresh, not chained

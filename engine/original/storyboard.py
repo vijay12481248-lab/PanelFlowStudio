@@ -81,9 +81,26 @@ def split_actions(text: str, names: dict[str, str], first: str) -> tuple[str, di
     return ". ".join(r for r in rest if r), {cid: ", ".join(v) for cid, v in own.items() if v}
 
 
+def clauses(text: str, names: dict[str, str]) -> tuple[list[str], list[str]]:
+    """(clauses about the weather/scenery, clauses that name a character): the two kinds of thing a picture description says."""
+    scene, chars = [], []
+    for clause in (c.strip(" ,") for c in CLAUSE_SPLIT.split(text) if c.strip()):
+        (chars if any(re.search(rf"\b{re.escape(nm)}\b", clause, re.I) for nm in names.values()) else scene).append(clause)
+    return scene, chars
+
+
+def end_text(story: OriginalStory, panel: Panel) -> str:
+    """The END picture is the START picture's world with the characters in their end places: the scenery and effects (clouds, bolts, glow) are taken from the start description
+    and only the character clauses from the end state. (Measured: when the two pictures differed in weather and effects, H3 filled the gap with smoke puffs, rings and lightning.)"""
+    names = {c.id: c.name for c in story.bible.characters if c.id in panel.character_ids}
+    scene_start, _ = clauses(panel.action, names)
+    _, chars_end = clauses(panel.end_state, names)
+    return ". ".join(chars_end + scene_start) if chars_end else panel.end_state
+
+
 def keyframe_prompt(story: OriginalStory, panel: Panel, which: str) -> tuple[str, str]:
     """The art prompt for the start or end picture of a shot: the shot's own framing, the cast on the sides the walk needs, the action (start) or end state (end)."""
-    text = panel.action if which == "start" else panel.end_state
+    text = panel.action if which == "start" else end_text(story, panel)
     spec: ShotSpec = film.film_spec(story, panel.model_copy(update={"action": ""}))
     if spec.characters:
         names = {c.id: c.name for c in story.bible.characters if c.id in panel.character_ids}
@@ -138,6 +155,11 @@ async def draw(story: OriginalStory, ws: Path, runner, provider, tries: int = 4,
     for p in story.panels:
         start, end = fd / "frames" / f"{p.id}.png", fd / "frames" / f"{p.id}_end.png"
         chained = continues(prev, p) and (fd / "frames" / f"{prev.id}_end.png").exists() and not report.get(prev.id, {}).get("problems", {}).get("end")  # a bad end picture is not passed on
+        kind = panel_first_kind(story, p)
+        if chained and walk_direction(p) and kind:  # a walker cannot start on the side it walks to
+            side = await ci.side_of(provider, (fd / "frames" / f"{prev.id}_end.png").read_bytes(), kind)
+            far = {"right": "left", "left": "right"}[walk_direction(p)]
+            chained = side in (far, "center", None)
         info = {"chained": chained, "attempts": 0, "problems": {}, "direction": walk_direction(p)}
         for attempt in range(tries):
             info["attempts"] = attempt + 1
@@ -167,7 +189,7 @@ async def draw(story: OriginalStory, ws: Path, runner, provider, tries: int = 4,
 
 
 STAY_IN_FRAME = ("Everyone stays inside the frame for the whole shot, in the same place and size as in the pictures. The camera never tilts, pans or moves. Weather, smoke and light effects "
-                 "stay small and in the background and never cover the characters or fill the frame.")  # measured: with only the story text H3 filled the middle of 4 of 8 shots with smoke, a different scene or a tilt up to the sky
+                 "stay small and in the background and never cover the characters or fill the frame. Nothing new appears between the two pictures: no smoke, dust clouds, rings, bolts or glow that are not already in them.")  # measured: with only the story text H3 filled the middle of 4 of 8 shots with smoke, a different scene or a tilt up to the sky
 
 
 def clip_prompt(story: OriginalStory, panel: Panel, seconds: float) -> str:
@@ -179,7 +201,9 @@ def clip_prompt(story: OriginalStory, panel: Panel, seconds: float) -> str:
     else:
         move = "Everyone stays where they are and moves only a little (a turn of the head, a gesture, a blink)."
     # The story text (lightning arcs, air lifts people) is NOT sent: both pictures already show it, and H3 acts out every event it is told about (a "massive lightning bolt" made a whole new lightning scene in the middle of a shot).
-    action = f"The scene changes gradually and smoothly from the first picture into the last picture. {move} {film.count_clause(story, panel.character_ids)} {STAY_IN_FRAME} The last picture shows: {panel.end_state.rstrip('.')}"
+    _, chars_end = clauses(panel.end_state, {c.id: c.name for c in story.bible.characters if c.id in panel.character_ids})
+    last = ". ".join(chars_end) if chars_end else panel.end_state.rstrip(".")  # only where the characters are: the pictures carry the rest
+    action = f"The scene changes gradually and smoothly from the first picture into the last picture. {move} {film.count_clause(story, panel.character_ids)} {STAY_IN_FRAME} The last picture shows: {last}"
     return h3_modes.fl2va_prompt(action, seconds, camera=panel.camera or STATIC_CAMERA)
 
 
