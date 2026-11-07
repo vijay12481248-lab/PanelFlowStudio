@@ -250,3 +250,27 @@ def test_the_planned_sky_is_in_both_pictures_of_a_shot(story):
     for which in ("start", "end"):
         assert "dark grey clouds" in sb.keyframe_prompt(story, p, which)[0]
     assert "dark grey clouds" not in sb.keyframe_prompt(story, p.model_copy(update={"atmosphere": ""}), "start")[0]
+
+
+def test_draw_can_redo_only_some_shots_with_new_seeds_and_keeps_the_rest(story, tmp_path):
+    p1 = _panel(story, 0, id="a1", character_ids=["mira"], action="Mira stands in the field")
+    st = story.model_copy(update={"panels": [p1, p1.model_copy(update={"id": "a2"}), p1.model_copy(update={"id": "a3"})]})
+    seeds = {}
+
+    class Runner:
+        def generate(self, pos, neg, seed, w, h, prefix):
+            seeds.setdefault(prefix, []).append(seed)
+            return _png(len(seeds) * 9)
+
+    class Provider:
+        async def analyze_vision(self, png, prompt, **kw):
+            return json.dumps({"count": 1})
+
+    asyncio.run(sb.draw(st, tmp_path, Runner(), Provider(), tries=2, progress=lambda m: None))
+    first = {k: v[0] for k, v in seeds.items()}
+    seeds.clear()
+    fd = tmp_path / "film" / "frames"
+    kept = (fd / "a1.png").read_bytes()
+    rep = asyncio.run(sb.draw(st, tmp_path, Runner(), Provider(), tries=2, progress=lambda m: None, ids=["a2"], round_=1))
+    assert set(seeds) == {"sb_a2_start", "sb_a2_end"} and seeds["sb_a2_end"][0] != first["sb_a2_end"] and rep["a2"]["chained"] is False  # only a2, new seed, own start picture
+    assert (fd / "a1.png").read_bytes() == kept and set(rep) == {"a1", "a2", "a3"}  # the other shots and their report stay

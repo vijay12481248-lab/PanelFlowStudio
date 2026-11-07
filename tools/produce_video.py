@@ -88,10 +88,10 @@ def stage_clips(story: OriginalStory, ws: Path, board: bool = False, ids: list[s
     return res
 
 
-def stage_stabilize(story: OriginalStory, ws: Path) -> dict:
+def stage_stabilize(story: OriginalStory, ws: Path, ids: list[str] | None = None) -> dict:
     """Undo a small camera drift in each clip (the raw clip is kept as <id>_raw.mp4). A drift beyond the stabiliser's limit is reported: that shot's pictures need redrawing."""
     clips, out = ws / "film" / "clips", {}
-    for p in story.panels:
+    for p in [p for p in story.panels if not ids or p.id in ids]:
         raw, cur = clips / f"{p.id}_raw.mp4", clips / f"{p.id}.mp4"
         res = stabilize.stabilize(cur, clips / f"{p.id}_stab.mp4")  # an already stabilised clip measures steady and is left alone
         if res["applied"]:
@@ -100,6 +100,26 @@ def stage_stabilize(story: OriginalStory, ws: Path) -> dict:
         out[p.id] = res
         print(f"  stabilize {p.id}: {res}", flush=True)
     return out
+
+
+def too_drifty(res: dict) -> bool:
+    """A clip the stabiliser could not repair: its drift is beyond the limit, or it measurably did not help."""
+    return not res["applied"] and (res.get("reason", "").startswith("drift") or res.get("reason", "").startswith("did not help"))
+
+
+async def stage_fix_drift(story: OriginalStory, ws: Path, stab: dict, rounds: int = 2) -> dict:
+    """Shots whose drift cannot be stabilised have pictures at different scales: draw their pictures again (new seeds), make the clips again, stabilise again. Up to `rounds` times, then report."""
+    bad = [i for i, r in stab.items() if too_drifty(r)]
+    for rnd in range(1, rounds + 1):
+        if not bad:
+            break
+        print(f"fix-drift round {rnd}: redrawing {bad}", flush=True)
+        await storyboard.draw(story, ws, art_mod.ComfyRunner(), llm_registry.get_ollama_provider(), progress=lambda m: print(m, flush=True), ids=bad, round_=rnd)
+        stage_clips(story, ws, True, bad, rnd)
+        again = stage_stabilize(story, ws, bad)
+        stab.update(again)
+        bad = [i for i in bad if too_drifty(again[i])]
+    return {"still_drifting": bad}
 
 
 def shot_at(panel, t: float) -> dict:
@@ -140,6 +160,7 @@ def main() -> None:
     ap.add_argument("--stage", default="all", choices=["plan", "frames", "clips", "stabilize", "qa", "master", "all"])
     ap.add_argument("--ids", default="", help="only these shots (comma list), e.g. t1,t6")
     ap.add_argument("--attempt", type=int, default=0, help="retry number: a new seed for the shots in --ids")
+    ap.add_argument("--fix-drift", type=int, default=2, help="storyboard: redraw and re-animate shots too drifty to stabilise, up to this many rounds (0 = off)")
     ap.add_argument("--storyboard", action="store_true", help="storyboard approach: draw and check a start and an end picture per shot, then animate between them (FL2VA)")
     a = ap.parse_args()
     ws = ROOT / a.slug
@@ -156,7 +177,9 @@ def main() -> None:
     if want("clips"):
         print("clips:", json.dumps(stage_clips(story, ws, a.storyboard, [i for i in a.ids.split(",") if i] or None, a.attempt)), flush=True)
     if want("stabilize"):
-        stage_stabilize(story, ws)
+        stab = stage_stabilize(story, ws)
+        if a.storyboard and a.fix_drift:
+            print("fix-drift:", asyncio.run(stage_fix_drift(story, ws, stab, a.fix_drift)), flush=True)
     if want("qa"):
         asyncio.run(stage_qa(story, ws))
     if want("master"):

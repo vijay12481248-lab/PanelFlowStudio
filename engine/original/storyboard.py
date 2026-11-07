@@ -155,15 +155,20 @@ def hist_distance(a: bytes, b: bytes) -> float:
     return round(float(cv2.compareHist(_hist(img(a)).astype(np.float32), _hist(img(b)).astype(np.float32), cv2.HISTCMP_BHATTACHARYYA)), 3)
 
 
-async def draw(story: OriginalStory, ws: Path, runner, provider, tries: int = 4, progress: Callable[[str], None] = print) -> dict:
+async def draw(story: OriginalStory, ws: Path, runner, provider, tries: int = 4, progress: Callable[[str], None] = print, ids: list[str] | None = None, round_: int = 0) -> dict:
     """Draw and check the start and end picture of every shot (`film/frames/<id>.png`, `film/frames/<id>_end.png`). Returns {shot: {...}}; `unresolved` lists pictures
-    that still miscount after `tries` draws (they are kept, and reported)."""
+    that still miscount after `tries` draws (they are kept, and reported).
+    `ids`: draw only these shots again (a shot whose clip drifted because its two pictures differ in scale); `round_` gives them new seeds, and they are drawn unchained (own start picture)."""
     fd = film.film_dir(ws)
-    report: dict = {}
+    old = json.loads((fd / "storyboard.json").read_text(encoding="utf-8")) if ids and (fd / "storyboard.json").exists() else {}
+    report: dict = dict(old)
     prev: Panel | None = None
     for p in story.panels:
+        if ids and p.id not in ids:
+            prev = p
+            continue
         start, end = fd / "frames" / f"{p.id}.png", fd / "frames" / f"{p.id}_end.png"
-        chained = continues(prev, p) and (fd / "frames" / f"{prev.id}_end.png").exists() and not report.get(prev.id, {}).get("problems", {}).get("end")  # a bad end picture is not passed on
+        chained = not ids and continues(prev, p) and (fd / "frames" / f"{prev.id}_end.png").exists() and not report.get(prev.id, {}).get("problems", {}).get("end")  # a bad end picture is not passed on
         kind = panel_first_kind(story, p)
         if chained and walk_direction(p) and kind:  # a walker cannot start on the side it walks to
             side = await ci.side_of(provider, (fd / "frames" / f"{prev.id}_end.png").read_bytes(), kind)
@@ -172,7 +177,7 @@ async def draw(story: OriginalStory, ws: Path, runner, provider, tries: int = 4,
         info = {"chained": chained, "attempts": 0, "problems": {}, "direction": walk_direction(p)}
         for attempt in range(tries):
             info["attempts"] = attempt + 1
-            seed = art_mod.seed_for(story, p.id, attempt)
+            seed = art_mod.seed_for(story, p.id, round_ * tries + attempt)
             if chained:
                 shutil.copy2(fd / "frames" / f"{prev.id}_end.png", start)
             else:
