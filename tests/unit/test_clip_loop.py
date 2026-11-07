@@ -177,12 +177,12 @@ def test_simplify_motion_rules():
 
 def test_lever_order_availability_and_one_input_changed():
     rep = {"flags": [{"axis": "consistency", "status": "suspected"}]}
-    s = {"seed": 5, "static_camera": False, "motion": "they walk, Mira laughing, the light growing", "frame_attempt": 0}
+    s = {"seed": 5, "static_camera": False, "motion": "they walk, Mira laughing, the light growing", "frame_attempt": 0, "frame_shot": "medium"}
     assert cl.next_lever(rep, s, set(), True) == ("simplify_action", "consistency")
     assert cl.next_lever(rep, s, {("simplify_action", "consistency")}, True) == ("seed", "consistency")  # redraw not available without a runner
-    avail = cl.DEFAULT_LEVERS | {"redraw_frame"}
+    avail = cl.DEFAULT_LEVERS | cl.FRAME_LEVERS
     assert cl.next_lever(rep, s, {("simplify_action", "consistency")}, True, avail) == ("redraw_frame", "consistency")
-    for lever in ("static_camera", "simplify_action", "redraw_frame", "seed"):
+    for lever in ("static_camera", "simplify_action", "redraw_frame", "widen_frame", "seed"):
         new = cl.apply_lever(lever, s, 1, "consistency")
         assert len([k for k in new if new[k] != s[k]]) == 1, lever
     assert cl.next_lever(rep, {**s, "motion": "she waves"}, set(), True) == ("seed", "consistency")  # nothing to simplify -> next lever
@@ -211,12 +211,13 @@ def test_film_generate_applies_motion_and_redraws_only_when_asked(tmp_path, monk
 
     def fake_frames(st, work, runner, ids, rerolls):
         seen["rerolls"] = rerolls
+        seen["frame_shot"] = next(p.shot for p in st.panels if p.id == ids[0])
         (work / "film" / "frames" / f"{ids[0]}.png").write_bytes(b"new")
 
     monkeypatch.setattr(cl.film, "make_clips", fake_clips)
     monkeypatch.setattr(cl.film, "make_frames", fake_frames)
-    gen = cl.film_generate(story, ws, sid, runner=object(), frame_attempt=0)
-    base = {"seed": 1, "static_camera": False, "native_voice": False, "motion": story.panels[0].motion, "frame_attempt": 0}
+    base = {"seed": 1, "static_camera": False, "native_voice": False, "motion": story.panels[0].motion, "frame_attempt": 0, "frame_shot": story.panels[0].shot}
+    gen = cl.film_generate(story, ws, sid, runner=object(), baseline=base)
     gen(tmp_path / "w1", base)
     assert (tmp_path / "w1" / "film" / "frames" / f"{sid}.png").read_bytes() == b"orig" and "rerolls" not in seen and seen["motion"] == story.panels[0].motion
     gen(tmp_path / "w2", {**base, "motion": "just this", "frame_attempt": 1, "static_camera": True})
@@ -226,4 +227,45 @@ def test_film_generate_applies_motion_and_redraws_only_when_asked(tmp_path, monk
     import pytest as _p
 
     with _p.raises(RuntimeError):
-        cl.film_generate(story, ws, sid, runner=None, frame_attempt=0)(tmp_path / "w3", {**base, "frame_attempt": 2})
+        cl.film_generate(story, ws, sid, runner=None, baseline=base)(tmp_path / "w3", {**base, "frame_attempt": 2})
+
+
+def test_widen_frame_changes_only_the_first_frame_shot_size(tmp_path, monkeypatch):
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("dg", Path(__file__).resolve().parents[2] / "stories" / "dawn_gate_source.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    story = mod.story
+    panel = next(p for p in story.panels if p.shot in ("close", "medium"))
+    sid, wider = panel.id, cl.widen(panel.shot)
+    ws = tmp_path / "ws"
+    (ws / "film" / "frames").mkdir(parents=True)
+    (ws / "film" / "frames" / f"{sid}.png").write_bytes(b"orig")
+    seen = {}
+
+    def fake_clips(st, work, ids, seeds, native_voice, camera):
+        seen["clip_shot"] = next(p.shot for p in st.panels if p.id == sid)
+        out = work / "film" / "clips" / f"{sid}.mp4"
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_bytes(b"clip")
+        return {"failed": []}
+
+    def fake_frames(st, work, runner, ids, rerolls):
+        seen["frame_shot"] = next(p.shot for p in st.panels if p.id == sid)
+        (work / "film" / "frames" / f"{sid}.png").write_bytes(b"wide")
+
+    monkeypatch.setattr(cl.film, "make_clips", fake_clips)
+    monkeypatch.setattr(cl.film, "make_frames", fake_frames)
+    base = {"seed": 1, "static_camera": False, "native_voice": False, "motion": panel.motion, "frame_attempt": 0, "frame_shot": panel.shot}
+    cl.film_generate(story, ws, sid, runner=object(), baseline=base)(tmp_path / "w", cl.apply_lever("widen_frame", base, 1))
+    assert seen["frame_shot"] == wider and seen["clip_shot"] == panel.shot  # the frame is wider, the clip keeps the shot's own size and length
+    assert cl.widen("wide") is None and cl.widen(None) is None and cl.widen("extreme_close") == "close"
+    rep = {"flags": [{"axis": "temporal", "status": "confirmed"}]}
+    order = []
+    s = {**base, "static_camera": True}
+    tried = set()
+    while (pick := cl.next_lever(rep, s, tried, False, cl.DEFAULT_LEVERS | cl.FRAME_LEVERS)) and len(order) < 6:
+        order.append(pick[0])
+        tried.add(pick)
+    assert order[0] == "widen_frame" and len(order) == len(set(order)) and order[-1] == "seed"  # temporal: static is done, so widen comes first, seed last

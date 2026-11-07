@@ -25,9 +25,11 @@ from engine.original.models import OriginalStory
 
 STATIC_CAMERA = "nothing; it is a Static Shot, fixed on a tripod, with no zoom, no pan and no tilt"
 SEVERITY = ["temporal", "consistency", "camera", "artifacts", "motion", "audio"]  # a scene break matters more than a zoom, a zoom more than flicker
-LEVERS = {"temporal": ["static_camera", "simplify_action", "redraw_frame", "seed"], "consistency": ["simplify_action", "redraw_frame", "seed"],
+LEVERS = {"temporal": ["static_camera", "widen_frame", "simplify_action", "redraw_frame", "seed"], "consistency": ["simplify_action", "redraw_frame", "seed"],
           "camera": ["static_camera", "seed"], "artifacts": ["seed"], "motion": ["seed"], "audio": []}
-DEFAULT_LEVERS = frozenset({"static_camera", "simplify_action", "seed"})  # redraw_frame is added when a frame runner is available
+DEFAULT_LEVERS = frozenset({"static_camera", "simplify_action", "seed"})  # redraw_frame and widen_frame are added when a frame runner is available
+FRAME_LEVERS = frozenset({"redraw_frame", "widen_frame"})
+SHOT_LADDER = ["extreme_close", "close", "medium", "wide"]  # widen_frame moves the FIRST FRAME one step to the right; the clip keeps the shot's own size (camera sentence, length)
 LIGHT = re.compile(r"\b(light|lights|glow|glows|glowing|flash|flashes|flare|flares|beam|beams|shaft|shafts|lightning|ray|rays|shine|shines|shining|blaze|blazes|gleam|gleams|bright|brighter|brightens)\b", re.I)
 
 Generate = Callable[[Path, dict], Path]  # (attempt workspace, settings) -> clip path
@@ -77,6 +79,11 @@ def simplify_motion(text: str, axis: str = "") -> str | None:
     return clauses[0] if len(clauses) > 1 else None
 
 
+def widen(shot: str | None) -> str | None:
+    """The next wider shot size, or None when already wide (or unknown)."""
+    return SHOT_LADDER[SHOT_LADDER.index(shot) + 1] if shot in SHOT_LADDER[:-1] else None
+
+
 def next_lever(report: dict, settings: dict, tried: set, act_on_suspected: bool, available: frozenset = DEFAULT_LEVERS) -> tuple[str, str] | None:
     """(lever, axis) for the most severe defect that still has an untried, usable lever; None when nothing can be done."""
     for f in defects(report, act_on_suspected):
@@ -84,6 +91,8 @@ def next_lever(report: dict, settings: dict, tried: set, act_on_suspected: bool,
             if lever not in available or (lever, f["axis"]) in tried:
                 continue
             if lever == "static_camera" and settings.get("static_camera"):
+                continue
+            if lever == "widen_frame" and widen(settings.get("frame_shot")) is None:
                 continue
             if lever == "simplify_action" and simplify_motion(settings.get("motion") or "", f["axis"]) in (None, settings.get("motion")):
                 continue
@@ -99,6 +108,8 @@ def apply_lever(lever: str, settings: dict, n: int, axis: str = "") -> dict:
         new["motion"] = simplify_motion(settings["motion"], axis)
     elif lever == "redraw_frame":
         new["frame_attempt"] = settings.get("frame_attempt", 0) + 1
+    elif lever == "widen_frame":
+        new["frame_shot"] = widen(settings["frame_shot"])
     else:  # seed: derived from the previous one and the attempt number, so it is reproducible
         new["seed"] = int(hashlib.sha256(f"{settings['seed']}|retry|{n}".encode()).hexdigest()[:12], 16)
     return new
@@ -112,21 +123,32 @@ def baseline_settings(story: OriginalStory, ws: Path, sid: str) -> dict:
     panel = next((p for p in story.panels if p.id == sid), None)
     flog = ws / "film" / "frames.json"
     frame = json.loads(flog.read_text(encoding="utf-8")).get(sid, {}).get("attempt", 0) if flog.exists() else 0
-    return {"seed": seed, "static_camera": False, "native_voice": bool(entry.get("native_voice")), "motion": panel.motion if panel else "", "frame_attempt": frame}
+    return {"seed": seed, "static_camera": False, "native_voice": bool(entry.get("native_voice")), "motion": panel.motion if panel else "", "frame_attempt": frame,
+            "frame_shot": panel.shot if panel else None}
 
 
-def film_generate(story: OriginalStory, ws: Path, sid: str, runner=None, frame_attempt: int = 0) -> Generate:
+def _with(story: OriginalStory, sid: str, **update) -> OriginalStory:
+    """A copy of the story with one panel's fields replaced (the real story object is never touched)."""
+    return story.model_copy(update={"panels": [p.model_copy(update=update) if p.id == sid else p for p in story.panels]})
+
+
+def film_generate(story: OriginalStory, ws: Path, sid: str, runner=None, baseline: dict | None = None) -> Generate:
     """Generator that runs `film.make_clips` for one shot in its own workspace, so the story's real clips are never touched. A changed `motion` is applied to a copy
-    of the story. A changed `frame_attempt` redraws the first frame with `film.make_frames` (needs `runner`, an `art.ComfyRunner`); otherwise the original frame is copied."""
+    of the story. A changed `frame_attempt` or `frame_shot` (vs `baseline`) draws a new first frame with `film.make_frames` (needs `runner`, an `art.ComfyRunner`; the
+    frame uses the wider shot size, the clip keeps the shot's own); otherwise the original frame is copied."""
+    base = baseline or {}
+
     def run(work: Path, settings: dict) -> Path:
         story2 = story
         if settings.get("motion") is not None and any(p.id == sid and p.motion != settings["motion"] for p in story.panels):
-            story2 = story.model_copy(update={"panels": [p.model_copy(update={"motion": settings["motion"]}) if p.id == sid else p for p in story.panels]})
+            story2 = _with(story, sid, motion=settings["motion"])
         (work / "film" / "frames").mkdir(parents=True, exist_ok=True)
-        if settings.get("frame_attempt", 0) != frame_attempt:
+        redraw = settings.get("frame_attempt", 0) != base.get("frame_attempt", 0) or settings.get("frame_shot") != base.get("frame_shot")
+        if redraw:
             if runner is None:
-                raise RuntimeError("redraw_frame needs a frame runner")
-            film.make_frames(story2, work, runner, ids=[sid], rerolls={sid: settings["frame_attempt"]})
+                raise RuntimeError("redrawing the first frame needs a frame runner")
+            story_frame = _with(story2, sid, shot=settings["frame_shot"]) if settings.get("frame_shot") else story2
+            film.make_frames(story_frame, work, runner, ids=[sid], rerolls={sid: settings.get("frame_attempt", 0)})
         else:
             shutil.copy2(ws / "film" / "frames" / f"{sid}.png", work / "film" / "frames" / f"{sid}.png")
         if (ws / "film" / "voices.json").exists():
@@ -219,8 +241,8 @@ def main() -> None:  # python -m engine.original.clip_loop <story_dir> <shot> [-
         from engine.original import art as art_mod
 
         runner = art_mod.ComfyRunner()
-    out = improve_clip(a.shot, ws, film_generate(story, ws, a.shot, runner, base["frame_attempt"]), base, attempts=a.attempts, expect_camera=a.camera,
-                       act_on_suspected=a.suspected, apply=a.apply, levers=DEFAULT_LEVERS | ({"redraw_frame"} if runner else set()))
+    out = improve_clip(a.shot, ws, film_generate(story, ws, a.shot, runner, base), base, attempts=a.attempts, expect_camera=a.camera,
+                       act_on_suspected=a.suspected, apply=a.apply, levers=DEFAULT_LEVERS | (FRAME_LEVERS if runner else frozenset()))
     print(json.dumps({k: v for k, v in out.items() if k != "history"}, indent=1))
     for h in out["history"]:
         print(h["attempt"], h["lever"], h["decision"], h["reason"], h.get("changed", ""), [f"{f['axis']}:{f['status']}" for f in h["report"]["flags"]])
