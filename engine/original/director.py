@@ -80,6 +80,7 @@ class _ShotOut(BaseModel):
 
 class _TakeOut(BaseModel):
     location_id: str
+    end_state: str = Field(default="", description="STORYBOARD only: what the LAST picture of the shot shows in the same framing: who stands where in the frame and what they are doing then")
     narration: str = Field(description="the voice-over for this take: friendly spoken sentences that explain the take's facts, no stage directions")
     shots: list[_ShotOut]
 
@@ -103,6 +104,22 @@ def normalize_camera(text: str) -> str:
     if "pan" in t and "right" in t:
         return "slow pan right"
     return ""
+
+
+class _BoardTake(BaseModel):
+    """Storyboard mode: ONE shot and its two pictures, every field required (the 9B skips optional fields and invents extra shots when a list is allowed)."""
+    location_id: str
+    narration: str = Field(description="the voice-over for this take: friendly spoken sentences that explain the take's facts, no stage directions")
+    shot: _ShotOut
+    end_state: str = Field(description="what the LAST picture of the shot shows in the same framing: who stands where in the frame (left, center or right side) and what they are doing then; at least 8 words")
+
+
+def stacked(text: str, names: list[str]) -> str | None:
+    """A character ridden, carried or perched on another ('Luna sits on her right shoulder', 'Maya carries Luna'): the image model draws BOTH the carried and a separate one (measured: a second cat in 3 of 8 storyboard pictures), so characters stay apart. Returns the offending name or None."""
+    for n in names:
+        if re.search(rf"{n}.{{0,40}}"+r"\b(shoulder|lap|arms|head|back|perch\w*)\b", text, re.I) or re.search(r"\b(carr\w+|cradl\w+|hug\w+|lift\w+|hold\w*)\s+(?:her\s+|his\s+|the\s+)?"+n, text, re.I):
+            return n
+    return None
 
 
 def take_count(total_seconds: float, max_take: float = MAX_TAKE) -> int:
@@ -144,8 +161,15 @@ def check_writer(o: _Writer, takes: int, genre: Genre, brief: str = "") -> list[
     return p
 
 
-def check_take(o: _TakeOut, bible, seconds: float, facts: list[str], genre: Genre, take_index: int = 0) -> list[str]:
+def check_take(o: _TakeOut, bible, seconds: float, facts: list[str], genre: Genre, take_index: int = 0, storyboard: bool = False) -> list[str]:
     p: list[str] = []
+    if storyboard:
+        if len(o.shots) != 1:
+            p.append("STORYBOARD: exactly ONE shot per take (one framing, one continuous action between a first and a last picture)")
+        if len(o.end_state.split()) < 8:
+            p.append("end_state: describe the LAST picture of the shot in at least 8 words: who stands where in the frame and what they are doing then")
+        elif o.shots and [c.id for c in bible.characters if c.name.lower() in o.end_state.lower() and c.id not in [x.strip().lower() for x in o.shots[0].characters]]:
+            p.append("end_state mentions a character who is not in the shot")
     chars = {c.id: c for c in bible.characters}
     locs = {x.id for x in bible.locations}
     for s in o.shots:  # tolerate wording, not substance: any framing / camera wording maps to the nearest allowed value
@@ -163,7 +187,7 @@ def check_take(o: _TakeOut, bible, seconds: float, facts: list[str], genre: Genr
         p.append(f"narration has {words} words; write {int(budget * 0.7)} words (allowed {int(budget * 0.45)}-{budget}) so it fills about {seconds:.0f} s of speech")
     if SPEECH.search(" ".join(s.action for s in o.shots)):
         p.append("nobody speaks on screen: the narration is a voice-over; describe what the viewer sees, not speech")
-    if not 2 <= len(o.shots) <= 3:
+    if not storyboard and not 2 <= len(o.shots) <= 3:
         p.append("2 or 3 shots per take")
     first = {c for c in (o.shots[0].characters if o.shots else [])}
     for k, s in enumerate(o.shots, 1):
@@ -186,6 +210,11 @@ def check_take(o: _TakeOut, bible, seconds: float, facts: list[str], genre: Genr
             p.append(f"shot {k}: the picture cannot hold readable text; show the idea as a picture instead")
     if sm.forbidden_hits(o.narration + " ".join(s.action for s in o.shots), genre):
         p.append("remove forbidden words")
+    names = [c.name for c in chars.values() if len(chars) > 1]
+    for k, text in [(f"shot {i + 1}", s.action) for i, s in enumerate(o.shots)] + ([("end_state", o.end_state)] if o.end_state else []):
+        hit = stacked(text, names)
+        if hit:
+            p.append(f"{k}: {hit} is carried by or sits on another character; characters stand or sit SEPARATELY on the ground, never on a shoulder, in arms or on a lap")
     return p
 
 
@@ -210,15 +239,32 @@ def uncovered(must_show: list[str], panels: list[Panel], cast_text: str = "") ->
     return out
 
 
-async def _take(provider, bible, premise, genre, i: int, n: int, seconds: float, facts: list[str], prev: str, extra: str = "") -> _TakeOut:
+STORYBOARD_ASK = ("STORYBOARD: this take is ONE continuous shot with ONE framing, drawn as two pictures: `action` = what the FIRST picture shows and what then happens, `end_state` = what the "
+                  "LAST picture shows, in the same framing. Use the frame: say where each character stands in the frame at the start and at the end (left, center or right side); if somebody "
+                  "walks, they end at a clearly different place (walking to the right = left side at the start, right side at the end). Keep the same characters in both pictures.")
+
+
+async def _take(provider, bible, premise, genre, i: int, n: int, seconds: float, facts: list[str], prev: str, extra: str = "", storyboard: bool = False) -> _TakeOut:
     cast = "; ".join(f"{c.id} = {c.name} ({c.species}, {c.age_group})" for c in bible.characters)
     places = "; ".join(f"{x.id} = {x.name}" for x in bible.locations)
+    shots_ask = "ONE shot" if storyboard else "2-3 shots inside this take"
     ask = (f"Video: {premise.title}. {premise.logline}\nCast: {cast}\nPlaces: {places}\n"
            f"Take {i + 1} of {n}, {seconds:.0f} seconds long. It must explain: {' | '.join(facts)}\nEarlier narration (do not repeat it): {prev or 'none'}\n"
-           f"Write the narration (about {int(narration_budget(seconds) * 0.75)} words, never more than {narration_budget(seconds)}) and 2-3 shots inside this take that SHOW the facts as pictures "
+           f"Write the narration (about {int(narration_budget(seconds) * 0.75)} words, never more than {narration_budget(seconds)}) and {shots_ask} that SHOW the facts as pictures "
            "(a story-world visual metaphor or a real scene, no text on screen). Only characters who are in the first shot may appear later in the take. The camera is fixed "
-           "unless a shot truly needs a slow move. Nobody speaks on screen; the narration is a voice-over." + (f"\n{extra}" if extra else ""))
-    return await sm._ask(provider, ask, _TakeOut, lambda o: check_take(o, bible, seconds, facts, genre, i), temperature=0.7, max_tokens=1800, attempts=7)
+           "unless a shot truly needs a slow move. Nobody speaks on screen; the narration is a voice-over." + (f"\n{STORYBOARD_ASK}" if storyboard else "") + (f"\n{extra}" if extra else ""))
+    from engine.llm.errors import GenerationLimitError
+
+    as_take = lambda o: _TakeOut(location_id=o.location_id, narration=o.narration, shots=[o.shot], end_state=o.end_state) if storyboard else o  # noqa: E731
+    for temperature, tokens in ((0.7, 1800), (0.5, 2800), (0.3, 4000)):  # the 9B sometimes runs on until the token limit: ask again, cooler and with more room
+        try:
+            got = await sm._ask(provider, ask, _BoardTake if storyboard else _TakeOut, lambda o: check_take(as_take(o), bible, seconds, facts, genre, i, storyboard), temperature=temperature, max_tokens=tokens, attempts=7)
+            out = as_take(got)
+            check_take(out, bible, seconds, facts, genre, i, storyboard)  # normalises wording on the object that is returned
+            return out
+        except GenerationLimitError:
+            continue
+    raise ValueError("the model ran past its length limit three times for this take")
 
 
 def _panel(i: int, t: _TakeOut, seconds: float, facts: list[str], genre: Genre) -> tuple[Scene, Panel]:
@@ -227,10 +273,10 @@ def _panel(i: int, t: _TakeOut, seconds: float, facts: list[str], genre: Genre) 
     first = t.shots[0]
     return (Scene(id=f"s{i + 1}", location_id=t.location_id, character_ids=first.characters, summary=" ".join(facts), mood=genre.tone),
             Panel(id=f"t{i + 1}", scene_id=f"s{i + 1}", shot=first.framing, angle="eye_level", location_id=t.location_id, character_ids=first.characters, action=first.action.strip(),
-                  dialogue=[Line(speaker_id="narrator", text=t.narration.strip())], caption="", motion=first.action.strip(), seconds=seconds, shots=shots))
+                  dialogue=[Line(speaker_id="narrator", text=t.narration.strip())], caption="", motion=first.action.strip(), seconds=seconds, shots=shots, end_state=t.end_state.strip()))
 
 
-async def direct(brief: str, provider, total_seconds: float = 60.0, max_take: float = MAX_TAKE, progress=lambda pct, msg: None) -> OriginalStory:
+async def direct(brief: str, provider, total_seconds: float = 60.0, max_take: float = MAX_TAKE, progress=lambda pct, msg: None, storyboard: bool = False) -> OriginalStory:
     """The whole plan from one sentence. Raises ValueError if a stage cannot be made to pass its checks (the message lists the problems).
     After the takes are written, every requirement the owner's brief made about what the viewer sees (`must_show`) must appear in some shot; a take is written again for each
     that does not (measured on the first storm video: the brief said the guide walks through the landscape and the plan never showed her walking)."""
@@ -239,7 +285,7 @@ async def direct(brief: str, provider, total_seconds: float = 60.0, max_take: fl
     seconds = round(total_seconds / n, 2)
     progress(0.05, "Writer: premise and teaching points")
     w = await sm._ask(provider, f"Brief from the owner: {brief}\nPlan an informative video of {total_seconds:.0f} seconds in {n} parts. Give a title, a two-sentence logline (name the guide "
-                      f"and any companion the brief asks for), the setting, {n * 2} teaching facts in the order they are explained (accurate and concrete), and must_show: "
+                      f"and any companion the brief asks for), the setting, {n if storyboard and n > 4 else n * 2} teaching facts in the order they are explained (accurate and concrete), and must_show: "
                       "up to 4 short phrases copied from the brief for everything the brief says the viewer must SEE (who is there, how many, what they do).",
                       _Writer, lambda o: check_writer(o, n, genre, brief), temperature=0.7, max_tokens=900)
     premise = sm.Premise(title=w.title.strip(), genre="explainer", logline=w.logline.strip(), tone=genre.tone, setting=w.setting.strip())
@@ -251,7 +297,7 @@ async def direct(brief: str, provider, total_seconds: float = 60.0, max_take: fl
     warnings: list[str] = []
     for i in range(n):
         progress(0.3 + 0.5 * i / n, f"Director: take {i + 1} of {n}")
-        t = await _take(provider, bible, premise, genre, i, n, seconds, dealt[i], " ".join(p.dialogue[0].text for p in panels)[-400:])
+        t = await _take(provider, bible, premise, genre, i, n, seconds, dealt[i], " ".join(p.dialogue[0].text for p in panels)[-400:], storyboard=storyboard)
         sc, pa = _panel(i, t, seconds, dealt[i], genre)
         scenes.append(sc)
         panels.append(pa)
@@ -259,7 +305,7 @@ async def direct(brief: str, provider, total_seconds: float = 60.0, max_take: fl
         progress(0.85, f"Director: the brief needs '{r}' to be shown; rewriting take {i + 1}")
         prev = " ".join(p.dialogue[0].text for k, p in enumerate(panels) if k != i)[-400:]
         try:
-            t = await _take(provider, bible, premise, genre, i, n, seconds, dealt[i], prev, f"The owner's brief requires this to be SEEN in this take (in shot 1 or 2, as a clear action): {r}.")
+            t = await _take(provider, bible, premise, genre, i, n, seconds, dealt[i], prev, f"The owner's brief requires this to be SEEN in this take (as a clear action): {r}.", storyboard=storyboard)
             scenes[i], panels[i] = _panel(i, t, seconds, dealt[i], genre)
         except ValueError as exc:  # best effort: keep the take that passed its checks and say what is missing
             warnings.append(f"the brief says '{r}' but no take shows it (rewrite of take {i + 1} failed: {str(exc)[:160]})")

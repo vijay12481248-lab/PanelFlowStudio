@@ -18,7 +18,7 @@ from engine.comfyui.art import ArtEngine
 from engine.original.animate import STATIC_CAMERA
 from engine.original.film import FPS, _apply, snap_frames
 
-WORKFLOWS = {"i2va": "fastvideo_h3_film_free", "fl2va": "fastvideo_h3_film_fl2va", "l2va": "fastvideo_h3_film_l2va", "t2va": "fastvideo_h3_film_t2va", "ref2va": "fastvideo_h3_omniref"}
+WORKFLOWS = {"i2va": "fastvideo_h3_film_free", "fl2va": "fastvideo_h3_film_fl2va", "l2va": "fastvideo_h3_film_l2va", "t2va": "fastvideo_h3_film_t2va", "ref2va": "fastvideo_h3_omniref", "fl2va_voice": "fastvideo_h3_film_fl2va_voice"}
 REF_RETENTION = ("fully_preserved", "partially_preserved", "attribute_transfer", "weak_reference")  # the official retention vocabulary for visible references
 T2VA_SIZE = (960, 544)
 QUIET = "realistic sound effects that match the action, no speech, no singing."
@@ -78,13 +78,13 @@ def ref2va_prompt(subjects: list[tuple[str, int, str, str]], action: str, style:
             f"overall_soundscape: {soundscape}\n\nnon_diegetic_music: {music}")
 
 
-def make_clip(mode: str, prompt: str, *, seed: int, seconds: float, first: Path | None = None, last: Path | None = None, refs: list[Path] | None = None,
+def make_clip(mode: str, prompt: str, *, seed: int, seconds: float, first: Path | None = None, last: Path | None = None, refs: list[Path] | None = None, voice: Path | None = None,
               client: ComfyUIClient | None = None, timeout: float = 1500.0, prefix: str = "video/h3_mode", size: tuple[int, int] | None = None) -> bytes:
     """Render one clip in `mode` (i2va | fl2va | l2va | t2va | ref2va) through the registered workflow and the one submit/poll path (`ArtEngine.run`). Returns the mp4 bytes.
-    `refs` = 1-2 reference images for ref2va; `size` = (width, height) for t2va / ref2va."""
+    `refs` = 1-2 reference images for ref2va; `voice` = a wav to anchor (fl2va); `size` = (width, height) for t2va / ref2va."""
     from engine.comfyui.service import _history_videos
 
-    wid = WORKFLOWS[mode]
+    wid = WORKFLOWS["fl2va_voice" if mode == "fl2va" and voice else mode]  # `voice`: a wav anchored into the clip (a silent one keeps H3 from inventing speech)
     if (mode == "fl2va" and not (first and last)) or (mode == "l2va" and not last) or (mode == "i2va" and not first) or (mode == "ref2va" and not (refs and len(refs) <= 2)):
         raise ValueError(f"{mode} needs " + {"fl2va": "a first and a last frame", "l2va": "a last frame", "i2va": "a first frame", "ref2va": "1 or 2 reference images"}[mode])
     client = client or ComfyUIClient()
@@ -99,6 +99,8 @@ def make_clip(mode: str, prompt: str, *, seed: int, seconds: float, first: Path 
         values["reference_image"] = client.upload_image(first)
     elif mode == "fl2va":
         values["reference_image"], values["last_image"] = client.upload_image(first), client.upload_image(last)
+        if voice:
+            values["voice_audio"] = client.upload_audio(voice)
     elif mode == "l2va":
         values["last_image"] = client.upload_image(last)
     elif mode == "ref2va":

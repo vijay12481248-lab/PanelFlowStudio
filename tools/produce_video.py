@@ -20,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from engine.llm.registry import llm_registry  # noqa: E402
 from engine.original import art as art_mod  # noqa: E402
 from engine.original import clip_identity as ci  # noqa: E402
-from engine.original import director, film, film_master  # noqa: E402
+from engine.original import director, film, film_master, storyboard  # noqa: E402
 from engine.original.animate import release_ollama  # noqa: E402
 from engine.original.clip_eval import evaluate  # noqa: E402
 from engine.original.models import OriginalStory  # noqa: E402
@@ -38,8 +38,8 @@ def plan_md(story: OriginalStory) -> str:
     return "\n".join(out) + "\n"
 
 
-async def stage_plan(brief: str, ws: Path, total: float, max_take: float) -> OriginalStory:
-    story = await director.direct(brief, llm_registry.get_ollama_provider(), total, max_take, progress=lambda p, m: print(f"  plan {p:.0%} {m}", flush=True))
+async def stage_plan(brief: str, ws: Path, total: float, max_take: float, board: bool = False) -> OriginalStory:
+    story = await director.direct(brief, llm_registry.get_ollama_provider(), total, max_take, progress=lambda p, m: print(f"  plan {p:.0%} {m}", flush=True), storyboard=board)
     ws.mkdir(parents=True, exist_ok=True)
     (ws / "story.json").write_text(story.model_dump_json(indent=1), encoding="utf-8")
     (ws / "plan.md").write_text(plan_md(story), encoding="utf-8")
@@ -75,8 +75,13 @@ async def stage_frames(story: OriginalStory, ws: Path) -> dict:
             rerolls[pid] = rerolls.get(pid, 0) + 1
 
 
-def stage_clips(story: OriginalStory, ws: Path) -> dict:
+def stage_clips(story: OriginalStory, ws: Path, board: bool = False) -> dict:
     release_ollama()
+    if board:
+        res = storyboard.make_clips(story, ws, progress=lambda m: print(m, flush=True))
+        if res["failed"]:
+            raise RuntimeError(f"shot(s) could not be generated: {res['failed']}")
+        return res
     res = film.make_clips(story, ws, progress=lambda p, m: print(f"  clips {p:.0%} {m}", flush=True))
     if res["failed"]:
         raise RuntimeError(f"take(s) could not be generated: {res['failed']}")
@@ -118,16 +123,21 @@ def main() -> None:
     ap.add_argument("--seconds", type=float, default=60.0)
     ap.add_argument("--max-take", type=float, default=director.MAX_TAKE)
     ap.add_argument("--stage", default="all", choices=["plan", "frames", "clips", "qa", "master", "all"])
+    ap.add_argument("--storyboard", action="store_true", help="storyboard approach: draw and check a start and an end picture per shot, then animate between them (FL2VA)")
     a = ap.parse_args()
     ws = ROOT / a.slug
     want = lambda s: a.stage in ("all", s)  # noqa: E731
     t0 = time.time()
-    story = asyncio.run(stage_plan(a.brief, ws, a.seconds, a.max_take)) if want("plan") and not (a.stage == "all" and (ws / "story.json").exists()) else OriginalStory.model_validate_json((ws / "story.json").read_text(encoding="utf-8"))
+    story = asyncio.run(stage_plan(a.brief, ws, a.seconds, a.max_take, a.storyboard)) if want("plan") and not (a.stage == "all" and (ws / "story.json").exists()) else OriginalStory.model_validate_json((ws / "story.json").read_text(encoding="utf-8"))
     print(f"plan: {len(story.panels)} takes of {story.panels[0].seconds:.0f} s ({round(time.time() - t0)} s)", flush=True)
     if want("frames"):
-        print("frames:", asyncio.run(stage_frames(story, ws)), flush=True)
+        if a.storyboard:
+            rep = asyncio.run(storyboard.draw(story, ws, art_mod.ComfyRunner(), llm_registry.get_ollama_provider()))
+            print("storyboard:", {k: {"tries": v["attempts"], "problems": v["problems"], "chained": v["chained"], "dir": v["direction"]} for k, v in rep.items()}, flush=True)
+        else:
+            print("frames:", asyncio.run(stage_frames(story, ws)), flush=True)
     if want("clips"):
-        print("clips:", json.dumps(stage_clips(story, ws)), flush=True)
+        print("clips:", json.dumps(stage_clips(story, ws, a.storyboard)), flush=True)
     if want("qa"):
         asyncio.run(stage_qa(story, ws))
     if want("master"):

@@ -157,3 +157,46 @@ def test_fix_direction_alternates_sides_and_leaves_stated_directions_alone():
     assert d.fix_direction("Maya walks along the path while Pip jumps", 1) == "Maya walks to the left along the path while Pip jumps"
     assert d.fix_direction("Maya runs toward the camera and Pip walks beside her", 0) == "Maya runs toward the camera and Pip walks to the right beside her"
     assert d.fix_direction("Maya points at the clouds", 0) == "Maya points at the clouds"
+
+
+def test_storyboard_take_needs_one_shot_and_an_end_state_about_the_same_cast():
+    b = _real_bible()
+    one = d._TakeOut(location_id="open_field", narration=" ".join(["word"] * 34), shots=[_shot()],
+                     end_state="Mira and Pip stand at the right side of the frame and look up at the dark clouds.")
+    assert d.check_take(one, b, 15, [], G, storyboard=True) == []
+    two = one.model_copy(update={"shots": [_shot(), _shot()]})
+    assert any("exactly ONE shot" in p for p in d.check_take(two, b, 15, [], G, storyboard=True))
+    assert any("end_state" in p for p in d.check_take(one.model_copy(update={"end_state": "short"}), b, 15, [], G, storyboard=True))
+    solo = one.model_copy(update={"shots": [_shot(characters=["mira"], action="Mira stands in the field and points up at the growing white clouds above her.")]})
+    assert any("not in the shot" in p for p in d.check_take(solo, b, 15, [], G, storyboard=True))  # the end state names Pip, who is not in the shot
+
+
+def test_direct_storyboard_mode_asks_for_one_shot_with_an_end_state(monkeypatch):
+    seen = []
+
+    class Fake:
+        async def generate_structured(self, prompt, model, **kw):
+            seen.append(model)
+            if model is d._Writer:
+                return d._Writer(title="How a storm forms", logline="This video explains how a thunderstorm forms for curious teenagers. Mira and her cat Pip guide the viewer.", setting="open fields",
+                                 facts=[f"Fact number {i} is a short true sentence about storms and clouds." for i in range(8)])
+            if model is sm._Bible:
+                return _bible()
+            return d._BoardTake(location_id="open_field", narration=" ".join(["word"] * 17), shot=_shot(action="Mira walks to the right across the meadow while Pip trots beside her."),
+                                end_state="Mira and Pip are at the right side of the frame and both look up at the clouds.")
+
+    story = asyncio.run(d.direct("a one minute video on storms", Fake(), 60, 7.5, storyboard=True))
+    assert len(story.panels) == 8 and d._BoardTake in seen
+    p = story.panels[0]
+    assert len(p.shots) == 1 and p.end_state.startswith("Mira and Pip are at the right") and p.seconds == 7.5 and p.dialogue[0].speaker_id == "narrator"
+
+
+def test_characters_are_never_carried_by_or_perched_on_each_other():
+    names = ["Maya", "Luna"]
+    assert d.stacked("Maya stands on the left while Luna sits on her right shoulder watching the rain.", names) == "Luna"
+    assert d.stacked("Maya carries Luna across the stream", names) == "Maya" or d.stacked("Maya carries Luna across the stream", names) == "Luna"
+    assert d.stacked("Maya holds a glowing crystal and Luna sits beside her on the grass", names) is None
+    b = _real_bible()
+    t = _take()
+    t.shots[0] = _shot(action="Mira stands in the field while Pip sits on her right shoulder and watches the clouds above them.")
+    assert any("carried by or sits on another character" in p for p in d.check_take(t, b, 15, [], G))

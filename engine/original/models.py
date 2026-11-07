@@ -55,6 +55,7 @@ class Panel(BaseModel):
     motion: str = ""  # what moves during this shot, for the video model (film.py); one action, never a loop
     seconds: float = 0.0  # take length for the video model (a long take: up to H3's 15 s limit); 0 = derived from the voice / shot size as before
     shots: list[dict] = Field(default_factory=list)  # shots INSIDE one take, [{"at": s, "framing": "wide|medium|close", "camera": "", "action": "...", "characters": ["id"]}]; empty = one shot (motion)
+    end_state: str = ""  # storyboard mode: what the LAST picture of the shot shows (who is where, doing what); the first picture is `action`
     camera: str = ""  # an explicit camera move for the video model ("a slow, steady push-in"); empty = Static Shot, the default (measured: a push-in sentence in every shot zoomed 38% on average)
 
 
