@@ -173,7 +173,7 @@ def test_the_keyframe_prompt_mentions_the_cat_only_in_its_own_entry(story):
 
 def test_clip_prompt_keeps_everyone_in_frame_and_the_camera_still(story):
     text = sb.clip_prompt(story, _panel(story, 0, character_ids=["mira", "pip"]), 8.0)
-    assert "Everyone stays inside the frame for the whole shot" in text and "The camera never tilts, pans or moves" in text and "never cover the characters" in text
+    assert "Everyone stays inside the frame for the whole shot" in text and "The camera never tilts, pans or moves" in text and "background stays calm and steady" in text
 
 
 def test_clip_prompt_does_not_send_the_story_events_only_a_gradual_change(story):
@@ -216,7 +216,7 @@ def test_the_end_picture_keeps_the_start_scenery_and_only_moves_the_characters(s
 def test_the_clip_prompt_names_only_the_characters_end_places(story):
     p = _panel(story, 0, character_ids=["mira"], action="Mira stands left; clouds swirl", end_state="Mira stands on the right side; a lightning bolt strikes behind her")
     text = sb.clip_prompt(story, p, 8.0)
-    assert "The last picture shows: Mira stands on the right side" in text and "lightning bolt" not in text and "no smoke, dust clouds, rings, bolts or glow" in text
+    assert "The last picture shows: Mira stands on the right side" in text and "lightning bolt" not in text and "smoke" not in text.lower() and "dust" not in text.lower() and "glow" not in text.lower() and "ring" not in text.lower().replace("bring","").replace("string","")
 
 
 def test_a_walker_does_not_start_from_an_end_picture_on_the_side_it_walks_to(story, tmp_path):
@@ -236,3 +236,10 @@ def test_a_walker_does_not_start_from_an_end_picture_on_the_side_it_walks_to(sto
 
     asyncio.run(sb.draw(st, tmp_path, Runner(), Provider(), tries=1, progress=lambda m: None))
     assert "sb_c2_start" in drawn  # c2 walks right but c1 ended on the right: it is drawn fresh, not chained
+
+
+def test_a_seated_animal_to_the_right_is_not_a_walk_but_a_walker_is(story):
+    assert sb.walk_direction(_panel(story, action="Maya stands left while Ziggy sits on a rock to the right", end_state="Maya points at the sky")) is None
+    assert sb.walk_direction(_panel(story, action="Maya walks slowly to the right across the field", end_state="")) == "right"
+    assert sb.walk_direction(_panel(story, action="Ziggy walks from right to left beside her", end_state="")) == "left"
+    assert sb.walk_direction(_panel(story, action="Maya walks to the right while Ziggy walks to the left", end_state="")) is None  # two walkers going opposite ways: leave the layout alone

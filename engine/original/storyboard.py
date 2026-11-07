@@ -36,10 +36,17 @@ LEFT = re.compile(r"\bto the left\b", re.I)
 
 
 def walk_direction(panel: Panel) -> str | None:
-    """'right' or 'left' when the shot has somebody walk that way (the Director writes it, `director.fix_direction` guarantees it), else None."""
-    text = f"{panel.action} {panel.end_state}"
-    r, l = RIGHT.search(text), LEFT.search(text)
-    return None if (r and l) or not (r or l) else ("right" if r else "left")
+    """'right' or 'left' when somebody WALKS (a locomotion verb followed within eight words by a direction), else None. A rock 'to the right' is not a walk (measured: it made a seated cat a walker)."""
+    from engine.original.director import LOCOMOTION
+
+    text, dirs = f"{panel.action} {panel.end_state}", set()
+    for m in LOCOMOTION.finditer(text):
+        after = " ".join(text[m.end():].split()[:8])
+        if re.search(r"\b(to the right|from left to right|left to right)\b", after, re.I):
+            dirs.add("right")
+        if re.search(r"\b(to the left|from right to left|right to left)\b", after, re.I):
+            dirs.add("left")
+    return dirs.pop() if len(dirs) == 1 else None
 
 
 def sides(n: int, direction: str | None, which: str) -> list[str] | None:
@@ -188,8 +195,9 @@ async def draw(story: OriginalStory, ws: Path, runner, provider, tries: int = 4,
     return report
 
 
-STAY_IN_FRAME = ("Everyone stays inside the frame for the whole shot, in the same place and size as in the pictures. The camera never tilts, pans or moves. Weather, smoke and light effects "
-                 "stay small and in the background and never cover the characters or fill the frame. Nothing new appears between the two pictures: no smoke, dust clouds, rings, bolts or glow that are not already in them.")  # measured: with only the story text H3 filled the middle of 4 of 8 shots with smoke, a different scene or a tilt up to the sky
+STAY_IN_FRAME = ("Everyone stays inside the frame for the whole shot, in the same place and size as in the pictures. The camera never tilts, pans or moves. The background stays calm and steady.")
+# Only POSITIVE words: H3 acts out every word it is given, even a negated one. Measured: "no smoke, dust clouds, rings, bolts or glow" filled 8 of 8 shots with dust clouds, rings and explosions;
+# an earlier clause that named "smoke and light effects" did the same in the retries.
 
 
 def clip_prompt(story: OriginalStory, panel: Panel, seconds: float) -> str:
