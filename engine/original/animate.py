@@ -21,6 +21,7 @@ from engine.original.models import OriginalStory, Panel
 from engine.original.shotspec import ShotSpec
 
 FAST_H3_ID = "fastvideo_h3_i2v"
+STATIC_CAMERA = "nothing; it is a Static Shot, fixed on a tripod, with no zoom, no pan and no tilt"  # the default: a push-in is opt-in per panel (Panel.camera)
 DEFAULT_SECONDS = 3.6  # the graph turns this into 90 frames (a multiple-of-17-plus-5 rule) = 4.7 s at 19 fps; video.py ping-pongs it to the narration
 BEATS_PER_CLIP = 4.5  # default: about one animated beat in 4-5
 
@@ -36,13 +37,11 @@ def motion_prompt(story: OriginalStory, panel: Panel) -> str:
             look = ", ".join(t.strip() for t in c.look.split(",")[:3]) if c else ""
             who.append(f"{c.name if c else cp.id} ({look}) {cp.pose}, expression {cp.expression}" + (f", {cp.action}" if cp.action else ""))
         scene = f"{spec.setting}. {'; '.join(who)}. The moment in the story: {panel.caption} Lighting: {spec.lighting}. Mood: {spec.mood}."
-        close = spec.shot in ("close", "extreme_close")
     else:
         scene = f"{panel.action}. The moment in the story: {panel.caption}"
-        close = panel.shot in ("close", "extreme_close")
-    camera = "very slow, steady push-in" if close else "slow, steady push-in"
+    camera = panel.camera or STATIC_CAMERA
     return ("For the target video, at 0.00 seconds into the target video, <Picture 1> (from [Shot 1]) is fully referenced.\n"
-            f"integrated_multimodal_description: [Shot 1] {scene} The camera does a {camera}. Only the action of this moment moves; everything else stays exactly as drawn.\n\n"
+            f"integrated_multimodal_description: [Shot 1] {scene} The camera does {camera}. Only the action of this moment moves; everything else stays exactly as drawn.\n\n"
             "overall_soundscape: quiet, realistic ambience that matches the room, no speech.\n\nnon_diegetic_music: none.")
 
 

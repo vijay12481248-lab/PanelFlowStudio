@@ -5,7 +5,7 @@ defect is left, the attempts are used up or no lever is left. Same inputs give t
 relative to the best clip so far. Every attempt (settings, report, decision) is appended to `<ws>/film/history/<shot>.json`; the attempt clips are kept in
 `<ws>/film/attempts/<shot>/`. The shot's real clip in `film/clips` is only replaced when `apply=True`.
 
-Levers: `static_camera` (Static Shot sentence), `simplify_action` (a rule-based cut of the shot's motion text, see `simplify_motion`), `redraw_frame` (a new first
+Levers: `static_camera` (Static Shot sentence; the default for new clips, so it matters for clips made with a push-in), `simplify_action` (a rule-based cut of the shot's motion text, see `simplify_motion`), `redraw_frame` (a new first
 frame through the one art workflow; needs a runner), `seed` (a new deterministic seed). Not implemented, so never chosen: `quiet` (needs speech detection, which the
 evaluator does not do). A defect with no lever left is reported, not hidden. The lever ORDER per defect is a hypothesis; the history shows which one worked.
 """
@@ -20,10 +20,10 @@ from pathlib import Path
 from typing import Callable
 
 from engine.original import film
+from engine.original.animate import STATIC_CAMERA
 from engine.original.clip_eval import evaluate
 from engine.original.models import OriginalStory
 
-STATIC_CAMERA = "nothing; it is a Static Shot, fixed on a tripod, with no zoom, no pan and no tilt"
 SEVERITY = ["temporal", "consistency", "camera", "artifacts", "motion", "audio"]  # a scene break matters more than a zoom, a zoom more than flicker
 LEVERS = {"temporal": ["static_camera", "widen_frame", "simplify_action", "redraw_frame", "seed"], "consistency": ["simplify_action", "redraw_frame", "seed"],
           "camera": ["static_camera", "seed"], "artifacts": ["seed"], "motion": ["seed"], "audio": []}
@@ -90,7 +90,7 @@ def next_lever(report: dict, settings: dict, tried: set, act_on_suspected: bool,
         for lever in LEVERS.get(f["axis"], []):
             if lever not in available or (lever, f["axis"]) in tried:
                 continue
-            if lever == "static_camera" and settings.get("static_camera"):
+            if lever == "static_camera" and settings.get("camera") == STATIC_CAMERA:
                 continue
             if lever == "widen_frame" and widen(settings.get("frame_shot")) is None:
                 continue
@@ -103,7 +103,7 @@ def next_lever(report: dict, settings: dict, tried: set, act_on_suspected: bool,
 def apply_lever(lever: str, settings: dict, n: int, axis: str = "") -> dict:
     new = dict(settings)
     if lever == "static_camera":
-        new["static_camera"] = True
+        new["camera"] = STATIC_CAMERA
     elif lever == "simplify_action":
         new["motion"] = simplify_motion(settings["motion"], axis)
     elif lever == "redraw_frame":
@@ -123,7 +123,9 @@ def baseline_settings(story: OriginalStory, ws: Path, sid: str) -> dict:
     panel = next((p for p in story.panels if p.id == sid), None)
     flog = ws / "film" / "frames.json"
     frame = json.loads(flog.read_text(encoding="utf-8")).get(sid, {}).get("attempt", 0) if flog.exists() else 0
-    return {"seed": seed, "static_camera": False, "native_voice": bool(entry.get("native_voice")), "motion": panel.motion if panel else "", "frame_attempt": frame,
+    m = re.search(r"The camera does (.+?)\. Single continuous take", entry.get("prompt", ""))  # the sentence the clip was really made with (older clips used a push-in)
+    camera = m.group(1) if m else ((panel.camera if panel else "") or STATIC_CAMERA)
+    return {"seed": seed, "camera": camera, "native_voice": bool(entry.get("native_voice")), "motion": panel.motion if panel else "", "frame_attempt": frame,
             "frame_shot": panel.shot if panel else None}
 
 
@@ -153,7 +155,7 @@ def film_generate(story: OriginalStory, ws: Path, sid: str, runner=None, baselin
             shutil.copy2(ws / "film" / "frames" / f"{sid}.png", work / "film" / "frames" / f"{sid}.png")
         if (ws / "film" / "voices.json").exists():
             shutil.copy2(ws / "film" / "voices.json", work / "film" / "voices.json")
-        res = film.make_clips(story2, work, ids=[sid], seeds={sid: settings["seed"]}, native_voice=settings["native_voice"], camera=STATIC_CAMERA if settings["static_camera"] else None)
+        res = film.make_clips(story2, work, ids=[sid], seeds={sid: settings["seed"]}, native_voice=settings["native_voice"], camera=settings.get("camera"))
         if res["failed"]:
             raise RuntimeError(f"generation failed: {res['failed']}")
         return work / "film" / "clips" / f"{sid}.mp4"

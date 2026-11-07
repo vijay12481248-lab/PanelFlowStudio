@@ -24,7 +24,7 @@ from engine.comfyui import ComfyUIClient, ComfyWorkflowRegistry
 from engine.comfyui.art import ArtEngine
 from engine.narration.runtime import audio as rt
 from engine.original import art as art_mod
-from engine.original.animate import release_ollama
+from engine.original.animate import STATIC_CAMERA, release_ollama
 from engine.original.models import OriginalStory, Panel
 from engine.original.shotspec import CharPose, ShotSpec
 
@@ -38,8 +38,6 @@ DEFAULT_VOICES = {  # character id -> (Kokoro voice, speed). Overridable per sto
 FACELESS = {"crystal"}  # speakers with no face: anchoring their voice makes H3 draw a mouth on them, so the picture is made with silence and the voice is mixed in at the master
 VOICE_FX = {"crystal": "aecho=0.8:0.6:90|180:0.4|0.25,highpass=f=140"}  # a disembodied echo for the crystal's voice
 HOLD = {"extreme_close": 2.3, "close": 3.0, "medium": 3.75, "wide": 4.45}  # silent-shot length by shot size (seconds, before the H3 frame grid)
-CAMERA = {"extreme_close": "a very slight, slow push-in", "close": "a slow, steady push-in", "medium": "a slow, steady push-in",
-          "wide": "a smooth camera that follows the motion"}
 
 
 def film_dir(ws: Path) -> Path:
@@ -182,7 +180,7 @@ def motion_prompt(story: OriginalStory, panel: Panel, native: bool = False, came
     """H3 text for one shot: only the motion (the picture already carries how everyone looks, and re-describing it makes faces melt).
     `native`: H3 speaks the line itself (no anchored voice), so the prompt names the voice and the soundscape is that voice alone."""
     names = {c.id: c.name for c in story.bible.characters}
-    cam = camera or CAMERA.get(panel.shot, CAMERA["medium"])  # `camera`: one sentence for every shot (e.g. clip_loop.STATIC_CAMERA)
+    cam = camera or panel.camera or STATIC_CAMERA  # `camera` overrides every shot; Panel.camera is an explicit per-shot move; the default is a Static Shot
     motion = panel.motion.rstrip(".")
     vehicle = "flying machine" in panel.motion + panel.action
     if vehicle:  # H3 reads "flying machine" as a real aircraft and swaps in jets or propeller planes: name what it is

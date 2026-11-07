@@ -49,16 +49,16 @@ def _ws(tmp, baseline):
 
 
 def _run(ws, gen, **kw):
-    return cl.improve_clip("p001", ws, gen, {"seed": 7, "static_camera": False, "native_voice": False}, expect_audio=False, **kw)
+    return cl.improve_clip("p001", ws, gen, {"seed": 7, "camera": "a slow push-in", "native_voice": False}, expect_audio=False, **kw)
 
 
 def test_static_camera_lever_fixes_zoom_and_is_kept(tmp_path):
     zoom, steady, _ = _clips(tmp_path)
     ws = _ws(tmp_path, zoom)
     calls = []
-    out = _run(ws, lambda work, s: calls.append(dict(s)) or (steady if s["static_camera"] else zoom))
+    out = _run(ws, lambda work, s: calls.append(dict(s)) or (steady if s["camera"] == cl.STATIC_CAMERA else zoom))
     assert out["stopped"].startswith("no confirmed defect left") and not out["defects_left"]
-    assert calls == [{"seed": 7, "static_camera": True, "native_voice": False}]  # exactly one input changed
+    assert calls == [{"seed": 7, "camera": cl.STATIC_CAMERA, "native_voice": False}]  # exactly one input changed
     assert [h["decision"] for h in out["history"]] == ["baseline", "kept"]
     assert json.loads((ws / "film" / "history" / "p001.json").read_text())[1]["lever"] == "static_camera"
 
@@ -78,13 +78,13 @@ def test_worse_result_is_discarded_and_next_lever_tried(tmp_path):
     ws = _ws(tmp_path, zoom)
 
     def gen(work, s):
-        return cut if s["static_camera"] else steady  # static_camera makes it worse (new cut), the seed lever fixes it
+        return cut if s["camera"] == cl.STATIC_CAMERA else steady  # static_camera makes it worse (new cut), the seed lever fixes it
 
     out = _run(ws, gen)
     dec = [(h["lever"], h["decision"]) for h in out["history"]]
     assert dec == [(None, "baseline"), ("static_camera", "discarded"), ("seed", "kept")]
     assert "worst defect camera -> temporal" in out["history"][1]["reason"]
-    assert out["settings"]["static_camera"] is False and out["settings"]["seed"] != 7
+    assert out["settings"]["camera"] == "a slow push-in" and out["settings"]["seed"] != 7
 
 
 def test_budget_and_seeds_are_reproducible(tmp_path):
@@ -101,20 +101,20 @@ def test_budget_and_seeds_are_reproducible(tmp_path):
 def test_defect_without_lever_is_reported_not_hidden(tmp_path):
     zoom, steady, _ = _clips(tmp_path)  # these clips have no audio stream, so with expect_audio the defect is `audio`, which has no lever
     ws = _ws(tmp_path, steady)
-    out = cl.improve_clip("p001", ws, lambda w, s: steady, {"seed": 1, "static_camera": False, "native_voice": False}, expect_audio=True)
+    out = cl.improve_clip("p001", ws, lambda w, s: steady, {"seed": 1, "camera": "a slow push-in", "native_voice": False}, expect_audio=True)
     assert out["stopped"] == "no lever left for the remaining defect" and out["defects_left"] == ["audio (confirmed)"] and len(out["history"]) == 1
 
 
 def test_suspected_flags_are_not_acted_on_by_default(tmp_path):
     rep = {"flags": [{"axis": "consistency", "status": "suspected"}]}
     assert cl.defects(rep) == [] and len(cl.defects(rep, act_on_suspected=True)) == 1
-    assert cl.next_lever(rep, {"static_camera": False}, set(), True) == ("seed", "consistency")
+    assert cl.next_lever(rep, {"camera": "a slow push-in"}, set(), True) == ("seed", "consistency")
 
 
 def test_severity_order_and_static_not_repeated():
     rep = {"flags": [{"axis": "artifacts", "status": "confirmed"}, {"axis": "camera", "status": "confirmed"}, {"axis": "temporal", "status": "confirmed"}]}
     assert [f["axis"] for f in cl.defects(rep)] == ["temporal", "camera", "artifacts"]
-    assert cl.next_lever(rep, {"static_camera": True}, set(), False) == ("seed", "temporal")
+    assert cl.next_lever(rep, {"camera": cl.STATIC_CAMERA}, set(), False) == ("seed", "temporal")
 
 
 def test_smaller_defect_of_the_same_kind_is_kept_but_marginal_change_is_not(tmp_path):
@@ -177,7 +177,7 @@ def test_simplify_motion_rules():
 
 def test_lever_order_availability_and_one_input_changed():
     rep = {"flags": [{"axis": "consistency", "status": "suspected"}]}
-    s = {"seed": 5, "static_camera": False, "motion": "they walk, Mira laughing, the light growing", "frame_attempt": 0, "frame_shot": "medium"}
+    s = {"seed": 5, "camera": "a slow push-in", "motion": "they walk, Mira laughing, the light growing", "frame_attempt": 0, "frame_shot": "medium"}
     assert cl.next_lever(rep, s, set(), True) == ("simplify_action", "consistency")
     assert cl.next_lever(rep, s, {("simplify_action", "consistency")}, True) == ("seed", "consistency")  # redraw not available without a runner
     avail = cl.DEFAULT_LEVERS | cl.FRAME_LEVERS
@@ -216,11 +216,11 @@ def test_film_generate_applies_motion_and_redraws_only_when_asked(tmp_path, monk
 
     monkeypatch.setattr(cl.film, "make_clips", fake_clips)
     monkeypatch.setattr(cl.film, "make_frames", fake_frames)
-    base = {"seed": 1, "static_camera": False, "native_voice": False, "motion": story.panels[0].motion, "frame_attempt": 0, "frame_shot": story.panels[0].shot}
+    base = {"seed": 1, "camera": "a slow push-in", "native_voice": False, "motion": story.panels[0].motion, "frame_attempt": 0, "frame_shot": story.panels[0].shot}
     gen = cl.film_generate(story, ws, sid, runner=object(), baseline=base)
     gen(tmp_path / "w1", base)
     assert (tmp_path / "w1" / "film" / "frames" / f"{sid}.png").read_bytes() == b"orig" and "rerolls" not in seen and seen["motion"] == story.panels[0].motion
-    gen(tmp_path / "w2", {**base, "motion": "just this", "frame_attempt": 1, "static_camera": True})
+    gen(tmp_path / "w2", {**base, "motion": "just this", "frame_attempt": 1, "camera": cl.STATIC_CAMERA})
     assert seen["motion"] == "just this" and seen["rerolls"] == {sid: 1} and seen["camera"] == cl.STATIC_CAMERA
     assert (tmp_path / "w2" / "film" / "frames" / f"{sid}.png").read_bytes() == b"new"
     assert story.panels[0].motion != "just this"  # the real story object is untouched
@@ -257,13 +257,13 @@ def test_widen_frame_changes_only_the_first_frame_shot_size(tmp_path, monkeypatc
 
     monkeypatch.setattr(cl.film, "make_clips", fake_clips)
     monkeypatch.setattr(cl.film, "make_frames", fake_frames)
-    base = {"seed": 1, "static_camera": False, "native_voice": False, "motion": panel.motion, "frame_attempt": 0, "frame_shot": panel.shot}
+    base = {"seed": 1, "camera": "a slow push-in", "native_voice": False, "motion": panel.motion, "frame_attempt": 0, "frame_shot": panel.shot}
     cl.film_generate(story, ws, sid, runner=object(), baseline=base)(tmp_path / "w", cl.apply_lever("widen_frame", base, 1))
     assert seen["frame_shot"] == wider and seen["clip_shot"] == panel.shot  # the frame is wider, the clip keeps the shot's own size and length
     assert cl.widen("wide") is None and cl.widen(None) is None and cl.widen("extreme_close") == "close"
     rep = {"flags": [{"axis": "temporal", "status": "confirmed"}]}
     order = []
-    s = {**base, "static_camera": True}
+    s = {**base, "camera": cl.STATIC_CAMERA}
     tried = set()
     while (pick := cl.next_lever(rep, s, tried, False, cl.DEFAULT_LEVERS | cl.FRAME_LEVERS)) and len(order) < 6:
         order.append(pick[0])

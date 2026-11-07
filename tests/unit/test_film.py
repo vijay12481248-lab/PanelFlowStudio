@@ -109,3 +109,11 @@ def test_inserted_shots_keep_every_other_shots_id(story):
     ids = [p.id for p in story.panels]
     assert ids.index("q01") == ids.index("p070") + 1 and ids.index("p071") == ids.index("q18") + 1
     assert len(ids) == len(set(ids)) == 158
+
+
+def test_camera_is_static_unless_the_panel_asks_for_a_move(story):
+    p = story.panels[0]
+    assert "Static Shot" in film.motion_prompt(story, p) and "push-in" not in film.motion_prompt(story, p)
+    moved = p.model_copy(update={"camera": "a slow, steady push-in"})
+    assert "The camera does a slow, steady push-in." in film.motion_prompt(story, moved)
+    assert "Static Shot" in film.motion_prompt(story, moved, camera=film.STATIC_CAMERA)  # an explicit override (the correction loop) wins

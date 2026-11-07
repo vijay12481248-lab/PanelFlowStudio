@@ -63,8 +63,8 @@ gives the same clip, so single-lever comparisons are real, not noise.
 - The evaluator's flags matched what I saw: `p046` base and `p088` long were marked `suspected` (zoom above the 50% trust cap), `p060` base got the flicker flag (fast-moving stars).
 - Not covered: dialogue shots, wide shots, other stories, more than 6 shots.
 
-**Recommendation (not applied; `film.py` has the owner's uncommitted edits):** default the camera sentence to the Static Shot wording and make a push-in or move an explicit per-shot
-choice; keep clip length as is.
+**Applied (2026-11-07):** the camera sentence defaults to the Static Shot wording (`animate.STATIC_CAMERA`) and a push-in or other move is an explicit per-shot choice (`Panel.camera`). Clip length unchanged.
+Consequence: the prompt of every shot changes, so `film.make_clips` treats all existing Dawn Gate clips as stale and would regenerate them (~158 clips, hours of GPU). The master is built from the existing clips and is unaffected until someone runs that job.
 
 ## Phase 3: correction loop (`engine/original/clip_loop.py`)
 `python -m engine.original.clip_loop <story_dir> <shot> [--attempts 3] [--camera any] [--suspected] [--apply]`. Levers implemented: `static_camera`, `seed`. Judged by the

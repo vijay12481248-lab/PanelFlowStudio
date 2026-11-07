@@ -68,8 +68,10 @@ def test_motion_prompt_comes_from_the_shot_spec_and_the_narration_and_asks_for_e
     s = story()
     text = animate.motion_prompt(s, s.panels[0])
     assert "Biscuit (chubby orange tabby, white paws, green eyes) crouching" in text and "Biscuit does thing number 1." in text
-    assert "a dark living room" in text and "very slow, steady push-in" in text and "everything else stays exactly as drawn" in text
-    assert "slow, steady push-in" in animate.motion_prompt(s, s.panels[1]) and "very slow" not in animate.motion_prompt(s, s.panels[1])  # a medium shot
+    assert "a dark living room" in text and "everything else stays exactly as drawn" in text
+    assert "Static Shot" in text and "push-in" not in text  # the default camera is static (a push-in in every shot zoomed 38% on average)
+    moved = s.panels[1].model_copy(update={"camera": "a slow, steady push-in"})
+    assert "The camera does a slow, steady push-in." in animate.motion_prompt(s, moved) and "Static Shot" not in animate.motion_prompt(s, moved)  # opt-in per panel
     plain = s.panels[0].model_copy(update={"director": {}, "action": "a cat sits"})
     assert "a cat sits" in animate.motion_prompt(s, plain)  # an undirected panel still gets a prompt
 

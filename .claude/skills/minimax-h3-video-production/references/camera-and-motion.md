@@ -5,7 +5,7 @@ Static Shot; Push In / Pull Out; Zoom In / Zoom Out; Pan Left/Right; Truck Left/
 A push-in or pull-out changes distance to the subject (dolly). Zoom changes focal length. Say which you want; they are not the same picture.
 
 ## Fixed camera `[verified, Phase 1]`
-Our own prompt asked for a push-in in every shot (`film.CAMERA`, `animate.motion_prompt`). Measured on 140 Dawn Gate clips: median zoom +9%, 119/140 clips beyond 3%. On 6 shots with the single camera sentence swapped:
+Our own prompt used to ask for a push-in in every shot. NOW (2026-11-07) the default is the Static Shot sentence (`animate.STATIC_CAMERA`) and a camera move is an explicit per-shot choice: `Panel.camera = "a slow, steady push-in"`. Clips made before the change keep their old signature; running `film.make_clips` regenerates any clip whose prompt differs, i.e. all of them for Dawn Gate. Measured on 140 Dawn Gate clips: median zoom +9%, 119/140 clips beyond 3%. On 6 shots with the single camera sentence swapped:
 | Camera sentence | mean abs zoom | flagged |
 |---|---|---|
 | "a very slight, slow push-in" / "a slow, steady push-in" | 38% (range +6% to +164%) | 6/6 |

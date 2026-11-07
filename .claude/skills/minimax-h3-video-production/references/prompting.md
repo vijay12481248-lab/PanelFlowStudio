@@ -12,7 +12,7 @@ Part 1 (instruction line) then blank line, then the core fields. Keep exact fiel
 
 ## Local rules for I2VA (what the pipeline does and what was measured)
 1. **The first frame carries the look. The prompt carries only the change.** Do not re-describe faces/outfits; re-describing makes faces melt `[verified: owner's observation in film.py, project guide]`.
-2. **State what must stay put and what the camera does** - every time (`camera-and-motion.md`). Default camera sentence: *"The camera does nothing; it is a Static Shot, fixed on a tripod, with no zoom, no pan and no tilt."* `[verified, Phase 1: zoom 38% -> 0.8%]`
+2. **State what must stay put and what the camera does** - every time (`camera-and-motion.md`). Default camera sentence (now what `film.motion_prompt` and `animate.motion_prompt` emit unless `Panel.camera` is set): *"The camera does nothing; it is a Static Shot, fixed on a tripod, with no zoom, no pan and no tilt."* `[verified, Phase 1: zoom 38% -> 0.8%]`
 3. **H3 continues any action it sees in the picture.** A tilted glass becomes poured juice; keep the picture's implied action equal to the wanted action `[verified: cat video]`. First = last frame loops make calm beats minimal but action beats still invent things.
 4. **Name things so they cannot be read as something else.** "flying machine" became jets; `film.motion_prompt` rewrites to "cloth-winged glider" and adds "no jets, no airplanes, no propellers" `[verified]`.
 5. **One shot, one action, 3-5 s.** Longer clips fill extra time with invention (`p088`: golem changed shape at 5.17 s) `[verified, 6 shots]`.
