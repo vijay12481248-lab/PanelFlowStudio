@@ -126,3 +126,57 @@ def main() -> None:  # python -m engine.original.clip_identity <story.json> <sho
 
 if __name__ == "__main__":
     main()
+
+
+# ------------------------------------------------------------------ how many? (extra cats, a second woman)
+COUNT_SCHEMA = {"type": "object", "properties": {"count": {"type": "integer"}}, "required": ["count"]}
+COUNT_PROMPTS = (
+    "How many {things} are clearly visible in this picture? Count only the ones you can actually see. Reply as JSON {{\"count\": <number>}}.",
+    "Count the {things} in this picture: whole {things} only, not parts of them and not pictures of them on objects. Reply as JSON {{\"count\": <number>}}.",
+)
+IRREGULAR = {"woman": "women", "man": "men", "child": "children", "person": "people"}
+
+
+def plural(kind: str) -> str:
+    return IRREGULAR.get(kind, kind if kind.endswith("s") else kind + "s")
+
+
+async def count_png(provider, png: bytes, kind: str) -> int | None:
+    """How many `kind` are in this picture: asked twice in different wording WITHOUT telling the model the expected number; a number only counts where both answers agree."""
+    got = []
+    for tpl in COUNT_PROMPTS:
+        raw = await provider.analyze_vision(png, tpl.format(things=plural(kind)), system_prompt="You are a careful visual counter. Output only JSON.", format_schema=COUNT_SCHEMA,
+                                            max_tokens=60, temperature=0.0)
+        try:
+            got.append(int(json.loads(raw)["count"]))
+        except Exception:
+            got.append(None)
+    return got[0] if got[0] is not None and got[0] == got[1] else None
+
+
+def judge_counts(kind: str, expected: int, counts: list[int | None], times: list[float]) -> list[dict]:
+    """More of something than the shot allows, in at least a quarter of the frames where the two answers agreed, is a suspected extra (never `confirmed`: a VLM alone does not confirm)."""
+    known = [(i, c) for i, c in enumerate(counts) if c is not None]
+    over = [(i, c) for i, c in known if c > expected]
+    if known and len(over) * 4 >= len(known):
+        i, c = over[0]
+        return [{"axis": "object", "status": "suspected", "t": times[i],
+                 "evidence": f"{c} {plural(kind)} counted at {times[i]}s but the shot has {expected}; {len(over)} of {len(known)} agreed frames show more than {expected} (both VLM answers agree)"}]
+    return []
+
+
+async def count_check(path: Path, kinds: dict[str, int], provider, frames: int = FRAMES) -> dict:
+    """`kinds` = {"woman": 1, "cat": 1}: the cast of the shot by kind (`film.cast_kinds`). Returns {"counts": {kind: [n|None per sampled frame]}, "flags": [...]}."""
+    cap = cv2.VideoCapture(str(path))
+    n = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    fps = cap.get(cv2.CAP_PROP_FPS) or 24.0
+    cap.release()
+    idx = sample_indices(n, frames)
+    times = [round(i / fps, 2) for i in idx]
+    pngs = frames_at(path, idx)
+    out, flags = {}, []
+    for kind, expected in kinds.items():
+        counts = [await count_png(provider, png, kind) for png in pngs]
+        out[kind] = counts
+        flags += judge_counts(kind, expected, counts, times)
+    return {"counts": out, "flags": flags, "times": times}

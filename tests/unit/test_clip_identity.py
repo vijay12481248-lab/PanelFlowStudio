@@ -83,3 +83,30 @@ def test_objects_use_their_own_wording_and_the_same_judging(tmp_path):
         key_visuals = ["a glowing crystal", "a brass compass"]
 
     assert ci.shot_objects(P()) == [("a glowing crystal", "a glowing crystal"), ("a brass compass", "a brass compass")]
+
+
+def test_counts_need_both_answers_and_flag_an_extra_only_from_a_quarter_of_frames():
+    times = [0.0, 1.0, 2.0, 3.0]
+    assert ci.judge_counts("cat", 1, [1, 1, 1, 1], times) == []
+    assert ci.judge_counts("cat", 1, [1, None, 1, 1], times) == []  # unknown is not an extra
+    f = ci.judge_counts("cat", 1, [1, 2, 3, 1], times)
+    assert [x["axis"] for x in f] == ["object"] and f[0]["status"] == "suspected" and f[0]["t"] == 1.0 and "cats" in f[0]["evidence"]
+    assert ci.judge_counts("woman", 1, [1, 1, 1, 1, 1, 1, 1, 2], list(range(8))) == []  # 1 of 8 agreed frames: tolerated
+    assert [ci.plural(k) for k in ("woman", "man", "cat", "child", "sky-fox kit")] == ["women", "men", "cats", "children", "sky-fox kits"]
+
+
+def test_count_check_asks_twice_without_the_expected_number(tmp_path):
+    vw = cv2.VideoWriter(str(tmp_path / "c.mp4"), cv2.VideoWriter_fourcc(*"mp4v"), 24, (64, 48))
+    for i in range(30):
+        vw.write(np.full((48, 64, 3), i * 8, np.uint8))
+    vw.release()
+    seen = []
+
+    class Fake:
+        async def analyze_vision(self, png, prompt, **kw):
+            seen.append(prompt)
+            return json.dumps({"count": 2})
+
+    r = asyncio.run(ci.count_check(tmp_path / "c.mp4", {"cat": 1}, Fake(), frames=4))
+    assert len(seen) == 8 and r["counts"]["cat"] == [2, 2, 2, 2] and [f["axis"] for f in r["flags"]] == ["object"]
+    assert not any("1" in p.replace("{", "") and "expected" in p for p in seen)  # the prompt never says how many there should be

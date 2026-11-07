@@ -53,6 +53,8 @@ class Panel(BaseModel):
     key_visuals: list[str] = Field(default_factory=list)  # what the narration needs visible; checked on the image
     director: dict = Field(default_factory=dict)  # the ShotSpec the shot director wrote (see shotspec.py); empty for plain panels
     motion: str = ""  # what moves during this shot, for the video model (film.py); one action, never a loop
+    seconds: float = 0.0  # take length for the video model (a long take: up to H3's 15 s limit); 0 = derived from the voice / shot size as before
+    shots: list[dict] = Field(default_factory=list)  # shots INSIDE one take, [{"at": s, "framing": "wide|medium|close", "camera": "", "action": "...", "characters": ["id"]}]; empty = one shot (motion)
     camera: str = ""  # an explicit camera move for the video model ("a slow, steady push-in"); empty = Static Shot, the default (measured: a push-in sentence in every shot zoomed 38% on average)
 
 

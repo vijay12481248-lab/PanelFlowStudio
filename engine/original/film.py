@@ -34,8 +34,8 @@ FREE_ID, VOICE_ID = "fastvideo_h3_film_free", "fastvideo_h3_film_voice"
 LEAD_SEC, TAIL_SEC = 0.15, 0.45  # silence before the first word and after the last, so the mouth closes before the cut
 PEAK = 0.7  # voice peak (linear) = about -3 dBFS
 DEFAULT_VOICES = {  # character id -> (Kokoro voice, speed). Overridable per story in film/voices.json.
-    "mira": ("af_bella", 1.0), "rook": ("am_adam", 1.0), "oren": ("bm_fable", 0.9), "crystal": ("af_heart", 0.8)}
-FACELESS = {"crystal"}  # speakers with no face: anchoring their voice makes H3 draw a mouth on them, so the picture is made with silence and the voice is mixed in at the master
+    "mira": ("af_bella", 1.0), "rook": ("am_adam", 1.0), "oren": ("bm_fable", 0.9), "crystal": ("af_heart", 0.8), "narrator": ("af_heart", 1.0)}
+FACELESS = {"crystal", "narrator"}  # speakers with no face: anchoring their voice makes H3 draw a mouth on them, so the picture is made with silence and the voice is mixed in at the master
 VOICE_FX = {"crystal": "aecho=0.8:0.6:90|180:0.4|0.25,highpass=f=140"}  # a disembodied echo for the crystal's voice
 HOLD = {"extreme_close": 2.3, "close": 3.0, "medium": 3.75, "wide": 4.45}  # silent-shot length by shot size (seconds, before the H3 frame grid)
 
@@ -176,9 +176,53 @@ def native_seconds(text: str) -> float:
     return snap_frames(0.35 + len(text.split()) / 2.6 + 0.5) / FPS
 
 
+def _mmss(t: float) -> str:
+    return f"{int(t // 60):02d}:{t % 60:06.3f}"
+
+
+def cast_kinds(story: OriginalStory, ids: list[str]) -> dict[str, list[str]]:
+    """{"woman": ["Mira"], "cat": ["Pip"]}: who is in the picture, by what the viewer would call them (the count check asks for these words)."""
+    chars = {c.id: c for c in story.bible.characters}
+    kinds: dict[str, list[str]] = {}
+    for c in (chars[i] for i in ids if i in chars):
+        if c.species != "human":
+            kind = c.species
+        elif c.age_group in ("child", "teen"):
+            kind = {"female": "girl", "male": "boy"}.get(c.gender, "child")
+        else:
+            kind = {"female": "woman", "male": "man"}.get(c.gender, "person")
+        kinds.setdefault(kind, []).append(c.name)
+    return kinds
+
+
+def count_clause(story: OriginalStory, ids: list[str]) -> str:
+    """"Exactly" who is in the picture, by name and kind, and that nobody else appears: a long take drifts into extra people and animals unless the prompt closes the cast."""
+    kinds = cast_kinds(story, ids)
+    if not kinds:
+        return "No people and no animals appear."
+    words = {1: "one", 2: "two", 3: "three", 4: "four", 5: "five"}
+    parts = [f"exactly {words.get(len(n), len(n))} {k}{'s' if len(n) > 1 and not k.endswith('s') else ''} ({', '.join(n)})" for k, n in kinds.items()]
+    return f"In the picture there are {' and '.join(parts)}, and no other people or animals appear at any time."
+
+
+def multishot_prompt(story: OriginalStory, panel: Panel, camera: str | None = None) -> str:
+    """One long take with several shots inside it, in the official skeleton: `[Shot 1]` without a time, later shots `[Shot N] At MM:SS.mmm, the camera cuts to ...`.
+    Every shot closes its cast (count_clause) and keeps the camera fixed unless the shot names a move; an action that moves a subject must say which way (the director checks)."""
+    parts = []
+    for k, sh in enumerate(panel.shots):
+        cam = camera or sh.get("camera") or panel.camera or STATIC_CAMERA
+        head = "[Shot 1]" if k == 0 else f"[Shot {k + 1}] At {_mmss(float(sh['at']))}, the camera cuts to a {sh.get('framing', 'medium').replace('_', ' ')} shot."
+        parts.append(f"{head} {sh['action'].rstrip('.')}. {count_clause(story, sh.get('characters') or panel.character_ids)} The camera does {cam}.")
+    body = " ".join(parts) + " Smooth natural motion; every character keeps the same face, hair and clothes in every frame."
+    return ("For the target video, at 0.00 seconds into the target video, <Picture 1> (from [Shot 1]) is fully referenced.\n"
+            f"integrated_multimodal_description: {body}\n\noverall_soundscape: ambient sound that matches the place and the action, no speech, no singing.\n\nnon_diegetic_music: none.")
+
+
 def motion_prompt(story: OriginalStory, panel: Panel, native: bool = False, camera: str | None = None) -> str:
     """H3 text for one shot: only the motion (the picture already carries how everyone looks, and re-describing it makes faces melt).
     `native`: H3 speaks the line itself (no anchored voice), so the prompt names the voice and the soundscape is that voice alone."""
+    if panel.shots:
+        return multishot_prompt(story, panel, camera)
     names = {c.id: c.name for c in story.bible.characters}
     cam = camera or panel.camera or STATIC_CAMERA  # `camera` overrides every shot; Panel.camera is an explicit per-shot move; the default is a Static Shot
     motion = panel.motion.rstrip(".")
@@ -279,8 +323,8 @@ def make_clips(story: OriginalStory, ws: Path, ids: list[str] | None = None, see
         if spoken is None and p.id in (quiet or []) and not talks:
             spoken = silent_shot(ws, p)
         elif spoken is not None and p.dialogue[0].speaker_id in FACELESS:  # the voice stays in voice/<id>.wav for the master; H3 gets silence
-            spoken = silent_shot(ws, p, spoken[1])
-        seconds = native_seconds(p.dialogue[0].text) if talks else spoken[1] if spoken else snap_frames(HOLD.get(p.shot, 3.75)) / FPS
+            spoken = silent_shot(ws, p, max(spoken[1], snap_frames(p.seconds) / FPS if p.seconds else 0))  # a long take is as long as the take, not as the voice
+        seconds = native_seconds(p.dialogue[0].text) if talks else spoken[1] if spoken else (snap_frames(p.seconds) if p.seconds else snap_frames(HOLD.get(p.shot, 3.75))) / FPS
         prompt = motion_prompt(story, p, native=talks, camera=camera)
         seed = (seeds or {}).get(p.id, int(hashlib.sha256(f"{story.bible.premise.title}|{p.id}|clip".encode()).hexdigest()[:12], 16))
         sig = hashlib.sha256(f"{prompt}|{seed}|{seconds}|{frame.stat().st_mtime_ns}|{spoken[0].stat().st_mtime_ns if spoken else 0}".encode()).hexdigest()[:16]
