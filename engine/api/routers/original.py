@@ -463,3 +463,56 @@ def film_status(slug: str):
     running = [{k: j[k] for k in ("id", "kind", "status", "progress", "message")} for j in _FILM_JOBS.values() if j["slug"] == Path(slug).name and j["status"] == "running"]
     return {"shots": len(shots), "frames": sum(s["frame"] for s in shots), "clips": sum(s["clip"] for s in shots),
             "seconds": round(sum(s["seconds"] or 0 for s in shots), 1), "too_still": [s["id"] for s in shots if s["too_still"]], "running": running, "detail": shots}
+
+
+# ------------------------------------------------------------------ clip evaluation and the correction loop (engine/original/clip_eval.py, clip_loop.py)
+def _shot_clip(slug: str, shot: str) -> tuple[Path, OriginalStory, Path]:
+    ws, story = _film_story(slug)
+    if not any(p.id == shot for p in story.panels):
+        raise HTTPException(status_code=404, detail="shot not found")
+    clip = ws / "film" / "clips" / f"{Path(shot).name}.mp4"
+    return ws, story, clip
+
+
+@router.get("/story/{slug}/film/clip/{shot}/eval")
+def film_clip_eval(slug: str, shot: str, camera: str = "static"):
+    """Measured review of one clip: camera path, hard cuts, flicker, stillness, colour drift, audio, as flags with timestamps (no overall score). camera=static|any."""
+    from engine.original.clip_eval import evaluate
+
+    if camera not in ("static", "any"):
+        raise HTTPException(status_code=422, detail="camera must be static or any")
+    _, _, clip = _shot_clip(slug, shot)
+    if not clip.is_file():
+        raise HTTPException(status_code=404, detail="no clip for this shot yet")
+    return evaluate(clip, expect_camera=camera)
+
+
+@router.post("/story/{slug}/film/clip/{shot}/improve", status_code=202)
+def film_clip_improve(slug: str, shot: str, attempts: int = 3, camera: str = "static", suspected: bool = False, apply: bool = False, redraw: bool = True):
+    """Correction loop for one shot (background job, one GPU): evaluate, change ONE thing, regenerate in an isolated workspace, keep the better clip, repeat. The real
+    clip is only replaced with apply=true. History: GET .../history."""
+    from engine.original import clip_loop
+
+    if camera not in ("static", "any") or not 1 <= attempts <= 6:
+        raise HTTPException(status_code=422, detail="camera must be static or any; attempts 1-6")
+    ws, story, clip = _shot_clip(slug, shot)
+    if not clip.is_file():
+        raise HTTPException(status_code=404, detail="no clip for this shot yet")
+    base = clip_loop.baseline_settings(story, ws, shot)
+
+    def run(prog, cancelled):
+        runner = art_mod.ComfyRunner() if redraw else None
+        levers = clip_loop.DEFAULT_LEVERS | (clip_loop.FRAME_LEVERS if runner else frozenset())
+        out = clip_loop.improve_clip(shot, ws, clip_loop.film_generate(story, ws, shot, runner, base), base, attempts=attempts, expect_camera=camera,
+                                     act_on_suspected=suspected, apply=apply, levers=levers)
+        return {k: v for k, v in out.items() if k != "history"} | {"attempts": [{k: h.get(k) for k in ("attempt", "lever", "decision", "reason", "changed")} for h in out["history"]]}
+
+    return _film_start(slug, "improve", run)
+
+
+@router.get("/story/{slug}/film/clip/{shot}/history")
+def film_clip_history(slug: str, shot: str):
+    """Every correction attempt recorded for a shot (settings, evaluator flags, decision), oldest first."""
+    ws, _, _ = _shot_clip(slug, shot)
+    path = ws / "film" / "history" / f"{Path(shot).name}.json"
+    return json.loads(path.read_text(encoding="utf-8")) if path.is_file() else []

@@ -142,31 +142,22 @@ async def test_watchdog_sees_a_shot_regeneration_task_registered_under_a_regen_n
 
 def test_reviewer_nonexistent_file():
     critique = analyze_video_chunk("nonexistent.mp4", "Dark apocalyptic streets")
-    assert critique["score"] == 80
-    assert critique["grade"] == "B"
-    assert critique["verdict"] == "PENDING INSPECTION"
+    assert critique["verdict"] == "NOT INSPECTED" and critique["measured"] is False
+    assert critique["overall_score"] is None and critique["grade"] is None  # no invented score for a clip that was not looked at
 
 
-@patch("subprocess.run")
-def test_reviewer_valid_probe(mock_run, tmp_path):
-    chunk_file = tmp_path / "valid_chunk.mp4"
-    chunk_file.write_bytes(b"content")
+def test_reviewer_measures_real_frames_and_invents_nothing(tmp_path):
+    import cv2
+    import numpy as np
 
-    probe_json = {
-        "streams": [
-            {"codec_type": "video", "width": 1344, "height": 768},
-            {"codec_type": "audio"},
-        ],
-        "format": {"duration": "5.17"},
-    }
-
-    mock_res = MagicMock()
-    mock_res.stdout = str(probe_json).replace("'", '"')
-    mock_run.return_value = mock_res
-
-    critique = analyze_video_chunk(str(chunk_file), "Cyberpunk neon alley with heavy rain", shot_index=1, total_shots=3)
-
-    assert critique["overall_score"] >= 90
-    assert critique["grade"] in ("A", "A+")
-    assert critique["verdict"] == "APPROVED FOR MASTER CUT"
-    assert "neon" in " ".join(critique["observations"]).lower() or "lighting" in " ".join(critique["observations"]).lower()
+    rng = np.random.default_rng(1)
+    base = cv2.GaussianBlur(rng.integers(0, 255, (432, 768, 3), dtype=np.uint8), (0, 0), 2)
+    vw = cv2.VideoWriter(str(tmp_path / "still.mp4"), cv2.VideoWriter_fourcc(*"mp4v"), 24, (384, 216))
+    for _ in range(40):
+        vw.write(base[108:324, 192:576])
+    vw.release()
+    critique = analyze_video_chunk(str(tmp_path / "still.mp4"), "Cyberpunk neon alley with heavy rain", shot_index=1, total_shots=3)
+    assert critique["measured"] is True and critique["overall_score"] is None and critique["grade"] is None
+    assert "APPROVED" not in critique["verdict"]  # a still picture with no audio stream cannot be approved
+    assert any(f["axis"] == "audio" for f in critique["flags"]) and "neon" not in " ".join(critique["observations"]).lower()  # the prompt no longer picks the praise
+    assert critique["metrics"]["has_audio"] is False and "identity" in critique["not_checked"]

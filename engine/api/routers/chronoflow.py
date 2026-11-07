@@ -1128,7 +1128,7 @@ def get_gallery() -> dict[str, Any]:
                     "job_id": job_id,
                     "chunk_index": chunk_num,
                     "score": review.get("overall_score", 93),
-                    "grade": review.get("grade", "A"),
+                    "grade": review.get("grade"),
                     "verdict": review.get("verdict", "APPROVED FOR MASTER CUT"),
                     "size_mb": round(size_bytes / (1024 * 1024), 2),
                     "created_at": mtime,

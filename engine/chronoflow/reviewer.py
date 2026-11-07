@@ -1,126 +1,47 @@
-"""
-DEPRECATED - do not trust the numbers this module returns.
+"""ChronoFlow clip review: real measurements from `engine.original.clip_eval`, no invented scores.
 
-`analyze_video_chunk` does NOT inspect frames: the sharpness, lighting, motion and audio "scores" are constants (94, 96, 93, 95) and the critique
-text is picked by keywords in the prompt. It cannot detect a defect, so its "APPROVED FOR MASTER CUT" verdict means nothing. Measured evidence about
-a clip comes from `engine.original.clip_eval.evaluate` (camera path, cuts, flicker, appearance drift, audio; see docs/H3_CLIP_EVAL.md). The function
-is kept only because the ChronoFlow API and UI still call it; wire them to clip_eval and delete this file.
+`analyze_video_chunk` used to return constants (sharpness 94, lighting 96, ...) and keyword-triggered praise, so every clip was "APPROVED FOR MASTER CUT". It now runs the
+evaluator (camera path, hard cuts, flicker, colour drift, stillness, audio) and returns what was measured. There is NO overall score or grade by design (`overall_score`
+and `grade` are None); `verdict` says how many defects were confirmed / suspected, `flags` and `observations` carry the evidence with timestamps, and `not_checked` names
+what the measurements cannot see (identity, objects, prompt adherence). ChronoFlow shots may move the camera, so camera moves are reported, not flagged.
 """
+from __future__ import annotations
 
 import os
-import warnings
-import subprocess
-import json
-import math
 from pathlib import Path
 
-def analyze_video_chunk(chunk_path, prompt, shot_index=1, total_shots=3, prev_chunk_path=None):
-    """
-    Performs autonomous frame extraction, metric evaluation,
-    and structured cinematic critique on a generated video chunk.
-    """
-    warnings.warn("analyze_video_chunk returns constant scores, not a measurement; use engine.original.clip_eval.evaluate", DeprecationWarning, stacklevel=2)
-    chunk_file = Path(chunk_path)
-    if not chunk_file.exists():
-        return {
-            "score": 80,
-            "grade": "B",
-            "verdict": "PENDING INSPECTION",
-            "metrics": {},
-            "critique": "Awaiting video file availability."
-        }
+NOT_CHECKED = "identity, objects appearing or vanishing, prompt adherence, how the audio sounds"
 
-    # Extract video stream information via ffprobe
-    duration = 5.17
-    width = 1344
-    height = 768
-    has_audio = True
+
+def analyze_video_chunk(chunk_path, prompt="", shot_index=1, total_shots=3, prev_chunk_path=None):
+    """Measured review of one generated chunk. `prompt` and `prev_chunk_path` are accepted for the callers' sake and not used for any score."""
+    chunk_file = Path(chunk_path)
+    base = {"shot_index": shot_index, "total_shots": total_shots, "overall_score": None, "grade": None, "measured": True, "not_checked": NOT_CHECKED}
+    if not chunk_file.is_file():
+        return {**base, "measured": False, "verdict": "NOT INSPECTED", "metrics": {}, "flags": [], "observations": ["The clip file is not available yet."],
+                "recommendation": "Nothing was measured.", "timestamp": 0}
+    from engine.original.clip_eval import evaluate
 
     try:
-        cmd = [
-            "ffprobe", "-v", "error",
-            "-show_entries", "stream=width,height,codec_type,duration:format=duration",
-            "-of", "json",
-            str(chunk_file)
-        ]
-        res = subprocess.run(cmd, capture_output=True, text=True, check=True)
-        probe_data = json.loads(res.stdout)
-        
-        streams = probe_data.get("streams", [])
-        for s in streams:
-            if s.get("codec_type") == "video":
-                width = int(s.get("width", 1344))
-                height = int(s.get("height", 768))
-            elif s.get("codec_type") == "audio":
-                has_audio = True
-                
-        if "format" in probe_data and "duration" in probe_data["format"]:
-            duration = float(probe_data["format"]["duration"])
-    except Exception as e:
-        print(f"[AI Reviewer] Probe notice: {e}")
-
-    # Compute cinematic scores based on resolution, duration compliance, and temporal consistency
-    aspect_ratio_ok = (width >= 1280 and height >= 720)
-    duration_fidelity = min(100, int((duration / 5.17) * 100))
-    
-    # Calculate quality metrics
-    sharpness_score = 94 if aspect_ratio_ok else 85
-    lighting_continuity = 96 if prev_chunk_path else 98
-    temporal_motion_score = 93
-    audio_sync_score = 95 if has_audio else 70
-
-    overall_score = round(
-        (sharpness_score * 0.3) +
-        (lighting_continuity * 0.25) +
-        (temporal_motion_score * 0.25) +
-        (audio_sync_score * 0.2)
-    )
-
-    grade = "A+" if overall_score >= 95 else "A" if overall_score >= 90 else "B+"
-
-    # Generate intelligent critique observations based on prompt context
-    keywords = prompt.lower()
-    observations = []
-
-    if "cyber" in keywords or "neon" in keywords or "city" in keywords:
-        observations.append("Volumetric neon lighting and reflections exhibit high dynamic range with zero banding.")
-    elif "zombie" in keywords or "dark" in keywords or "apocalypse" in keywords:
-        observations.append("Atmospheric fog diffusion and low-key chiaroscuro contrast remain stable across all frames.")
+        rep = evaluate(chunk_file, expect_camera="any", expect_audio=True)
+    except Exception as exc:  # an unreadable clip is itself a finding, not a pass
+        return {**base, "measured": False, "verdict": "NOT INSPECTED", "metrics": {}, "flags": [], "observations": [f"The clip could not be analysed: {exc}"],
+                "recommendation": "Open the clip and check it by eye.", "timestamp": os.path.getmtime(str(chunk_file))}
+    flags = rep["flags"]
+    confirmed = [f for f in flags if f["status"] == "confirmed"]
+    suspected = [f for f in flags if f["status"] == "suspected"]
+    cam = rep["camera"]
+    if confirmed:
+        verdict = f"{len(confirmed)} DEFECT(S) CONFIRMED" + (f", {len(suspected)} suspected" if suspected else "")
+        rec = "Fix the confirmed defect(s) before the master cut (the correction loop: python -m engine.original.clip_loop)."
+    elif suspected:
+        verdict = f"CHECK: {len(suspected)} SUSPECTED"
+        rec = "Look at the flagged moments before approving."
     else:
-        observations.append("Color grading and luminance curves maintain seamless scene continuity.")
-
-    if shot_index == 1:
-        observations.append("Initial anchor locking is flawless; character silhouette and key attributes established firmly.")
-    elif prev_chunk_path:
-        observations.append(f"Sliding-window transition from Shot #{shot_index-1} preserved momentum and camera tracking angle.")
-    else:
-        observations.append("Smooth camera kinematics with natural depth parallax across 124 frames.")
-
-    if has_audio:
-        observations.append("Synchronized Foley audio tracks align with on-screen kinetic motion beats.")
-
-    verdict = "APPROVED FOR MASTER CUT" if overall_score >= 88 else "RECOMMEND MINOR TOUCH-UP"
-
-    recommendation = (
-        "Visual flow is pristine. Ready for multi-track timeline assembly."
-        if overall_score >= 88 else
-        "Consider a 1.0s or 2.3s micro-regeneration on key action frames if sharper foreground focus is desired."
-    )
-
-    return {
-        "shot_index": shot_index,
-        "total_shots": total_shots,
-        "overall_score": overall_score,
-        "grade": grade,
-        "verdict": verdict,
-        "metrics": {
-            "resolution": f"{width}x{height}",
-            "sharpness": f"{sharpness_score}%",
-            "lighting_continuity": f"{lighting_continuity}%",
-            "motion_fluidity": f"{temporal_motion_score}% (24fps)",
-            "audio_alignment": f"{audio_sync_score}%"
-        },
-        "observations": observations,
-        "recommendation": recommendation,
-        "timestamp": os.path.getmtime(str(chunk_file)) if chunk_file.exists() else 0
-    }
+        verdict = "NO DEFECT FLAGGED"
+        rec = f"Look at the clip yourself: not checked - {NOT_CHECKED}."
+    obs = [f"{f['status']} ({f['axis']}" + (f" at {f['t']}s" if f.get("t") is not None else "") + f"): {f['evidence']}" for f in flags] or ["No measurement raised a flag."]
+    return {**base, "verdict": verdict, "flags": flags, "observations": obs, "recommendation": rec, "timestamp": os.path.getmtime(str(chunk_file)),
+            "metrics": {"seconds": rep["seconds"], "camera_zoom_pct": cam["zoom_pct"], "camera_pan_x_pct": cam["pan_x_pct"], "camera_pan_y_pct": cam["pan_y_pct"],
+                        "motion": rep["motion"], "flicker": rep["flicker"], "colour_drift": rep["drift"]["max"], "hard_cuts_s": rep["cuts_s"],
+                        "has_audio": rep["audio"].get("has_audio", False)}}

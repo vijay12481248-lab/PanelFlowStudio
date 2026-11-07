@@ -229,3 +229,37 @@ async def panelflow_original_film_job(job_id: str) -> dict[str, Any]:
 )
 async def panelflow_original_film_status(slug: str) -> dict[str, Any]:
     return await bridge.get(f"/api/original/story/{slug}/film/status")
+
+
+@registry.tool(
+    name="panelflow_original_clip_eval",
+    description="Measured review of one film clip (no score): camera zoom/pan, hard cuts, flicker, still picture, colour drift, audio, each flag with a timestamp and status confirmed|suspected. "
+                "camera='static' flags any camera move, 'any' only reports it. It does NOT check identity, objects or prompt match: look at the clip too.",
+    input_schema={"type": "object", "properties": {"slug": {"type": "string"}, "shot": {"type": "string"}, "camera": {"type": "string", "enum": ["static", "any"]}}, "required": ["slug", "shot"]},
+    domain="original",
+)
+async def panelflow_original_clip_eval(slug: str, shot: str, camera: str = "static") -> dict[str, Any]:
+    return await bridge.get(f"/api/original/story/{slug}/film/clip/{shot}/eval{_query(camera=camera)}")
+
+
+@registry.tool(
+    name="panelflow_original_clip_improve",
+    description="Correction loop for one film clip: evaluate, change ONE thing (static camera, simpler action, wider/new first frame, new seed), regenerate in an isolated workspace, keep the better clip. "
+                "Background job (a minute or two per attempt); poll panelflow_original_film_job. The real clip is replaced only with apply=true; read panelflow_original_clip_history first and look at the result.",
+    input_schema={"type": "object", "properties": {"slug": {"type": "string"}, "shot": {"type": "string"}, "attempts": {"type": "integer"}, "camera": {"type": "string", "enum": ["static", "any"]},
+                                                  "suspected": {"type": "boolean", "description": "also act on suspected flags (look at the frames first)"}, "apply": {"type": "boolean"},
+                                                  "redraw": {"type": "boolean", "description": "allow the first-frame levers (needs ComfyUI art)"}}, "required": ["slug", "shot"]},
+    domain="original",
+)
+async def panelflow_original_clip_improve(slug: str, shot: str, attempts: int = 3, camera: str = "static", suspected: bool = False, apply: bool = False, redraw: bool = True) -> dict[str, Any]:
+    return await bridge.post(f"/api/original/story/{slug}/film/clip/{shot}/improve{_query(attempts=attempts, camera=camera, suspected=str(suspected).lower(), apply=str(apply).lower(), redraw=str(redraw).lower())}")
+
+
+@registry.tool(
+    name="panelflow_original_clip_history",
+    description="Every correction attempt recorded for a film clip: lever, settings changed, evaluator flags, kept or discarded and why.",
+    input_schema={"type": "object", "properties": {"slug": {"type": "string"}, "shot": {"type": "string"}}, "required": ["slug", "shot"]},
+    domain="original",
+)
+async def panelflow_original_clip_history(slug: str, shot: str) -> dict[str, Any]:
+    return await bridge.get(f"/api/original/story/{slug}/film/clip/{shot}/history")

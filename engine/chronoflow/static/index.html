@@ -3086,12 +3086,10 @@
         
         // Intelligent AI Review Data
         const reviewData = (job.reviews && job.reviews[String(i)]) || null;
-        const aiScore = reviewData ? reviewData.overall_score : 94;
-        const aiGrade = reviewData ? reviewData.grade : 'A';
-        const aiVerdict = reviewData ? reviewData.verdict : 'APPROVED FOR MASTER CUT';
-        const aiObs = (reviewData && reviewData.observations && reviewData.observations.length > 0) 
-          ? reviewData.observations[0] 
-          : 'Sliding-window temporal flow and lighting contrast preserved.';
+        // measured review (engine/original/clip_eval): no score or grade exists; show the verdict and the first finding, or say nothing was measured
+        const aiVerdict = reviewData ? reviewData.verdict : 'NOT INSPECTED';
+        const aiObs = (reviewData && reviewData.observations && reviewData.observations.length > 0) ? reviewData.observations[0] : 'No measurement for this shot yet.';
+        const aiBad = reviewData && /CONFIRMED|CHECK/.test(reviewData.verdict || '');
 
         html += `<div class="chunk-node" id="chunk-card-${i}">`;
         if (isCompletedChunk) {
@@ -3100,17 +3098,17 @@
             <div class="chunk-body">
               <div class="chunk-meta">
                 <span style="color: #f1f5f9; font-weight: 600;">Shot #${i} (${timeStart}s - ${timeEnd}s)</span>
-                <span style="color: #34d399; font-size: 0.7rem; font-weight: 700; background: rgba(52, 211, 153, 0.15); padding: 1px 6px; border-radius: 4px;">🤖 AI: ${aiScore}% (${aiGrade})</span>
+                <span style="color: ${aiBad ? '#fbbf24' : '#94a3b8'}; font-size: 0.7rem; font-weight: 700; background: rgba(148, 163, 184, 0.15); padding: 1px 6px; border-radius: 4px;">measured</span>
               </div>
               
               <!-- AI Review Diagnostic Strip -->
               <div style="font-size: 0.68rem; color: #a5b4fc; background: rgba(99, 102, 241, 0.1); border: 1px solid rgba(99, 102, 241, 0.25); border-radius: 4px; padding: 4px 6px; margin: 4px 0; line-height: 1.3;">
-                <div style="font-weight: 700; color: #38bdf8; margin-bottom: 1px;">✓ ${aiVerdict}</div>
-                <div style="color: #cbd5e1;">${aiObs}</div>
+                <div style="font-weight: 700; color: ${aiBad ? '#fbbf24' : '#38bdf8'}; margin-bottom: 1px;">${escHtml(aiVerdict)}</div>
+                <div style="color: #cbd5e1;">${escHtml(aiObs)}</div>
               </div>
 
               <div class="review-actions">
-                <button class="btn-review-ok" onclick="alert('Shot #${i} confirmed approved! Master continuous film is synchronized.')" style="flex: 1; font-size: 0.72rem;">✓ Keep Approved</button>
+                <button class="btn-review-ok" onclick="alert('Shot #${i} kept. The review above is measured evidence only; it does not check identity, objects or prompt match.')" style="flex: 1; font-size: 0.72rem;">✓ Keep</button>
                 <button class="btn-review-regen" onclick="openShotDirectorModal(${i})" style="flex: 1.3; font-size: 0.72rem;">↺ Re-Gen Shot</button>
               </div>
             </div>`;
@@ -3976,7 +3974,7 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
             ${canEdit ? `<button type="button" class="btn-tool" style="width:100%; justify-content:center; font-size:0.7rem;" onclick="openGalleryImage('${it.url}', '${escHtml(it.filename)}')">🎨 Open in Image Studio</button>` : ''}</div></div>`;
         }
         const poster = mediaSrc(`${API_BASE}/media/filmstrip?file=${encodeURIComponent(it.filename)}&count=1&height=240`);
-        const title = galleryFilter === 'masters' ? escHtml((it.prompt || 'Master cut').slice(0, 70)) : `Shot ${escHtml(it.chunk_index)} · grade ${escHtml(it.grade)}`;
+        const title = galleryFilter === 'masters' ? escHtml((it.prompt || 'Master cut').slice(0, 70)) : `Shot ${escHtml(it.chunk_index)}`;
         const sub = galleryFilter === 'masters' ? `${it.resolution} · ${it.size_mb} MB` : `${it.size_mb} MB`;
         return `<div class="char-card"><video class="char-img" style="height: 200px;" controls preload="none" poster="${poster}" src="${mediaSrc(it.url)}"></video>
           <div class="char-body"><div style="font-weight: 700; color: #f8fafc; font-size: 0.8rem;">${title}</div>
