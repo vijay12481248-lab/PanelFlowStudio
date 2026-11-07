@@ -379,6 +379,46 @@ def planned_seconds(panels: list[Panel]) -> float:
     return sum(film.snap_frames(len(p.dialogue[0].text.split()) / WORDS_PER_SECOND + film.LEAD_SEC + film.TAIL_SEC) / film.FPS for p in panels if p.dialogue)
 
 
+class _Extra(BaseModel):
+    fact: str = Field(description="ONE more teaching point, 8-22 words, that fits between the earlier takes and the final takeaway and does not repeat any earlier fact")
+    atmosphere: str = Field(description="the sky and light for this extra take, 5-14 words, between the neighbouring takes' skies")
+
+
+def renumber(scenes: list[Scene], panels: list[Panel]) -> dict[str, str]:
+    """Give scenes and panels consecutive ids (s1.., t1..) in order; returns {old panel id: new panel id} for the ones that moved."""
+    moved = {}
+    for k, (sc, p) in enumerate(zip(scenes, panels), 1):
+        if p.id != f"t{k}":
+            moved[p.id] = f"t{k}"
+        sc.id, p.id, p.scene_id = f"s{k}", f"t{k}", f"s{k}"
+    return moved
+
+
+async def insert_take(provider, story: OriginalStory, seconds: float, progress=lambda pct, msg: None) -> dict[str, str]:
+    """Add ONE take before the final takeaway (a storyboard plan whose lines came out short lasts less than asked): the Writer is asked for one more fact and sky that fit
+    between the neighbours, the take is written with every storyboard rule, and the ids are renumbered. Returns {old id: new id} of the shots that moved (the caller moves
+    their pictures, clips and voice); raises ValueError when no take passes its checks (the story is then unchanged)."""
+    genre = GENRES["explainer"]
+    bible, panels, scenes = story.bible, story.panels, story.scenes
+    pos = len(panels) - 1
+    said = " ".join(p.dialogue[0].text for p in panels)
+    facts = " | ".join(sc.summary for sc in scenes)
+    extra = await sm._ask(provider, f"Video: {bible.premise.title}. {bible.premise.logline}\n"
+                          f"Teaching facts so far, in order: {facts}\n"
+                          f"The last take is the takeaway. Give ONE more fact "
+                          f"that belongs just before the takeaway, and the sky and light for it (between: {panels[pos - 1].atmosphere!r} and {panels[pos].atmosphere!r}).",
+                          _Extra, lambda o: ([] if 6 <= len(o.fact.split()) <= 26 and 4 <= len(o.atmosphere.split()) <= 16 else ["fact 8-22 words, atmosphere 5-14 words"])
+                          + (["the fact repeats an earlier one"] if content_words(o.fact) <= content_words(facts) else []), temperature=0.7, max_tokens=500, attempts=4)
+    sky = extra.atmosphere.strip()
+    progress(0.5, f"Director: extra take {pos + 1}")
+    t = await _take(provider, bible, bible.premise, genre, pos, len(panels) + 1, seconds, [extra.fact.strip()], said[-400:],
+                    f"Sky and light in this take: {sky}. Do not describe any other weather or light.", storyboard=True)
+    sc, pa = _panel(pos, t, seconds, [extra.fact.strip()], genre, sky)
+    scenes.insert(pos, sc)
+    panels.insert(pos, pa)
+    return renumber(scenes, panels)
+
+
 async def direct(brief: str, provider, total_seconds: float = 60.0, max_take: float = MAX_TAKE, progress=lambda pct, msg: None, storyboard: bool = False) -> OriginalStory:
     """The whole plan from one sentence. Raises ValueError if a stage cannot be made to pass its checks (the message lists the problems).
     After the takes are written, every requirement the owner's brief made about what the viewer sees (`must_show`) must appear in some shot; a take is written again for each
@@ -414,7 +454,16 @@ async def direct(brief: str, provider, total_seconds: float = 60.0, max_take: fl
             scenes[i], panels[i] = _panel(i, t, seconds, dealt[i], genre, skies[i])
         except ValueError as exc:  # best effort: keep the take that passed its checks and say what is missing
             warnings.append(f"the brief says '{r}' but no take shows it (rewrite of take {i + 1} failed: {str(exc)[:160]})")
+    story = OriginalStory(bible=bible, scenes=scenes, panels=panels, warnings=warnings)
+    for _ in range(2 if storyboard else 0):  # up to two extra takes when the lines came out short
+        if planned_seconds(panels) >= 0.85 * total_seconds:
+            break
+        try:
+            await insert_take(provider, story, seconds, progress)
+        except ValueError as exc:
+            warnings.append(f"the plan is short and an extra take could not be written: {str(exc)[:160]}")
+            break
     if storyboard and planned_seconds(panels) < 0.85 * total_seconds:
         warnings.append(f"the narration is short: the video will last about {planned_seconds(panels):.0f} s of the {total_seconds:.0f} s asked")
     progress(1.0, "Plan complete")
-    return OriginalStory(bible=bible, scenes=scenes, panels=panels, warnings=warnings)
+    return story

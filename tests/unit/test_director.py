@@ -265,3 +265,23 @@ def test_a_short_line_is_lengthened_by_one_focused_rewrite_and_kept_when_no_rewr
 def test_planned_length_follows_the_words():
     p = lambda words: d.Panel(id="t", scene_id="s", shot="wide", angle="eye_level", location_id="l", character_ids=[], action="x", dialogue=[d.Line(speaker_id="narrator", text=" ".join(["w"] * words))])  # noqa: E731
     assert 5.0 < d.planned_seconds([p(13)]) < 5.9 and 6.5 < d.planned_seconds([p(18)]) < 7.4
+
+
+def test_an_extra_take_is_inserted_before_the_takeaway_and_ids_are_renumbered():
+    class Fake:
+        async def generate_structured(self, prompt, model, **kw):
+            if model is d._Extra:
+                return d._Extra(fact="Strong updrafts carry water droplets high where they freeze into hail stones.", atmosphere="towering dark clouds with a cold greenish light")
+            return d._BoardTake(location_id="open_field", narration="Hail stones form when strong updrafts carry water droplets up into freezing air above " + "and so on " * 2,
+                                visual="white hail stones falling from a dark cloud", end_state="Mira and Pip stand at the left side of the frame and watch hail stones fall from the cloud.",
+                                shot=_shot(action="Hail stones fall from a dark cloud above the field while Mira points at them and Pip watches."))
+
+    b = _real_bible()
+    mk = lambda i, text, sky: (d.Scene(id=f"s{i}", location_id="open_field", character_ids=["mira"], summary="fact %d about storms" % i, mood="x"),  # noqa: E731
+                               d.Panel(id=f"t{i}", scene_id=f"s{i}", shot="wide", angle="eye_level", location_id="open_field", character_ids=["mira"], action="x", dialogue=[d.Line(speaker_id="narrator", text=text)], atmosphere=sky, seconds=7.5))
+    pairs = [mk(1, "First line about warm air rising", "blue sky"), mk(2, "Second line about clouds growing", "grey sky"), mk(3, "The takeaway line about the whole storm", "rainbow sky")]
+    story = d.OriginalStory(bible=b, scenes=[s for s, _ in pairs], panels=[p for _, p in pairs], warnings=[])
+    moved = asyncio.run(d.insert_take(Fake(), story, 7.5))
+    assert [p.id for p in story.panels] == ["t1", "t2", "t3", "t4"] and moved == {"t3": "t4"}
+    assert "Hail" in story.panels[2].dialogue[0].text and story.panels[3].dialogue[0].text.startswith("The takeaway")  # the takeaway stays last
+    assert [s.id for s in story.scenes] == ["s1", "s2", "s3", "s4"] and story.panels[2].scene_id == "s3" and story.panels[2].atmosphere.startswith("towering")
