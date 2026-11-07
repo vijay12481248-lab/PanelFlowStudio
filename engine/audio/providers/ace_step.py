@@ -209,7 +209,7 @@ class ACEStepProvider:
         logger.info(f"ACE-Step task released: task_id={task_id}, cue={cue_id}")
 
         # 2. Poll /query_result
-        max_poll_iterations = 90  # 90 * 1.5s = 135s timeout
+        max_poll_iterations = int(os.environ.get("ACESTEP_MAX_POLL", "480"))  # x 1.5 s: the first task after a cold start also loads the model (>135 s)
         download_url: Optional[str] = None
         poll_count = 0
 

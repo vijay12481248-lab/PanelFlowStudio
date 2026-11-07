@@ -49,6 +49,7 @@ LOCS = [
     Location(id="mirrors", name="Hall of Mirrors", look="ancient temple hall with tall polished bronze mirrors on stone pillars, dust motes, shafts of light"),
     Location(id="bridge", name="Chasm bridge", look="narrow ancient stone bridge across a bottomless chasm glowing orange from below, carved pillars"),
     Location(id="vault", name="Crystal vault", look="round stone chamber with a huge radiant golden crystal floating above a carved altar, god rays, warm golden light"),
+    Location(id="gorge", name="Moth Gorge", look="misty gorge in blue pre-dawn light, giant ferns, a long old rope-and-plank bridge, tiny glowing blue-green lantern moths drifting in the air"),
     Location(id="lamp_gold", name="The Great Lantern relit", look="stone tower square holding a huge warm golden glowing crystal lantern, golden sunrise light, villagers cheering, lanterns glowing gold"),
     Location(id="flashback", name="Memory", look="warm soft-focus memory of the sky dock at golden hour"),
     Location(id="ruinsky", name="Above the ruins", look="open morning sky above collapsing stone ruins, sunrise, dust and golden sparks"),
@@ -77,11 +78,20 @@ def scene(sid, loc, chars, summary, mood):
     SCENES.append(Scene(id=sid, location_id=loc, character_ids=chars, summary=summary, mood=mood, score=sc, bpm=bpm, key=key))
 
 
-def P(sid, shot, angle, loc, chars, action, motion, dlg=None, key=None):
-    n = len(PANELS) + 1
-    PANELS.append(Panel(id=f"p{n:03d}", scene_id=sid, shot=shot, angle=angle, location_id=loc, character_ids=chars,
+COUNT = [0]
+
+
+def P(sid, shot, angle, loc, chars, action, motion, dlg=None, key=None, pid=None):
+    if pid is None:  # numbered shots keep their ids whatever is inserted between them; inserted shots carry an explicit id
+        COUNT[0] += 1
+        pid = f"p{COUNT[0]:03d}"
+    PANELS.append(Panel(id=pid, scene_id=sid, shot=shot, angle=angle, location_id=loc, character_ids=chars,
                         action=action, motion=motion,
                         dialogue=[Line(speaker_id=dlg[0], text=dlg[1])] if dlg else [], key_visuals=key or []))
+
+
+def Q(pid, *args, **kw):
+    P(*args, pid=pid, **kw)
 
 
 # ---------------------------------------------------------------- S1 golden-hour flight (fun hook)
@@ -239,6 +249,45 @@ P("s5", "close", "eye_level", "jungle", ["rook"], "Rook close-up, totally deadpa
 P("s5", "wide", "eye_level", "jungle", ["mira", "rook", "pip"], "Mira laughing while she and Rook walk up a mossy stone path toward the ruins, Rook scowling, blue pre-dawn light.",
   "they walk up the path, Mira laughing, Rook scowling, the blue light growing")
 
+# ---- Moth Gorge (added so the film runs about nine and a half minutes): fun, a chase, and Rook returns the rescue. Explicit ids keep every other shot's id.
+Q("q01", "s5", "wide", "eye_level", "gorge", ["mira", "rook"], "Mira and Rook walking single file along a mossy path through giant ferns toward the glowing ruins, tiny blue-green lights drifting in the blue pre-dawn air.",
+  "they walk along the path, the camera follows behind them, glowing specks drift past")
+Q("q02", "s5", "close", "eye_level", "gorge", ["pip"], "Close-up of Pip the white fluffy sky-fox kit floating in the pre-dawn mist, nose twitching, huge blue eyes reflecting a tiny glowing light.",
+  "Pip's nose twitches, its eyes grow wide and follow a drifting glowing light, ears perking up")
+Q("q03", "s5", "wide", "low", "gorge", [], "A huge swirling cloud of dinner-plate-sized glowing blue-green moths rising out of giant ferns in a misty gorge in blue pre-dawn light.",
+  "the moths rise in a glowing swirl, wings beating, light rippling through the cloud")
+Q("q04", "s5", "medium", "eye_level", "gorge", ["mira"], "Mira looking up with a delighted open mouth, blue-green moth light glowing on her face.",
+  "she turns slowly, awestruck, moth light flickering on her face, speaking softly", ("mira", "Whoa. They're beautiful."))
+Q("q05", "s5", "medium", "eye_level", "gorge", ["rook"], "Rook wary, one hand raised in warning, moth light on his silver hair.",
+  "he lifts his hand in warning and glances at the swarm, speaking low", ("rook", "Don't touch them. Lantern moths follow any light."))
+Q("q06", "s5", "close", "eye_level", "gorge", ["pip"], "Pip the white fluffy sky-fox kit mid-leap toward a glowing moth, eyes sparkling, mouth open in a happy squeak.",
+  "Pip dives eagerly toward a glowing moth, tail wagging, squeaking happily")
+Q("q07", "s5", "medium", "eye_level", "gorge", ["mira"], "Mira reaching out in alarm, eyes wide, glowing moths swirling behind her.",
+  "she reaches out and shouts, moths swirling past her", ("mira", "Pip, no! Come back!"))
+Q("q08", "s5", "wide", "high", "gorge", ["pip"], "Pip the white fluffy sky-fox kit carried upward in a spiral of glowing moths over a misty gorge, kicking its little legs.",
+  "the moths lift Pip in a glowing spiral and carry it across the gorge, its legs kicking")
+Q("q09", "s5", "wide", "eye_level", "gorge", ["mira", "rook"], "Mira and Rook sprinting onto a long rope-and-plank bridge across a misty gorge, chasing the glowing swarm.",
+  "they run onto the swaying rope bridge, planks bouncing under their boots")
+Q("q10", "s5", "medium", "eye_level", "gorge", ["rook"], "Rook running on the rope bridge, glancing down at the cracked old planks, alarmed.",
+  "he runs, glances down at the cracking planks and shouts a warning", ("rook", "This bridge is rotten! Slow down!"))
+Q("q11", "s5", "wide", "high", "gorge", ["mira"], "Old wooden planks snapping and dropping away under Mira's boots on a rope bridge over a deep misty gorge.",
+  "plank after plank cracks and falls into the mist as Mira runs, the bridge sagging")
+Q("q12", "s5", "close", "eye_level", "gorge", ["mira"], "Mira close-up, terror on her face as she slips, one hand grabbing a rope, mist below.",
+  "she slips, grabs the rope and cries out", ("mira", "Rook!"))
+Q("q13", "s5", "wide", "low", "gorge", ["mira", "rook"], "The rope bridge snapping at one end and swinging against the cliff, Mira dangling from a plank while Rook grabs her wrist from the cliff edge.",
+  "the bridge whips against the cliff, Mira dangles, Rook lunges and catches her wrist")
+Q("q14", "s5", "close", "eye_level", "gorge", ["rook"], "Rook close-up, straining with both hands gripping, sweat on his face, fierce and gentle at once.",
+  "he strains and holds on, then speaks through his teeth", ("rook", "I've got you. You caught me once, remember?"))
+Q("q15", "s5", "wide", "eye_level", "gorge", ["mira", "rook"], "Rook hauling Mira up over the edge of the cliff ledge, both landing in the ferns gasping, the broken bridge hanging below.",
+  "he heaves her up over the edge and they collapse in the ferns, panting")
+Q("q16", "s5", "close", "eye_level", "gorge", ["mira"], "Mira close-up lying in the ferns, out of breath, a grateful grin, blue light on her face.",
+  "she catches her breath and grins, speaking warmly", ("mira", "Now we're even."))
+Q("q17", "s5", "medium", "eye_level", "gorge", ["pip"], "Pip the white fluffy sky-fox kit floating gently down on a halo of glowing moths, landing proudly, looking very pleased.",
+  "the moths set Pip down gently and drift away, Pip looks proud and wags its tail")
+Q("q18", "s5", "wide", "low", "gorge", ["mira", "rook"], "Mira and Rook standing side by side on the cliff, looking up toward the ruins as the first golden light touches the highest tower, glowing moths drifting around them.",
+  "they stand shoulder to shoulder, golden light spreading over the tower, moths drifting upward")
+
+
 # ---------------------------------------------------------------- S6 ruins and the mirror puzzle
 scene("s6", "gate", ["mira", "rook", "pip"], "The gate is sealed; the compass reveals a side way and the mirrors open the path.", "wonder, teamwork, comic")
 P("s6", "wide", "low", "gate", ["mira", "rook"], "The huge sealed stone gate of the Skyfall Ruins carved with a giant sun, vines hanging, the three tiny figures before it in blue pre-dawn light.",
@@ -345,7 +394,7 @@ P("s8", "close", "eye_level", "vault", ["rook"], "Rook close-up, stunned, a slow
 # ---------------------------------------------------------------- S9 collapse and escape
 scene("s9", "vault", ["mira", "rook", "pip", "guardian"], "The ruins collapse; the Guardian, freed, carries them to the sky.", "urgent, then awe")
 P("s9", "wide", "eye_level", "vault", ["mira", "rook"], "The vault shaking violently, cracks racing across the ceiling, golden light spilling through them, dust and rubble falling.",
-  "the ceiling cracks, rubble rains down, golden light streams through the cracks")
+  "the ceiling cracks and rubble rains down around them while the golden Crystal stays whole and glowing, golden light streaming through the cracks")
 P("s9", "medium", "eye_level", "vault", ["rook"], "Rook shielding his head from falling stones, shouting.",
   "stones fall around him, he shouts", ("rook", "The whole place is coming down!"))
 P("s9", "wide", "low", "vault", ["guardian", "mira"], "The Guardian rising in the arch, its rune eyes now warm gold instead of cyan, Mira bracing in front of it.",

@@ -72,3 +72,16 @@ def test_film_workflows_are_registered_with_matching_checksums():
         g = json.loads(raw)
         assert g["105:91"]["inputs"]["fps"] == 24
     assert "voice_audio" in reg[film.VOICE_ID]["patch_slots"] and "voice_audio" not in reg[film.FREE_ID]["patch_slots"]
+
+
+def test_a_faceless_speaker_is_not_lip_synced_and_the_clip_is_made_with_silence(story):
+    shot = next(p for p in story.panels if p.dialogue and p.dialogue[0].speaker_id in film.FACELESS)
+    t = film.motion_prompt(story, shot)
+    assert "says:" not in t and "exact sync" not in t  # H3 would draw a mouth on a crystal
+    assert shot.dialogue[0].text not in t
+
+
+def test_inserted_shots_keep_every_other_shots_id(story):
+    ids = [p.id for p in story.panels]
+    assert ids.index("q01") == ids.index("p070") + 1 and ids.index("p071") == ids.index("q18") + 1
+    assert len(ids) == len(set(ids)) == 158

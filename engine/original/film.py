@@ -35,6 +35,7 @@ LEAD_SEC, TAIL_SEC = 0.15, 0.45  # silence before the first word and after the l
 PEAK = 0.7  # voice peak (linear) = about -3 dBFS
 DEFAULT_VOICES = {  # character id -> (Kokoro voice, speed). Overridable per story in film/voices.json.
     "mira": ("af_bella", 1.0), "rook": ("am_adam", 1.0), "oren": ("bm_fable", 0.9), "crystal": ("af_heart", 0.8)}
+FACELESS = {"crystal"}  # speakers with no face: anchoring their voice makes H3 draw a mouth on them, so the picture is made with silence and the voice is mixed in at the master
 VOICE_FX = {"crystal": "aecho=0.8:0.6:90|180:0.4|0.25,highpass=f=140"}  # a disembodied echo for the crystal's voice
 HOLD = {"extreme_close": 2.3, "close": 3.0, "medium": 3.75, "wide": 4.45}  # silent-shot length by shot size (seconds, before the H3 frame grid)
 CAMERA = {"extreme_close": "a very slight, slow push-in", "close": "a slow, steady push-in", "medium": "a slow, steady push-in",
@@ -154,9 +155,9 @@ def voice_shot(story: OriginalStory, ws: Path, panel: Panel, tts=None, voices=No
     return out, frames / FPS
 
 
-def silent_shot(ws: Path, panel: Panel) -> tuple[Path, float]:
+def silent_shot(ws: Path, panel: Panel, seconds: float | None = None) -> tuple[Path, float]:
     """A silent wav on the H3 frame grid for a shot that must carry no voice at all."""
-    seconds = snap_frames(HOLD.get(panel.shot, 3.75)) / FPS
+    seconds = seconds or snap_frames(HOLD.get(panel.shot, 3.75)) / FPS
     out = film_dir(ws) / "voice" / f"{panel.id}.silent.wav"
     rt.write_wav_atomic(out, np.zeros(int(round(seconds * rt.SR)), dtype=np.float32))
     return out, seconds
@@ -175,7 +176,7 @@ def motion_prompt(story: OriginalStory, panel: Panel) -> str:
              "Single continuous take, anime film animation, smooth natural motion, consistent character appearance in every frame."]
     if vehicle:
         parts.append("The vehicles are hand-built wooden gliders with big patched canvas wings in a fantasy anime world: no jets, no airplanes, no propellers, no modern aircraft.")
-    if panel.dialogue:
+    if panel.dialogue and panel.dialogue[0].speaker_id not in FACELESS:
         ln = panel.dialogue[0]
         parts.insert(1, f"{names.get(ln.speaker_id, ln.speaker_id)}'s lips move in exact sync with the words, with natural blinks, expressive eyebrows and small head movements. "
                         f"{names.get(ln.speaker_id, ln.speaker_id)} says: \"{ln.text}\"")
@@ -252,6 +253,8 @@ def make_clips(story: OriginalStory, ws: Path, ids: list[str] | None = None, see
         spoken = voice_shot(story, ws, p, tts, voices)
         if spoken is None and p.id in (quiet or []):
             spoken = silent_shot(ws, p)
+        elif spoken is not None and p.dialogue[0].speaker_id in FACELESS:  # the voice stays in voice/<id>.wav for the master; H3 gets silence
+            spoken = silent_shot(ws, p, spoken[1])
         seconds = spoken[1] if spoken else snap_frames(HOLD.get(p.shot, 3.75)) / FPS
         prompt = motion_prompt(story, p)
         seed = (seeds or {}).get(p.id, int(hashlib.sha256(f"{story.bible.premise.title}|{p.id}|clip".encode()).hexdigest()[:12], 16))
