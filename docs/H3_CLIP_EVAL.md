@@ -153,3 +153,16 @@ camera, shots jumped, a cat grew a human hand. The brief's "walks" never reached
 **Final storyboard video (`storm_board2`, 64 s, -16.8 LUFS):** cat counted once in every sampled frame, both characters present in every sampled frame, no dust or explosions, walking visible in shots 1-2 (by eye).
 Remaining: camera still moves 3-7% in 6 of 8 shots (`camera` confirmed; the walker's scale changes), a faint ring effect around the cat in shot 7, all skies are sunny (the 9B's plan does not build a storm), the cat design is odd
 (black body, orange tail), the 9B's science is plain; the "girl" counter reads 0 in a few frames of a walker in profile (counter error). Tests: `tests/unit/test_storyboard.py`, `test_director.py`.
+
+## Camera drift and the sky arc (storyboard runs, 2026-11-07)
+
+- **Drift is measured on the background, not on features** (`clip_eval.camera_motion_area`: area-weighted Farneback flow on a grid, robust similarity fit). A subject that grows or walks no longer reads as a camera move
+  (two of eight clips were false alarms before). On the first storm video the real drift was pan 5-10 %, tilt 11 %, and one clip 31-34 % zoom.
+- **`engine/original/stabilize.py`** removes a drift of 3-12 % (a straight ramp to the net drift, then a crop zoom that hides the borders) and **keeps the original unless the evaluator measures the result as
+  at least 40 % steadier** (a first version with a coarser flow made a walking shot worse; that check is what caught it). Above 12 % it refuses: the cause is a different scale between the start and end picture,
+  and the fix is to redraw the shot's pictures. `produce_video.py --stage stabilize` runs it (the raw clip is kept as `<id>_raw.mp4`).
+  Second storm video: t2 4.5 -> 0.9 %, t6 3.6 -> 1.1 % fixed; t5 (14.7 %) and t8 (24.2 %) refused. **Not solved:** redrawing those two shots automatically. A cheap pre-check on the two pictures (SIFT background
+  agreement) did not separate the bad pairs from the good ones, so it was not built.
+- **Sky arc:** in storyboard mode the Writer plans one `atmosphere` (sky and light, 5-14 words) per take, neighbours must differ (`check_writer`); it goes into the take's prompt and into BOTH keyframes
+  (`ShotSpec.lighting`, `Panel.atmosphere`). Measured on the second storm video: sunny -> grey -> purple storm with lightning -> clearing with sun rays -> rainbow, where the first video was sunny throughout.
+  Known weakness: the image model over-draws the middle of the arc (take 3 "grey clouds gathering" came out as a full purple storm), so the build-up is a jump from take 2 to take 3 rather than gradual.
