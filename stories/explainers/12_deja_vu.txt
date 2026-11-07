@@ -1,0 +1,41 @@
+title: Why Do We Get Deja Vu? 3 Theories Explained
+slug: vox_deja_vu
+logline: Maya walks into a brand new cafe and feels she has lived the moment before, and a scientist explains three theories about deja vu.
+hook: Why do we get deja vu, that strange feeling of having already lived a moment? Three theories scientists use, and one very creepy spoon.
+cta: Have you had a deja vu moment? Tell us in the comments. We have the feeling you already know what to write.
+tags: why do we get deja vu, what is deja vu, deja vu explained, deja vu theories, what is jamais vu, memory glitch, familiarity feeling brain, psychology explained, flat animation explainer, ExplainItFlat
+thumb: HAVE WE MET | p002
+scene: s1 | cafe | eerie and funny | The strange feeling | Maya feels she has lived a moment before.
+beat: wide | cafe | maya | Maya walks into a cafe in a town she has never visited. The moment the door closes, a strange feeling washes over her. | Maya standing just inside a cafe doorway looking around with unfocused eyes, her hand still on the door, the cafe warmly lit.
+beat: close | cafe | maya | She has been here before. She knows the chair by the window, the sound of the espresso machine, the smell of toast. | Maya with wide stunned eyes and one hand rising to her forehead, the cafe blurred softly behind her.
+beat: medium | cafe | maya,dev | She turns to Dev and says: wait for it. In three seconds, the barista will drop a spoon. A spoon clinks to the floor. | Maya pointing ahead with a stunned look at Dev while a small silver spoon drops through the air at the edge of the frame.
+beat: close | cafe | dev | Dev stares at her, then at the spoon. He does not know whether to be impressed or scared. | Dev with wide eyes and raised eyebrows looking from Maya toward the spoon on the floor.
+beat: medium | cafe | maya | But Maya has never been here. So what is this strange feeling of having already lived the moment? | Maya at the cafe table gripping a cup with a puzzled frown, a small yellow question mark above her head.
+scene: s2 | diagram | curious | What deja vu is | A feeling of familiarity.
+beat: medium | diagram | priya | Priya says: that is deja vu, French for already seen. It is a feeling of familiarity that does not match reality. | Priya in her lab coat on the navy backdrop beside a flat yellow eye shape with a small circular arrow, smiling.
+beat: wide | diagram | | Most people experience it at least once. It is most common in young adults, and also when you are tired or stressed. | A flat yellow calendar page and a flat yellow sleepy moon shape side by side on the navy backdrop. Objects only. | a calendar and a sleepy moon
+beat: medium | diagram | priya | Importantly, it is not proof of a past life or psychic powers. It is a quirk of how normal memory works. | Priya shaking her head with a kind smile, a flat yellow crystal ball shape crossed out with a bold yellow X beside her.
+scene: s3 | diagram | curious | Theory 1: the pattern | A familiar layout.
+beat: medium | diagram | priya | Theory one: your brain noticed a pattern. The cafe's layout may be like a place you saw once and forgot. | Priya pointing at two flat yellow room outline shapes with similar layouts on the navy backdrop, a bright curious smile.
+beat: wide | diagram | | Researchers tested this with virtual rooms. People felt more deja vu in a new scene arranged like a scene they had seen earlier. | Two flat yellow room floor plans with matching furniture shapes in similar places on the navy backdrop, a small glowing link between them. Objects only. | two similar room layouts
+beat: medium | cafe | maya | Maybe Maya once visited a cafe with the same big window and a spiral staircase, and her brain matched the pattern without telling her. | Maya sitting at the cafe table with a thought cloud above her showing a similar cafe with a spiral staircase, a thoughtful smile.
+scene: s4 | diagram | curious | Theory 2: a timing glitch | Signals arriving twice.
+beat: medium | diagram | priya | Theory two is about timing. Sometimes signals reach your brain twice, a tiny moment apart, so the second one feels like a memory. | Priya holding up two fingers beside two flat yellow arrows reaching a flat brain shape one slightly after the other.
+beat: wide | diagram | | A glitch could file the present moment as a memory a split second too early. You feel like you are remembering as it happens. | A flat yellow clock shape with a tiny arrow looping back from its hand toward a brain shape on the navy backdrop. Objects only. | a clock arrow looping back
+scene: s5 | diagram | curious | Theory 3: the false alarm | A familiarity checker.
+beat: medium | diagram | priya | Theory three: your brain has a familiarity checker that sometimes fires by mistake, like a smoke alarm when you make toast. | Priya holding a flat yellow smoke alarm shape with a toast slice beside it and a playful grin.
+beat: wide | diagram | | The checker says: this is familiar. But the memory itself is missing. You get the feeling without the story. | A flat yellow glowing check mark beside an empty flat photo frame shape on the navy backdrop. Objects only. | a check mark and an empty frame
+beat: medium | diagram | priya | Some researchers think the brain may also catch the false alarm and say: wait, that cannot be right. That adds to the odd feeling. | Priya with a thoughtful smile and a finger on her chin beside a small flat yellow question mark.
+scene: s6 | living_room | funny | Nana's version | Nana's view of deja vu.
+beat: medium | living_room | nana | Nana says she gets deja vu at least once a week. She calls it the universe repeating its jokes. | Nana in an armchair holding a cup of tea with a knowing playful smile and a raised eyebrow.
+beat: medium | living_room | maya,nana | Maya explains the three theories. Nana nods, sips her tea, and says: fine. But the spoon thing was creepy. | Maya counting on her fingers while Nana listens with her teacup raised and a skeptical amused look.
+beat: close | living_room | maya | There is an opposite feeling too: jamais vu, French for never seen. A familiar word suddenly looks strange, as if spelled wrong. | Maya staring at a small card with a single word on it, her eyes crossed and a confused face.
+beat: medium | diagram | priya | Deja vu can also happen in some kinds of epilepsy, where it can be a warning sign. For most people, it is harmless. | Priya with a calm kind expression, one hand open in a reassuring gesture beside a small flat yellow brain shape.
+beat: medium | diagram | priya | If it happens a lot, or comes with other strange symptoms, talk to a doctor. Otherwise, enjoy the mystery. | Priya smiling with a friendly shrug and a small yellow star beside her.
+scene: s7 | cafe | warm | A brand new moment | Back at the cafe.
+beat: medium | cafe | maya,dev | Back at the cafe, Dev asks what the barista will do next. Maya grins: nothing. I have no idea. Surprise me. | Maya and Dev at the cafe table both laughing, Dev with his hands raised in a playful shrug.
+beat: close | cafe | maya | The strange feeling fades, as deja vu always does, usually within seconds. The coffee arrives, and it tastes brand new. | Maya sipping her coffee with a content smile, her eyes soft and present.
+beat: medium | cafe | maya,dev | They sit by the window. Maya notices small details: the cracked mug, the sunbeam, Dev's tired smile. Everything feels new. | Maya and Dev sitting by a sunlit cafe window, a cracked mug on the table and a warm sunbeam across it, both smiling gently.
+beat: close | cafe | dev,maya | Dev says: so deja vu is your brain going, hey, I know this, and then, or do I? Maya laughs and nods. | Dev with a thoughtful amused smile and a hand raised in a questioning gesture, Maya beside him laughing.
+beat: close | cafe | maya | So why do we get deja vu? A familiar pattern, a timing glitch, or a false alarm in the memory checker. Probably a mix. | Maya smiling at the viewer with one open hand raised, a flat yellow question mark above her.
+beat: close | cafe | maya | Have you had a deja vu moment? Tell us in the comments. We have the feeling you already know what to write. | Maya with a mischievous knowing grin and one eyebrow raised.

@@ -1,0 +1,46 @@
+title: Why Do We Feel Homesick? The Science of Missing Home
+slug: vox_homesick
+logline: Dev moves to a new city for his dream job and feels homesick, and a scientist explains what homesickness is, why it hurts, and what helps.
+hook: Why do we feel homesick even when the change is good? The science of missing home, and one chipped mug in a very quiet apartment.
+cta: If you are far from home tonight, you are not alone. Tell us in the comments where home is for you.
+tags: why do we feel homesick, what is homesickness, how to cope with homesickness, moving to a new city, missing home explained, place attachment, psychology of homesickness, everyday psychology, flat animation explainer, ExplainItFlat
+thumb: SUNDAY CALL | p013
+loc: new_apartment | New Apartment | small bare studio apartment, a mattress on the floor, a few unopened cardboard boxes, a single lamp, a window facing a brick wall
+scene: s1 | new_apartment | lonely | The quiet apartment | Dev in his new city.
+beat: wide | new_apartment | dev | Dev's new apartment is quiet. Boxes everywhere, a single lamp, and a window with a view of someone else's wall. | Dev standing in the middle of a bare studio apartment surrounded by unopened boxes with a single lamp glowing, a window showing a brick wall.
+beat: close | new_apartment | dev | He unpacks a mug. It is the one with the chip, from home. He holds it with both hands and his chest feels tight. | Dev holding a chipped mug in both hands with a heavy sad expression and glistening eyes.
+beat: medium | new_apartment | dev | This is the dream job he wanted. So why does he feel like he swallowed a stone? | Dev sitting on a mattress on the floor with his hands on his knees, a distant sad look, a single lamp glowing beside him.
+beat: close | new_apartment | dev | He is homesick. Not sick in the body. Sick for a place, a smell, a voice, a whole way of being. | Dev lying on the mattress staring at the ceiling with a quiet longing face, one hand on his chest.
+scene: s2 | diagram | curious | What homesickness is | The science of missing home.
+beat: medium | diagram | priya | Priya says: homesickness is the distress we feel when we are away from home and miss what is familiar. It is very common. | Priya in her lab coat on the navy backdrop beside a flat yellow house outline with a small heart, her expression warm and kind.
+beat: wide | diagram | | Home is not just a building. It is a bundle of routines, people, sounds and smells your brain has learned to trust. | A flat yellow house outline on the navy backdrop surrounded by small glowing icons: a coffee cup, a note, a heart and a footprint. Objects only. | a house with small icons
+beat: medium | diagram | priya | When that bundle disappears, your brain loses a lot of familiar signals at once, and it takes extra work to read the new place. | Priya gesturing at a flat yellow brain shape surrounded by many question marks, a gentle sympathetic smile.
+beat: wide | diagram | | That extra effort, plus missing people you love, can feel like worry, sadness, trouble sleeping, or a knot in the stomach. | A flat yellow stomach shape with a knot in it beside a flat yellow crescent moon and a small dark cloud on the navy backdrop. Objects only. | a knot, a moon and a cloud
+beat: medium | diagram | priya | It is not a weakness. People of every age get it: kids at camp, students at college, adults moving for work. | Priya holding up a row of small flat yellow icons, a backpack, a graduation cap and a suitcase, with a reassuring smile.
+scene: s3 | diagram | informative | Why it can hit hard | When and why.
+beat: medium | diagram | priya | It tends to be stronger when the move was not fully your choice, when you feel little control, or when you feel alone. | Priya with a kind serious expression beside a flat yellow steering wheel shape with a faint grey outline.
+beat: wide | diagram | | It can also hit later. Some people feel fine in the first week, when everything is exciting, and low a few weeks in. | A flat yellow line on the navy backdrop that starts high with a sparkle, then dips lower later in the graph. Objects only. | a line starting high then dipping
+beat: medium | diagram | priya | The good news: for most people it eases with time, as the new place slowly becomes familiar. | Priya smiling brightly beside a flat yellow rising line with a small sun at its end.
+scene: s4 | living_room | tender | The Sunday call | Staying connected.
+beat: medium | living_room | maya,dev | Back home, Maya sets a reminder: Sunday. Call Dev. Her phone buzzes at eight sharp, and she grabs it like a lifeline. | Maya on the sofa holding her phone up with a big smile, a small video of Dev smiling on the phone screen.
+beat: medium | new_apartment | dev,maya | On the screen, Dev tries to smile and shows his boxes. Maya shows him the cat, sitting proudly in a box too. | Dev sitting on his mattress holding a phone up with a brave smile, a small video of Maya on the phone screen holding up a cat in a cardboard box.
+beat: close | new_apartment | dev | For twenty minutes, home is on his screen. When the call ends, the apartment feels quiet again, but a little less empty. | Dev lowering his phone with a soft warm smile and wet eyes, the single lamp glowing beside him.
+scene: s5 | diagram | helpful | What helps | Coping with homesickness.
+beat: medium | diagram | priya | What helps? Start with small routines. A morning coffee at the same time, a regular walk, a favorite show. | Priya holding a flat yellow coffee cup and a flat yellow clock with a friendly smile.
+beat: medium | diagram | priya | Bring familiar things: a blanket, a photo, a mug, a playlist. Familiar objects and smells can calm the brain. | Priya holding a flat yellow photo frame and a flat yellow blanket with a warm smile.
+beat: medium | diagram | priya | Stay in touch with home, but do not live on the phone. A balance helps you build a life where you are. | Priya with a flat yellow phone shape in one hand and a flat yellow map pin in the other, balancing them playfully.
+beat: medium | diagram | priya | Explore your new place in small steps: one new cafe, one new route, one hello. Attachment grows slowly, like a plant. | Priya watering a small flat yellow plant in a flat pot with a gentle smile.
+beat: medium | diagram | priya | And say it out loud. Telling someone I miss home often makes the feeling lighter, not heavier. | Priya with a hand on her heart and a gentle encouraging smile, a small yellow speech bubble beside her.
+scene: s6 | street | hopeful | Small hellos | Dev starts to belong.
+beat: medium | street | dev | Dev walks to a corner cafe. The barista smiles and asks his name. He tells her. It is a tiny hello. | Dev at a cafe counter on a sunny street smiling shyly at an unseen barista, a coffee cup in his hand.
+beat: close | street | dev | The next day, she remembers it. A stranger says his name back to him, and the city shrinks by one size. | Dev with a surprised delighted smile and a bright look in his eyes, warm morning light on his face.
+beat: medium | new_apartment | dev | He puts the chipped mug on the shelf, next to a new plant. For the first time, the apartment smells like his coffee. | Dev placing the chipped mug on a small shelf next to a green plant, the apartment a little more lived in with a lamp and a rug.
+beat: close | new_apartment | dev | Homesickness does not vanish. But it softens, like a bruise turning yellow. | Dev sitting by the window with a calm gentle expression, the sunset light on his face.
+scene: s7 | kitchen | warm | A care package | Maya and Nana help.
+beat: medium | kitchen | maya,nana | Maya tells Nana about the calls. Nana says: when I moved across the country, I cried for a month. Then I made soup. | Nana stirring a pot at the stove while Maya listens at the kitchen table with her chin on her hand.
+beat: close | kitchen | nana | Soup, for Nana, was the first home she built. A pot, a spoon, and neighbors knocking on the door. | Nana smiling softly over a steaming pot with warm kitchen light.
+beat: medium | kitchen | maya,biscuit | Maya decides to mail a care package: a jar of cookies, a photo, and a drawing of Biscuit in a box. | Maya packing a cardboard box at the kitchen table with a jar of cookies and a small drawing, Biscuit sitting inside another box beside her.
+scene: s8 | new_apartment | warm | The answer | Wrap up.
+beat: close | new_apartment | dev | A week later, Dev opens the package. He laughs, then cries, then laughs again. The apartment starts to feel like his. | Dev holding a drawing of a cat in a box and a jar of cookies, laughing with clear tears of joy on his cheeks.
+beat: close | new_apartment | maya | So why do we feel homesick? Our brains miss familiar people, places and routines, and it takes time to build new ones. | Maya smiling at the viewer with a gentle warm look, a flat yellow house outline glowing beside her.
+beat: close | new_apartment | dev | If you are far from home tonight, you are not alone. Tell us in the comments where home is for you. | Dev smiling warmly at the viewer holding the chipped mug up like a toast.

@@ -1,0 +1,42 @@
+title: Why Do We Sneeze? And Why Do Our Eyes Close?
+slug: vox_sneeze
+logline: A sneeze launches Maya's sandwich into a tree, and a scientist explains the nose reflex, why eyes close, a few myths, and why some people sneeze at the sun.
+hook: Why do we sneeze, and why do our eyes slam shut every time? A flying sandwich, three myths and one very sunny sneeze.
+cta: What is your strangest sneeze trigger? Tell us in the comments. We promise to say bless you.
+tags: why do we sneeze, why do we close our eyes when we sneeze, sneeze myths, photic sneeze reflex, why do we say bless you, what causes sneezing, sneezing explained, everyday science, flat animation explainer, ExplainItFlat
+thumb: BLESS YOU | p001
+scene: s1 | park | funny | The flying sandwich | Maya sneezes at a picnic.
+beat: wide | park | maya | At a spring picnic, Maya feels a tickle in her nose. Her eyes squeeze shut. Her head jerks. Achoo, and the sandwich flies. | Maya on a picnic blanket in the park mid-sneeze with her eyes squeezed shut and her head jerking forward, a sandwich flying out of her hand, flowers all around.
+beat: medium | park | dev,maya | Dev says: bless you. Maya says: thanks. Dev says: where did the sandwich go? It is now in a tree. | Dev pointing up at a tree where a sandwich is stuck in the branches, Maya beside him sniffing with a sheepish face and a tissue.
+beat: close | park | maya | Why do we sneeze in a way we cannot control? And why do our eyes close every single time? | Maya with a runny nose and a puzzled look, a small yellow question mark above her head.
+scene: s2 | diagram | curious | The sneeze reflex | A reflex that clears the nose.
+beat: medium | diagram | priya | Priya explains: a sneeze is a reflex, the body's way of clearing something annoying out of your nose. | Priya in her lab coat on the navy backdrop beside a flat yellow nose shape with tiny dust specks, smiling.
+beat: wide | diagram | | Tiny particles like pollen, dust or pepper tickle the lining of your nose, and nerves send an alert to the brain. | A flat yellow nose shape with small dust specks inside it and a thin yellow line running to a flat brain shape on the navy backdrop. Objects only. | specks in a nose and a nerve line
+beat: wide | diagram | | The brain coordinates a rapid chain reaction: you breathe in, your throat and chest muscles tighten, and then everything bursts out together. | A flat yellow chest outline with three bold arrows in a row, an inward arrow, a squeeze arrow and a big outward burst on the navy backdrop. Objects only. | in, squeeze, burst arrows
+beat: medium | diagram | priya | That blast of air helps carry the irritant out. A sneeze is basically a very fast nose-cleaning machine. | Priya laughing with a hand over her mouth beside a flat yellow tissue and a puff of wind lines.
+scene: s3 | park | funny | Why eyes close | The eye mystery.
+beat: medium | diagram | priya | Why do your eyes close? It seems to be part of the reflex, because the face muscles join in when the body is busy. | Priya with a curious smile pointing at her own closed eye, small yellow motion lines beside it.
+beat: wide | diagram | | Some people think the eyes close to protect them from germs. Others say it is just wiring. Scientists are not sure. | A flat yellow closed eye shape and a flat yellow open eye shape side by side with a yellow question mark between them on the navy backdrop. Objects only. | a closed eye and an open eye
+beat: medium | park | dev | Dev tries to sneeze with his eyes open. After three attempts he makes a face like a startled owl and sneezes anyway, eyes shut. | Dev with huge wide-open eyes trying hard to hold them open, his face scrunched in a funny grimace, mid-sneeze.
+beat: wide | diagram | | The famous myth says your eyes could pop out if you keep them open. That is false. Your eyes stay right where they are. | A flat yellow eye shape with a big yellow X over a small popping-out arrow on the navy backdrop. Objects only. | a crossed-out popping eye
+beat: medium | diagram | priya | You also rarely sneeze while asleep, because the reflex is turned down in sleep. Your nose stays quiet all night. | Priya beside a flat sleeping moon shape and a flat nose shape with a calm face, smiling.
+scene: s4 | park | informative | Myths and manners | Heart myths and elbows.
+beat: medium | diagram | priya | Another myth: your heart stops when you sneeze. It does not. Pressure in your chest changes for a moment, but your heart keeps going. | Priya with a reassuring smile beside a flat yellow heart shape with a steady pulse line.
+beat: medium | diagram | priya | A sneeze can launch tiny droplets quite far, which is why covering it with your elbow helps. | Priya demonstrating a sneeze into her elbow with a playful serious face.
+beat: medium | park | maya,dev | Maya covers the next sneeze with her elbow like a champion. Dev claps. The sandwich is still in the tree. | Maya sneezing into her elbow while Dev claps happily, the sandwich visible up in the tree behind them.
+scene: s5 | street | funny | Sunlight sneezes | Photic sneeze reflex.
+beat: medium | diagram | priya | Some people sneeze when they step into bright sunlight. It is called the photic sneeze reflex, and it runs in families. | Priya shielding her eyes with one hand beside a flat yellow sun shape and a small puff of sneeze lines.
+beat: medium | street | dev | Dev is one of them. He walks out of the cafe, looks at the sun, and: achoo. Every. Single. Time. | Dev stepping out onto a sunny street squinting up at the sun, mid-sneeze with his eyes squeezed shut.
+beat: wide | diagram | | Scientists think signals from bright light and the nose's nerves may get a little crossed, so the brain says: sneeze. | A flat yellow sun shape and a flat yellow nose shape with two yellow lines crossing in the middle on the navy backdrop. Objects only. | crossed lines between a sun and a nose
+beat: medium | diagram | priya | Sneezes also come in sets. After the first one, the lining of the nose may still feel irritated, so another follows. | Priya counting on her fingers with a smile beside three small yellow sneeze puffs.
+scene: s6 | living_room | warm | Bless you | Why we say it.
+beat: medium | diagram | priya | And why do we say bless you? Nobody knows for sure. There are many stories, from old plague fears to simple good manners. | Priya with an honest shrug and a friendly smile beside a flat yellow old scroll shape.
+beat: close | living_room | nana | Nana says: it is how you tell someone, I care that you are okay. Even if the sneeze is gross. | Nana smiling warmly with her teacup, her eyes crinkled.
+beat: medium | living_room | maya,biscuit | Biscuit sneezes once, tiny and squeaky. Maya says bless you in a very serious voice. He ignores her. | Biscuit with a tiny sneeze and a surprised face on the sofa, Maya beside him with a serious nod.
+scene: s7 | park | hopeful | When to get help | Allergies.
+beat: medium | diagram | priya | If sneezing comes with itchy eyes, a runny nose or a long season, allergies may be the cause. A pharmacist or doctor can help. | Priya with a kind helpful smile beside a flat yellow flower shape and a small flat tissue box.
+beat: medium | park | maya | Maya takes a tissue and a drink of water, and moves the picnic away from the flowers. Small fixes make a big difference. | Maya dragging the picnic blanket away from the flowers with a determined smile, a tissue in her pocket.
+scene: s8 | park | warm | The answer | Wrap up.
+beat: close | park | maya | So why do we sneeze? Nerves in the nose sound an alarm, and a chain reaction of muscles blasts the intruder out. | Maya smiling at the viewer with a finger raised, a flat yellow nose shape floating beside her.
+beat: close | park | maya | And the eyes? A mix of wiring and protection, and nothing dangerous. Just cover your nose and let your eyes close. | Maya with a reassuring smile and one hand on her cheek.
+beat: close | park | maya | What is your strangest sneeze trigger? Tell us in the comments. We promise to say bless you. | Maya grinning at the viewer with a tissue held up like a toast.

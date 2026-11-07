@@ -1,0 +1,43 @@
+title: Why Do We Get Hangry? Hunger, Mood and the Brain
+slug: vox_hangry
+logline: Maya and Dev argue over where to eat, and a scientist explains why low fuel makes us irritable, how the brain labels feelings and what really helps.
+hook: Why does hunger turn us into grumpy people? The science of hangry, a kettle-voiced argument on a sidewalk and the power of one cracker.
+cta: Have you ever snapped because you were hungry? Tell us in the comments. Then go eat a snack.
+tags: why do we get hangry, what is hangry, hunger and mood, low blood sugar irritability, emotional labeling, why am I angry when hungry, how to avoid hangry, psychology explained, flat animation explainer, ExplainItFlat
+thumb: SNACK FIRST | p005
+scene: s1 | street | funny and tense | The restaurant argument | Maya and Dev cannot choose.
+beat: wide | street | maya,dev | It is six o'clock. Maya and Dev have been walking for an hour, trying to pick a restaurant. Nobody has eaten since breakfast. | Maya and Dev walking side by side on a city street at dusk with tired grumpy faces, restaurant signs without any text glowing around them.
+beat: close | street | maya | Italian? No. Thai? No. Burgers? Maya says: you always say burgers. Her voice sounds like a kettle about to whistle. | Maya with a tight frown and scrunched eyebrows pointing sharply, a small puff of steam coming from her ears like a kettle.
+beat: close | street | dev | Dev says: you always reject my ideas. His voice is also a kettle. Two kettles on a sidewalk is not a good plan. | Dev with a defensive scowl and crossed arms, a small puff of steam coming from his ears.
+beat: medium | street | maya,dev | A pigeon looks at them like they are two very hungry, very silly people. The pigeon is right. | Maya and Dev facing each other with scowls on a sidewalk, a pigeon in the foreground tilting its head at them with a deadpan stare.
+beat: close | street | maya | Then a stranger hands Maya a cracker. She eats it. Her whole face changes. What just happened? | Maya holding a small cracker with a surprised expression, her scowl softening into a relaxed puzzled smile.
+scene: s2 | diagram | curious | The hungry brain | Brain fuel.
+beat: medium | diagram | priya | Priya says: your brain is a hungry organ. It is a small part of your weight, but uses a big share of your energy. | Priya in her lab coat on the navy backdrop beside a flat yellow brain shape with a small fork and spoon, smiling.
+beat: wide | diagram | | The brain runs mostly on glucose, a sugar from food. When fuel runs low, your brain notices quickly. | A flat yellow brain shape beside a flat yellow fuel gauge on the navy backdrop with the needle near empty. Objects only. | a brain and an empty fuel gauge
+beat: medium | diagram | priya | When blood sugar dips, your body releases stress hormones such as adrenaline and cortisol to push stored sugar into your blood. | Priya holding a flat yellow lightning bolt and a small flat sugar cube with an explaining smile.
+beat: wide | diagram | | Those same hormones can make you irritable, jumpy and impatient. That is the chemistry behind hangry. | A flat yellow lightning bolt over a flat yellow grumpy face on the navy backdrop with small steam puffs. Objects only. | a lightning bolt and a grumpy face
+scene: s3 | diagram | informative | Self-control | Why manners get harder.
+beat: medium | diagram | priya | Hunger also makes self-control harder. The thinking part of your brain, which says do not snap, works worse when tired and low on fuel. | Priya with a sympathetic grin beside a flat yellow brain shape with a small yellow brake pedal shape.
+beat: medium | diagram | priya | In a famous study, people with lower blood sugar stuck more pins into a doll representing their partner. Hunger can turn up irritation. | Priya with a wincing smile beside a small flat yellow doll shape with a few pins, a flat yellow low battery shape.
+beat: medium | diagram | priya | That does not mean hunger turns us into monsters. It means the dial of irritation is turned up, and manners get harder. | Priya turning a flat yellow dial shape with a playful face.
+scene: s4 | diagram | clever | Naming the feeling | Emotional labeling.
+beat: medium | diagram | priya | The clever part: hangry depends on how you read the feeling. Your body feels bad, so your brain hunts for someone to blame. | Priya pointing at a flat yellow brain shape with a small pointing finger icon aimed at a round head shape.
+beat: wide | diagram | | In some experiments, people who realized hunger might be affecting their mood were less angry at others. Knowing the cause can help. | Two flat yellow round faces on the navy backdrop, the left grumpy and the right calm with a small light bulb above it. Objects only. | a grumpy face and a calm face
+beat: medium | diagram | priya | That is called emotional labeling. I feel annoyed, and I may be hungry. Naming it gives your thinking brain a chance to step in. | Priya holding a flat yellow label tag shape with a smile.
+scene: s5 | diagram | helpful | What helps | Practical tips.
+beat: medium | diagram | priya | Not everyone gets hangry the same way. Sleep, stress, personality and habits all play a role. | Priya with open hands and a friendly shrug beside a row of small flat yellow icons, a moon, a cloud, a heart and a clock.
+beat: medium | diagram | priya | Hunger is not an excuse for being unkind. But it is a good reason to eat a snack before an important conversation. | Priya holding a flat yellow banana shape with a mischievous grin.
+beat: medium | diagram | priya | What helps? Regular meals and snacks that mix protein, fiber and healthy fats keep energy steadier than sugar alone. | Priya holding a flat yellow plate with an egg, an apple slice and nuts.
+beat: wide | diagram | | A candy bar gives a quick spike and then a crash. A banana with nuts gives a steadier lift. | Two flat yellow lines on the navy backdrop, the left spiking sharply then crashing and the right rising gently and holding steady, with a small candy and a small banana beside them. Objects only. | a spike and a steady line
+beat: medium | diagram | priya | Water matters too. Mild dehydration can feel like hunger and make you cranky. Drink first, then decide. | Priya holding a flat yellow glass of water with a refreshed smile.
+scene: s6 | cafe | warm | Peace at last | They eat.
+beat: medium | cafe | maya,dev | Maya and Dev sit down at the first place they see, a tiny noodle shop. Two bowls of steaming noodles arrive. | Maya and Dev sitting across from each other in a small cozy cafe with two big steaming bowls of noodles between them, both looking hopeful.
+beat: close | cafe | dev,maya | Three bites in, Dev says: I think I owe you an apology. Maya says: I owe you one too. | Dev with a warm sheepish smile holding chopsticks, Maya across from him smiling back with a noodle in her chopsticks.
+beat: medium | cafe | maya,dev | They laugh. The kettle sounds have disappeared. Food, water and a little understanding did the trick. | Maya and Dev laughing together over their noodle bowls, steam rising, both relaxed.
+scene: s7 | kitchen | funny | Nana's rule | Snack treaties.
+beat: medium | kitchen | nana,leo | At home, Nana keeps a snack box on the counter. Leo calls it the peace treaty. When the box is empty, watch out. | Nana beside a kitchen counter with an open snack box, Leo peeking in with a hopeful grin.
+beat: close | kitchen | nana | Nana says: never argue on an empty stomach. Hungry people make terrible lawyers and even worse diplomats. | Nana with a wise teasing smile and a cookie in her hand.
+scene: s8 | living_room | warm | The answer | Wrap up.
+beat: medium | living_room | maya,biscuit | Biscuit has strong views about breakfast time. At five a.m., he is a furry alarm and a tiny hangry dictator. | Biscuit sitting on Maya's pillow with huge demanding eyes and a stern look, Maya half asleep with her hand over her face.
+beat: close | living_room | maya | So why do we get hangry? Low fuel raises stress hormones and weakens self-control, and our brain blames the nearest person. | Maya smiling at the viewer holding a banana, a flat yellow fuel gauge glowing beside her.
+beat: close | living_room | maya | Have you ever snapped because you were hungry? Tell us in the comments. Then go eat a snack. | Maya grinning at the viewer biting into a cracker.

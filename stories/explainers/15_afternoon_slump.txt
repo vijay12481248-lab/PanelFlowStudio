@@ -1,0 +1,41 @@
+title: Why Do We Get Sleepy After Lunch? It's Not Just Food
+slug: vox_afternoon_slump
+logline: Dev fights sleep at his desk after lunch, and a scientist explains the body clock, sleep pressure and what really helps.
+hook: Why does the whole world crash after lunch? Your body clock, a brain chemical and a very sleepy Dev explain the afternoon slump.
+cta: What is your best trick for beating the afternoon slump? Tell us in the comments. Dev is taking notes.
+tags: why do we get sleepy after lunch, afternoon slump explained, how to beat afternoon tiredness, circadian rhythm explained, what is adenosine, do naps help, siesta science, why am I sleepy after eating, flat animation explainer, ExplainItFlat
+thumb: SIESTA TIME | p002
+scene: s1 | office | funny | The afternoon crash | Dev fights sleep at his desk.
+beat: wide | office | dev | It is two in the afternoon. The office is quiet. Dev stares at his screen, and the words begin to swim. | Dev sitting at an office desk in front of a laptop with heavy half-closed eyelids, a quiet bright office behind him and a clock on the wall showing afternoon.
+beat: close | office | dev | His head dips. His eyelids droop. He jerks awake and types: asdfasdfasdf. His boss walks past. Dev smiles like nothing happened. | Dev with his head tilting forward and eyelids drooping, then a forced awake smile, his fingers on a keyboard.
+beat: medium | office | maya,dev | Maya slides a coffee onto his desk and whispers: you are drooling a little. Dev wipes his chin. Dignity: gone. | Maya placing a coffee cup on Dev's desk with an amused whisper, Dev wiping his chin with a mortified half-asleep face.
+beat: close | office | maya | She wonders: is it the sandwich? Why does the whole world crash after lunch? Or is something else going on? | Maya with a curious thoughtful look and a hand on her chin, a small yellow question mark above her.
+scene: s2 | diagram | curious | Two forces | The body clock and sleep pressure.
+beat: medium | diagram | priya | Priya explains: the afternoon slump has more than one cause. Lunch is part of the story, but not the whole story. | Priya in her lab coat on the navy backdrop beside a flat yellow clock and a flat yellow sandwich, smiling.
+beat: wide | diagram | | First, your body clock. Over a day, alertness rises and falls in waves, with a natural dip in the early afternoon. | A flat yellow wavy line on the navy backdrop that rises in the morning, dips in the early afternoon and rises again, with a small yellow clock beside it. Objects only. | a wavy alertness line with a dip
+beat: wide | diagram | | Studies suggest that dip can show up even without a big lunch, so food cannot be the only reason. | A flat yellow wavy line with a dip and a small crossed-out lunch plate shape beside it on the navy backdrop. Objects only. | a dip and a crossed-out plate
+beat: wide | diagram | | Second, sleep pressure. The longer you are awake, the more a chemical called adenosine builds up in your brain, and the sleepier you get. | A flat yellow brain shape on the navy backdrop slowly filling with small glowing yellow dots from bottom to top like a rising tide. Objects only. | a brain filling with dots
+beat: medium | diagram | priya | Those two forces meet in the afternoon, like two waves joining up. The result is a drowsy peak. | Priya holding two flat yellow wavy lines meeting to form one big wave with a playful smile.
+scene: s3 | diagram | informative | What about lunch? | Food adds to the slump.
+beat: medium | diagram | priya | Now lunch. A big heavy meal may add to the sleepiness, and scientists are still working out exactly how. | Priya with an open-handed honest shrug beside a flat yellow plate shape piled high with food.
+beat: wide | diagram | | Foods rich in refined sugar and starch can cause quick changes in blood sugar. For some people, the crash feels like fatigue. | A flat yellow line graph on the navy backdrop that spikes sharply then drops steeply, with a small flat pastry shape beside it. Objects only. | a spike and a crash
+beat: medium | diagram | priya | The turkey myth is mostly just that: a myth. The big dinner and the long day do more of the work. | Priya laughing beside a flat yellow turkey drumstick shape with a crossed-out sleepy moon above it.
+scene: s4 | living_room | cozy | Naps | Nana and Biscuit's view.
+beat: medium | living_room | nana | Nana never fights it. After lunch she takes a twenty-minute nap in her armchair and calls it recharging her batteries. | Nana asleep in her armchair with a peaceful smile and her glasses pushed up on her head, a soft blanket on her knees.
+beat: medium | living_room | biscuit | Biscuit takes this idea very seriously. Cats can sleep most of the day, so a lunch nap is just a warm-up. | Biscuit curled in a perfect ball on the sofa fast asleep in a sunbeam, a tiny sleeping z shape beside him.
+beat: wide | diagram | | Many cultures built the afternoon rest into daily life. The siesta may not be laziness. It may match a real rhythm of the body. | A flat yellow sun shape high in the sky over a small flat yellow house outline with a hammock on the navy backdrop. Objects only. | a sun over a house with a hammock
+scene: s5 | diagram | helpful | What helps | Practical tips.
+beat: medium | diagram | priya | What helps? Start with light. Bright daylight tells your brain it is daytime, and a short walk outside can lift alertness. | Priya walking with a bright smile beside a flat yellow sun shape.
+beat: medium | diagram | priya | A lighter lunch, with some protein and vegetables, may cause less of a crash than a giant plate of starch and sweets. | Priya holding a flat yellow salad bowl shape with a pleased smile.
+beat: medium | diagram | priya | A short nap of ten to twenty minutes can refresh you. Longer naps can leave you groggy, so set an alarm. | Priya with a flat yellow alarm clock shape and a small sleepy moon beside her, giving a thumbs up.
+beat: medium | diagram | priya | Water matters too. Even mild dehydration can make you feel tired, so keep a bottle nearby. | Priya holding up a flat yellow water bottle with bubbles inside and a fresh smile.
+beat: medium | diagram | priya | And caffeine? It blocks the receptors that adenosine uses, so it hides sleepiness. It works best earlier in the day, not at night. | Priya with a flat yellow coffee cup and a flat adenosine dot shape being blocked by a small yellow shield.
+beat: medium | diagram | priya | If you are exhausted every single day, the fix is not more coffee. It is more sleep, and maybe a chat with a doctor. | Priya with a kind serious expression beside a flat yellow crescent moon and a small flat bed shape.
+scene: s6 | office | hopeful | Dev's experiment | A better afternoon.
+beat: medium | office | dev,maya | Dev tries the plan: a short walk, a glass of water, a light snack. Maya times him with her phone. | Dev walking briskly along an office hallway with a water bottle, Maya beside him holding up her phone as a stopwatch with a cheerful grin.
+beat: close | office | dev | After the walk, his eyes are brighter and the words on the screen stay still. He types a perfect sentence. | Dev at his desk with bright open eyes and a pleased smile, typing quickly.
+beat: medium | office | maya,dev | Maya raises a coffee. Dev raises a water bottle. The boss walks by and sees two very productive people. | Maya and Dev at their desks clinking a coffee cup and a water bottle together with proud grins, an office behind them.
+scene: s7 | living_room | warm | The answer | Wrap up.
+beat: close | office | maya | So why do we get sleepy after lunch? A natural dip in the body clock, rising sleep pressure, and sometimes a heavy meal. | Maya smiling at the viewer counting on her fingers, a flat yellow clock beside her.
+beat: close | office | dev | It is not a flaw. It is your body asking for light, movement, or a short rest. | Dev with a calm refreshed smile and one hand raised in a friendly wave.
+beat: close | office | maya,dev | What is your best trick for beating the afternoon slump? Tell us in the comments. Dev is taking notes. | Maya grinning at the viewer while Dev beside her writes busily in a small notebook.

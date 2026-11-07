@@ -1,0 +1,41 @@
+title: Why Is It So Hard to Wake Up? Meet Sleep Inertia
+slug: vox_wake_up
+logline: Maya cannot get out of bed, and a scientist explains sleep inertia, sleep cycles, the snooze trap and how to wake up better.
+hook: Why does your brain take so long to boot in the morning? Meet sleep inertia, and one cat who has been awake since four.
+cta: What is your best trick for waking up? Tell us in the comments. Please do not say snooze.
+tags: why is it so hard to wake up, what is sleep inertia, why do I feel groggy in the morning, sleep cycles explained, does snoozing make you more tired, how to wake up easier, morning grogginess, everyday science, flat animation explainer, ExplainItFlat
+thumb: 5 MORE MINUTES | p002
+scene: s1 | bedroom | funny | The alarm | Maya cannot get up.
+beat: wide | bedroom | maya,biscuit | The alarm rings. Maya's hand slaps it. Biscuit lifts his head, looks at the clock, and goes back to sleep. A professional. | Maya under a blue blanket in bed with one arm slapping a ringing alarm clock, Biscuit curled at the foot of the bed lifting his head with a deadpan look, morning light at the window.
+beat: close | bedroom | maya | Five more minutes, she tells herself. Her eyelids weigh a hundred pounds each, and the pillow is a warm cloud. | Maya's face half buried in a pillow with heavy half-closed eyes and a sleepy blissful smile.
+beat: medium | bedroom | maya | The alarm rings again. She sits up, and the room tilts. She can hardly remember her own name. Where is the floor? | Maya sitting up in bed with messy hair and unfocused droopy eyes, a spiral of dizziness lines above her head.
+beat: close | bedroom | maya | Why is waking up so hard? Why does a brain that works fine all day take so long to boot? | Maya slumped over with her face in one hand and one eye open, a small yellow question mark above her messy hair.
+scene: s2 | diagram | curious | Sleep inertia | The foggy state after waking.
+beat: medium | diagram | priya | Priya says it has a name: sleep inertia, the groggy, foggy state right after waking up. | Priya in her lab coat on the navy backdrop beside a flat yellow brain shape wrapped in a flat grey cloud, smiling.
+beat: wide | diagram | | Your brain does not switch on like a light. Different parts wake at different speeds, like a city lighting up district by district. | A flat yellow city skyline silhouette on the navy backdrop with some windows glowing yellow and others still dark. Objects only. | a city waking window by window
+beat: wide | diagram | | The areas that control alertness and decision making, mainly in the front of the brain, tend to wake up more slowly. | A flat yellow brain shape in profile on the navy backdrop with the front area dim and the back area glowing, a small clock beside it. Objects only. | a brain with a dim front
+beat: medium | diagram | priya | That is why you can walk and brush your teeth, but cannot decide between toast and cereal. The deep thinking part is still booting. | Priya holding a flat yellow toast shape and a flat yellow cereal bowl with a laughing helpless expression.
+beat: medium | diagram | priya | Sleep inertia can last from a few minutes to half an hour. After very deep sleep or a short night, it can be stronger. | Priya with a flat yellow stopwatch shape and a sleepy smile.
+scene: s3 | diagram | informative | Sleep cycles | Why some mornings are worse.
+beat: wide | diagram | | During the night you cycle through light sleep, deep sleep and dream sleep, roughly every ninety minutes. | A flat yellow wavy line on the navy backdrop that rises and falls in several repeating waves across the night with a small moon at the left. Objects only. | repeating sleep waves
+beat: medium | diagram | priya | Being woken from deep sleep tends to feel worst, like being pulled out of a swimming pool in the middle of a dive. | Priya with a wincing playful face beside a flat yellow swimming pool shape and a small flat towel.
+beat: wide | diagram | | Waking from lighter sleep is usually gentler. That is why one morning you pop up, and another you are a zombie. | Two flat yellow alarm clocks on the navy backdrop, the left over a shallow wave marked light and the right over a deep wave marked heavy, with no text. Objects only. | an alarm over a shallow wave and a deep wave
+scene: s4 | diagram | informative | Other reasons | Debt, clocks and snooze.
+beat: medium | diagram | priya | Other things matter too: sleep debt and your internal clock. At six a.m., your body may think it is the middle of the night. | Priya pointing at a flat yellow clock showing early morning beside a flat yellow moon, her expression sympathetic.
+beat: wide | diagram | | Teenagers often have a body clock that runs later, which makes early alarms even harder. It is biology, not laziness. | A flat yellow clock shape on the navy backdrop with its hand shifted later, a small flat yellow backpack shape beside it. Objects only. | a clock shifted later
+beat: medium | diagram | priya | Some people are naturally larks and others owls. Neither is better. You work best when your schedule matches your clock. | Priya holding up a flat yellow bird outline and a flat yellow owl outline with a friendly smile.
+beat: medium | diagram | priya | Hitting snooze can make it worse. Those extra minutes are fragmented sleep, and they can restart the groggy feeling again. | Priya shaking her head with a smile beside a flat yellow snooze button shape.
+scene: s5 | diagram | helpful | What helps | Better mornings.
+beat: medium | diagram | priya | What helps? Light. Bright light tells your brain the day has started. Open the curtains, or step outside for a minute. | Priya beside a flat yellow window shape with bright rays pouring in, a bright smile.
+beat: medium | diagram | priya | Keep a regular schedule. Waking at about the same time every day teaches your body clock when to turn on. | Priya holding a flat yellow calendar page and a flat yellow clock with a confident smile.
+beat: medium | diagram | priya | Drink water, move your body, and splash your face. Small signals tell your body it is go time. | Priya holding a flat yellow glass of water and a small flat towel with a refreshed smile.
+beat: medium | diagram | priya | Caffeine can help with grogginess, but a good night of sleep matters more. Coffee is a loan, not a gift. | Priya holding a flat yellow coffee cup with a playful pretend serious look.
+beat: medium | diagram | priya | If you are always exhausted, snore loudly, or stop breathing at night, talk to a doctor. Sleep problems are treatable. | Priya with a kind serious expression beside a small flat yellow crescent moon and a flat cross shape.
+scene: s6 | bedroom | hopeful | Maya tries | A better morning.
+beat: medium | bedroom | maya | Maya places her alarm across the room, opens the curtains, and drinks a glass of water. The sun hits her face. | Maya standing at the open curtains with a glass of water, bright morning sunlight on her face, her eyes squinting and a small smile.
+beat: close | bedroom | maya | Slowly, the fog lifts. Her eyes focus. She thinks: I am awake. I am a person. I can have toast. | Maya with bright awake eyes and a proud smile, light streaming into the room.
+beat: medium | bedroom | maya,biscuit | Biscuit stares at her. He has been awake since four, plotting. He wants breakfast, and he wants it now. | Biscuit sitting very close to Maya's face on the bed with wide staring eyes and a determined look, Maya leaning back with a laugh.
+beat: close | bedroom | maya,dev | Dev texts: I did the sunlight thing. I feel like a human. Maya replies: welcome to the club. | Maya smiling at a phone screen in her hand, a small thumbs up emoji visible on the screen, Dev's face small in a message bubble.
+scene: s7 | bedroom | warm | The answer | Wrap up.
+beat: close | bedroom | maya | So why is waking up hard? The brain wakes in stages, deep sleep makes it worse, and your body clock may say no. | Maya smiling at the viewer with a coffee cup in her hand, bright morning light behind her.
+beat: close | bedroom | maya | What is your best trick for waking up? Tell us in the comments. Please do not say snooze. | Maya grinning at the viewer holding up an alarm clock with a pretend stern look.

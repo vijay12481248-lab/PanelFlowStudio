@@ -1,0 +1,44 @@
+title: Why Do Cats Purr? It's Not Just Happiness
+slug: vox_cat_purr
+logline: After a terrible day, Maya is comforted by Biscuit's purr, and a scientist explains how purring works and why cats also purr when they are scared or hungry.
+hook: Why do cats purr, and why do they purr at the vet? A rainy day, a deadpan cat and the surprising science of the purr.
+cta: Does your cat purr in a way you can recognize? Tell us in the comments. We would love to hear its story.
+tags: why do cats purr, how do cats purr, why do cats purr when scared, cat purr meaning, cat behavior explained, purring and healing, do big cats purr, everyday science, flat animation explainer, ExplainItFlat
+thumb: LISTEN CLOSER | p004
+loc: vet | Vet Room | small veterinary exam room, a steel examination table, a poster of a cat on the wall, white walls, bright clinical light
+scene: s1 | living_room | sad then warm | A terrible day | Maya comes home after a bad day.
+beat: wide | living_room | maya | It has been a terrible day. Maya's presentation fell apart, and the rain followed her all the way home. | Maya coming through the apartment door soaked by rain, drooping shoulders, wet hair stuck to her forehead, a tired sad face.
+beat: close | living_room | maya | She sinks onto the sofa and stares at nothing. She does not cry. She is just very, very tired. | Maya slumped on the sofa staring blankly ahead in a damp yellow hoodie, a tissue box on the table beside her.
+beat: medium | living_room | maya,biscuit | Biscuit walks over. He looks at her for exactly three seconds. Then he climbs onto her lap and begins to purr. | Biscuit stepping onto Maya's lap and looking up at her face, Maya looking down at him with a surprised soft expression.
+beat: close | living_room | biscuit | A deep, low rumble fills the room. It might be the most comforting sound in the world. | Biscuit with his eyes closed and a relaxed face, his body gently vibrating, soft yellow wavy sound lines around him.
+beat: close | living_room | maya | Maya's shoulders drop. Her breathing slows. And she wonders: how does a cat make that sound, and what is it for? | Maya relaxed with half-closed eyes and a small smile, one hand resting on Biscuit's back.
+scene: s2 | diagram | curious | How a purr works | The machinery of a purr.
+beat: medium | diagram | priya | Priya explains: purring starts in the brain. A rhythmic signal tells the muscles of the voice box to twitch very quickly. | Priya in her lab coat beside a flat glowing brain shape connected by a yellow line to a small throat shape, navy backdrop.
+beat: wide | diagram | | The vocal folds open and close again and again as air flows past, and that creates the rumble. | A flat yellow throat tube shape with two small vocal fold shapes flicking open and shut and soft wave lines coming out on the navy backdrop. Objects only. | vocal folds and wave lines
+beat: wide | diagram | | Most animals make sound only when they breathe out. A purr works on both the in breath and the out breath. | Two flat yellow arrows, one pointing in and one pointing out, both with soft wave lines, beside a small cat head outline on the navy backdrop. Objects only. | an in arrow and an out arrow
+beat: medium | diagram | priya | That is why a purr sounds so steady. A cat can purr for a very long time, even while drifting off to sleep. | Priya smiling with one finger raised beside a flat crescent moon and a small yellow wave line.
+scene: s3 | living_room | sweet | The happy purr | When cats purr for contentment.
+beat: medium | living_room | biscuit | Most purrs happen when a cat is content: being petted, curled in a warm spot, or settling down for a nap. | Biscuit curled in a patch of sunlight on the sofa kneading a soft blanket with his front paws, eyes closed in bliss.
+beat: close | living_room | biscuit | Kittens purr from the first days of life, while feeding. It tells their mother: I am here, and I am okay. | A tiny orange kitten pressed against the warm belly of a big orange tabby cat, both with closed eyes, soft sound lines around them.
+beat: medium | living_room | biscuit | And mothers purr back. It becomes a first conversation, felt through fur long before it is understood. | An orange mother cat and a tiny kitten touching noses with closed eyes and soft glowing wave lines between them.
+scene: s4 | vet | surprising | The scared purr | Cats also purr when stressed.
+beat: medium | diagram | priya | But here is the surprise. Cats also purr when they are scared, in pain, or at the vet. | Priya holding up one finger with a playful surprised expression, a small yellow exclamation shape beside her.
+beat: medium | vet | biscuit | At the vet, Biscuit purrs on the cold table with wide eyes and flat ears. He is not happy. He is coping. | Biscuit sitting stiffly on a steel exam table with wide eyes and flat ears, his body vibrating slightly with purr lines.
+beat: close | vet | biscuit | Some researchers think purring may calm cats down, a bit like a person humming to stay steady when nervous. | Biscuit with eyes half closed and flat ears slowly relaxing, soft wave lines around his chest.
+beat: medium | diagram | priya | So a purr is not simply a smile. It is more like an all-purpose tool for feeling better and for connecting. | Priya with a warm smile beside a flat yellow toolbox shape with a small heart on it.
+scene: s5 | diagram | curious | The healing idea | A famous hypothesis.
+beat: wide | diagram | | There is a famous idea that purring vibrations help bones and tissues heal. It is a fascinating hypothesis. | A flat yellow bone shape with soft glowing wave lines around it on the navy backdrop. Objects only. | a bone with wave lines
+beat: medium | diagram | priya | But it is not proven. Scientists say the evidence is thin, so treat it as a maybe, not a medical fact. | Priya with an honest open-handed shrug and a gentle smile, a small yellow question mark beside her.
+scene: s6 | kitchen | funny | The breakfast purr | Cats purr to get what they want.
+beat: medium | kitchen | biscuit | Cats also purr to get what they want. Biscuit's breakfast purr has a tiny cry hidden inside it. | Biscuit standing beside an empty food bowl in the kitchen looking up with huge pleading green eyes, mouth slightly open.
+beat: close | kitchen | biscuit | In one study, owners rated this kind of purr as more urgent and harder to ignore. Biscuit knows exactly what he is doing. | Biscuit staring up with enormous eyes and a tiny sly look, his paw lifted toward the viewer.
+beat: medium | kitchen | maya,biscuit | Maya fills the bowl at six a.m., half asleep. The purr stops instantly. Biscuit has been paid. | Maya in pajamas with messy hair pouring cat food into a bowl with sleepy eyes, Biscuit already eating, looking smug.
+scene: s7 | diagram | curious | Big cats | Do lions purr?
+beat: medium | diagram | priya | Do lions purr? Not like house cats. Big cats that roar do not purr in the same continuous way. | Priya smiling beside a flat yellow lion head outline on the navy backdrop, one hand gesturing.
+beat: wide | diagram | | Smaller wild cats, such as cougars and cheetahs, can purr. Scientists link the difference to the throat bones and voice box. | A flat yellow cheetah head outline and a cougar head outline side by side on the navy backdrop with small wave lines. Objects only. | a cheetah and a cougar outline
+scene: s8 | living_room | tender | Back on the sofa | The ending.
+beat: medium | living_room | maya,biscuit | Back on the sofa, Maya listens to the rumble again. Now she knows it is not magic. It is a body doing something kind. | Maya leaning her ear close to Biscuit's chest with a soft smile, Biscuit relaxed in her lap, warm lamp light.
+beat: close | living_room | maya | Maybe it was not the purr itself that fixed her day. Maybe it was a small warm friend choosing to stay. | Maya smiling gently with a single clear teardrop of relief on her cheek, her eyes shining, hand on Biscuit.
+beat: close | living_room | biscuit | Biscuit, of course, takes full credit. | Biscuit with his chin lifted and a smug half-closed-eyed expression.
+beat: medium | living_room | maya,biscuit | So why do cats purr? To say I am content, I need help, I am calm, or I am hungry. Listen closely. | Maya and Biscuit on the sofa, Maya tilting her head to listen to Biscuit's purr with a smile.
+beat: close | living_room | maya | Does your cat purr in a way you can recognize? Tell us in the comments. We would love to hear its story. | Maya grinning at the viewer with Biscuit's paw resting on her arm.

@@ -1,0 +1,44 @@
+title: Why Does Music Give Us Chills? The Brain's Reward Moment
+slug: vox_music_chills
+logline: A school choir's high note gives Maya and Nana chills, and a scientist explains frisson, the dopamine reward system, and why some people never feel it.
+hook: Why does a song make your skin tingle and your eyes sting? The science of musical chills, from a school choir to your brain's reward system.
+cta: What song gives you chills every time? Tell us in the comments, and press play right now.
+tags: why does music give me chills, what is frisson, musical chills explained, why does music make me cry, dopamine and music, musical anhedonia, music and the brain, everyday science, flat animation explainer, ExplainItFlat
+thumb: SPINE TINGLE | p004
+loc: auditorium | School Auditorium | school auditorium with rows of red seats, a small stage with a red curtain, warm dim lighting
+scene: s1 | auditorium | moving | The choir concert | A high note gives everyone chills.
+beat: wide | auditorium | maya,nana | It is the school choir concert. Maya and Nana sit in the third row, and the smallest singer on stage stands very straight. | Maya and Nana seated in a row of red auditorium seats looking toward a small stage where a children's choir stands, a small boy at the center looking serious.
+beat: close | auditorium | nana,maya | The choir begins softly. Nana squeezes Maya's hand. The room is so quiet you can hear programs rustle. | Nana holding Maya's hand with a hopeful loving look, the dim auditorium glowing warm behind her.
+beat: medium | auditorium | maya | Then, near the end, the music swells. The voices rise together, and a new high note floats above everything. | Maya leaning forward in her seat with wide eyes and parted lips, bright warm stage light on her face.
+beat: close | auditorium | maya | A shiver runs down Maya's spine. The hair on her arms lifts. Her eyes fill with tears. Nothing sad is happening. | Maya with a hand pressed to her chest and clear tears of awe on her cheeks, a small smile, goosebumps on her bare forearm.
+beat: close | auditorium | nana | Nana is crying too, smiling all the while. Whatever just happened, it happened to everyone at once. | Nana smiling through clear happy tears with one hand over her heart.
+beat: medium | auditorium | maya | Why can a song, which is only air vibrating, make our skin tingle and our eyes sting? | Maya wiping her eye with a puzzled marveling smile, a small yellow question mark above her.
+scene: s2 | diagram | curious | What chills are | Frisson.
+beat: medium | diagram | priya | Priya has a name for it: frisson, the French word for shiver. Scientists also call it aesthetic chills. | Priya in her lab coat on the navy backdrop beside a flat yellow music note with small shiver lines around it, smiling.
+beat: wide | diagram | | Not everyone gets them, but many people do. They can bring goosebumps, a tingle down the back, and a lump in the throat. | A flat yellow human back silhouette on the navy backdrop with small glowing tingle lines running down the spine and little bumps on the arms. Objects only. | a back with tingle lines
+beat: medium | diagram | priya | They tend to come at special moments: a sudden change in volume, a surprising note, or a voice entering at just the right time. | Priya holding up a flat yellow volume dial turning up with an excited smile.
+beat: wide | diagram | | Your brain loves to predict what comes next. Chills often come when the music surprises that prediction in a way that feels right. | A flat yellow staircase on the navy backdrop with one unexpected glowing step higher than the others and a small spark above it. Objects only. | a staircase with a surprise step
+scene: s3 | diagram | curious | The reward system | Dopamine and anticipation.
+beat: medium | diagram | priya | Here is the amazing part. During these moments, brain scans show activity in the brain's reward system. | Priya pointing to a flat glowing brain shape with a small bright region lit up, a delighted smile.
+beat: wide | diagram | | That system uses a chemical called dopamine, which is also involved in food, friendship and other pleasures. Music tickles the same circuits. | A flat yellow brain shape on the navy backdrop with a glowing region and small yellow dots floating beside a flat music note and a flat apple shape. Objects only. | a brain, a note and an apple
+beat: wide | diagram | | Even more interesting: dopamine seems to rise before the peak, while you anticipate it, and again at the peak itself. | A flat yellow wavy line on the navy backdrop that rises slowly, dips, and then jumps to a high peak with a small star on top. Objects only. | a rising line with a star
+beat: medium | diagram | priya | So part of the thrill is waiting. The music promises something, delays it, and then delivers. Your brain adores a good wait. | Priya with a mischievous grin holding a small flat yellow gift box shape with a ribbon.
+scene: s4 | diagram | curious | Who gets chills | Personality and memory.
+beat: medium | diagram | priya | People who get chills often score high on a personality trait called openness to experience. They love art, ideas and strong feelings. | Priya smiling warmly beside a flat yellow open door shape with light streaming through.
+beat: medium | diagram | priya | Familiar songs, songs tied to memories, and music you chose yourself are more likely to give you chills than random tracks. | Priya holding flat yellow headphones with a friendly smile, a small heart beside her.
+beat: medium | diagram | priya | Some people feel very little pleasure from music, even though they enjoy other things. It is called musical anhedonia, and it is real. | Priya with a kind understanding smile beside a flat yellow music note with a faint grey outline.
+scene: s5 | living_room | warm | Dev's song | Chills are personal.
+beat: medium | living_room | dev,maya | Dev says music never gives him chills. Maya plays a rising choir through headphones. He shrugs, goes silent, then whispers: oh. | Dev wearing headphones with a shrug that melts into wide quiet eyes, Maya beside him watching his face with a hopeful grin.
+beat: close | living_room | dev | Chills are not a test of taste. Different songs hit different people. Dev just needed his song. | Dev with eyes closed and a small amazed smile, goosebumps visible on his forearm, headphones on.
+scene: s6 | living_room | tender | Nana's story | Love written in the skin.
+beat: medium | living_room | nana | Nana says she felt chills the first time she heard her husband sing. She was nineteen, and the note was slightly flat. | Nana in her armchair with a faraway smile and a hand resting on her forearm, an old framed photo of a smiling young couple on the shelf behind her.
+beat: close | living_room | nana | It was not perfect. But it was his voice, and her body said: remember this. Chills can be love written in the skin. | Nana with clear tears of love in her eyes and a gentle smile, soft lamp light on her face.
+scene: s7 | diagram | informative | Chills and the body | Mood and stress.
+beat: wide | diagram | | Chills use the same body system as cold and fear goosebumps, but here the trigger is a feeling, not a temperature. | A flat yellow music note and a flat yellow snowflake beside a bumpy flat forearm shape with a yellow arrow joining them on the navy backdrop. Objects only. | a note and a snowflake to one arm
+beat: medium | diagram | priya | Studies suggest listening to music you love can lower stress and lift mood. Chills are one of the strongest versions. | Priya with a relaxed smile beside a flat yellow heart with a calm wave line.
+beat: medium | diagram | priya | Want to chase chills? Try songs with big swells, key changes or a solo voice. Headphones help, and so does paying attention. | Priya holding a flat yellow swelling wave line and headphones with a bright invitation smile.
+scene: s8 | auditorium | warm | The answer | Wrap up.
+beat: wide | auditorium | leo | On stage, Leo finishes the last note and looks for the third row, where two people are waving and crying at once. | Leo on the stage in his choir robe smiling widely and waving at the audience, the choir behind him.
+beat: medium | auditorium | maya,nana | After the concert, Nana says: that note got me. Maya says: me too. Neither can explain it, and neither needs to. | Maya and Nana hugging in the auditorium aisle, both smiling with happy tears, red seats around them.
+beat: close | auditorium | maya | So why does music give us chills? Surprise and anticipation light up the brain's reward system, and the body answers with a shiver. | Maya smiling at the viewer with a hand over her arm showing a few goosebumps.
+beat: close | auditorium | maya | What song gives you chills every time? Tell us in the comments, and press play right now. | Maya grinning at the viewer wearing headphones around her neck, one thumb up.

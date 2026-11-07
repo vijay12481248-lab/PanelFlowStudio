@@ -1,0 +1,43 @@
+title: Why Do Dogs Tilt Their Heads? Scientists Have Ideas
+slug: vox_head_tilt
+logline: Mochi tilts his head at every new word, and a scientist explains the hearing, sight, word-learning and reward ideas behind the cutest move in the dog world.
+hook: Why do dogs tilt their heads when we talk? Scientists have four ideas, and one involves a dog who knows the names of his toys.
+cta: Does your dog tilt for a special word? Tell us in the comments, and describe the tilt.
+tags: why do dogs tilt their heads, dog head tilt meaning, do dogs understand words, dog behavior explained, dog hearing explained, why do dogs tilt head when you talk, dog ear problems, everyday science, flat animation explainer, ExplainItFlat
+thumb: SO CUTE | p002
+scene: s1 | living_room | funny and sweet | The cutest move | Mochi tilts his head.
+beat: wide | living_room | maya,mochi | Maya says a new word to Mochi: broccoli. Mochi freezes, ears up, and tilts his head all the way to the left. | Maya sitting on the floor holding a piece of broccoli, Mochi sitting in front of her with perked ears and his head tilted far to one side, big curious eyes.
+beat: close | living_room | mochi,maya | It is the cutest thing in the world. Maya takes forty photos. Mochi tilts the other way for photo forty-one. | Mochi in close-up with his head tilted the other way, eyes wide and one ear raised, looking adorable and curious, Maya's phone held up at the edge of the frame taking a photo.
+beat: medium | living_room | maya,mochi | She wonders: is he confused, curious, or a professional at melting hearts? Why do dogs tilt their heads? | Maya with a melted smile and a hand on her heart looking at Mochi, a small yellow question mark above her.
+scene: s2 | diagram | curious | Idea 1: hearing | Tilting to hear better.
+beat: medium | diagram | priya | Priya says: honest answer, scientists are not completely sure. But there are a few good ideas, and the first is about hearing. | Priya in her lab coat on the navy backdrop beside a flat yellow dog ear outline with sound waves, smiling.
+beat: wide | diagram | | Dogs hear very well, and they can hear higher sounds than we can. Tilting may help them work out where a sound comes from. | A flat yellow dog head outline with its ears up on the navy backdrop and curved sound wave lines arriving from the side. Objects only. | a dog head with sound waves
+beat: wide | diagram | | Their ear flaps can move, and a tilt may change how sound reaches each ear. It is like adjusting a satellite dish. | A flat yellow satellite dish shape turning slightly toward a small flat yellow signal arrow on the navy backdrop. Objects only. | a satellite dish turning
+beat: medium | diagram | priya | Dogs also pay close attention to our tone of voice. A tilt may mean: I am listening carefully. | Priya cupping her hand behind her ear with a playful smile.
+beat: medium | living_room | maya,mochi | Maya notices something. When she says walk, Mochi tilts. When she says dinner, Mochi tilts, spins, and falls over. | Mochi mid-spin with a head tilt and tumbling onto the rug, Maya laughing with her hands on her knees.
+scene: s3 | diagram | curious | Idea 2: seeing | Tilting to see your face.
+beat: medium | diagram | priya | The second idea is about sight. A dog's muzzle can block the lower part of their view of your face. | Priya holding a flat yellow dog muzzle shape up in front of her own face with a funny blocked expression.
+beat: wide | diagram | | A tilt may let them see your mouth and expressions better. One survey found dogs with bigger muzzles were more likely to tilt. | Two flat yellow dog head outlines on the navy backdrop, a long-muzzled one with a tilt and a flat-faced one without. Objects only. | two dog heads, one tilted
+beat: medium | diagram | priya | Dogs read faces. Seeing your mouth helps them understand whether the words come with a smile or a frown. | Priya showing a smile and a frown with her hands and a warm grin.
+scene: s4 | living_room | funny | Idea 3: words | Tilting at words that matter.
+beat: medium | diagram | priya | A third idea: dogs tilt when they hear something meaningful. In one study, dogs that knew toy names tilted more when hearing them. | Priya smiling brightly beside a flat yellow ball shape and a flat yellow rubber duck shape.
+beat: medium | living_room | leo,mochi | Leo teaches Mochi the names of two toys: ducky and monkey. Mochi tilts his head, listens, and brings the ducky. Leo cheers. | Leo sitting on the floor with two toys, a rubber duck and a monkey plush, Mochi trotting toward the duck with a head tilt, Leo's hands in the air.
+beat: close | living_room | leo,mochi | Mochi gets a treat. Leo gets a lifelong friend. Science gets a very good example. | Leo hugging the rubber duck with a huge proud grin, Mochi beside him chewing a treat.
+scene: s5 | diagram | informative | Idea 4: it works | The reward.
+beat: medium | diagram | priya | The fourth idea is the simplest: it works. When a dog tilts its head, people say aww, smile, and give treats. | Priya with a mischievous smile holding a flat yellow treat shape, a small yellow heart above her.
+beat: wide | diagram | | Dogs are great at learning what makes humans happy. A tilt that earns praise may be repeated, like a trick. | A flat yellow dog head outline tilting beside a flat yellow heart and a flat yellow cookie with a bright sparkle on the navy backdrop. Objects only. | a tilted dog, a heart and a cookie
+beat: medium | diagram | priya | That does not mean the tilt is fake. It may start as listening, and grow stronger because we love it. | Priya with a gentle laugh holding a flat yellow heart to her chest.
+beat: medium | diagram | priya | Not every dog tilts, and that is normal. Some tilt a lot, some almost never. It says nothing about how smart they are. | Priya with an easy shrug and a warm smile beside two flat yellow dog head outlines, one tilted and one straight.
+beat: medium | diagram | priya | Dogs can hear a treat bag from the next room, which proves hearing is not the only thing involved. | Priya laughing beside a flat yellow treat bag shape and small flat sound wave lines.
+scene: s6 | diagram | serious | When to worry | A tilt that never stops.
+beat: medium | diagram | priya | One caution: if a dog tilts its head all the time, stumbles, or seems off balance, it could be an ear problem. | Priya with a kind serious expression beside a flat yellow dog ear outline with a small question mark.
+beat: medium | diagram | priya | Ear infections and balance problems can cause constant head tilting. If you notice it, take your dog to a vet. | Priya with a reassuring smile and one hand open in a gentle gesture beside a flat yellow cross shape.
+scene: s7 | living_room | tender | Nana's dog | A song and a tilt.
+beat: medium | living_room | nana,mochi | Nana had a dog who tilted her head only when Nana sang. She said the dog was reviewing the performance. | Nana in her armchair singing softly with a smile and a closed-eye expression, Mochi in front of her with his head tilted listening.
+beat: close | living_room | nana | Nana says dogs tilt their heads at things that matter to them. A song, a name, a voice they love. | Nana smiling warmly with a fond faraway look and her hand held out.
+beat: close | living_room | mochi,nana | Mochi tilts at Nana, and Nana melts. That is a very reliable system. | Mochi looking up at Nana with a deep head tilt and soft eyes, his tail wagging beside her chair.
+beat: close | living_room | biscuit | Even Biscuit tilts his head once, at the sound of the can opener. He pretends it did not happen. | Biscuit with a very slight head tilt and wide green eyes in the kitchen doorway, one ear twitching toward a can opener sound.
+scene: s8 | living_room | warm | The answer | Wrap up.
+beat: medium | living_room | maya,mochi | Maya tries an experiment. She says walk, treat, and ball. Mochi tilts for all three. He has opinions about broccoli. | Maya holding a leash, a treat and a ball in her hands with a mischievous grin, Mochi sitting in front of her with a very serious deep tilt.
+beat: close | living_room | maya | So why do dogs tilt their heads? To hear better, to see faces, to focus on words that matter, and because it works. | Maya smiling at the viewer with her own head tilted to the side in an imitation of a dog tilt.
+beat: close | living_room | maya | Does your dog tilt for a special word? Tell us in the comments, and describe the tilt. | Maya grinning with her head tilted and Mochi's tilted head popping up beside her.

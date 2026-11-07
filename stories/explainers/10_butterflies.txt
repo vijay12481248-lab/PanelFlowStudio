@@ -1,0 +1,42 @@
+title: Why Do We Get Butterflies in Our Stomach?
+slug: vox_butterflies
+logline: Dev gets butterflies before meeting someone special, and a scientist explains the gut-brain connection, the alert mode behind the flutter, and how to calm it.
+hook: Why does nervousness or excitement show up in your stomach? Your gut and brain are in constant conversation, and Dev is about to find out.
+cta: When did you last feel butterflies? Tell us in the comments. We will keep your secrets.
+tags: why do we get butterflies in stomach, gut brain connection, why does nervousness make my stomach feel weird, vagus nerve explained, how to calm butterflies, adrenaline and stomach, first date nerves, everyday science, flat animation explainer, ExplainItFlat
+thumb: GUT FEELING | p002
+loc: cafe | Cafe | cozy cafe interior, wooden tables, hanging warm lamps, a counter with pastries, a big window with a street view
+scene: s1 | cafe | nervous and funny | Dev's big moment | Dev gets butterflies before meeting someone special.
+beat: wide | cafe | dev,maya | Dev is about to meet someone special at a cafe. His hands are cold and his stomach is doing backflips. Maya is his coach. | Dev sitting at a cafe table with a stiff nervous posture gripping a cup, Maya sitting across from him giving an encouraging smile.
+beat: close | cafe | dev | He puts a hand on his belly. It feels like a hundred butterflies are having a party in there. | Dev holding his stomach with an uneasy smile and wide eyes, small yellow butterflies fluttering around his middle.
+beat: medium | cafe | maya,dev | Maya says: that is perfectly normal. Dev says: it does not feel normal. It feels like a butterfly farm. | Maya laughing gently with a hand on her cheek, Dev wide-eyed and pale across the table.
+beat: close | cafe | maya | She pauses. Why does a worry in your head show up in your stomach? That is a really good question. | Maya with a thoughtful curious look, her chin on her hand, a small yellow question mark above her.
+scene: s2 | diagram | curious | Your gut and your brain | Two organs in conversation.
+beat: medium | diagram | priya | Priya explains: your gut and your brain are in constant conversation, through nerves, hormones and chemical messengers. | Priya in her lab coat on the navy backdrop between a flat brain shape and a flat stomach shape, yellow lines running between them.
+beat: wide | diagram | | Your digestive system even has its own huge network of nerves, sometimes called the second brain. It can work on its own. | A flat yellow stomach and intestine shape covered in tiny glowing nerve branches on the navy backdrop. Objects only. | a gut covered in nerves
+beat: wide | diagram | | A big nerve called the vagus nerve carries messages both ways, so your gut can tell your brain how it feels, and the reverse. | A flat yellow line with two arrows, one up and one down, connecting a brain shape to a stomach shape on the navy backdrop. Objects only. | a nerve with two arrows
+beat: medium | diagram | priya | That is why a big emotion in your head can show up as a feeling in your belly. They are wired together. | Priya smiling with her hands pointing to her head and her belly, a small yellow heart between them.
+scene: s3 | diagram | informative | The alert mode | What actually flutters.
+beat: medium | diagram | priya | When you feel nervous or excited, your body switches into alert mode. It releases adrenaline and gets ready for action. | Priya with an alert upright posture beside a flat yellow lightning bolt and a small flat heart shape.
+beat: wide | diagram | | In alert mode, blood flow tends to shift toward your muscles and away from digestion, so your stomach works differently. | A flat yellow arrow pointing from a stomach shape toward a flat leg muscle shape on the navy backdrop. Objects only. | blood moving to muscles
+beat: wide | diagram | | That change in the gut muscles and blood flow creates the fluttery, churning, floating feeling. Butterflies are real. | A flat yellow stomach shape with small wing-shaped swirls and wobbly lines inside it on the navy backdrop. Objects only. | a stomach with swirls
+beat: medium | diagram | priya | It is not just fear. Excitement, love and pride can switch on the same system. Butterflies can be good news. | Priya smiling brightly beside a flat yellow heart and a flat yellow star glowing.
+scene: s4 | stage | warm | Butterflies everywhere | Maya's stage butterflies.
+beat: medium | stage | maya | Maya gets them before every stage performance. Her stomach flips, then her voice steadies, and the show begins. | Maya waiting in the dark wings of a theatre stage with one hand on her stomach and a determined face, a red curtain beside her.
+beat: medium | diagram | priya | Researchers also study how gut chemistry and gut bacteria may affect mood. It is an exciting area, and still being explored. | Priya holding a flat petri dish shape with a thoughtful smile, small yellow dots floating around it.
+beat: wide | diagram | | Most of your serotonin, a mood-linked chemical, is made in your gut. Scientists are careful: it does not simply make you happy. | A flat yellow stomach shape with small yellow glowing dots flowing up an arrow to a brain shape on the navy backdrop. Objects only. | a gut sending dots to the brain
+scene: s5 | cafe | calming | What helps | Calming the butterflies.
+beat: medium | diagram | priya | So what helps when the butterflies get loud? Slow breathing tells your body that the danger is not real. | Priya breathing out slowly with a calm smile, a soft blue glow around her.
+beat: close | cafe | dev | Dev breathes in for four counts and out for six. His shoulders drop, and the butterflies slow their wings. | Dev with his eyes closed breathing slowly, shoulders relaxing, a few yellow butterflies drifting calmly.
+beat: medium | diagram | priya | Naming the feeling helps too: I am excited, not scared. Many people find it turns the same body signals into a different story. | Priya holding up two small flat speech bubble shapes, one with a frown and one with a smile.
+beat: medium | cafe | maya,dev | Maya whispers it to Dev: you are excited. He repeats it, and his shaky hands start to feel more like energy. | Maya leaning toward Dev with an encouraging whisper, Dev looking at his hands with a growing smile.
+beat: wide | diagram | | A small snack, some water and a short walk can also settle a restless stomach. The gut likes calm and routine. | A flat glass of water, a banana and a pair of walking shoes in a row on the navy backdrop. Objects only. | water, a banana and shoes
+scene: s6 | cafe | hopeful | The meeting | The moment arrives.
+beat: medium | cafe | dev | The door opens. Someone walks in with a big smile. Dev stands up, and his stomach does one last somersault. | Dev standing up from the cafe chair looking toward the door with wide excited eyes, brushing down his sweater.
+beat: close | cafe | dev | Then he smiles. A real, easy smile. The butterflies were never a warning. They were a signal that this matters. | Dev smiling warmly and easily, his eyes bright, the nervousness gone from his face.
+beat: medium | cafe | maya | Maya slips out through the door, grinning, her work done. | Maya leaving the cafe with a proud grin, glancing back over her shoulder.
+beat: close | living_room | maya | Later, her phone buzzes. His text is one word: butterflies. She types back: good ones? He replies: the best. | Maya on the sofa smiling at her phone screen with a soft happy face, Biscuit sleeping beside her.
+scene: s7 | living_room | warm | The answer | Wrap up.
+beat: medium | living_room | maya,biscuit | So why do we get butterflies? Your brain and gut are wired together, and alert mode changes how your belly feels. | Maya on the sofa with Biscuit, one hand on her stomach and a knowing smile.
+beat: close | living_room | maya | Butterflies are not a flaw. They are your body saying: pay attention, this matters to you. | Maya smiling at the viewer with a hand on her heart.
+beat: close | living_room | maya | When did you last feel butterflies? Tell us in the comments. We will keep your secrets. | Maya with a playful secretive grin, a finger pressed to her lips.
