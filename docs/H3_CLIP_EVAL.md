@@ -130,3 +130,26 @@ histogram 0.139 / gray 3.4; the same clip followed by an unrelated one measured 
 
 **Engine hooks:** `GET /api/original/story/{slug}/film/clip/{shot}/eval`, `POST .../improve` (background job), `GET .../history`; MCP `panelflow_original_clip_eval|improve|history`; ChronoFlow's reviewer now returns real measurements
 (no score or grade) and its UI no longer shows the hard-coded "94% (A) APPROVED FOR MASTER CUT". The running engine must be restarted to load them.
+
+## Storyboard approach and the long-take Director (2026-11-07)
+`engine/original/director.py` (one brief -> a plan), `storyboard.py` (pictures first, then video), `tools/produce_video.py --storyboard`, `tools/h3_length_probe.py`.
+
+**One clip can be 15 s on this GPU:** 362 frames, 6.3 min, peak VRAM 15.7 of 16.3 GB, followed a five-beat script in order (probe, `output/H3_LongTake/`).
+
+**Approach 1 - one first picture + a prompt (I2VA long takes, 4 x 15 s):** exactly one woman and one cat in every sampled frame (closed-cast wording), but H3 ignored the plan: a guide told to walk to the right walked at the
+camera, shots jumped, a cat grew a human hand. The brief's "walks" never reached the plan (the Director's word match missed "walks"/"walked").
+
+**Approach 2 - storyboard (start and end picture per shot, FL2VA between them, 8 x 7.5 s):** every clip lands on its two pictures (gray difference 4-9 of 255). What it took, in the order the evidence arrived:
+| Finding (measured) | Fix |
+|---|---|
+| a second cat in 3 of 8 pictures: the cat was described twice (cast layout + the action sentence) | each character is described once (`split_actions`); characters may not be carried by each other |
+| H3 acts out every event in the prompt ("a massive blue lightning bolt arcs down" made a lightning scene) | the clip prompt says only "change gradually from picture 1 to picture 2" + where the characters end |
+| start and end pictures that differ in weather/effects: H3 fills the gap with smoke and rings (6 of 8 shots) | the end picture keeps the start's scenery; only the characters move |
+| **naming unwanted things makes H3 draw them**: "no smoke, dust clouds, rings, bolts or glow" filled 8 of 8 shots with dust clouds and rings (an earlier clause naming "smoke and light effects" did the same) | positive wording only; clean on all 8 after the change |
+| a walker chained from an end picture already on the side it walks to cannot be drawn walking | such a shot is drawn fresh; a VLM checks that start and end are on different thirds of the frame |
+| narration used 9-13 of 18 words (half the video silent) | at least 65% of the slot; hook first, takeaway last |
+| "rock to the right" counted as a walk | a walk needs a locomotion verb followed by a direction |
+
+**Final storyboard video (`storm_board2`, 64 s, -16.8 LUFS):** cat counted once in every sampled frame, both characters present in every sampled frame, no dust or explosions, walking visible in shots 1-2 (by eye).
+Remaining: camera still moves 3-7% in 6 of 8 shots (`camera` confirmed; the walker's scale changes), a faint ring effect around the cat in shot 7, all skies are sunny (the 9B's plan does not build a storm), the cat design is odd
+(black body, orange tail), the 9B's science is plain; the "girl" counter reads 0 in a few frames of a walker in profile (counter error). Tests: `tests/unit/test_storyboard.py`, `test_director.py`.

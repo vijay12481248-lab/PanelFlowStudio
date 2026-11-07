@@ -33,3 +33,12 @@ Not exercised. Before using: add or approve a registered workflow that wires `la
 
 ## Do not
 Put identity phrases inside `<d>`; translate dialogue; add a timestamp to `[Shot 1]`; write plot summaries; mix reference and first/last-frame modes `[official]`. Do not pass a prompt through the hosted Context-IR.
+
+
+## Lessons from the storyboard videos (2026-11-07, `[verified]` on this machine; details in docs/H3_CLIP_EVAL.md)
+1. **H3 draws every word you give it, even a negated one.** "no smoke, dust clouds, rings, bolts or glow" produced dust clouds and rings in 8 of 8 shots. Never list unwanted things; describe only what should happen ("the background stays calm").
+2. **H3 acts out every event in the prompt.** A prompt that says "a massive lightning bolt arcs down" makes a lightning scene. When the pictures already show the effect, do not describe it again.
+3. **Describe each character once.** A cast layout plus the same animal named in the action sentence gave two cats. Say who is in the picture once, with where they stand.
+4. **A walk must be drawn, not asked for.** "Walks to the right" in the prompt alone was ignored (she walked at the camera). Draw the start and end pictures on different thirds of the frame and animate between them (FL2VA).
+5. **Start and end pictures must share the world:** same scenery and effects, only the characters move. Differences in weather/effects become smoke and rings in between.
+6. **Close the cast** ("exactly one woman (Maya) and exactly one cat (Miso)"): held in every sampled frame of three videos. A second cat appeared only when the prompt itself placed the cat twice.

@@ -45,5 +45,8 @@ A guide for agents. It does not generate anything itself: the tools below do. It
 | A clip failed; what to change | `references/regeneration.md`, `references/troubleshooting.md` |
 | Many clips / a 5+ minute video | `references/multi-clip.md` |
 
+## Storyboard route (use this for anything with walking, counts or several shots)
+`python tools/produce_video.py "<brief>" <slug> --storyboard --max-take 7.5`: the Director plans, pictures are drawn and checked first, then FL2VA animates between them (`engine/original/storyboard.py`). Read `references/prompting.md` lessons 1-6 before touching clip prompts.
+
 ## Not built yet (do not pretend they exist)
 The `quiet` lever, a metric that shows scene-continuity gains (the evaluator missed `p005`'s), a working colour/outfit-drift check (the VLM missed 2 of 2), SAM3/LTX (no weights found), a restart of the engine (the new routes/tools need it).
