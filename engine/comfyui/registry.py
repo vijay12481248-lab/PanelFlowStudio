@@ -16,7 +16,7 @@ _WORKFLOW_ID = re.compile(r"^[a-z][a-z0-9_-]{2,63}$")
 _REGISTRY_FILE = Path(__file__).with_name("workflow_registry.json")
 _MAX_WORKFLOW_BYTES = 4 * 1024 * 1024
 _REQUIRED_PATCH_SLOTS = frozenset({"prompt", "seed", "filename_prefix"})
-_OPTIONAL_PATCH_SLOTS = frozenset({"negative_prompt", "duration", "width", "height", "reference_image", "reference_image_b", "reference_weight", "mask_image", "denoise", "voice_audio", "pose_image", "depth_image", "pose_weight", "depth_weight", "control_weight"})
+_OPTIONAL_PATCH_SLOTS = frozenset({"negative_prompt", "duration", "width", "height", "reference_image", "last_image", "reference_image_b", "reference_weight", "mask_image", "denoise", "voice_audio", "pose_image", "depth_image", "pose_weight", "depth_weight", "control_weight"})
 
 
 class WorkflowRegistryError(RuntimeError):

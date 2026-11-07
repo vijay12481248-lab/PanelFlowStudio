@@ -981,5 +981,305 @@
       "max": 2048,
       "multiple_of": 32
     }
+  },
+  {
+    "id": "fastvideo_h3_film_fl2va",
+    "purpose": "image_to_video",
+    "filename": "fastvideo_h3_film_fl2va.api.json",
+    "sha256": "87448fdeb6e5b9b17eadbff022c054050113dc1c4c7ebdc5180531d2eea2ee5a",
+    "requires_gpu": true,
+    "gpu_vram_mb": 14000,
+    "model_files": [
+      "fastvideo_fasth3_8step_v2_pruned_int8_convrot.safetensors",
+      "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+      "minimax_h3_video_vae_int8_convrot.safetensors",
+      "minimax_h3_audio_vae_fp32.safetensors"
+    ],
+    "required_nodes": [
+      "BasicGuider",
+      "BasicScheduler",
+      "BlockSparseAttention",
+      "CLIPLoader",
+      "ComfyMathExpression",
+      "CreateVideo",
+      "GetImageSize",
+      "ImageScaleToTotalPixels",
+      "KSamplerSelect",
+      "LoadImage",
+      "MiniMaxH3ImageToVideo",
+      "MiniMaxH3SigmaShift",
+      "ModelAttentionBackend",
+      "PrimitiveFloat",
+      "RandomNoise",
+      "SamplerCustomAdvanced",
+      "SaveVideo",
+      "UNETLoader",
+      "VAEDecode",
+      "VAEDecodeAudio",
+      "VAELoader"
+    ],
+    "patch_slots": {
+      "prompt": {
+        "node_id": "105:104",
+        "input": "prompt",
+        "class_type": "MiniMaxH3ImageToVideo"
+      },
+      "seed": {
+        "node_id": "105:15",
+        "input": "noise_seed",
+        "class_type": "RandomNoise"
+      },
+      "filename_prefix": {
+        "node_id": "92",
+        "input": "filename_prefix",
+        "class_type": "SaveVideo"
+      },
+      "duration": {
+        "node_id": "105:111",
+        "input": "value",
+        "class_type": "PrimitiveFloat"
+      },
+      "reference_image": {
+        "node_id": "136",
+        "input": "image",
+        "class_type": "LoadImage"
+      },
+      "last_image": {
+        "node_id": "137",
+        "input": "image",
+        "class_type": "LoadImage"
+      }
+    },
+    "dimension_policy": {
+      "mode": "exact",
+      "min": 256,
+      "max": 2048,
+      "multiple_of": 32
+    }
+  },
+  {
+    "id": "fastvideo_h3_film_l2va",
+    "purpose": "image_to_video",
+    "filename": "fastvideo_h3_film_l2va.api.json",
+    "sha256": "79b55ffde855ba6c98f625e3007e9238ebd81c5e8aea5678c620a90fb6d48745",
+    "requires_gpu": true,
+    "gpu_vram_mb": 14000,
+    "model_files": [
+      "fastvideo_fasth3_8step_v2_pruned_int8_convrot.safetensors",
+      "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+      "minimax_h3_video_vae_int8_convrot.safetensors",
+      "minimax_h3_audio_vae_fp32.safetensors"
+    ],
+    "required_nodes": [
+      "BasicGuider",
+      "BasicScheduler",
+      "BlockSparseAttention",
+      "CLIPLoader",
+      "ComfyMathExpression",
+      "CreateVideo",
+      "GetImageSize",
+      "ImageScaleToTotalPixels",
+      "KSamplerSelect",
+      "LoadImage",
+      "MiniMaxH3ImageToVideo",
+      "MiniMaxH3SigmaShift",
+      "ModelAttentionBackend",
+      "PrimitiveFloat",
+      "RandomNoise",
+      "SamplerCustomAdvanced",
+      "SaveVideo",
+      "UNETLoader",
+      "VAEDecode",
+      "VAEDecodeAudio",
+      "VAELoader"
+    ],
+    "patch_slots": {
+      "prompt": {
+        "node_id": "105:104",
+        "input": "prompt",
+        "class_type": "MiniMaxH3ImageToVideo"
+      },
+      "seed": {
+        "node_id": "105:15",
+        "input": "noise_seed",
+        "class_type": "RandomNoise"
+      },
+      "filename_prefix": {
+        "node_id": "92",
+        "input": "filename_prefix",
+        "class_type": "SaveVideo"
+      },
+      "duration": {
+        "node_id": "105:111",
+        "input": "value",
+        "class_type": "PrimitiveFloat"
+      },
+      "last_image": {
+        "node_id": "136",
+        "input": "image",
+        "class_type": "LoadImage"
+      }
+    },
+    "dimension_policy": {
+      "mode": "exact",
+      "min": 256,
+      "max": 2048,
+      "multiple_of": 32
+    }
+  },
+  {
+    "id": "fastvideo_h3_film_t2va",
+    "purpose": "text_to_video",
+    "filename": "fastvideo_h3_film_t2va.api.json",
+    "sha256": "5adb2df4ec5b91d401989612698e11d57d6a5472ef80edfb10304cf3d3b1efc8",
+    "requires_gpu": true,
+    "gpu_vram_mb": 14000,
+    "model_files": [
+      "fastvideo_fasth3_8step_v2_pruned_int8_convrot.safetensors",
+      "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+      "minimax_h3_video_vae_int8_convrot.safetensors",
+      "minimax_h3_audio_vae_fp32.safetensors"
+    ],
+    "required_nodes": [
+      "BasicGuider",
+      "BasicScheduler",
+      "BlockSparseAttention",
+      "CLIPLoader",
+      "ComfyMathExpression",
+      "CreateVideo",
+      "KSamplerSelect",
+      "MiniMaxH3ImageToVideo",
+      "MiniMaxH3SigmaShift",
+      "ModelAttentionBackend",
+      "PrimitiveFloat",
+      "RandomNoise",
+      "SamplerCustomAdvanced",
+      "SaveVideo",
+      "UNETLoader",
+      "VAEDecode",
+      "VAEDecodeAudio",
+      "VAELoader"
+    ],
+    "patch_slots": {
+      "prompt": {
+        "node_id": "105:104",
+        "input": "prompt",
+        "class_type": "MiniMaxH3ImageToVideo"
+      },
+      "seed": {
+        "node_id": "105:15",
+        "input": "noise_seed",
+        "class_type": "RandomNoise"
+      },
+      "filename_prefix": {
+        "node_id": "92",
+        "input": "filename_prefix",
+        "class_type": "SaveVideo"
+      },
+      "duration": {
+        "node_id": "105:111",
+        "input": "value",
+        "class_type": "PrimitiveFloat"
+      },
+      "width": {
+        "node_id": "105:104",
+        "input": "width",
+        "class_type": "MiniMaxH3ImageToVideo"
+      },
+      "height": {
+        "node_id": "105:104",
+        "input": "height",
+        "class_type": "MiniMaxH3ImageToVideo"
+      }
+    },
+    "dimension_policy": {
+      "mode": "exact",
+      "min": 256,
+      "max": 2048,
+      "multiple_of": 32
+    }
+  },
+  {
+    "id": "fastvideo_h3_omniref",
+    "purpose": "reference_to_video",
+    "filename": "fastvideo_h3_omniref.api.json",
+    "sha256": "cee4b2b6620262e439b9d8b0cfe076d5c56a2b6444e17eb13d4e8eda59dcb2fb",
+    "requires_gpu": true,
+    "gpu_vram_mb": 14000,
+    "model_files": [
+      "fasth3_omniref_8step_pruned_int8_convrot.safetensors",
+      "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+      "minimax_h3_video_vae_int8_convrot.safetensors",
+      "minimax_h3_audio_vae_fp32.safetensors"
+    ],
+    "required_nodes": [
+      "BasicGuider",
+      "BasicScheduler",
+      "BlockSparseAttention",
+      "CLIPLoader",
+      "ComfyMathExpression",
+      "CreateVideo",
+      "KSamplerSelect",
+      "LoadImage",
+      "MiniMaxH3ReferenceToVideo",
+      "MiniMaxH3SigmaShift",
+      "ModelAttentionBackend",
+      "PrimitiveFloat",
+      "RandomNoise",
+      "SamplerCustomAdvanced",
+      "SaveVideo",
+      "UNETLoader",
+      "VAEDecode",
+      "VAEDecodeAudio",
+      "VAELoader"
+    ],
+    "patch_slots": {
+      "prompt": {
+        "node_id": "105:104",
+        "input": "prompt",
+        "class_type": "MiniMaxH3ReferenceToVideo"
+      },
+      "seed": {
+        "node_id": "105:15",
+        "input": "noise_seed",
+        "class_type": "RandomNoise"
+      },
+      "filename_prefix": {
+        "node_id": "92",
+        "input": "filename_prefix",
+        "class_type": "SaveVideo"
+      },
+      "reference_image": {
+        "node_id": "136",
+        "input": "image",
+        "class_type": "LoadImage"
+      },
+      "duration": {
+        "node_id": "105:111",
+        "input": "value",
+        "class_type": "PrimitiveFloat"
+      },
+      "reference_image_b": {
+        "node_id": "137",
+        "input": "image",
+        "class_type": "LoadImage"
+      },
+      "width": {
+        "node_id": "105:104",
+        "input": "width",
+        "class_type": "MiniMaxH3ReferenceToVideo"
+      },
+      "height": {
+        "node_id": "105:104",
+        "input": "height",
+        "class_type": "MiniMaxH3ReferenceToVideo"
+      }
+    },
+    "dimension_policy": {
+      "mode": "exact",
+      "min": 256,
+      "max": 2048,
+      "multiple_of": 32
+    }
   }
 ]
