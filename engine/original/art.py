@@ -539,6 +539,11 @@ class ArtRecord(BaseModel):
     selected: int | None = None  # the `n` of the iteration whose picture is panels/<id>.png
 
 
+def frame_16x9(story: OriginalStory) -> bool:
+    """True when the story asks for the 16:9 video frame for every picture (`meta["frame"]`, set by the explainer format)."""
+    return (story.meta or {}).get("frame") == "16:9"
+
+
 def _hash(pos: str, neg: str, ref: str = "", dims: tuple[int, int] | None = None) -> str:
     w, h = dims if dims else (W, H)
     return hashlib.sha256(f"{pos}\n{neg}\n{w}x{h}\n{ref}".encode()).hexdigest()[:16]
@@ -559,7 +564,7 @@ def _refine_directed_panel(*, story, p, ws, runner, provider, claims, chars, spe
         extra = {k: v for k, v in (("runner", runner), ("engine", engine)) if k in _BUILD_PROMPT_EXTRA}
         pos_i, _ = build_prompt(story, p, plan.emphasis if plan else [], style, must, attempt, **extra)
         w, h = pw, ph
-        if attempt >= 2 and style == "natural":
+        if attempt >= 2 and style == "natural" and not frame_16x9(story):
             widened = {"close": "medium", "extreme_close": "medium", "medium": "wide"}.get(spec_shot, spec_shot)
             w, h = shotspec.resolve_dimensions(widened, num_characters=shown_n, default=(W, H))
         seed = seed_for(story, p.id, attempt)
@@ -632,7 +637,9 @@ def generate_art(story: OriginalStory, ws: Path, runner: ComfyRunner, provider=N
         shown = [chars[c] for c in p.character_ids if c in chars][:2]
         spec = shotspec.ShotSpec(**p.director) if p.director else None
         spec_shot = spec.shot if spec else p.shot
-        pw, ph = shotspec.resolve_dimensions(spec_shot, num_characters=len(shown), default=(W, H))
+        # a story that asks for the video frame (meta["frame"] == "16:9", the explainer format) draws EVERY picture 16:9: a square close-up would sit
+        # on blurred side bars in the video (as film.py's FRAME); other stories keep the per-shot shapes (portrait full-body, square close-up)
+        pw, ph = (W, H) if frame_16x9(story) else shotspec.resolve_dimensions(spec_shot, num_characters=len(shown), default=(W, H))
         # the first character on screen has its face pinned to its sheet
         ref = ws / "sheets" / f"{shown[0].id}.png" if shown and getattr(runner, "ipa", None) is not None else None
         # two characters: the first is pinned to the left half, the second to the right half (needs the masked workflow)
@@ -697,7 +704,7 @@ def generate_art(story: OriginalStory, ws: Path, runner: ComfyRunner, provider=N
         for attempt in (range(DIRECTED_ATTEMPTS if p.director else MAX_ATTEMPTS) if best is None else ()):
             seed = seed_for(story, p.id, attempt)
             pos_i, _ = build_prompt(story, p, emphasis, style, must, attempt, runner=runner, engine=engine)
-            if attempt >= 2 and p.director and style == "natural":
+            if attempt >= 2 and p.director and style == "natural" and not frame_16x9(story):
                 widened_shot = {"close": "medium", "extreme_close": "medium", "medium": "wide"}.get(spec_shot, spec_shot)
                 pw, ph = shotspec.resolve_dimensions(widened_shot, num_characters=len(shown), default=(W, H))
             png = runner.generate(pos_i, neg, seed, pw, ph, f"panel_{p.id}", reference=ref, reference_b=ref_b,

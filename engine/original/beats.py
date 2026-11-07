@@ -183,8 +183,10 @@ async def direct_shot(provider, story: OriginalStory, panel: Panel, text: str, p
                     key_visuals=o.key_visuals, characters=[CharPose(**c.model_dump()) for c in o.characters])
 
 
-def fallback_spec(story: OriginalStory, panel: Panel, text: str) -> ShotSpec:
-    """When the director fails: still a complete spec, built from the words (named characters, pose rules, the panel's place)."""
+def fallback_spec(story: OriginalStory, panel: Panel, text: str, authored: str = "") -> ShotSpec:
+    """When the director fails: still a complete spec, built from the words (named characters, pose rules, the panel's place).
+    `authored` is the author's own description of the picture (Panel.action of a single-beat panel); it beats the bare narration sentence,
+    which carries no expression (measured: 30 of 34 beats of an explainer fell back and lost every authored emotion)."""
     named = named_characters(text, story.bible)[:MAX_CHARACTERS]
     who = focus_character(text, story.bible)
     ids = [who] if who else (named or panel.character_ids[:MAX_CHARACTERS])
@@ -192,7 +194,7 @@ def fallback_spec(story: OriginalStory, panel: Panel, text: str) -> ShotSpec:
     loc = next((x for x in story.bible.locations if x.id == panel.location_id), None)
     return ShotSpec(shot="close" if who else panel.shot if panel.shot in SHOTS else "medium", camera="eye_level",
                     characters=[CharPose(id=i, side="center" if len(ids) == 1 else ("left" if k == 0 else "right"),
-                                         pose="", expression=", ".join(keys), action=text[:120]) for k, i in enumerate(ids)],
+                                         pose="", expression=", ".join(keys), action=(authored or text)[:160]) for k, i in enumerate(ids)],
                     setting=loc.name if loc else "", key_visuals=keys)
 
 
@@ -212,7 +214,7 @@ async def expand_story(story: OriginalStory, provider, progress: Callable[[float
             if spec is None:
                 if text:
                     notes.append(f"{p.id}: no shot could be directed, built it from the words")
-                spec = fallback_spec(story, p, text or p.action)
+                spec = fallback_spec(story, p, text or p.action, authored=p.action if len(parts) == 1 else "")
             spec.key_visuals = list(dict.fromkeys(pose_keys(text) + spec.key_visuals))[:4]
             dialogue = list(p.dialogue) if last else []
             for ln in dialogue:  # whoever speaks must be in the picture

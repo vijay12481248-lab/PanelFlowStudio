@@ -188,3 +188,14 @@ def test_hash_incorporates_dimensions():
     assert h1 != h3
     # Default without dims matches (1344, 768) for backward compatibility
     assert art._hash(pos, neg) == h1
+
+
+def test_a_story_that_asks_for_the_video_frame_draws_every_panel_16_by_9(tmp_path):
+    story = _make_story()
+    story.meta["frame"] = "16:9"  # the explainer format: a square close-up would sit on blurred side bars in the video
+    runner = CapturingRunner()
+    art.generate_art(story, tmp_path, runner)
+    panels = [c for c in runner.calls if c["prefix"].startswith("panel_")]
+    assert panels and all((c["w"], c["h"]) == (1344, 768) for c in panels)
+    sheets = [c for c in runner.calls if c["prefix"].startswith("sheet_")]
+    assert all((c["w"], c["h"]) == (832, 1216) for c in sheets)  # character sheets keep their portrait shape

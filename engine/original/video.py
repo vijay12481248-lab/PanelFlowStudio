@@ -268,8 +268,48 @@ def chapters(story: OriginalStory, timeline: dict) -> list[tuple[str, str]]:
     for sid, t in starts.items():
         if out and t - out[-1][0] < 10:
             continue
-        out.append((t, " ".join(scenes[sid].summary.split()[:7]).rstrip(".,;")))
+        sc = scenes[sid]
+        out.append((t, sc.title.strip() or " ".join(sc.summary.split()[:7]).rstrip(".,;")))
     return [(_stamp(t), label) for t, label in out] if len(out) >= 3 else []
+
+
+def thumbnail_with_text(src: Path, text: str, out: Path) -> Path:
+    """1280x720 thumbnail from a panel picture with 1-3 big stacked words (Impact, white then yellow, black outline) on the side of the
+    picture that has less going on (lower edge energy), so the text does not cover the face; the words never repeat the title (author's choice)."""
+    import numpy as np
+    from PIL import Image, ImageDraw, ImageFont
+
+    from engine.anime.review.packaging import IMPACT
+
+    img = Image.open(src).convert("RGB").resize((1280, 720), Image.LANCZOS)
+    g = np.asarray(img.convert("L"), dtype=np.float32)
+    edge = np.abs(np.diff(g, axis=1))[:-1, :] + np.abs(np.diff(g, axis=0))[:, :-1]
+    rgb = np.asarray(img, dtype=np.float32)
+    r_, g_, b_ = rgb[..., 0], rgb[..., 1], rgb[..., 2]
+    face = ((r_ > 140) & (g_ > 80) & (g_ < 0.78 * r_) & (b_ < 0.75 * g_ + 20)) | (g.astype(np.float32) < 40)  # skin tones and near-black hair
+    face = face[:-1, :-1]
+
+    def busy(sl):  # how much is going on, with a heavy penalty for a face or hair under the text column
+        return edge[:, sl].mean() + 3000 * face[:, sl].mean()
+
+    left, right = busy(slice(0, 470)), busy(slice(-470, None))
+    words = text.upper().split()[:3] or [""]
+    font_path = str(IMPACT) if IMPACT.exists() else None
+    d = ImageDraw.Draw(img)
+    zone = 470  # text column width in pixels
+    size = 230
+    while font_path and size > 70 and max(d.textlength(w, font=ImageFont.truetype(font_path, size)) for w in words) > zone:
+        size -= 6
+    font = ImageFont.truetype(font_path, size) if font_path else ImageFont.load_default()
+    line_h = int(size * 1.08)
+    total = line_h * len(words)
+    y0 = max(20, (720 - total) // 2 - 10)
+    for i, w in enumerate(words):
+        w_px = d.textlength(w, font=font)
+        x = 36 if left <= right else 1280 - 36 - w_px
+        d.text((x, y0 + i * line_h), w, font=font, fill="white" if i % 2 == 0 else "#FFD400", stroke_width=max(6, size // 16), stroke_fill="black")
+    img.save(out, quality=92)
+    return out
 
 
 def package(story: OriginalStory, ws: Path, extra_tags: list[str] | None = None, footer: str = "") -> dict:
@@ -280,31 +320,40 @@ def package(story: OriginalStory, ws: Path, extra_tags: list[str] | None = None,
     from engine.original.genres import GENRES
 
     pr = story.bible.premise
+    meta = story.meta or {}
     timeline = json.loads((ws / "timeline.json").read_text())
     ch = chapters(story, timeline)
-    desc = [pr.logline, ""] + (["Chapters:"] + [f"{t} {l}" for t, l in ch] + [""] if ch else []) + [
-        f"An original {pr.genre} story. The story, art and narration were created with AI tools (PanelFlow Studio) and "
-        "reviewed by the channel owner."] + (["", footer] if footer else [])
-    first = next((p for p in story.panels if (ws / "panels" / f"{p.id}.png").exists() and p.shot in ("close", "medium")), None) or next(
-        p for p in story.panels if (ws / "panels" / f"{p.id}.png").exists())
-    img = Image.open(ws / "panels" / f"{first.id}.png").convert("RGB").resize((1280, 720))
-    d = ImageDraw.Draw(img)
-    font = ImageFont.truetype(str(IMPACT), 96) if IMPACT.exists() else ImageFont.load_default()
-    lines, cur = [], ""
-    for w in pr.title.upper().split():
-        if cur and d.textlength(cur + " " + w, font=font) > 1160:
-            lines.append(cur)
-            cur = w
-        else:
-            cur = (cur + " " + w).strip()
-    lines.append(cur)
-    y = 720 - 40 - 110 * len(lines[:3])
-    for ln in lines[:3]:
-        d.text((60, y), ln, font=font, fill="white", stroke_width=7, stroke_fill="black")
-        y += 110
+    disclosure = ("Script, pictures and narration were made with AI tools." if meta.get("hook") else
+                  f"An original {pr.genre} story. The story, art and narration were created with AI tools (PanelFlow Studio) and reviewed by the channel owner.")
+    desc = [meta.get("hook") or pr.logline, ""] + ([pr.logline, ""] if meta.get("hook") else []) + (
+        ["Chapters:"] + [f"{t} {l}" for t, l in ch] + [""] if ch else []) + ([meta["cta"], ""] if meta.get("cta") else []) + [disclosure] + (
+        ["", footer] if footer else [])
+    has = lambda p: (ws / "panels" / f"{p.id}.png").exists()  # noqa: E731
+    first = next((p for p in story.panels if p.id == meta.get("thumb_panel") and has(p)), None) or next(
+        (p for p in story.panels if has(p) and p.shot in ("close", "medium")), None) or next(p for p in story.panels if has(p))
     thumb = ws / "thumbnail.jpg"
-    img.save(thumb, quality=92)
-    tags = [pr.genre + " story", "original story", "animated story", "story time", "AI generated story"] + [c.name for c in story.bible.characters] + (extra_tags or [])
+    if meta.get("thumb_text"):
+        thumbnail_with_text(ws / "panels" / f"{first.id}.png", meta["thumb_text"], thumb)
+    else:
+        img = Image.open(ws / "panels" / f"{first.id}.png").convert("RGB").resize((1280, 720))
+        d = ImageDraw.Draw(img)
+        font = ImageFont.truetype(str(IMPACT), 96) if IMPACT.exists() else ImageFont.load_default()
+        lines, cur = [], ""
+        for w in pr.title.upper().split():
+            if cur and d.textlength(cur + " " + w, font=font) > 1160:
+                lines.append(cur)
+                cur = w
+            else:
+                cur = (cur + " " + w).strip()
+        lines.append(cur)
+        y = 720 - 40 - 110 * len(lines[:3])
+        for ln in lines[:3]:
+            d.text((60, y), ln, font=font, fill="white", stroke_width=7, stroke_fill="black")
+            y += 110
+        img.save(thumb, quality=92)
+    tags = list(meta["tags"]) if meta.get("tags") else (
+        [pr.genre + " story", "original story", "animated story", "story time", "AI generated story"] + [c.name for c in story.bible.characters])
+    tags += extra_tags or []
     pkg = {"title": pr.title[:100], "description": chr(10).join(desc), "tags": tags, "chapters": ch,
            "thumbnail_path": str(thumb), "genre_style": GENRES[pr.genre].art_style}
     (ws / "youtube_package.json").write_text(json.dumps(pkg, indent=1), encoding="utf-8")

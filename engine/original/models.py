@@ -69,6 +69,7 @@ class Scene(BaseModel):
     score: str = ""  # music direction for this scene's cue (film.py / score.py); empty = derived from the mood
     bpm: int = 0
     key: str = ""
+    title: str = ""  # the YouTube chapter label; empty = the first words of `summary`
 
 
 class OriginalStory(BaseModel):
@@ -76,6 +77,8 @@ class OriginalStory(BaseModel):
     scenes: list[Scene]
     panels: list[Panel]
     warnings: list[str] = Field(default_factory=list)
+    # packaging the author chose (all optional): hook (first description line), cta, tags, thumb_text (1-3 words), thumb_panel (panel id)
+    meta: dict = Field(default_factory=dict)
 
 
 class Claim(BaseModel):
