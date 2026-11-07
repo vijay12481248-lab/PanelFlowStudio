@@ -39,3 +39,29 @@ missed the darkening in `p019_1` (0/2), missed the real cut in `p005` (0/2) and 
 - In a close-up the subject dominates the tracked points; whole-frame and ring agreeing is evidence, not proof, that the camera moved.
 - Identity and object integrity are not measured deterministically yet (no face/CLIP embedding check, no SAM3 weights found). Next phase.
 - Thresholds are provisional (21 + 140 clips); re-check them when more labelled failures exist.
+
+## Phase 1 experiments (2026-11-07): is the zoom our prompt, and are short clips worse?
+Script: `tools/h3_phase1_experiment.py`; clips in `output/H3_Phase1/{base,static,long}/` (git-ignored). Six silent Dawn Gate shots (`p003 p031 p088` extreme close-up,
+`p012 p046 p060` close-up), same first frame and seed in every variant; one change per variant.
+
+**Reproducibility:** `base` (current prompt and length) regenerated all six existing Dawn Gate clips with mean pixel difference 0.00. Same frame + prompt + seed + workflow
+gives the same clip, so single-lever comparisons are real, not noise.
+
+| Variant | what changed | mean \|zoom\| | median drift | mean frame step | camera flags |
+|---|---|---|---|---|---|
+| base | nothing (push-in line, 56/73 frames) | 38.4% | 0.27 | 5.68 | 6 of 6 clips |
+| static | camera sentence = "Static Shot, fixed on a tripod, no zoom, no pan, no tilt" | **0.8%** | 0.18 | 3.09 | **0 of 6** |
+| long | length 124 frames (5.17 s), push-in kept | 54.8% | 0.32 | 6.25 | 6 of 6 |
+
+- **The push-in sentence causes the zoom.** 6 of 6 shots went from +6% to +164% zoom to between -1.3% and +2.5%. The "very slight" push-in on extreme close-ups still gave +6 to +7%.
+- **Static kept the action in the shots I looked at.** `p012` still shows the smile fall and eyes close with a fixed camera. In `p046` the goggle lenses glow as asked; with the push-in
+  the glow appeared in his eyes instead (one example, a hypothesis that a fixed camera helps adherence).
+  Mean frame step fell from 5.68 to 3.09: part of that is the zoom itself, but the action may also be calmer. Needs a check on action-heavy shots.
+- **Short clips are not worse; longer ones invent more.** 124 frames did not reduce drift or flicker: more zoom (`p088` +95%, `p003` +24%), more drift, and the golem in `p088` changes
+  shape and loses its foreground hands. The "56/73 frames are off-spec" hypothesis is NOT supported for these prompts. Caveat: the prompt describes one short action, so more time is
+  filled by invention; `static` + `long` was not run.
+- The evaluator's flags matched what I saw: `p046` base and `p088` long were marked `suspected` (zoom above the 50% trust cap), `p060` base got the flicker flag (fast-moving stars).
+- Not covered: dialogue shots, wide shots, other stories, more than 6 shots.
+
+**Recommendation (not applied; `film.py` has the owner's uncommitted edits):** default the camera sentence to the Static Shot wording and make a push-in or move an explicit per-shot
+choice; keep clip length as is.
