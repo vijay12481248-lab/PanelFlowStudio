@@ -82,3 +82,11 @@ What the real runs taught (fixed in the same phase): the first version ignored a
 compared flag counts instead of size (rejected `p070`'s zoom fix), rejected a fix of a worse defect for adding a minor one (`p005`), and reported "no defect left" while a fast transition was
 only suspected (the evaluator now flags a tracker-lost run as a suspected transition and the loop lists remaining suspected flags).
 With only camera and seed levers the loop fixes camera defects; drift and scene transitions need the not-yet-built levers (redraw the first frame, simplify the action text). Sample: 3 shots.
+
+### Phase 3b: `simplify_action` and `redraw_frame` levers (2026-11-07)
+Same isolated Dawn Gate copy, 3-4 attempts per shot, outcomes checked on contact sheets. Per-attempt records: `output/H3_Phase3/dawn/film/history/<shot>.json` (run 3).
+| Shot | Attempts (lever -> decision) | Result |
+|---|---|---|
+| `p070` | `simplify_action` kept (drift 0.60 -> 0.13), `static_camera` kept (zoom 13.8 -> 8.2%), `seed` kept (5.95%) | **drift fixed**: colours and lighting stay stable in all 8 frames; camera still +6% (confirmed, above the 3% limit). The beat "the blue light growing" was removed by the rule |
+| `p005` | `static_camera` kept (cut removed), `simplify_action` discarded, `redraw_frame` discarded, `seed` discarded (3 hard cuts) | **not fixed**: the clip still jumps from the close-up to the glider at about 1.6 s; loop ends "attempts used up", temporal (suspected) left |
+Lessons: a growing-light clause in the motion text was the cause of `p070`'s washed-out colours (seeds had not moved it); `p005`'s cause is a first frame (close-up of the girl and the cat) that does not show the flying machine its action describes, which none of the four levers fixes. Next lever if wanted: regenerate the first frame from the ACTION (shot size matching what the motion needs), not a reroll of the same prompt. Sample: 2 shots.

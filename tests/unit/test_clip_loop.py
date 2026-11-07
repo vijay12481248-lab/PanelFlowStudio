@@ -164,3 +164,66 @@ def test_lost_picture_is_a_suspected_transition_but_a_single_cut_is_not_double_c
     assert any(f["axis"] == "temporal" and f["status"] == "suspected" for f in r["flags"]) and not r["cuts_s"]
     cut = ce.evaluate(_write(tmp_path / "cut.mp4", [_view(s)] * 20 + [np.roll(s, 300, axis=1)[H // 2: H // 2 + H, W // 2: W // 2 + W] // 4] * 28), expect_audio=False)
     assert [f["status"] for f in cut["flags"] if f["axis"] == "temporal"] == ["confirmed"]
+
+
+# ---------------------------------------------------------------- levers: simplify_action, redraw_frame
+def test_simplify_motion_rules():
+    t = "they walk up the path, Mira laughing, Rook scowling, the blue light growing"
+    assert cl.simplify_motion(t, "consistency") == "they walk up the path, Mira laughing, Rook scowling"  # only the light clause goes
+    assert cl.simplify_motion(t, "temporal") == "they walk up the path"  # the first clause is the main action
+    assert cl.simplify_motion("she waves", "temporal") is None and cl.simplify_motion("she waves", "consistency") is None
+    assert cl.simplify_motion("a quiet room, a clock ticks", "consistency") is None  # no light clause: nothing to cut
+
+
+def test_lever_order_availability_and_one_input_changed():
+    rep = {"flags": [{"axis": "consistency", "status": "suspected"}]}
+    s = {"seed": 5, "static_camera": False, "motion": "they walk, Mira laughing, the light growing", "frame_attempt": 0}
+    assert cl.next_lever(rep, s, set(), True) == ("simplify_action", "consistency")
+    assert cl.next_lever(rep, s, {("simplify_action", "consistency")}, True) == ("seed", "consistency")  # redraw not available without a runner
+    avail = cl.DEFAULT_LEVERS | {"redraw_frame"}
+    assert cl.next_lever(rep, s, {("simplify_action", "consistency")}, True, avail) == ("redraw_frame", "consistency")
+    for lever in ("static_camera", "simplify_action", "redraw_frame", "seed"):
+        new = cl.apply_lever(lever, s, 1, "consistency")
+        assert len([k for k in new if new[k] != s[k]]) == 1, lever
+    assert cl.next_lever(rep, {**s, "motion": "she waves"}, set(), True) == ("seed", "consistency")  # nothing to simplify -> next lever
+
+
+def test_film_generate_applies_motion_and_redraws_only_when_asked(tmp_path, monkeypatch):
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("dg", Path(__file__).resolve().parents[2] / "stories" / "dawn_gate_source.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    story = mod.story
+    sid = story.panels[0].id
+    ws = tmp_path / "ws"
+    (ws / "film" / "frames").mkdir(parents=True)
+    (ws / "film" / "frames" / f"{sid}.png").write_bytes(b"orig")
+    seen = {}
+
+    def fake_clips(st, work, ids, seeds, native_voice, camera):
+        seen["motion"] = next(p.motion for p in st.panels if p.id == sid)
+        seen["camera"] = camera
+        out = work / "film" / "clips" / f"{sid}.mp4"
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_bytes(b"clip")
+        return {"failed": []}
+
+    def fake_frames(st, work, runner, ids, rerolls):
+        seen["rerolls"] = rerolls
+        (work / "film" / "frames" / f"{ids[0]}.png").write_bytes(b"new")
+
+    monkeypatch.setattr(cl.film, "make_clips", fake_clips)
+    monkeypatch.setattr(cl.film, "make_frames", fake_frames)
+    gen = cl.film_generate(story, ws, sid, runner=object(), frame_attempt=0)
+    base = {"seed": 1, "static_camera": False, "native_voice": False, "motion": story.panels[0].motion, "frame_attempt": 0}
+    gen(tmp_path / "w1", base)
+    assert (tmp_path / "w1" / "film" / "frames" / f"{sid}.png").read_bytes() == b"orig" and "rerolls" not in seen and seen["motion"] == story.panels[0].motion
+    gen(tmp_path / "w2", {**base, "motion": "just this", "frame_attempt": 1, "static_camera": True})
+    assert seen["motion"] == "just this" and seen["rerolls"] == {sid: 1} and seen["camera"] == cl.STATIC_CAMERA
+    assert (tmp_path / "w2" / "film" / "frames" / f"{sid}.png").read_bytes() == b"new"
+    assert story.panels[0].motion != "just this"  # the real story object is untouched
+    import pytest as _p
+
+    with _p.raises(RuntimeError):
+        cl.film_generate(story, ws, sid, runner=None, frame_attempt=0)(tmp_path / "w3", {**base, "frame_attempt": 2})

@@ -5,13 +5,15 @@ defect is left, the attempts are used up or no lever is left. Same inputs give t
 relative to the best clip so far. Every attempt (settings, report, decision) is appended to `<ws>/film/history/<shot>.json`; the attempt clips are kept in
 `<ws>/film/attempts/<shot>/`. The shot's real clip in `film/clips` is only replaced when `apply=True`.
 
-Levers implemented: `static_camera` (Static Shot sentence), `seed` (a new deterministic seed). Not implemented, so never chosen: redrawing the first frame,
-editing the action text, `quiet` (needs speech detection, which the evaluator does not do). A defect with no lever left is reported, not hidden.
+Levers: `static_camera` (Static Shot sentence), `simplify_action` (a rule-based cut of the shot's motion text, see `simplify_motion`), `redraw_frame` (a new first
+frame through the one art workflow; needs a runner), `seed` (a new deterministic seed). Not implemented, so never chosen: `quiet` (needs speech detection, which the
+evaluator does not do). A defect with no lever left is reported, not hidden. The lever ORDER per defect is a hypothesis; the history shows which one worked.
 """
 from __future__ import annotations
 
 import hashlib
 import json
+import re
 import shutil
 import time
 from pathlib import Path
@@ -23,7 +25,10 @@ from engine.original.models import OriginalStory
 
 STATIC_CAMERA = "nothing; it is a Static Shot, fixed on a tripod, with no zoom, no pan and no tilt"
 SEVERITY = ["temporal", "consistency", "camera", "artifacts", "motion", "audio"]  # a scene break matters more than a zoom, a zoom more than flicker
-LEVERS = {"temporal": ["static_camera", "seed"], "consistency": ["seed"], "camera": ["static_camera", "seed"], "artifacts": ["seed"], "motion": ["seed"], "audio": []}
+LEVERS = {"temporal": ["static_camera", "simplify_action", "redraw_frame", "seed"], "consistency": ["simplify_action", "redraw_frame", "seed"],
+          "camera": ["static_camera", "seed"], "artifacts": ["seed"], "motion": ["seed"], "audio": []}
+DEFAULT_LEVERS = frozenset({"static_camera", "simplify_action", "seed"})  # redraw_frame is added when a frame runner is available
+LIGHT = re.compile(r"\b(light|lights|glow|glows|glowing|flash|flashes|flare|flares|beam|beams|shaft|shafts|lightning|ray|rays|shine|shines|shining|blaze|blazes|gleam|gleams|bright|brighter|brightens)\b", re.I)
 
 Generate = Callable[[Path, dict], Path]  # (attempt workspace, settings) -> clip path
 
@@ -61,42 +66,72 @@ def better(new: dict, best: dict, act_on_suspected: bool = False) -> tuple[bool,
     return len(nd) < len(bd), f"no meaningful change{note}"
 
 
-def next_lever(report: dict, settings: dict, tried: set, act_on_suspected: bool) -> tuple[str, str] | None:
-    """(lever, axis) for the most severe defect that still has an untried lever; None when nothing can be done."""
+def simplify_motion(text: str, axis: str = "") -> str | None:
+    """A shorter motion text, by rule (generic, nothing per story), or None when there is nothing to cut. By convention the FIRST clause is the main action;
+    the later ones are secondary actions and expressions that H3 over-extends. For a colour/lighting defect (`consistency`) only the clauses that name a light event
+    are dropped (a growing glow washes the whole picture); for any other defect everything after the first clause is dropped."""
+    clauses = [c.strip() for c in text.strip().rstrip(".").split(",") if c.strip()]
+    if axis == "consistency":
+        kept = [c for c in clauses if not LIGHT.search(c)]
+        return ", ".join(kept) if kept and len(kept) < len(clauses) else None
+    return clauses[0] if len(clauses) > 1 else None
+
+
+def next_lever(report: dict, settings: dict, tried: set, act_on_suspected: bool, available: frozenset = DEFAULT_LEVERS) -> tuple[str, str] | None:
+    """(lever, axis) for the most severe defect that still has an untried, usable lever; None when nothing can be done."""
     for f in defects(report, act_on_suspected):
         for lever in LEVERS.get(f["axis"], []):
+            if lever not in available or (lever, f["axis"]) in tried:
+                continue
             if lever == "static_camera" and settings.get("static_camera"):
                 continue
-            if (lever, f["axis"]) not in tried:
-                return lever, f["axis"]
+            if lever == "simplify_action" and simplify_motion(settings.get("motion") or "", f["axis"]) in (None, settings.get("motion")):
+                continue
+            return lever, f["axis"]
     return None
 
 
-def apply_lever(lever: str, settings: dict, n: int) -> dict:
+def apply_lever(lever: str, settings: dict, n: int, axis: str = "") -> dict:
     new = dict(settings)
     if lever == "static_camera":
         new["static_camera"] = True
+    elif lever == "simplify_action":
+        new["motion"] = simplify_motion(settings["motion"], axis)
+    elif lever == "redraw_frame":
+        new["frame_attempt"] = settings.get("frame_attempt", 0) + 1
     else:  # seed: derived from the previous one and the attempt number, so it is reproducible
         new["seed"] = int(hashlib.sha256(f"{settings['seed']}|retry|{n}".encode()).hexdigest()[:12], 16)
     return new
 
 
 def baseline_settings(story: OriginalStory, ws: Path, sid: str) -> dict:
-    """Seed and voice mode the shot was made with (clips.json), else the default seed film.make_clips would use."""
+    """What the shot was made with: seed and voice mode (clips.json, else the default seed film.make_clips would use), motion text, first-frame attempt."""
     log = ws / "film" / "clips.json"
     entry = json.loads(log.read_text(encoding="utf-8")).get(sid, {}) if log.exists() else {}
     seed = entry.get("seed") or int(hashlib.sha256(f"{story.bible.premise.title}|{sid}|clip".encode()).hexdigest()[:12], 16)
-    return {"seed": seed, "static_camera": False, "native_voice": bool(entry.get("native_voice"))}
+    panel = next((p for p in story.panels if p.id == sid), None)
+    flog = ws / "film" / "frames.json"
+    frame = json.loads(flog.read_text(encoding="utf-8")).get(sid, {}).get("attempt", 0) if flog.exists() else 0
+    return {"seed": seed, "static_camera": False, "native_voice": bool(entry.get("native_voice")), "motion": panel.motion if panel else "", "frame_attempt": frame}
 
 
-def film_generate(story: OriginalStory, ws: Path, sid: str) -> Generate:
-    """Generator that runs `film.make_clips` for one shot in its own workspace (frames copied in), so the story's real clips are never touched."""
+def film_generate(story: OriginalStory, ws: Path, sid: str, runner=None, frame_attempt: int = 0) -> Generate:
+    """Generator that runs `film.make_clips` for one shot in its own workspace, so the story's real clips are never touched. A changed `motion` is applied to a copy
+    of the story. A changed `frame_attempt` redraws the first frame with `film.make_frames` (needs `runner`, an `art.ComfyRunner`); otherwise the original frame is copied."""
     def run(work: Path, settings: dict) -> Path:
+        story2 = story
+        if settings.get("motion") is not None and any(p.id == sid and p.motion != settings["motion"] for p in story.panels):
+            story2 = story.model_copy(update={"panels": [p.model_copy(update={"motion": settings["motion"]}) if p.id == sid else p for p in story.panels]})
         (work / "film" / "frames").mkdir(parents=True, exist_ok=True)
-        shutil.copy2(ws / "film" / "frames" / f"{sid}.png", work / "film" / "frames" / f"{sid}.png")
+        if settings.get("frame_attempt", 0) != frame_attempt:
+            if runner is None:
+                raise RuntimeError("redraw_frame needs a frame runner")
+            film.make_frames(story2, work, runner, ids=[sid], rerolls={sid: settings["frame_attempt"]})
+        else:
+            shutil.copy2(ws / "film" / "frames" / f"{sid}.png", work / "film" / "frames" / f"{sid}.png")
         if (ws / "film" / "voices.json").exists():
             shutil.copy2(ws / "film" / "voices.json", work / "film" / "voices.json")
-        res = film.make_clips(story, work, ids=[sid], seeds={sid: settings["seed"]}, native_voice=settings["native_voice"], camera=STATIC_CAMERA if settings["static_camera"] else None)
+        res = film.make_clips(story2, work, ids=[sid], seeds={sid: settings["seed"]}, native_voice=settings["native_voice"], camera=STATIC_CAMERA if settings["static_camera"] else None)
         if res["failed"]:
             raise RuntimeError(f"generation failed: {res['failed']}")
         return work / "film" / "clips" / f"{sid}.mp4"
@@ -108,7 +143,7 @@ def _brief(report: dict) -> dict:
 
 
 def improve_clip(sid: str, ws: Path, generate: Generate, settings: dict, *, attempts: int = 3, expect_camera: str = "static", act_on_suspected: bool = False,
-                 apply: bool = False, expect_audio: bool = True, now: Callable[[], float] = time.monotonic) -> dict:
+                 apply: bool = False, expect_audio: bool = True, levers: frozenset = DEFAULT_LEVERS, now: Callable[[], float] = time.monotonic) -> dict:
     """Run the loop for shot `sid`. `generate(work_dir, settings)` returns the new clip; `settings` are the shot's current settings (`baseline_settings`).
     Returns {"best": path, "report": best report, "history": [...], "stopped": reason}."""
     fd = ws / "film"
@@ -139,19 +174,19 @@ def improve_clip(sid: str, ws: Path, generate: Generate, settings: dict, *, atte
     for n in range(1, attempts + 1):
         if not defects(best, act_on_suspected):
             break
-        pick = next_lever(best, best_set, tried, act_on_suspected)
+        pick = next_lever(best, best_set, tried, act_on_suspected, levers)
         if pick is None:
             stopped = "no lever left for the remaining defect"
             break
         lever, axis = pick
         tried.add((lever, axis))
-        new_set = apply_lever(lever, best_set, n)
+        new_set = apply_lever(lever, best_set, n, axis)
         t0 = now()
         clip = adir / f"r{run_id}_a{n}.mp4"
         shutil.copy2(generate(adir / f"r{run_id}_a{n}_work", new_set), clip)
         rep = ev(clip)
         win, why = better(rep, best, act_on_suspected)
-        log({"attempt": n, "lever": lever, "for_axis": axis, "settings": new_set, "clip": clip.name, "report": _brief(rep), "elapsed_s": round(now() - t0, 1),
+        log({"attempt": n, "lever": lever, "for_axis": axis, "settings": new_set, "changed": {k: [best_set.get(k), v] for k, v in new_set.items() if best_set.get(k) != v}, "clip": clip.name, "report": _brief(rep), "elapsed_s": round(now() - t0, 1),
              "decision": "kept" if win else "discarded", "reason": why})
         if win:
             best_path, best_set, best = clip, new_set, rep
@@ -174,14 +209,21 @@ def main() -> None:  # python -m engine.original.clip_loop <story_dir> <shot> [-
     ap.add_argument("--camera", default="static", choices=["static", "any"])
     ap.add_argument("--suspected", action="store_true", help="also act on suspected flags (look at the frames first)")
     ap.add_argument("--apply", action="store_true", help="replace film/clips/<shot>.mp4 with the best clip")
+    ap.add_argument("--no-redraw", action="store_true", help="do not use the redraw_frame lever (no art runner)")
     a = ap.parse_args()
     ws = Path(a.story_dir)
     story = OriginalStory.model_validate(json.loads((ws / "story.json").read_text(encoding="utf-8")))
-    out = improve_clip(a.shot, ws, film_generate(story, ws, a.shot), baseline_settings(story, ws, a.shot), attempts=a.attempts, expect_camera=a.camera,
-                       act_on_suspected=a.suspected, apply=a.apply)
+    base = baseline_settings(story, ws, a.shot)
+    runner = None
+    if not a.no_redraw:
+        from engine.original import art as art_mod
+
+        runner = art_mod.ComfyRunner()
+    out = improve_clip(a.shot, ws, film_generate(story, ws, a.shot, runner, base["frame_attempt"]), base, attempts=a.attempts, expect_camera=a.camera,
+                       act_on_suspected=a.suspected, apply=a.apply, levers=DEFAULT_LEVERS | ({"redraw_frame"} if runner else set()))
     print(json.dumps({k: v for k, v in out.items() if k != "history"}, indent=1))
     for h in out["history"]:
-        print(h["attempt"], h["lever"], h["decision"], h["reason"], [f"{f['axis']}:{f['status']}" for f in h["report"]["flags"]])
+        print(h["attempt"], h["lever"], h["decision"], h["reason"], h.get("changed", ""), [f"{f['axis']}:{f['status']}" for f in h["report"]["flags"]])
 
 
 if __name__ == "__main__":
