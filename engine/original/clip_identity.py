@@ -184,3 +184,34 @@ async def count_check(path: Path, kinds: dict[str, int], provider, frames: int =
         out[kind] = counts
         flags += judge_counts(kind, [expected_at(kind, t) for t in times] if expected_at else expected, counts, times)
     return {"counts": out, "flags": flags, "times": times}
+
+
+# ------------------------------------------------------------------ where in the picture? (does the walker really start on one side and end on the other)
+SIDE_SCHEMA = {"type": "object", "properties": {"side": {"type": "string", "enum": ["left", "center", "right"]}}, "required": ["side"]}
+SIDE_PROMPTS = (
+    "In which part of this picture is the {thing}: the left third, the middle third or the right third? Reply as JSON {{\"side\": \"left\" or \"center\" or \"right\"}}.",
+    "Look only at the {thing}. Is it mostly on the left, in the center or on the right of the picture? Reply as JSON {{\"side\": \"left\" or \"center\" or \"right\"}}.",
+)
+
+
+async def side_of(provider, png: bytes, kind: str) -> str | None:
+    """left | center | right where the two answers agree, else None."""
+    got = []
+    for tpl in SIDE_PROMPTS:
+        raw = await provider.analyze_vision(png, tpl.format(thing=kind), system_prompt="You are a careful visual inspector. Output only JSON.", format_schema=SIDE_SCHEMA, max_tokens=40, temperature=0.0)
+        try:
+            got.append(json.loads(raw)["side"])
+        except Exception:
+            got.append(None)
+    return got[0] if got[0] and got[0] == got[1] else None
+
+
+def walk_ok(direction: str, start: str | None, end: str | None) -> list[str]:
+    """Problems with a walker's two pictures: it must start on the far side (or the middle) and end on the near side (or the middle), and not be on the same side in both."""
+    if start is None or end is None:
+        return []
+    order = {"left": 0, "center": 1, "right": 2}
+    delta = order[end] - order[start]
+    if (direction == "right" and delta <= 0) or (direction == "left" and delta >= 0):
+        return [f"walking {direction}, but the start picture has them on the {start} and the end picture on the {end}"]
+    return []

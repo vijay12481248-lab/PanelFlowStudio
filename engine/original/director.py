@@ -183,8 +183,8 @@ def check_take(o: _TakeOut, bible, seconds: float, facts: list[str], genre: Genr
         p.append(f"location_id must be one of {sorted(locs)}")
     words = len(o.narration.split())
     budget = narration_budget(seconds)
-    if not budget * 0.45 <= words <= budget:
-        p.append(f"narration has {words} words; write {int(budget * 0.7)} words (allowed {int(budget * 0.45)}-{budget}) so it fills about {seconds:.0f} s of speech")
+    if not budget * 0.65 <= words <= budget:
+        p.append(f"narration has {words} words; write {int(budget * 0.85)} words (allowed {int(budget * 0.65)}-{budget}) so it fills the {seconds:.0f} s (measured: 9-13 words in an 18-word slot left half the video silent)")
     if SPEECH.search(" ".join(s.action for s in o.shots)):
         p.append("nobody speaks on screen: the narration is a voice-over; describe what the viewer sees, not speech")
     if not storyboard and not 2 <= len(o.shots) <= 3:
@@ -225,14 +225,27 @@ STOP_WORDS = {"the", "a", "an", "and", "or", "of", "to", "in", "on", "at", "with
 
 def content_words(text: str) -> set[str]:
     """Rough stems (first 5 letters of every content word): enough to ask 'does a shot talk about walking?' without an NLP library."""
-    return {w[:5] for w in re.findall(r"[a-z]+", text.lower()) if w not in STOP_WORDS and len(w) > 2}
+    out = set()
+    for w in re.findall(r"[a-z]+", text.lower()):
+        if w in STOP_WORDS or len(w) <= 2:
+            continue
+        for suffix in ("ing", "ed", "es", "s"):  # walks / walked / walking are one word
+            if w.endswith(suffix) and len(w) - len(suffix) >= 3:
+                w = w[:-len(suffix)]
+                break
+        out.add(w[:5])
+    return out
 
 
 def uncovered(must_show: list[str], panels: list[Panel], cast_text: str = "") -> list[str]:
     """Requirements of the brief that no shot of the plan shows: a requirement is covered when at least half of its content words (stems) occur in the shots' actions."""
-    shown = content_words(" ".join(s["action"] for p in panels for s in p.shots) + " " + cast_text)  # the cast covers "a young woman guide" and "one cat"
+    actions = " ".join(s["action"] for p in panels for s in p.shots)
+    shown = content_words(actions + " " + cast_text)  # the cast covers "a young woman guide" and "one cat"
     out = []
     for r in must_show:
+        if LOCOMOTION.search(r) and not LOCOMOTION.search(actions):  # "the guide walks": somebody must walk in what is SHOWN (a start action), not only be said to have walked
+            out.append(r)
+            continue
         words = content_words(r)
         if words and len(words & shown) * 2 < len(words):
             out.append(r)
@@ -250,7 +263,7 @@ async def _take(provider, bible, premise, genre, i: int, n: int, seconds: float,
     shots_ask = "ONE shot" if storyboard else "2-3 shots inside this take"
     ask = (f"Video: {premise.title}. {premise.logline}\nCast: {cast}\nPlaces: {places}\n"
            f"Take {i + 1} of {n}, {seconds:.0f} seconds long. It must explain: {' | '.join(facts)}\nEarlier narration (do not repeat it): {prev or 'none'}\n"
-           f"Write the narration (about {int(narration_budget(seconds) * 0.75)} words, never more than {narration_budget(seconds)}) and {shots_ask} that SHOW the facts as pictures "
+           f"Write the narration (about {int(narration_budget(seconds) * 0.85)} words, never more than {narration_budget(seconds)}) and {shots_ask} that SHOW the facts as pictures "
            "(a story-world visual metaphor or a real scene, no text on screen). Only characters who are in the first shot may appear later in the take. The camera is fixed "
            "unless a shot truly needs a slow move. Nobody speaks on screen; the narration is a voice-over." + (f"\n{STORYBOARD_ASK}" if storyboard else "") + (f"\n{extra}" if extra else ""))
     from engine.llm.errors import GenerationLimitError
@@ -285,7 +298,7 @@ async def direct(brief: str, provider, total_seconds: float = 60.0, max_take: fl
     seconds = round(total_seconds / n, 2)
     progress(0.05, "Writer: premise and teaching points")
     w = await sm._ask(provider, f"Brief from the owner: {brief}\nPlan an informative video of {total_seconds:.0f} seconds in {n} parts. Give a title, a two-sentence logline (name the guide "
-                      f"and any companion the brief asks for), the setting, {n if storyboard and n > 4 else n * 2} teaching facts in the order they are explained (accurate and concrete), and must_show: "
+                      f"and any companion the brief asks for), the setting, {n if storyboard and n > 4 else n * 2} teaching facts in the order they are explained (the FIRST is a hook that makes the viewer curious, the LAST a one-sentence takeaway; accurate and concrete), and must_show: "
                       "up to 4 short phrases copied from the brief for everything the brief says the viewer must SEE (who is there, how many, what they do).",
                       _Writer, lambda o: check_writer(o, n, genre, brief), temperature=0.7, max_tokens=900)
     premise = sm.Premise(title=w.title.strip(), genre="explainer", logline=w.logline.strip(), tone=genre.tone, setting=w.setting.strip())

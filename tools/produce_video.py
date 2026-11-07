@@ -75,10 +75,10 @@ async def stage_frames(story: OriginalStory, ws: Path) -> dict:
             rerolls[pid] = rerolls.get(pid, 0) + 1
 
 
-def stage_clips(story: OriginalStory, ws: Path, board: bool = False) -> dict:
+def stage_clips(story: OriginalStory, ws: Path, board: bool = False, ids: list[str] | None = None, attempt: int = 0) -> dict:
     release_ollama()
     if board:
-        res = storyboard.make_clips(story, ws, progress=lambda m: print(m, flush=True))
+        res = storyboard.make_clips(story, ws, ids=ids, progress=lambda m: print(m, flush=True), attempt=attempt)
         if res["failed"]:
             raise RuntimeError(f"shot(s) could not be generated: {res['failed']}")
         return res
@@ -106,8 +106,9 @@ async def stage_qa(story: OriginalStory, ws: Path) -> dict:
         kinds = {k: len(v) for k, v in film.cast_kinds(story, p.character_ids).items()}
         counts = await ci.count_check(clip, kinds, provider, expected_at=lambda k, t, p=p: len(film.cast_kinds(story, shot_at(p, t).get("characters", [])).get(k, [])))
         qa[p.id] = {"eval": {k: rep[k] for k in ("frames", "seconds", "camera", "cuts_s", "flicker", "drift", "motion")}, "flags": rep["flags"] + ident["flags"] + counts["flags"],
-                    "presence": {n: d["presence"] for n, d in ident["characters"].items()}, "counts": counts["counts"]}
-        print(f"  qa {p.id}: {rep['seconds']} s, flags {[f['axis'] + ':' + f['status'][:4] for f in qa[p.id]['flags']]}, presence {qa[p.id]['presence']}, counts {counts['counts']}", flush=True)
+                    "presence": {n: d["presence"] for n, d in ident["characters"].items()}, "counts": counts["counts"],
+                    "landing": storyboard.landing(ws, p) if (ws / "film" / "frames" / f"{p.id}_end.png").exists() else None}
+        print(f"  qa {p.id}: {rep['seconds']} s, flags {[f['axis'] + ':' + f['status'][:4] for f in qa[p.id]['flags']]}, presence {qa[p.id]['presence']}, counts {counts['counts']}, landing {qa[p.id]['landing']}", flush=True)
     (ws / "qa.json").write_text(json.dumps(qa, indent=1), encoding="utf-8")
     return qa
 
@@ -123,6 +124,8 @@ def main() -> None:
     ap.add_argument("--seconds", type=float, default=60.0)
     ap.add_argument("--max-take", type=float, default=director.MAX_TAKE)
     ap.add_argument("--stage", default="all", choices=["plan", "frames", "clips", "qa", "master", "all"])
+    ap.add_argument("--ids", default="", help="only these shots (comma list), e.g. t1,t6")
+    ap.add_argument("--attempt", type=int, default=0, help="retry number: a new seed for the shots in --ids")
     ap.add_argument("--storyboard", action="store_true", help="storyboard approach: draw and check a start and an end picture per shot, then animate between them (FL2VA)")
     a = ap.parse_args()
     ws = ROOT / a.slug
@@ -137,7 +140,7 @@ def main() -> None:
         else:
             print("frames:", asyncio.run(stage_frames(story, ws)), flush=True)
     if want("clips"):
-        print("clips:", json.dumps(stage_clips(story, ws, a.storyboard)), flush=True)
+        print("clips:", json.dumps(stage_clips(story, ws, a.storyboard, [i for i in a.ids.split(",") if i] or None, a.attempt)), flush=True)
     if want("qa"):
         asyncio.run(stage_qa(story, ws))
     if want("master"):

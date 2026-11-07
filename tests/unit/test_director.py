@@ -200,3 +200,12 @@ def test_characters_are_never_carried_by_or_perched_on_each_other():
     t = _take()
     t.shots[0] = _shot(action="Mira stands in the field while Pip sits on her right shoulder and watches the clouds above them.")
     assert any("carried by or sits on another character" in p for p in d.check_take(t, b, 15, [], G))
+
+
+def test_walks_walked_and_walking_are_one_word_and_a_walker_must_be_shown_walking():
+    assert d.content_words("the guide walks") == d.content_words("she walked") == d.content_words("walking")
+    only_said = [d.Panel(id="t1", scene_id="s1", shot="wide", angle="eye_level", location_id="x", character_ids=[], action="a", seconds=7.5,
+                         shots=[{"at": 0, "framing": "wide", "camera": "", "action": "Maya stands in the field while the cat sits beside her.", "characters": []}], end_state="Maya has walked slowly to the right.")]
+    assert d.uncovered(["the guide walks through the landscape"], only_said) == ["the guide walks through the landscape"]  # 'has walked' in an END state is not walking on screen
+    only_said[0].shots[0]["action"] = "Maya walks to the right across the field while the cat sits beside her."
+    assert d.uncovered(["the guide walks through the landscape"], only_said) == []

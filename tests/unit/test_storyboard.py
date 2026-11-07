@@ -88,7 +88,7 @@ def test_clip_prompt_pins_the_cast_the_camera_and_the_ending(story):
     p = _panel(story, 0, character_ids=["mira", "pip"], action="Mira walks to the right across the meadow")
     text = sb.clip_prompt(story, p, 7.5)
     assert text.startswith("How the reference pictures align with the target video — Picture 1 (from Shot 1) aligns with the 0.00-second mark")
-    assert "exactly one girl (Mira)" in text and "no other people or animals appear" in text and "Static Shot" in text and "ends exactly as the last picture shows: Mira stands at the far right" in text
+    assert "exactly one girl (Mira)" in text and "no other people or animals appear" in text and "Static Shot" in text and "The last picture shows: Mira stands at the far right" in text
 
 
 def test_make_clips_anchors_silence_and_lands_between_the_two_pictures(story, tmp_path, monkeypatch):
@@ -169,3 +169,37 @@ def test_the_keyframe_prompt_mentions_the_cat_only_in_its_own_entry(story):
     p = _panel(story, 0, character_ids=["mira", "pip"], action="Mira stands center-left while Pip sits on a rock to her right and watches the lightning")
     start, _ = sb.keyframe_prompt(story, p, "start")
     assert start.lower().count("on a rock") == 1  # once, in Pip's entry (not again in Mira's)
+
+
+def test_clip_prompt_keeps_everyone_in_frame_and_the_camera_still(story):
+    text = sb.clip_prompt(story, _panel(story, 0, character_ids=["mira", "pip"]), 8.0)
+    assert "Everyone stays inside the frame for the whole shot" in text and "The camera never tilts, pans or moves" in text and "never cover the characters" in text
+
+
+def test_clip_prompt_does_not_send_the_story_events_only_a_gradual_change(story):
+    p = _panel(story, 0, character_ids=["mira"], action="A massive blue lightning bolt arcs down while the sky explodes")
+    text = sb.clip_prompt(story, p, 8.0)
+    assert "lightning" not in text and "changes gradually and smoothly from the first picture into the last picture" in text and "only a little" in text
+    walk = sb.clip_prompt(story, _panel(story, 0, character_ids=["mira"], action="Mira walks to the right across the meadow"), 8.0)
+    assert "walks to the right across the frame, in profile" in walk
+
+
+def test_a_walker_must_end_on_the_other_side(story, tmp_path):
+    from engine.original import clip_identity as ci
+
+    assert ci.walk_ok("right", "left", "right") == [] and ci.walk_ok("right", "left", "center") == [] and ci.walk_ok("left", "right", "left") == []
+    assert ci.walk_ok("right", "left", "left") and ci.walk_ok("right", "right", "left") and ci.walk_ok("left", "center", "right")
+    assert ci.walk_ok("right", None, "right") == []  # unknown is not a problem
+    p1 = _panel(story, 0, id="w1", character_ids=["mira"], action="Mira walks to the right across the meadow")
+    st = story.model_copy(update={"panels": [p1]})
+
+    class Runner:
+        def generate(self, *a):
+            return _png(90)
+
+    class Provider:  # the girl is on the left in both pictures: the walk is not drawn
+        async def analyze_vision(self, png, prompt, **kw):
+            return json.dumps({"side": "left"} if "left third" in prompt or "mostly on the left" in prompt else {"count": 1})
+
+    rep = asyncio.run(sb.draw(st, tmp_path, Runner(), Provider(), tries=2, progress=lambda m: None))
+    assert rep["w1"]["attempts"] == 2 and rep["w1"]["problems"].get("walk")

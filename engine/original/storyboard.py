@@ -98,6 +98,11 @@ def keyframe_prompt(story: OriginalStory, panel: Panel, which: str) -> tuple[str
     return art_mod.build_prompt(story, panel.model_copy(update={"director": spec.model_dump()}), style="natural", engine="qwen")
 
 
+def panel_first_kind(story: OriginalStory, panel: Panel) -> str | None:
+    kinds = list(film.cast_kinds(story, panel.character_ids[:1]))
+    return kinds[0] if kinds else None
+
+
 def continues(prev: Panel | None, panel: Panel) -> bool:
     """The shot starts where the previous one ended: same place, same cast (then its start picture IS the previous end picture)."""
     return prev is not None and prev.location_id == panel.location_id and set(prev.character_ids) == set(panel.character_ids) and bool(prev.end_state)
@@ -145,6 +150,11 @@ async def draw(story: OriginalStory, ws: Path, runner, provider, tries: int = 4,
             pos, neg = keyframe_prompt(story, p, "end")
             end.write_bytes(runner.generate(pos, neg, seed, SIZE[0], SIZE[1], f"sb_{p.id}_end"))  # the same seed: the same characters, a different moment
             info["problems"] = {w: await picture_problems(story, p, f.read_bytes(), provider) for w, f in (("start", start), ("end", end))}
+            if info["direction"] and panel_first_kind(story, p):  # a walker must really start on one side and end on the other
+                kind = panel_first_kind(story, p)
+                walk = ci.walk_ok(info["direction"], await ci.side_of(provider, start.read_bytes(), kind), await ci.side_of(provider, end.read_bytes(), kind))
+                if walk:
+                    info["problems"]["walk"] = walk
             info["problems"] = {k: v for k, v in info["problems"].items() if v}
             progress(f"  {p.id}: try {attempt + 1}{' (start = previous end)' if chained else ''}: {info['problems'] or 'cast counts match the plan'}")
             if not info["problems"]:
@@ -156,13 +166,24 @@ async def draw(story: OriginalStory, ws: Path, runner, provider, tries: int = 4,
     return report
 
 
+STAY_IN_FRAME = ("Everyone stays inside the frame for the whole shot, in the same place and size as in the pictures. The camera never tilts, pans or moves. Weather, smoke and light effects "
+                 "stay small and in the background and never cover the characters or fill the frame.")  # measured: with only the story text H3 filled the middle of 4 of 8 shots with smoke, a different scene or a tilt up to the sky
+
+
 def clip_prompt(story: OriginalStory, panel: Panel, seconds: float) -> str:
     """The FL2VA prompt: the start action, the closed cast, the camera, and how the shot must end (the last picture)."""
-    action = f"{panel.action.rstrip('.')}. {film.count_clause(story, panel.character_ids)} The shot ends exactly as the last picture shows: {panel.end_state.rstrip('.')}"
+    d = walk_direction(panel)
+    names = [c.name for c in story.bible.characters if c.id in panel.character_ids]
+    if d:
+        move = f"{' and '.join(names)} {'walks' if len(names) == 1 else 'walk'} {'to the right' if d == 'right' else 'to the left'} across the frame, in profile, from their place in the first picture to their place in the last picture."
+    else:
+        move = "Everyone stays where they are and moves only a little (a turn of the head, a gesture, a blink)."
+    # The story text (lightning arcs, air lifts people) is NOT sent: both pictures already show it, and H3 acts out every event it is told about (a "massive lightning bolt" made a whole new lightning scene in the middle of a shot).
+    action = f"The scene changes gradually and smoothly from the first picture into the last picture. {move} {film.count_clause(story, panel.character_ids)} {STAY_IN_FRAME} The last picture shows: {panel.end_state.rstrip('.')}"
     return h3_modes.fl2va_prompt(action, seconds, camera=panel.camera or STATIC_CAMERA)
 
 
-def make_clips(story: OriginalStory, ws: Path, ids: list[str] | None = None, timeout: float = 3600.0, progress: Callable[[str], None] = print) -> dict:
+def make_clips(story: OriginalStory, ws: Path, ids: list[str] | None = None, timeout: float = 3600.0, progress: Callable[[str], None] = print, attempt: int = 0) -> dict:
     """One FL2VA clip per shot, `film/clips/<id>.mp4`, between its start and end picture, sound anchored to silence; the narrator's voice is written to `film/voice/<id>.wav` for the
     master. A clip newer than its pictures and prompt is reused."""
     from engine.narration.runtime import audio as rt
@@ -185,7 +206,7 @@ def make_clips(story: OriginalStory, ws: Path, ids: list[str] | None = None, tim
         secs = max(film.snap_frames(p.seconds) / film.FPS, spoken[1] if spoken else 0)
         silent, secs = film.silent_shot(ws, p, secs)
         prompt = clip_prompt(story, p, secs)
-        seed = int(hashlib.sha256(f"{story.bible.premise.title}|{p.id}|storyboard".encode()).hexdigest()[:12], 16)
+        seed = int(hashlib.sha256(f"{story.bible.premise.title}|{p.id}|storyboard{f'|retry{attempt}' if attempt else ''}".encode()).hexdigest()[:12], 16)  # a retry is a new seed, nothing else
         sig = hashlib.sha256(f"{prompt}|{seed}|{secs}|{start.stat().st_mtime_ns}|{end.stat().st_mtime_ns}".encode()).hexdigest()[:16]
         if out.exists() and log.get(p.id, {}).get("sig") == sig:
             reused.append(p.id)
