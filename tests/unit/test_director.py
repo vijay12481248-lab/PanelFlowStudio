@@ -243,3 +243,25 @@ def test_character_ids_tolerate_the_models_wording():
     chars = {c.id: c for c in _real_bible().characters}
     assert d.character_id("Mira: center facing right", chars) == "mira" and d.character_id(" PIP ", chars) == "pip" and d.character_id("dragon", chars) == "dragon"
     assert d.character_id("mira stands center-left pointing at the sky", chars) == "mira"
+
+
+def test_a_short_line_is_lengthened_by_one_focused_rewrite_and_kept_when_no_rewrite_passes():
+    short = "Lightning flashes when charges separate."
+    long_ok = "Look at that bright lightning bolt flashing across dark clouds when the charges inside them separate."  # 16 words: inside 14-18
+
+    class Fake:
+        def __init__(self, answers):
+            self.answers = answers
+
+        async def generate_structured(self, prompt, model, **kw):
+            assert "ONE concrete detail" in prompt and short in prompt
+            return d._Line(narration=self.answers.pop(0))
+
+    out = asyncio.run(d.lengthen(Fake(["Lightning flashes.", long_ok]), short, "a bright lightning bolt across dark clouds", ["Charges separate."], 7.5))
+    assert out == long_ok  # the too-short first rewrite was refused, the second passed
+    assert asyncio.run(d.lengthen(Fake(["no"] * 4), short, "a bright lightning bolt", [], 7.5)) == short
+
+
+def test_planned_length_follows_the_words():
+    p = lambda words: d.Panel(id="t", scene_id="s", shot="wide", angle="eye_level", location_id="l", character_ids=[], action="x", dialogue=[d.Line(speaker_id="narrator", text=" ".join(["w"] * words))])  # noqa: E731
+    assert 5.0 < d.planned_seconds([p(13)]) < 5.9 and 6.5 < d.planned_seconds([p(18)]) < 7.4

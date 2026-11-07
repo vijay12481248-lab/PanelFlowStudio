@@ -329,6 +329,8 @@ async def _take(provider, bible, premise, genre, i: int, n: int, seconds: float,
             got = await sm._ask(provider, ask, _BoardTake if storyboard else _TakeOut, check, temperature=temperature, max_tokens=tokens, attempts=7)
             out = as_take(got)
             check_take(out, bible, seconds, facts, genre, i, storyboard, prev)  # normalises wording on the object that is returned
+            if storyboard and len(out.narration.split()) < round(narration_budget(seconds) * 0.8):
+                out.narration = await lengthen(provider, out.narration, out.visual, facts, seconds, prev)
             return out
         except GenerationLimitError:
             continue
@@ -343,6 +345,38 @@ def _panel(i: int, t: _TakeOut, seconds: float, facts: list[str], genre: Genre, 
             Panel(id=f"t{i + 1}", scene_id=f"s{i + 1}", shot=first.framing, angle="eye_level", location_id=t.location_id, character_ids=first.characters, action=first.action.strip(),
                   dialogue=[Line(speaker_id="narrator", text=t.narration.strip())], caption="", motion=first.action.strip(), seconds=seconds, shots=shots, end_state=t.end_state.strip(), atmosphere=sky.strip(),
                   key_visuals=[t.visual.strip()] if t.visual.strip() else []))
+
+
+class _Line(BaseModel):
+    narration: str = Field(description="the rewritten voice-over line")
+
+
+async def lengthen(provider, line: str, visual: str, facts: list[str], seconds: float, prev: str = "") -> str:
+    """A short line made longer by ONE focused rewrite (the 9B writes 10-12 words where 16-18 are asked while it juggles every take rule at once; measured: the
+    third storm video came out 39 s instead of 60, because storyboard clips last as long as their line). Same meaning, one more concrete detail about what the
+    picture shows; still mentions the visual and does not repeat earlier narration. The original line is kept when no rewrite passes."""
+    budget = narration_budget(seconds)
+    low, high = round(budget * 0.8), budget
+    ask = (f"Rewrite this voice-over line for a {seconds:.0f}-second shot so it has {round(budget * 0.9)} words (between {low} and {high}). Keep its meaning and its friendly "
+           f"spoken tone, and add ONE concrete detail about what the viewer sees: {visual}. Facts it explains: {' | '.join(facts)}. No stage directions.\n"
+           f"Line: {line}")
+
+    def check(o: _Line) -> list[str]:
+        words = len(o.narration.split())
+        t = _TakeOut(location_id="", narration=o.narration, shots=[], visual=visual)
+        return ([] if low <= words <= high else [f"the line has {words} words; it needs {low}-{high}"]) + picture_first(t, prev)
+
+    try:
+        return (await sm._ask(provider, ask, _Line, check, temperature=0.6, max_tokens=400, attempts=4)).narration.strip()
+    except Exception:  # noqa: BLE001 - best effort: a short line is still a valid line
+        return line
+
+
+def planned_seconds(panels: list[Panel]) -> float:
+    """Rough length of a storyboard video before any clip is made: each line at the measured pace plus the voice padding, on the H3 grid."""
+    from engine.original import film
+
+    return sum(film.snap_frames(len(p.dialogue[0].text.split()) / WORDS_PER_SECOND + film.LEAD_SEC + film.TAIL_SEC) / film.FPS for p in panels if p.dialogue)
 
 
 async def direct(brief: str, provider, total_seconds: float = 60.0, max_take: float = MAX_TAKE, progress=lambda pct, msg: None, storyboard: bool = False) -> OriginalStory:
@@ -380,5 +414,7 @@ async def direct(brief: str, provider, total_seconds: float = 60.0, max_take: fl
             scenes[i], panels[i] = _panel(i, t, seconds, dealt[i], genre, skies[i])
         except ValueError as exc:  # best effort: keep the take that passed its checks and say what is missing
             warnings.append(f"the brief says '{r}' but no take shows it (rewrite of take {i + 1} failed: {str(exc)[:160]})")
+    if storyboard and planned_seconds(panels) < 0.85 * total_seconds:
+        warnings.append(f"the narration is short: the video will last about {planned_seconds(panels):.0f} s of the {total_seconds:.0f} s asked")
     progress(1.0, "Plan complete")
     return OriginalStory(bible=bible, scenes=scenes, panels=panels, warnings=warnings)
