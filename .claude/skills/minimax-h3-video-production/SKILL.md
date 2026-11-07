@@ -46,4 +46,4 @@ A guide for agents. It does not generate anything itself: the tools below do. It
 | Many clips / a 5+ minute video | `references/multi-clip.md` |
 
 ## Not built yet (do not pretend they exist)
-A lever for shots whose first frame does not match the action (`p005`), the `quiet` lever, API/MCP/UI hook for the loop (command line only), identity/object checks (no face/CLIP/SAM3 measurement yet), FL2VA workflow, reference mode weights, ChronoFlow UI still shows constant fake scores from the deprecated `chronoflow/reviewer.py`.
+The `quiet` lever, a metric that shows scene-continuity gains (the evaluator missed `p005`'s), API/MCP/UI hook for the loop (command line only), identity/object checks (no face/CLIP/SAM3 measurement yet), FL2VA workflow, reference mode weights, ChronoFlow UI still shows constant fake scores from the deprecated `chronoflow/reviewer.py`.

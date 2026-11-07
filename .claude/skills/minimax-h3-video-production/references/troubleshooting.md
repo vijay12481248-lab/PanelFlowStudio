@@ -6,7 +6,7 @@ Cases are from this project. See `regeneration.md` for the loop.
 |---|---|---|
 | Camera pushes in / zooms | `evaluate` camera flag; is the camera sentence a push-in? | Static Shot sentence (Phase 1: 38% -> 0.8%) |
 | Subject suddenly bigger in a "static" clip | subject lunging vs camera: border-ring zoom in report | Accept if it is the action; else shorten/soften the action |
-| Scene jumps mid-clip (`p005`: close-up -> flying glider at 0.58 s) | cut flag with time | one action per clip; remove travel words; split the shot |
+| Scene jumps mid-clip (`p005`: close-up -> flying glider at 0.58 s) | cut flag with time; does the first frame show what the action needs? | `static_camera`, then `widen_frame` (a wider first frame fixed it); else one action per clip, split the shot |
 | Hair/outfit/colour changes (`p004_1`, `p070`) | drift flag + contact sheet | simpler action, shorter clip, redraw frame, new seed |
 | Screen goes dark or flashes (`p019_1`) | drift + flicker flags | remove light-event words, new seed |
 | Glass/object changes state (juice appears) | contact sheet | remove result-implying verb; name the end state |

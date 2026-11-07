@@ -29,13 +29,14 @@ Change prompt and seed together; stretch clip length to "give H3 more room" `[ve
 ## History (record per attempt)
 `shot id, attempt n, mode, prompt, first-frame hash, seed, workflow sha, length, evaluator report (flags with t), lever applied, result (kept/discarded), reason`. `film/clips.json` already stores sig, seed, seconds, prompt, workflow, prompt_id, elapsed, stats per shot; the loop writes the per-attempt record to `<ws>/film/history/<shot>.json` and keeps attempt clips in `<ws>/film/attempts/<shot>/` (real `film/clips` is replaced only with `--apply`).
 
-The loop has four levers and judges by the worst defect in severity order (temporal > consistency > camera > artifacts > motion > audio); on the same axis a new clip must be at least 25% smaller in the measured number, a tie falls through to the next defect.
+The loop has five levers and judges by the worst defect in severity order (temporal > consistency > camera > artifacts > motion > audio); on the same axis a new clip must be at least 25% smaller in the measured number, a tie falls through to the next defect.
 - `static_camera` - Static Shot sentence. `[verified]` fixes push-in zoom (`p046`).
 - `simplify_action` - `clip_loop.simplify_motion`: for a colour/lighting defect drop the clauses that name a light event; otherwise keep only the first clause. `[verified, 1 shot]` `p070` drift 0.60 -> 0.13 with stable colours on the contact sheet. It REMOVES part of the story beat (the growing light): check before `--apply`.
 - `redraw_frame` - new first frame via `film.make_frames(rerolls)`; needs the art runner (CLI default; `--no-redraw` to skip). `[verified, 1 shot]` did not fix `p005`'s transition.
+- `widen_frame` - first frame one shot size wider, from the same action (the clip keeps its own size and length); needs the art runner. `[verified, 1 shot]` fixed `p005`'s scene jump (by eye) where redraw, text cut and seed failed; the evaluator did not show the gain. Use when the first frame does not show what the action needs.
 - `seed` - deterministic new seed. `[verified]` did not change `p070`'s drift; on `p005` it introduced 3 hard cuts. Keep it last.
-Order per defect (hypothesis, from 3 shots): temporal: static_camera, simplify_action, redraw_frame, seed; consistency: simplify_action, redraw_frame, seed; camera: static_camera, seed.
-Not implemented: `quiet` (needs speech detection); a fix for a shot whose first frame does not show what the action needs (`p005`: close-up of the girl, action = glider around a spire: all four levers failed, 0/4 attempts). Defects with no lever are reported, not hidden.
+Order per defect (hypothesis, from 3 shots): temporal: static_camera, widen_frame, simplify_action, redraw_frame, seed; consistency: simplify_action, redraw_frame, seed; camera: static_camera, seed.
+Not implemented: `quiet` (needs speech detection). `p005` (close-up first frame, action = glider around a spire): reroll, text cut and seed failed; `widen_frame` fixed the jump but Pip left the frame after 0.5 s. Defects with no lever are reported, not hidden.
 
 ## Cost
 Short shots took 47-133 s each, so 3 attempts are about 2-7 minutes per shot. Budget a story by shots x attempts, not by "regenerate everything".

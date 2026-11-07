@@ -90,3 +90,15 @@ Same isolated Dawn Gate copy, 3-4 attempts per shot, outcomes checked on contact
 | `p070` | `simplify_action` kept (drift 0.60 -> 0.13), `static_camera` kept (zoom 13.8 -> 8.2%), `seed` kept (5.95%) | **drift fixed**: colours and lighting stay stable in all 8 frames; camera still +6% (confirmed, above the 3% limit). The beat "the blue light growing" was removed by the rule |
 | `p005` | `static_camera` kept (cut removed), `simplify_action` discarded, `redraw_frame` discarded, `seed` discarded (3 hard cuts) | **not fixed**: the clip still jumps from the close-up to the glider at about 1.6 s; loop ends "attempts used up", temporal (suspected) left |
 Lessons: a growing-light clause in the motion text was the cause of `p070`'s washed-out colours (seeds had not moved it); `p005`'s cause is a first frame (close-up of the girl and the cat) that does not show the flying machine its action describes, which none of the four levers fixes. Next lever if wanted: regenerate the first frame from the ACTION (shot size matching what the motion needs), not a reroll of the same prompt. Sample: 2 shots.
+
+### Phase 3c: `widen_frame` lever (2026-11-07)
+`widen_frame` draws the first frame one shot size wider (extreme_close -> close -> medium -> wide) from the same action text; the clip keeps the shot's own size, camera sentence
+and length. For temporal defects it is tried after `static_camera`. Run on `p005` (history run 4, 3 attempts, `--suspected`):
+| Attempt | Lever | Decision | Evidence |
+|---|---|---|---|
+| 1 | `static_camera` | kept | the hard cut at 0.58 s is gone |
+| 2 | `widen_frame` (medium -> wide) | kept | by eye: the glider banks around the same rock spire from 1.0 s to the end; no jump to a different scene (earlier clips jumped at about 1.6 s). Numbers: camera 30.2 -> 6.8%, drift 0.46 |
+| 3 | `simplify_action` | discarded | 4 hard cuts appeared |
+Residual problems seen on the kept clip: Pip (the cat) leaves the frame after 0.5 s; one fast move around 1.0 s (the wing fills the frame; the evaluator still marks `temporal` suspected);
+camera stays above the 3% limit. The evaluator's flags did NOT show the improvement (the suspected transition flag is unchanged), so this result rests on looking at the frames.
+Conclusion (1 shot): when the first frame does not show what the action needs, a wider first frame fixes the scene jump where reroll, text cut and seed did not.
