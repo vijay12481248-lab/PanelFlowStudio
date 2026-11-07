@@ -269,3 +269,15 @@ def test_widen_frame_changes_only_the_first_frame_shot_size(tmp_path, monkeypatc
         order.append(pick[0])
         tried.add(pick)
     assert order[0] == "widen_frame" and len(order) == len(set(order)) and order[-1] == "seed"  # temporal: static is done, so widen comes first, seed last
+
+
+def test_a_long_take_is_simplified_shot_by_shot_and_judged_with_its_planned_cuts(tmp_path):
+    shots = [{"at": 0, "framing": "wide", "camera": "", "action": "Maya points at the clouds, the wind lifts her hair, rain starts", "characters": ["maya"]},
+             {"at": 7.5, "framing": "close", "camera": "", "action": "A bolt of lightning flashes, the sky glows white, thunder shakes the hills", "characters": ["maya"]}]
+    s = {"seed": 1, "camera": cl.STATIC_CAMERA, "motion": "", "shots": shots, "native_voice": False, "frame_attempt": 0, "frame_shot": "wide"}
+    assert cl.simplifiable(s, "temporal") and cl.simplifiable(s, "consistency")  # first clause / the light clause can go
+    new = cl.apply_lever("simplify_action", s, 1, "temporal")
+    assert [x["action"] for x in new["shots"]] == ["Maya points at the clouds", "A bolt of lightning flashes"] and new["shots"][1]["at"] == 7.5
+    cons = cl.apply_lever("simplify_action", s, 1, "consistency")
+    assert "sky glows white" not in cons["shots"][1]["action"] and "Maya points at the clouds" in cons["shots"][0]["action"]
+    assert not cl.simplifiable({**s, "shots": [{**shots[0], "action": "Maya points at the clouds"}]}, "temporal")

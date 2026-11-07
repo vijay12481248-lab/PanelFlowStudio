@@ -504,7 +504,7 @@ def film_clip_improve(slug: str, shot: str, attempts: int = 3, camera: str = "st
         runner = art_mod.ComfyRunner() if redraw else None
         levers = clip_loop.DEFAULT_LEVERS | (clip_loop.FRAME_LEVERS if runner else frozenset())
         out = clip_loop.improve_clip(shot, ws, clip_loop.film_generate(story, ws, shot, runner, base), base, attempts=attempts, expect_camera=camera,
-                                     act_on_suspected=suspected, apply=apply, levers=levers)
+                                     act_on_suspected=suspected, apply=apply, levers=levers, planned_cuts=[x["at"] for x in base.get("shots", [])[1:]] or None)
         return {k: v for k, v in out.items() if k != "history"} | {"attempts": [{k: h.get(k) for k in ("attempt", "lever", "decision", "reason", "changed")} for h in out["history"]]}
 
     return _film_start(slug, "improve", run)

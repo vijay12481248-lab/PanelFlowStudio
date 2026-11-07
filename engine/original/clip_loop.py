@@ -84,6 +84,12 @@ def widen(shot: str | None) -> str | None:
     return SHOT_LADDER[SHOT_LADDER.index(shot) + 1] if shot in SHOT_LADDER[:-1] else None
 
 
+def simplifiable(settings: dict, axis: str) -> bool:
+    if settings.get("shots"):
+        return any(simplify_motion(sh["action"], axis) not in (None, sh["action"]) for sh in settings["shots"])
+    return simplify_motion(settings.get("motion") or "", axis) not in (None, settings.get("motion"))
+
+
 def next_lever(report: dict, settings: dict, tried: set, act_on_suspected: bool, available: frozenset = DEFAULT_LEVERS) -> tuple[str, str] | None:
     """(lever, axis) for the most severe defect that still has an untried, usable lever; None when nothing can be done."""
     for f in defects(report, act_on_suspected):
@@ -94,7 +100,7 @@ def next_lever(report: dict, settings: dict, tried: set, act_on_suspected: bool,
                 continue
             if lever == "widen_frame" and widen(settings.get("frame_shot")) is None:
                 continue
-            if lever == "simplify_action" and simplify_motion(settings.get("motion") or "", f["axis"]) in (None, settings.get("motion")):
+            if lever == "simplify_action" and not simplifiable(settings, f["axis"]):
                 continue
             return lever, f["axis"]
     return None
@@ -105,7 +111,10 @@ def apply_lever(lever: str, settings: dict, n: int, axis: str = "") -> dict:
     if lever == "static_camera":
         new["camera"] = STATIC_CAMERA
     elif lever == "simplify_action":
-        new["motion"] = simplify_motion(settings["motion"], axis)
+        if settings.get("shots"):  # a long take: simplify what each shot shows
+            new["shots"] = [{**sh, "action": simplify_motion(sh["action"], axis) or sh["action"]} for sh in settings["shots"]]
+        else:
+            new["motion"] = simplify_motion(settings["motion"], axis)
     elif lever == "redraw_frame":
         new["frame_attempt"] = settings.get("frame_attempt", 0) + 1
     elif lever == "widen_frame":
@@ -125,7 +134,7 @@ def baseline_settings(story: OriginalStory, ws: Path, sid: str) -> dict:
     frame = json.loads(flog.read_text(encoding="utf-8")).get(sid, {}).get("attempt", 0) if flog.exists() else 0
     m = re.search(r"The camera does (.+?)\. Single continuous take", entry.get("prompt", ""))  # the sentence the clip was really made with (older clips used a push-in)
     camera = m.group(1) if m else ((panel.camera if panel else "") or STATIC_CAMERA)
-    return {"seed": seed, "camera": camera, "native_voice": bool(entry.get("native_voice")), "motion": panel.motion if panel else "", "frame_attempt": frame,
+    return {"seed": seed, "camera": camera, "native_voice": bool(entry.get("native_voice")), "motion": panel.motion if panel else "", "shots": [dict(x) for x in panel.shots] if panel else [], "frame_attempt": frame,
             "frame_shot": panel.shot if panel else None}
 
 
@@ -144,6 +153,8 @@ def film_generate(story: OriginalStory, ws: Path, sid: str, runner=None, baselin
         story2 = story
         if settings.get("motion") is not None and any(p.id == sid and p.motion != settings["motion"] for p in story.panels):
             story2 = _with(story, sid, motion=settings["motion"])
+        if settings.get("shots"):
+            story2 = _with(story2, sid, shots=settings["shots"])
         (work / "film" / "frames").mkdir(parents=True, exist_ok=True)
         redraw = settings.get("frame_attempt", 0) != base.get("frame_attempt", 0) or settings.get("frame_shot") != base.get("frame_shot")
         if redraw:
@@ -167,7 +178,7 @@ def _brief(report: dict) -> dict:
 
 
 def improve_clip(sid: str, ws: Path, generate: Generate, settings: dict, *, attempts: int = 3, expect_camera: str = "static", act_on_suspected: bool = False,
-                 apply: bool = False, expect_audio: bool = True, levers: frozenset = DEFAULT_LEVERS, now: Callable[[], float] = time.monotonic) -> dict:
+                 apply: bool = False, expect_audio: bool = True, levers: frozenset = DEFAULT_LEVERS, planned_cuts: list[float] | None = None, now: Callable[[], float] = time.monotonic) -> dict:
     """Run the loop for shot `sid`. `generate(work_dir, settings)` returns the new clip; `settings` are the shot's current settings (`baseline_settings`).
     Returns {"best": path, "report": best report, "history": [...], "stopped": reason}."""
     fd = ws / "film"
@@ -182,7 +193,7 @@ def improve_clip(sid: str, ws: Path, generate: Generate, settings: dict, *, atte
         hpath.write_text(json.dumps(history, indent=1), encoding="utf-8")
 
     def ev(p: Path) -> dict:
-        return evaluate(p, expect_camera=expect_camera, expect_audio=expect_audio)
+        return evaluate(p, expect_camera=expect_camera, expect_audio=expect_audio, planned_cuts=planned_cuts)
 
     first = fd / "clips" / f"{sid}.mp4"
     if first.exists():
@@ -244,7 +255,8 @@ def main() -> None:  # python -m engine.original.clip_loop <story_dir> <shot> [-
 
         runner = art_mod.ComfyRunner()
     out = improve_clip(a.shot, ws, film_generate(story, ws, a.shot, runner, base), base, attempts=a.attempts, expect_camera=a.camera,
-                       act_on_suspected=a.suspected, apply=a.apply, levers=DEFAULT_LEVERS | (FRAME_LEVERS if runner else frozenset()))
+                       act_on_suspected=a.suspected, apply=a.apply, levers=DEFAULT_LEVERS | (FRAME_LEVERS if runner else frozenset()),
+                       planned_cuts=[x['at'] for x in base.get('shots', [])[1:]] or None)
     print(json.dumps({k: v for k, v in out.items() if k != "history"}, indent=1))
     for h in out["history"]:
         print(h["attempt"], h["lever"], h["decision"], h["reason"], h.get("changed", ""), [f"{f['axis']}:{f['status']}" for f in h["report"]["flags"]])

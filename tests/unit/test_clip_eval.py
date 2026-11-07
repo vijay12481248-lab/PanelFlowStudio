@@ -105,3 +105,26 @@ def test_contact_sheet_is_a_png_with_all_samples(tmp_path):
 def test_too_short_clip_is_refused(tmp_path):
     with pytest.raises(ValueError):
         ce.load_clip(_write(tmp_path / "one.mp4", [_view(_scene())]))
+
+
+def test_a_planned_cut_is_not_a_defect_but_an_unplanned_one_is_and_each_shot_is_measured_alone(tmp_path):
+    a, b = _scene(), np.roll(_scene(), 300, axis=1) // 4
+    frames = [_view(a)] * 40 + [_view(b, 1 + 0.15 * i / 39) for i in range(40)]  # shot 2 zooms 15%; shot 1 is steady; the cut is at 40/24 s
+    path = _write(tmp_path / "take.mp4", frames)
+    plain = ce.evaluate(path, expect_audio=False)
+    assert any(f["axis"] == "temporal" and f["status"] == "confirmed" for f in plain["flags"])  # without the plan the cut is a defect
+    planned = ce.evaluate(path, expect_audio=False, planned_cuts=[40 / 24])
+    assert not any(f["axis"] == "temporal" for f in planned["flags"]) and planned["cuts_s"] == []
+    cam = [f for f in planned["flags"] if f["axis"] == "camera"]
+    assert cam and all("[shot 2" in f["evidence"] for f in cam) and len(planned["segments"]) == 2  # only shot 2 zooms
+    c = np.roll(_scene(), 150, axis=0) // 2
+    stray = _write(tmp_path / "stray.mp4", [_view(a)] * 14 + [_view(c)] * 70 + [_view(b)] * 36)  # a stray cut at 14/24 s, the planned one at 84/24 s
+    other = ce.evaluate(stray, expect_audio=False, planned_cuts=[84 / 24])
+    assert any(f["axis"] == "temporal" and f["status"] == "confirmed" and f["t"] < 1.5 for f in other["flags"])  # a cut that is NOT near where the plan put one
+
+
+def test_a_planned_cut_that_lands_a_little_early_is_still_planned(tmp_path):
+    a, b = _scene(), np.roll(_scene(), 300, axis=1) // 4
+    path = _write(tmp_path / "early.mp4", [_view(a)] * 36 + [_view(b)] * 44)  # the cut is at 1.5 s; the plan said 1.9 s
+    r = ce.evaluate(path, expect_audio=False, planned_cuts=[1.9])
+    assert not any(f["axis"] == "temporal" for f in r["flags"]) and r["cut_deviation_s"] and abs(r["cut_deviation_s"][0] + 0.4) < 0.1

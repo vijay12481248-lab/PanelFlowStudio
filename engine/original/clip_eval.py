@@ -174,10 +174,14 @@ def contact_sheet(clip: Clip, idx: list[int] | None = None, cols: int = 4) -> by
 
 
 # ------------------------------------------------------------------ the report
-def evaluate(path: Path, expect_camera: str = "static", reference: np.ndarray | None = None, expect_audio: bool = True) -> dict:
+def evaluate(path: Path, expect_camera: str = "static", reference: np.ndarray | None = None, expect_audio: bool = True, planned_cuts: list[float] | None = None,
+             _clip: Clip | None = None) -> dict:
     """Measurements plus flags for one clip. `expect_camera`: "static" (a fixed camera was asked for) or "any" (a move was asked for: the camera
-    path is reported but not flagged). Every flag: {axis, status: confirmed|suspected, t, evidence}. No overall score by design."""
-    clip = load_clip(Path(path))
+    path is reported but not flagged). Every flag: {axis, status: confirmed|suspected, t, evidence}. No overall score by design.
+    `planned_cuts`: times (s) of cuts the plan put INSIDE this clip (a multi-shot take): each shot is measured on its own (`evaluate_take`) and a planned cut is not a defect."""
+    if planned_cuts:
+        return evaluate_take(path, planned_cuts, expect_camera, reference, expect_audio)
+    clip = _clip or load_clip(Path(path))
     diffs = step_diffs(clip.gray)
     cam = camera_motion(clip.gray)
     cuts = find_cuts(diffs)
@@ -213,6 +217,42 @@ def evaluate(path: Path, expect_camera: str = "static", reference: np.ndarray | 
         flag("audio", "confirmed", None, "no audio stream")
     return {"clip": str(path), "frames": clip.n, "seconds": clip.t(clip.n - 1) + round(1 / clip.fps, 2), "camera": cam, "camera_border": ring, "cuts_s": [clip.t(c) for c in cuts],
             "flicker": flick, "drift": drift, "audio": audio, **mot, "flags": flags}
+
+
+def evaluate_take(path: Path, planned_cuts: list[float], expect_camera: str = "static", reference: np.ndarray | None = None, expect_audio: bool = True, trim: int = 4) -> dict:
+    """A take with planned shot changes: split at the planned times, drop `trim` frames either side of each cut, measure every shot on its own (camera, drift against the shot's own
+    first frame, flicker, unplanned cuts) and merge: flags keep their time (shifted to the take) and name the shot; the report carries the worst camera/drift/flicker and `segments`."""
+    clip = load_clip(Path(path))
+    diffs = step_diffs(clip.gray)
+    marks, deviation = [], []
+    for t in sorted(planned_cuts):  # H3 puts a planned cut near, not at, the asked time (measured: 7.2 s for 7.5 s): snap to the strongest real cut within +-1 s, else keep the plan
+        m = round(t * clip.fps)
+        win = range(max(0, m - 24), min(len(diffs), m + 24))
+        best = max(win, key=lambda i: diffs[i], default=None)
+        if best is not None and diffs[best] >= CUT_MIN:
+            deviation.append(round((best + 1 - m) / clip.fps, 2))
+            m = best + 1
+        marks.append(m)
+    bounds = [0] + [m for m in marks if 0 < m < clip.n] + [clip.n]
+    segs, flags, cuts = [], [], []
+    for k in range(len(bounds) - 1):
+        a, b = bounds[k] + (trim if k else 0), bounds[k + 1] - (trim if k < len(bounds) - 2 else 0)
+        if b - a < 14:
+            continue
+        sub = Clip(clip.path, clip.fps, clip.bgr[a:b], clip.gray[a:b])
+        r = evaluate(path, expect_camera, reference if k == 0 else None, expect_audio=False, _clip=sub)
+        off = a / clip.fps
+        for f in r["flags"]:
+            flags.append({**f, "t": None if f["t"] is None else round(f["t"] + off, 2), "evidence": f"[shot {k + 1}, {a / clip.fps:.1f}-{b / clip.fps:.1f}s] {f['evidence']}"})
+        cuts += [round(c + off, 2) for c in r["cuts_s"]]
+        segs.append({"shot": k + 1, "from_s": round(a / clip.fps, 2), "to_s": round(b / clip.fps, 2), "camera": r["camera"], "drift": r["drift"]["max"], "flicker": r["flicker"], "motion": r["motion"], "flags": [f["axis"] + ":" + f["status"] for f in r["flags"]]})
+    audio = audio_stats(Path(path))
+    if expect_audio and not audio["has_audio"]:
+        flags.append({"axis": "audio", "status": "confirmed", "t": None, "evidence": "no audio stream"})
+    worst = max((sg for sg in segs), key=lambda sg: max(abs(sg["camera"]["zoom_pct"]), abs(sg["camera"]["pan_x_pct"]), abs(sg["camera"]["pan_y_pct"])))
+    return {"clip": str(path), "frames": clip.n, "seconds": clip.t(clip.n - 1) + round(1 / clip.fps, 2), "camera": worst["camera"], "camera_border": worst["camera"], "cuts_s": cuts, "planned_cuts_s": sorted(planned_cuts), "cut_deviation_s": deviation,
+            "flicker": max(sg["flicker"] for sg in segs), "drift": {"max": max(sg["drift"] for sg in segs), "at_s": None, "final": 0.0, "series": []}, "audio": audio,
+            "motion": round(float(np.mean([sg["motion"] for sg in segs])), 3), "motion_min_window": 0.0, "flags": flags, "segments": segs}
 
 
 # ------------------------------------------------------------------ vision witness (optional, needs Ollama)

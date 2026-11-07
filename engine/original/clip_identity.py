@@ -79,8 +79,8 @@ def judge(name: str, series: list[dict], times: list[float]) -> tuple[list[dict]
     return flags, {"presence": "".join(vis), "colours": "".join(mat)}  # colours: information only, see the module note
 
 
-async def check(path: Path, characters: list[tuple[str, str]], provider, frames: int = FRAMES, fps: float = 24.0, objects: list[tuple[str, str]] = ()) -> dict:
-    """`characters` = [(name, description)] expected in the shot (from the story bible). Returns {"characters": {name: {presence, colours}}, "flags": [...]}.
+async def check(path: Path, characters: list[tuple[str, str]], provider, frames: int = FRAMES, fps: float = 24.0, objects: list[tuple[str, str]] = (), active=None) -> dict:
+    """`characters` = [(name, description)] expected in the shot (from the story bible). `active(name, t) -> bool`: is the character planned to be on screen at time t (a multi-shot take). Returns {"characters": {name: {presence, colours}}, "flags": [...]}.
     Presence string: P visible, . absent, ? the two answers disagree; colours: M match, x mismatch, ? unknown."""
     cap = cv2.VideoCapture(str(path))
     n = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -93,7 +93,10 @@ async def check(path: Path, characters: list[tuple[str, str]], provider, frames:
     for kind, items, prompts in (("characters", characters, PROMPTS), ("objects", objects, OBJECT_PROMPTS)):
         for name, look in items:
             series = []
-            for png in pngs:
+            for png, t in zip(pngs, times):
+                if active is not None and not active(name, t):  # the plan has this character out of this shot: its absence is not a defect (and it is not asked about)
+                    series.append({"visible": None, "match": None})
+                    continue
                 ans = await ask(provider, png, name, look, prompts)
                 series.append({"visible": agree(ans, "visible"), "match": agree(ans, "colours_match")})
             f, d = judge(name, series, times)
@@ -154,18 +157,19 @@ async def count_png(provider, png: bytes, kind: str) -> int | None:
     return got[0] if got[0] is not None and got[0] == got[1] else None
 
 
-def judge_counts(kind: str, expected: int, counts: list[int | None], times: list[float]) -> list[dict]:
+def judge_counts(kind: str, expected: int | list[int], counts: list[int | None], times: list[float]) -> list[dict]:
     """More of something than the shot allows, in at least a quarter of the frames where the two answers agreed, is a suspected extra (never `confirmed`: a VLM alone does not confirm)."""
+    exp = expected if isinstance(expected, list) else [expected] * len(counts)
     known = [(i, c) for i, c in enumerate(counts) if c is not None]
-    over = [(i, c) for i, c in known if c > expected]
+    over = [(i, c) for i, c in known if c > exp[i]]
     if known and len(over) * 4 >= len(known):
         i, c = over[0]
         return [{"axis": "object", "status": "suspected", "t": times[i],
-                 "evidence": f"{c} {plural(kind)} counted at {times[i]}s but the shot has {expected}; {len(over)} of {len(known)} agreed frames show more than {expected} (both VLM answers agree)"}]
+                 "evidence": f"{c} {plural(kind)} counted at {times[i]}s but the shot has {exp[i]}; {len(over)} of {len(known)} agreed frames show more than planned (both VLM answers agree)"}]
     return []
 
 
-async def count_check(path: Path, kinds: dict[str, int], provider, frames: int = FRAMES) -> dict:
+async def count_check(path: Path, kinds: dict[str, int], provider, frames: int = FRAMES, expected_at=None) -> dict:
     """`kinds` = {"woman": 1, "cat": 1}: the cast of the shot by kind (`film.cast_kinds`). Returns {"counts": {kind: [n|None per sampled frame]}, "flags": [...]}."""
     cap = cv2.VideoCapture(str(path))
     n = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -178,5 +182,5 @@ async def count_check(path: Path, kinds: dict[str, int], provider, frames: int =
     for kind, expected in kinds.items():
         counts = [await count_png(provider, png, kind) for png in pngs]
         out[kind] = counts
-        flags += judge_counts(kind, expected, counts, times)
+        flags += judge_counts(kind, [expected_at(kind, t) for t in times] if expected_at else expected, counts, times)
     return {"counts": out, "flags": flags, "times": times}

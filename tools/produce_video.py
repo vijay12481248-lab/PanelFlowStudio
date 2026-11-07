@@ -83,15 +83,23 @@ def stage_clips(story: OriginalStory, ws: Path) -> dict:
     return res
 
 
+def shot_at(panel, t: float) -> dict:
+    """The planned shot playing at time t of a take."""
+    return [s for s in panel.shots if s["at"] <= t + 1e-6][-1] if panel.shots else {"characters": panel.character_ids}
+
+
 async def stage_qa(story: OriginalStory, ws: Path) -> dict:
     provider = llm_registry.get_ollama_provider()
     qa = {}
+    ids = {c.id: c for c in story.bible.characters}
     for p in story.panels:
         clip = ws / "film" / "clips" / f"{p.id}.mp4"
-        rep = evaluate(clip, expect_camera="static", expect_audio=False)  # the narration is mixed at the master: the clip itself is silent by design
+        cuts = [s["at"] for s in p.shots[1:]]  # the plan's own shot changes are not defects
+        rep = evaluate(clip, expect_camera="static", expect_audio=False, planned_cuts=cuts or None)  # the narration is mixed at the master: the clip itself is silent by design
         chars = [(c.name, c.look) for c in story.bible.characters if c.id in p.character_ids]
-        ident = await ci.check(clip, chars, provider)
-        counts = await ci.count_check(clip, {k: len(v) for k, v in film.cast_kinds(story, p.character_ids).items()}, provider)
+        ident = await ci.check(clip, chars, provider, active=lambda n, t, p=p: any(ids[i].name == n for i in shot_at(p, t).get("characters", []) if i in ids))
+        kinds = {k: len(v) for k, v in film.cast_kinds(story, p.character_ids).items()}
+        counts = await ci.count_check(clip, kinds, provider, expected_at=lambda k, t, p=p: len(film.cast_kinds(story, shot_at(p, t).get("characters", [])).get(k, [])))
         qa[p.id] = {"eval": {k: rep[k] for k in ("frames", "seconds", "camera", "cuts_s", "flicker", "drift", "motion")}, "flags": rep["flags"] + ident["flags"] + counts["flags"],
                     "presence": {n: d["presence"] for n, d in ident["characters"].items()}, "counts": counts["counts"]}
         print(f"  qa {p.id}: {rep['seconds']} s, flags {[f['axis'] + ':' + f['status'][:4] for f in qa[p.id]['flags']]}, presence {qa[p.id]['presence']}, counts {counts['counts']}", flush=True)

@@ -55,9 +55,11 @@ def test_movement_needs_a_direction_and_speech_and_text_are_refused():
     b = _real_bible()
     moving = _take()
     moving.shots[0] = _shot(action="Mira walks along the path with Pip trotting right behind her in the field.")
-    assert any("which way relative to the camera" in p for p in d.check_take(moving, b, 15, [], G))
+    assert not any("something moves" in p for p in d.check_take(moving, b, 15, [], G))  # no rejection: the Director adds the direction itself
+    assert "walks to the right along the path" in moving.shots[0].action
     moving.shots[0] = _shot(action="Mira walks away from the camera along the path with Pip trotting beside her.")
-    assert not any("which way" in p for p in d.check_take(moving, b, 15, [], G))
+    d.check_take(moving, b, 15, [], G, take_index=1)
+    assert moving.shots[0].action.count("away from the camera") == 1 and "to the left" not in moving.shots[0].action  # a stated direction is kept
     talk = _take(); talk.shots[0] = _shot(action="Mira says hello to the viewer while Pip sits beside her in the field.")
     assert any("nobody speaks" in p for p in d.check_take(talk, b, 15, [], G))
     txt = _take(); txt.shots[0] = _shot(action="A big caption appears over the field while Mira and Pip look at the sky above them.")
@@ -74,7 +76,7 @@ def test_every_character_must_be_in_the_first_shot_and_listed_when_named():
     t2.shots[1] = _shot(framing="close", characters=["mira"], action="Pip stares at the clouds above the hills while Mira watches him closely there.")
     assert any("appear in the action but are not listed" in p for p in d.check_take(t2, b, 15, [], G))
     t3 = _take(); t3.shots[0] = _shot(camera="zoom crazy")
-    assert any("camera must be empty" in p for p in d.check_take(t3, b, 15, [], G))
+    assert d.check_take(t3, b, 15, [], G) == [] and t3.shots[0].camera == ""  # unknown camera wording becomes a fixed camera, it is not an error
 
 
 def test_direct_builds_long_takes_with_a_faceless_narrator(monkeypatch):
@@ -95,3 +97,63 @@ def test_direct_builds_long_takes_with_a_faceless_narrator(monkeypatch):
 
     text = film.motion_prompt(story, story.panels[0])
     assert "[Shot 1]" in text and "[Shot 2] At 00:" in text and "exactly one woman (Mira) and exactly one cat (Pip)" in text and "Static Shot" in text
+
+
+def test_requirements_of_the_brief_must_be_shown_somewhere():
+    panels = [d.Panel(id="t1", scene_id="s1", shot="wide", angle="eye_level", location_id="x", character_ids=[], action="a", seconds=15,
+                      shots=[{"at": 0, "framing": "wide", "camera": "", "action": "Maya points at the clouds while Pip sits beside her.", "characters": []}])]
+    assert d.uncovered(["the guide walks through the landscape", "one pet cat"], panels, "Pip cat adult") == ["the guide walks through the landscape"]  # nothing walks; the cast covers the cat
+    panels[0].shots.append({"at": 7.5, "framing": "wide", "camera": "", "action": "Maya walks away from the camera along the path through the hills.", "characters": []})
+    assert d.uncovered(["the guide walks through the landscape"], panels) == []
+
+
+def test_direct_rewrites_a_take_for_every_requirement_that_is_not_shown():
+    asked = []
+
+    class Fake:
+        async def generate_structured(self, prompt, model, **kw):
+            if model is d._Writer:
+                return d._Writer(title="How a storm forms", logline="This video explains how a thunderstorm forms for curious teenagers. Mira guides the viewer with her cat Pip.", setting="open fields",
+                                 facts=[f"Fact number {i} is a short true sentence about storms and clouds." for i in range(8)], must_show=["the guide skips rope across the meadow"])
+            if model is sm._Bible:
+                return _bible()
+            asked.append(prompt)
+            t = _take()
+            if "requires this to be SEEN" in prompt:
+                t.shots[0] = _shot(action="Mira skips rope toward the camera across the meadow while Pip sits beside her in the grass.")
+            return t
+
+    story = asyncio.run(d.direct("a one minute video on storms where the guide skips rope across the meadow", Fake(), 60))
+    assert sum("requires this to be SEEN" in p for p in asked) == 1 and any("skips rope" in s["action"] for p in story.panels for s in p.shots)
+
+
+def test_framing_and_camera_wording_maps_to_the_allowed_values():
+    assert [d.normalize_framing(x) for x in ("Extreme close-up", "wide establishing shot", "medium two-shot", "weird", "Close")] == ["close", "wide", "medium", "medium", "close"]
+    assert [d.normalize_camera(x) for x in ("static", "Slow push in", "pan left slowly", "tracking shot", "slow zoom out", "")] == ["", "slow push-in", "slow pan left", "", "", ""]
+
+
+def test_must_show_comes_from_the_brief_and_includes_the_movement_it_asks_for():
+    brief = "A one-minute video on storms. A young woman guide walks through the landscape and she has her one pet cat with her."
+    ok = d._Writer(title="T", logline="x " * 12, setting="s", facts=["Fact number %d is a short true sentence about storms and clouds." % i for i in range(8)], must_show=["the guide walks through the landscape", "one pet cat"])
+    assert d.check_writer(ok, 4, G, brief) == []
+    made_up = ok.model_copy(update={"must_show": ["four parts"]})
+    problems = d.check_writer(made_up, 4, G, brief)
+    assert any("not in the owner's brief" in p for p in problems) and any("someone or something moves" in p for p in problems)
+    assert d.check_writer(ok.model_copy(update={"must_show": []}), 4, G, brief)  # the walking requirement may not be dropped
+
+
+def test_a_walker_needs_a_horizontal_direction_right_after_the_verb():
+    assert d.needs_direction("Maya walks through the landscape, pointing upward while Pip jumps")  # 'upward' is not a way to walk
+    assert not d.needs_direction("Maya walks away from the camera along the path while Pip trots beside her")
+    assert not d.needs_direction("Maya walks to the left across the meadow")
+    assert d.needs_direction("Maya walks along the path with Pip beside her")  # "along the path" does not say which way the camera sees her go
+    assert d.needs_direction("Maya runs and Pip follows her over the hill")
+    assert not d.needs_direction("A balloon floats above the field")  # only walkers need a direction
+    assert not d.needs_direction("Maya stands in the field and points at the clouds")
+
+
+def test_fix_direction_alternates_sides_and_leaves_stated_directions_alone():
+    assert d.fix_direction("Maya walks along the path while Pip jumps", 0) == "Maya walks to the right along the path while Pip jumps"
+    assert d.fix_direction("Maya walks along the path while Pip jumps", 1) == "Maya walks to the left along the path while Pip jumps"
+    assert d.fix_direction("Maya runs toward the camera and Pip walks beside her", 0) == "Maya runs toward the camera and Pip walks to the right beside her"
+    assert d.fix_direction("Maya points at the clouds", 0) == "Maya points at the clouds"
