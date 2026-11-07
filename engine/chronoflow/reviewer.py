@@ -1,10 +1,14 @@
 """
-ChronoFlow AI Reviewer & Quality Inspector Engine
-Performs autonomous computer vision, frame continuity analysis,
-and multi-modal cinematic quality critique on generated video chunks.
+DEPRECATED - do not trust the numbers this module returns.
+
+`analyze_video_chunk` does NOT inspect frames: the sharpness, lighting, motion and audio "scores" are constants (94, 96, 93, 95) and the critique
+text is picked by keywords in the prompt. It cannot detect a defect, so its "APPROVED FOR MASTER CUT" verdict means nothing. Measured evidence about
+a clip comes from `engine.original.clip_eval.evaluate` (camera path, cuts, flicker, appearance drift, audio; see docs/H3_CLIP_EVAL.md). The function
+is kept only because the ChronoFlow API and UI still call it; wire them to clip_eval and delete this file.
 """
 
 import os
+import warnings
 import subprocess
 import json
 import math
@@ -15,6 +19,7 @@ def analyze_video_chunk(chunk_path, prompt, shot_index=1, total_shots=3, prev_ch
     Performs autonomous frame extraction, metric evaluation,
     and structured cinematic critique on a generated video chunk.
     """
+    warnings.warn("analyze_video_chunk returns constant scores, not a measurement; use engine.original.clip_eval.evaluate", DeprecationWarning, stacklevel=2)
     chunk_file = Path(chunk_path)
     if not chunk_file.exists():
         return {
