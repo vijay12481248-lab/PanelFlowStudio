@@ -109,6 +109,7 @@ def keyframe_prompt(story: OriginalStory, panel: Panel, which: str) -> tuple[str
     """The art prompt for the start or end picture of a shot: the shot's own framing, the cast on the sides the walk needs, the action (start) or end state (end)."""
     text = panel.action if which == "start" else end_text(story, panel)
     spec: ShotSpec = film.film_spec(story, panel.model_copy(update={"action": ""}))
+    spec.lighting = panel.atmosphere  # the same sky and light in the start and the end picture
     if spec.characters:
         names = {c.id: c.name for c in story.bible.characters if c.id in panel.character_ids}
         mine, others = split_actions(text or panel.action, names, spec.characters[0].id)
@@ -117,6 +118,7 @@ def keyframe_prompt(story: OriginalStory, panel: Panel, which: str) -> tuple[str
             cp.action = others.get(cp.id, "")
     else:
         spec = film.film_spec(story, panel.model_copy(update={"action": text or panel.action}))
+        spec.lighting = panel.atmosphere
     for cp, side in zip(spec.characters, sides(len(spec.characters), walk_direction(panel), which) or []):
         cp.side = side
     return art_mod.build_prompt(story, panel.model_copy(update={"director": spec.model_dump()}), style="natural", engine="qwen")

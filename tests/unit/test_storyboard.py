@@ -243,3 +243,10 @@ def test_a_seated_animal_to_the_right_is_not_a_walk_but_a_walker_is(story):
     assert sb.walk_direction(_panel(story, action="Maya walks slowly to the right across the field", end_state="")) == "right"
     assert sb.walk_direction(_panel(story, action="Ziggy walks from right to left beside her", end_state="")) == "left"
     assert sb.walk_direction(_panel(story, action="Maya walks to the right while Ziggy walks to the left", end_state="")) is None  # two walkers going opposite ways: leave the layout alone
+
+
+def test_the_planned_sky_is_in_both_pictures_of_a_shot(story):
+    p = _panel(story, action="Mira stands on the hill and points at the horizon", character_ids=["mira"], atmosphere="heavy dark grey clouds cover the sky and the light turns dim and cold")
+    for which in ("start", "end"):
+        assert "dark grey clouds" in sb.keyframe_prompt(story, p, which)[0]
+    assert "dark grey clouds" not in sb.keyframe_prompt(story, p.model_copy(update={"atmosphere": ""}), "start")[0]

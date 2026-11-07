@@ -179,7 +179,8 @@ def test_direct_storyboard_mode_asks_for_one_shot_with_an_end_state(monkeypatch)
             seen.append(model)
             if model is d._Writer:
                 return d._Writer(title="How a storm forms", logline="This video explains how a thunderstorm forms for curious teenagers. Mira and her cat Pip guide the viewer.", setting="open fields",
-                                 facts=[f"Fact number {i} is a short true sentence about storms and clouds." for i in range(8)])
+                                 facts=[f"Fact number {i} is a short true sentence about storms and clouds." for i in range(8)],
+                                 atmosphere=[f"sky number {i} with {'dark' if i % 2 else 'bright'} clouds and {'dim' if i % 2 else 'warm'} light" for i in range(8)])
             if model is sm._Bible:
                 return _bible()
             return d._BoardTake(location_id="open_field", narration=" ".join(["word"] * 17), shot=_shot(action="Mira walks to the right across the meadow while Pip trots beside her."),
@@ -188,6 +189,7 @@ def test_direct_storyboard_mode_asks_for_one_shot_with_an_end_state(monkeypatch)
     story = asyncio.run(d.direct("a one minute video on storms", Fake(), 60, 7.5, storyboard=True))
     assert len(story.panels) == 8 and d._BoardTake in seen
     p = story.panels[0]
+    assert p.atmosphere.startswith("sky number 0") and story.panels[1].atmosphere != p.atmosphere
     assert len(p.shots) == 1 and p.end_state.startswith("Mira and Pip are at the right") and p.seconds == 7.5 and p.dialogue[0].speaker_id == "narrator"
 
 
@@ -209,3 +211,16 @@ def test_walks_walked_and_walking_are_one_word_and_a_walker_must_be_shown_walkin
     assert d.uncovered(["the guide walks through the landscape"], only_said) == ["the guide walks through the landscape"]  # 'has walked' in an END state is not walking on screen
     only_said[0].shots[0]["action"] = "Maya walks to the right across the field while the cat sits beside her."
     assert d.uncovered(["the guide walks through the landscape"], only_said) == []
+
+
+def test_writer_must_plan_a_different_sky_for_every_part_in_storyboard_mode():
+    from engine.original import director as d
+    from engine.original.director import GENRES
+
+    w = d._Writer(title="T", logline="A guide explains how storms build up over a valley, for curious children everywhere.", setting="a valley",
+                  facts=["Warm air rises from the sunny ground and cools as it climbs higher."] * 2, atmosphere=["bright blue sky with warm sunshine", "bright blue sky with warm sunshine"])
+    g = GENRES["explainer"]
+    assert any("atmosphere" in p for p in d.check_writer(w, 2, g, "", True))
+    assert not any("atmosphere" in p for p in d.check_writer(w, 2, g, "", False))  # not asked for outside storyboard mode
+    w.atmosphere = ["bright blue sky with warm sunshine", "towering dark clouds gather and the light turns grey"]
+    assert not any("atmosphere" in p for p in d.check_writer(w, 2, g, "", True))

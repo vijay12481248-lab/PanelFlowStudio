@@ -68,6 +68,7 @@ class _Writer(BaseModel):
     logline: str = Field(description="two sentences: what the video explains, for whom, and who guides the viewer (name the guide and any companion from the brief)")
     setting: str
     facts: list[str] = Field(description="the teaching points in the order they are explained, each ONE short sentence of 8-22 words, accurate and concrete")
+    atmosphere: list[str] = Field(default_factory=list, description="the sky and light of each part, in order, ONE entry per part: 5-14 words of what is seen (cloud cover, light colour and strength). It changes from part to part the way the story builds or calms down")
     must_show: list[str] = Field(default_factory=list, description="up to 4 short phrases from the owner's brief for what the viewer must SEE: who is there, how many, what they do (e.g. 'the guide walks through the landscape')")
 
 
@@ -141,8 +142,12 @@ def split_facts(facts: list[str], takes: int) -> list[list[str]]:
     return out
 
 
-def check_writer(o: _Writer, takes: int, genre: Genre, brief: str = "") -> list[str]:
+def check_writer(o: _Writer, takes: int, genre: Genre, brief: str = "", sky: bool = False) -> list[str]:
     p: list[str] = []
+    if sky and (len(o.atmosphere) != takes or any(not 4 <= len(a.split()) <= 16 for a in o.atmosphere)):
+        p.append(f"atmosphere: exactly {takes} entries (one per part), each 5-14 words about the sky and the light")
+    elif sky and takes > 1 and any(content_words(a) == content_words(b) for a, b in zip(o.atmosphere, o.atmosphere[1:])):
+        p.append("atmosphere: neighbouring parts must look different (the sky and light change as the story builds or calms down)")
     bw = content_words(brief)
     for m in o.must_show:  # a requirement is something the OWNER said: it must come from the brief, not from the model's own plan
         if bw and not content_words(m) <= bw:
@@ -280,13 +285,13 @@ async def _take(provider, bible, premise, genre, i: int, n: int, seconds: float,
     raise ValueError("the model ran past its length limit three times for this take")
 
 
-def _panel(i: int, t: _TakeOut, seconds: float, facts: list[str], genre: Genre) -> tuple[Scene, Panel]:
+def _panel(i: int, t: _TakeOut, seconds: float, facts: list[str], genre: Genre, sky: str = "") -> tuple[Scene, Panel]:
     shots = [{"at": round(seconds * k / len(t.shots) * 2) / 2, "framing": s.framing, "camera": s.camera.strip(), "action": s.action.strip(), "characters": s.characters}
              for k, s in enumerate(t.shots)]
     first = t.shots[0]
     return (Scene(id=f"s{i + 1}", location_id=t.location_id, character_ids=first.characters, summary=" ".join(facts), mood=genre.tone),
             Panel(id=f"t{i + 1}", scene_id=f"s{i + 1}", shot=first.framing, angle="eye_level", location_id=t.location_id, character_ids=first.characters, action=first.action.strip(),
-                  dialogue=[Line(speaker_id="narrator", text=t.narration.strip())], caption="", motion=first.action.strip(), seconds=seconds, shots=shots, end_state=t.end_state.strip()))
+                  dialogue=[Line(speaker_id="narrator", text=t.narration.strip())], caption="", motion=first.action.strip(), seconds=seconds, shots=shots, end_state=t.end_state.strip(), atmosphere=sky.strip()))
 
 
 async def direct(brief: str, provider, total_seconds: float = 60.0, max_take: float = MAX_TAKE, progress=lambda pct, msg: None, storyboard: bool = False) -> OriginalStory:
@@ -298,28 +303,30 @@ async def direct(brief: str, provider, total_seconds: float = 60.0, max_take: fl
     seconds = round(total_seconds / n, 2)
     progress(0.05, "Writer: premise and teaching points")
     w = await sm._ask(provider, f"Brief from the owner: {brief}\nPlan an informative video of {total_seconds:.0f} seconds in {n} parts. Give a title, a two-sentence logline (name the guide "
-                      f"and any companion the brief asks for), the setting, {n if storyboard and n > 4 else n * 2} teaching facts in the order they are explained (the FIRST is a hook that makes the viewer curious, the LAST a one-sentence takeaway; accurate and concrete), and must_show: "
+                      f"and any companion the brief asks for), the setting, {n if storyboard and n > 4 else n * 2} teaching facts in the order they are explained (the FIRST is a hook that makes the viewer curious, the LAST a one-sentence takeaway; accurate and concrete), " + (f"atmosphere (the sky and light of each of the {n} parts, in order, changing as the story builds or calms down), " if storyboard else "") + "and must_show: "
                       "up to 4 short phrases copied from the brief for everything the brief says the viewer must SEE (who is there, how many, what they do).",
-                      _Writer, lambda o: check_writer(o, n, genre, brief), temperature=0.7, max_tokens=900)
+                      _Writer, lambda o: check_writer(o, n, genre, brief, storyboard), temperature=0.7, max_tokens=1100)
     premise = sm.Premise(title=w.title.strip(), genre="explainer", logline=w.logline.strip(), tone=genre.tone, setting=w.setting.strip())
     progress(0.2, "Production designer: cast and places")
     bible = await sm._make_bible(provider, genre, premise)
     dealt = split_facts([f.strip() for f in w.facts], n)
+    skies = [a.strip() for a in w.atmosphere] if storyboard else [""] * n
+    sky_ask = lambda i: f"Sky and light in this take: {skies[i]}. Do not describe any other weather or light." if skies[i] else ""  # noqa: E731
     scenes: list[Scene] = []
     panels: list[Panel] = []
     warnings: list[str] = []
     for i in range(n):
         progress(0.3 + 0.5 * i / n, f"Director: take {i + 1} of {n}")
-        t = await _take(provider, bible, premise, genre, i, n, seconds, dealt[i], " ".join(p.dialogue[0].text for p in panels)[-400:], storyboard=storyboard)
-        sc, pa = _panel(i, t, seconds, dealt[i], genre)
+        t = await _take(provider, bible, premise, genre, i, n, seconds, dealt[i], " ".join(p.dialogue[0].text for p in panels)[-400:], sky_ask(i), storyboard=storyboard)
+        sc, pa = _panel(i, t, seconds, dealt[i], genre, skies[i])
         scenes.append(sc)
         panels.append(pa)
     for r, i in zip(uncovered([m.strip() for m in w.must_show], panels, " ".join(f"{c.name} {c.species} {c.age_group} {c.gender} {c.role} {c.look}" for c in bible.characters)), range(n)):  # one repair per missing requirement, each in a different take
         progress(0.85, f"Director: the brief needs '{r}' to be shown; rewriting take {i + 1}")
         prev = " ".join(p.dialogue[0].text for k, p in enumerate(panels) if k != i)[-400:]
         try:
-            t = await _take(provider, bible, premise, genre, i, n, seconds, dealt[i], prev, f"The owner's brief requires this to be SEEN in this take (as a clear action): {r}.", storyboard=storyboard)
-            scenes[i], panels[i] = _panel(i, t, seconds, dealt[i], genre)
+            t = await _take(provider, bible, premise, genre, i, n, seconds, dealt[i], prev, f"The owner's brief requires this to be SEEN in this take (as a clear action): {r}. {sky_ask(i)}", storyboard=storyboard)
+            scenes[i], panels[i] = _panel(i, t, seconds, dealt[i], genre, skies[i])
         except ValueError as exc:  # best effort: keep the take that passed its checks and say what is missing
             warnings.append(f"the brief says '{r}' but no take shows it (rewrite of take {i + 1} failed: {str(exc)[:160]})")
     progress(1.0, "Plan complete")
