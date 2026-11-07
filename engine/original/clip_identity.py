@@ -28,6 +28,10 @@ PROMPTS = (
     "Check this picture for one character. Name: {name}. Description: {look}. visible = the character is clearly in the picture (not just a similar colour blob). "
     "colours_match = their hair and clothes have the colours in the description. If not visible, colours_match is false. note: what you see.",
 )
+OBJECT_PROMPTS = (  # the same two-witness question for a thing the shot needs visible (Panel.key_visuals); NOT calibrated on a clip where an object really vanishes (none was available)
+    "Is this visible in the picture: {name}? ({look}) Answer visible (true/false). colours_match: true if what you see has the colours described, otherwise false. note: one short reason.",
+    "Look for one object or thing in this picture: {name}. Description: {look}. visible = it is clearly in the picture. colours_match = its colours match the description. If not visible, colours_match is false. note: what you see.",
+)
 
 
 def frames_at(path: Path, idx: list[int], width: int = WIDTH) -> list[bytes]:
@@ -44,9 +48,9 @@ def frames_at(path: Path, idx: list[int], width: int = WIDTH) -> list[bytes]:
     return out
 
 
-async def ask(provider, png: bytes, name: str, look: str) -> list[dict | None]:
+async def ask(provider, png: bytes, name: str, look: str, prompts: tuple = PROMPTS) -> list[dict | None]:
     answers = []
-    for tpl in PROMPTS:
+    for tpl in prompts:
         raw = await provider.analyze_vision(png, tpl.format(name=name, look=look[:240]), system_prompt="You are a strict visual QA inspector. Output only JSON.",
                                             format_schema=SCHEMA, max_tokens=300)
         try:
@@ -75,7 +79,7 @@ def judge(name: str, series: list[dict], times: list[float]) -> tuple[list[dict]
     return flags, {"presence": "".join(vis), "colours": "".join(mat)}  # colours: information only, see the module note
 
 
-async def check(path: Path, characters: list[tuple[str, str]], provider, frames: int = FRAMES, fps: float = 24.0) -> dict:
+async def check(path: Path, characters: list[tuple[str, str]], provider, frames: int = FRAMES, fps: float = 24.0, objects: list[tuple[str, str]] = ()) -> dict:
     """`characters` = [(name, description)] expected in the shot (from the story bible). Returns {"characters": {name: {presence, colours}}, "flags": [...]}.
     Presence string: P visible, . absent, ? the two answers disagree; colours: M match, x mismatch, ? unknown."""
     cap = cv2.VideoCapture(str(path))
@@ -85,21 +89,27 @@ async def check(path: Path, characters: list[tuple[str, str]], provider, frames:
     idx = sample_indices(n, frames)
     times = [round(i / fps, 2) for i in idx]
     pngs = frames_at(path, idx)
-    flags, detail = [], {}
-    for name, look in characters:
-        series = []
-        for png in pngs:
-            ans = await ask(provider, png, name, look)
-            series.append({"visible": agree(ans, "visible"), "match": agree(ans, "colours_match")})
-        f, d = judge(name, series, times)
-        flags += f
-        detail[name] = d
-    return {"characters": detail, "flags": flags, "times": times}
+    flags, detail, found = [], {}, {}
+    for kind, items, prompts in (("characters", characters, PROMPTS), ("objects", objects, OBJECT_PROMPTS)):
+        for name, look in items:
+            series = []
+            for png in pngs:
+                ans = await ask(provider, png, name, look, prompts)
+                series.append({"visible": agree(ans, "visible"), "match": agree(ans, "colours_match")})
+            f, d = judge(name, series, times)
+            flags += f
+            (detail if kind == "characters" else found)[name] = d
+    return {"characters": detail, "objects": found, "flags": flags, "times": times}
 
 
 def shot_characters(story, panel) -> list[tuple[str, str]]:
     chars = {c.id: c for c in story.bible.characters}
     return [(chars[c].name, chars[c].look) for c in panel.character_ids if c in chars]
+
+
+def shot_objects(panel) -> list[tuple[str, str]]:
+    """What the shot says must be visible (`Panel.key_visuals`), as (name, description)."""
+    return [(k, k) for k in panel.key_visuals]
 
 
 def main() -> None:  # python -m engine.original.clip_identity <story.json> <shot> <clip.mp4>
@@ -111,7 +121,7 @@ def main() -> None:  # python -m engine.original.clip_identity <story.json> <sho
 
     story = OriginalStory.model_validate(json.loads(Path(sys.argv[1]).read_text(encoding="utf-8")))
     panel = next(p for p in story.panels if p.id == sys.argv[2])
-    print(json.dumps(asyncio.run(check(Path(sys.argv[3]), shot_characters(story, panel), llm_registry.get_ollama_provider())), indent=1))
+    print(json.dumps(asyncio.run(check(Path(sys.argv[3]), shot_characters(story, panel), llm_registry.get_ollama_provider(), objects=shot_objects(panel))), indent=1))
 
 
 if __name__ == "__main__":

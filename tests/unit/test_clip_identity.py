@@ -60,3 +60,26 @@ def test_check_runs_the_questions_per_frame_and_character(tmp_path):
 
     r = asyncio.run(ci.check(tmp_path / "c.mp4", [("Mira", "red hair"), ("Pip", "white kit")], Fake(), frames=4))
     assert len(calls) == 2 * 2 * 4 and set(r["characters"]) == {"Mira", "Pip"} and r["characters"]["Mira"]["presence"] == "PPPP"
+
+
+def test_objects_use_their_own_wording_and_the_same_judging(tmp_path):
+    vw = cv2.VideoWriter(str(tmp_path / "o.mp4"), cv2.VideoWriter_fourcc(*"mp4v"), 24, (64, 48))
+    for i in range(30):
+        vw.write(np.full((48, 64, 3), i * 8, np.uint8))
+    vw.release()
+    seen = []
+
+    class Fake:
+        async def analyze_vision(self, png, prompt, **kw):
+            seen.append(prompt)
+            gone = "white cup" in prompt and len(seen) > 4  # the cup disappears after the second sampled frame
+            return json.dumps({"visible": not gone, "colours_match": True, "note": "x"})
+
+    r = asyncio.run(ci.check(tmp_path / "o.mp4", [], Fake(), frames=4, objects=[("white cup", "a white ceramic cup")]))
+    assert r["objects"]["white cup"]["presence"] == "PP.." and [f["axis"] for f in r["flags"]] == ["object"]
+    assert all("object or thing" in p or "visible in the picture: white cup" in p for p in seen)
+
+    class P:
+        key_visuals = ["a glowing crystal", "a brass compass"]
+
+    assert ci.shot_objects(P()) == [("a glowing crystal", "a glowing crystal"), ("a brass compass", "a brass compass")]
