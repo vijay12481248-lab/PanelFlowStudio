@@ -18,7 +18,7 @@ from engine.original.models import OriginalStory
 
 SR = 48000
 W, H = 1920, 1080
-MUSIC_DB = -17.0  # music bed level before ducking, relative to full scale RMS target
+MUSIC_DB = -27.0  # music bed RMS before ducking; the voices sit near -23 dB, so music stays under them (-17 buried the quiet crystal line)
 TARGET_LUFS = -16.0
 
 
@@ -47,6 +47,15 @@ def timeline(story: OriginalStory, ws: Path, ids: list[str] | None = None) -> li
     return cuts
 
 
+VOICE_MEAN_DB = -23.0  # mean level of the lip-synced voices H3 returns; a voice mixed in at master is brought to it
+
+
+def voice_gain_db(wav: Path, target: float = VOICE_MEAN_DB, cap: float = 12.0) -> float:
+    x, _ = sf.read(str(wav), dtype="float32", always_2d=True)
+    rms = float(np.sqrt(np.mean(x ** 2))) or 1e-6
+    return float(np.clip(target - 20 * np.log10(rms), 0.0, cap))
+
+
 def normalize(cut: dict, ws: Path) -> Path:
     """1080p / 24 fps / yuv420p picture and 48 kHz stereo sound with 12 ms edge fades (no clicks at cuts), to an intermediate mkv."""
     out = ws.resolve() / "film" / "norm" / f"{cut['id']}.mkv"
@@ -62,7 +71,8 @@ def normalize(cut: dict, ws: Path) -> Path:
     vf = f"scale={W}:{H}:flags=lanczos,unsharp=5:5:0.45:5:5:0.0,fps={film.FPS},format=yuv420p,setsar=1"
     if p.dialogue and p.dialogue[0].speaker_id in film.FACELESS and voice.exists():  # a faceless speaker's voice is laid over the picture
         _run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(cut["clip"]), "-i", str(voice), "-vf", vf,
-              "-filter_complex", f"[0:a]aresample={SR},aformat=channel_layouts=stereo[a0];[1:a]aresample={SR},aformat=channel_layouts=stereo[a1];"
+              "-filter_complex", f"[0:a]aresample={SR},aformat=channel_layouts=stereo[a0];"
+                                 f"[1:a]volume={voice_gain_db(voice):.1f}dB,alimiter=limit=0.9,aresample={SR},aformat=channel_layouts=stereo[a1];"
                                  f"[a0][a1]amix=inputs=2:duration=first:normalize=0,{fade}[a]",
               "-map", "0:v", "-map", "[a]", "-c:v", "libx264", "-crf", "12", "-preset", "fast", "-c:a", "pcm_s16le", str(out)])
         return out
@@ -168,7 +178,7 @@ def render(story: OriginalStory, ws: Path, cues: dict[str, Path] | None = None, 
     base = ["ffmpeg", "-y", "-loglevel", "error", "-i", str(cut)]
     if cues:
         bed = music_bed(cuts, ws, cues, total)
-        fc = ("[0:a]asplit=2[sc][dry];[1:a]volume=1.0[m];[m][sc]sidechaincompress=threshold=0.03:ratio=9:attack=15:release=450:makeup=1[duck];"
+        fc = ("[0:a]asplit=2[sc][dry];[1:a]volume=1.0[m];[m][sc]sidechaincompress=threshold=0.01:ratio=10:attack=10:release=500:makeup=1[duck];"
               f"[dry][duck]amix=inputs=2:duration=first:normalize=0,loudnorm=I={TARGET_LUFS}:TP=-1.5:LRA=11[a]")
         if title:
             fc = f"[0:v]{title_filter(title, total)}[v];" + fc

@@ -54,7 +54,7 @@ def make_cues(story: OriginalStory, ws: Path, scene_seconds: dict[str, float], p
         progress((n - 1) / len(story.scenes), f"Scoring {sc.id} ({dur:.0f} s)")
         take = provider.generate_music_take("film", sc.id, music_dir, cue_prompt(story, sc), audio_duration=dur, bpm=sc.bpm or 100,
                                             key_scale=sc.key or "D Minor", seed=seed_base + n, use_random_seed=False, inference_steps=8, take_index=1)
-        wav = Path(take.file_path if hasattr(take, "file_path") else take.path) if not isinstance(take, dict) else Path(take["file_path"])
+        wav = Path(take.audio_file_path)
         dest = music_dir / f"{sc.id}.wav"
         dest.write_bytes(wav.read_bytes())
         cues[sc.id] = dest

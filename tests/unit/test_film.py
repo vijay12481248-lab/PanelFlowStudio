@@ -81,6 +81,19 @@ def test_a_faceless_speaker_is_not_lip_synced_and_the_clip_is_made_with_silence(
     assert shot.dialogue[0].text not in t
 
 
+def test_a_quiet_faceless_voice_is_lifted_to_the_level_of_the_other_voices(tmp_path):
+    import numpy as np
+    import soundfile as sf
+
+    from engine.original import film_master
+
+    wav = tmp_path / "v.wav"
+    sf.write(str(wav), (0.5 * np.sin(np.linspace(0, 2000, 24000))).astype("float32") * 10 ** (-31 / 20) / 0.354, 24000)  # about -31 dB RMS
+    assert 7.0 < film_master.voice_gain_db(wav) < 9.0
+    sf.write(str(wav), np.full(24000, 0.5, dtype="float32"), 24000)  # already loud: never turned down
+    assert film_master.voice_gain_db(wav) == 0.0
+
+
 def test_inserted_shots_keep_every_other_shots_id(story):
     ids = [p.id for p in story.panels]
     assert ids.index("q01") == ids.index("p070") + 1 and ids.index("p071") == ids.index("q18") + 1
