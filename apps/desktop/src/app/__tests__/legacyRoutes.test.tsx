@@ -143,3 +143,18 @@ test("Home, Projects, Jobs and Library load the v2 pages, not the old dashboard"
   assert.equal(await component("/library"), library);
   assert.equal(await component("/library/audio"), library);
 });
+
+test("each Settings section loads its own page, and the old engine and provider screens are gone", async () => {
+  const component = async (url: string) => (await matchRoutes(appRoutes, url)!.at(-1)!.route.lazy!() as { Component: React.ComponentType }).Component;
+  assert.equal(await component("/settings/engine"), (await import("../../features/settings/EngineSection")).EngineSection);
+  assert.equal(await component("/settings/models"), (await import("../../features/settings/ModelsSection")).ModelsSection);
+  assert.equal(await component("/settings/providers"), (await import("../../features/settings/ProvidersSection")).ProvidersSection);
+  assert.equal(await component("/settings/youtube"), (await import("../../features/settings/YouTubeSection")).YouTubeSection);
+  assert.equal(await component("/settings/diagnostics"), (await import("../../features/settings/DiagnosticsSection")).DiagnosticsSection);
+  // LegacyScreens imports a CSS file tsx cannot load, so check its source text instead of importing it.
+  const { readFileSync } = await import("node:fs");
+  const source = readFileSync(new URL("../../features/legacy/LegacyScreens.tsx", import.meta.url), "utf8");
+  assert.ok(!source.includes("EngineSettingsRoute"), "EngineSettingsRoute is removed");
+  assert.ok(!source.includes("ProvidersRoute"), "ProvidersRoute is removed");
+  assert.ok(!source.includes("ProviderManagementScreen"), "the old provider screen is no longer used");
+});

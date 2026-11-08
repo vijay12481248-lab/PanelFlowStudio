@@ -6,7 +6,6 @@
   "apps/desktop/src/components/ProviderHealthModal.tsx",
   "apps/desktop/src/components/StoryAnalysisActivity.tsx",
   "apps/desktop/src/components/StoryboardPreview.tsx",
-  "apps/desktop/src/components/ai-gateway/ProviderManagementScreen.tsx",
   "apps/desktop/src/components/audio-library/AIMusicStudio.tsx",
   "apps/desktop/src/components/audio-library/AudioAssetBrowser.tsx",
   "apps/desktop/src/components/audio-library/AudioCategoryNav.tsx",

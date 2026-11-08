@@ -1,5 +1,5 @@
 import React from "react";
-import { Navigate, useLocation, useNavigate, useParams, useSearchParams } from "react-router";
+import { Navigate, useNavigate, useParams, useSearchParams } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@panelflow/api-client";
 import { Button, EmptyState, ErrorState, ListRow, PageHeader, Skeleton } from "@panelflow/ui-v2";
@@ -10,8 +10,6 @@ import { AnimeReviewScreen } from "../../screens/AnimeReviewScreen";
 import { ChronoFlowScreen } from "../../screens/ChronoFlowScreen";
 import { ComfyImageScreen } from "../../screens/ComfyImageScreen";
 import { StoryEditorScreen } from "../../screens/StoryEditorScreen";
-import ProviderManagementScreen from "../../components/ai-gateway/ProviderManagementScreen";
-import { ProviderHealthModal } from "../../components/ProviderHealthModal";
 import { useEngine } from "../../app/providers";
 import { isChronoFlowProject, paths, stageForProject } from "../../app/routes";
 
@@ -85,28 +83,6 @@ export const EditorRoute: React.FC = () => {
   if (project.isError) return <ProjectMissing />;
   if (!project.data) return <Loading />;
   return <StoryEditorScreen project={project.data} engineConnected={engine.connected} onBack={() => navigate(paths.projects())} onExport={() => { /* handled by the built-in export dialog */ }} />;
-};
-
-export const ProvidersRoute: React.FC = () => {
-  const navigate = useNavigate();
-  return (
-    <div className="mx-auto w-full max-w-7xl p-6 md:p-8">
-      <ProviderManagementScreen onBack={() => navigate(paths.home())} onOpenToolsModels={() => navigate(paths.settings("engine"))} />
-    </div>
-  );
-};
-
-/** The modal opens at once only when a button asked for it (navigation state); the dock just shows the page, so the dock stays usable. */
-export const EngineSettingsRoute: React.FC = () => {
-  const location = useLocation();
-  const [open, setOpen] = React.useState(Boolean((location.state as { open?: boolean } | null)?.open));
-  return (
-    <div className="mx-auto grid w-full max-w-3xl gap-4 p-6 md:p-8 grid-cols-1">
-      <PageHeader title="Engine and models" meta={<span>Local tools, models and their health.</span>} />
-      <EmptyState title="Engine and models" description="See which local tools and models are ready." action={<Button variant="primary" onClick={() => setOpen(true)}>Show engine and models</Button>} />
-      <ProviderHealthModal open={open} onClose={() => setOpen(false)} />
-    </div>
-  );
 };
 
 /** `/projects/:id` opens the project at the stage it has reached. */
