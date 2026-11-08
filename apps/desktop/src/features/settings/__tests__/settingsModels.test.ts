@@ -2,7 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import type { ProviderHealth, SystemResourcesResponse } from "@panelflow/shared-types";
 import type { OllamaConfig, OllamaModelCapability } from "@panelflow/shared-types";
-import { changedOllamaFields, draftFromConfig, modelsForRole, pullPercent, resourceGauges, toolRows, validateEndpointUrl } from "../settingsModels";
+import type { GlobalLLMSettings, LLMProviderInfo } from "@panelflow/shared-types";
+import { WORKFLOWS, localFirstWarning, providerOptions, routingChanged, routingFromSettings, routingToRequest, changedOllamaFields, draftFromConfig, modelsForRole, pullPercent, resourceGauges, toolRows, validateEndpointUrl } from "../settingsModels";
 
 const resources = (gpuUsed: number, over: Partial<SystemResourcesResponse["gpu"]> = {}, ramUsedPct = 40): SystemResourcesResponse => ({
   ram: { total_gb: 32, available_gb: 32 * (1 - ramUsedPct / 100), used_percent: ramUsedPct, sufficient_for_inference: true },
@@ -96,4 +97,50 @@ test("pullPercent uses bytes when it can and stays within 0 to 100", () => {
   assert.equal(pullPercent({ completed_bytes: 0, total_bytes: 0, percent: 42 }), 42);
   assert.equal(pullPercent({ completed_bytes: 2000, total_bytes: 1000 }), 100);
   assert.equal(pullPercent({ completed_bytes: 0, total_bytes: 0 }), 0);
+});
+
+const SETTINGS: GlobalLLMSettings = {
+  global_default_provider: "ollama", global_default_model: "qwen:9b",
+  flow_overrides: { story_script: { provider_id: "groq", model_name: "llama-3.3" } },
+  providers: [
+    { id: "ollama", name: "Local Ollama", type: "local", is_configured: true, is_healthy: true, models: [] },
+    { id: "openrouter", name: "OpenRouter", type: "cloud", is_configured: false, is_healthy: false, models: [] },
+    { id: "groq", name: "Groq", type: "cloud", is_configured: true, is_healthy: true, models: [] },
+  ],
+};
+const INFO: LLMProviderInfo[] = [{ provider_id: "ollama", provider_name: "Local Ollama", is_local: true, is_multimodal: true, is_healthy: true }, { provider_id: "custom", provider_name: "My gateway", is_local: false, is_multimodal: false, is_healthy: false }];
+
+test("the four workflows are listed in a fixed order with plain names", () => {
+  assert.deepEqual(WORKFLOWS.map((w) => [w.key, w.label]), [["story_narration", "Story narration"], ["story_script", "Script writing"], ["character_analysis", "Character profiling"], ["vision_inspection", "Panel and OCR inspection"]]);
+});
+
+test("routing round-trips and an untouched draft is not a change", () => {
+  const draft = routingFromSettings(SETTINGS);
+  assert.deepEqual(draft, { provider: "ollama", model: "qwen:9b", overrides: SETTINGS.flow_overrides });
+  assert.equal(routingChanged(SETTINGS, draft), false);
+  assert.equal(routingChanged(SETTINGS, { ...draft, model: "other" }), true);
+  assert.equal(routingChanged(SETTINGS, { ...draft, overrides: { ...draft.overrides, story_narration: { provider_id: "groq" } } }), true);
+});
+
+test("choosing 'use the default' for a workflow is not saved as an override, and is not a change from nothing", () => {
+  const draft = routingFromSettings({ ...SETTINGS, flow_overrides: {} });
+  const withGlobal = { ...draft, overrides: { story_script: { provider_id: "global", model_name: "" } } };
+  assert.equal(routingChanged({ ...SETTINGS, flow_overrides: {} }, withGlobal), false);
+  assert.deepEqual(routingToRequest(withGlobal), { global_default_provider: "ollama", global_default_model: "qwen:9b", flow_overrides: {} });
+  assert.deepEqual(routingToRequest(routingFromSettings(SETTINGS)).flow_overrides, { story_script: { provider_id: "groq", model_name: "llama-3.3" } });
+});
+
+test("providerOptions merges the catalog and the provider list and marks readiness", () => {
+  const options = providerOptions(SETTINGS, INFO);
+  assert.deepEqual(options.map((o) => [o.id, o.local, o.ready]), [["ollama", true, true], ["openrouter", false, false], ["groq", false, true], ["custom", false, false]]);
+  assert.equal(options.find((o) => o.id === "custom")!.name, "My gateway");
+});
+
+test("localFirstWarning names every cloud provider in use and stays quiet for local-only routing", () => {
+  const options = providerOptions(SETTINGS, INFO);
+  assert.equal(localFirstWarning({ provider: "ollama", model: "m", overrides: {} }, options), null);
+  assert.equal(localFirstWarning({ provider: "ollama", model: "m", overrides: { story_script: { provider_id: "global", model_name: "" } } }, options), null);
+  assert.equal(localFirstWarning({ provider: "ollama", model: "m", overrides: { story_script: { provider_id: "openrouter" } } }, options), "Cloud routing sends your text to OpenRouter. Keep Local Ollama as the default unless you mean to.");
+  assert.match(localFirstWarning({ provider: "groq", model: "m", overrides: { story_script: { provider_id: "openrouter" } } }, options)!, /OpenRouter and Groq|Groq and OpenRouter/);
+  assert.match(localFirstWarning({ provider: "mystery", model: "m", overrides: {} }, options)!, /mystery/);
 });

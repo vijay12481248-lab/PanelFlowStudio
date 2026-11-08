@@ -1,4 +1,4 @@
-import type { OllamaConfig, OllamaModelCapability, ProviderHealth, SystemResourcesResponse } from "@panelflow/shared-types";
+import type { FlowOverrideConfig, GlobalLLMSettings, LLMProviderInfo, OllamaConfig, OllamaModelCapability, ProviderHealth, SaveGlobalLLMSettingsRequest, SystemResourcesResponse } from "@panelflow/shared-types";
 
 export interface Gauge {
   id: "gpu" | "ram";
@@ -90,12 +90,12 @@ export function changedOllamaFields(saved: OllamaConfig, draft: OllamaDraft): Pa
 
 const EXAMPLE_ADDRESS = "Enter the address of your Ollama server, for example http://127.0.0.1:11434.";
 
-export function validateEndpointUrl(value: string): string | null {
+export function validateEndpointUrl(value: string, example: string = EXAMPLE_ADDRESS): string | null {
   let url: URL;
   try {
     url = new URL(value.trim());
   } catch {
-    return EXAMPLE_ADDRESS;
+    return example;
   }
   if (url.protocol !== "http:" && url.protocol !== "https:") return "Use an http or https address.";
   if (url.username || url.password) return "Remove the username and password from the address and use the token field.";
@@ -110,4 +110,76 @@ export function modelsForRole(models: OllamaModelCapability[], role: "vision" | 
 export function pullPercent(status: { completed_bytes: number; total_bytes: number; percent?: number }): number {
   const raw = status.total_bytes > 0 ? (status.completed_bytes / status.total_bytes) * 100 : status.percent ?? 0;
   return Math.max(0, Math.min(100, Math.round(raw)));
+}
+
+// ---------------------------------------------------------------------------
+// Providers and routing
+// ---------------------------------------------------------------------------
+
+export const WORKFLOWS: ReadonlyArray<{ key: string; label: string }> = [
+  { key: "story_narration", label: "Story narration" },
+  { key: "story_script", label: "Script writing" },
+  { key: "character_analysis", label: "Character profiling" },
+  { key: "vision_inspection", label: "Panel and OCR inspection" },
+];
+
+export interface RoutingDraft {
+  provider: string;
+  model: string;
+  overrides: Record<string, FlowOverrideConfig>;
+}
+
+export function routingFromSettings(settings: GlobalLLMSettings): RoutingDraft {
+  return { provider: settings.global_default_provider, model: settings.global_default_model, overrides: { ...settings.flow_overrides } };
+}
+
+/** "Use the default" rows are not overrides, and a missing model is the same as an empty one. */
+function effectiveOverrides(overrides: Record<string, FlowOverrideConfig>): Record<string, FlowOverrideConfig> {
+  return Object.fromEntries(
+    Object.entries(overrides)
+      .filter(([, value]) => value.provider_id !== "global")
+      .map(([key, value]) => [key, value.model_name ? { provider_id: value.provider_id, model_name: value.model_name } : { provider_id: value.provider_id }])
+      .sort(([a], [b]) => (a as string).localeCompare(b as string)),
+  );
+}
+
+export function routingChanged(saved: GlobalLLMSettings, draft: RoutingDraft): boolean {
+  return (
+    saved.global_default_provider !== draft.provider ||
+    saved.global_default_model !== draft.model ||
+    JSON.stringify(effectiveOverrides(saved.flow_overrides)) !== JSON.stringify(effectiveOverrides(draft.overrides))
+  );
+}
+
+export function routingToRequest(draft: RoutingDraft): SaveGlobalLLMSettingsRequest {
+  return { global_default_provider: draft.provider, global_default_model: draft.model, flow_overrides: effectiveOverrides(draft.overrides) };
+}
+
+export interface ProviderOption {
+  id: string;
+  name: string;
+  local: boolean;
+  ready: boolean;
+}
+
+export function providerOptions(settings: GlobalLLMSettings, info: LLMProviderInfo[]): ProviderOption[] {
+  const options: ProviderOption[] = (settings.providers ?? []).map((p) => ({ id: p.id, name: p.name, local: p.type === "local", ready: p.is_configured && p.is_healthy }));
+  for (const provider of info) {
+    if (!options.some((o) => o.id === provider.provider_id)) {
+      options.push({ id: provider.provider_id, name: provider.provider_name, local: provider.is_local, ready: provider.is_healthy });
+    }
+  }
+  return options;
+}
+
+/** A sentence for the owner when any job would send text to a cloud provider; null while everything stays local. */
+export function localFirstWarning(draft: RoutingDraft, options: ProviderOption[]): string | null {
+  const used = [draft.provider, ...Object.values(draft.overrides).map((o) => o.provider_id)].filter((id) => id !== "global");
+  const cloud = [...new Set(used)].flatMap((id) => {
+    const option = options.find((o) => o.id === id);
+    return option?.local ? [] : [option?.name ?? id];
+  });
+  if (cloud.length === 0) return null;
+  const names = cloud.length === 1 ? cloud[0] : `${cloud.slice(0, -1).join(", ")} and ${cloud.at(-1)}`;
+  return `Cloud routing sends your text to ${names}. Keep Local Ollama as the default unless you mean to.`;
 }

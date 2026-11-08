@@ -38,10 +38,9 @@ export const appRoutes: RouteObject[] = [
         element: <SettingsLayout />,
         children: [
           { index: true, loader: () => redirect(paths.settings("engine")) },
-          // Providers keeps its old screen until its section lands (M4a task 4).
           { path: "engine", ...screen(() => import("../features/settings/EngineSection"), "EngineSection") },
           { path: "models", ...screen(() => import("../features/settings/ModelsSection"), "ModelsSection") },
-          { path: "providers", ...legacy("ProvidersRoute") },
+          { path: "providers", ...screen(() => import("../features/settings/ProvidersSection"), "ProvidersSection") },
           { path: "youtube", ...screen(() => import("../features/settings/SectionPlaceholder"), "SectionPlaceholder") },
           { path: "diagnostics", ...screen(() => import("../features/settings/SectionPlaceholder"), "SectionPlaceholder") },
           { path: "*", loader: () => redirect(paths.settings("engine")) },
