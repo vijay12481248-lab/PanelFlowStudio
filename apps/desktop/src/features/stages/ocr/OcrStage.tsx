@@ -2,21 +2,27 @@ import React from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Film, Redo2, Undo2 } from "lucide-react";
 import { api } from "@panelflow/api-client";
-import type { Project } from "@panelflow/shared-types";
-import { Button, Chip, ErrorState, GlassPanel, Select, Skeleton, useToast } from "@panelflow/ui-v2";
+import type { Panel, Project } from "@panelflow/shared-types";
+import { Button, Chip, EmptyState, ErrorState, GlassPanel, Select, Skeleton, useToast } from "@panelflow/ui-v2";
 import { historyShortcut } from "../../../history/shortcuts";
 import { useError } from "../../../context/ErrorContext";
+import { ConfirmDialog } from "../kit/ConfirmDialog";
 import { JobProgress } from "../kit/JobProgress";
 import { StageToolbar } from "../kit/StageToolbar";
 import { browserDownload } from "../kit/download";
 import { refusal } from "../kit/engineReason";
 import { isTyping } from "../kit/typing";
+import { usePages } from "../kit/stageData";
 import { useFollowedJob } from "../kit/useFollowedJob";
 import { useHistoryMoves } from "../kit/useHistoryMoves";
 import { panelKeys, usePanels } from "../panels/panelsData";
+import { sortPanels } from "../panels/panelsModel";
 import { GateBanner } from "./GateBanner";
 import { ocrKeys, useOcrEngines, useTextRegions } from "./ocrData";
-import { canConfirmOCR, confirmPatch, engineProblem, needsReview, pickEngine } from "./ocrModel";
+import { PanelStrip } from "./PanelStrip";
+import { RegionCanvas } from "./RegionCanvas";
+import { RegionList } from "./RegionList";
+import { type PanelFilter, canConfirmOCR, confirmPatch, engineProblem, filterCounts, jumpToNextFlagged, needsReview, panelFilter, pickEngine, regionsByPanel } from "./ocrModel";
 
 export interface OcrStageProps {
   project: Project;
@@ -39,6 +45,8 @@ export const OcrStage: React.FC<OcrStageProps> = ({ project, onApproved, onConti
   const regionsQuery = useTextRegions(project.id);
   const regions = regionsQuery.data ?? [];
   const panelsQuery = usePanels(project.id);
+  const pagesQuery = usePages(project.id);
+  const sorted = React.useMemo(() => sortPanels(panelsQuery.data ?? [], pagesQuery.data ?? []), [panelsQuery.data, pagesQuery.data]);
   const enginesQuery = useOcrEngines();
   const engines = enginesQuery.data ?? [];
 
@@ -47,9 +55,14 @@ export const OcrStage: React.FC<OcrStageProps> = ({ project, onApproved, onConti
   const problem = enginesQuery.data ? engineProblem(engines) : null;
   const approved = OCR_APPROVED.has(project.current_stage);
 
+  const [selectedPanelId, setSelectedPanelId] = React.useState<string | null>(null);
+  const [selectedRegionId, setSelectedRegionId] = React.useState<string | null>(null);
+  const [filter, setFilter] = React.useState<PanelFilter>("all");
+  const [cropBuster, setCropBuster] = React.useState(() => Date.now());
+  const [pendingDelete, setPendingDelete] = React.useState<Panel | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [notice, setNotice] = React.useState<string | null>(null);
-  const [working, setWorking] = React.useState<null | "detect" | "confirm" | "approve" | "export">(null);
+  const [working, setWorking] = React.useState<null | "detect" | "confirm" | "approve" | "export" | "delete">(null);
   const [progress, setProgress] = React.useState<string | null>(null);
   const busy = React.useRef(false);
   const reloadRegions = () => queryClient.invalidateQueries({ queryKey: ocrKeys.regions(project.id) });
@@ -68,7 +81,7 @@ export const OcrStage: React.FC<OcrStageProps> = ({ project, onApproved, onConti
   });
 
   const history = useHistoryMoves(project.id, {
-    onMoved: async () => { await Promise.all([reloadRegions(), queryClient.invalidateQueries({ queryKey: panelKeys.list(project.id) })]); },
+    onMoved: async () => { await Promise.all([reloadRegions(), queryClient.invalidateQueries({ queryKey: panelKeys.list(project.id) })]); setCropBuster(Date.now()); },
     onFailed: (which, err) => {
       setError(`Couldn't ${which} that. Reload the page if this keeps happening.`);
       reportError({ title: which === "undo" ? "Undo Failed" : "Redo Failed", message: `Could not ${which} project state.`, severity: "warning", source: "pipeline", projectId: project.id, rawDetails: err as Record<string, any> });
@@ -128,11 +141,48 @@ export const OcrStage: React.FC<OcrStageProps> = ({ project, onApproved, onConti
     download(`ocr_contract_${project.id}.json`, JSON.stringify(contract, null, 2));
   });
 
+  const filtered = React.useMemo(() => panelFilter(sorted, regions, filter), [sorted, regions, filter]);
+  const counts = React.useMemo(() => filterCounts(sorted, regions), [sorted, regions]);
+  const activeId = selectedPanelId && sorted.some((p) => p.id === selectedPanelId) ? selectedPanelId : (filtered[0] ?? sorted[0])?.id ?? null;
+  const activePanel = sorted.find((p) => p.id === activeId) ?? null;
+  const panelRegions = (activeId ? regionsByPanel(regions)[activeId] : undefined) ?? [];
+  const at = filtered.findIndex((p) => p.id === activeId);
+  const hasPrevious = at > 0;
+  const hasNext = at >= 0 ? at < filtered.length - 1 : filtered.length > 0;
+
+  const selectPanel = (id: string) => { setSelectedPanelId(id); setSelectedRegionId(null); };
+  const goToPanel = (delta: -1 | 1) => { const target = filtered[at < 0 ? 0 : at + delta]; if (target) selectPanel(target.id); };
+  const jumpToPanel = (sequence: number) => { const found = sorted.find((p) => p.sequence === sequence); if (found) selectPanel(found.id); return Boolean(found); };
+  const jumpToFlagged = () => { const next = jumpToNextFlagged(regions, sorted, selectedRegionId); if (next) { setSelectedPanelId(next.panel_id); setSelectedRegionId(next.id); } };
+  const cycleRegion = (delta: 1 | -1) => {
+    if (panelRegions.length === 0) return;
+    const index = panelRegions.findIndex((r) => r.id === selectedRegionId);
+    setSelectedRegionId(panelRegions[index < 0 ? (delta > 0 ? 0 : panelRegions.length - 1) : (index + delta + panelRegions.length) % panelRegions.length].id);
+  };
+  const removePanel = () => {
+    const panel = pendingDelete;
+    setPendingDelete(null);
+    if (!panel) return;
+    void run("delete", "Couldn't delete the panel.", async () => {
+      await api.deletePanel(project.id, panel.id);
+      history.refresh();
+      setSelectedPanelId((id) => (id === panel.id ? null : id));
+      setSelectedRegionId(null);
+      setCropBuster(Date.now());
+      await Promise.all([reloadRegions(), queryClient.invalidateQueries({ queryKey: panelKeys.list(project.id) })]);
+    });
+  };
+
   const keys = React.useRef<(e: KeyboardEvent) => void>(() => {});
   keys.current = (event) => {
     if (event.defaultPrevented || isTyping(event.target as HTMLElement | null)) return;
     const action = historyShortcut(event);
-    if (action) { event.preventDefault(); void history.move(action); }
+    if (action) { event.preventDefault(); void history.move(action); return; }
+    if (event.key === "[") { event.preventDefault(); cycleRegion(-1); }
+    else if (event.key === "]") { event.preventDefault(); cycleRegion(1); }
+    else if (event.key === "ArrowLeft" && !event.shiftKey) { if (hasPrevious) goToPanel(-1); }
+    else if (event.key === "ArrowRight" && !event.shiftKey) { if (hasNext) goToPanel(1); }
+    else if (event.key === "Escape") setSelectedRegionId(null);
   };
   React.useEffect(() => {
     const onKey = (event: KeyboardEvent) => keys.current(event);
@@ -140,7 +190,7 @@ export const OcrStage: React.FC<OcrStageProps> = ({ project, onApproved, onConti
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  if (regionsQuery.isError || panelsQuery.isError) return <ErrorState title="Couldn't load the text" description="Check that the engine is running, then try again." onRetry={() => { void regionsQuery.refetch(); void panelsQuery.refetch(); }} />;
+  if (regionsQuery.isError || panelsQuery.isError || pagesQuery.isError) return <ErrorState title="Couldn't load the text" description="Check that the engine is running, then try again." onRetry={() => { void regionsQuery.refetch(); void panelsQuery.refetch(); void pagesQuery.refetch(); }} />;
 
   const statusChip = approved ? <Chip tone="ok">Approved</Chip> : regions.length > 0 ? <Chip tone="accent">Needs approving</Chip> : <Chip>No text yet</Chip>;
   const availability = history.availability;
@@ -191,11 +241,35 @@ export const OcrStage: React.FC<OcrStageProps> = ({ project, onApproved, onConti
 
       {regionsQuery.isLoading || panelsQuery.isLoading ? (
         <Skeleton className="h-72" />
-      ) : regions.length === 0 ? (
-        <p className="text-sm text-fg-dim">No text regions yet. Detect text regions to find the text in the panels.</p>
+      ) : sorted.length === 0 ? (
+        <GlassPanel blur={false}><EmptyState title="No panels yet" description="Go back to Panels and detect them first." /></GlassPanel>
       ) : (
-        <GateBanner regions={regions} onJump={() => {}} />
+        <>
+          {regions.length === 0 ? <p className="text-sm text-fg-dim">No text regions yet. Detect text regions to find the text in the panels.</p> : <GateBanner regions={regions} onJump={jumpToFlagged} />}
+          <PanelStrip projectId={project.id} panels={filtered} regions={regions} counts={counts} filter={filter} onFilter={setFilter} activeId={activeId} cropBuster={cropBuster} onSelect={selectPanel} onDelete={setPendingDelete} onJump={jumpToPanel} />
+          {activePanel && (
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
+              <RegionCanvas projectId={project.id} panel={activePanel} regions={panelRegions} selectedRegionId={selectedRegionId} onSelectRegion={setSelectedRegionId} cropBuster={cropBuster} hasPrevious={hasPrevious} hasNext={hasNext} onPrevious={() => goToPanel(-1)} onNext={() => goToPanel(1)} />
+              <div className="grid min-w-0 content-start gap-4">
+                <GlassPanel blur={false} className="grid grid-cols-1 gap-3 p-4">
+                  <h3 className="font-display text-sm font-semibold text-fg">{`Panel ${activePanel.sequence}`}</h3>
+                  <RegionList regions={panelRegions} selectedId={selectedRegionId} onSelect={setSelectedRegionId} />
+                </GlassPanel>
+              </div>
+            </div>
+          )}
+        </>
       )}
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title={pendingDelete ? `Delete panel ${pendingDelete.sequence}?` : "Delete panel?"}
+        description="The panel and its text regions are removed. You can undo it with Undo."
+        confirmLabel="Delete panel"
+        danger
+        onConfirm={removePanel}
+        onCancel={() => setPendingDelete(null)}
+      />
     </div>
   );
 };

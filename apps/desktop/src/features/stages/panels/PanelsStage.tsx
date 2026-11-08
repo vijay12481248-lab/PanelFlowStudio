@@ -8,6 +8,7 @@ import { historyShortcut } from "../../../history/shortcuts";
 import { useError } from "../../../context/ErrorContext";
 import type { Box } from "../kit/canvas/geometry";
 import { PageCanvas, type CanvasBox } from "../kit/canvas/PageCanvas";
+import { useFitZoom } from "../kit/canvas/useFitZoom";
 import { ConfirmDialog } from "../kit/ConfirmDialog";
 import { JobProgress } from "../kit/JobProgress";
 import { StageToolbar } from "../kit/StageToolbar";
@@ -40,21 +41,6 @@ export interface PanelsStageProps {
 
 const DETECT_ADVICE = "Check the engine log in Diagnostics, then try again.";
 const FALLBACK_SIZE = { w: 1920, h: 2400 };
-
-/** Fit the canvas to the width of its container. Before it can be measured (and in tests) a fixed fraction is used. */
-function useFitZoom(imageWidth: number) {
-  const ref = React.useRef<HTMLDivElement | null>(null);
-  const [width, setWidth] = React.useState(0);
-  React.useEffect(() => {
-    const el = ref.current;
-    if (!el || typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(() => setWidth(el.clientWidth));
-    observer.observe(el);
-    setWidth(el.clientWidth);
-    return () => observer.disconnect();
-  }, []);
-  return { ref, zoom: width > 0 ? Math.max(5, Math.floor((width / imageWidth) * 100)) : 40 };
-}
 
 /** Panels: detect panels on every page, fix them on the page, and confirm. Undo and redo are the engine's. */
 export const PanelsStage: React.FC<PanelsStageProps> = ({ project, onConfirmed, onContinue, onOpenStoryEditor }) => {
@@ -98,7 +84,7 @@ export const PanelsStage: React.FC<PanelsStageProps> = ({ project, onConfirmed, 
   const pagePanels = activePage ? panelsOnPage(panels, activePage.id) : [];
   const selected = panels.find((p) => p.id === selectedId) ?? null;
   const size = activePage && loaded?.pageId === activePage.id ? { w: loaded.w, h: loaded.h } : activePage?.width && activePage?.height ? { w: activePage.width, h: activePage.height } : FALLBACK_SIZE;
-  const fit = useFitZoom(size.w);
+  const fit = useFitZoom(size.w, 5);
   const zoom = zoomMode === "fit" ? fit.zoom : zoomMode;
 
   const editing = usePanelEditing({ project, pages, onChanged: () => { history.refresh(); setCropBuster(Date.now()); } });

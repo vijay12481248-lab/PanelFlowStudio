@@ -8,6 +8,8 @@ export interface CanvasBox {
   tone: "accent" | "ok" | "warn" | "bad" | "neutral";
   /** Can be selected but not moved, resized or nudged. */
   locked?: boolean;
+  /** Can be selected like any box but is never moved, resized or nudged, and is not drawn as locked. */
+  fixed?: boolean;
 }
 
 export interface InteractionOptions {
@@ -64,14 +66,14 @@ export function useCanvasInteraction(options: InteractionOptions) {
       const additive = e.shiftKey || e.ctrlKey || e.metaKey;
       opts.current.onSelect(cb.id, additive);
       const { editable, drawMode } = opts.current;
-      if (!editable || cb.locked || drawMode || additive) return;
+      if (!editable || cb.locked || cb.fixed || drawMode || additive) return;
       capture(e);
       session.current = { kind: "move", id: cb.id, start: toImage(e), startBox: cb.box };
     },
 
     onHandlePointerDown(e: React.PointerEvent, cb: CanvasBox, handle: Handle) {
       e.stopPropagation();
-      if (!opts.current.editable || cb.locked) return;
+      if (!opts.current.editable || cb.locked || cb.fixed) return;
       capture(e);
       session.current = { kind: "resize", id: cb.id, handle, start: toImage(e), startBox: cb.box };
     },
@@ -120,7 +122,7 @@ export function useCanvasInteraction(options: InteractionOptions) {
       if (e.key === "Enter" || e.key === " ") { e.preventDefault(); opts.current.onSelect(cb.id, false); return; }
       if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(e.key)) return;
       const { editable, image } = opts.current;
-      if (!editable || cb.locked) return;
+      if (!editable || cb.locked || cb.fixed) return;
       const current = find(cb.id)?.box ?? cb.box;
       const next = nudgeBox(current, e.key as "ArrowLeft", e.altKey ? 1 : 10, e.shiftKey, image);
       e.preventDefault();

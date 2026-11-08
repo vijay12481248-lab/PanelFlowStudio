@@ -21,6 +21,8 @@ export interface PageCanvasProps {
   zoom: number;
   editable?: boolean;
   className?: string;
+  /** What the fallback says when the image cannot load. */
+  unavailableLabel?: string;
 }
 
 const TONE: Record<CanvasBox["tone"], string> = {
@@ -41,7 +43,7 @@ const HANDLES: Array<{ handle: Handle; fx: number; fy: number; cursor: string }>
  * arrow keys (Alt for single pixels, Shift to resize); a new box can be drawn. Drawing and dragging use the pointer, everything
  * has a keyboard path, and the image says so when it cannot load.
  */
-export const PageCanvas: React.FC<PageCanvasProps> = ({ image, boxes, selectedId, onSelect, onChange, onCommit, onDraw, onImageSize, drawMode = false, showBoxes = true, zoom, editable = true, className }) => {
+export const PageCanvas: React.FC<PageCanvasProps> = ({ image, boxes, selectedId, onSelect, onChange, onCommit, onDraw, onImageSize, drawMode = false, showBoxes = true, zoom, editable = true, className, unavailableLabel = "Page image unavailable" }) => {
   const [attempt, setAttempt] = React.useState(0);
   const [failed, setFailed] = React.useState(false);
   const interaction = useCanvasInteraction({ image: { w: image.width, h: image.height }, boxes, editable, drawMode, onSelect, onChange, onCommit, onDraw });
@@ -52,7 +54,7 @@ export const PageCanvas: React.FC<PageCanvasProps> = ({ image, boxes, selectedId
   if (failed) {
     return (
       <div role="status" className="grid min-h-48 place-items-center gap-2 rounded-ctl border border-edge bg-glass p-6 text-center text-sm text-fg-dim">
-        <span>Page image unavailable</span>
+        <span>{unavailableLabel}</span>
         <Button size="sm" variant="secondary" onClick={() => { setAttempt((n) => n + 1); setFailed(false); }}>Retry</Button>
       </div>
     );
@@ -90,7 +92,7 @@ export const PageCanvas: React.FC<PageCanvasProps> = ({ image, boxes, selectedId
                   strokeWidth={active ? stroke * 1.8 : stroke}
                   strokeDasharray={cb.locked ? `${stroke * 4} ${stroke * 3}` : undefined}
                   className={`${TONE[cb.tone]} outline-none focus-visible:stroke-info`}
-                  style={{ cursor: editable && !cb.locked && !drawMode ? "move" : "pointer" }}
+                  style={{ cursor: editable && !cb.locked && !cb.fixed && !drawMode ? "move" : "pointer" }}
                   onPointerDown={(e) => interaction.onBoxPointerDown(e, cb)}
                   onKeyDown={(e) => interaction.onBoxKeyDown(e, cb)}
                 />
@@ -98,7 +100,7 @@ export const PageCanvas: React.FC<PageCanvasProps> = ({ image, boxes, selectedId
               </g>
             );
           })}
-          {showBoxes && editable && selected && !selected.locked && !drawMode && HANDLES.map(({ handle, fx, fy, cursor }) => (
+          {showBoxes && editable && selected && !selected.locked && !selected.fixed && !drawMode && HANDLES.map(({ handle, fx, fy, cursor }) => (
             <rect
               key={handle}
               data-handle={handle}
