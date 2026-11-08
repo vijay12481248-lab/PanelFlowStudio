@@ -20,6 +20,7 @@ episodes and original stories into narrated YouTube videos. Everything runs on t
 
 ## What exists (read these docs first)
 - `docs/ANIME_REVIEW.md` - anime episode review videos (ingest, rights gate, analysis, script, voice, sync, render, packaging, queue).
+- `docs/H3_LONG_VIDEO.md` - videos longer than one H3 clip: `engine/original/chain.py` chains clips between storyboard pictures (measured results and limits).
 - `docs/ORIGINAL_STORY_STUDIO.md` - original stories: story engine, shot director, prompt composer, ComfyUI art, image reviewer,
   voiced video, comic pages, series + daily queue, YouTube upload, with the measured results and the known weaknesses of each step.
 - Code map: `engine/anime/review/` (anime), `engine/original/` (stories), `engine/youtube/` (OAuth + upload), `engine/comfyui/`

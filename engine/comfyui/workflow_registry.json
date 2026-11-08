@@ -1363,5 +1363,242 @@
       "max": 2048,
       "multiple_of": 32
     }
+  },
+  {
+    "id": "herrgott_h3_chain_start",
+    "purpose": "image_to_video",
+    "filename": "herrgott_h3_chain_start.api.json",
+    "sha256": "a72188675fc5c6370cafe2f9b08b886d887d47be96814cfe80eb0da0a6c27c9c",
+    "requires_gpu": true,
+    "gpu_vram_mb": 14000,
+    "model_files": [
+      "fastvideo_fasth3_8step_v2_pruned_int8_convrot.safetensors",
+      "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+      "minimax_h3_video_vae_int8_convrot.safetensors",
+      "minimax_h3_audio_vae_fp32.safetensors"
+    ],
+    "required_nodes": [
+      "BasicGuider",
+      "BasicScheduler",
+      "CLIPLoader",
+      "CreateVideo",
+      "H3ContinuousAnalyzeHandoverV14",
+      "H3ContinuousSaveLatent",
+      "H3ContinuousStartV14",
+      "H3ContinuousStitchOutputV14",
+      "KSamplerSelect",
+      "LoadImage",
+      "MiniMaxH3SigmaShift",
+      "ModelAttentionBackend",
+      "RandomNoise",
+      "SamplerCustomAdvanced",
+      "SaveVideo",
+      "UNETLoader",
+      "VAEDecode",
+      "VAEDecodeAudio",
+      "VAELoader"
+    ],
+    "patch_slots": {
+      "prompt": {
+        "node_id": "8",
+        "input": "prompt",
+        "class_type": "H3ContinuousStartV14"
+      },
+      "seed": {
+        "node_id": "13",
+        "input": "noise_seed",
+        "class_type": "RandomNoise"
+      },
+      "filename_prefix": {
+        "node_id": "18",
+        "input": "filename_prefix",
+        "class_type": "SaveVideo"
+      },
+      "duration": {
+        "node_id": "8",
+        "input": "duration",
+        "class_type": "H3ContinuousStartV14"
+      },
+      "width": {
+        "node_id": "8",
+        "input": "width",
+        "class_type": "H3ContinuousStartV14"
+      },
+      "height": {
+        "node_id": "8",
+        "input": "height",
+        "class_type": "H3ContinuousStartV14"
+      },
+      "latent_prefix": {
+        "node_id": "21",
+        "input": "filename_prefix",
+        "class_type": "H3ContinuousSaveLatent"
+      },
+      "clip_index": {
+        "node_id": "21",
+        "input": "clip_index",
+        "class_type": "H3ContinuousSaveLatent"
+      },
+      "last_image": {
+        "node_id": "6",
+        "input": "image",
+        "class_type": "LoadImage"
+      },
+      "reference_image": {
+        "node_id": "5",
+        "input": "image",
+        "class_type": "LoadImage"
+      }
+    },
+    "dimension_policy": {
+      "mode": "exact",
+      "min": 256,
+      "max": 2048,
+      "multiple_of": 32
+    }
+  },
+  {
+    "id": "herrgott_h3_chain_continue",
+    "purpose": "image_to_video",
+    "filename": "herrgott_h3_chain_continue.api.json",
+    "sha256": "43eeb9bc847c78e003147625233cf9bace652e05c54fddfc0dbb343b078d8752",
+    "requires_gpu": true,
+    "gpu_vram_mb": 14000,
+    "model_files": [
+      "fastvideo_fasth3_8step_v2_pruned_int8_convrot.safetensors",
+      "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+      "minimax_h3_video_vae_int8_convrot.safetensors",
+      "minimax_h3_audio_vae_fp32.safetensors"
+    ],
+    "required_nodes": [
+      "BasicGuider",
+      "BasicScheduler",
+      "CLIPLoader",
+      "CreateVideo",
+      "H3ContinuousAnalyzeHandoverV14",
+      "H3ContinuousContinueV14",
+      "H3ContinuousLoadLatent",
+      "H3ContinuousSaveLatent",
+      "H3ContinuousStitchOutputV14",
+      "KSamplerSelect",
+      "LoadImage",
+      "MiniMaxH3SigmaShift",
+      "ModelAttentionBackend",
+      "RandomNoise",
+      "SamplerCustomAdvanced",
+      "SaveVideo",
+      "UNETLoader",
+      "VAEDecode",
+      "VAEDecodeAudio",
+      "VAELoader"
+    ],
+    "patch_slots": {
+      "prompt": {
+        "node_id": "8",
+        "input": "prompt",
+        "class_type": "H3ContinuousContinueV14"
+      },
+      "seed": {
+        "node_id": "13",
+        "input": "noise_seed",
+        "class_type": "RandomNoise"
+      },
+      "filename_prefix": {
+        "node_id": "18",
+        "input": "filename_prefix",
+        "class_type": "SaveVideo"
+      },
+      "duration": {
+        "node_id": "8",
+        "input": "duration",
+        "class_type": "H3ContinuousContinueV14"
+      },
+      "width": {
+        "node_id": "8",
+        "input": "width",
+        "class_type": "H3ContinuousContinueV14"
+      },
+      "height": {
+        "node_id": "8",
+        "input": "height",
+        "class_type": "H3ContinuousContinueV14"
+      },
+      "latent_prefix": {
+        "node_id": "21",
+        "input": "filename_prefix",
+        "class_type": "H3ContinuousSaveLatent"
+      },
+      "clip_index": {
+        "node_id": "21",
+        "input": "clip_index",
+        "class_type": "H3ContinuousSaveLatent"
+      },
+      "last_image": {
+        "node_id": "6",
+        "input": "image",
+        "class_type": "LoadImage"
+      },
+      "latent_path": {
+        "node_id": "5",
+        "input": "latent_path",
+        "class_type": "H3ContinuousLoadLatent"
+      },
+      "latent_index": {
+        "node_id": "5",
+        "input": "clip_index",
+        "class_type": "H3ContinuousLoadLatent"
+      }
+    },
+    "dimension_policy": {
+      "mode": "exact",
+      "min": 256,
+      "max": 2048,
+      "multiple_of": 32
+    }
+  },
+  {
+    "id": "herrgott_h3_chain_stitch",
+    "purpose": "latent_stitch",
+    "filename": "herrgott_h3_chain_stitch.api.json",
+    "sha256": "1caa0c65069be94e7abdaf7f86e3facda1ee6eb3e24ff14002d0207db8dd7459",
+    "requires_gpu": true,
+    "gpu_vram_mb": 14000,
+    "model_files": [
+      "minimax_h3_video_vae_int8_convrot.safetensors",
+      "minimax_h3_audio_vae_fp32.safetensors"
+    ],
+    "required_nodes": [
+      "H3ContinuousStitchSavedChainV14",
+      "PreviewAny",
+      "VAELoader"
+    ],
+    "patch_slots": {
+      "filename_prefix": {
+        "node_id": "4",
+        "input": "filename_prefix",
+        "class_type": "H3ContinuousStitchSavedChainV14"
+      },
+      "latent_prefix": {
+        "node_id": "4",
+        "input": "latent_prefix",
+        "class_type": "H3ContinuousStitchSavedChainV14"
+      },
+      "first_clip": {
+        "node_id": "4",
+        "input": "first_clip",
+        "class_type": "H3ContinuousStitchSavedChainV14"
+      },
+      "last_clip": {
+        "node_id": "4",
+        "input": "last_clip",
+        "class_type": "H3ContinuousStitchSavedChainV14"
+      }
+    },
+    "dimension_policy": {
+      "mode": "exact",
+      "min": 256,
+      "max": 2048,
+      "multiple_of": 32
+    }
   }
 ]

@@ -1,0 +1,62 @@
+{
+  "2": {
+    "inputs": {
+      "vae_name": "minimax_h3_video_vae_int8_convrot.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "Video VAE",
+      "cnr_id": "comfy-core",
+      "ver": "0.30.0"
+    }
+  },
+  "3": {
+    "inputs": {
+      "vae_name": "minimax_h3_audio_vae_fp32.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "Audio VAE",
+      "cnr_id": "comfy-core",
+      "ver": "0.30.0"
+    }
+  },
+  "4": {
+    "inputs": {
+      "latent_prefix": "h3_continuous/dg056/clip",
+      "first_clip": 1,
+      "last_clip": 0,
+      "filename_prefix": "video/dg056_stitched",
+      "video_crossfade_frames": 4,
+      "audio_crossfade_ms": 15,
+      "luminance_match": false,
+      "luminance_fade_frames": 16,
+      "max_luminance_correction_percent": 10,
+      "crf": 18,
+      "max_safe_tail_bridge_frames": 0,
+      "video_vae": [
+        "2",
+        0
+      ],
+      "audio_vae": [
+        "3",
+        0
+      ]
+    },
+    "class_type": "H3ContinuousStitchSavedChainV14",
+    "_meta": {
+      "title": "STITCH SAVED CHAIN — Memory-Bounded",
+      "cnr_id": "herrgotts-h3-infinite-continuation-suite",
+      "ver": "1.4.0"
+    }
+  },
+  "5": {
+    "inputs": {
+      "source": [
+        "4",
+        0
+      ]
+    },
+    "class_type": "PreviewAny"
+  }
+}

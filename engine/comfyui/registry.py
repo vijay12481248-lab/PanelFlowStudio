@@ -16,7 +16,9 @@ _WORKFLOW_ID = re.compile(r"^[a-z][a-z0-9_-]{2,63}$")
 _REGISTRY_FILE = Path(__file__).with_name("workflow_registry.json")
 _MAX_WORKFLOW_BYTES = 4 * 1024 * 1024
 _REQUIRED_PATCH_SLOTS = frozenset({"prompt", "seed", "filename_prefix"})
-_OPTIONAL_PATCH_SLOTS = frozenset({"negative_prompt", "duration", "width", "height", "reference_image", "last_image", "reference_image_b", "reference_weight", "mask_image", "denoise", "voice_audio", "pose_image", "depth_image", "pose_weight", "depth_weight", "control_weight"})
+_OPTIONAL_PATCH_SLOTS = frozenset({"negative_prompt", "duration", "width", "height", "reference_image", "last_image", "reference_image_b", "reference_weight", "mask_image", "denoise", "voice_audio", "pose_image", "depth_image", "pose_weight", "depth_weight", "control_weight",
+                                   "latent_prefix", "clip_index", "latent_path", "latent_index", "first_clip", "last_clip"})  # the last six: H3 chain latents (engine/original/chain.py)
+_STITCH_PURPOSE = "latent_stitch"  # a finishing graph that decodes saved latents: no prompt or seed, only a filename prefix is required
 
 
 class WorkflowRegistryError(RuntimeError):
@@ -72,7 +74,8 @@ class ComfyWorkflowRegistry:
         entry: dict[str, Any],
     ) -> None:
         slots = entry.get("patch_slots")
-        if not isinstance(slots, dict) or not _REQUIRED_PATCH_SLOTS <= set(slots) <= _REQUIRED_PATCH_SLOTS | _OPTIONAL_PATCH_SLOTS:
+        required = frozenset({"filename_prefix"}) if entry.get("purpose") == _STITCH_PURPOSE else _REQUIRED_PATCH_SLOTS
+        if not isinstance(slots, dict) or not required <= set(slots) <= _REQUIRED_PATCH_SLOTS | _OPTIONAL_PATCH_SLOTS:
             raise WorkflowRegistryError(
                 f"Workflow {workflow_id} must declare exact patch slots: {sorted(_REQUIRED_PATCH_SLOTS)}"
             )
