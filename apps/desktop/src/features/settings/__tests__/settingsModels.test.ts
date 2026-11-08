@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import type { ProviderHealth, SystemResourcesResponse } from "@panelflow/shared-types";
 import type { OllamaConfig, OllamaModelCapability } from "@panelflow/shared-types";
 import type { GlobalLLMSettings, LLMProviderInfo } from "@panelflow/shared-types";
-import { WORKFLOWS, localFirstWarning, providerOptions, routingChanged, routingFromSettings, routingToRequest, changedOllamaFields, draftFromConfig, modelsForRole, pullPercent, resourceGauges, toolRows, validateEndpointUrl } from "../settingsModels";
+import type { HardwareDiagnostics } from "@panelflow/shared-types";
+import { diagnosticsFilename, hardwareRows, WORKFLOWS, localFirstWarning, providerOptions, routingChanged, routingFromSettings, routingToRequest, changedOllamaFields, draftFromConfig, modelsForRole, pullPercent, resourceGauges, toolRows, validateEndpointUrl } from "../settingsModels";
 
 const resources = (gpuUsed: number, over: Partial<SystemResourcesResponse["gpu"]> = {}, ramUsedPct = 40): SystemResourcesResponse => ({
   ram: { total_gb: 32, available_gb: 32 * (1 - ramUsedPct / 100), used_percent: ramUsedPct, sufficient_for_inference: true },
@@ -143,4 +144,36 @@ test("localFirstWarning names every cloud provider in use and stays quiet for lo
   assert.equal(localFirstWarning({ provider: "ollama", model: "m", overrides: { story_script: { provider_id: "openrouter" } } }, options), "Cloud routing sends your text to OpenRouter. Keep Local Ollama as the default unless you mean to.");
   assert.match(localFirstWarning({ provider: "groq", model: "m", overrides: { story_script: { provider_id: "openrouter" } } }, options)!, /OpenRouter and Groq|Groq and OpenRouter/);
   assert.match(localFirstWarning({ provider: "mystery", model: "m", overrides: {} }, options)!, /mystery/);
+});
+
+const HARDWARE: HardwareDiagnostics = {
+  os_name: "Windows", os_release: "11", architecture: "AMD64", cpu_count: 16, total_ram_gb: 31.9, available_ram_gb: 18.2, total_disk_gb: 931.5, free_disk_gb: 412.04,
+  gpu_name: "NVIDIA GeForce RTX 5060 Ti", vram_mb: 16384, cuda_available: true, ffmpeg_available: true, ffmpeg_hwaccels: ["cuda", "d3d11va"], neural_performance_tier: "GOOD",
+} as HardwareDiagnostics;
+
+test("hardwareRows reads like a spec sheet in plain units", () => {
+  const rows = Object.fromEntries(hardwareRows(HARDWARE).map((r) => [r.label, r.value]));
+  assert.equal(rows["System"], "Windows 11, AMD64");
+  assert.equal(rows["Processor cores"], "16");
+  assert.equal(rows["RAM"], "18.2 of 31.9 GB free");
+  assert.equal(rows["Disk"], "412.0 of 931.5 GB free");
+  assert.equal(rows["GPU"], "NVIDIA GeForce RTX 5060 Ti, 16.0 GB");
+  assert.equal(rows["CUDA"], "Yes");
+  assert.equal(rows["FFmpeg"], "Yes, with cuda, d3d11va");
+  assert.equal(rows["Performance"], "Good");
+});
+
+test("hardwareRows handles no CUDA, no FFmpeg and every tier", () => {
+  const none = Object.fromEntries(hardwareRows({ ...HARDWARE, cuda_available: false, ffmpeg_available: false, ffmpeg_hwaccels: [], vram_mb: 0, gpu_name: "" }).map((r) => [r.label, r.value]));
+  assert.equal(none["CUDA"], "No");
+  assert.equal(none["FFmpeg"], "No");
+  assert.equal(none["GPU"], "None found");
+  const tier = (t: HardwareDiagnostics["neural_performance_tier"]) => hardwareRows({ ...HARDWARE, neural_performance_tier: t }).find((r) => r.label === "Performance")!.value;
+  assert.deepEqual(["GOOD", "SUPPORTED", "LIMITED", "UNSUPPORTED"].map((t) => tier(t as never)), ["Good", "Supported", "Limited", "Not supported"]);
+});
+
+test("diagnosticsFilename is safe on Windows and sorts by time", () => {
+  assert.equal(diagnosticsFilename({ generated_at: "2026-11-08T12:00:00.123Z" }), "panelflow-diagnostics-2026-11-08T12-00-00Z.json");
+  assert.equal(diagnosticsFilename({ generated_at: "" }).startsWith("panelflow-diagnostics-"), true);
+  assert.ok(!/[:*?"<>|]/.test(diagnosticsFilename({ generated_at: "2026-11-08T12:00:00Z" })));
 });

@@ -42,7 +42,7 @@ export const appRoutes: RouteObject[] = [
           { path: "models", ...screen(() => import("../features/settings/ModelsSection"), "ModelsSection") },
           { path: "providers", ...screen(() => import("../features/settings/ProvidersSection"), "ProvidersSection") },
           { path: "youtube", ...screen(() => import("../features/settings/SectionPlaceholder"), "SectionPlaceholder") },
-          { path: "diagnostics", ...screen(() => import("../features/settings/SectionPlaceholder"), "SectionPlaceholder") },
+          { path: "diagnostics", ...screen(() => import("../features/settings/DiagnosticsSection"), "DiagnosticsSection") },
           { path: "*", loader: () => redirect(paths.settings("engine")) },
         ],
       },

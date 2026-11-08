@@ -1,4 +1,4 @@
-import type { FlowOverrideConfig, GlobalLLMSettings, LLMProviderInfo, OllamaConfig, OllamaModelCapability, ProviderHealth, SaveGlobalLLMSettingsRequest, SystemResourcesResponse } from "@panelflow/shared-types";
+import type { FlowOverrideConfig, GlobalLLMSettings, HardwareDiagnostics, LLMProviderInfo, OllamaConfig, OllamaModelCapability, ProviderHealth, SaveGlobalLLMSettingsRequest, SystemResourcesResponse } from "@panelflow/shared-types";
 
 export interface Gauge {
   id: "gpu" | "ram";
@@ -182,4 +182,29 @@ export function localFirstWarning(draft: RoutingDraft, options: ProviderOption[]
   if (cloud.length === 0) return null;
   const names = cloud.length === 1 ? cloud[0] : `${cloud.slice(0, -1).join(", ")} and ${cloud.at(-1)}`;
   return `Cloud routing sends your text to ${names}. Keep Local Ollama as the default unless you mean to.`;
+}
+
+// ---------------------------------------------------------------------------
+// Diagnostics
+// ---------------------------------------------------------------------------
+
+const TIER_WORD: Record<HardwareDiagnostics["neural_performance_tier"], string> = { GOOD: "Good", SUPPORTED: "Supported", LIMITED: "Limited", UNSUPPORTED: "Not supported" };
+
+export function hardwareRows(h: HardwareDiagnostics): Array<{ label: string; value: string }> {
+  return [
+    { label: "System", value: `${h.os_name} ${h.os_release}, ${h.architecture}` },
+    { label: "Processor cores", value: String(h.cpu_count) },
+    { label: "RAM", value: `${h.available_ram_gb.toFixed(1)} of ${h.total_ram_gb.toFixed(1)} GB free` },
+    { label: "Disk", value: `${h.free_disk_gb.toFixed(1)} of ${h.total_disk_gb.toFixed(1)} GB free` },
+    { label: "GPU", value: h.gpu_name && h.vram_mb > 0 ? `${h.gpu_name}, ${(h.vram_mb / 1024).toFixed(1)} GB` : "None found" },
+    { label: "CUDA", value: h.cuda_available ? "Yes" : "No" },
+    { label: "FFmpeg", value: h.ffmpeg_available ? (h.ffmpeg_hwaccels.length ? `Yes, with ${h.ffmpeg_hwaccels.join(", ")}` : "Yes") : "No" },
+    { label: "Performance", value: TIER_WORD[h.neural_performance_tier] ?? h.neural_performance_tier },
+  ];
+}
+
+/** A file name that is valid on Windows and sorts by time. */
+export function diagnosticsFilename(d: { generated_at: string }): string {
+  const stamp = (d.generated_at || new Date().toISOString()).replace(/\.\d+/, "").replace(/:/g, "-");
+  return `panelflow-diagnostics-${stamp}.json`;
 }
