@@ -40,6 +40,11 @@ export async function mount(element: React.ReactElement) {
       Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, "value")!.set!.call(input, value);
       input.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
     }),
+    /** Choose an option in a controlled React select. */
+    setSelect: (select: HTMLSelectElement, value: string) => act(async () => {
+      Object.getOwnPropertyDescriptor(dom.window.HTMLSelectElement.prototype, "value")!.set!.call(select, value);
+      select.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+    }),
     async cleanup() {
       await act(async () => root.unmount());
       container.remove();

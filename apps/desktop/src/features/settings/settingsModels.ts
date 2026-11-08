@@ -1,4 +1,4 @@
-import type { ProviderHealth, SystemResourcesResponse } from "@panelflow/shared-types";
+import type { OllamaConfig, OllamaModelCapability, ProviderHealth, SystemResourcesResponse } from "@panelflow/shared-types";
 
 export interface Gauge {
   id: "gpu" | "ram";
@@ -51,4 +51,63 @@ export function toolRows(input: { ffmpeg?: { found: boolean; version: string | n
     rows.push({ id: provider.id, label: provider.name, state, detail: provider.details ? `${statusWord(provider.status)}. ${provider.details}` : statusWord(provider.status) });
   }
   return rows;
+}
+
+// ---------------------------------------------------------------------------
+// Ollama (Models section)
+// ---------------------------------------------------------------------------
+
+export interface OllamaDraft {
+  endpoint_url: string;
+  is_remote: boolean;
+  vision_model: string;
+  reasoning_model: string;
+  narration_model: string;
+  num_ctx: number;
+  concurrency_mode: "AUTO" | "MANUAL";
+  max_gpu_concurrency: number;
+  /** Write-only: never filled from the engine, only from what the owner types. */
+  auth_token: string;
+}
+
+const OLLAMA_FIELDS = ["endpoint_url", "is_remote", "vision_model", "reasoning_model", "narration_model", "num_ctx", "concurrency_mode", "max_gpu_concurrency"] as const;
+
+export function draftFromConfig(config: OllamaConfig): OllamaDraft {
+  return {
+    endpoint_url: config.endpoint_url, is_remote: config.is_remote, vision_model: config.vision_model, reasoning_model: config.reasoning_model,
+    narration_model: config.narration_model, num_ctx: config.num_ctx, concurrency_mode: config.concurrency_mode, max_gpu_concurrency: config.max_gpu_concurrency,
+    auth_token: "",
+  };
+}
+
+/** Only the fields that differ from what is saved; the token only when one was typed. */
+export function changedOllamaFields(saved: OllamaConfig, draft: OllamaDraft): Partial<OllamaConfig> & { auth_token?: string } {
+  const changed: Record<string, unknown> = {};
+  for (const key of OLLAMA_FIELDS) if (draft[key] !== saved[key]) changed[key] = draft[key];
+  if (draft.auth_token) changed.auth_token = draft.auth_token;
+  return changed as Partial<OllamaConfig> & { auth_token?: string };
+}
+
+const EXAMPLE_ADDRESS = "Enter the address of your Ollama server, for example http://127.0.0.1:11434.";
+
+export function validateEndpointUrl(value: string): string | null {
+  let url: URL;
+  try {
+    url = new URL(value.trim());
+  } catch {
+    return EXAMPLE_ADDRESS;
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") return "Use an http or https address.";
+  if (url.username || url.password) return "Remove the username and password from the address and use the token field.";
+  return null;
+}
+
+export function modelsForRole(models: OllamaModelCapability[], role: "vision" | "reasoning" | "narration"): OllamaModelCapability[] {
+  if (role === "vision") return models.filter((m) => m.supports_vision);
+  return models.filter((m) => m.capabilities.length === 0 || m.capabilities.includes("completion"));
+}
+
+export function pullPercent(status: { completed_bytes: number; total_bytes: number; percent?: number }): number {
+  const raw = status.total_bytes > 0 ? (status.completed_bytes / status.total_bytes) * 100 : status.percent ?? 0;
+  return Math.max(0, Math.min(100, Math.round(raw)));
 }
