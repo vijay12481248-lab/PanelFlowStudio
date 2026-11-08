@@ -415,9 +415,9 @@ export const AudioScreen: React.FC<AudioScreenProps> = ({
             <Button variant="ghost" size="sm" onClick={onBack}>
               <Icons.ArrowLeft className="w-4 h-4 mr-1" /> Back
             </Button>
-            <h1 className="text-xl font-bold text-zinc-100 flex items-center gap-2">
+            <h2 className="text-xl font-bold text-zinc-100 flex items-center gap-2">
               Audio Director & Voice Review
-            </h1>
+            </h2>
             <Badge variant={isApproved ? "success" : "neutral"} className="uppercase font-mono">
               {timelineData?.status || "NOT_GENERATED"}
             </Badge>

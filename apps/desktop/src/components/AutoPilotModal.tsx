@@ -92,6 +92,14 @@ export const AutoPilotModal: React.FC<AutoPilotModalProps> = ({
     }
   }, [statusData?.logs]);
 
+  // The dialog must be dismissable from the keyboard. Closing never cancels a running pipeline.
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   const handleStartRun = async () => {

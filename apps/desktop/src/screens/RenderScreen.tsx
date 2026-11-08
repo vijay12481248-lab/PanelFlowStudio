@@ -261,9 +261,9 @@ export const RenderScreen: React.FC<RenderScreenProps> = ({
             <Button variant="ghost" size="sm" onClick={onBack}>
               <Icons.ArrowLeft className="w-4 h-4 mr-1" /> Back
             </Button>
-            <h1 className="text-xl font-bold text-zinc-100 flex items-center gap-2">
+            <h2 className="text-xl font-bold text-zinc-100 flex items-center gap-2">
               Production Renderer
-            </h1>
+            </h2>
             {activeJob && (
               <Badge
                 variant={
