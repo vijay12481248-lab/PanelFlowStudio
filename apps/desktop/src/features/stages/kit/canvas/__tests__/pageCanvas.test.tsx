@@ -225,3 +225,16 @@ test("boxes can be hidden", async () => {
   await view.cleanup(); restore();
   void log;
 });
+
+test("the canvas reports the image's natural size once it loads", async () => {
+  const restore = stubRect(100);
+  const sizes: Array<[number, number]> = [];
+  const Sized = () => <PageCanvas image={IMAGE} boxes={[]} selectedId={null} zoom={100} onSelect={() => {}} onImageSize={(w, h) => { sizes.push([w, h]); }} />;
+  const view = await mount(<Sized />);
+  const img = view.document.querySelector("img")!;
+  Object.defineProperty(img, "naturalWidth", { configurable: true, value: 1920 });
+  Object.defineProperty(img, "naturalHeight", { configurable: true, value: 22528 });
+  await act(async () => { img.dispatchEvent(new (window as any).Event("load")); });
+  assert.deepEqual(sizes, [[1920, 22528]]);
+  await view.cleanup(); restore();
+});

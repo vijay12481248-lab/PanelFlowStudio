@@ -13,6 +13,8 @@ export interface PageCanvasProps {
   onChange?: (id: string, box: Box) => void;
   onCommit?: (id: string, box: Box, previous: Box) => void;
   onDraw?: (box: Box) => void;
+  /** The image's own size once it has loaded (box coordinates are in this space). */
+  onImageSize?: (width: number, height: number) => void;
   drawMode?: boolean;
   showBoxes?: boolean;
   /** Percent: 100 draws the image at its own size. */
@@ -39,7 +41,7 @@ const HANDLES: Array<{ handle: Handle; fx: number; fy: number; cursor: string }>
  * arrow keys (Alt for single pixels, Shift to resize); a new box can be drawn. Drawing and dragging use the pointer, everything
  * has a keyboard path, and the image says so when it cannot load.
  */
-export const PageCanvas: React.FC<PageCanvasProps> = ({ image, boxes, selectedId, onSelect, onChange, onCommit, onDraw, drawMode = false, showBoxes = true, zoom, editable = true, className }) => {
+export const PageCanvas: React.FC<PageCanvasProps> = ({ image, boxes, selectedId, onSelect, onChange, onCommit, onDraw, onImageSize, drawMode = false, showBoxes = true, zoom, editable = true, className }) => {
   const [attempt, setAttempt] = React.useState(0);
   const [failed, setFailed] = React.useState(false);
   const interaction = useCanvasInteraction({ image: { w: image.width, h: image.height }, boxes, editable, drawMode, onSelect, onChange, onCommit, onDraw });
@@ -61,7 +63,7 @@ export const PageCanvas: React.FC<PageCanvasProps> = ({ image, boxes, selectedId
   return (
     <div className={`overflow-auto rounded-ctl border border-edge bg-ink ${className ?? ""}`}>
       <div className="relative" style={{ width: `${(image.width * zoom) / 100}px`, aspectRatio: `${image.width} / ${image.height}` }}>
-        <img src={src} alt={image.alt} draggable={false} className="block size-full select-none" onError={() => setFailed(true)} />
+        <img src={src} alt={image.alt} draggable={false} className="block size-full select-none" onLoad={(e) => onImageSize?.(e.currentTarget.naturalWidth, e.currentTarget.naturalHeight)} onError={() => setFailed(true)} />
         <svg
           ref={interaction.overlayRef}
           data-canvas-overlay
