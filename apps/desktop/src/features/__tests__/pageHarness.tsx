@@ -12,7 +12,7 @@ export const engineState = (overrides: Partial<EngineState> = {}): EngineState =
 });
 
 /** Mount a page the way the app does (router, query cache, engine, errors, toasts), in jsdom. */
-export async function mountPage(element: React.ReactElement, path = "/page") {
+export async function mountPage(element: React.ReactElement, path = "/page", engine: EngineState = engineState()) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const router = createMemoryRouter(
     [{ path: "/page", element }, { path: "*", element: <p id="elsewhere">elsewhere</p> }],
@@ -22,7 +22,7 @@ export async function mountPage(element: React.ReactElement, path = "/page") {
     <ErrorProvider>
       <QueryClientProvider client={client}>
         <ToastProvider>
-          <EngineContext.Provider value={engineState()}><RouterProvider router={router} /></EngineContext.Provider>
+          <EngineContext.Provider value={engine}><RouterProvider router={router} /></EngineContext.Provider>
         </ToastProvider>
       </QueryClientProvider>
     </ErrorProvider>,

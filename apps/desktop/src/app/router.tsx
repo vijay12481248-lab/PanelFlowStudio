@@ -38,8 +38,8 @@ export const appRoutes: RouteObject[] = [
         element: <SettingsLayout />,
         children: [
           { index: true, loader: () => redirect(paths.settings("engine")) },
-          // Engine and Providers keep their old screens until their sections land (M4a tasks 2 and 4).
-          { path: "engine", ...legacy("EngineSettingsRoute") },
+          // Providers keeps its old screen until its section lands (M4a task 4).
+          { path: "engine", ...screen(() => import("../features/settings/EngineSection"), "EngineSection") },
           { path: "models", ...screen(() => import("../features/settings/SectionPlaceholder"), "SectionPlaceholder") },
           { path: "providers", ...legacy("ProvidersRoute") },
           { path: "youtube", ...screen(() => import("../features/settings/SectionPlaceholder"), "SectionPlaceholder") },
