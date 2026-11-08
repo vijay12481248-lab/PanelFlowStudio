@@ -15,6 +15,7 @@ import { MotionScreen } from "../../screens/MotionScreen";
 import { RenderScreen } from "../../screens/RenderScreen";
 import { AutoPilotModal } from "../../components/AutoPilotModal";
 import { paths, nextStage, prevStage, type Stage } from "../../app/routes";
+import { PublishStage } from "../workbench/PublishStage";
 import { WorkbenchFrame } from "../workbench/WorkbenchFrame";
 import { resolveStageRoute } from "./resolveStageRoute";
 
@@ -42,6 +43,7 @@ const StageScreen: React.FC<{ project: Project; stage: Stage }> = ({ project, st
     case "script": return <ScriptReviewScreen project={project} onBack={back} onScriptApproved={advance} onProceedToAudio={advance} onProjectUpdated={update} />;
     case "audio": return <AudioScreen project={project} onBack={back} onAudioApproved={advance} onProceedToMotion={advance} />;
     case "motion": return <MotionScreen project={project} onBack={back} onMotionApproved={advance} onProceedToRender={advance} />;
+    case "publish": return <PublishStage project={project} />;
     default: return <RenderScreen project={project} onBack={back} onRenderComplete={update} />;
   }
 };
