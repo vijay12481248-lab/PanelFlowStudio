@@ -9,14 +9,16 @@ export interface TileProps {
   /** Shown on a gradient when there is no image (usually the project's initials). */
   fallbackText: string;
   onOpen?: () => void;
+  /** Called when the image fails to load, so the caller can fall back to the initials. */
+  onImageError?: () => void;
 }
 
-export const Tile: React.FC<TileProps> = ({ title, subtitle, imageUrl, fallbackText, onOpen }) => {
+export const Tile: React.FC<TileProps> = ({ title, subtitle, imageUrl, fallbackText, onOpen, onImageError }) => {
   const content = (
     <>
       <span className="relative block aspect-square overflow-hidden rounded-card border border-edge bg-gradient-to-br from-info to-glow">
         {imageUrl ? (
-          <img src={imageUrl} alt="" className="size-full object-cover" loading="lazy" />
+          <img src={imageUrl} alt="" className="size-full object-cover" loading="lazy" onError={onImageError} />
         ) : (
           <span className="absolute bottom-2 left-3 font-display text-lg font-bold text-white/80">{fallbackText}</span>
         )}

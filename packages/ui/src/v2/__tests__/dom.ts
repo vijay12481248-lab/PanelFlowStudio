@@ -31,7 +31,14 @@ export async function mount(element: React.ReactElement) {
     }),
     /** A full mouse press (down, up, click): Radix tabs and menus react to mousedown, not click. */
     press: (el: Element) => act(async () => {
-      for (const type of ["mousedown", "mouseup", "click"]) el.dispatchEvent(new dom.window.MouseEvent(type, { bubbles: true, button: 0 }));
+      for (const type of ["pointerdown", "mousedown", "pointerup", "mouseup", "click"]) el.dispatchEvent(new dom.window.MouseEvent(type, { bubbles: true, button: 0 }));
+    }),
+    /** Dispatch a plain event such as "error" (a failed image load). */
+    fire: (el: Element, type: string) => act(async () => { el.dispatchEvent(new dom.window.Event(type, { bubbles: false })); }),
+    /** Type into a controlled React input. */
+    setValue: (input: HTMLInputElement, value: string) => act(async () => {
+      Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, "value")!.set!.call(input, value);
+      input.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
     }),
     async cleanup() {
       await act(async () => root.unmount());
