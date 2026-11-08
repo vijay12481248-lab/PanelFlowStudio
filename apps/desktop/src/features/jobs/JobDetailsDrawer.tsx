@@ -17,7 +17,7 @@ export interface JobDetailsDrawerProps {
 export const JobDetailsDrawer: React.FC<JobDetailsDrawerProps> = ({ job, projectTitle, open, onOpenChange }) => (
   <Drawer open={open && job !== null} onOpenChange={onOpenChange} title={job ? `${jobLabel(job.job_type)}, ${projectTitle}` : "Job details"}>
     {job && (
-      <dl className="grid gap-3 text-sm">
+      <dl className="grid gap-3 text-sm grid-cols-1">
         <Row label="Status">{job.status.charAt(0) + job.status.slice(1).toLowerCase()}</Row>
         <Row label="Message">{job.message || "None"}</Row>
         <Row label="Started">{when(job.started_at)}</Row>

@@ -76,15 +76,15 @@ export const ProjectsPage: React.FC = () => {
     body = <EmptyState title="No projects match" description="Try a different search or filter." />;
   } else {
     body = (
-      <div className="grid gap-8">
+      <div className="grid gap-8 grid-cols-1">
         {groups.map((group) => (
-          <section key={group.series} className="grid gap-3">
+          <section key={group.series} className="grid gap-3 grid-cols-1">
             <h2 className="font-display text-base font-semibold text-fg">{group.series}</h2>
             {grid(group.projects)}
           </section>
         ))}
         {singles.length > 0 && (
-          <section className="grid gap-3">
+          <section className="grid gap-3 grid-cols-1">
             {groups.length > 0 && <h2 className="font-display text-base font-semibold text-fg">Other projects</h2>}
             {grid(singles)}
           </section>
@@ -94,13 +94,13 @@ export const ProjectsPage: React.FC = () => {
   }
 
   return (
-    <div className="mx-auto grid w-full max-w-6xl gap-6 p-6 md:p-8">
+    <div className="mx-auto grid w-full max-w-6xl gap-6 p-6 md:p-8 grid-cols-1">
       <PageHeader
         title="Projects"
         meta={<span>{`${all.length} ${all.length === 1 ? "project" : "projects"}`}</span>}
         actions={<Button variant="primary" onClick={() => navigate(paths.create("new"))}>Create a project</Button>}
       />
-      <GlassPanel className="grid gap-4 p-4">
+      <GlassPanel className="grid gap-4 p-4 grid-cols-1">
         <Input type="search" placeholder="Search projects" aria-label="Search projects" value={query} onChange={(event) => setQuery(event.target.value)} />
         <Tabs
           value={filter}

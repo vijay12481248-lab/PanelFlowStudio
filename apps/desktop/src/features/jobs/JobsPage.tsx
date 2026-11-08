@@ -45,14 +45,14 @@ export const JobsPage: React.FC = () => {
   if (jobs.isError) {
     body = <ErrorState title="Couldn't load jobs" description="Check that the engine is running, then try again." onRetry={() => void jobs.refetch()} />;
   } else if (jobs.isLoading || !jobs.data) {
-    body = <div className="grid gap-2"><Skeleton className="h-14" /><Skeleton className="h-14" /><Skeleton className="h-14" /></div>;
+    body = <div className="grid gap-2 grid-cols-1"><Skeleton className="h-14" /><Skeleton className="h-14" /><Skeleton className="h-14" /></div>;
   } else if (jobs.data.length === 0) {
     body = <EmptyState title="No jobs yet. Start a pipeline stage and it shows up here." />;
   } else if (list.length === 0) {
     body = <EmptyState {...EMPTY_TAB[tab]} />;
   } else {
     body = (
-      <div className="grid gap-2">
+      <div className="grid gap-2 grid-cols-1">
         {list.map((job) => (
           <JobRow
             key={job.job_id}
@@ -69,7 +69,7 @@ export const JobsPage: React.FC = () => {
   }
 
   return (
-    <div className="mx-auto grid w-full max-w-5xl gap-5 p-6 md:p-8">
+    <div className="mx-auto grid w-full max-w-5xl gap-5 p-6 md:p-8 grid-cols-1">
       <PageHeader title="Jobs" meta={<span>{`${running} running, ${waiting} waiting`}</span>} />
       <GlassPanel className="p-4">
         <Tabs

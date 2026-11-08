@@ -14,7 +14,7 @@ const STUDIOS: Array<{ kind: CreateKind; title: string; subtitle: string; initia
 export const CreateIndex: React.FC = () => {
   const navigate = useNavigate();
   return (
-    <div className="mx-auto grid w-full max-w-5xl gap-6 p-6 md:p-8">
+    <div className="mx-auto grid w-full max-w-5xl gap-6 p-6 md:p-8 grid-cols-1">
       <PageHeader title="Create" meta={<span>What do you want to make?</span>} />
       <div className="grid grid-cols-2 gap-5 md:grid-cols-3 lg:grid-cols-5">
         {STUDIOS.map((studio) => (

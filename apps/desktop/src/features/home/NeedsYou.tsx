@@ -25,11 +25,11 @@ export const NeedsYou: React.FC<NeedsYouProps> = ({ items, onAction, onCreate, o
   }
   const shown = showAll ? items : items.slice(0, CAP);
   return (
-    <div className="grid gap-4">
+    <div className="grid gap-4 grid-cols-1">
       {GROUP_ORDER.map(([kind, label]) => {
         const rows = shown.filter((item) => item.kind === kind);
         return rows.length === 0 ? null : (
-          <section key={kind} className="grid gap-1">
+          <section key={kind} className="grid gap-1 grid-cols-1">
             <h3 data-inbox-group className="px-2 text-xs font-medium text-fg-faint">{label}</h3>
             {rows.map((item) => (
               <div key={item.id} data-inbox-row>

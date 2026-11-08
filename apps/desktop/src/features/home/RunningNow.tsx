@@ -10,7 +10,7 @@ const SHOWN = 3;
 export const RunningNow: React.FC<{ jobs: Job[]; projectTitles: ReadonlyMap<string, string> }> = ({ jobs, projectTitles }) => {
   const active = groupJobs(jobs).active;
   return (
-    <section aria-label="Running now" className="grid gap-2">
+    <section aria-label="Running now" className="grid gap-2 grid-cols-1">
       <div className="flex items-center justify-between px-2">
         <h3 className="text-xs font-medium text-fg-faint">Running now</h3>
         <Link to={paths.jobs()} className="text-xs text-info underline underline-offset-2">All jobs</Link>

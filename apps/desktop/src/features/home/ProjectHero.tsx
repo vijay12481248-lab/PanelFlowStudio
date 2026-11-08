@@ -19,7 +19,7 @@ export const ProjectHero: React.FC<ProjectHeroProps> = ({ project, coverUrl, not
         <img src={coverUrl} alt="" onError={() => setCoverFailed(true)} className="absolute inset-y-0 right-0 h-full w-3/5 object-cover" />
       )}
       <div className="absolute inset-0 bg-gradient-to-r from-flat via-flat/90 to-transparent" />
-      <div className="relative grid max-w-[62%] gap-3 p-6">
+      <div className="relative grid max-w-[62%] gap-3 p-6 grid-cols-1">
         <Chip tone="accent" className="w-fit">{stageLabel(project.current_stage)}</Chip>
         <h2 className="font-display text-3xl font-bold leading-tight tracking-tight text-fg">{project.title}</h2>
         <p className="text-sm text-fg-dim">{note ?? `${project.ready_pages} of ${project.total_pages} pages ready`}</p>

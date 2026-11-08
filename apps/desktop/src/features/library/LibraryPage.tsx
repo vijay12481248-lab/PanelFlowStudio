@@ -7,7 +7,7 @@ import { paths } from "../../app/routes";
 export const LibraryPage: React.FC = () => {
   const navigate = useNavigate();
   return (
-    <div className="mx-auto grid w-full max-w-3xl gap-6 p-6 md:p-8">
+    <div className="mx-auto grid w-full max-w-3xl gap-6 p-6 md:p-8 grid-cols-1">
       <PageHeader title="Library" />
       <GlassPanel>
         <EmptyState

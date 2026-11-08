@@ -16,14 +16,14 @@ export const CreationsSection: React.FC = () => {
     api.openOriginalStory(slug, target).catch(() => setProblem("Couldn't open that. Check that the file still exists."));
 
   return (
-    <section aria-label="Creations" className="grid gap-3">
+    <section aria-label="Creations" className="grid gap-3 grid-cols-1">
       <div>
         <h2 className="font-display text-base font-semibold text-fg">Creations</h2>
         <p className="text-sm text-fg-dim">Original Stories and ChronoFlow videos, saved as files next to your projects.</p>
         {failed && <p className="text-xs text-warn">Some creations could not be loaded. Is the engine running?</p>}
         {problem && <p role="alert" className="text-xs text-bad">{problem}</p>}
       </div>
-      <GlassPanel blur={false} className="grid gap-1 p-2">
+      <GlassPanel blur={false} className="grid gap-1 p-2 grid-cols-1">
         {stories.map((story) => (
           <ListRow
             key={story.slug}

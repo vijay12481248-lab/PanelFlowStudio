@@ -64,7 +64,7 @@ export const LegacyStageRoute: React.FC = () => {
     return <ErrorState title="This project no longer exists" description="It may have been deleted. Go back to your projects." onBack={() => navigate(paths.projects())} />;
   }
   if (decision.kind === "loading" || !query.data) {
-    return <div className="mx-auto grid max-w-7xl gap-4 p-8"><Skeleton className="h-10 w-72" /><Skeleton className="h-64 w-full" /></div>;
+    return <div className="mx-auto grid max-w-7xl gap-4 p-8 grid-cols-1"><Skeleton className="h-10 w-72" /><Skeleton className="h-64 w-full" /></div>;
   }
 
   const project = query.data;

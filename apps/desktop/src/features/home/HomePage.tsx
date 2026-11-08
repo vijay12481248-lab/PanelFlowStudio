@@ -42,18 +42,18 @@ export const HomePage: React.FC = () => {
     return <ErrorState title="Couldn't load your projects" description="Check that the engine is running, then try again." onRetry={() => void projects.refetch()} />;
   }
   if (projects.isLoading || !projects.data) {
-    return <div className="mx-auto grid max-w-6xl gap-4 p-8"><Skeleton className="h-10 w-48" /><Skeleton className="h-64" /></div>;
+    return <div className="mx-auto grid max-w-6xl gap-4 p-8 grid-cols-1"><Skeleton className="h-10 w-48" /><Skeleton className="h-64" /></div>;
   }
 
   const focusItem = focus ? items.find((item) => item.projectId === focus.id) : undefined;
   return (
-    <div className="mx-auto grid w-full max-w-6xl gap-6 p-6 md:p-8">
+    <div className="mx-auto grid w-full max-w-6xl gap-6 p-6 md:p-8 grid-cols-1">
       <PageHeader title="Home" meta={<span>{items.length === 0 ? "All clear" : `${items.length} ${items.length === 1 ? "thing needs" : "things need"} you`}</span>} />
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
-        <div className="grid content-start gap-6">
+        <div className="grid content-start gap-6 grid-cols-1">
           {focus && <ProjectHero project={focus} coverUrl={covers[focus.id]} note={focusItem?.title} onContinue={() => open(focus)} />}
           {recent.length > 0 && (
-            <section aria-label="Recent projects" className="grid gap-3">
+            <section aria-label="Recent projects" className="grid gap-3 grid-cols-1">
               <div className="flex items-center justify-between">
                 <h2 className="font-display text-sm font-semibold text-fg">Recent projects</h2>
                 <Button variant="ghost" size="sm" onClick={() => navigate(paths.projects())}>All projects</Button>
@@ -66,8 +66,8 @@ export const HomePage: React.FC = () => {
             </section>
           )}
         </div>
-        <div className="grid content-start gap-6">
-          <GlassPanel className="grid gap-3 p-4">
+        <div className="grid content-start gap-6 grid-cols-1">
+          <GlassPanel className="grid gap-3 p-4 grid-cols-1">
             <h2 className="font-display text-sm font-semibold text-fg">Needs you</h2>
             <NeedsYou items={items} onAction={(item) => void act(item)} onCreate={() => navigate(paths.create("new"))} onOpenStories={() => navigate(paths.create("stories"))} />
           </GlassPanel>

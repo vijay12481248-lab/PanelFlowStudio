@@ -19,7 +19,7 @@ function useProject(id: string | undefined) {
   return useQuery({ queryKey: ["project", id], queryFn: () => api.getProject(id as string), enabled: Boolean(id), retry: false });
 }
 
-const Loading: React.FC = () => <div className="mx-auto grid max-w-5xl gap-4 p-8"><Skeleton className="h-10 w-72" /><Skeleton className="h-64 w-full" /></div>;
+const Loading: React.FC = () => <div className="mx-auto grid max-w-5xl gap-4 p-8 grid-cols-1"><Skeleton className="h-10 w-72" /><Skeleton className="h-64 w-full" /></div>;
 
 const ProjectMissing: React.FC = () => {
   const navigate = useNavigate();
@@ -69,7 +69,7 @@ export const ImageRoute: React.FC = () => {
     return <div className="mx-auto w-full max-w-7xl p-6 md:p-8"><ComfyImageScreen project={project.data} onBack={() => navigate(paths.create())} /></div>;
   }
   return (
-    <div className="mx-auto grid w-full max-w-3xl gap-4 p-6 md:p-8">
+    <div className="mx-auto grid w-full max-w-3xl gap-4 p-6 md:p-8 grid-cols-1">
       <PageHeader title="Create an image" meta={<span>Pick the project the image belongs to.</span>} />
       {projects.data?.length === 0 && <EmptyState title="No projects yet" description="Create a project first, then generate images for it." action={<Button variant="primary" onClick={() => navigate(paths.create("new"))}>Create a project</Button>} />}
       {projects.data?.map((p) => <ListRow key={p.id} title={p.title} subtitle={p.current_stage} onSelect={() => navigate(`${paths.create("image")}?project=${encodeURIComponent(p.id)}`)} />)}
@@ -101,7 +101,7 @@ export const EngineSettingsRoute: React.FC = () => {
   const location = useLocation();
   const [open, setOpen] = React.useState(Boolean((location.state as { open?: boolean } | null)?.open));
   return (
-    <div className="mx-auto grid w-full max-w-3xl gap-4 p-6 md:p-8">
+    <div className="mx-auto grid w-full max-w-3xl gap-4 p-6 md:p-8 grid-cols-1">
       <PageHeader title="Engine and models" meta={<span>Local tools, models and their health.</span>} />
       <EmptyState title="Engine and models" description="See which local tools and models are ready." action={<Button variant="primary" onClick={() => setOpen(true)}>Show engine and models</Button>} />
       <ProviderHealthModal open={open} onClose={() => setOpen(false)} />

@@ -14,11 +14,14 @@ export interface TileProps {
 }
 
 export const Tile: React.FC<TileProps> = ({ title, subtitle, imageUrl, fallbackText, onOpen, onImageError }) => {
+  // A cover that 404s must never leave a broken-image icon. Remember which URL failed, so a new URL is tried again.
+  const [failedUrl, setFailedUrl] = React.useState<string | undefined>();
+  const showImage = Boolean(imageUrl) && imageUrl !== failedUrl;
   const content = (
     <>
       <span className="relative block aspect-square overflow-hidden rounded-card border border-edge bg-gradient-to-br from-info to-glow">
-        {imageUrl ? (
-          <img src={imageUrl} alt="" className="size-full object-cover" loading="lazy" onError={onImageError} />
+        {showImage ? (
+          <img src={imageUrl} alt="" className="size-full object-cover" loading="lazy" onError={() => { setFailedUrl(imageUrl); onImageError?.(); }} />
         ) : (
           <span className="absolute bottom-2 left-3 font-display text-lg font-bold text-white/80">{fallbackText}</span>
         )}
