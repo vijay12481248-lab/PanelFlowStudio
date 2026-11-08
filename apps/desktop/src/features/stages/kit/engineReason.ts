@@ -11,6 +11,6 @@ export function engineReason(err: unknown): string | null {
 }
 
 /** A headline plus the engine's reason, or plain advice when there is no safe reason. */
-export function refusal(headline: string, err: unknown): string {
-  return `${headline} ${engineReason(err) ?? "Check that the engine is running, then try again."}`;
+export function refusal(headline: string, err: unknown, fallback = "Check that the engine is running, then try again."): string {
+  return `${headline} ${engineReason(err) ?? fallback}`;
 }

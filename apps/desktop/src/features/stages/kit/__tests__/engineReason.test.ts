@@ -24,4 +24,6 @@ test("messages that look like exceptions, paths or network noise are hidden", ()
 test("refusal joins a headline with the reason, or with the fallback advice", () => {
   assert.equal(refusal("Couldn't confirm the pages.", new Error("No pages are ready.")), "Couldn't confirm the pages. No pages are ready.");
   assert.equal(refusal("Couldn't confirm the pages.", new Error("Failed to fetch")), "Couldn't confirm the pages. Check that the engine is running, then try again.");
+  assert.equal(refusal("Motion can't be approved yet.", new Error("Failed to fetch"), "Plan the motion, then try again."), "Motion can't be approved yet. Plan the motion, then try again.");
+  assert.equal(refusal("Motion can't be approved yet.", new Error("No shots."), "ignored"), "Motion can't be approved yet. No shots.");
 });
