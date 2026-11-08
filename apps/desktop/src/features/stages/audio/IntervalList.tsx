@@ -22,7 +22,7 @@ const isSpeech = (iv: AudioInterval) => Boolean(iv.audio_file_uri && (iv as any)
 function speakerName(iv: AudioInterval, characters: CharacterEntity[]): string {
   const id: string = (iv as any).character_id || (iv as any).speaker_character_id || (iv as any).speaker_id || "";
   if (!id) return "";
-  const known = characters.find((c) => c.character_id === id);
+  const known = characters.find((c) => c.character_id === id || (c as { id?: string }).id === id);
   return known?.display_name || known?.canonical_name || id.replace(/^char_/, "");
 }
 

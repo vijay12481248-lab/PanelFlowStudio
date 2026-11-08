@@ -102,3 +102,60 @@ test("Publish shows the checks and waits for a button before asking for packagin
   await page.waitForTimeout(1500);
   expect(requests.filter((url) => url.includes("/youtube/packaging")), "packaging was requested without a button press").toEqual([]);
 });
+
+// M5b stages. These only read and navigate: they never press Start acquisition, Confirm, Plan, Generate, Regenerate, Approve or the Delete confirmation.
+for (const stage of ["acquire", "pages", "motion", "audio"] as const) {
+  test(`${stage} is one frame with one title and no second back button`, async ({ page }) => {
+    const id = await firstPipelineProject(page);
+    await page.goto(`/#/projects/${id}/${stage}`);
+    await expect(page.getByRole("list", { name: "Pipeline stages" })).toBeVisible({ timeout: 15_000 });
+    await page.waitForTimeout(1500);
+    await expect(page.locator("h1")).toHaveCount(1);
+    await expect(page.locator("h2").first()).toBeVisible();
+    await expect(page.getByRole("button", { name: /^(Back|Projects)$/ }), "the frame owns navigation").toHaveCount(0);
+    await expect(page.locator("[data-stage-body]")).not.toContainText(/Proceed to|Inspect Manifest/);
+  });
+}
+
+test("Pages offers keyboard reordering, and Delete asks inside the app", async ({ page }) => {
+  const id = await firstPipelineProject(page);
+  const dialogs: string[] = [];
+  page.on("dialog", (dialog) => { dialogs.push(dialog.message()); void dialog.dismiss(); });
+  await page.goto(`/#/projects/${id}/pages`);
+  await expect(page.getByRole("heading", { name: "Review pages" })).toBeVisible({ timeout: 15_000 });
+  await page.waitForTimeout(1500);
+  const confirm = page.getByRole("button", { name: /^Confirm acquisition/ });
+  await expect(confirm).toBeVisible();
+  const deletes = page.getByRole("button", { name: /^Delete page/ });
+  test.skip((await deletes.count()) === 0, "This project has no pages to delete.");
+  await expect(page.getByRole("button", { name: /^Move page 1 earlier$/ })).toBeDisabled();
+  await deletes.first().click();
+  await expect(page.getByRole("dialog")).toContainText(/Delete page \d+\?/);
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  expect(dialogs, "no browser confirm or alert may appear").toEqual([]);
+});
+
+test("Motion shows either the shots with the preview-only note or the invitation to plan", async ({ page }) => {
+  const id = await firstPipelineProject(page);
+  await page.goto(`/#/projects/${id}/motion`);
+  await expect(page.getByRole("heading", { name: "Plan camera motion" })).toBeVisible({ timeout: 15_000 });
+  await page.waitForTimeout(2000);
+  const shots = page.getByText("Preview only. These choices are not saved to the plan.").first();
+  const invite = page.getByText("No camera plan yet");
+  await expect(shots.or(invite).first()).toBeVisible();
+});
+
+test("Audio shows either the player or the invitation to generate", async ({ page }) => {
+  const id = await firstPipelineProject(page);
+  await page.goto(`/#/projects/${id}/audio`);
+  await expect(page.getByRole("heading", { name: "Review the voice track" })).toBeVisible({ timeout: 15_000 });
+  await page.waitForTimeout(2000);
+  const player = page.getByRole("group", { name: "Voice track player" });
+  const invite = page.getByText("No voice track yet");
+  await expect(player.or(invite).first()).toBeVisible();
+  await page.getByRole("button", { name: "Voice casting" }).click();
+  await expect(page.getByRole("dialog")).toContainText("Voice casting");
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+});

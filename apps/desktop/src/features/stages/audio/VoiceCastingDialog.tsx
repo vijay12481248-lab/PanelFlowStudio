@@ -1,7 +1,7 @@
 import React from "react";
 import type { CharacterEntity } from "@panelflow/shared-types";
 import { Button, Dialog, Field, Select } from "@panelflow/ui-v2";
-import { castingValue, setCharacterVoice, setNarratorVoice, type Casting, type Voice } from "./casting";
+import { castingValue, narratorVoice, setCharacterVoice, setNarratorVoice, type Castable, type Casting, type Voice } from "./casting";
 
 export interface VoiceCastingDialogProps {
   open: boolean;
@@ -28,7 +28,7 @@ export const VoiceCastingDialog: React.FC<VoiceCastingDialogProps> = ({ open, ch
       {current && !voices.some((v) => v.id === current) && <option value={current}>{`${current} (saved)`}</option>}
     </>
   );
-  const narrator = draft.narrator ?? "";
+  const narrator = narratorVoice(draft);
 
   return (
     <Dialog
@@ -53,11 +53,12 @@ export const VoiceCastingDialog: React.FC<VoiceCastingDialogProps> = ({ open, ch
         {characters.length === 0 ? (
           <p className="rounded-ctl border border-dashed border-edge p-3 text-sm text-fg-dim">No characters found yet. The narrator voice is used for every line.</p>
         ) : (
-          characters.map((character) => {
-            const name = character.canonical_name || character.display_name;
+          characters.map((entity) => {
+            const character = entity as Castable & CharacterEntity; // the engine sends `id`, which the typed entity lacks
+            const name = character.canonical_name || character.display_name || "Unnamed character";
             const current = castingValue(draft, character);
             return (
-              <Field key={character.character_id || name} label={name} hint={character.aliases?.length ? `Also called ${character.aliases.join(", ")}` : undefined}>
+              <Field key={character.character_id || character.id || name} label={name} hint={character.aliases?.length ? `Also called ${character.aliases.join(", ")}` : undefined}>
                 <Select aria-label={`Voice for ${name}`} value={current} onChange={(e) => setDraft((d) => setCharacterVoice(d, character, e.target.value))}>{options(current)}</Select>
               </Field>
             );

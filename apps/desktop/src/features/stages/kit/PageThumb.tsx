@@ -22,7 +22,7 @@ export const PageThumb: React.FC<PageThumbProps> = ({ src, label, failed, reason
       ) : (
         <span className="grid justify-items-center gap-1 p-2 text-center">
           <span className="text-sm font-semibold text-fg">{label}</span>
-          <span className="text-xs font-medium text-bad">Failed</span>
+          {failed ? <span className="text-xs font-medium text-bad">Failed</span> : <span className="text-xs text-fg-dim">Image unavailable</span>}
           {reason && <span className="line-clamp-3 text-[11px] text-fg-faint">{reason}</span>}
         </span>
       )}

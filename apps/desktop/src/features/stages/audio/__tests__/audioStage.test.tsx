@@ -256,3 +256,59 @@ test("the space bar plays and pauses, except when a button or field has the focu
   assert.ok(button(view.document, "Pause"), "still playing");
   await view.cleanup();
 });
+
+// The engine's real shapes, taken from a saved project: `text` and `speaker_character_id` on intervals, `sample_rate`,
+// no speech_intervals_count, and characters that have an `id` and a null canonical_name.
+const REAL_TIMELINE = {
+  id: "t1", project_id: "p1", status: "DRAFT", total_duration: 137.87, voice_casting: { Narrator: "am_michael" }, warnings: [],
+  timeline: {
+    timeline_id: "t", total_duration_sec: 137.87, sample_rate: 24000, channels: 1,
+    intervals: [
+      { interval_id: "r1", script_segment_id: "s1", speaker_character_id: "abc", text: "A glowing object streaks across the sky.", start_time: 0.12, end_time: 3.92, is_speech: true, audio_file_uri: "C:\p\one.wav" },
+      { interval_id: "r2", start_time: 3.92, end_time: 4.4, is_speech: false },
+      { interval_id: "r3", script_segment_id: "s2", speaker_character_id: null, text: "He looked up.", start_time: 4.4, end_time: 6, is_speech: true, audio_file_uri: "C:\p\two.wav" },
+    ],
+  },
+};
+const REAL_CHARACTERS = [{ id: "abc", canonical_name: null, display_name: "Shangguan Yulin", aliases: [], role: "UNKNOWN" }, { id: "def", canonical_name: null, display_name: "Luo Yunhai", aliases: [], role: "UNKNOWN" }];
+
+test("the engine's real field names are read: speech count, sample rate, speaker, text, duration", async () => {
+  stub({ timeline: REAL_TIMELINE, over: { listCharacters: async () => REAL_CHARACTERS } });
+  const { view } = await show();
+  const body = text(view.document);
+  assert.ok(body.includes("2 takes"), "speech takes are counted when the engine sends no count");
+  assert.ok(body.includes("24,000 Hz"), "sample_rate is read");
+  assert.ok(body.includes("Shangguan Yulin"), "the speaker is found by id");
+  assert.ok(body.includes("A glowing object streaks across the sky."), "text is shown");
+  assert.ok(body.includes("3.80s"), "duration comes from the start and end");
+  assert.ok(body.includes("2:18"));
+  await view.cleanup();
+});
+
+test("a timeline with no sample rate says it was not reported instead of inventing one", async () => {
+  const noRate = JSON.parse(JSON.stringify(REAL_TIMELINE));
+  delete noRate.timeline.sample_rate;
+  stub({ timeline: noRate });
+  const { view } = await show();
+  assert.ok(text(view.document).includes("Not reported"));
+  assert.ok(!text(view.document).includes("48,000"));
+  await view.cleanup();
+});
+
+test("characters that have only an id are cast, and the saved narrator voice is shown in the dialog", async () => {
+  const calls = stub({ timeline: REAL_TIMELINE, over: { listCharacters: async () => REAL_CHARACTERS } });
+  const { view } = await show();
+  assert.ok(text(view.document).includes("2 of 2 characters"), "both are cast by default");
+  await view.click(button(view.document, "Voice casting")!);
+  const narrator = view.document.querySelector('[aria-label="Narrator voice"]') as HTMLSelectElement;
+  assert.equal(narrator.value, "am_michael", "a saved voice the engine no longer lists is kept");
+  assert.ok([...narrator.options].some((o) => o.textContent === "am_michael (saved)"));
+  assert.ok(view.document.querySelector('[aria-label="Voice for Shangguan Yulin"]'));
+  await view.click(dialogButton(view.document, "Save and generate")!);
+  await view.settle();
+  assert.equal(calls.generate.length, 1);
+  assert.equal(calls.generate[0]!.Narrator, "am_michael", "the saved narrator voice is sent unchanged");
+  assert.equal(calls.generate[0]!.abc, "vx1");
+  assert.equal(calls.generate[0]!.def, "vx2");
+  await view.cleanup();
+});

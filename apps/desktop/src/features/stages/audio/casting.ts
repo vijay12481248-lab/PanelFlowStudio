@@ -1,10 +1,11 @@
 export interface Voice { id: string; name: string; gender?: string }
 
-export interface Castable { character_id?: string; canonical_name: string; gender?: string }
+/** A speaker. The engine sends `id` (the typed `character_id` is absent) and often a null `canonical_name`. */
+export interface Castable { character_id?: string; id?: string; canonical_name?: string | null; display_name?: string; gender?: string }
 
 export type Casting = Record<string, string>;
 
-const NARRATOR_KEYS = ["narrator", "NARRATOR", "The_Narrator"] as const;
+const NARRATOR_KEYS = ["narrator", "NARRATOR", "The_Narrator", "Narrator"] as const;
 
 /** The voices of the engine's primary speech provider. The id is what the engine looks a voice up by. */
 export function voicesFromProviders(res: { primary_provider: string; providers: Array<{ id: string; voices?: any[] }> } | null | undefined): Voice[] {
@@ -23,11 +24,17 @@ export function voicesFromProviders(res: { primary_provider: string; providers: 
 
 /** A character is cast under its id and under its name, because the engine may refer to either. */
 export function castKeys(character: Castable): string[] {
-  return [...new Set([character.character_id, character.canonical_name].filter((k): k is string => Boolean(k)))];
+  return [...new Set([character.character_id ?? character.id, character.canonical_name ?? character.display_name].filter((k): k is string => Boolean(k)))];
 }
 
 export function castingValue(casting: Casting, character: Castable): string {
   for (const key of castKeys(character)) if (casting[key]) return casting[key];
+  return "";
+}
+
+/** The saved narrator voice, from whichever narrator key the engine used. */
+export function narratorVoice(casting: Casting): string {
+  for (const key of NARRATOR_KEYS) if (casting[key]) return casting[key];
   return "";
 }
 
@@ -42,7 +49,7 @@ export function defaultCasting(characters: Castable[], voices: Voice[], current:
   let general = 0;
   const perGender = new Map<string, number>();
   for (const character of characters) {
-    if (castingValue(out, character)) continue;
+    if (castKeys(character).length === 0 || castingValue(out, character)) continue;
     const gender = character.gender?.trim().toLowerCase();
     const sameGender = gender ? voices.filter((v) => v.gender?.trim().toLowerCase() === gender) : [];
     let pick: Voice;

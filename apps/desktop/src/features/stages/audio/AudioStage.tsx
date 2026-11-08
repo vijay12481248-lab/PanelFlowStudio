@@ -47,6 +47,8 @@ export const AudioStage: React.FC<AudioStageProps> = ({ project, onApproved, onC
   const voices = React.useMemo(() => voicesFromProviders(providersQuery.data), [providersQuery.data]);
   const intervals = timeline?.timeline?.intervals ?? [];
   const totalSeconds = timeline?.total_duration || timeline?.timeline?.total_duration_sec || 0;
+  const speechCount = timeline?.timeline?.speech_intervals_count ?? intervals.filter((iv) => iv.audio_file_uri && (iv as any).is_speech !== false).length;
+  const sampleRate: number | undefined = timeline?.timeline?.sample_rate_hz ?? (timeline?.timeline as any)?.sample_rate;
   const approved = timeline?.status === "APPROVED" || project.current_stage === "AUDIO_APPROVED";
 
   // The casting sent with the next generation: the engine's saved choices, then generic defaults for anyone left out, then edits.
@@ -173,8 +175,8 @@ export const AudioStage: React.FC<AudioStageProps> = ({ project, onApproved, onC
       {timeline && (
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <Stat label="Total length" value={formatClock(totalSeconds)} detail={`${totalSeconds.toFixed(1)}s`} />
-          <Stat label="Dialogue lines" value={`${timeline.timeline.speech_intervals_count || 0} takes`} />
-          <Stat label="Sample rate" value={`${(timeline.timeline.sample_rate_hz ?? 48000).toLocaleString("en-US")} Hz`} />
+          <Stat label="Dialogue lines" value={`${speechCount} takes`} />
+          <Stat label="Sample rate" value={sampleRate ? `${sampleRate.toLocaleString("en-US")} Hz` : "Not reported"} />
           <Stat label="Voices cast" value={`${castCount} of ${characters.length} characters`} />
         </div>
       )}

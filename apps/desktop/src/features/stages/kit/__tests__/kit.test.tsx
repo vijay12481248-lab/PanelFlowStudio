@@ -55,14 +55,15 @@ test("Escape cancels the confirm dialog", async () => {
   await view.cleanup();
 });
 
-test("a page thumbnail whose image fails shows its label and Failed, never a broken image", async () => {
+test("a page thumbnail whose image cannot load shows its label and Image unavailable, never a broken image or a false Failed", async () => {
   const view = await mountPage(<PageThumb src="/missing.png" label="Page 3" />);
   const img = view.document.querySelector("img")!;
   assert.ok(img);
   await view.fire(img, "error");
   assert.equal(view.document.querySelector("img"), null);
   assert.ok(text(view.document).includes("Page 3"));
-  assert.ok(text(view.document).includes("Failed"));
+  assert.ok(text(view.document).includes("Image unavailable"));
+  assert.ok(!text(view.document).includes("Failed"), "the engine did not report a failure, only the file is missing");
   await view.cleanup();
 });
 

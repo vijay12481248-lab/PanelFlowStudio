@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { castKeys, castingValue, defaultCasting, setCharacterVoice, setNarratorVoice, voicesFromProviders } from "../casting";
+import { castKeys, castingValue, defaultCasting, narratorVoice, setCharacterVoice, setNarratorVoice, voicesFromProviders } from "../casting";
 
 const voice = (id: string, gender?: string) => ({ id, name: id.toUpperCase(), gender });
 
@@ -84,9 +84,9 @@ test("choosing a voice for a character sets both keys, and Automatic removes the
   assert.deepEqual(setCharacterVoice({ c1: "v2", One: "v2", other: "o" }, character, ""), { other: "o" });
 });
 
-test("the narrator voice is set under the three narrator keys, and Automatic removes them", () => {
-  assert.deepEqual(setNarratorVoice({}, "v1"), { narrator: "v1", NARRATOR: "v1", The_Narrator: "v1" });
-  assert.deepEqual(setNarratorVoice({ narrator: "v1", NARRATOR: "v1", The_Narrator: "v1", c1: "x" }, ""), { c1: "x" });
+test("the narrator voice is set under every narrator key the engine has used, and Automatic removes them", () => {
+  assert.deepEqual(setNarratorVoice({}, "v1"), { narrator: "v1", NARRATOR: "v1", The_Narrator: "v1", Narrator: "v1" });
+  assert.deepEqual(setNarratorVoice({ narrator: "v1", NARRATOR: "v1", The_Narrator: "v1", Narrator: "v1", c1: "x" }, ""), { c1: "x" });
 });
 
 test("the value shown for a character is its id entry, then its name entry, then automatic", () => {
@@ -94,4 +94,25 @@ test("the value shown for a character is its id entry, then its name entry, then
   assert.equal(castingValue({ c1: "a", One: "b" }, character), "a");
   assert.equal(castingValue({ One: "b" }, character), "b");
   assert.equal(castingValue({}, character), "");
+});
+
+test("the engine's real character shape (an id, no canonical name) is cast under its id and display name", () => {
+  const real = { id: "abc123", canonical_name: null, display_name: "Shangguan Yulin" } as any;
+  assert.deepEqual(castKeys(real), ["abc123", "Shangguan Yulin"]);
+  const out = defaultCasting([real, { id: "def456", canonical_name: null, display_name: "Luo" } as any], [voice("v1"), voice("v2")]);
+  assert.deepEqual([out.abc123, out["Shangguan Yulin"], out.def456, out.Luo], ["v1", "v1", "v2", "v2"]);
+  assert.equal(castingValue(out, real), "v1");
+});
+
+test("a character with no id and no name has no keys, and is skipped rather than cast under undefined", () => {
+  assert.deepEqual(castKeys({} as any), []);
+  assert.deepEqual(defaultCasting([{} as any], [voice("v1")]), {});
+});
+
+test("the saved narrator voice is read from any of the narrator keys the engine has used", () => {
+  assert.equal(narratorVoice({ Narrator: "am_michael" }), "am_michael");
+  assert.equal(narratorVoice({ NARRATOR: "x", narrator: "y" }), "y");
+  assert.equal(narratorVoice({}), "");
+  assert.deepEqual(setNarratorVoice({ Narrator: "am_michael" }, ""), {}, "Automatic clears every narrator key, including the capitalised one");
+  assert.equal(setNarratorVoice({}, "v1").Narrator, "v1");
 });
