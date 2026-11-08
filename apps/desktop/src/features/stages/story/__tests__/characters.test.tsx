@@ -2,7 +2,6 @@ import { mountPage } from "../../../__tests__/pageHarness"; // first: installs j
 import React from "react";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { act } from "react";
 import { api } from "@panelflow/api-client";
 import type { UtteranceEntity } from "@panelflow/shared-types";
 import { CharactersTab } from "../CharactersTab";
@@ -132,17 +131,12 @@ test("a failed save keeps the dialog open and says why in words", async () => {
   await view.cleanup();
 });
 
-test("Cancel and Escape close the editor without saving, and focus returns to the Edit button", async () => {
+test("Cancel closes the editor without saving (focus return and Escape are covered by the Dialog and ConfirmDialog tests)", async () => {
   const calls = stub();
   const view = await show();
-  const edit = button(view.document, "Edit Red Demon")!;
-  edit.focus();
-  await view.click(edit);
+  await view.click(button(view.document, "Edit Red Demon")!);
+  await view.setSelect(field(view.document, "Role"), "MINOR");
   await view.click(dialogButton(view.document, "Cancel")!);
-  assert.equal(dialog(view.document), null);
-  assert.equal(view.document.activeElement, edit);
-  await view.click(edit);
-  await act(async () => { dialog(view.document)!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); });
   assert.equal(dialog(view.document), null);
   assert.equal(calls.update.length, 0);
   await view.cleanup();
