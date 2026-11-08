@@ -837,7 +837,9 @@ export type RenderStatus =
   | "VALIDATING"
   | "COMPLETE"
   | "FAILED"
-  | "CANCELLED";
+  | "CANCELLED"
+  /** A render the project has changed under since it was made. The engine sends it; it is history, not work. */
+  | "STALE";
 
 export interface YouTubeThumbnailResearch {
   aspect_ratio: "16:9" | "9:16" | "1:1";
