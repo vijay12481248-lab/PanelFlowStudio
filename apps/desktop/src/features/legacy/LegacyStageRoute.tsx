@@ -1,6 +1,6 @@
 import React from "react";
 import { Navigate, useNavigate, useParams } from "react-router";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { api } from "@panelflow/api-client";
 import type { Project } from "@panelflow/shared-types";
 import { ErrorState, Skeleton } from "@panelflow/ui-v2";
@@ -14,7 +14,8 @@ import { AudioScreen } from "../../screens/AudioScreen";
 import { MotionScreen } from "../../screens/MotionScreen";
 import { RenderScreen } from "../../screens/RenderScreen";
 import { AutoPilotModal } from "../../components/AutoPilotModal";
-import { paths, nextStage, prevStage, type Stage } from "../../app/routes";
+import { paths, type Stage } from "../../app/routes";
+import { useStageNav } from "../stages/kit/useStageNav";
 import { PublishStage } from "../workbench/PublishStage";
 import { WorkbenchFrame } from "../workbench/WorkbenchFrame";
 import { resolveStageRoute } from "./resolveStageRoute";
@@ -26,12 +27,7 @@ const AUTOPILOT_STAGE: Record<string, Stage> = {
 
 const StageScreen: React.FC<{ project: Project; stage: Stage }> = ({ project, stage }) => {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const go = (to: Stage) => navigate(paths.stage(project.id, to));
-  const back = () => { const previous = prevStage(stage); navigate(previous ? paths.stage(project.id, previous) : paths.projects()); };
-  const update = (updated: Project) => queryClient.setQueryData(["project", project.id], updated);
-  /** Every old "approved" / "proceed" callback stored the updated project, then moved to the next screen. */
-  const advance = (updated: Project) => { update(updated); const next = nextStage(stage); if (next) go(next); };
+  const { goTo: go, back, store: update, advance } = useStageNav(project, stage);
   const openEditor = (target: Project) => { update(target); navigate(paths.editor(target.id)); };
 
   switch (stage) {
