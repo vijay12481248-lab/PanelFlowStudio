@@ -130,3 +130,16 @@ test("the editor and ChronoFlow stay mounted when the engine drops, so unsaved w
     await view.cleanup();
   }
 });
+
+test("Home, Projects, Jobs and Library load the v2 pages, not the old dashboard", async () => {
+  const component = async (url: string) => {
+    const route = matchRoutes(appRoutes, url)!.at(-1)!.route;
+    return (await route.lazy!() as { Component: React.ComponentType }).Component;
+  };
+  assert.equal(await component("/home"), (await import("../../features/home/HomePage")).HomePage);
+  assert.equal(await component("/projects"), (await import("../../features/projects/ProjectsPage")).ProjectsPage);
+  assert.equal(await component("/jobs"), (await import("../../features/jobs/JobsPage")).JobsPage);
+  const library = (await import("../../features/library/LibraryPage")).LibraryPage;
+  assert.equal(await component("/library"), library);
+  assert.equal(await component("/library/audio"), library);
+});
