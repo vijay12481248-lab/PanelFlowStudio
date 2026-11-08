@@ -1,10 +1,15 @@
 @import "tailwindcss" source(none);
 @import "./components/story-editor/setup-workspace.css";
+@import "@fontsource-variable/sora";
+@import "@fontsource-variable/geist";
+@import "@fontsource-variable/geist-mono";
+@import "../../../packages/ui/src/v2/tokens.css";
 @config "../tailwind.config.js";
 /* Explicit paths are relative to this file, not the build working directory. */
 @source "../index.html";
 @source "./";
 @source "../../../packages/ui/src";
+@source "../../../packages/ui/src/v2";
 
 /* Preserve v3 interactions and defaults without rewriting component classes. */
 @custom-variant hover (&:hover);

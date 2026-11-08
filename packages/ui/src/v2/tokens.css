@@ -1,0 +1,58 @@
+/*
+  Midnight Glass tokens (UI v2). Values come from docs/superpowers/specs/2026-11-08-ui-v2-design.md section 3.
+  Text rules: fg and fg-dim are body text (4.5:1 or better, checked in __tests__/tokens.test.ts).
+  fg-faint is for secondary text and metadata only (3:1 on ink): never use it for anything a person must read.
+*/
+@theme static {
+  --color-ink: #070b1c;
+  --color-navy: #0c1433;
+  --color-glow: #1b2f7a;
+  --color-glass: rgba(22, 32, 72, 0.55);
+  --color-glass-hi: rgba(34, 48, 98, 0.62);
+  --color-flat: #101a3d;
+  --color-edge: rgba(150, 175, 255, 0.14);
+
+  --color-fg: #eef1ff;
+  --color-fg-dim: #9aa6d0;
+  --color-fg-faint: #6a76a3;
+
+  --color-accent: #3b6bf5;
+  --color-accent-soft: rgba(59, 107, 245, 0.22);
+
+  --color-ok: #46d6a3;
+  --color-warn: #f0b35a;
+  --color-bad: #f2667a;
+  --color-info: #7aa2ff;
+
+  --radius-card: 22px;
+  --radius-ctl: 14px;
+
+  --font-display: "Sora Variable", system-ui, sans-serif;
+  --font-body: "Geist Variable", system-ui, sans-serif;
+  --font-data: "Geist Mono Variable", ui-monospace, monospace;
+
+  --duration-fast: 120ms;
+  --duration-base: 200ms;
+}
+
+/* Page background used by the shell and hub screens. */
+.pf-canvas {
+  background:
+    radial-gradient(1200px 700px at 18% -10%, var(--color-glow), transparent 60%),
+    radial-gradient(900px 600px at 100% 100%, rgba(16, 42, 107, 0.4), transparent 60%),
+    var(--color-ink);
+  color: var(--color-fg);
+  font-family: var(--font-body);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-fast: 0ms;
+    --duration-base: 0ms;
+  }
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
