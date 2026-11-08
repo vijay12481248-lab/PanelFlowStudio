@@ -6,7 +6,6 @@ import type { Project } from "@panelflow/shared-types";
 import { ErrorState, Skeleton } from "@panelflow/ui-v2";
 import { PanelReviewScreen } from "../../screens/PanelReviewScreen";
 import { OCRReviewScreen } from "../../screens/OCRReviewScreen";
-import { RenderScreen } from "../../screens/RenderScreen";
 import { AutoPilotModal } from "../../components/AutoPilotModal";
 import { paths, type Stage } from "../../app/routes";
 import { useStageNav } from "../stages/kit/useStageNav";
@@ -16,6 +15,7 @@ import { MotionStage } from "../stages/motion/MotionStage";
 import { AudioStage } from "../stages/audio/AudioStage";
 import { StoryStage } from "../stages/story/StoryStage";
 import { ScriptStage } from "../stages/script/ScriptStage";
+import { RenderStage } from "../stages/render/RenderStage";
 import { PublishStage } from "../workbench/PublishStage";
 import { WorkbenchFrame } from "../workbench/WorkbenchFrame";
 import { resolveStageRoute } from "./resolveStageRoute";
@@ -40,7 +40,7 @@ const StageScreen: React.FC<{ project: Project; stage: Stage }> = ({ project, st
     case "audio": return <AudioStage project={project} onApproved={advance} onContinue={advance} />;
     case "motion": return <MotionStage project={project} onApproved={advance} onContinue={advance} />;
     case "publish": return <PublishStage project={project} />;
-    default: return <RenderScreen project={project} onBack={back} onRenderComplete={update} />;
+    default: return <RenderStage project={project} onRenderComplete={update} />;
   }
 };
 

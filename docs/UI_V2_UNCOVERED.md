@@ -68,7 +68,7 @@ Not a gap: `executeProjectHistoryCommand` (used by 39 history methods) and `getP
 - Still open: **pipeline projects cannot be uploaded to YouTube from PanelFlow.** The engine has an upload path only for Original Stories episodes; Publish hands off the title, description, chapters, tags and thumbnail prompt to copy into YouTube Studio.
 - Still open: **`GET /api/projects/{id}/youtube/packaging` generates packaging when none is saved** (a slow local-model job), so the UI treats Get packaging as a generate action and never calls it on page open. A read-only "is packaging saved?" endpoint would let Publish show it without generating.
 - Still open: render profiles and render progress events (`getRenderProfiles`, `subscribeRenderEvents`) are not used.
-- Still open: **three legacy stage screens are still the old ones** inside the new frame (M5b rebuilt Acquire, Pages, Motion and Audio; M5c rebuilt Story and Script). Remaining: M5d Panels, OCR and Render. They keep their own back button, title and approve actions until then.
+- Still open: **two legacy stage screens are still the old ones** inside the new frame (M5b rebuilt Acquire, Pages, Motion and Audio; M5c rebuilt Story and Script; M5d Part A rebuilt Render). Remaining: Panels and OCR. They keep their own back button, title and approve actions until then.
 - Data observation (not a UI bug): the real project used for checking is at `RENDERED` but the engine lists no renders for it, so Publish shows "Render the video first". The October database restore may have lost render records.
 
 ## 9. Changes in M5b (Acquire, Pages, Motion, Audio)
@@ -95,3 +95,13 @@ Not a gap: `executeProjectHistoryCommand` (used by 39 history methods) and `getP
 - Data observation: the real narrative's utterances include site watermarks and credits read as dialogue (for example "MANHUAPLUS.COM", "FASTER RELEASE PLEASE READ"), so the Utterances tab is mostly OCR noise to reassign. That is the analysis, not the UI; a "watermark" filter at the analysis or OCR step would help.
 - Not exercised against real data: Run or Re-analyze, Approve (Story and Script), Generate or Re-adapt, Validate (pressed), every edit, line action, character edit, merge and split (the dialogs were only opened and cancelled). Script editing flows are tested with synthetic data.
 - The colour ratchet (`noRawColors.test.ts`) currently fails on `apps/desktop/src/components/ImageEditorModal.tsx`, an untracked file that is not part of this work; it needs tokens or an allowlist entry when it is committed.
+
+## 11. Changes in M5d Part A (Render)
+
+- Fixed: the legacy Render screen (1,209 lines) is deleted and replaced by a v2 stage. Settings, the running job, the finished render's media and checks, and the history are separate parts; no `alert`, no `console.warn`-only failures.
+- Fixed (found on real data): the engine sends a render status **`STALE`** (a render the project changed under) that was not in the `RenderStatus` type. The old screen treated every status other than complete, failed or cancelled as running, so (from reading the code, not run) a project with only out-of-date renders looked like it had a running job. The status is now in the shared type, never counts as running, and shows as "Out of date" in the history with no actions. Checked in the real app on a project with eight such renders: the settings and Start render are shown, no Cancel.
+- Fixed: the profile list was hard-coded (it included `preview_1080p`, which the engine does not list). The select now shows the engine's profiles from `GET /api/render/profiles`; if that list cannot be loaded Start is disabled and says why, and no profile is invented.
+- Fixed: a render's check results can arrive as a JSON string (handled); a check the engine reports as not confirmed on a render it still passed (a real render has `sync_valid: false` with gate `PRODUCTION_READY`) is shown as "Not confirmed" with an explanation instead of a failure; "Open file" fired twice on a double click.
+- Changed: packaging moved to Publish (M5a); Render ends with "Continue to publish". The story editor keeps `YouTubePackagingModal`.
+- Still open: a new render still saves to the engine's default folder unless another is chosen (as before). Starting, cancelling, opening files and exporting were not pressed on your projects.
+- Engine side: `STALE` should be part of the documented render statuses; the engine's profile list is the only source for profile ids and the old hard-coded list shows how easily the two drift.

@@ -8,7 +8,9 @@ import { StageToolbar } from "../kit/StageToolbar";
 import { refusal } from "../kit/engineReason";
 import { latestRender } from "../../workbench/publishModel";
 import { workbenchKeys } from "../../workbench/queries";
+import { useStageNav } from "../kit/useStageNav";
 import { RenderHistory } from "./RenderHistory";
+import { RenderResult } from "./RenderResult";
 import { RenderSettingsPanel } from "./RenderSettingsPanel";
 import { useQuickDestinations, useRenderList, useRenderProfiles } from "./renderData";
 import { DEFAULT_SETTINGS, activeRender, isRunning, profileChoices, renderStatus, startOptions, type RenderSettings } from "./renderModel";
@@ -27,6 +29,8 @@ export const RenderStage: React.FC<RenderStageProps> = ({ project, onRenderCompl
   const toast = useToast();
   const { reportError } = useError();
 
+  const nav = useStageNav(project, "render");
+  const [viewedId, setViewedId] = React.useState<string | null>(null);
   const rendersQuery = useRenderList(project.id);
   const renders = rendersQuery.data ?? [];
   const active = activeRender(renders);
@@ -126,6 +130,7 @@ export const RenderStage: React.FC<RenderStageProps> = ({ project, onRenderCompl
   };
 
   const viewed: RenderJob | undefined = active ?? latestRender(renders) ?? renders[0];
+  const shown: RenderJob | undefined = renders.find((r) => r.render_id === viewedId) ?? latestRender(renders);
   const statusChip = viewed ? <Chip tone={renderStatus(viewed.status).tone}>{renderStatus(viewed.status).word}</Chip> : <Chip>Not rendered</Chip>;
   const noProfiles = !choices.fromEngine && !profilesQuery.isLoading;
 
@@ -161,9 +166,11 @@ export const RenderStage: React.FC<RenderStageProps> = ({ project, onRenderCompl
         ? <Skeleton className="h-64" />
         : <RenderSettingsPanel settings={{ ...settings, profile: profileId }} onChange={change} profiles={choices.options} destinations={destinations.data?.destinations ?? []} onBrowseFolder={() => void browse("folder")} onBrowseFile={() => void browse("file")} pickerError={pickerError} />)}
 
+      {!active && shown && shown.status === "COMPLETE" && <RenderResult key={shown.render_id} projectId={project.id} render={shown} onPublish={() => nav.goTo("publish")} />}
+
       <section className="grid grid-cols-1 gap-3" aria-label="Renders">
         <h3 className="font-display text-sm font-semibold text-fg">Render history</h3>
-        {rendersQuery.isLoading ? <Skeleton className="h-24" /> : <RenderHistory renders={renders} onOpenFile={(path) => void openFile(path)} />}
+        {rendersQuery.isLoading ? <Skeleton className="h-24" /> : <RenderHistory renders={renders} onView={(r) => setViewedId(r.render_id)} onOpenFile={(path) => void openFile(path)} />}
       </section>
     </div>
   );

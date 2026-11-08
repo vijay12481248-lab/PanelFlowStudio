@@ -44,7 +44,6 @@
   "apps/desktop/src/screens/OCRReviewScreen.tsx",
   "apps/desktop/src/screens/OriginalStoriesScreen.tsx",
   "apps/desktop/src/screens/PanelReviewScreen.tsx",
-  "apps/desktop/src/screens/RenderScreen.tsx",
   "apps/desktop/src/screens/StoryEditorScreen.tsx",
   "packages/ui/src/SvgAudioEqualizer.tsx",
   "packages/ui/src/SvgCameraFramingVisualizer.tsx",

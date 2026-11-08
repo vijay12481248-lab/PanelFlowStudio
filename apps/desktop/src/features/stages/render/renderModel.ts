@@ -121,6 +121,13 @@ export function formatBytes(n: number): string {
 
 export const outputName = (path: string) => path.split(/[\\/]/).pop() ?? "";
 
+/** A validation report as an object. The engine may send it as a JSON string; text that is not JSON is no report. */
+export function parseReport(raw: unknown): Record<string, any> | null {
+  let value = raw;
+  if (typeof value === "string") { try { value = JSON.parse(value); } catch { return null; } }
+  return value && typeof value === "object" ? (value as Record<string, any>) : null;
+}
+
 export interface SummaryRow { label: string; value: string; tone: Tone; note?: string }
 
 const num = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n);
@@ -131,7 +138,7 @@ const secs = (n: number, digits: number) => `${Number(n.toFixed(digits))}s`;
  * the engine reports as not confirmed on a render it still passed (the real `sync_valid: false` case) is explained, not shown as a failure.
  */
 export function validationSummary(raw: unknown): { verdict: { word: string; tone: Tone }; rows: SummaryRow[]; warnings: string[] } {
-  const r = (raw ?? null) as Record<string, any> | null;
+  const r = parseReport(raw);
   if (!r) return { verdict: { word: "No checks yet", tone: "neutral" }, rows: [], warnings: [] };
   const passed = r.gate_status ? r.gate_status === "PRODUCTION_READY" : Boolean(r.is_valid);
   const verdict = r.gate_status === "PRODUCTION_READY" ? { word: "Ready for production", tone: "ok" as Tone } : passed ? { word: "Passed", tone: "ok" as Tone } : { word: "Did not pass", tone: "bad" as Tone };

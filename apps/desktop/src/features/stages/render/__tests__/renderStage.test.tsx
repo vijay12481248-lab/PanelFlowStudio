@@ -31,6 +31,9 @@ function stub(opts: { renders?: any[]; over?: Record<string, unknown> } = {}) {
     startRender: async (...a: any[]) => { calls.start.push(a); list = [render("new", "QUEUED"), ...list]; return render("new", "QUEUED"); },
     cancelRender: async (_p: string, id: string) => { calls.cancel.push(id); return { cancelled: true, render_id: id }; },
     getProject: async () => { calls.getProject++; return project("RENDERED"); },
+    getRenderVideoUrl: (_p: string, id: string) => `/video/${id}.mp4`,
+    getRenderContactSheetUrl: (_p: string, id: string) => `/sheet/${id}.jpg`,
+    getRenderAuditSampleUrl: (_p: string, id: string, i: number) => `/sample/${id}/${i}.jpg`,
     openPath: async (...a: any[]) => { calls.open.push(a); return { opened: true, path: a[0] }; },
     pickDirectoryNative: async () => ({ selected: true, path: "D:\\Exports" }),
     pickSaveFileNative: async () => ({ selected: true, path: "D:\\Exports\\video.mp4" }),
@@ -207,5 +210,30 @@ test("history lists renders newest first; out-of-date renders explain themselves
   assert.equal(rows[0].querySelectorAll("button").length, 0);
   await view.clickTwice(button(rows[1], "Open file")!);
   assert.deepEqual(calls.open, [["C:\\Users\\user\\renders\\done.mp4", true]]);
+  await view.cleanup();
+});
+
+test("the latest finished render is shown with its video and checks, and View switches to another", async () => {
+  stub({ renders: [
+    render("new", "COMPLETE", { created_at: "2026-11-08T12:00:00Z", validation_report: { is_valid: true, gate_status: "PRODUCTION_READY", warnings: [] } }),
+    render("old", "COMPLETE", { created_at: "2026-11-01T12:00:00Z", validation_report: { is_valid: false, warnings: ["Black frames"], black_frames_count: 3 } }),
+    render("stale", "STALE", { created_at: "2026-11-09T12:00:00Z" }),
+  ] });
+  const view = await show();
+  assert.equal(view.document.querySelector("video")!.getAttribute("src"), "/video/new.mp4");
+  assert.ok(text(view.document).includes("Ready for production"));
+  const oldRow = view.document.querySelector('[data-render-id="old"]')!;
+  await view.click(button(oldRow, "View")!);
+  assert.equal(view.document.querySelector("video")!.getAttribute("src"), "/video/old.mp4");
+  assert.ok(text(view.document).includes("Did not pass"));
+  await view.cleanup();
+});
+
+test("Continue to publish goes to the Publish stage", async () => {
+  stub({ renders: [render("c1", "COMPLETE")] });
+  const view = await show();
+  await view.click(button(view.document, "Continue to publish")!);
+  await view.settle();
+  assert.equal(view.router.state.location.pathname, "/projects/p1/publish");
   await view.cleanup();
 });

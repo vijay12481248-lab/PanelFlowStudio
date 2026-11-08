@@ -108,3 +108,8 @@ test("bytes and file names", () => {
   assert.equal(outputName("/home/u/renders/a_b.mp4"), "a_b.mp4");
   assert.equal(outputName(""), "");
 });
+
+test("a report that arrives as a JSON string is read, and unreadable text is treated as no report", () => {
+  assert.deepEqual(validationSummary(JSON.stringify(REAL_REPORT)).verdict, { word: "Ready for production", tone: "ok" });
+  assert.deepEqual(validationSummary("not json").verdict, { word: "No checks yet", tone: "neutral" });
+});

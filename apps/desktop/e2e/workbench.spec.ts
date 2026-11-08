@@ -104,7 +104,7 @@ test("Publish shows the checks and waits for a button before asking for packagin
 });
 
 // M5b stages. These only read and navigate: they never press Start acquisition, Confirm, Plan, Generate, Regenerate, Approve or the Delete confirmation.
-for (const stage of ["acquire", "pages", "motion", "audio", "story", "script"] as const) {
+for (const stage of ["acquire", "pages", "motion", "audio", "story", "script", "render"] as const) {
   test(`${stage} is one frame with one title and no second back button`, async ({ page }) => {
     const id = await firstPipelineProject(page);
     await page.goto(`/#/projects/${id}/${stage}`);
@@ -208,4 +208,35 @@ test("Script shows its content or the invitation to generate, and no stale bound
   const invite = page.getByText("No script yet");
   await expect(metrics.or(invite).first()).toBeVisible();
   await expect(page.getByText("Milestone 4")).toHaveCount(0);
+});
+
+// M5d Part A. Read and navigate only: never Start render, Cancel render, Open file, Open folder or Export.
+test("Render treats out-of-date renders as history, not as a running job, and shows a finished render's checks", async ({ page }) => {
+  const token = await (await page.request.get("/__engine_token")).text();
+  const auth = { headers: { Authorization: `Bearer ${token}` } };
+  const projects: Array<{ id: string; source_type: string }> = await (await page.request.get("http://127.0.0.1:8765/api/projects", auth)).json();
+  let stale = "";
+  let done = "";
+  for (const project of projects.filter((p) => p.source_type !== "CHRONOFLOW_AI")) {
+    const renders: Array<{ status: string }> = await (await page.request.get(`http://127.0.0.1:8765/api/projects/${project.id}/render/jobs`, auth)).json();
+    if (!stale && renders.some((r) => r.status === "STALE") && !renders.some((r) => ["QUEUED", "PREPARING", "COMPOSING", "ENCODING", "MUXING", "VALIDATING"].includes(r.status))) stale = project.id;
+    if (!done && renders.some((r) => r.status === "COMPLETE")) done = project.id;
+  }
+  test.skip(!stale && !done, "No project has a stale or finished render.");
+  const dialogs: string[] = [];
+  page.on("dialog", (dialog) => { dialogs.push(dialog.message()); void dialog.dismiss(); });
+  if (stale) {
+    await page.goto(`/#/projects/${stale}/render`);
+    await expect(page.getByRole("heading", { name: "Render the video" })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole("button", { name: "Start render" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Cancel render" })).toHaveCount(0);
+    await expect(page.getByText("Out of date: the project changed after this render.").first()).toBeVisible();
+  }
+  if (done) {
+    await page.goto(`/#/projects/${done}/render`);
+    await expect(page.getByRole("heading", { name: "The rendered video" })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole("heading", { name: "Render checks" })).toBeVisible();
+    await expect(page.locator("video")).toHaveCount(1);
+  }
+  expect(dialogs).toEqual([]);
 });

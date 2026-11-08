@@ -28,7 +28,7 @@ export const RenderHistory: React.FC<RenderHistoryProps> = ({ renders, onView, o
               <span className="text-xs text-fg-dim">{when(r.created_at)}</span>
               {r.status === "COMPLETE" && <span className="min-w-0 truncate font-data text-xs text-fg-faint" title={r.output_path}>{outputName(r.output_path)}</span>}
               {r.status === "STALE" && <span className="text-xs text-fg-dim">Out of date: the project changed after this render.</span>}
-              {r.status === "FAILED" && r.error_message && <span className="text-xs text-bad">{r.error_message}</span>}
+              {r.status === "FAILED" && r.error_message && <span className="line-clamp-2 w-full text-xs text-bad" title={r.error_message}>{r.error_message}</span>}
               {r.status === "COMPLETE" && (
                 <span className="ml-auto flex gap-2">
                   {onView && <Button size="sm" variant="ghost" onClick={() => onView(r)}>View</Button>}
