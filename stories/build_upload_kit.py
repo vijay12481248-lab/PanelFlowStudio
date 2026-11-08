@@ -83,7 +83,7 @@ def main() -> None:
     tot = sum(1 for r in rows for k in ("LONG", "SHORT") if k in r)
     out += [f"UPLOADED AND SCHEDULED: {up} of {tot}      REMAINING: {tot - up}", "", SEP, "DAY-BY-DAY  ([x] = on YouTube and scheduled, [ ] = still to upload)", SEP]
     for r in rows:
-        out.append(f"\nDay {r['day']:02d} - {r['date']}   folder: {r['folder']}")
+        out.append(f"\nDay {r['day']:02d} - {r['date']}   folder: {r['folder'] or '(nothing left to upload)'}")
         for k in ("LONG", "SHORT"):
             if k in r:
                 x = r[k]
