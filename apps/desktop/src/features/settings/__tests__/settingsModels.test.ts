@@ -177,3 +177,10 @@ test("diagnosticsFilename is safe on Windows and sorts by time", () => {
   assert.equal(diagnosticsFilename({ generated_at: "" }).startsWith("panelflow-diagnostics-"), true);
   assert.ok(!/[:*?"<>|]/.test(diagnosticsFilename({ generated_at: "2026-11-08T12:00:00Z" })));
 });
+
+test("FFmpeg's version banner is shortened to the version number", () => {
+  const banner = "ffmpeg version 9.0.1-essentials_build-www.gyan.dev Copyright (c) 2000-2026 the FFmpeg developers";
+  assert.equal(toolRows({ ffmpeg: { found: true, version: banner } })[0].detail, "Found, version 9.0.1-essentials_build-www.gyan.dev");
+  assert.equal(toolRows({ ffmpeg: { found: true, version: "6.1" } })[0].detail, "Found, version 6.1");
+  assert.equal(toolRows({ ffmpeg: { found: true, version: "N-117 something long ".repeat(10) } })[0].detail.length <= 60, true);
+});

@@ -98,3 +98,20 @@ test("Restart engine restarts once even on a fast double click", async () => {
   assert.equal(restarts, 1);
   await view.cleanup();
 });
+
+test("a provider that shares an id with the FFmpeg row renders both rows without React key warnings", async () => {
+  stub({ getProviderHealth: async () => ({ system_ready: true, providers: [{ id: "ffmpeg", name: "FFmpeg Video Encoder", category: "video_engine", status: "HEALTHY", version: "", path: "", required: true, details: "" }] }) });
+  const errors: string[] = [];
+  const original = console.error;
+  console.error = (...args: unknown[]) => { errors.push(String(args[0])); };
+  try {
+    const view = await mountPage(<EngineSection />);
+    await view.settle();
+    assert.ok(text(view.document).includes("FFmpeg Video Encoder"));
+    assert.ok(text(view.document).includes("Found, version 6.1"));
+    await view.cleanup();
+  } finally {
+    console.error = original;
+  }
+  assert.deepEqual(errors.filter((e) => e.includes("same key")), []);
+});

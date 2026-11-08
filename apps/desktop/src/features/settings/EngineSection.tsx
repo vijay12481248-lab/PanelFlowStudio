@@ -88,12 +88,12 @@ export const EngineSection: React.FC = () => {
         {health.isError && <ErrorState title="Couldn't load tool status" description="Check that the engine is running, then try again." onRetry={() => void health.refetch()} />}
         {ffmpeg.isError && !ffmpeg.data && <p className="text-sm text-fg-dim">Couldn't check FFmpeg.</p>}
         {!health.isError && !health.data && !ffmpeg.data && <Skeleton className="h-12" />}
-        {rows.map((row) => {
+        {rows.map((row, index) => {
           const chip = STATE_CHIP[row.state];
           const isChromium = row.id === "playwright" && chromiumMissing;
           return (
             <RowShell
-              key={row.id}
+              key={`${index}-${row.id}`}
               label={row.label}
               detail={isChromium && installing ? `Installing. ${playwright.data?.log_lines.at(-1) ?? ""}`.trim() : row.detail}
               chip={<Chip tone={chip.tone}>{chip.word}</Chip>}

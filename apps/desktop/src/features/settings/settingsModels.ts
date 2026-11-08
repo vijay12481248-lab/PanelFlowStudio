@@ -36,6 +36,13 @@ const STATUS_WORD: Record<string, string> = {
 };
 const statusWord = (status: string) => STATUS_WORD[status] ?? status.replace(/_/g, " ").toLowerCase().replace(/^./, (c) => c.toUpperCase());
 
+/** FFmpeg reports its whole banner; keep the version number (or a short prefix when it is not in the usual form). */
+function shortVersion(version: string): string {
+  const match = /version\s+(\S+)/i.exec(version);
+  const text = match ? match[1] : version.trim();
+  return text.length > 40 ? `${text.slice(0, 40)}...` : text;
+}
+
 export function toolRows(input: { ffmpeg?: { found: boolean; version: string | null }; providers?: ProviderHealth[] }): ToolRow[] {
   const rows: ToolRow[] = [];
   if (input.ffmpeg) {
@@ -43,7 +50,7 @@ export function toolRows(input: { ffmpeg?: { found: boolean; version: string | n
       id: "ffmpeg",
       label: "FFmpeg",
       state: input.ffmpeg.found ? "ready" : "missing",
-      detail: input.ffmpeg.found ? `Found${input.ffmpeg.version ? `, version ${input.ffmpeg.version}` : ""}` : "Not found",
+      detail: input.ffmpeg.found ? `Found${input.ffmpeg.version ? `, version ${shortVersion(input.ffmpeg.version)}` : ""}` : "Not found",
     });
   }
   for (const provider of input.providers ?? []) {
