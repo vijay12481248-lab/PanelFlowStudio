@@ -1,10 +1,9 @@
 import React from "react";
 import { Navigate, useNavigate, useParams } from "react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Zap } from "lucide-react";
 import { api } from "@panelflow/api-client";
 import type { Project } from "@panelflow/shared-types";
-import { Button, ErrorState, GlassPanel, PageHeader, Skeleton } from "@panelflow/ui-v2";
+import { ErrorState, Skeleton } from "@panelflow/ui-v2";
 import { AcquisitionScreen } from "../../screens/AcquisitionScreen";
 import { PageReviewScreen } from "../../screens/PageReviewScreen";
 import { PanelReviewScreen } from "../../screens/PanelReviewScreen";
@@ -14,17 +13,12 @@ import { ScriptReviewScreen } from "../../screens/ScriptReviewScreen";
 import { AudioScreen } from "../../screens/AudioScreen";
 import { MotionScreen } from "../../screens/MotionScreen";
 import { RenderScreen } from "../../screens/RenderScreen";
-import { PipelineNavbar } from "../../components/PipelineNavbar";
 import { AutoPilotModal } from "../../components/AutoPilotModal";
 import { paths, nextStage, prevStage, type Stage } from "../../app/routes";
+import { WorkbenchFrame } from "../workbench/WorkbenchFrame";
 import { resolveStageRoute } from "./resolveStageRoute";
 
-/** The old PipelineNavbar and AutoPilotModal speak in the old screen keys; translate both ways. */
-const NAVBAR_KEY_TO_STAGE: Record<string, Stage | "story_editor"> = {
-  acquisition: "acquire", review: "pages", panels: "panels", ocr: "ocr", story: "story",
-  script: "script", audio: "audio", motion: "motion", render: "render", story_editor: "story_editor",
-};
-const stageToNavbarKey = (stage: Stage): string => ({ acquire: "acquisition", pages: "review", publish: "render" } as Record<string, string>)[stage] ?? stage;
+/** AutoPilotModal speaks in its own stage ids; translate them to routes. */
 const AUTOPILOT_STAGE: Record<string, Stage> = {
   pages: "pages", panels: "panels", ocr: "ocr", story: "story", script: "script", audio: "audio", motion: "motion", render: "render", packaging: "publish",
 };
@@ -69,22 +63,7 @@ export const LegacyStageRoute: React.FC = () => {
 
   const project = query.data;
   return (
-    <div className="mx-auto w-full max-w-7xl space-y-5 p-6 md:p-8">
-      <PageHeader
-        title={project.title}
-        actions={<Button variant="secondary" size="sm" icon={<Zap size={14} />} onClick={() => setAutoPilotOpen(true)}>Auto-Pilot</Button>}
-      />
-      <GlassPanel blur={false} className="p-2.5">
-        <PipelineNavbar
-          currentStage={project.current_stage}
-          currentScreen={stageToNavbarKey(decision.stage)}
-          staleStages={project.stale_stages}
-          onNavigate={(key) => {
-            const target = NAVBAR_KEY_TO_STAGE[key];
-            navigate(target === "story_editor" ? paths.editor(project.id) : target ? paths.stage(project.id, target) : paths.projects());
-          }}
-        />
-      </GlassPanel>
+    <WorkbenchFrame project={project} stage={decision.stage} onAutoPilot={() => setAutoPilotOpen(true)}>
       <StageScreen project={project} stage={decision.stage} />
       <AutoPilotModal
         isOpen={autoPilotOpen}
@@ -94,6 +73,6 @@ export const LegacyStageRoute: React.FC = () => {
         onOpenRenderScreen={() => { setAutoPilotOpen(false); navigate(paths.stage(project.id, "render")); }}
         onOpenStage={(stageId) => { setAutoPilotOpen(false); navigate(paths.stage(project.id, AUTOPILOT_STAGE[stageId] ?? "render")); }}
       />
-    </div>
+    </WorkbenchFrame>
   );
 };

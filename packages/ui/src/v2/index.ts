@@ -25,7 +25,7 @@ export { Field, Input, Select } from "./primitives/Field";
 export { Dock } from "./patterns/Dock";
 export type { DockItem } from "./patterns/Dock";
 export { Stepper } from "./patterns/Stepper";
-export type { Step, StepStatus } from "./patterns/Stepper";
+export type { Step, StepStatus, StepperProps } from "./patterns/Stepper";
 export { PageHeader } from "./patterns/PageHeader";
 export { InboxRow } from "./patterns/InboxRow";
 export type { InboxKind } from "./patterns/InboxRow";

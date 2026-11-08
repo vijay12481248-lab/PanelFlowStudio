@@ -2,7 +2,6 @@
   "apps/desktop/src/components/AutoPilotModal.tsx",
   "apps/desktop/src/components/GlobalLLMSelector.tsx",
   "apps/desktop/src/components/JobActivityPanel.tsx",
-  "apps/desktop/src/components/PipelineNavbar.tsx",
   "apps/desktop/src/components/ProviderHealthModal.tsx",
   "apps/desktop/src/components/StoryAnalysisActivity.tsx",
   "apps/desktop/src/components/StoryboardPreview.tsx",

@@ -69,3 +69,16 @@ test("PageHeader renders one h1 with its meta and actions", () => {
   assert.ok(markup.includes("Episode 4"));
   assert.ok(markup.includes("Continue"));
 });
+
+test("Stepper marks the step being viewed as current and says so in words", () => {
+  const markup = html(<Stepper steps={[{ id: "a", label: "A", status: "done" }, { id: "b", label: "B", status: "active" }, { id: "c", label: "C", status: "upcoming", viewed: true }]} />);
+  assert.equal(markup.match(/aria-current="step"/g)?.length, 1);
+  assert.ok(/aria-current="step"[^>]*>(?:(?!<li).)*C/.test(markup), "the viewed step carries aria-current");
+  assert.ok(markup.includes("viewing"));
+});
+
+test("Stepper lets the shell supply router links so navigation stays client-side", () => {
+  const markup = html(<Stepper steps={[{ id: "a", label: "A", status: "done", href: "/x" }, { id: "b", label: "B", status: "upcoming" }]} renderLink={(step, children) => <a data-router-link={step.id} href={step.href}>{children}</a>} />);
+  assert.ok(markup.includes('data-router-link="a"'));
+  assert.ok(!markup.includes('data-router-link="b"'), "steps without an href are not links");
+});
