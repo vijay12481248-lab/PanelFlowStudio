@@ -29,6 +29,15 @@ test("a Drawer is a dialog too, anchored to its side", async () => {
   await view.cleanup();
 });
 
+test("a wide Drawer is wider than the default one", async () => {
+  const wide = await mount(<Drawer open onOpenChange={() => {}} title="Page" size="wide">x</Drawer>);
+  assert.ok(wide.document.querySelector('[role="dialog"]')!.className.includes("900px"));
+  await wide.cleanup();
+  const normal = await mount(<Drawer open onOpenChange={() => {}} title="Page">x</Drawer>);
+  assert.ok(normal.document.querySelector('[role="dialog"]')!.className.includes("440px"));
+  await normal.cleanup();
+});
+
 test("Switch is a switch with its state and label", () => {
   const markup = html(<Switch checked onCheckedChange={() => {}} label="Private by default" />);
   assert.ok(markup.includes('role="switch"'));
