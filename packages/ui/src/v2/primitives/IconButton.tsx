@@ -7,8 +7,10 @@ export interface IconButtonProps extends Omit<React.ButtonHTMLAttributes<HTMLBut
   label: string;
 }
 
-export const IconButton: React.FC<IconButtonProps> = ({ label, className, children, type = "button", ...rest }) => (
+export const IconButton = React.forwardRef<HTMLButtonElement, IconButtonProps>(function IconButton({ label, className, children, type = "button", ...rest }, ref) {
+  return (
   <button
+    ref={ref}
     type={type}
     {...rest}
     aria-label={label}
@@ -20,4 +22,5 @@ export const IconButton: React.FC<IconButtonProps> = ({ label, className, childr
   >
     {children}
   </button>
-);
+  );
+});

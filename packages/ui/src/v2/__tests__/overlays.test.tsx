@@ -3,7 +3,7 @@ import React from "react";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { renderToStaticMarkup as html } from "react-dom/server";
-import { Dialog, Drawer, Field, Input, Select, Switch, Tabs, ToastProvider, useToast } from "../index";
+import { Button, Dialog, Drawer, Field, IconButton, Input, Select, Switch, Tabs, ToastProvider, useToast } from "../index";
 
 test("a closed Dialog renders nothing", async () => {
   const view = await mount(<Dialog open={false} onOpenChange={() => {}} title="Delete project">body</Dialog>);
@@ -88,5 +88,14 @@ test("closing a Dialog returns focus to the control that opened it", async () =>
   assert.equal(view.document.querySelector('[role="dialog"]'), null, "dialog closed");
   await new Promise((resolve) => setTimeout(resolve, 30)); // Radix restores focus in a 0ms timeout
   assert.equal(view.document.activeElement?.id, "opener");
+  await view.cleanup();
+});
+
+test("Button and IconButton forward refs so Radix triggers can anchor menus and tooltips to them", async () => {
+  const buttonRef = React.createRef<HTMLButtonElement>();
+  const iconRef = React.createRef<HTMLButtonElement>();
+  const view = await mount(<><Button ref={buttonRef}>Menu</Button><IconButton ref={iconRef} label="Retry">x</IconButton></>);
+  assert.equal(buttonRef.current?.tagName, "BUTTON");
+  assert.equal(iconRef.current?.getAttribute("aria-label"), "Retry");
   await view.cleanup();
 });

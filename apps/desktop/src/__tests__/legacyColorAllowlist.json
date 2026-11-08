@@ -1,5 +1,4 @@
 [
-  "apps/desktop/src/App.tsx",
   "apps/desktop/src/components/AutoPilotModal.tsx",
   "apps/desktop/src/components/GlobalLLMSelector.tsx",
   "apps/desktop/src/components/JobActivityPanel.tsx",

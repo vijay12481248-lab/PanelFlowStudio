@@ -25,9 +25,11 @@ export function isImmersive(pathname: string): boolean {
   return pathname.startsWith("/editor/") || pathname.startsWith("/create/chronoflow");
 }
 
+/** The dock destination is the first path segment ("/settings/providers" belongs to Settings); the editor belongs to Projects. */
 function activeDockId(pathname: string): string {
-  if (pathname.startsWith("/editor/")) return "projects";
-  return DOCK_ITEMS.find((item) => pathname === item.href || pathname.startsWith(`${item.href}/`))?.id ?? "home";
+  const segment = pathname.split("/")[1];
+  if (segment === "editor") return "projects";
+  return DOCK_ITEMS.some((item) => item.id === segment) ? segment : "home";
 }
 
 const EngineGate: React.FC = () => {

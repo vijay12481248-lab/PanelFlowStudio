@@ -21,7 +21,8 @@ const SIZE = { sm: "h-8 px-3 text-[13px]", md: "h-10 px-4 text-sm" } as const;
 
 export const FOCUS_RING = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-info";
 
-export const Button: React.FC<ButtonProps> = ({
+// forwardRef: Radix triggers (asChild) attach a ref to the button to anchor menus and tooltips.
+export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(function Button({
   variant = "secondary",
   size = "md",
   loading = false,
@@ -31,8 +32,10 @@ export const Button: React.FC<ButtonProps> = ({
   disabled,
   type = "button",
   ...rest
-}) => (
+}, ref) {
+  return (
   <button
+    ref={ref}
     type={type}
     {...rest}
     disabled={disabled || loading}
@@ -48,4 +51,5 @@ export const Button: React.FC<ButtonProps> = ({
     {loading ? <span aria-hidden="true" className="size-3.5 rounded-full border-2 border-current border-t-transparent motion-safe:animate-spin" /> : icon}
     {children}
   </button>
-);
+  );
+});

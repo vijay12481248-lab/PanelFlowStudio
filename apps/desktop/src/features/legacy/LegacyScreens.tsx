@@ -40,12 +40,12 @@ export const NewProjectRoute: React.FC = () => {
 
 export const StoriesRoute: React.FC = () => {
   const navigate = useNavigate();
-  return <OriginalStoriesScreen onBack={() => navigate(paths.create())} />;
+  return <OriginalStoriesScreen onBack={() => navigate(paths.projects())} />;
 };
 
 export const AnimeRoute: React.FC = () => {
   const navigate = useNavigate();
-  return <AnimeReviewScreen onBack={() => navigate(paths.create())} />;
+  return <AnimeReviewScreen onBack={() => navigate(paths.projects())} />;
 };
 
 export const ChronoFlowRoute: React.FC = () => {

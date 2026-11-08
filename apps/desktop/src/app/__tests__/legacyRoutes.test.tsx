@@ -107,3 +107,17 @@ test("the dock is hidden on immersive routes such as the story editor", async ()
   assert.ok(view.document.getElementById("page"));
   await view.cleanup();
 });
+
+test("every settings, library and project URL highlights its own dock destination", async () => {
+  const cases: Array<[string, string]> = [
+    ["/settings/providers", "Settings"], ["/settings/engine", "Settings"], ["/library/audio", "Library"],
+    ["/projects/p1/ocr", "Projects"], ["/editor/p1", "Projects"], ["/create/stories", "Create"],
+  ];
+  for (const [path, label] of cases) {
+    const view = await mountShell(path, engine());
+    const current = view.document.querySelector('nav[aria-label="Main"] [aria-current="page"]');
+    // The dock is hidden on immersive routes, so only assert where it exists.
+    if (view.document.querySelector('nav[aria-label="Main"]')) assert.equal(current?.textContent, label, path);
+    await view.cleanup();
+  }
+});
