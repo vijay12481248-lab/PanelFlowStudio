@@ -4,7 +4,7 @@ import { api } from "@panelflow/api-client";
 import { ToastProvider } from "@panelflow/ui-v2";
 import { ErrorProvider, useError } from "../context/ErrorContext";
 import { getAuthenticatedEngineHealth } from "../engineConnection";
-import { connectWithRetry, restartAndWait } from "./engineMonitor";
+import { connectWithRetry, nextConnection, restartAndWait } from "./engineMonitor";
 
 const isTauri = () => typeof window !== "undefined" && ("__TAURI_INTERNALS__" in window || "__TAURI__" in window);
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -44,36 +44,45 @@ export const EngineProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [retrying, setRetrying] = React.useState(false);
   const [restarting, setRestarting] = React.useState(false);
   const restartingRef = React.useRef(false);
+  const connection = React.useRef({ connected: false, failures: 0 });
+
+  /** Record one health result; a single failure keeps a connected engine connected (see nextConnection). */
+  const record = React.useCallback((ok: boolean) => {
+    connection.current = nextConnection(connection.current, ok);
+    setConnected(connection.current.connected);
+  }, []);
 
   const check = React.useCallback(async () => {
     if (restartingRef.current) return;
     try {
       const health = await getAuthenticatedEngineHealth();
       if (health.status === "healthy") {
-        setConnected(true);
+        record(true);
         setVersion(health.version);
         setStartupGrace(false);
       } else {
-        setConnected(false);
+        record(false);
       }
     } catch {
-      setConnected(false);
+      record(false);
     }
-  }, []);
+    // After a first failure, look again soon instead of waiting a full poll interval.
+    if (connection.current.failures === 1 && connection.current.connected) setTimeout(() => void check(), 1500);
+  }, [record]);
 
   const retry = React.useCallback(async () => {
     setRetrying(true);
     try {
       const health = await connectWithRetry({ start: startDesktopEngine, sleep, health: getAuthenticatedEngineHealth });
       if (health) {
-        setConnected(true);
+        record(true);
         setVersion(health.version);
       }
     } finally {
       await check();
       setRetrying(false);
     }
-  }, [check]);
+  }, [check, record]);
 
   const restart = React.useCallback(async () => {
     if (restartingRef.current) return;
@@ -81,7 +90,7 @@ export const EngineProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setRestarting(true);
     try {
       const health = await restartAndWait({ restart: () => api.restartEngine(), sleep, health: getAuthenticatedEngineHealth });
-      setConnected(true);
+      record(true);
       setVersion(health.version);
     } catch (error: any) {
       reportError({ title: "Engine restart failed", message: error?.message || "Could not restart the engine.", severity: "error", source: "engine" });
@@ -90,7 +99,7 @@ export const EngineProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setRestarting(false);
       await check();
     }
-  }, [check, reportError]);
+  }, [check, record, reportError]);
 
   React.useEffect(() => {
     void check();

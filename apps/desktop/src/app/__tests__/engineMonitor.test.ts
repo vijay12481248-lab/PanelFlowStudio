@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { RESTART_TIMEOUT_MESSAGE, connectWithRetry, restartAndWait } from "../engineMonitor";
+import { RESTART_TIMEOUT_MESSAGE, connectWithRetry, restartAndWait, nextConnection } from "../engineMonitor";
 
 const healthy = { status: "healthy", version: "1.0.0-beta.2", instance_id: "new" };
 
@@ -63,4 +63,21 @@ test("restartAndWait throws the documented message after 60 attempts without a n
   );
   assert.equal(sleeps.length, 60);
   assert.equal(RESTART_TIMEOUT_MESSAGE, "Engine did not reconnect within 60 seconds. Check the engine log or run launch_panelflow again.");
+});
+
+test("one failed health check does not mark a connected engine offline, two in a row do", () => {
+  let state = { connected: true, failures: 0 };
+  state = nextConnection(state, false);
+  assert.deepEqual(state, { connected: true, failures: 1 });
+  state = nextConnection(state, false);
+  assert.deepEqual(state, { connected: false, failures: 2 });
+});
+
+test("a successful health check reconnects at once and clears the failure count", () => {
+  assert.deepEqual(nextConnection({ connected: false, failures: 5 }, true), { connected: true, failures: 0 });
+  assert.deepEqual(nextConnection({ connected: true, failures: 1 }, true), { connected: true, failures: 0 });
+});
+
+test("an engine that was never connected stays offline after a single failure", () => {
+  assert.deepEqual(nextConnection({ connected: false, failures: 0 }, false), { connected: false, failures: 1 });
 });

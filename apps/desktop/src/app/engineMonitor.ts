@@ -46,3 +46,18 @@ export async function restartAndWait(deps: Timing & { restart: () => Promise<{ i
   }
   throw new Error(RESTART_TIMEOUT_MESSAGE);
 }
+
+export interface ConnectionState {
+  connected: boolean;
+  failures: number;
+}
+
+/**
+ * One slow or failed health check (for example while the GPU is saturated) must not flip a connected
+ * engine to offline, because going offline replaces the current screen. Two failures in a row do.
+ */
+export function nextConnection(previous: ConnectionState, ok: boolean): ConnectionState {
+  if (ok) return { connected: true, failures: 0 };
+  const failures = previous.failures + 1;
+  return { connected: previous.connected && failures < 2, failures };
+}

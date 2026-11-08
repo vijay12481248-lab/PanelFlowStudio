@@ -121,3 +121,12 @@ test("every settings, library and project URL highlights its own dock destinatio
     await view.cleanup();
   }
 });
+
+test("the editor and ChronoFlow stay mounted when the engine drops, so unsaved work is not thrown away", async () => {
+  for (const path of ["/editor/p1", "/create/chronoflow/p1"]) {
+    const view = await mountShell(path, engine({ connected: false }));
+    assert.ok(view.document.getElementById("page"), `${path} keeps its screen`);
+    assert.ok(!view.document.body.textContent!.includes("Processing engine unavailable"), `${path} shows no blocking gate`);
+    await view.cleanup();
+  }
+});

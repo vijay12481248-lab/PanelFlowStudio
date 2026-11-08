@@ -92,7 +92,8 @@ export const AppShell: React.FC = () => {
         </header>
       )}
 
-      <main className="min-h-0 flex-1 overflow-y-auto">{engine.connected ? <Outlet /> : <EngineGate />}</main>
+      {/* The editor and ChronoFlow stay mounted when the engine drops: they hold unsaved work and have their own offline handling. */}
+      <main className="min-h-0 flex-1 overflow-y-auto">{engine.connected || immersive ? <Outlet /> : <EngineGate />}</main>
 
       {!immersive && (
         <div className="px-4 pb-4 pt-2">
