@@ -17,7 +17,7 @@ export const HubRoute: React.FC = () => {
       retryingEngine={engine.retrying}
       onRestartEngine={() => void engine.restart()}
       restartingEngine={engine.restarting}
-      onOpenToolsModels={() => navigate(paths.settings("engine"))}
+      onOpenToolsModels={() => navigate(paths.settings("engine"), { state: { open: true } })}
       onOpenProviderManagement={() => navigate(paths.settings("providers"))}
       onNewProject={() => navigate(paths.create("new"))}
       onOpenAnimeReview={() => navigate(paths.create("anime"))}
@@ -30,7 +30,7 @@ export const HubRoute: React.FC = () => {
       onOpenOCR={(project) => navigate(paths.stage(project.id, "ocr"))}
       onOpenStoryEditor={(project) => navigate(paths.editor(project.id))}
       onOpenProject={(project) => navigate(isChronoFlowProject(project) ? paths.chronoflow({ projectId: project.id }) : paths.stage(project.id, stageForProject(project)))}
-      onOpenLibrary={() => navigate(paths.settings("engine"))}
+      onOpenLibrary={() => navigate(paths.settings("engine"), { state: { open: true } })}
     />
   );
 };

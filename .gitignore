@@ -83,3 +83,7 @@ model_backups/
 
 apps/desktop/src-tauri/tauri.nobundle.conf.json
 .agents/
+
+# Playwright
+apps/desktop/test-results/
+apps/desktop/playwright-report/
