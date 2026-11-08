@@ -15,7 +15,8 @@ import { SpokenList } from "./SpokenList";
 import { StoryboardView } from "./StoryboardView";
 import { UnsupportedBanner } from "./UnsupportedBanner";
 import { scriptKeys, useScript, useScriptValidation, useStoryboard } from "./scriptData";
-import { PROFILES, canApproveScript, isScriptApproved, unsupportedIssues } from "./scriptModel";
+import { useScriptEditing } from "./useScriptEditing";
+import { PROFILES, canApproveScript, isScriptApproved, unsupportedIssues, type SegmentAction } from "./scriptModel";
 
 export interface ScriptStageProps {
   project: Project;
@@ -30,7 +31,7 @@ export interface ScriptStageProps {
 const GENERATE_ADVICE = "Check the local model in Settings, then try again. The engine log in Diagnostics has the details.";
 
 /** Script: adapt the story into spoken lines, check them against the source, fix what is unsupported, approve. */
-export const ScriptStage: React.FC<ScriptStageProps> = ({ project, onApproved, onContinue }) => {
+export const ScriptStage: React.FC<ScriptStageProps> = ({ project, onApproved, onContinue, onProjectUpdated }) => {
   const queryClient = useQueryClient();
   const toast = useToast();
   const { reportError } = useError();
@@ -44,6 +45,7 @@ export const ScriptStage: React.FC<ScriptStageProps> = ({ project, onApproved, o
   const characters = useStoryCharacters(project.id, narrative.isLoading ? undefined : narrative.data ?? null);
   const validation = useScriptValidation(project.id, script?.script_id);
   const issues = unsupportedIssues(validation.report);
+  const editing = useScriptEditing({ project, script, validation, onProjectUpdated });
   const approved = isScriptApproved(project.current_stage, script?.status);
 
   const [profile, setProfile] = React.useState<string | null>(null);
@@ -51,6 +53,8 @@ export const ScriptStage: React.FC<ScriptStageProps> = ({ project, onApproved, o
   const [view, setView] = React.useState<"storyboard" | "spoken" | null>(null);
   const [unsupportedOnly, setUnsupportedOnly] = React.useState(false);
   const [confirmReplace, setConfirmReplace] = React.useState(false);
+  const [editingId, setEditingId] = React.useState<string | null>(null);
+  const [pendingAction, setPendingAction] = React.useState<{ segmentId: string; action: SegmentAction } | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [starting, setStarting] = React.useState(false);
   const [approving, setApproving] = React.useState(false);
@@ -91,7 +95,7 @@ export const ScriptStage: React.FC<ScriptStageProps> = ({ project, onApproved, o
     }
   }, [jobId, job.data?.status]); // eslint-disable-line react-hooks/exhaustive-deps
   const generating = starting || jobId !== undefined;
-  const gate = canApproveScript({ script, report: validation.report, busy: generating });
+  const gate = canApproveScript({ script, report: validation.report, busy: generating || editing.busy });
 
   const generate = async () => {
     if (busy.current || generating) return;
@@ -120,6 +124,8 @@ export const ScriptStage: React.FC<ScriptStageProps> = ({ project, onApproved, o
       void validation.run(); // show which lines are flagged
     } finally { busy.current = false; setApproving(false); }
   };
+
+  const onAction = (segmentId: string, action: SegmentAction) => (action.confirm ? setPendingAction({ segmentId, action }) : void editing.actionOn(segmentId, action.id));
 
   const statusChip = approved ? <Chip tone="ok">Approved</Chip> : script ? <Chip tone="accent">{script.status === "VALIDATED" ? "Validated" : "Draft"}</Chip> : <Chip>Not generated</Chip>;
   const activeView = view ?? (storyboard ? "storyboard" : "spoken");
@@ -151,7 +157,7 @@ export const ScriptStage: React.FC<ScriptStageProps> = ({ project, onApproved, o
       </GlassPanel>
 
       {script && !approved && !gate.ok && <p className="text-sm text-warn">{gate.reason}</p>}
-      {error && <p role="alert" className="text-sm text-bad">{error}</p>}
+      {(error ?? editing.error) && <p role="alert" className="text-sm text-bad">{error ?? editing.error}</p>}
       {script && validation.state === "failed" && <p className="text-sm text-warn">Validation unavailable. Check that the engine is running, then press Validate faithfulness.</p>}
       {generating && <GlassPanel blur={false} className="p-4" role="status"><JobProgress job={job.data} idleLabel="Starting the script adaptation." /></GlassPanel>}
 
@@ -163,7 +169,7 @@ export const ScriptStage: React.FC<ScriptStageProps> = ({ project, onApproved, o
           characters={characters}
           filterOn={unsupportedOnly}
           onToggleFilter={() => setUnsupportedOnly((on) => !on)}
-          onEdit={(segmentId) => document.getElementById(`seg-${segmentId}`)?.scrollIntoView?.({ behavior: "smooth", block: "center" })}
+          onEdit={(segmentId) => { setEditingId(segmentId); setTimeout(() => document.getElementById(`seg-${segmentId}`)?.scrollIntoView?.({ behavior: "smooth", block: "center" }), 0); }}
         />
       )}
 
@@ -174,13 +180,22 @@ export const ScriptStage: React.FC<ScriptStageProps> = ({ project, onApproved, o
       ) : storyboard ? (
         <Tabs value={activeView} onValueChange={(v) => setView(v as "storyboard" | "spoken")} tabs={[{ value: "storyboard", label: "Storyboard" }, { value: "spoken", label: "Spoken script" }]}>
           {activeView === "storyboard"
-            ? <StoryboardView segments={storyboard.segments} report={validation.report} unsupportedOnly={unsupportedOnly} />
-            : <SpokenList segments={script.segments} characters={characters} report={validation.report} unsupportedOnly={unsupportedOnly} />}
+            ? <StoryboardView projectId={project.id} segments={storyboard.segments} totalSeconds={storyboard.total_duration_sec ?? script.estimated_duration} report={validation.report} unsupportedOnly={unsupportedOnly} editingId={editingId} onEdit={setEditingId} busy={editing.busy} realigning={editing.realigning} onSaveBeat={editing.saveBeat} onMotion={(id, panels) => void editing.setMotion(id, panels)} onRealign={() => void editing.realign()} />
+            : <SpokenList projectId={project.id} segments={script.segments} characters={characters} report={validation.report} unsupportedOnly={unsupportedOnly} editingId={editingId} onEdit={setEditingId} busy={editing.busy} onAction={onAction} onSave={editing.saveLine} />}
         </Tabs>
       ) : (
-        <SpokenList segments={script.segments} characters={characters} report={validation.report} unsupportedOnly={unsupportedOnly} />
+        <SpokenList projectId={project.id} segments={script.segments} characters={characters} report={validation.report} unsupportedOnly={unsupportedOnly} editingId={editingId} onEdit={setEditingId} busy={editing.busy} onAction={onAction} onSave={editing.saveLine} />
       )}
 
+      <ConfirmDialog
+        open={pendingAction !== null}
+        title={pendingAction?.action.confirm ?? "Change this line?"}
+        description="The change is saved to the script and the storyboard straight away."
+        confirmLabel={pendingAction?.action.label ?? "Confirm"}
+        danger={pendingAction?.action.danger}
+        onConfirm={() => { const pending = pendingAction; setPendingAction(null); if (pending) void editing.actionOn(pending.segmentId, pending.action.id); }}
+        onCancel={() => setPendingAction(null)}
+      />
       <ConfirmDialog
         open={confirmReplace}
         title="Replace the current script?"
