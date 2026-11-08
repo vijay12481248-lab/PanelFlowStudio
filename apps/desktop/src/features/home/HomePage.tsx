@@ -51,7 +51,7 @@ export const HomePage: React.FC = () => {
       <PageHeader title="Home" meta={<span>{items.length === 0 ? "All clear" : `${items.length} ${items.length === 1 ? "thing needs" : "things need"} you`}</span>} />
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
         <div className="grid content-start gap-6 grid-cols-1">
-          {focus && <ProjectHero project={focus} coverUrl={covers[focus.id]} note={focusItem?.title} onContinue={() => open(focus)} />}
+          {focus && <ProjectHero project={focus} coverUrl={covers[focus.id]} note={focusItem?.title} onContinue={() => (focusItem?.action.type === "open" ? navigate(focusItem.action.to) : open(focus))} />}
           {recent.length > 0 && (
             <section aria-label="Recent projects" className="grid gap-3 grid-cols-1">
               <div className="flex items-center justify-between">

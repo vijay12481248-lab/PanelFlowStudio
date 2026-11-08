@@ -128,3 +128,21 @@ test("a project cover that fails to load never leaves a broken image in the hero
   assert.equal(view.document.querySelector("[data-hero] img"), null);
   await view.cleanup();
 });
+
+test("Continue on the hero follows the inbox item, so unknown rights go to the rights decision, not a later stage", async () => {
+  stub([project("r", "RENDERED", { rights_status: "UNKNOWN" as Project["rights_status"] })]);
+  const view = await mountPage(<HomePage />);
+  await view.settle();
+  await view.click(button(view.document, "Continue")!);
+  assert.equal(view.router.state.location.pathname, "/projects/r/acquire");
+  await view.cleanup();
+});
+
+test("Continue on a hero with a review item opens the screen where it is approved", async () => {
+  stub([project("o", "OCR_COMPLETE")]);
+  const view = await mountPage(<HomePage />);
+  await view.settle();
+  await view.click(button(view.document, "Continue")!);
+  assert.equal(view.router.state.location.pathname, "/projects/o/ocr");
+  await view.cleanup();
+});
