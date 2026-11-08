@@ -4,18 +4,18 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@panelflow/api-client";
 import type { Project } from "@panelflow/shared-types";
 import { ErrorState, Skeleton } from "@panelflow/ui-v2";
-import { AcquisitionScreen } from "../../screens/AcquisitionScreen";
-import { PageReviewScreen } from "../../screens/PageReviewScreen";
 import { PanelReviewScreen } from "../../screens/PanelReviewScreen";
 import { OCRReviewScreen } from "../../screens/OCRReviewScreen";
 import { StoryReviewScreen } from "../../screens/StoryReviewScreen";
 import { ScriptReviewScreen } from "../../screens/ScriptReviewScreen";
-import { AudioScreen } from "../../screens/AudioScreen";
-import { MotionScreen } from "../../screens/MotionScreen";
 import { RenderScreen } from "../../screens/RenderScreen";
 import { AutoPilotModal } from "../../components/AutoPilotModal";
 import { paths, type Stage } from "../../app/routes";
 import { useStageNav } from "../stages/kit/useStageNav";
+import { AcquireStage } from "../stages/acquire/AcquireStage";
+import { PagesStage } from "../stages/pages/PagesStage";
+import { MotionStage } from "../stages/motion/MotionStage";
+import { AudioStage } from "../stages/audio/AudioStage";
 import { PublishStage } from "../workbench/PublishStage";
 import { WorkbenchFrame } from "../workbench/WorkbenchFrame";
 import { resolveStageRoute } from "./resolveStageRoute";
@@ -31,14 +31,14 @@ const StageScreen: React.FC<{ project: Project; stage: Stage }> = ({ project, st
   const openEditor = (target: Project) => { update(target); navigate(paths.editor(target.id)); };
 
   switch (stage) {
-    case "acquire": return <AcquisitionScreen project={project} onBack={back} onReviewPages={() => go("pages")} />;
-    case "pages": return <PageReviewScreen project={project} onBack={back} onAcquisitionConfirmed={advance} onProceedToPanels={advance} />;
+    case "acquire": return <AcquireStage project={project} onReviewPages={() => go("pages")} />;
+    case "pages": return <PagesStage project={project} onConfirmed={advance} onContinue={advance} />;
     case "panels": return <PanelReviewScreen project={project} onBack={back} onPanelsApproved={advance} onProceedToOCR={advance} onOpenStoryEditor={openEditor} />;
     case "ocr": return <OCRReviewScreen project={project} onBack={back} onOCRApproved={advance} onProceedToStory={advance} onOpenStoryEditor={openEditor} />;
     case "story": return <StoryReviewScreen project={project} onBack={back} onStoryApproved={advance} onProceedToScript={advance} />;
     case "script": return <ScriptReviewScreen project={project} onBack={back} onScriptApproved={advance} onProceedToAudio={advance} onProjectUpdated={update} />;
-    case "audio": return <AudioScreen project={project} onBack={back} onAudioApproved={advance} onProceedToMotion={advance} />;
-    case "motion": return <MotionScreen project={project} onBack={back} onMotionApproved={advance} onProceedToRender={advance} />;
+    case "audio": return <AudioStage project={project} onApproved={advance} onContinue={advance} />;
+    case "motion": return <MotionStage project={project} onApproved={advance} onContinue={advance} />;
     case "publish": return <PublishStage project={project} />;
     default: return <RenderScreen project={project} onBack={back} onRenderComplete={update} />;
   }
