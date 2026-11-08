@@ -17,14 +17,16 @@ import { useRedaction } from "../kit/redaction/useRedaction";
 import { refusal } from "../kit/engineReason";
 import { stageKeys, usePages } from "../kit/stageData";
 import { useFollowedJob } from "../kit/useFollowedJob";
+import { useHistoryMoves } from "../kit/useHistoryMoves";
+import { isTyping } from "../kit/typing";
 import { AddPanelDialog } from "./AddPanelDialog";
 import { ContentCleanup, type Review } from "./ContentCleanup";
 import { DetectAndReview } from "./DetectReviewControl";
 import { PageStrip } from "./PageStrip";
 import { PanelInspector } from "./PanelInspector";
 import { PanelList } from "./PanelList";
-import { panelKeys, usePanels, useProjectHistory } from "./panelsData";
-import { canConfirmPanels, historyAvailability, isPanelsConfirmed, pageCounts, panelStatus, panelsOnPage } from "./panelsModel";
+import { panelKeys, usePanels } from "./panelsData";
+import { canConfirmPanels, isPanelsConfirmed, pageCounts, panelStatus, panelsOnPage } from "./panelsModel";
 import { usePanelEditing } from "./usePanelEditing";
 
 export interface PanelsStageProps {
@@ -53,8 +55,6 @@ function useFitZoom(imageWidth: number) {
   }, []);
   return { ref, zoom: width > 0 ? Math.max(5, Math.floor((width / imageWidth) * 100)) : 40 };
 }
-
-const isTyping = (target: HTMLElement | null) => ["INPUT", "TEXTAREA", "SELECT"].includes(target?.tagName ?? "") || Boolean(target?.isContentEditable) || Boolean(target?.closest?.("[role=dialog]"));
 
 /** Panels: detect panels on every page, fix them on the page, and confirm. Undo and redo are the engine's. */
 export const PanelsStage: React.FC<PanelsStageProps> = ({ project, onConfirmed, onContinue, onOpenStoryEditor }) => {
@@ -93,10 +93,6 @@ export const PanelsStage: React.FC<PanelsStageProps> = ({ project, onConfirmed, 
   const [confirming, setConfirming] = React.useState(false);
   const [detectingPage, setDetectingPage] = React.useState(false);
   const busy = React.useRef(false);
-  const history = useProjectHistory(project.id);
-  const historyBusy = React.useRef(false);
-  const [historyWorking, setHistoryWorking] = React.useState(false);
-  const availability = historyAvailability(history.history, historyWorking);
 
   const activePage: Page | undefined = pages[Math.min(pageIndex, Math.max(0, pages.length - 1))];
   const pagePanels = activePage ? panelsOnPage(panels, activePage.id) : [];
@@ -107,6 +103,14 @@ export const PanelsStage: React.FC<PanelsStageProps> = ({ project, onConfirmed, 
 
   const editing = usePanelEditing({ project, pages, onChanged: () => { history.refresh(); setCropBuster(Date.now()); } });
   const reloadPanels = () => queryClient.invalidateQueries({ queryKey: panelKeys.list(project.id) });
+  const history = useHistoryMoves(project.id, {
+    onMoved: async () => { await reloadPanels(); setCacheBuster(Date.now()); setCropBuster(Date.now()); },
+    onFailed: (which, err) => {
+      setError(`Couldn't ${which} that. Reload the page if this keeps happening.`);
+      reportError({ title: which === "undo" ? "Undo Failed" : "Redo Failed", message: `Could not ${which} project state.`, severity: "warning", source: "pipeline", projectId: project.id, rawDetails: err as Record<string, any> });
+    },
+  });
+  const availability = history.availability;
   const redaction = useRedaction(project.id, () => { setBlurBuster(Date.now()); setCropBuster(Date.now()); history.refresh(); });
 
   // Detection and normalisation are jobs: follow one that was started here or was already running when the stage opened.
@@ -175,26 +179,6 @@ export const PanelsStage: React.FC<PanelsStageProps> = ({ project, onConfirmed, 
     } finally { busy.current = false; setConfirming(false); }
   };
 
-  const moveHistory = async (which: "undo" | "redo") => {
-    if (historyBusy.current) return;
-    const known = api.getCachedProjectHistory(project.id);
-    if (known && !(which === "undo" ? known.canUndo : known.canRedo)) { history.setHistory(known); return; }
-    historyBusy.current = true;
-    setHistoryWorking(true);
-    setError(null);
-    try {
-      const reply = which === "undo" ? await api.undo(project.id) : await api.redo(project.id);
-      history.setHistory(reply.history ?? api.getCachedProjectHistory(project.id));
-      await reloadPanels();
-      setCacheBuster(Date.now());
-      setCropBuster(Date.now());
-    } catch (err: any) {
-      history.refresh();
-      setError(`Couldn't ${which} that. Reload the page if this keeps happening.`);
-      reportError({ title: which === "undo" ? "Undo Failed" : "Redo Failed", message: `Could not ${which} project state.`, severity: "warning", source: "pipeline", projectId: project.id, rawDetails: err });
-    } finally { historyBusy.current = false; setHistoryWorking(false); }
-  };
-
   const select = (id: string | null, additive = false) => {
     if (additive && id) setMergeIds((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]));
     else setSelectedId(id);
@@ -211,7 +195,7 @@ export const PanelsStage: React.FC<PanelsStageProps> = ({ project, onConfirmed, 
     const target = event.target as HTMLElement | null;
     if (event.defaultPrevented || isTyping(target)) return;
     const action = historyShortcut(event);
-    if (action) { event.preventDefault(); void moveHistory(action); return; }
+    if (action) { event.preventDefault(); void history.move(action); return; }
     const onCanvas = Boolean(target?.closest?.("[data-canvas-overlay]"));
     if (event.key === "ArrowLeft" && !event.shiftKey && !onCanvas) { setPageIndex((i) => Math.max(0, i - 1)); setSelectedId(null); setMergeIds([]); }
     else if (event.key === "ArrowRight" && !event.shiftKey && !onCanvas) { setPageIndex((i) => Math.min(pages.length - 1, i + 1)); setSelectedId(null); setMergeIds([]); }
@@ -273,8 +257,8 @@ export const PanelsStage: React.FC<PanelsStageProps> = ({ project, onConfirmed, 
         status={statusChip}
         actions={
           <>
-            <Button variant="ghost" size="sm" icon={<Undo2 size={14} />} title="Undo (Ctrl+Z)" disabled={!availability.canUndo} onClick={() => void moveHistory("undo")}>Undo</Button>
-            <Button variant="ghost" size="sm" icon={<Redo2 size={14} />} title="Redo (Ctrl+Y)" disabled={!availability.canRedo} onClick={() => void moveHistory("redo")}>Redo</Button>
+            <Button variant="ghost" size="sm" icon={<Undo2 size={14} />} title="Undo (Ctrl+Z)" disabled={!availability.canUndo} onClick={() => void history.move("undo")}>Undo</Button>
+            <Button variant="ghost" size="sm" icon={<Redo2 size={14} />} title="Redo (Ctrl+Y)" disabled={!availability.canRedo} onClick={() => void history.move("redo")}>Redo</Button>
             <Button variant="secondary" size="sm" disabled={panels.length === 0} icon={<Film size={14} />} onClick={() => onOpenStoryEditor(project)}>Open story editor</Button>
             {confirmed && <Button variant="secondary" size="sm" onClick={() => onContinue(project)}>Continue to OCR</Button>}
             <Button variant="primary" size="sm" loading={confirming} disabled={!gate.ok} onClick={() => void confirm()}>Confirm panels</Button>

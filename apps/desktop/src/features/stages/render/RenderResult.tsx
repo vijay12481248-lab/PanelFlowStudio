@@ -1,4 +1,5 @@
 import React from "react";
+import { browserDownload } from "../kit/download";
 import { api } from "@panelflow/api-client";
 import type { RenderJob } from "@panelflow/shared-types";
 import { Button, GlassPanel, Tabs } from "@panelflow/ui-v2";
@@ -11,15 +12,6 @@ export interface RenderResultProps {
   onPublish: () => void;
   /** Saves text as a file. Replaced in tests. */
   download?: (filename: string, content: string) => void;
-}
-
-function browserDownload(filename: string, content: string) {
-  const url = URL.createObjectURL(new Blob([content], { type: "application/json" }));
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  link.click();
-  URL.revokeObjectURL(url);
 }
 
 /** An image that says so when it cannot load. */
