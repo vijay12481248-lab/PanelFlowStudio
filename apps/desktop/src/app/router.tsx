@@ -1,6 +1,7 @@
 import React from "react";
 import { createHashRouter, redirect, type RouteObject } from "react-router";
 import { AppShell } from "./AppShell";
+import { SettingsLayout } from "../features/settings/SettingsLayout";
 import { paths } from "./routes";
 
 /** Screens load on demand: the editor alone pulls in a large dependency tree. */
@@ -32,10 +33,20 @@ export const appRoutes: RouteObject[] = [
       { path: "jobs", ...screen(() => import("../features/jobs/JobsPage"), "JobsPage") },
       { path: "library", ...screen(() => import("../features/library/LibraryPage"), "LibraryPage") },
       { path: "library/*", ...screen(() => import("../features/library/LibraryPage"), "LibraryPage") },
-      { path: "settings", loader: () => redirect(paths.settings("engine")) },
-      { path: "settings/engine", ...legacy("EngineSettingsRoute") },
-      { path: "settings/providers", ...legacy("ProvidersRoute") },
-      { path: "settings/*", loader: () => redirect(paths.settings("engine")) },
+      {
+        path: "settings",
+        element: <SettingsLayout />,
+        children: [
+          { index: true, loader: () => redirect(paths.settings("engine")) },
+          // Engine and Providers keep their old screens until their sections land (M4a tasks 2 and 4).
+          { path: "engine", ...legacy("EngineSettingsRoute") },
+          { path: "models", ...screen(() => import("../features/settings/SectionPlaceholder"), "SectionPlaceholder") },
+          { path: "providers", ...legacy("ProvidersRoute") },
+          { path: "youtube", ...screen(() => import("../features/settings/SectionPlaceholder"), "SectionPlaceholder") },
+          { path: "diagnostics", ...screen(() => import("../features/settings/SectionPlaceholder"), "SectionPlaceholder") },
+          { path: "*", loader: () => redirect(paths.settings("engine")) },
+        ],
+      },
       { path: "*", loader: toHome },
     ],
   },
