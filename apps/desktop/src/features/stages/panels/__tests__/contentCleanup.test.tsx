@@ -21,7 +21,8 @@ function stub(over: Record<string, unknown> = {}) {
   const calls: Calls = { saveRules: [], saveLabels: [], suggest: 0, blur: [], update: [], changed: 0, blurred: 0 };
   Object.assign(api as any, {
     getContentCleanupRules: async () => ({ enabled: true, labels: ["ManhuaPlus.com", "Read on ManhuaPlus.com"] }),
-    getContentCleanupReport: async () => ({ panels: { pn1: { panel_id: "pn1", sequence: 1, action: "BLURRED", reason: "label" }, pn9: { panel_id: "pn9", sequence: 9, action: "EXCLUDED", reason: "label" } } }),
+    // The real report lists every panel, with the action the engine took: keep, review, blur or exclude.
+    getContentCleanupReport: async () => ({ panels: { pn1: { panel_id: "pn1", sequence: 1, action: "blur", reason: "label" }, pn9: { panel_id: "pn9", sequence: 9, action: "exclude", reason: "label" }, pn3: { panel_id: "pn3", sequence: 3, action: "keep", reason: "" }, pn4: { panel_id: "pn4", sequence: 4, action: "keep", reason: "" }, pn5: { panel_id: "pn5", sequence: 5, action: "review", reason: "possible" } } }),
     saveContentCleanupRules: async (...a: any[]) => { calls.saveRules.push(a); return a[1]; },
     savePanelContentLabels: async (...a: any[]) => { calls.saveLabels.push(a); return { labels: a[1] }; },
     getPanelContentSuggestions: async () => { calls.suggest++; return SUGGESTIONS(); },
@@ -49,12 +50,12 @@ async function show(calls: Calls, initial: Review | null = null) {
   return view;
 }
 
-test("the saved rules fill the controls, and the report says how many panels were cleaned automatically", async () => {
+test("the saved rules fill the controls, and the report says what was done to the panels it checked", async () => {
   stub();
   const view = await show({} as Calls);
   assert.equal((byLabel(view.document, "Shared exclusion labels") as HTMLTextAreaElement).value, "ManhuaPlus.com\nRead on ManhuaPlus.com");
-  await until(() => text(view.document).includes("2 panels were cleaned automatically"));
-  assert.ok(text(view.document).includes("2 panels were cleaned automatically"));
+  await until(() => text(view.document).includes("checked automatically"));
+  assert.ok(text(view.document).includes("5 panels were checked automatically: 1 blurred, 1 excluded, 1 need review, 2 kept."), "keep and review are not cleanups");
   await view.cleanup();
 });
 

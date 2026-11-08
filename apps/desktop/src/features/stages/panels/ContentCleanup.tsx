@@ -9,6 +9,8 @@ type Suggestions = Awaited<ReturnType<typeof api.getPanelContentSuggestions>>;
 export type Review = Suggestions;
 type Suggestion = Suggestions["suggestions"][number];
 
+/** What the engine's cleanup report says it did with each panel, in the order shown. */
+const ACTIONS = [["blur", "blurred"], ["exclude", "excluded"], ["review", "need review"], ["keep", "kept"]] as const;
 const AREA = "min-h-24 w-full rounded-ctl border border-edge bg-glass p-3 text-sm text-fg";
 const lines = (text: string) => text.split("\n").map((l) => l.trim()).filter(Boolean);
 
@@ -90,8 +92,8 @@ export const ContentCleanup: React.FC<ContentCleanupProps> = ({ projectId, panel
     } catch (err) { setError(refusal("Couldn't exclude that panel.", err)); }
   });
 
-  const cleaned = report.data ? Object.values(report.data.panels) : null;
-  const byAction = cleaned ? Object.entries(cleaned.reduce<Record<string, number>>((n, p) => ({ ...n, [p.action.toLowerCase()]: (n[p.action.toLowerCase()] ?? 0) + 1 }), {})).map(([a, n]) => `${n} ${a}`).join(", ") : "";
+  const checked = report.data ? Object.values(report.data.panels) : null;
+  const summary = checked ? ACTIONS.map(([action, word]) => [checked.filter((p) => p.action.toLowerCase() === action).length, word] as const).filter(([n]) => n > 0).map(([n, word]) => `${n} ${word}`).join(", ") : "";
 
   return (
     <section aria-label="Content cleanup" className="grid gap-4">
@@ -105,7 +107,7 @@ export const ContentCleanup: React.FC<ContentCleanupProps> = ({ projectId, panel
             <div><Button size="sm" variant="secondary" disabled={working} onClick={() => void saveRules()}>Save for all episodes</Button></div>
           </>
         )}
-        {cleaned && <p className="text-xs text-fg-dim">{cleaned.length === 0 ? "No panels have been cleaned automatically yet." : `${cleaned.length} ${cleaned.length === 1 ? "panel was" : "panels were"} cleaned automatically (${byAction}).`}</p>}
+        {checked && <p className="text-xs text-fg-dim">{checked.length === 0 ? "No panels have been checked automatically yet." : `${checked.length} ${checked.length === 1 ? "panel was" : "panels were"} checked automatically: ${summary}.`}</p>}
       </div>
 
       <div className="grid gap-2 border-t border-edge pt-3">

@@ -4,13 +4,13 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@panelflow/api-client";
 import type { Project } from "@panelflow/shared-types";
 import { ErrorState, Skeleton } from "@panelflow/ui-v2";
-import { PanelReviewScreen } from "../../screens/PanelReviewScreen";
 import { OCRReviewScreen } from "../../screens/OCRReviewScreen";
 import { AutoPilotModal } from "../../components/AutoPilotModal";
 import { paths, type Stage } from "../../app/routes";
 import { useStageNav } from "../stages/kit/useStageNav";
 import { AcquireStage } from "../stages/acquire/AcquireStage";
 import { PagesStage } from "../stages/pages/PagesStage";
+import { PanelsStage } from "../stages/panels/PanelsStage";
 import { MotionStage } from "../stages/motion/MotionStage";
 import { AudioStage } from "../stages/audio/AudioStage";
 import { StoryStage } from "../stages/story/StoryStage";
@@ -33,7 +33,7 @@ const StageScreen: React.FC<{ project: Project; stage: Stage }> = ({ project, st
   switch (stage) {
     case "acquire": return <AcquireStage project={project} onReviewPages={() => go("pages")} />;
     case "pages": return <PagesStage project={project} onConfirmed={advance} onContinue={advance} />;
-    case "panels": return <PanelReviewScreen project={project} onBack={back} onPanelsApproved={advance} onProceedToOCR={advance} onOpenStoryEditor={openEditor} />;
+    case "panels": return <PanelsStage project={project} onConfirmed={advance} onContinue={advance} onOpenStoryEditor={openEditor} />;
     case "ocr": return <OCRReviewScreen project={project} onBack={back} onOCRApproved={advance} onProceedToStory={advance} onOpenStoryEditor={openEditor} />;
     case "story": return <StoryStage project={project} onApproved={advance} onContinue={advance} />;
     case "script": return <ScriptStage project={project} onApproved={advance} onContinue={advance} onProjectUpdated={update} />;

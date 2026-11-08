@@ -104,7 +104,7 @@ test("Publish shows the checks and waits for a button before asking for packagin
 });
 
 // M5b stages. These only read and navigate: they never press Start acquisition, Confirm, Plan, Generate, Regenerate, Approve or the Delete confirmation.
-for (const stage of ["acquire", "pages", "motion", "audio", "story", "script", "render"] as const) {
+for (const stage of ["acquire", "pages", "panels", "motion", "audio", "story", "script", "render"] as const) {
   test(`${stage} is one frame with one title and no second back button`, async ({ page }) => {
     const id = await firstPipelineProject(page);
     await page.goto(`/#/projects/${id}/${stage}`);
@@ -237,6 +237,55 @@ test("Render treats out-of-date renders as history, not as a running job, and sh
     await expect(page.getByRole("heading", { name: "The rendered video" })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByRole("heading", { name: "Render checks" })).toBeVisible();
     await expect(page.locator("video")).toHaveCount(1);
+  }
+  expect(dialogs).toEqual([]);
+});
+
+// M5d Part B. Read and navigate only: never Detect, Normalize, Confirm, Blur, Restore, Merge, Split, Add, or the Delete confirmation.
+test("Panels draws labelled panels on the page, Delete asks inside the app, and a huge project stays windowed with no sideways scroll", async ({ page }) => {
+  const token = await (await page.request.get("/__engine_token")).text();
+  const auth = { headers: { Authorization: `Bearer ${token}` } };
+  const api = "http://127.0.0.1:8765/api/projects";
+  const projects: Array<{ id: string; source_type: string }> = await (await page.request.get(api, auth)).json();
+  let withImage = ""; // panels, and the first page's picture is on disk
+  let anyPanels = "";
+  let big = "";
+  let bigCount = 0;
+  for (const project of projects.filter((p) => p.source_type !== "CHRONOFLOW_AI")) {
+    const panels: unknown[] = await (await page.request.get(`${api}/${project.id}/panels`, auth)).json();
+    if (panels.length === 0) continue;
+    anyPanels ||= project.id;
+    if (panels.length > bigCount) { bigCount = panels.length; big = project.id; }
+    const pages: Array<{ id: string }> = await (await page.request.get(`${api}/${project.id}/pages`, auth)).json();
+    if (!withImage && pages.length > 0 && (await page.request.get(`${api}/${project.id}/pages/${pages[0].id}/normalized-file`, auth)).ok()) withImage = project.id;
+  }
+  test.skip(!anyPanels, "No project has panels.");
+  const dialogs: string[] = [];
+  page.on("dialog", (dialog) => { dialogs.push(dialog.message()); void dialog.dismiss(); });
+
+  if (withImage) {
+    await page.goto(`/#/projects/${withImage}/panels`);
+    await expect(page.getByRole("heading", { name: "Review panels" })).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator("[data-page-id]").first()).toBeVisible({ timeout: 15_000 });
+    await page.locator("[data-page-id]").filter({ hasNotText: "0 panels" }).first().click();
+    await expect(page.locator("[data-canvas-overlay]")).toHaveCount(1, { timeout: 15_000 });
+    await expect(page.locator("[data-box-id]").first()).toHaveAttribute("aria-label", /^Panel \d+, at /);
+    await page.getByRole("button", { name: /^Select panel \d+$/ }).first().click();
+    await page.keyboard.press("Delete");
+    await expect(page.getByRole("dialog")).toContainText(/Delete panel \d+\?/);
+    await page.getByRole("button", { name: "Cancel" }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+  }
+
+  // Most projects on this PC have lost their page files: the stage must say so, not draw an empty canvas or crash.
+  await page.goto(`/#/projects/${big}/panels`);
+  await expect(page.getByRole("heading", { name: "Review panels" })).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator("[data-page-id]").first()).toBeVisible({ timeout: 15_000 });
+  for (const width of [1440, 1100]) {
+    await page.setViewportSize({ width, height: 800 });
+    await page.waitForTimeout(800);
+    expect(await page.locator("[data-page-id]").count(), "the page strip is windowed").toBeLessThanOrEqual(40);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), `no sideways scroll at ${width}`).toBe(true);
   }
   expect(dialogs).toEqual([]);
 });

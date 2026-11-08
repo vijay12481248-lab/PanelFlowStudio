@@ -68,7 +68,7 @@ Not a gap: `executeProjectHistoryCommand` (used by 39 history methods) and `getP
 - Still open: **pipeline projects cannot be uploaded to YouTube from PanelFlow.** The engine has an upload path only for Original Stories episodes; Publish hands off the title, description, chapters, tags and thumbnail prompt to copy into YouTube Studio.
 - Still open: **`GET /api/projects/{id}/youtube/packaging` generates packaging when none is saved** (a slow local-model job), so the UI treats Get packaging as a generate action and never calls it on page open. A read-only "is packaging saved?" endpoint would let Publish show it without generating.
 - Still open: render profiles and render progress events (`getRenderProfiles`, `subscribeRenderEvents`) are not used.
-- Still open: **two legacy stage screens are still the old ones** inside the new frame (M5b rebuilt Acquire, Pages, Motion and Audio; M5c rebuilt Story and Script; M5d Part A rebuilt Render). Remaining: Panels and OCR. They keep their own back button, title and approve actions until then.
+- Still open: **one legacy stage screen is still the old one** inside the new frame (M5b rebuilt Acquire, Pages, Motion and Audio; M5c rebuilt Story and Script; M5d rebuilt Render and Panels). Remaining: OCR. It keeps its own back button, title and approve actions until then.
 - Data observation (not a UI bug): the real project used for checking is at `RENDERED` but the engine lists no renders for it, so Publish shows "Render the video first". The October database restore may have lost render records.
 
 ## 9. Changes in M5b (Acquire, Pages, Motion, Audio)
@@ -105,3 +105,18 @@ Not a gap: `executeProjectHistoryCommand` (used by 39 history methods) and `getP
 - Changed: packaging moved to Publish (M5a); Render ends with "Continue to publish". The story editor keeps `YouTubePackagingModal`.
 - Still open: a new render still saves to the engine's default folder unless another is chosen (as before). Starting, cancelling, opening files and exporting were not pressed on your projects.
 - Engine side: `STALE` should be part of the documented render statuses; the engine's profile list is the only source for profile ids and the old hard-coded list shows how easily the two drift.
+
+## 12. Changes in M5d Part B (Panels)
+
+- Fixed: the legacy Panel review screen (1,744 lines) is deleted and replaced by a v2 stage. The page canvas and the redaction controls are shared kits (`stages/kit/canvas`, `stages/kit/redaction`) that the OCR stage reuses.
+- Fixed (found on real data): the cleanup report lists **every** panel with the action the engine took (`keep`, `review`, `blur`, `exclude`), not only the ones it changed. The first version said "48 panels were cleaned automatically"; the real report for one project is 10 blurred, 3 excluded, 2 need review and 33 kept, and the screen now says that. My first tests used invented action names; they now use the real ones.
+- Fixed (from reading the old code, covered by tests, not reproduced on your data): an edit whose save failed could leave the screen showing the change while the engine did not have it. A failed move, split, merge, add or delete now puts the panel back and says why in words. Reordering panels on one page used to rewrite the order of the other pages' panels (it now keeps their places).
+- Fixed: Tab was taken over to cycle panels, so the keyboard could not walk the page. Tab is left alone; `[` and `]` cycle panels, the arrow keys change page (or nudge a panel when it has focus: 10 px, Alt for 1, Shift to resize), Delete asks in an app dialog, Escape clears. Every pointer action has a keyboard path (boxes are buttons with a label that includes their position; "Add by numbers" replaces drawing).
+- Fixed: detection and normalisation timers that gave up and called a running job failed. The stage follows the engine's job for as long as it runs, including one that was already running when the screen opened, and stops when you leave.
+- Changed: **drag to reorder is not rebuilt.** Panels are reordered with Move earlier / Move later buttons (they are the keyboard path and cover the same need). The detection profile selector is dropped: the old screen always sent "AUTO".
+- Changed: the engine's `IGNORED` status means a promotional panel that is excluded from the video; the screen says "Excluded" and draws the panel locked, still visible.
+- Changed: **Detect and review** is one button for detect, find text, read it with a real OCR engine and scan for promotional text. It refuses with a sentence when only the test engine (`mock_ocr`) is available, shows the step, can be cancelled (which cancels the running job) and never gives up on a long job.
+- Still open: on this PC most projects have **lost their page files** (the engine answers 404 for the page picture on 10 of 11 projects; only the project `9b7cb59d` has them). The stage shows "Page image unavailable" with Retry on those. This is likely from the October restore (see the DB wipe note); it is not caused by the stage.
+- Still open: the client's `batchBlurPanels` returns counts it computes itself, so the batch dialog says a request was sent and does not quote a number. The engine should return what it blurred.
+- Not pressed on your projects: Detect, Normalize, Detect this page, Confirm, Blur, Restore, Merge, Split, Add, Delete (opened and cancelled), Detect and review, Save for all episodes, Save labels. Scan was pressed once on `9b7cb59d` (it only reads) and reported "read the text in OCR first".
+
