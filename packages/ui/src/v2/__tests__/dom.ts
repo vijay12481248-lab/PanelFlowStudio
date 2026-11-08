@@ -25,6 +25,14 @@ export async function mount(element: React.ReactElement) {
   return {
     document,
     click: (el: Element) => act(async () => { el.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true })); }),
+    /** Two clicks inside one act(): overlapping act() calls (Promise.all of two clicks) corrupt later tests. */
+    clickTwice: (el: Element) => act(async () => {
+      for (let i = 0; i < 2; i++) el.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+    }),
+    /** A full mouse press (down, up, click): Radix tabs and menus react to mousedown, not click. */
+    press: (el: Element) => act(async () => {
+      for (const type of ["mousedown", "mouseup", "click"]) el.dispatchEvent(new dom.window.MouseEvent(type, { bubbles: true, button: 0 }));
+    }),
     async cleanup() {
       await act(async () => root.unmount());
       container.remove();
