@@ -15,6 +15,8 @@ export interface DashboardActivityItem {
 }
 
 export interface DashboardShellProps {
+  /** Rendered inside the app shell: no header or rail of its own, fills its parent instead of the window. */
+  embedded?: boolean;
   engineConnected: boolean;
   engineVersion: string;
   onRetryEngine: () => void;

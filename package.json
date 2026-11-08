@@ -10,7 +10,7 @@
     "dev:desktop": "npm --workspace=@panelflow/desktop run dev",
     "build": "npm run build --workspaces",
     "engine": "python -m uvicorn engine.api.app:app --host 127.0.0.1 --port 8765 --reload --no-access-log",
-    "test:ui": "npx tsx --test \"packages/ui/src/v2/__tests__/*.test.ts*\" \"apps/desktop/src/app/__tests__/*.test.ts*\" \"apps/desktop/src/__tests__/noRawColors.test.ts\"",
+    "test:ui": "npx tsx --tsconfig apps/desktop/tsconfig.json --test \"packages/ui/src/v2/__tests__/*.test.ts*\" \"apps/desktop/src/app/__tests__/*.test.ts*\" \"apps/desktop/src/__tests__/noRawColors.test.ts\"",
     "test:engine": "pytest tests -v",
     "test": "npm --workspace=@panelflow/history test && npx tsx --test packages/api-client/src/history.test.ts packages/api-client/src/narration.test.ts apps/desktop/src/history/__tests__/shortcuts.test.ts apps/desktop/src/__tests__/desktopDragDrop.test.ts apps/desktop/src/components/story-editor/__tests__/panelDrag.test.ts apps/desktop/src/components/story-editor/__tests__/sourceBrowserReference.test.tsx apps/desktop/src/components/story-editor/__tests__/timelineInteractions.test.tsx apps/desktop/src/components/story-editor/__tests__/backgroundSettings.test.ts apps/desktop/src/components/story-editor/__tests__/backgroundUI.test.tsx apps/desktop/src/components/story-editor/__tests__/youtubePackaging.test.tsx apps/desktop/src/components/__tests__/autoPilotModal.test.tsx apps/desktop/src/components/narration-studio/__tests__/narrationReview.test.tsx"
   },

@@ -28,7 +28,7 @@ export interface EngineState {
   restart: () => Promise<void>;
 }
 
-const EngineContext = React.createContext<EngineState | null>(null);
+export const EngineContext = React.createContext<EngineState | null>(null);
 
 export function useEngine(): EngineState {
   const value = React.useContext(EngineContext);

@@ -17,6 +17,7 @@ import { createDashboardLoader } from "./dashboardData";
 import { getAuthenticatedEngineHealth } from "../../engineConnection";
 
 export const DashboardShell: React.FC<DashboardShellProps> = ({
+  embedded = false,
   engineConnected,
   engineVersion,
   onRetryEngine,
@@ -181,9 +182,9 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
   const completedCount = jobs.filter((j) => j.status === "SUCCEEDED").length;
 
   return (
-    <div className="h-screen w-screen flex flex-col bg-[#080b12] text-zinc-100 overflow-hidden font-sans select-none">
+    <div className={`${embedded ? "h-full w-full" : "h-screen w-screen"} flex flex-col bg-[#080b12] text-zinc-100 overflow-hidden font-sans`}>
       {/* 1. TOP HEADER */}
-      <DashboardHeader
+      {!embedded && <DashboardHeader
         engineConnected={engineConnected}
         engineVersion={engineVersion}
         onOpenToolsModels={onOpenToolsModels}
@@ -192,18 +193,18 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
         retryingEngine={retryingEngine}
         onRestartEngine={onRestartEngine}
         restartingEngine={restartingEngine}
-      />
+      />}
 
       {/* 2. MAIN HORIZONTAL MULTI-COLUMN WORKSPACE */}
       <div className="flex-1 flex min-h-0 overflow-hidden">
         {/* Far-Left Navigation Rail (68px) */}
-        <AppNavigationRail
+        {!embedded && <AppNavigationRail
           activeTab={activeNavTab}
           onSelectTab={setActiveNavTab}
           onOpenSettings={onOpenToolsModels}
           onOpenLibrary={onOpenLibrary}
           onOpenChronoFlow={onOpenChronoFlow}
-        />
+        />}
 
         {/* Left Job Queue Sidebar (~310px) */}
         <JobQueueSidebar
