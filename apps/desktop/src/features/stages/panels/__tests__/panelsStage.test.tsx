@@ -235,3 +235,51 @@ test("a project with hundreds of pages draws only a window of them", async () =>
   assert.ok(text(view.document).includes("Page 1 of 300"));
   await view.cleanup();
 });
+
+// ---- Redaction and cleanup inside the stage ----
+test("a selected panel offers Blur panel, which blurs that panel once and refreshes its blur state", async () => {
+  const blurs: any[][] = [];
+  let state = { is_blurred: false, blurred_regions_count: 0, has_backup: false };
+  stub({ over: {
+    getPanelBlurStatus: async () => state,
+    blurEntirePanel: async (...a: any[]) => { blurs.push(a); state = { is_blurred: true, blurred_regions_count: 1, has_backup: true }; return { success: true }; },
+  } });
+  const view = await show();
+  await view.click(button(view.document, "Select panel 1")!);
+  await until(() => Boolean(button(view.document, "Blur panel")));
+  await until(() => text(view.document).includes("Not blurred"));
+  await view.clickTwice(button(view.document, "Blur panel")!);
+  await until(() => blurs.length > 0 && text(view.document).includes("Blurred, 1 region"));
+  assert.deepEqual(blurs, [["p1", "a", 32]]);
+  assert.ok(text(view.document).includes("Blurred, 1 region"));
+  await view.cleanup();
+});
+
+test("Blur on every panel opens the batch dialog, and nothing is sent until Blur panels is pressed", async () => {
+  const sent: any[][] = [];
+  stub({ over: { batchBlurPanels: async (...a: any[]) => { sent.push(a); return { success: true }; } } });
+  const view = await show();
+  await view.click(button(view.document, "Blur on every panel")!);
+  await until(() => Boolean(dialogButton(view.document, "Blur panels")));
+  assert.equal(sent.length, 0);
+  await view.click(dialogButton(view.document, "Blur panels")!);
+  await until(() => sent.length > 0);
+  assert.deepEqual(sent, [["p1", { preset: "TOP_WATERMARK", height_px: 80 }]]);
+  await view.cleanup();
+});
+
+test("the cleanup section loads nothing until it is opened", async () => {
+  let rulesCalls = 0;
+  stub({ over: {
+    getContentCleanupRules: async () => { rulesCalls++; return { enabled: true, labels: [] }; },
+    getContentCleanupReport: async () => ({ panels: {} }),
+  } });
+  const view = await show();
+  assert.equal(rulesCalls, 0);
+  assert.equal(view.document.querySelector('[aria-label="Shared exclusion labels"]'), null);
+  await view.click(button(view.document, "Show cleanup")!);
+  await until(() => Boolean(view.document.querySelector('[aria-label="Shared exclusion labels"]')));
+  assert.equal(rulesCalls, 1);
+  assert.ok(button(view.document, "Detect and review"));
+  await view.cleanup();
+});

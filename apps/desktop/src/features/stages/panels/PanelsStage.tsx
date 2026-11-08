@@ -11,10 +11,15 @@ import { PageCanvas, type CanvasBox } from "../kit/canvas/PageCanvas";
 import { ConfirmDialog } from "../kit/ConfirmDialog";
 import { JobProgress } from "../kit/JobProgress";
 import { StageToolbar } from "../kit/StageToolbar";
+import { BatchBlurDialog } from "../kit/redaction/BatchBlurDialog";
+import { BlurPanelControls } from "../kit/redaction/BlurPanelControls";
+import { useRedaction } from "../kit/redaction/useRedaction";
 import { refusal } from "../kit/engineReason";
 import { stageKeys, usePages } from "../kit/stageData";
 import { useFollowedJob } from "../kit/useFollowedJob";
 import { AddPanelDialog } from "./AddPanelDialog";
+import { ContentCleanup, type Review } from "./ContentCleanup";
+import { DetectAndReview } from "./DetectReviewControl";
 import { PageStrip } from "./PageStrip";
 import { PanelInspector } from "./PanelInspector";
 import { PanelList } from "./PanelList";
@@ -81,6 +86,10 @@ export const PanelsStage: React.FC<PanelsStageProps> = ({ project, onConfirmed, 
   const [error, setError] = React.useState<string | null>(null);
   const [notice, setNotice] = React.useState<string | null>(null);
   const [confirmDetect, setConfirmDetect] = React.useState(false);
+  const [batchOpen, setBatchOpen] = React.useState(false);
+  const [cleanupOpen, setCleanupOpen] = React.useState(false);
+  const [review, setReview] = React.useState<Review | null>(null);
+  const [blurBuster, setBlurBuster] = React.useState(() => Date.now()); // the blur state of panels: changes after any blur or restore
   const [confirming, setConfirming] = React.useState(false);
   const [detectingPage, setDetectingPage] = React.useState(false);
   const busy = React.useRef(false);
@@ -98,6 +107,7 @@ export const PanelsStage: React.FC<PanelsStageProps> = ({ project, onConfirmed, 
 
   const editing = usePanelEditing({ project, pages, onChanged: () => { history.refresh(); setCropBuster(Date.now()); } });
   const reloadPanels = () => queryClient.invalidateQueries({ queryKey: panelKeys.list(project.id) });
+  const redaction = useRedaction(project.id, () => { setBlurBuster(Date.now()); setCropBuster(Date.now()); history.refresh(); });
 
   // Detection and normalisation are jobs: follow one that was started here or was already running when the stage opened.
   const followed = useFollowedJob({
@@ -283,6 +293,7 @@ export const PanelsStage: React.FC<PanelsStageProps> = ({ project, onConfirmed, 
         <Button variant="secondary" size="sm" disabled={followed.active} title="Standardize the resolution and colour space without changing the originals" onClick={() => void normalize()}>Normalize pages</Button>
         <Button variant="secondary" size="sm" disabled={followed.active} title="Pages with manual edits, approved panels or panels linked to video scenes are preserved" onClick={() => (panels.length > 0 ? setConfirmDetect(true) : void detect())}>Detect panels</Button>
         <Button variant="secondary" size="sm" loading={detectingPage} disabled={followed.active || !activePage} onClick={() => void detectThisPage()}>Detect this page</Button>
+        <Button variant="secondary" size="sm" disabled={panels.length === 0} title="Blur the same area on every panel, for example a site watermark" onClick={() => setBatchOpen(true)}>Blur on every panel</Button>
       </GlassPanel>
 
       {!gate.ok && pages.length > 0 && <p className="text-sm text-warn">{gate.reason}</p>}
@@ -347,14 +358,41 @@ export const PanelsStage: React.FC<PanelsStageProps> = ({ project, onConfirmed, 
                   onSplit={(type) => void editing.split(selected, type)}
                   onFullPage={() => void editing.markFullPage(selected, size)}
                   onDelete={() => setPendingDelete(selected)}
-                />
+                >
+                  <BlurPanelControls projectId={project.id} panelId={selected.id} buster={blurBuster} redaction={redaction} />
+                </PanelInspector>
               )}
               <PanelList panels={pagePanels} selectedId={selectedId} mergeIds={mergeIds} busy={editing.busy} onSelect={(id) => setSelectedId(id)} onToggleMerge={(id) => select(id, true)} onMove={reorderPage} onMerge={() => void doMerge()} />
             </div>
           </div>
+          <GlassPanel blur={false} className="grid grid-cols-1 gap-4 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="font-display text-sm font-semibold text-fg">Clean up promotional content</h3>
+              <Button size="sm" variant="ghost" aria-expanded={cleanupOpen} onClick={() => setCleanupOpen((open) => !open)}>{cleanupOpen ? "Hide cleanup" : "Show cleanup"}</Button>
+            </div>
+            {cleanupOpen && (
+              <>
+                <DetectAndReview
+                  projectId={project.id}
+                  direction={direction}
+                  onReview={setReview}
+                  onPanelsChanged={() => { void reloadPanels(); setCacheBuster(Date.now()); setCropBuster(Date.now()); history.refresh(); }}
+                />
+                <ContentCleanup
+                  projectId={project.id}
+                  panels={panels}
+                  review={review}
+                  onReview={setReview}
+                  onPanelsChanged={() => { void reloadPanels(); setCropBuster(Date.now()); history.refresh(); }}
+                  onBlurred={() => { setBlurBuster(Date.now()); setCropBuster(Date.now()); history.refresh(); }}
+                />
+              </>
+            )}
+          </GlassPanel>
         </>
       )}
 
+      <BatchBlurDialog open={batchOpen} onClose={() => setBatchOpen(false)} redaction={redaction} />
       <AddPanelDialog open={addOpen} image={size} onClose={() => setAddOpen(false)} onAdd={(box) => (activePage ? addBox(activePage.id, box) : Promise.resolve(false))} />
       <ConfirmDialog
         open={pendingDelete !== null}
