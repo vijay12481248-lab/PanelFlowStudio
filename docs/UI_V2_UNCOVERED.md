@@ -10,7 +10,7 @@ Generated list: `node scripts/audit-api-usage.mjs` (228 `api-client` methods; 34
 |---|---|---|
 | Render | `getRenderProfiles`, `getRenderValidation`, `subscribeRenderEvents` | Routes `/api/render/profiles`, `/api/projects/{id}/render/jobs/{job}/validation`, `/api/render/events` exist. The Render screen polls instead of using events and shows no validation report or profile picker. Decide in M5. |
 | Music | `getMusicServiceHealth`, `saveProjectMusicPlan`, `updateCuePrompt`, `listProjectMusicTakes`, `selectMusicTake`, `addTakeToTimeline` | Routes under `/api/projects/{id}/music/*` exist. No screen picks between generated takes or edits cue prompts. Belongs to the audio library work in M7. |
-| Jobs | `listBatchJobs` (`/api/series/batch-jobs`), `listAnimeJobs` (`/api/anime/jobs`) | The queue views show project jobs only. M3 (Jobs page) should decide whether to merge series and anime jobs. |
+| Jobs | `listBatchJobs` (`/api/series/batch-jobs`), `listAnimeJobs` (`/api/anime/jobs`) | The M3 Jobs page lists engine jobs (`/api/jobs`) only; series batch jobs and anime jobs are still not shown. Their payload shape has not been checked against `Job`. |
 | YouTube | `listYoutubeChannels`, `getYoutubeAgentSettings` | Original Stories shows one channel preset list from a different endpoint. M4 (Settings, YouTube). |
 | System | `setConcurrencySettings`, `getAllAvailableLLMProviders`, `getAudioProviders` | Concurrency and the full provider list are not editable in the UI. M4. |
 | Motion graphics | `renderMotionGraphic`, `getMotionPreset` | Router `/api/motion-graphics/*` exists; the editor inspector does not call these. M7. |
@@ -32,7 +32,7 @@ Not a gap: `executeProjectHistoryCommand` (used by 39 history methods) and `getP
 
 ## 4. Wiring problems found in the existing UI
 
-- Dashboard nav "Library" opens the Tools and Models modal, not a library. The same modal also opens from "Workspace health", "Tools & Models", "Model Settings", "Engine Settings" and "Open Library". Fixed by M4.
+- ~~Dashboard nav "Library" opens the Tools and Models modal.~~ Fixed in M3 (the dashboard is gone). The engine modal is still reachable from Settings; M4 replaces it.
 - Auto-Pilot has two buttons on pipeline screens (header and stage bar). Fixed in M2.
 - `body { user-select: none }` blocks copying OCR text and scripts. Fixed in M2.
 - `handleOpenProject` sends projects at `NORMALIZED` or `PANELS_DETECTED` straight to OCR (or Story when visual storytelling is on) and skips the Panels review stage. M2 keeps this behaviour in `stageForProject`; **owner to confirm whether skipping panel review is intended.**
@@ -43,3 +43,11 @@ Not a gap: `executeProjectHistoryCommand` (used by 39 history methods) and `getP
 
 - A single engine `/inbox` endpoint (the Home inbox is aggregated client-side in M3).
 - Light theme ("Paper").
+
+## 6. Changes in M3 (Home, Projects, Jobs)
+
+- Fixed: the four queue views are one Jobs page (`JobActivityPanel` stays because the editor and error modal use it; `NarrationJobQueue` stays inside Narration Studio, M7). `MultiProjectQueueDashboard` was never used and is deleted.
+- New gap: **Library has no standalone screen.** `AudioLibrary` renders mock assets (`MOCK_AUDIO_ASSETS`) and defaults to a hard-coded project id, so `/library` shows an honest placeholder. Music and sound effects are chosen inside the story editor. A real library is M7 work.
+- New gap: **"Ready to publish" on Home covers Original Stories episodes and projects at `QA_APPROVED` only.** The upload kit (`1_TO_UPLOAD`) and explainer batches have no API, so they cannot appear in the inbox.
+- Dead tests found: the old `components/dashboard/__tests__` files used vitest, which is not installed, so they never ran. They were deleted with the dashboard; `groupBySeries` now has a node:test.
+- Inbox rule to confirm: failed jobs older than 7 days are not shown, and a project shows one item (failed job, then rights, then review, then publish).
