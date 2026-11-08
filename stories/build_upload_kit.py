@@ -55,6 +55,11 @@ def main() -> None:
             pkg = json.loads((ws / "youtube_package.json").read_text(encoding="utf-8"))
             video = ws / "story_1080p.mp4"
             sub = folder / f"{kind}_{when:%H-%M}_{slug.removeprefix('vox_').removesuffix('_short')}"
+            if state.get(slug, {}).get("scheduled"):  # already on YouTube: nothing to upload, so the kit keeps no files for it
+                if sub.exists() and KIT in sub.parents:
+                    shutil.rmtree(sub)
+                row[kind] = {"title": pkg["title"], "when": f"{when:%I:%M %p}", "dir": None, "state": state[slug]}
+                continue
             sub.mkdir(exist_ok=True)
             if not (sub / video.name).exists() or (sub / video.name).stat().st_size != video.stat().st_size:
                 shutil.copy2(video, sub / video.name)
@@ -66,9 +71,12 @@ def main() -> None:
             (sub / "title_description_tags.txt").write_text(
                 info_text(kind, slug, when, pkg, desc, state.get(slug, {}), long_url, has_thumb), encoding="utf-8-sig")
             row[kind] = {"title": pkg["title"], "when": f"{when:%I:%M %p}", "dir": sub, "state": state.get(slug, {})}
+        if not any(folder.iterdir()):
+            folder.rmdir()
+            row["folder"] = None
         rows.append(row)
     out = ["YOUTUBE UPLOAD CHECKLIST  -  @ExplainItFlat", SEP,
-           f"Kit folder : {KIT}", "Each Day_NN folder = one release day: a LONG folder (video, thumbnail.jpg, title_description_tags.txt) and a SHORT folder.",
+           f"Kit folder : {KIT}", "Only videos NOT yet on YouTube have files here. Each Day_NN folder = one release day: a LONG folder (video, thumbnail.jpg, title_description_tags.txt) and a SHORT folder.",
            "Times are India time. Long video 6:00 PM, its Short 8:00 PM. All videos: Schedule, not made for kids, AI content = Yes.",
            "YouTube allows about 10 new uploads per 24 h on this channel, so upload in date order, 2-5 days ahead of each date.", ""]
     up = sum(1 for r in rows for k in ("LONG", "SHORT") if k in r and r[k]["state"].get("scheduled"))
@@ -79,7 +87,9 @@ def main() -> None:
         for k in ("LONG", "SHORT"):
             if k in r:
                 x = r[k]
-                out += [f"  [{'x' if x['state'].get('scheduled') else ' '}] {k:<5} {x['when']}  {x['title']}", f"        files: {x['dir']}"]
+                out.append(f"  [{'x' if x['state'].get('scheduled') else ' '}] {k:<5} {x['when']}  {x['title']}")
+                if x["dir"]:
+                    out.append(f"        files: {x['dir']}")
                 if x["state"].get("url"):
                     out.append(f"        link : {x['state']['url']}")
     out += ["", SEP, "REMAINING TO UPLOAD (in this order)", SEP]
