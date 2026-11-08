@@ -104,7 +104,7 @@ test("Publish shows the checks and waits for a button before asking for packagin
 });
 
 // M5b stages. These only read and navigate: they never press Start acquisition, Confirm, Plan, Generate, Regenerate, Approve or the Delete confirmation.
-for (const stage of ["acquire", "pages", "motion", "audio"] as const) {
+for (const stage of ["acquire", "pages", "motion", "audio", "story", "script"] as const) {
   test(`${stage} is one frame with one title and no second back button`, async ({ page }) => {
     const id = await firstPipelineProject(page);
     await page.goto(`/#/projects/${id}/${stage}`);
@@ -158,4 +158,54 @@ test("Audio shows either the player or the invitation to generate", async ({ pag
   await expect(page.getByRole("dialog")).toContainText("Voice casting");
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toHaveCount(0);
+});
+
+// M5c stages. Read and navigate only: never Run, Re-analyze, Approve, Generate, Re-adapt, Validate, Save, Merge, Split, Remove or a line action.
+test("Story shows its tabs or the Run invitation, puts beats under their scenes, and Edit identity opens and cancels without a browser dialog", async ({ page }) => {
+  // The first project may have no analysis; look for one that has, so the real shapes are what is checked.
+  const token = await (await page.request.get("/__engine_token")).text();
+  const auth = { headers: { Authorization: `Bearer ${token}` } };
+  const projects: Array<{ id: string; source_type: string }> = await (await page.request.get("http://127.0.0.1:8765/api/projects", auth)).json();
+  let id = "";
+  let narrative: { beats?: unknown[] } = {};
+  for (const project of projects.filter((p) => p.source_type !== "CHRONOFLOW_AI")) {
+    const res = await page.request.get(`http://127.0.0.1:8765/api/projects/${project.id}/narrative`, auth);
+    if (res.ok()) { id = project.id; narrative = await res.json(); break; }
+  }
+  test.skip(!id, "No project has a story analysis.");
+  const dialogs: string[] = [];
+  page.on("dialog", (dialog) => { dialogs.push(dialog.message()); void dialog.dismiss(); });
+  await page.goto(`/#/projects/${id}/story`);
+  await expect(page.getByRole("heading", { name: "Review the story" })).toBeVisible({ timeout: 15_000 });
+  await page.waitForTimeout(2000);
+  const characters = page.getByRole("tab", { name: /^Characters/ });
+  await expect(characters).toBeVisible();
+
+  // If the engine's narrative has beats, the Scenes tab must show them under their scenes.
+  await page.getByRole("tab", { name: /^Scenes and beats/ }).click();
+  if ((narrative.beats ?? []).length > 0) {
+    await expect(page.getByText(/^Beat \d+$/).first(), "beats must appear under their scenes").toBeVisible();
+    await expect(page.locator("[data-scene-id]").filter({ hasNotText: "No beats in this scene." }).first()).toBeVisible();
+  }
+
+  await characters.click();
+  const edit = page.getByRole("button", { name: /^Edit / }).first();
+  if (await edit.count()) {
+    await edit.click();
+    await expect(page.getByRole("dialog")).toContainText("Edit character identity");
+    await page.getByRole("dialog").getByRole("button", { name: "Cancel" }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+  }
+  expect(dialogs, "no browser confirm or alert may appear").toEqual([]);
+});
+
+test("Script shows its content or the invitation to generate, and no stale boundary banner", async ({ page }) => {
+  const id = await firstPipelineProject(page);
+  await page.goto(`/#/projects/${id}/script`);
+  await expect(page.getByRole("heading", { name: "Review the script" })).toBeVisible({ timeout: 15_000 });
+  await page.waitForTimeout(2000);
+  const metrics = page.getByText("Faithfulness coverage");
+  const invite = page.getByText("No script yet");
+  await expect(metrics.or(invite).first()).toBeVisible();
+  await expect(page.getByText("Milestone 4")).toHaveCount(0);
 });

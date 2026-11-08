@@ -167,6 +167,7 @@ export const ScriptStage: React.FC<ScriptStageProps> = ({ project, onApproved, o
           issues={issues}
           segments={script.segments}
           characters={characters}
+          approved={approved}
           filterOn={unsupportedOnly}
           onToggleFilter={() => setUnsupportedOnly((on) => !on)}
           onEdit={(segmentId) => { setEditingId(segmentId); setTimeout(() => document.getElementById(`seg-${segmentId}`)?.scrollIntoView?.({ behavior: "smooth", block: "center" }), 0); }}

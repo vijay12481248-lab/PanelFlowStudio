@@ -240,3 +240,14 @@ test("with a storyboard the Storyboard view is first, and the Spoken script view
   assert.deepEqual(ids(view.document), ["s1", "s2", "s3"]);
   await view.cleanup();
 });
+
+test("on an already-approved script, unsupported statements are reported without saying they block approval", async () => {
+  stub({ script: scriptDoc({ status: "APPROVED" }) });
+  const view = await show(project("SCRIPT_APPROVED"));
+  const banner = view.document.querySelector("[data-unsupported-banner]")!;
+  assert.ok(banner, "the statements are still listed");
+  assert.ok(banner.textContent!.includes("1 unsupported statement found"));
+  assert.ok(!banner.textContent!.includes("block"), "nothing is being blocked");
+  assert.ok(banner.textContent!.includes("already approved"));
+  await view.cleanup();
+});
