@@ -8,7 +8,7 @@ Generated list: `node scripts/audit-api-usage.mjs` (228 `api-client` methods; 34
 
 | Area | Client methods | Notes |
 |---|---|---|
-| Render | `getRenderProfiles`, `getRenderValidation`, `subscribeRenderEvents` | Routes `/api/render/profiles`, `/api/projects/{id}/render/jobs/{job}/validation`, `/api/render/events` exist. The Render screen polls instead of using events and shows no validation report or profile picker. Decide in M5. |
+| Render | `getRenderProfiles`, `subscribeRenderEvents` (`getRenderValidation` is wired in the Publish stage since M5a) | Routes `/api/render/profiles`, `/api/projects/{id}/render/jobs/{job}/validation`, `/api/render/events` exist. The Render screen polls instead of using events and shows no validation report or profile picker. Decide in M5. |
 | Music | `getMusicServiceHealth`, `saveProjectMusicPlan`, `updateCuePrompt`, `listProjectMusicTakes`, `selectMusicTake`, `addTakeToTimeline` | Routes under `/api/projects/{id}/music/*` exist. No screen picks between generated takes or edits cue prompts. Belongs to the audio library work in M7. |
 | Jobs | `listBatchJobs` (`/api/series/batch-jobs`), `listAnimeJobs` (`/api/anime/jobs`) | The M3 Jobs page lists engine jobs (`/api/jobs`) only; series batch jobs and anime jobs are still not shown. Their payload shape has not been checked against `Job`. |
 | YouTube | `listYoutubeChannels`, `getYoutubeAgentSettings` | Original Stories shows one channel preset list from a different endpoint. M4 (Settings, YouTube). |
@@ -59,3 +59,14 @@ Not a gap: `executeProjectHistoryCommand` (used by 39 history methods) and `getP
 - Still open: the concurrency benchmark (`runConcurrencyBenchmark`) and the "Usage dashboard" idea have no UI.
 - The old modal's Routing, Cloud, Ollama and System tabs are now duplicated by the new sections until M4b removes the modal's non-YouTube tabs.
 - Settings never display a stored secret: the Ollama token and cloud API key are write-only (tests check the page, the query and mutation caches and storage).
+
+## 8. Changes in M5a (workbench frame and Publish)
+
+- Fixed: every pipeline stage sits in one frame (`WorkbenchFrame`): project header, rights and stage chips, one Auto-Pilot button, an Open story editor link, and a ten-step stepper (the old bar had no Pages or Publish step and could not show Blocked). `PipelineNavbar` is deleted. Five stage screens rendered a second `h1`; they now use `h2`.
+- Fixed: the Auto-Pilot dialog could not be closed with Escape.
+- New: **Publish stage** (checks, latest render with its validation report, YouTube packaging to copy). It never uploads, publishes or schedules.
+- Still open: **pipeline projects cannot be uploaded to YouTube from PanelFlow.** The engine has an upload path only for Original Stories episodes; Publish hands off the title, description, chapters, tags and thumbnail prompt to copy into YouTube Studio.
+- Still open: **`GET /api/projects/{id}/youtube/packaging` generates packaging when none is saved** (a slow local-model job), so the UI treats Get packaging as a generate action and never calls it on page open. A read-only "is packaging saved?" endpoint would let Publish show it without generating.
+- Still open: render profiles and render progress events (`getRenderProfiles`, `subscribeRenderEvents`) are not used.
+- Still open: **the legacy stage screens are still the old ones** inside the new frame. Rebuilds, in order of use: M5b Acquire, Pages, Motion, Audio; M5c Story, Script; M5d Panels, OCR. They keep their own back button, title and approve actions until then.
+- Data observation (not a UI bug): the real project used for checking is at `RENDERED` but the engine lists no renders for it, so Publish shows "Render the video first". The October database restore may have lost render records.
