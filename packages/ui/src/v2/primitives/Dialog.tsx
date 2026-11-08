@@ -13,11 +13,19 @@ export interface OverlayProps {
 }
 
 /** Shared by Dialog and Drawer. The scrim is a flat tint with no blur, because dialogs sit above the blurred hub. */
-export const OverlayContent: React.FC<OverlayProps & { className: string }> = ({ open, onOpenChange, title, description, children, footer, className }) => (
+export const OverlayContent: React.FC<OverlayProps & { className: string }> = ({ open, onOpenChange, title, description, children, footer, className }) => {
+  // These dialogs are controlled and have no Radix Trigger, so remember what had focus when they
+  // opened and hand it back on close (otherwise focus drops to the page body).
+  const opener = React.useRef<HTMLElement | null>(null);
+  React.useLayoutEffect(() => {
+    if (open) opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  }, [open]);
+  return (
   <RD.Root open={open} onOpenChange={onOpenChange}>
     <RD.Portal>
       <RD.Overlay className="fixed inset-0 z-40 bg-ink/70" />
       <RD.Content
+        onCloseAutoFocus={(event) => { event.preventDefault(); opener.current?.focus(); }}
         {...(description ? {} : { "aria-describedby": undefined })}
         className={cx("fixed z-50 flex flex-col border border-edge bg-navy text-fg shadow-2xl focus:outline-none", className)}
       >
@@ -30,7 +38,8 @@ export const OverlayContent: React.FC<OverlayProps & { className: string }> = ({
       </RD.Content>
     </RD.Portal>
   </RD.Root>
-);
+  );
+};
 
 export const Dialog: React.FC<OverlayProps> = (props) => (
   <OverlayContent {...props} className="left-1/2 top-1/2 max-h-[85vh] w-[min(92vw,560px)] -translate-x-1/2 -translate-y-1/2 rounded-card" />

@@ -68,3 +68,25 @@ test("useToast shows a message that is announced politely", async () => {
   assert.ok(view.document.body.textContent!.includes("Settings saved"));
   await view.cleanup();
 });
+
+test("closing a Dialog returns focus to the control that opened it", async () => {
+  function Opener() {
+    const [open, setOpen] = React.useState(false);
+    return (
+      <>
+        <button id="opener" onClick={() => setOpen(true)}>Open</button>
+        <Dialog open={open} onOpenChange={setOpen} title="Confirm" footer={<button id="close" onClick={() => setOpen(false)}>Close</button>}>x</Dialog>
+      </>
+    );
+  }
+  const view = await mount(<Opener />);
+  const opener = view.document.getElementById("opener")!;
+  opener.focus();
+  await view.click(opener);
+  assert.ok(view.document.querySelector('[role="dialog"]'), "dialog opened");
+  await view.click(view.document.getElementById("close")!);
+  assert.equal(view.document.querySelector('[role="dialog"]'), null, "dialog closed");
+  await new Promise((resolve) => setTimeout(resolve, 30)); // Radix restores focus in a 0ms timeout
+  assert.equal(view.document.activeElement?.id, "opener");
+  await view.cleanup();
+});
