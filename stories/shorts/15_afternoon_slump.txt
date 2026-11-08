@@ -1,0 +1,15 @@
+from: 15_afternoon_slump.txt
+title: Why Do We Get Sleepy After Lunch? It's Not Just Food #Shorts
+slug: vox_afternoon_slump_short
+hook: Why does everyone crash after lunch? #Shorts
+cta: What is your best trick against the slump? Tell us below.
+tags: why do we get sleepy after lunch, afternoon slump explained, circadian rhythm, science shorts, everyday science, ExplainItFlat
+use: p001 | Why do we get sleepy after lunch? Dev is crashing at his desk at two o'clock.
+use: p006 | First, your body clock has a natural dip in the early afternoon.
+use: p008 | Second, sleep pressure: adenosine builds up in your brain the longer you are awake.
+use: p011 | A heavy sugary meal adds a quick blood sugar spike, then a crash.
+use: p012 | The turkey story is mostly a myth. The long day does more of the work.
+use: p016 | What helps? Daylight, a short walk, and a lighter lunch.
+use: p018 | A ten to twenty minute nap can refresh you. Set an alarm.
+use: p023 | After a walk and some water, Dev's eyes are bright and his words stay still.
+use: p027 | What is your best trick for beating the slump? Tell us in the comments.

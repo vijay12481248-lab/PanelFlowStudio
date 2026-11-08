@@ -87,29 +87,45 @@ def motion_fx_filters(fx: str | None) -> list[str]:
         out.append("eq=contrast=1.06:saturation=1.12:gamma=0.98")
     return out
 
-def fit_graph(aspect: float) -> str:
+def fit_graph(aspect: float, size: tuple[int, int] | None = None) -> str:
     """Filter graph [0:v] -> [v0]: the WHOLE picture on a 16:9 canvas. Nothing is cropped and nothing moves.
 
     Square close-ups and portrait sheets sit centred on a blurred, darkened copy of themselves, so no black bars show and no head,
     hand or glass is cut off.
     """
-    if abs(aspect / (rr.W / rr.H) - 1) < FIT_TOLERANCE:
-        return f"[0:v]scale={rr.W}:{rr.H}:flags=lanczos,setsar=1[v0]"
+    W, H = size or (rr.W, rr.H)
+    if abs(aspect / (W / H) - 1) < FIT_TOLERANCE:
+        return f"[0:v]scale={W}:{H}:flags=lanczos,setsar=1[v0]"
     return (f"[0:v]split[a][b];"
-            f"[a]scale={rr.W}:{rr.H}:force_original_aspect_ratio=increase,crop={rr.W}:{rr.H},boxblur=25:5,eq=brightness=-0.15:saturation=1.1[bg];"
-            f"[b]scale={rr.W}:{rr.H}:force_original_aspect_ratio=decrease:flags=lanczos[fg];"
+            f"[a]scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},boxblur=25:5,eq=brightness=-0.15:saturation=1.1[bg];"
+            f"[b]scale={W}:{H}:force_original_aspect_ratio=decrease:flags=lanczos[fg];"
             f"[bg][fg]overlay=(W-w)/2:(H-h)/2,setsar=1[v0]")
 
 
+def frame_canvas(story: OriginalStory) -> tuple[int, int] | None:
+    """The render canvas a story asks for: a 9:16 story (a YouTube Short) is 1080x1920; anything else keeps the default landscape canvas."""
+    return (1080, 1920) if (story.meta or {}).get("frame") == "9:16" else None
+
+
+def caption_style(size: tuple[int, int] | None) -> str:
+    """libass style: landscape keeps the long-form look; a vertical canvas gets a bigger font in short lines, placed in the lower third
+    (above the Shorts UI, which covers the very bottom), so a 9-word chunk wraps to two lines instead of running off the narrow frame."""
+    if size and size[1] > size[0]:
+        # libass scales these by PlayResY=288 (and PlayResX = 288 * w/h = 162 on a 9:16 canvas): FontSize 10 is ~64 px of 1920, MarginV 70 puts the
+        # lines ~470 px above the bottom edge, MarginL/R 10 leave ~88% of the width. (Measured: MarginV 300 pushed the text off the frame.)
+        return "FontName=Arial,FontSize=10,Bold=1,Outline=1,Shadow=0,BorderStyle=1,Alignment=2,MarginV=70,MarginL=10,MarginR=10"
+    return "FontName=Arial,FontSize=20,Bold=1,Outline=1,Shadow=0,BackColour=&H80000000,BorderStyle=4,MarginV=36"
+
+
 def render_panel(img: Path, wav: Path, dur: float, fps: float, text: str, ws: Path, burn: bool, out: Path,
-                 fade_in: float = 0.0, fade_out: float = 0.0, fx: str | None = None) -> None:
+                 fade_in: float = 0.0, fade_out: float = 0.0, fx: str | None = None, size: tuple[int, int] | None = None) -> None:
     n = round(dur * fps)
     from PIL import Image
     try:
         with Image.open(img) as im:
             aspect = im.width / max(im.height, 1)
     except Exception:
-        aspect = rr.W / rr.H
+        aspect = (size or (rr.W, rr.H))[0] / (size or (rr.W, rr.H))[1]
 
     vf = []
     if fade_in:
@@ -118,14 +134,14 @@ def render_panel(img: Path, wav: Path, dur: float, fps: float, text: str, ws: Pa
         vf.append(f"fade=t=out:st={dur - fade_out:.3f}:d={fade_out}")
     if burn and text.strip():
         (ws / "tmp_seg.srt").write_text(rr.srt_text(rr.caption_chunks(text, max(dur - END_PAUSE_SEC, 0.5))), encoding="utf-8")
-        vf.append("subtitles=tmp_seg.srt:force_style='FontName=Arial,FontSize=20,Bold=1,Outline=1,Shadow=0,BackColour=&H80000000,BorderStyle=4,MarginV=36'")
+        vf.append(f"subtitles=tmp_seg.srt:force_style='{caption_style(size)}'")
     vf.extend(motion_fx_filters(fx))
     vf.append("format=yuv420p")
 
     af = "aresample=48000" + (f",afade=t=in:st=0:d={fade_in}" if fade_in else "") + (
         f",afade=t=out:st={dur - fade_out:.3f}:d={fade_out}" if fade_out else "")
     head = ["ffmpeg", "-y", "-v", "error", "-loop", "1", "-framerate", str(fps), "-i", str(img), "-i", str(wav),
-            "-filter_complex", f"{fit_graph(aspect)};[v0]{','.join(vf)}[v];[1:a]{af}[a]", "-map", "[v]", "-map", "[a]"]
+            "-filter_complex", f"{fit_graph(aspect, size)};[v0]{','.join(vf)}[v];[1:a]{af}[a]", "-map", "[v]", "-map", "[a]"]
     tail = ["-frames:v", str(n), "-t", f"{dur}", "-r", str(fps), "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2", str(out)]
     try:
         rr._run(head + rr.video_encoder() + tail, ws)
@@ -193,7 +209,7 @@ def _digest(*parts: str) -> str:
 def build_video(story: OriginalStory, ws: Path, tts=None, fps: float = 30.0, burn_captions: bool = True,
                 music: Path | None = rr.DEFAULT_MUSIC, name: str = "story_1080p.mp4",
                 progress: Callable[[float, str], None] = lambda p, m: None, narrator: tuple[str, float] | None = None,
-                engine: str = "auto", fx: str = "none") -> dict:
+                engine: str = "auto", fx: str = "none", size: tuple[int, int] | None = None) -> dict:
     """Voices and renders every panel that has an image (missing panels are listed, not faked); reruns reuse unchanged work."""
     ws = Path(ws).resolve()
     tts = tts or rt.KokoroTts()
@@ -218,7 +234,7 @@ def build_video(story: OriginalStory, ws: Path, tts=None, fps: float = 30.0, bur
             last = i == len(panels) - 1
             clip = ws / "clips" / f"{p.id}.mp4"
             use_clip = clip.exists() and engine != "still"
-            rkey = _digest(vkey, hashlib.sha256(img.read_bytes()).hexdigest(), str(burn_captions), RENDER_LOOK, str(i == 0), str(last),
+            rkey = _digest(vkey, hashlib.sha256(img.read_bytes()).hexdigest(), str(burn_captions), RENDER_LOOK, str(i == 0), str(last), str(size), caption_style(size),
                            hashlib.sha256(clip.read_bytes()).hexdigest() if use_clip else "still", str(fx))  # a new clip invalidates its segment
             if not (seg.exists() and meta.get(p.id, {}).get("render") == rkey):
                 text_content = " ".join(x for x, _ in spoken_parts(p))
@@ -227,7 +243,7 @@ def build_video(story: OriginalStory, ws: Path, tts=None, fps: float = 30.0, bur
                                     fade_in=0.6 if i == 0 else 0.0, fade_out=1.2 if last else 0.0, fx=fx)
                 else:
                     render_panel(img, wav, dur, fps, text_content, ws, burn_captions, seg,
-                                 fade_in=0.6 if i == 0 else 0.0, fade_out=1.2 if last else 0.0, fx=fx)
+                                 fade_in=0.6 if i == 0 else 0.0, fade_out=1.2 if last else 0.0, fx=fx, size=size)
             meta[p.id] = {"voice": vkey, "render": rkey}
             entries.append({"panel_id": p.id, "scene_id": p.scene_id, "start": round(t, 4), "duration": round(dur, 4)})
             t += round(dur, 4)
@@ -332,7 +348,9 @@ def package(story: OriginalStory, ws: Path, extra_tags: list[str] | None = None,
     first = next((p for p in story.panels if p.id == meta.get("thumb_panel") and has(p)), None) or next(
         (p for p in story.panels if has(p) and p.shot in ("close", "medium")), None) or next(p for p in story.panels if has(p))
     thumb = ws / "thumbnail.jpg"
-    if meta.get("thumb_text"):
+    if frame_canvas(story):  # a Short has no custom thumbnail (YouTube takes a frame); a landscape one would be a squashed picture
+        pass
+    elif meta.get("thumb_text"):
         thumbnail_with_text(ws / "panels" / f"{first.id}.png", meta["thumb_text"], thumb)
     else:
         img = Image.open(ws / "panels" / f"{first.id}.png").convert("RGB").resize((1280, 720))

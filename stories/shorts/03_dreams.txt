@@ -1,0 +1,15 @@
+from: 03_dreams.txt
+title: Why Do We Dream? 4 Ideas Scientists Argue About #Shorts
+slug: vox_dreams_short
+hook: Why do we dream, and why do we forget them? Four ideas in 45 seconds. #Shorts
+cta: What is your strangest dream? Tell us in the comments.
+tags: why do we dream, dream science, what is REM sleep, science shorts, everyday science, ExplainItFlat
+use: p002 | Why do we dream? Here, Maya is on a stage in her pajamas, with no idea what the play is.
+use: p003 | Her heart pounds, nothing comes out, and then she wakes up.
+use: p007 | In REM sleep your eyes dart around, your brain is busy, and your body is paralyzed.
+use: p012 | Idea one: dreams help sort your memories from the day.
+use: p014 | Idea two: dreams help you process feelings, where they feel a little safer.
+use: p016 | Idea three: dreams are practice for chases, falls and being late.
+use: p018 | Idea four: your brain tells stories from random signals.
+use: p020 | Which is right? Maybe all of them. Nobody knows for sure.
+use: p031 | What is the strangest dream you remember? Tell us in the comments.

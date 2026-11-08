@@ -1,0 +1,14 @@
+from: 12_deja_vu.txt
+title: Why Do We Get Deja Vu? 3 Theories Explained #Shorts
+slug: vox_deja_vu_short
+hook: Why do we feel we have lived a moment before? Three theories. #Shorts
+cta: Have you had deja vu? Tell us in the comments.
+tags: why do we get deja vu, what is deja vu, deja vu explained, science shorts, psychology, ExplainItFlat
+use: p002 | Why do we get deja vu? Maya walks into a new cafe and feels she has lived this moment.
+use: p008 | It is not a past life or psychic powers. It is a quirk of memory.
+use: p009 | Theory one: the room's layout matches a place you saw once and forgot.
+use: p013 | Theory two: a timing glitch files the present as a memory too early.
+use: p014 | Theory three: your familiarity checker fires by mistake, like a smoke alarm for toast.
+use: p019 | The opposite is jamais vu, when a familiar word suddenly looks strange.
+use: p023 | The feeling fades in seconds. Then the coffee tastes brand new.
+use: p027 | Have you had deja vu? Tell us in the comments.

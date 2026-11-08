@@ -1,0 +1,14 @@
+from: 22_head_tilt.txt
+title: Why Do Dogs Tilt Their Heads? Scientists Have Ideas #Shorts
+slug: vox_head_tilt_short
+hook: Why do dogs tilt their heads when we talk? Four ideas. #Shorts
+cta: Does your dog tilt for a special word? Tell us below.
+tags: why do dogs tilt their heads, dog head tilt meaning, dog behavior explained, science shorts, everyday science, ExplainItFlat
+use: p001 | Why do dogs tilt their heads? Maya says broccoli, and Mochi tilts all the way to the left.
+use: p005 | Idea one: hearing. A tilt may help them tell where a sound comes from.
+use: p009 | Idea two: sight. A dog's muzzle can block part of your face. | Mochi the dog in close-up from the side, his long snout in the foreground pointing at the viewer, Maya's smiling face behind it partly hidden by the snout, living room, no mask or muzzle strap on anyone
+use: p010 | A tilt may help them see your mouth and expressions better.
+use: p012 | Idea three: words. Dogs that knew toy names tilted more when hearing them.
+use: p015 | Idea four: it works. People say aww, smile, and give treats.
+use: p020 | But a constant tilt, stumbling or poor balance could mean an ear problem. See a vet.
+use: p028 | Does your dog tilt for a special word? Tell us in the comments.

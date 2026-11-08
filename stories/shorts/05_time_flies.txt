@@ -1,0 +1,14 @@
+from: 05_time_flies.txt
+title: Why Does Time Speed Up As We Get Older? #Shorts
+slug: vox_time_flies_short
+hook: Why did summers feel endless as a kid? Three ideas in 45 seconds. #Shorts
+cta: What new thing will you try this week? Tell us below.
+tags: why does time go faster as you get older, time perception, psychology of time, science shorts, everyday science, ExplainItFlat
+use: p001 | To a kid, summer lasts forever. To Nana, it flew by.
+use: p007 | Idea one: to an eight-year-old, one year is a huge slice of life.
+use: p008 | To an eighty-year-old, it is a thin sliver.
+use: p011 | Idea two: new memories make time feel long, repeated days blur together.
+use: p013 | A routine Tuesday looks just like every other day.
+use: p015 | Idea three: when you watch the clock, time slows down.
+use: p019 | You can slow time down by feeding your brain new experiences.
+use: p030 | What new thing will you try this week? Tell us in the comments.

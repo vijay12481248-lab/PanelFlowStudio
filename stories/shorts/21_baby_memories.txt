@@ -1,0 +1,15 @@
+from: 21_baby_memories.txt
+title: Why Can't We Remember Being Babies? #Shorts
+slug: vox_baby_memories_short
+hook: Why can almost nobody remember being a baby? #Shorts
+cta: What is your earliest memory? Tell us below.
+tags: why cant we remember being a baby, childhood amnesia, infantile amnesia, science shorts, psychology, ExplainItFlat
+use: p001 | Why can't we remember being babies? Maya has a photo of herself with spaghetti on her head.
+use: p005 | It is called childhood amnesia. Most adults remember almost nothing before age two or three.
+use: p008 | But babies do learn. Months-old babies learned to move a mobile with their foot.
+use: p009 | One idea: the memory-making part of the brain is still under construction.
+use: p011 | Another: new brain cells may overwrite old memory traces.
+use: p013 | Around age two, kids start saying me and mine, and memories stick.
+use: p018 | Be careful: photos and family stories can become false memories that feel real.
+use: p022 | Nana tells Maya about the lullaby and the rain. She remembers for both of them.
+use: p027 | What is your earliest memory? Tell us in the comments.

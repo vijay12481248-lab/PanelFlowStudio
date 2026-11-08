@@ -1,0 +1,16 @@
+from: 08_dog_tail.txt
+title: Why Do Dogs Wag Their Tails? It's Not Always Happy #Shorts
+slug: vox_dog_tail_short
+hook: Why do dogs wag their tails, and does a wag always mean happy? #Shorts
+cta: What does your dog's wag say? Tell us below.
+tags: why do dogs wag their tails, dog body language, dog behavior explained, science shorts, everyday science, ExplainItFlat
+use: p002 | Why do dogs wag? This shy shelter dog is Mochi, and his tail is low and still.
+use: p005 | A wag is communication, not a happiness button.
+use: p008 | A high tail means alert, a low tail means worried, a level tail means calm.
+use: p009 | Wide, whole-body wags mean friendly excitement. Small, slow wags mean unsure.
+use: p010 | Studies suggest dogs wag more to the right when they feel positive.
+use: p011 | And more to the left when they feel unsure or anxious.
+use: p014 | But a stiff, high, quick wag can mean tense, so respect it.
+use: p024 | Then Maya opened the door, and Mochi's whole body wiggled. He had decided she was home.
+use: p027 | So dogs wag to talk. Read the whole dog, not just the tail.
+use: p028 | What does your dog's wag say? Tell us in the comments.

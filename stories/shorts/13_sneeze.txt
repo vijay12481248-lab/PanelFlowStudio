@@ -1,0 +1,15 @@
+from: 13_sneeze.txt
+title: Why Do We Sneeze? And Why Do Our Eyes Close? #Shorts
+slug: vox_sneeze_short
+hook: Why do we sneeze, and why do our eyes always close? #Shorts
+cta: What is your strangest sneeze trigger? Tell us below.
+tags: why do we sneeze, why do we close our eyes when we sneeze, sneeze myths, science shorts, everyday science, ExplainItFlat
+use: p001 | Why do we sneeze? Maya's sandwich is airborne, thanks to one tickle in her nose.
+use: p005 | Particles like pollen or dust tickle your nose, and nerves alert the brain.
+use: p006 | The brain triggers a chain reaction: breathe in, squeeze, and burst.
+use: p009 | Why do the eyes close? Maybe protection, maybe wiring. Scientists are not sure.
+use: p011 | The myth says your eyes could pop out. That is false.
+use: p013 | Another myth: your heart does not stop when you sneeze.
+use: p016 | Some people sneeze in bright sunlight, and it runs in families.
+use: p025 | So a sneeze is a fast nose-cleaning reflex. Cover it with your elbow.
+use: p027 | What is your strangest sneeze trigger? Tell us in the comments.

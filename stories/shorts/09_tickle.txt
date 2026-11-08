@@ -1,0 +1,15 @@
+from: 09_tickle.txt
+title: Why Can't You Tickle Yourself? (The Brain Trick) #Shorts
+slug: vox_tickle_short
+hook: Why can't you tickle yourself? Your brain is a prediction machine. #Shorts
+cta: Who is the most ticklish person you know? Tell us below.
+tags: why cant you tickle yourself, tickle science, brain tricks explained, science shorts, everyday science, ExplainItFlat
+use: p002 | Why can't you tickle yourself? Leo tries, and nothing happens, not one giggle.
+use: p006 | Your brain predicts every touch you make with your own hands.
+use: p007 | If the touch matches the prediction, the brain turns the feeling down.
+use: p008 | When someone else tickles you, it is a surprise, and surprise sets off laughter.
+use: p009 | In one experiment, a small delay in a robot's touch made self-tickling work.
+use: p014 | Ticklish spots like the neck, ribs and feet may be places the body guards.
+use: p018 | Even young rats chirp when tickled, which looks like laughter during play.
+use: p028 | So tickling needs someone else, because your brain cannot surprise itself.
+use: p029 | Who is the most ticklish person you know? Tell us in the comments.

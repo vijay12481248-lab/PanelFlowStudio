@@ -17,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+import shutil
 import subprocess
 import sys
 import textwrap
@@ -99,7 +100,8 @@ def review_sheets(ws: Path, only: list[str] | None = None, name: str = "sheet") 
     looks = " ; ".join(c["look"].lower() for c in story["bible"]["characters"])
     f_id = ImageFont.truetype(str(FONT), 17) if FONT.exists() else ImageFont.load_default()
     f_tx = ImageFont.truetype(str(FONT), 14) if FONT.exists() else ImageFont.load_default()
-    W, H, TXT = 480, 270, 78
+    portrait = (story.get("meta") or {}).get("frame") == "9:16"  # a Short: cells are 9:16 and the caption wraps narrower
+    W, H, TXT = (270, 480, 96) if portrait else (480, 270, 78)
     panels = [p for p in story["panels"] if not only or p["id"] in only]
     paths = []
     for n in range(0, len(panels), 8):
@@ -120,7 +122,7 @@ def review_sheets(ws: Path, only: list[str] | None = None, name: str = "sheet") 
             if miss:
                 d.rectangle((x, y + H - 20, x + W, y + H), fill="#7a1010")
                 d.text((x + 4, y + H - 19), ("reviewer missed: " + "; ".join(miss))[:70], fill="white", font=f_tx)
-            for k, line in enumerate(textwrap.wrap(p["caption"], 62)[:3]):
+            for k, line in enumerate(textwrap.wrap(p["caption"], 34 if portrait else 62)[:4 if portrait else 3]):
                 d.text((x + 4, y + H + 3 + k * 17), line, fill="white", font=f_tx)
         path = out_dir / f"{name}_{n // 8 + 1}.jpg"
         sheet.save(path, quality=88)
@@ -133,7 +135,7 @@ def _ff(args: list[str]) -> str:
     return (r.stdout or "") + (r.stderr or "")
 
 
-def verify_video(ws: Path, story_text: str, est_seconds: float) -> dict:
+def verify_video(ws: Path, story_text: str, est_seconds: float, short: bool = False) -> dict:
     """Measured checks on the finished mp4: size, length floor, loudness, frozen/black stretches and that the narration says what the script says."""
     mp4 = ws / "story_1080p.mp4"
     res: dict = {"ok": True, "problems": []}
@@ -142,10 +144,16 @@ def verify_video(ws: Path, story_text: str, est_seconds: float) -> dict:
     dur = float(j["format"]["duration"])
     w, h = j["streams"][0]["width"], j["streams"][0]["height"]
     res.update(duration=round(dur, 1), size=f"{w}x{h}")
-    if (w, h) != (1920, 1080):
-        res["problems"].append(f"size {w}x{h}")
-    if dur < MIN_SECONDS:
-        res["problems"].append(f"duration {dur:.0f}s is under {MIN_SECONDS:.0f}s")
+    if short:
+        if (w, h) != (1080, 1920):
+            res["problems"].append(f"size {w}x{h}")
+        if not 20 <= dur <= 59.5:
+            res["problems"].append(f"duration {dur:.1f}s is outside 20-59.5 s (a Short)")
+    else:
+        if (w, h) != (1920, 1080):
+            res["problems"].append(f"size {w}x{h}")
+        if dur < MIN_SECONDS:
+            res["problems"].append(f"duration {dur:.0f}s is under {MIN_SECONDS:.0f}s")
     if abs(dur - est_seconds) > 0.25 * est_seconds:
         res["problems"].append(f"duration {dur:.0f}s is far from the estimate {est_seconds:.0f}s")
     out = _ff(["ffmpeg", "-hide_banner", "-nostats", "-i", str(mp4), "-af", "ebur128", "-f", "null", "-"])
@@ -195,6 +203,11 @@ def _build(spec: Path) -> tuple:
     from engine.original import explainer as ex
 
     story, ws = ex.write_story(spec, STORIES)
+    text = spec.read_text(encoding="utf-8")
+    if ex.is_short(text):  # a Short reuses the full video's character sheets (same faces, no extra GPU time)
+        src = STORIES / ex.parent_slug(text) / "sheets"
+        if src.exists() and not (ws / "sheets").exists():
+            shutil.copytree(src, ws / "sheets")
     return story, ws, ex.estimate_seconds(story), ex.lint(story)
 
 
@@ -207,7 +220,8 @@ async def _art(slug: str) -> dict:
 async def _render(slug: str) -> dict:
     from engine.mcp.tools.original_story_tools import panelflow_original_render_video
 
-    return await panelflow_original_render_video(slug, burn_captions=True)
+    # Shorts carry no burned-in subtitles (owner's call); the narration is still voiced and story.srt is still written
+    return await panelflow_original_render_video(slug, burn_captions=not slug.endswith("_short"))
 
 
 def do_art(spec: Path, st: dict) -> None:
@@ -247,7 +261,7 @@ def do_render(spec: Path) -> None:
         if res.get("missing_panels"):
             set_stage(slug, "failed", error=f"missing panels {res['missing_panels']}")
             return
-        ver = verify_video(ws, " ".join(p.caption for p in story.panels), ex.estimate_seconds(story))
+        ver = verify_video(ws, " ".join(p.caption for p in story.panels), ex.estimate_seconds(story), short=ex.is_short(text))
     except Exception as e:
         set_stage(slug, "error", error=f"{type(e).__name__}: {e}"[:400])
         return

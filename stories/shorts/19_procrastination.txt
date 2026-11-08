@@ -1,0 +1,14 @@
+from: 19_procrastination.txt
+title: Why Do We Procrastinate? It's Not Laziness #Shorts
+slug: vox_procrastination_short
+hook: Why do we put things off even when we know better? #Shorts
+cta: What is your favorite way to avoid starting? Tell us below.
+tags: why do we procrastinate, how to stop procrastinating, procrastination explained, science shorts, psychology, ExplainItFlat
+use: p002 | Why do we procrastinate? Maya stares at an empty page and suddenly wants to vacuum.
+use: p006 | A task can trigger boredom, worry or self-doubt, and your brain wants out right now.
+use: p009 | Putting it off feels better for a moment, then guilty, then more stressed.
+use: p011 | Be kind to yourself. Kindness after a slip means less procrastination next time.
+use: p012 | Shrink the first step. Just open the file and write one ugly sentence.
+use: p013 | Maya sets a two minute timer, and writes three sentences.
+use: p015 | Make an if-then plan: if it is nine, then I open the report.
+use: p029 | What is your favorite way to avoid starting? Tell us in the comments.

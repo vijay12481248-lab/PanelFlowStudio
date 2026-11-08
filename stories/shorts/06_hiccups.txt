@@ -1,0 +1,14 @@
+from: 06_hiccups.txt
+title: Why Do We Get Hiccups? (And Do Cures Work?) #Shorts
+slug: vox_hiccups_short
+hook: Why do we hiccup, and do cures really work? #Shorts
+cta: Do you have a favorite hiccup cure? Tell us in the comments.
+tags: why do we get hiccups, how to stop hiccups, do hiccup cures work, science shorts, everyday science, ExplainItFlat
+use: p002 | Why do we hiccup? Dev has an interview in ten minutes, and hic.
+use: p007 | Your diaphragm suddenly jerks, and you gulp in a breath.
+use: p008 | Then the flap in your throat snaps shut. That is the hic sound.
+use: p011 | Triggers: eating fast, fizzy drinks, laughing hard, or excitement.
+use: p014 | One idea: a leftover from ancestors that breathed with gills and lungs.
+use: p018 | Do cures work? Holding your breath, water, a scare, sugar. Few are proven.
+use: p021 | Dev tried a scare. It failed, but he laughed and relaxed.
+use: p030 | Do you have a favorite hiccup cure? Tell us in the comments.

@@ -1,0 +1,15 @@
+from: 14_sky_blue.txt
+title: Why Is the Sky Blue? And Why Are Sunsets Red? #Shorts
+slug: vox_sky_blue_short
+hook: Why is the sky blue and sunsets red? A kid, his grandma and a scientist. #Shorts
+cta: What question about the sky do you have? Tell us below.
+tags: why is the sky blue, why are sunsets red, rayleigh scattering explained, science shorts, everyday science, ExplainItFlat
+use: p001 | Why is the sky blue? Leo lies in the grass and asks, and Nana does not know.
+use: p006 | Sunlight looks white, but it is every color of the rainbow together.
+use: p010 | Short blue waves bounce off air molecules much more than red waves.
+use: p011 | That bouncing is called scattering. Blue light reaches your eyes from everywhere.
+use: p018 | At sunset, light travels through more air, and the blue scatters away.
+use: p019 | What is left are reds and golds, while the blue lights up someone else's sky.
+use: p022 | Clouds look white because big droplets scatter every color equally.
+use: p023 | In space there is no air to scatter light, so the sky is black.
+use: p028 | What question about the sky do you have? Leo will look it up.

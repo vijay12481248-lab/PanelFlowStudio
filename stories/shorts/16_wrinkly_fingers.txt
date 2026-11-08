@@ -1,0 +1,14 @@
+from: 16_wrinkly_fingers.txt
+title: Why Do Our Fingers Get Wrinkly in Water? #Shorts
+slug: vox_wrinkly_fingers_short
+hook: Why do fingers turn into raisins in water? It is not what you were told. #Shorts
+cta: What is your longest swim? Tell us below.
+tags: why do fingers get wrinkly in water, wrinkled fingers explained, rain tread theory, science shorts, everyday science, ExplainItFlat
+use: p002 | Why do fingers wrinkle in water? Leo's fingertips look like tiny raisins.
+use: p005 | It is not swelling like a sponge. Fingertips shrink into organized wrinkles.
+use: p007 | Nerves tell the blood vessels under the skin to tighten.
+use: p008 | The skin is pulled inward and folds into ridges and valleys.
+use: p012 | One idea: like a tire's grooves, they channel water away so fingers grip wet things.
+use: p014 | In some experiments, wrinkled fingers picked up wet objects a little faster.
+use: p015 | Other studies disagree, so scientists are still arguing.
+use: p026 | What is the longest you have stayed in the water? Leo wants to beat it.

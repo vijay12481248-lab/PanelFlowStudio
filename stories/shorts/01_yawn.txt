@@ -1,0 +1,14 @@
+from: 01_yawn.txt
+title: Why Do We Yawn? It's Not About Oxygen #Shorts
+slug: vox_yawn_short
+hook: Why do we yawn, and why is it contagious? 50 seconds with a scientist, a cat and a dog. #Shorts
+cta: Did you yawn? Be honest in the comments.
+tags: why do we yawn, contagious yawn, yawning explained, science shorts, everyday science, ExplainItFlat
+use: p002 | Why do we yawn? And why can you catch one from a stranger?
+use: p009 | It is not about oxygen. Breathing extra oxygen does not stop yawns.
+use: p013 | One idea: a yawn may help cool your brain with a rush of cooler air.
+use: p017 | Another: it helps your body switch gears, like waking up or getting bored.
+use: p025 | And yawns spread most between people who are close to each other.
+use: p026 | Even dogs seem to catch yawns from their owners.
+use: p036 | So why do we yawn? To cool down, to switch gears, or to say: I am with you.
+use: p037 | Did you yawn just now? Be honest, and follow for more.

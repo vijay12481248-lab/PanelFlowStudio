@@ -1,0 +1,14 @@
+from: 20_stage_fright.txt
+title: Why Do We Get Stage Fright? The Spotlight Illusion #Shorts
+slug: vox_stage_fright_short
+hook: Why does being watched feel like facing a tiger? #Shorts
+cta: What calms your nerves? Tell us in the comments.
+tags: why do we get stage fright, public speaking fear, how to calm nerves, science shorts, psychology, ExplainItFlat
+use: p002 | Why do we get stage fright? Maya's heart thumps and her paper rattles.
+use: p005 | Your body's alarm system is working. It just picked the wrong alarm.
+use: p007 | Fight or flight kicks in: adrenaline, a faster heartbeat, and quicker breathing.
+use: p009 | The spotlight effect: we think people notice us far more than they do.
+use: p012 | Try saying: I am excited. Excitement and anxiety feel similar in the body.
+use: p016 | Slow breathing helps. Breathe in for four, out for six.
+use: p026 | Maya forgets one line, smiles, and nobody notices. The applause is huge.
+use: p029 | What is your favorite way to calm nerves? Tell us in the comments.

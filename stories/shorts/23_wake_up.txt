@@ -1,0 +1,15 @@
+from: 23_wake_up.txt
+title: Why Is It So Hard to Wake Up? Meet Sleep Inertia #Shorts
+slug: vox_wake_up_short
+hook: Why does your brain take so long to boot in the morning? #Shorts
+cta: What is your best trick for waking up? Tell us below.
+tags: why is it so hard to wake up, what is sleep inertia, morning grogginess, science shorts, everyday science, ExplainItFlat
+use: p001 | Why is waking up so hard? Maya slaps the alarm, and Biscuit goes back to sleep.
+use: p003 | She sits up and the room tilts. Her brain is still booting.
+use: p005 | It is called sleep inertia, the foggy state right after waking.
+use: p006 | Your brain does not switch on like a light. Different parts wake at different speeds.
+use: p011 | Waking from deep sleep feels worst, like being pulled out of a pool mid-dive.
+use: p016 | Hitting snooze can make it worse. Those minutes are fragmented sleep.
+use: p017 | What helps? Bright light. Open the curtains or step outside.
+use: p022 | Maya opens the curtains, drinks water, and the fog lifts.
+use: p027 | What is your best trick for waking up? Tell us in the comments.

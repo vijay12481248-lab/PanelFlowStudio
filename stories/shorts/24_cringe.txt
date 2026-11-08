@@ -1,0 +1,15 @@
+from: 24_cringe.txt
+title: Why Do We Cringe at Our Old Selves? #Shorts
+slug: vox_cringe_short
+hook: Why do old embarrassing memories still make us wince? #Shorts
+cta: What is your most cringe moment? Tell us below.
+tags: why do we cringe, why do embarrassing memories hurt, self compassion, science shorts, psychology, ExplainItFlat
+use: p001 | Why do we cringe at our old selves? Dev finds a video of Maya rapping about frogs.
+use: p002 | Maya dives for the laptop. Her whole body wants to melt into the floor.
+use: p006 | Social pain, like embarrassment, uses some of the same brain regions as physical pain.
+use: p008 | Strong emotions also make memories sticky, so you remember the cringe vividly.
+use: p010 | Your brain replays mistakes like a coach rewatching the game.
+use: p015 | Cringing at an old self may even be a sign of growth.
+use: p021 | Be kind to yourself, the way you would be to a friend.
+use: p026 | In the end, Dev says: you were great. Maya says: I know.
+use: p028 | Share your most cringe moment in the comments. We will laugh with you.

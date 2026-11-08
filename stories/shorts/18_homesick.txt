@@ -1,0 +1,15 @@
+from: 18_homesick.txt
+title: Why Do We Feel Homesick? The Science of Missing Home #Shorts
+slug: vox_homesick_short
+hook: Why do we miss home even when the move is good? #Shorts
+cta: If you are far from home, where is home for you? Tell us below.
+tags: why do we feel homesick, what is homesickness, how to cope with homesickness, science shorts, psychology, ExplainItFlat
+use: p002 | Why do we feel homesick? Dev unpacks a chipped mug from home, and his chest tightens.
+use: p006 | Home is a bundle of routines, people, sounds and smells your brain trusts.
+use: p007 | When that bundle disappears, your brain loses many familiar signals at once.
+use: p011 | It can hit later, a few weeks after the exciting first week.
+use: p014 | Sunday calls help. Maya shows Dev the cat, sitting proudly in a box.
+use: p017 | Bring familiar things: a blanket, a photo, a mug, a playlist.
+use: p021 | Small hellos help too. Even a barista knowing your name shrinks a city.
+use: p024 | Homesickness does not vanish. It softens, like a bruise turning yellow.
+use: p030 | If you are far from home tonight, you are not alone. Tell us where home is.

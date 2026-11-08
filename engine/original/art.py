@@ -539,9 +539,17 @@ class ArtRecord(BaseModel):
     selected: int | None = None  # the `n` of the iteration whose picture is panels/<id>.png
 
 
+FRAME_SIZES = {"16:9": (W, H), "9:16": (H, W)}  # 9:16 = a YouTube Short (768x1344, a multiple of 32 like the landscape bucket)
+
+
+def frame_size(story: OriginalStory) -> tuple[int, int] | None:
+    """The one picture size a story asks for (`meta["frame"]`, set by the explainer / short formats), else None (per-shot shapes)."""
+    return FRAME_SIZES.get((story.meta or {}).get("frame", ""))
+
+
 def frame_16x9(story: OriginalStory) -> bool:
-    """True when the story asks for the 16:9 video frame for every picture (`meta["frame"]`, set by the explainer format)."""
-    return (story.meta or {}).get("frame") == "16:9"
+    """True when the story fixes ONE picture size for every picture (the name is historical: it now also covers 9:16)."""
+    return frame_size(story) is not None
 
 
 def _hash(pos: str, neg: str, ref: str = "", dims: tuple[int, int] | None = None) -> str:
@@ -639,7 +647,7 @@ def generate_art(story: OriginalStory, ws: Path, runner: ComfyRunner, provider=N
         spec_shot = spec.shot if spec else p.shot
         # a story that asks for the video frame (meta["frame"] == "16:9", the explainer format) draws EVERY picture 16:9: a square close-up would sit
         # on blurred side bars in the video (as film.py's FRAME); other stories keep the per-shot shapes (portrait full-body, square close-up)
-        pw, ph = (W, H) if frame_16x9(story) else shotspec.resolve_dimensions(spec_shot, num_characters=len(shown), default=(W, H))
+        pw, ph = frame_size(story) or shotspec.resolve_dimensions(spec_shot, num_characters=len(shown), default=(W, H))
         # the first character on screen has its face pinned to its sheet
         ref = ws / "sheets" / f"{shown[0].id}.png" if shown and getattr(runner, "ipa", None) is not None else None
         # two characters: the first is pinned to the left half, the second to the right half (needs the masked workflow)

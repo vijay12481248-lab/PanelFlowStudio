@@ -1,0 +1,14 @@
+from: 04_blush.txt
+title: Why Do We Blush? Darwin Called It the Most Human #Shorts
+slug: vox_blush_short
+hook: Why does your face turn red when you are embarrassed? #Shorts
+cta: When did you last blush? Tell us in the comments.
+tags: why do we blush, blushing explained, embarrassment science, science shorts, everyday science, ExplainItFlat
+use: p003 | Why do we blush? Blood vessels in your face widen, and more blood flows near the skin.
+use: p010 | You cannot choose it. An automatic nerve signal does the work.
+use: p013 | One idea: a blush is a signal that says: I care what you think.
+use: p014 | Studies suggest people who blush after a mistake are judged more kindly.
+use: p017 | Maya spills coffee on Dev, and her face lights up like a stop sign.
+use: p019 | Dev sees her red face, softens, and bursts out laughing. | Dev laughing out loud with his head tilted back, eyes crinkled shut and his mouth wide open in a kind laugh, a faint brown coffee stain on his green sweater, a sunny city street behind him.
+use: p030 | A blush is the body telling the truth before the mouth can.
+use: p031 | When did you last blush? Tell us in the comments.

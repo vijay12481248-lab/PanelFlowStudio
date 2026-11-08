@@ -171,7 +171,7 @@ async def create_video(slug: str, burn_captions: bool = True):
         raise HTTPException(status_code=404, detail="story not found")
     story = media_story(ws)
     try:
-        out = await asyncio.to_thread(video_mod.build_video, story, ws, None, 30.0, burn_captions)
+        out = await asyncio.to_thread(lambda: video_mod.build_video(story, ws, None, 30.0, burn_captions, size=video_mod.frame_canvas(story)))
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
     return {**out, "package": await asyncio.to_thread(video_mod.package, story, ws)}

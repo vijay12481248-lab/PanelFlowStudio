@@ -1,0 +1,15 @@
+from: 25_hangry.txt
+title: Why Do We Get Hangry? Hunger, Mood and the Brain #Shorts
+slug: vox_hangry_short
+hook: Why does hunger turn us into grumpy people? #Shorts
+cta: Have you ever snapped because you were hungry? Tell us below.
+tags: why do we get hangry, what is hangry, hunger and mood, science shorts, everyday science, ExplainItFlat
+use: p002 | Why do we get hangry? Maya is hungry, and her voice sounds like a kettle about to whistle.
+use: p003 | Dev's voice is a kettle too. Two kettles on a sidewalk is not a good plan.
+use: p007 | Your brain runs mostly on glucose. When fuel runs low, it notices quickly.
+use: p008 | Low blood sugar releases stress hormones like adrenaline and cortisol.
+use: p009 | Those hormones make you irritable, jumpy and impatient. That is hangry.
+use: p015 | Naming it helps: I feel annoyed, and I may be hungry.
+use: p019 | A candy bar spikes then crashes. A banana with nuts lifts more steadily.
+use: p023 | After noodles, the kettle sounds disappear. Food, water and understanding did the trick.
+use: p028 | Have you ever snapped because you were hungry? Tell us in the comments.

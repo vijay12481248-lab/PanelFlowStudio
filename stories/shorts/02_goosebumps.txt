@@ -1,0 +1,14 @@
+from: 02_goosebumps.txt
+title: Why Do We Get Goosebumps? Blame Your Furry Ancestors #Shorts
+slug: vox_goosebumps_short
+hook: Why do we get goosebumps from cold, fear and even a beautiful song? #Shorts
+cta: What gives YOU goosebumps? Tell us in the comments.
+tags: why do we get goosebumps, what are goosebumps, goosebumps explained, science shorts, everyday science, ExplainItFlat
+use: p003 | Why do we get goosebumps? A tiny muscle pulls each hair upright.
+use: p007 | Thousands of them at once make those little bumps on your skin.
+use: p010 | It is a leftover from ancestors who were covered in thick fur.
+use: p012 | Raised fur trapped warm air, and made a scared animal look bigger.
+use: p016 | Cold and fear still flip the same ancient switch, even at a movie.
+use: p018 | So does awe, like a golden sunrise or a song you love.
+use: p029 | Goosebumps are your body answering before you can even think.
+use: p030 | What gives you goosebumps? Tell us in the comments.

@@ -1,0 +1,15 @@
+from: 11_nostalgia.txt
+title: Why Does Nostalgia Hurt and Feel Good? #Shorts
+slug: vox_nostalgia_short
+hook: Why does remembering a happy time make us ache? #Shorts
+cta: What smell or song takes you back? Tell us below.
+tags: why does nostalgia hurt, what is nostalgia, why do smells trigger memories, science shorts, psychology, ExplainItFlat
+use: p001 | Why does nostalgia hurt and feel good? Maya smells Nana's cookies and is eight again.
+use: p003 | She is smiling and tearing up at the same time.
+use: p006 | Nostalgia once meant a painful longing to return home.
+use: p008 | Today, research finds it mostly warm, with a touch of sadness: a sweet ache.
+use: p011 | Smell takes a shortcut to the brain areas for emotion and memory.
+use: p019 | Memory also edits. We keep the good parts and soften the bad.
+use: p022 | Studies suggest nostalgia can lift your mood, like a warm blanket.
+use: p028 | It links love and loss. We ache because it mattered.
+use: p029 | What smell or song takes you back? Tell us in the comments.

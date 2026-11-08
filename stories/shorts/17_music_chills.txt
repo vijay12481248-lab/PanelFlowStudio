@@ -1,0 +1,15 @@
+from: 17_music_chills.txt
+title: Why Does Music Give Us Chills? #Shorts
+slug: vox_music_chills_short
+hook: Why does a song make your skin tingle? The brain's reward moment. #Shorts
+cta: What song gives you chills? Tell us below.
+tags: why does music give me chills, what is frisson, dopamine and music, science shorts, psychology, ExplainItFlat
+use: p004 | Why does music give us chills? A high note rises, and a shiver runs down Maya's spine.
+use: p007 | The French word is frisson, a shiver from beautiful music.
+use: p010 | Your brain predicts what comes next, and chills come when music surprises it in a good way.
+use: p011 | Brain scans show activity in the brain's reward system.
+use: p013 | Dopamine rises while you anticipate the peak, and again at the peak itself.
+use: p016 | Familiar songs and songs tied to memories are more likely to give you chills.
+use: p018 | Dev never got chills, until Maya played him a rising choir.
+use: p021 | Chills can even be love written in the skin.
+use: p028 | What song gives you chills every time? Tell us in the comments.

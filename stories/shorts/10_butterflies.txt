@@ -1,0 +1,15 @@
+from: 10_butterflies.txt
+title: Why Do We Get Butterflies in Our Stomach? #Shorts
+slug: vox_butterflies_short
+hook: Why does nervousness show up in your stomach? Your gut and brain are talking. #Shorts
+cta: When did you last feel butterflies? Tell us below.
+tags: why do we get butterflies in stomach, gut brain connection, vagus nerve explained, science shorts, everyday science, ExplainItFlat
+use: p002 | Why do we get butterflies? Before meeting someone special, Dev's stomach is full of them.
+use: p006 | Your gut has its own huge network of nerves, called the second brain.
+use: p007 | The vagus nerve carries messages between your gut and your brain.
+use: p009 | When you are nervous or excited, your body goes into alert mode and releases adrenaline.
+use: p010 | Blood flow shifts toward your muscles, and your stomach works differently.
+use: p012 | It is not just fear. Excitement and love can switch on the same system.
+use: p017 | Slow breathing helps. Dev breathes in for four, and out for six.
+use: p026 | Butterflies are your body saying: pay attention, this matters.
+use: p027 | When did you last feel butterflies? Tell us in the comments.

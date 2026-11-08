@@ -115,8 +115,89 @@ def _split(line: str, n: int, where: str, errs: list[str]) -> list[str] | None:
     return parts
 
 
+SHORT_MAX_WORDS = 140  # measured pace 0.365 s per spoken word -> about 51 s, safely inside the 60 s a Short is shown as a Short
+SHORT_MIN_BEATS = 4
+EXPLAINER_DIR = Path(__file__).resolve().parents[2] / "stories" / "explainers"
+
+
+def is_short(text: str) -> bool:
+    return re.search(r"^from:", text, re.M) is not None
+
+
+def parse_short(text: str) -> dict:
+    """Short spec -> {from, title, slug, hook, cta, tags, uses: [(beat id, narration)]}. A Short REUSES beats (visual, cast, place) of a full
+    video by id and gives each its own narration; it is drawn 9:16 in its own workspace (`<slug>`), reusing the full video's character sheets.
+
+        from: 01_yawn.txt     title: ...     slug: vox_yawn_short     hook: ...     cta: ...     tags: a, b
+        use: p001 | the new, shorter narration for that beat
+    """
+    out: dict = {"uses": []}
+    errs: list[str] = []
+    for n, raw in enumerate(text.splitlines(), 1):
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        m = re.match(r"^([a-z]+):\s*(.*)$", line)
+        if not m:
+            errs.append(f"line {n}: not 'key: value'")
+        elif m.group(1) == "use":
+            f = re.split(r"\s*\|\s*", m.group(2), maxsplit=2)
+            if len(f) not in (2, 3) or not re.fullmatch(r"p\w+", f[0]):
+                errs.append(f"line {n}: use: needs 'pNNN | narration [| a new visual for the 9:16 picture]'")
+            else:
+                out["uses"].append((f[0], f[1], f[2] if len(f) == 3 else ""))
+        elif m.group(1) in ("from", "title", "slug", "hook", "cta", "tags"):
+            out[m.group(1)] = m.group(2)
+        else:
+            errs.append(f"line {n}: unknown key '{m.group(1)}'")
+    for k in ("from", "title", "slug"):
+        if not out.get(k):
+            errs.append(f"missing '{k}:'")
+    if errs:
+        raise ValueError("\n".join(errs))
+    return out
+
+
+def build_short(text: str, specs_dir: Path | None = None) -> OriginalStory:
+    sp = parse_short(text)
+    parent_text = ((specs_dir or EXPLAINER_DIR) / sp["from"]).read_text(encoding="utf-8")
+    parent = build_story(parent_text)
+    pm = {p.id: p for p in parent.panels}
+    errs: list[str] = []
+    for pid, _, _ in sp["uses"]:
+        if pid not in pm:
+            errs.append(f"use: {pid} is not a beat of {sp['from']}")
+    words = sum(_words(n) for _, n, _ in sp["uses"])
+    if words > SHORT_MAX_WORDS:
+        errs.append(f"{words} narrated words; a Short holds at most {SHORT_MAX_WORDS} (about 51 s)")
+    if len(sp["uses"]) < SHORT_MIN_BEATS:
+        errs.append(f"{len(sp['uses'])} beats; at least {SHORT_MIN_BEATS}")
+    if len({pid for pid, _, _ in sp["uses"]}) != len(sp["uses"]):
+        errs.append("a beat is used twice")
+    if errs:
+        raise ValueError("\n".join(errs))
+    custom = [ln for ln in parent_text.splitlines() if re.match(r"^(char|loc):", ln.strip())]
+    first = pm[sp["uses"][0][0]]
+    lines = [f"title: {sp['title']}", f"slug: {sp['slug']}", f"logline: {sp.get('hook') or sp['title']}", *custom,
+             f"scene: s1 | {first.location_id} | punchy | {sp['title']} | {sp['title']}"]
+    for pid, narr, visual in sp["uses"]:
+        b = pm[pid]
+        lines.append(f"beat@{pid}: {b.shot} | {b.location_id} | {','.join(b.character_ids)} | {narr} | {visual or b.action} | {'; '.join(b.key_visuals)}")
+    story = build_story("\n".join(lines))
+    tags = [t.strip() for t in sp["tags"].split(",") if t.strip()] if sp.get("tags") else None
+    story.meta = {**{k: v for k, v in {"hook": sp.get("hook"), "cta": sp.get("cta"), "tags": tags}.items() if v}, "frame": "9:16"}
+    return story
+
+
+def parent_slug(text: str, specs_dir: Path | None = None) -> str:
+    """Slug of the full video a Short was cut from (its character sheets are reused)."""
+    return parse(((specs_dir or EXPLAINER_DIR) / parse_short(text)["from"]).read_text(encoding="utf-8"))["slug"]
+
+
 def parse(text: str) -> dict:
     """Spec text -> raw records (no validation of meaning)."""
+    if is_short(text):
+        return parse_short(text)
     spec: dict = {"chars": [], "locs": [], "scenes": [], "beats": []}
     errs: list[str] = []
     cur_scene = None
@@ -163,6 +244,8 @@ def parse(text: str) -> dict:
 
 
 def build_story(text: str) -> OriginalStory:
+    if is_short(text):
+        return build_short(text)
     spec = parse(text)
     errs: list[str] = []
     for k in ("title", "slug", "logline"):
@@ -254,6 +337,10 @@ def lint(story: OriginalStory) -> list[str]:
     """Non-blocking observations about a built story."""
     out: list[str] = []
     secs = estimate_seconds(story)
+    if (story.meta or {}).get("frame") == "9:16":
+        if secs > 56:
+            out.append(f"estimated {secs:.0f}s is too long for a Short (aim under 56 s)")
+        return out
     if secs < MIN_SECONDS:
         out.append(f"estimated {secs:.0f}s is under the channel floor of {MIN_SECONDS:.0f}s")
     if secs > 420:

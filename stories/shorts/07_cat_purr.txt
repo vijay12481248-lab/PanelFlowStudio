@@ -1,0 +1,15 @@
+from: 07_cat_purr.txt
+title: Why Do Cats Purr? It's Not Just Happiness #Shorts
+slug: vox_cat_purr_short
+hook: Why do cats purr, and why do they purr at the vet? #Shorts
+cta: Does your cat purr in a way you recognize? Tell us below.
+tags: why do cats purr, cat purr meaning, cat behavior explained, science shorts, everyday science, ExplainItFlat
+use: p003 | Why do cats purr? After Maya's worst day, Biscuit climbs into her lap and starts to rumble.
+use: p007 | A purr is the voice box twitching open and closed, again and again.
+use: p008 | And it works on both the in breath and the out breath.
+use: p010 | Most purrs mean a cat is content, warm, petted, or settling down.
+use: p011 | Kittens purr while feeding, to tell their mother: I am here.
+use: p014 | But cats also purr when scared, even at the vet. It may calm them down.
+use: p019 | And some purrs are for breakfast, with a tiny cry hidden inside.
+use: p027 | So a purr can say: I am content, I need help, or I am hungry.
+use: p028 | Does your cat purr in a way you recognize? Tell us in the comments. | Maya sitting on the sofa smiling warmly at the viewer with relaxed open hands in her lap, nobody else in the picture, warm lamp light.
