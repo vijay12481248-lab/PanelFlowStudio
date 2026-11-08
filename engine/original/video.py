@@ -314,7 +314,8 @@ def thumbnail_with_text(src: Path, text: str, out: Path) -> Path:
     d = ImageDraw.Draw(img)
     zone = 470  # text column width in pixels
     size = 230
-    while font_path and size > 70 and max(d.textlength(w, font=ImageFont.truetype(font_path, size)) for w in words) > zone:
+    while font_path and size > 70 and (max(d.textlength(w, font=ImageFont.truetype(font_path, size)) for w in words) > zone
+                                       or size * 1.08 * len(words) > 660):  # also keep a 3-word stack inside the frame
         size -= 6
     font = ImageFont.truetype(font_path, size) if font_path else ImageFont.load_default()
     line_h = int(size * 1.08)
