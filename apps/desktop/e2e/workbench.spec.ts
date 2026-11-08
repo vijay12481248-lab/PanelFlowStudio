@@ -161,7 +161,7 @@ test("Audio shows either the player or the invitation to generate", async ({ pag
 });
 
 // M5c stages. Read and navigate only: never Run, Re-analyze, Approve, Generate, Re-adapt, Validate, Save, Merge, Split, Remove or a line action.
-test("Story shows its tabs or the Run invitation, puts beats under their scenes, and Edit identity opens and cancels without a browser dialog", async ({ page }) => {
+test("Story shows its tabs, puts beats under their scenes, and Edit identity opens and cancels without a browser dialog", async ({ page }) => {
   // The first project may have no analysis; look for one that has, so the real shapes are what is checked.
   const token = await (await page.request.get("/__engine_token")).text();
   const auth = { headers: { Authorization: `Bearer ${token}` } };
