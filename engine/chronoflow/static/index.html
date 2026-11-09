@@ -2112,43 +2112,6 @@
       flex-shrink: 0;
     }
 
-    /* DAVINCI BOTTOM PAGE DOCK */
-    .davinci-bottom-dock {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      background: #0f1014;
-      border: 1px solid #23252d;
-      border-radius: 4px;
-      padding: 3px 6px;
-      gap: 2px;
-    }
-    .dock-tab-btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      background: transparent;
-      border: 1px solid transparent;
-      color: #828a9b;
-      padding: 4px 14px;
-      border-radius: 3px;
-      font-size: 0.72rem;
-      font-weight: 700;
-      cursor: pointer;
-      transition: all 0.15s;
-    }
-    .dock-tab-btn:hover {
-      color: #e2e8f0;
-      background: rgba(255, 255, 255, 0.04);
-    }
-    .dock-tab-btn.active {
-      background: #1f212a;
-      border-color: #3b3e4f;
-      color: #f59e0b;
-    }
-    .dock-tab-icon {
-      font-size: 0.85rem;
-    }
 
   </style>
 </head>
@@ -2356,15 +2319,6 @@
         <!-- Multi-track NLE timeline (built by static/nle/nle.js) -->
         <div id="nleTimeline"></div>
 
-        <!-- DaVinci Resolve Signature Bottom Page Dock Bar -->
-        <div class="davinci-bottom-dock">
-          <button type="button" class="dock-tab-btn" onclick="selectMediaBin('all')"><span class="dock-tab-icon">📁</span><span>Media</span></button>
-          <button type="button" class="dock-tab-btn active" onclick="switchMainTab('director')"><span class="dock-tab-icon">✂️</span><span>Cut</span></button>
-          <button type="button" class="dock-tab-btn" onclick="switchMainTab('director')"><span class="dock-tab-icon">🎬</span><span>Edit</span></button>
-          <button type="button" class="dock-tab-btn" onclick="openShotDirectorModal()"><span class="dock-tab-icon">🎨</span><span>Color &amp; Prompts</span></button>
-          <button type="button" class="dock-tab-btn" onclick="switchMainTab('image-studio')"><span class="dock-tab-icon">🎙️</span><span>Fairlight</span></button>
-          <button type="button" class="dock-tab-btn" onclick="exportTimelineCut()"><span class="dock-tab-icon">🚀</span><span>Deliver</span></button>
-        </div>
       </div>
     </div>
 

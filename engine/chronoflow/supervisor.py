@@ -232,12 +232,14 @@ class JobSupervisor:
 
         jobs_list = self.list_jobs()
 
-        # Find actively running job if any
+        # Find actively running job if any (must have a live active task)
         running_job = None
         for j in jobs_list:
             if j.get("status") in ("starting", "regenerating"):
-                running_job = j
-                break
+                task = self._tasks.get(j.get("id"))
+                if task is not None and not (task.done() if hasattr(task, "done") else False):
+                    running_job = j
+                    break
 
         # Resolve active job
         active_job = None
@@ -246,7 +248,9 @@ class JobSupervisor:
         elif running_job:
             active_job = running_job
         elif jobs_list:
-            active_job = jobs_list[0]
+            # Prefer the latest job that actually has rendered clips/video
+            with_clips = [j for j in jobs_list if j.get("chunks") or j.get("master_video")]
+            active_job = with_clips[0] if with_clips else jobs_list[0]
 
         # Fast response if version matches and job/queue is idle
         is_dynamic = False

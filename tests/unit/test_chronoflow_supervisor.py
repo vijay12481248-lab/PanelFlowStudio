@@ -18,17 +18,21 @@ def test_supervisor_singleton_and_job_registration():
         "created_at": 1000.0,
     }
 
-    supervisor.register_new_job(job_id, job_data)
-    retrieved = supervisor.get_job(job_id)
-    assert retrieved is not None
-    assert retrieved["prompt"] == "Test cinematic prompt"
+    with patch.object(supervisor, "_save_jobs_to_disk"):
+        supervisor.register_new_job(job_id, job_data)
+        try:
+            retrieved = supervisor.get_job(job_id)
+            assert retrieved is not None
+            assert retrieved["prompt"] == "Test cinematic prompt"
 
-    supervisor.update_job(job_id, status="completed", status_msg="Done")
-    assert supervisor.get_job(job_id)["status"] == "completed"
+            supervisor.update_job(job_id, status="completed", status_msg="Done")
+            assert supervisor.get_job(job_id)["status"] == "completed"
 
-    # Test cancel
-    supervisor.cancel_job(job_id)
-    assert supervisor.get_job(job_id)["status"] == "cancelled"
+            # Test cancel
+            supervisor.cancel_job(job_id)
+            assert supervisor.get_job(job_id)["status"] == "cancelled"
+        finally:
+            supervisor.active_jobs.pop(job_id, None)
 
 
 @pytest.mark.asyncio
@@ -59,6 +63,7 @@ async def _watchdog_verdict(comfy_status, idle_for=0.0):
     import time
 
     sup = JobSupervisor()
+    sup._save_jobs_to_disk = lambda: None
     sup._idle_since = time.time() - idle_for if idle_for else None
     jid = "watchdog_test_job"
 
