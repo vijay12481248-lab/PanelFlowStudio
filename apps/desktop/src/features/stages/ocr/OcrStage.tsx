@@ -2,10 +2,11 @@ import React from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Film, Redo2, Undo2 } from "lucide-react";
 import { api } from "@panelflow/api-client";
-import type { Panel, Project } from "@panelflow/shared-types";
+import type { Panel, Project, TextRegion } from "@panelflow/shared-types";
 import { Button, Chip, EmptyState, ErrorState, GlassPanel, Select, Skeleton, useToast } from "@panelflow/ui-v2";
 import { historyShortcut } from "../../../history/shortcuts";
 import { useError } from "../../../context/ErrorContext";
+import type { Box } from "../kit/canvas/geometry";
 import { ConfirmDialog } from "../kit/ConfirmDialog";
 import { JobProgress } from "../kit/JobProgress";
 import { StageToolbar } from "../kit/StageToolbar";
@@ -18,11 +19,13 @@ import { useHistoryMoves } from "../kit/useHistoryMoves";
 import { panelKeys, usePanels } from "../panels/panelsData";
 import { sortPanels } from "../panels/panelsModel";
 import { GateBanner } from "./GateBanner";
-import { ocrKeys, useOcrEngines, useTextRegions } from "./ocrData";
+import { ocrKeys, useCharacters, useOcrEngines, useTextRegions } from "./ocrData";
 import { PanelStrip } from "./PanelStrip";
 import { RegionCanvas } from "./RegionCanvas";
+import { RegionEditor } from "./RegionEditor";
 import { RegionList } from "./RegionList";
-import { type PanelFilter, canConfirmOCR, confirmPatch, engineProblem, filterCounts, jumpToNextFlagged, needsReview, panelFilter, pickEngine, regionsByPanel } from "./ocrModel";
+import { useRegionEditing } from "./useRegionEditing";
+import { type EditForm, type PanelFilter, canConfirmOCR, confirmPatch, engineProblem, filterCounts, jumpToNextFlagged, needsReview, panelFilter, pickEngine, regionsByPanel } from "./ocrModel";
 
 export interface OcrStageProps {
   project: Project;
@@ -48,6 +51,7 @@ export const OcrStage: React.FC<OcrStageProps> = ({ project, onApproved, onConti
   const pagesQuery = usePages(project.id);
   const sorted = React.useMemo(() => sortPanels(panelsQuery.data ?? [], pagesQuery.data ?? []), [panelsQuery.data, pagesQuery.data]);
   const enginesQuery = useOcrEngines();
+  const characters = useCharacters(project.id).data ?? [];
   const engines = enginesQuery.data ?? [];
 
   const [chosenEngine, setChosenEngine] = React.useState<string | null>(null);
@@ -60,6 +64,7 @@ export const OcrStage: React.FC<OcrStageProps> = ({ project, onApproved, onConti
   const [filter, setFilter] = React.useState<PanelFilter>("all");
   const [cropBuster, setCropBuster] = React.useState(() => Date.now());
   const [pendingDelete, setPendingDelete] = React.useState<Panel | null>(null);
+  const [drawMode, setDrawMode] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [notice, setNotice] = React.useState<string | null>(null);
   const [working, setWorking] = React.useState<null | "detect" | "confirm" | "approve" | "export" | "delete">(null);
@@ -150,7 +155,10 @@ export const OcrStage: React.FC<OcrStageProps> = ({ project, onApproved, onConti
   const hasPrevious = at > 0;
   const hasNext = at >= 0 ? at < filtered.length - 1 : filtered.length > 0;
 
-  const selectPanel = (id: string) => { setSelectedPanelId(id); setSelectedRegionId(null); };
+  const editing = useRegionEditing({ projectId: project.id, engineId, onChanged: async () => { await reloadRegions(); history.refresh(); } });
+  const selectedRegion = panelRegions.find((r) => r.id === selectedRegionId) ?? null;
+
+  const selectPanel = (id: string) => { setSelectedPanelId(id); setSelectedRegionId(null); setDrawMode(false); };
   const goToPanel = (delta: -1 | 1) => { const target = filtered[at < 0 ? 0 : at + delta]; if (target) selectPanel(target.id); };
   const jumpToPanel = (sequence: number) => { const found = sorted.find((p) => p.sequence === sequence); if (found) selectPanel(found.id); return Boolean(found); };
   const jumpToFlagged = () => { const next = jumpToNextFlagged(regions, sorted, selectedRegionId); if (next) { setSelectedPanelId(next.panel_id); setSelectedRegionId(next.id); } };
@@ -158,6 +166,19 @@ export const OcrStage: React.FC<OcrStageProps> = ({ project, onApproved, onConti
     if (panelRegions.length === 0) return;
     const index = panelRegions.findIndex((r) => r.id === selectedRegionId);
     setSelectedRegionId(panelRegions[index < 0 ? (delta > 0 ? 0 : panelRegions.length - 1) : (index + delta + panelRegions.length) % panelRegions.length].id);
+  };
+  /** Save, then the next region of this panel; when the panel is done, the next region that needs review anywhere. */
+  const saveAndNext = async (region: TextRegion, form: EditForm) => {
+    if (!(await editing.save(region, form))) return;
+    const index = panelRegions.findIndex((r) => r.id === region.id);
+    const next = panelRegions[index + 1] ?? jumpToNextFlagged(regions, sorted, region.id);
+    if (next && next.id !== region.id) { setSelectedPanelId(next.panel_id); setSelectedRegionId(next.id); }
+  };
+  const drawRegion = async (box: Box) => {
+    setDrawMode(false);
+    if (!activePanel) return;
+    const created = await editing.createFromBox(activePanel.id, box);
+    if (created) setSelectedRegionId(created.id);
   };
   const removePanel = () => {
     const panel = pendingDelete;
@@ -182,7 +203,7 @@ export const OcrStage: React.FC<OcrStageProps> = ({ project, onApproved, onConti
     else if (event.key === "]") { event.preventDefault(); cycleRegion(1); }
     else if (event.key === "ArrowLeft" && !event.shiftKey) { if (hasPrevious) goToPanel(-1); }
     else if (event.key === "ArrowRight" && !event.shiftKey) { if (hasNext) goToPanel(1); }
-    else if (event.key === "Escape") setSelectedRegionId(null);
+    else if (event.key === "Escape") { if (drawMode) setDrawMode(false); else setSelectedRegionId(null); }
   };
   React.useEffect(() => {
     const onKey = (event: KeyboardEvent) => keys.current(event);
@@ -249,12 +270,14 @@ export const OcrStage: React.FC<OcrStageProps> = ({ project, onApproved, onConti
           <PanelStrip projectId={project.id} panels={filtered} regions={regions} counts={counts} filter={filter} onFilter={setFilter} activeId={activeId} cropBuster={cropBuster} onSelect={selectPanel} onDelete={setPendingDelete} onJump={jumpToPanel} />
           {activePanel && (
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
-              <RegionCanvas projectId={project.id} panel={activePanel} regions={panelRegions} selectedRegionId={selectedRegionId} onSelectRegion={setSelectedRegionId} cropBuster={cropBuster} hasPrevious={hasPrevious} hasNext={hasNext} onPrevious={() => goToPanel(-1)} onNext={() => goToPanel(1)} />
+              <RegionCanvas projectId={project.id} panel={activePanel} regions={panelRegions} selectedRegionId={selectedRegionId} onSelectRegion={setSelectedRegionId} cropBuster={cropBuster} hasPrevious={hasPrevious} hasNext={hasNext} onPrevious={() => goToPanel(-1)} onNext={() => goToPanel(1)} drawMode={drawMode} onDraw={(box) => void drawRegion(box)} tools={<Button size="sm" variant={drawMode ? "primary" : "secondary"} aria-pressed={drawMode} disabled={editing.busy} onClick={() => setDrawMode((on) => !on)}>Add text region</Button>} />
               <div className="grid min-w-0 content-start gap-4">
                 <GlassPanel blur={false} className="grid grid-cols-1 gap-3 p-4">
                   <h3 className="font-display text-sm font-semibold text-fg">{`Panel ${activePanel.sequence}`}</h3>
                   <RegionList regions={panelRegions} selectedId={selectedRegionId} onSelect={setSelectedRegionId} />
                 </GlassPanel>
+                {editing.error && !selectedRegion && <p role="alert" className="text-sm text-bad">{editing.error}</p>}
+                {selectedRegion && <RegionEditor key={selectedRegion.id} region={selectedRegion} characters={characters} editing={editing} canReadAgain={engineId !== null} onSaveAndNext={(r, f) => void saveAndNext(r, f)} onDeleted={() => setSelectedRegionId(null)} />}
               </div>
             </div>
           )}

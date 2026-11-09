@@ -119,3 +119,26 @@ export function speakerWord(id: string | null | undefined, characters: Character
   const known = id ? speakerOptions(characters).find((o) => o.id === id) : null;
   return known?.label ?? "Unknown";
 }
+
+export interface Option { id: string; label: string }
+const withCurrent = (options: Option[], current: string | undefined, label: (value: string) => string): Option[] =>
+  current && !options.some((o) => o.id === current) ? [...options, { id: current, label: label(current) }] : options;
+
+/** What a person can set a region to. "Ignored" is REJECTED: it is the status the export and audio steps leave out. A value the engine set itself stays selectable. */
+export const statusOptions = (current?: string): Option[] =>
+  withCurrent([{ id: "NEEDS_REVIEW", label: "Needs review" }, { id: "DETECTED", label: "Detected" }, { id: "CONFIRMED", label: "Confirmed" }, { id: "REJECTED", label: "Ignored" }], current, (v) => regionStatus(v).word);
+export const typeOptions = (current?: string): Option[] =>
+  withCurrent(["SPEECH", "NARRATION", "THOUGHT", "SFX", "CAPTION", "UNKNOWN"].map((id) => ({ id, label: regionTypeWord(id) })), current, regionTypeWord);
+
+export type TextTool = "trim" | "quotes" | "sentence" | "clear";
+export function formatText(tool: TextTool, text: string): string {
+  switch (tool) {
+    case "trim": return text.replace(/\s+/g, " ").trim();
+    case "quotes": return text.replace(/[\u300C\u300E\u300D\u300F\u201C\u201D]/g, '"').replace(/[\u2018\u2019]/g, "'");
+    case "sentence": return text.replace(/(^\s*\w|[.!?]\s*\w)/g, (c) => c.toUpperCase());
+    case "clear": return "";
+  }
+}
+
+const ASSIGNMENT: Record<string, string> = { BALLOON_GEOMETRY: "Balloon shape", RULE_TAIL: "Balloon tail", PROXIMITY: "Closest character", LLM_INFERRED: "Guessed by the model", MANUAL: "Chosen by hand", UNKNOWN: "Not known" };
+export const assignmentWord = (method: string | null | undefined) => (method ? ASSIGNMENT[method] ?? words(method) : "Not assigned");

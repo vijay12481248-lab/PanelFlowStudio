@@ -238,3 +238,22 @@ test("the canvas reports the image's natural size once it loads", async () => {
   assert.deepEqual(sizes, [[1920, 22528]]);
   await view.cleanup(); restore();
 });
+
+test("a fixed box can be selected and a new box drawn, but the fixed box is never moved, resized or nudged, and is not called locked", async () => {
+  const restore = stubRect(100);
+  const log = newLog();
+  const fixed: CanvasBox[] = [{ id: "r", box: { x: 100, y: 100, w: 300, h: 200 }, label: "Region 1", tone: "accent", fixed: true }];
+  const view = await mount(<Harness initial={fixed} log={log} />);
+  await key(boxEl(view.document, "r"), "Enter");
+  assert.deepEqual(log.select, [["r", false]]);
+  assert.equal(view.document.querySelectorAll("[data-handle]").length, 0, "no resize handles");
+  await key(boxEl(view.document, "r"), "ArrowRight");
+  await ptr(boxEl(view.document, "r"), "pointerdown", 200, 150);
+  await ptr(overlay(view.document), "pointermove", 260, 190);
+  await ptr(overlay(view.document), "pointerup", 260, 190);
+  assert.deepEqual(log.commit, [], "dragging a fixed box commits nothing");
+  assert.deepEqual(log.change, []);
+  assert.ok(!boxEl(view.document, "r").getAttribute("aria-label")!.includes("locked"));
+  await view.cleanup();
+  restore();
+});

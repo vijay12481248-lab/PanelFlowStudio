@@ -107,3 +107,35 @@ test("speaker choices are Unknown, Narrator, Sound effect, then characters by na
   assert.equal(speakerWord(null, characters), "Unknown");
   assert.equal(speakerWord("deadbeef", characters), "Unknown");
 });
+
+import { formatText, statusOptions, typeOptions } from "../ocrModel";
+
+test("the status and type choices are the ones a person can pick, plus the region's current value when the engine set another", () => {
+  assert.deepEqual(statusOptions("NEEDS_REVIEW").map((o) => o.id), ["NEEDS_REVIEW", "DETECTED", "CONFIRMED", "REJECTED"]);
+  assert.equal(statusOptions("NEEDS_REVIEW").find((o) => o.id === "REJECTED")?.label, "Ignored");
+  const blurred = statusOptions("BLURRED");
+  assert.equal(blurred[blurred.length - 1].id, "BLURRED");
+  assert.equal(blurred[blurred.length - 1].label, "Blurred");
+  assert.equal(statusOptions("IGNORED").some((o) => o.id === "IGNORED"), true, "an engine-set IGNORED stays selectable so a save does not change it");
+  assert.deepEqual(typeOptions("SPEECH").map((o) => o.id), ["SPEECH", "NARRATION", "THOUGHT", "SFX", "CAPTION", "UNKNOWN"]);
+  assert.equal(typeOptions("REDACTED").pop()?.label, "Redacted");
+});
+
+test("the quick text tools trim spaces, standardise quotes, capitalise sentences and clear", () => {
+  assert.equal(formatText("trim", "  Hello \n  world  "), "Hello world");
+  assert.equal(formatText("quotes", "\u300CHi\u300D and \u201Cthere\u201D, it\u2019s \u2018ok\u2019"), "\"Hi\" and \"there\", it's 'ok'");
+  assert.equal(formatText("sentence", "hello. how are you? fine"), "Hello. How are you? Fine");
+  assert.equal(formatText("clear", "anything"), "");
+});
+
+import { assignmentWord } from "../ocrModel";
+test("how a speaker was chosen is said in words, including the methods the engine really sends", () => {
+  assert.equal(assignmentWord("BALLOON_GEOMETRY"), "Balloon shape");
+  assert.equal(assignmentWord("RULE_TAIL"), "Balloon tail");
+  assert.equal(assignmentWord("PROXIMITY"), "Closest character");
+  assert.equal(assignmentWord("LLM_INFERRED"), "Guessed by the model");
+  assert.equal(assignmentWord("MANUAL"), "Chosen by hand");
+  assert.equal(assignmentWord("UNKNOWN"), "Not known");
+  assert.equal(assignmentWord(null), "Not assigned");
+  assert.equal(assignmentWord("NEW_METHOD"), "New method");
+});
