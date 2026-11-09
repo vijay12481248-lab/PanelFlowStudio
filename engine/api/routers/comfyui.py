@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from engine.comfyui import ComfyUIClient, ComfyUIError, ComfyWorkflowRegistry, WorkflowRegistryError
 from engine.comfyui.art import ART_WORKFLOW_ID
-from engine.comfyui.service import generate_image_operation
+from engine.comfyui.service import INPAINT_WORKFLOW_ID, generate_image_operation, inpaint_image_operation
 from engine.database.models import AssetRecord, ProjectRecord
 from engine.database.session import get_db
 from engine.jobs.workflow import enqueue_project_operation
@@ -27,6 +27,16 @@ class ComfyImageRequest(BaseModel):
     seed: int = Field(default=20261019, ge=0, le=2**63 - 1)
     timeout_s: float = Field(default=900.0, ge=30.0, le=3600.0)
     refine: bool = Field(default=False, description="Review the picture, then repair or redraw it (slower: needs the local vision model); every candidate is kept")
+
+
+class ComfyInpaintRequest(BaseModel):
+    asset_id: str | None = None
+    image_data: str | None = None
+    mask_data: str = Field(..., description="Base64 encoded PNG or data URL containing the binary mask (white=inpaint, black=keep)")
+    prompt: str = Field(..., min_length=1, max_length=12000)
+    negative_prompt: str | None = Field(default=None, max_length=12000)
+    seed: int = Field(default=20261019, ge=0, le=2**63 - 1)
+    timeout_s: float = Field(default=900.0, ge=30.0, le=3600.0)
 
 
 @router.get("/capabilities")
@@ -116,6 +126,63 @@ def submit_comfyui_image_job(project_id: str, request: ComfyImageRequest, db: Se
         },
     )
     return {"job_id": job_id, "status": "QUEUED", "workflow_id": request.workflow_id}
+
+
+@project_router.post("/{project_id}/comfyui/inpaint")
+def submit_comfyui_inpaint_job(project_id: str, request: ComfyInpaintRequest, db: Session = Depends(get_db)) -> dict:
+    project = db.query(ProjectRecord).filter(ProjectRecord.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+    if not request.asset_id and not request.image_data:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Either asset_id or image_data is required")
+
+    try:
+        registry = ComfyWorkflowRegistry()
+        metadata = registry.metadata(INPAINT_WORKFLOW_ID)
+        registry.load(INPAINT_WORKFLOW_ID)
+        preflight = registry.preflight(INPAINT_WORKFLOW_ID)
+        if not preflight["ready"]:
+            raise WorkflowRegistryError(
+                f"ComfyUI workflow preflight failed: missing nodes={preflight['missing_nodes']}, missing models={preflight['missing_models']}"
+            )
+    except (ComfyUIError, WorkflowRegistryError) as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    def operation(operation_db, progress, is_cancelled):
+        return inpaint_image_operation(
+            operation_db,
+            progress,
+            is_cancelled,
+            project_id=project_id,
+            base_asset_id=request.asset_id,
+            image_data=request.image_data,
+            mask_data=request.mask_data,
+            prompt=request.prompt,
+            negative_prompt=request.negative_prompt,
+            seed=request.seed,
+            timeout_s=request.timeout_s,
+        )
+
+    job_id = enqueue_project_operation(
+        project_id=project_id,
+        job_type="COMFYUI_IMAGE_GENERATION",
+        operation=operation,
+        priority=20,
+        requires_gpu=bool(metadata.get("requires_gpu", True)),
+        gpu_vram_mb=int(metadata.get("gpu_vram_mb", 0) or 0),
+        max_retries=1,
+        job_input={
+            "operation": "inpaint",
+            "workflow_id": INPAINT_WORKFLOW_ID,
+            "base_asset_id": request.asset_id,
+            "mask_data": request.mask_data,
+            "prompt": request.prompt,
+            "negative_prompt": request.negative_prompt,
+            "seed": request.seed,
+            "timeout_s": request.timeout_s,
+        },
+    )
+    return {"job_id": job_id, "status": "QUEUED", "workflow_id": INPAINT_WORKFLOW_ID}
 
 
 @project_router.get("/{project_id}/assets")

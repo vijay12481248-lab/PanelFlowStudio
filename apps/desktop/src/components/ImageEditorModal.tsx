@@ -1,0 +1,956 @@
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { api } from "@panelflow/api-client";
+import type { GeneratedAsset } from "@panelflow/api-client";
+import type { Job } from "@panelflow/shared-types";
+import {
+  Paintbrush,
+  Eraser,
+  Undo2,
+  Redo2,
+  Trash2,
+  Eye,
+  EyeOff,
+  ZoomIn,
+  ZoomOut,
+  Maximize2,
+  Download,
+  Copy,
+  Check,
+  Sparkles,
+  Wand2,
+  X,
+  Sliders,
+  RefreshCw,
+  Layers,
+  CheckCircle2,
+  AlertCircle,
+} from "lucide-react";
+
+export interface ImageEditorModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  projectId: string;
+  asset: GeneratedAsset | null;
+  onAssetUpdated?: (newAsset: GeneratedAsset) => void;
+}
+
+type ToolMode = "brush" | "eraser";
+
+interface InpaintPreset {
+  label: string;
+  prompt: string;
+  icon: string;
+}
+
+const INPAINT_PRESETS: InpaintPreset[] = [
+  { label: "Fix Hands & Fingers", prompt: "highly detailed realistic anime hands, perfect fingers, correct anatomy, clean lines", icon: "✋" },
+  { label: "Change Outfit", prompt: "elaborate ornate dark assassin robes with silver trim, highly detailed fabric folds, elegant silhouette", icon: "👘" },
+  { label: "Magical Aura", prompt: "intense glowing azure energy aura, crackling ethereal mana particles, dynamic lighting, cinematic", icon: "✨" },
+  { label: "Enhance Face & Eyes", prompt: "striking detailed anime face, luminous expressive eyes, clean intricate facial features, masterpiece", icon: "👁️" },
+  { label: "Mystical Blade", prompt: "holding a glowing translucent crystal dagger with golden runes, sharp gleaming edge, dynamic weapon", icon: "⚔️" },
+  { label: "Remove / Clean Up", prompt: "seamless clean background matching the surrounding scene, flawless continuity, no artifacts", icon: "🧹" },
+];
+
+const MASK_COLORS = [
+  { id: "rose", label: "Hot Rose", color: "rgba(244, 63, 94, 0.6)", hex: "#f43f5e" },
+  { id: "cyan", label: "Neon Cyan", color: "rgba(6, 182, 212, 0.6)", hex: "#06b6d4" },
+  { id: "amber", label: "Electric Gold", color: "rgba(245, 158, 11, 0.6)", hex: "#f59e0b" },
+];
+
+export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
+  isOpen,
+  onClose,
+  projectId,
+  asset,
+  onAssetUpdated,
+}) => {
+  if (!isOpen || !asset) return null;
+
+  // Active asset (can update when inpainting finishes)
+  const [currentAsset, setCurrentAsset] = useState<GeneratedAsset>(asset);
+  const [previousAsset, setPreviousAsset] = useState<GeneratedAsset | null>(null);
+  const [isComparing, setIsComparing] = useState(false);
+
+  // Tool states
+  const [tool, setTool] = useState<ToolMode>("brush");
+  const [brushSize, setBrushSize] = useState<number>(40);
+  const [brushOpacity, setBrushOpacity] = useState<number>(0.85);
+  const [maskColorIndex, setMaskColorIndex] = useState<number>(0);
+  const [showMask, setShowMask] = useState<boolean>(true);
+  const [hasMaskContent, setHasMaskContent] = useState<boolean>(false);
+
+  // Canvas zoom & view
+  const [zoomLevel, setZoomLevel] = useState<number>(1);
+  const [fitMode, setFitMode] = useState<"contain" | "actual">("contain");
+
+  // Inpaint parameters
+  const [prompt, setPrompt] = useState<string>("");
+  const [negativePrompt, setNegativePrompt] = useState<string>(
+    "photorealism, 3D render, blurry, malformed hands, text, watermark, logo, gore"
+  );
+  const [seed, setSeed] = useState<number>(Math.floor(Math.random() * 900000000) + 100000000);
+  const [isInpainting, setIsInpainting] = useState<boolean>(false);
+  const [inpaintProgress, setInpaintProgress] = useState<number>(0);
+  const [inpaintStatusText, setInpaintStatusText] = useState<string>("");
+  const [inpaintError, setInpaintError] = useState<string | null>(null);
+
+  // Micro-feedback state
+  const [copiedSha, setCopiedSha] = useState<boolean>(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Cursor state
+  const [cursorPos, setCursorPos] = useState<{ x: number; y: number } | null>(null);
+  const [isCursorInside, setIsCursorInside] = useState<boolean>(false);
+
+  // History stack for Undo / Redo
+  const historyRef = useRef<ImageData[]>([]);
+  const historyStepRef = useRef<number>(-1);
+
+  // Canvas & Image refs
+  const canvasContainerRef = useRef<HTMLDivElement>(null);
+  const imageRef = useRef<HTMLImageElement>(null);
+  const maskCanvasRef = useRef<HTMLCanvasElement>(null);
+  const isDrawingRef = useRef<boolean>(false);
+  const lastPointRef = useRef<{ x: number; y: number } | null>(null);
+
+  // Sync currentAsset when props asset changes
+  useEffect(() => {
+    setCurrentAsset(asset);
+  }, [asset]);
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 2500);
+  };
+
+  // Initialize and clear canvas when asset loads
+  const initCanvas = useCallback(() => {
+    const canvas = maskCanvasRef.current;
+    const img = imageRef.current;
+    if (!canvas || !img) return;
+
+    const w = img.naturalWidth || currentAsset.width || 512;
+    const h = img.naturalHeight || currentAsset.height || 768;
+    canvas.width = w;
+    canvas.height = h;
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.clearRect(0, 0, w, h);
+
+    // Save initial blank state
+    const blankData = ctx.getImageData(0, 0, w, h);
+    historyRef.current = [blankData];
+    historyStepRef.current = 0;
+    setHasMaskContent(false);
+  }, [currentAsset]);
+
+  const pushHistory = () => {
+    const canvas = maskCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    // Prune redo tree
+    const newHistory = historyRef.current.slice(0, historyStepRef.current + 1);
+    const data = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    newHistory.push(data);
+    if (newHistory.length > 25) newHistory.shift();
+
+    historyRef.current = newHistory;
+    historyStepRef.current = newHistory.length - 1;
+    setHasMaskContent(true);
+  };
+
+  const handleUndo = () => {
+    if (historyStepRef.current <= 0) return;
+    const canvas = maskCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    historyStepRef.current -= 1;
+    const state = historyRef.current[historyStepRef.current];
+    ctx.putImageData(state, 0, 0);
+    setHasMaskContent(historyStepRef.current > 0);
+  };
+
+  const handleRedo = () => {
+    if (historyStepRef.current >= historyRef.current.length - 1) return;
+    const canvas = maskCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    historyStepRef.current += 1;
+    const state = historyRef.current[historyStepRef.current];
+    ctx.putImageData(state, 0, 0);
+    setHasMaskContent(true);
+  };
+
+  const handleClearMask = () => {
+    const canvas = maskCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    pushHistory();
+    setHasMaskContent(false);
+    showToast("Mask cleared");
+  };
+
+  // Coordinate mapping from mouse event to canvas pixels
+  const getCanvasCoordinates = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const canvas = maskCanvasRef.current;
+    if (!canvas) return { x: 0, y: 0 };
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    return {
+      x: (e.clientX - rect.left) * scaleX,
+      y: (e.clientY - rect.top) * scaleY,
+    };
+  };
+
+  const drawStroke = (x1: number, y1: number, x2: number, y2: number) => {
+    const canvas = maskCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    ctx.save();
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.lineWidth = brushSize;
+
+    if (tool === "eraser") {
+      ctx.globalCompositeOperation = "destination-out";
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+    } else {
+      ctx.globalCompositeOperation = "source-over";
+      ctx.strokeStyle = MASK_COLORS[maskColorIndex].color;
+      ctx.globalAlpha = brushOpacity;
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+    }
+    ctx.restore();
+  };
+
+  const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    isDrawingRef.current = true;
+    const pt = getCanvasCoordinates(e);
+    lastPointRef.current = pt;
+    drawStroke(pt.x, pt.y, pt.x, pt.y);
+  };
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    // Track cursor location for preview ring
+    const rect = e.currentTarget.getBoundingClientRect();
+    setCursorPos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+
+    if (!isDrawingRef.current || !lastPointRef.current) return;
+    const pt = getCanvasCoordinates(e);
+    drawStroke(lastPointRef.current.x, lastPointRef.current.y, pt.x, pt.y);
+    lastPointRef.current = pt;
+  };
+
+  const handlePointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!isDrawingRef.current) return;
+    isDrawingRef.current = false;
+    lastPointRef.current = null;
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      // Ignored
+    }
+    pushHistory();
+  };
+
+  // Generate binary B&W mask for ComfyUI: Pure White (255) for painted pixels, Black (0) for background
+  const exportBinaryMaskDataUrl = (): string | null => {
+    const displayCanvas = maskCanvasRef.current;
+    if (!displayCanvas) return null;
+
+    const w = displayCanvas.width;
+    const h = displayCanvas.height;
+    const displayCtx = displayCanvas.getContext("2d");
+    if (!displayCtx) return null;
+
+    const imgData = displayCtx.getImageData(0, 0, w, h);
+    const pixels = imgData.data;
+
+    // Check if any pixel has mask alpha > 0
+    let hasPainted = false;
+    const binaryCanvas = document.createElement("canvas");
+    binaryCanvas.width = w;
+    binaryCanvas.height = h;
+    const bCtx = binaryCanvas.getContext("2d")!;
+    const binaryImgData = bCtx.createImageData(w, h);
+    const bPixels = binaryImgData.data;
+
+    for (let i = 0; i < pixels.length; i += 4) {
+      const alpha = pixels[i + 3];
+      if (alpha > 8) {
+        hasPainted = true;
+        // White = Inpaint region
+        bPixels[i] = 255;
+        bPixels[i + 1] = 255;
+        bPixels[i + 2] = 255;
+        bPixels[i + 3] = 255;
+      } else {
+        // Black = Preserve
+        bPixels[i] = 0;
+        bPixels[i + 1] = 0;
+        bPixels[i + 2] = 0;
+        bPixels[i + 3] = 255;
+      }
+    }
+
+    if (!hasPainted) return null;
+
+    bCtx.putImageData(binaryImgData, 0, 0);
+    return binaryCanvas.toDataURL("image/png");
+  };
+
+  const handleInpaintSubmit = async () => {
+    if (!prompt.trim()) {
+      setInpaintError("Please enter an inpainting prompt describing what to draw.");
+      return;
+    }
+
+    const maskData = exportBinaryMaskDataUrl();
+    if (!maskData) {
+      setInpaintError("No masked area selected. Brush over the region you want to inpaint first.");
+      return;
+    }
+
+    setInpaintError(null);
+    setIsInpainting(true);
+    setInpaintProgress(0.05);
+    setInpaintStatusText("Uploading image & mask to ComfyUI...");
+
+    try {
+      const queued = await api.inpaintComfyImage(projectId, {
+        asset_id: currentAsset.id,
+        mask_data: maskData,
+        prompt: prompt.trim(),
+        negative_prompt: negativePrompt.trim(),
+        seed,
+        timeout_s: 900,
+      });
+
+      setInpaintStatusText("ComfyUI inpainting with Qwen 2.1 Turbo...");
+
+      const completedJob = await api.waitForWorkflowJob(queued.job_id, (job: Job) => {
+        if (job.progress != null) setInpaintProgress(job.progress);
+        if (job.message) setInpaintStatusText(job.message);
+      });
+
+      if (completedJob.status === "FAILED") {
+        throw new Error(completedJob.error || "Inpainting job failed in engine.");
+      }
+
+      setInpaintStatusText("Retrieving newly generated asset...");
+      setInpaintProgress(0.95);
+
+      // Refresh project assets
+      const assetList = await api.listGeneratedAssets(projectId);
+      if (assetList.assets && assetList.assets.length > 0) {
+        const newest = assetList.assets[0];
+        setPreviousAsset(currentAsset);
+        setCurrentAsset(newest);
+        if (onAssetUpdated) onAssetUpdated(newest);
+        showToast("✨ Inpainting complete! New asset created.");
+      }
+
+      // Reset mask canvas for further edits
+      initCanvas();
+    } catch (err: any) {
+      setInpaintError(err.message || "Failed to execute inpainting.");
+    } finally {
+      setIsInpainting(false);
+      setInpaintProgress(0);
+      setInpaintStatusText("");
+    }
+  };
+
+  const copyShaToClipboard = () => {
+    navigator.clipboard.writeText(currentAsset.sha256);
+    setCopiedSha(true);
+    showToast("SHA-256 copied to clipboard");
+    setTimeout(() => setCopiedSha(false), 2000);
+  };
+
+  const handleDownload = () => {
+    const url = api.getGeneratedAssetUrl(projectId, currentAsset.id);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = currentAsset.filename || `asset-${currentAsset.id}.png`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast("Image downloaded");
+  };
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") {
+        e.preventDefault();
+        if (e.shiftKey) handleRedo();
+        else handleUndo();
+      } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "y") {
+        e.preventDefault();
+        handleRedo();
+      } else if (e.key.toLowerCase() === "b") {
+        setTool("brush");
+      } else if (e.key.toLowerCase() === "e") {
+        setTool("eraser");
+      } else if (e.key === "[") {
+        setBrushSize((s) => Math.max(8, s - 6));
+      } else if (e.key === "]") {
+        setBrushSize((s) => Math.min(200, s + 6));
+      } else if (e.key === "Escape") {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  const displayedAsset = isComparing && previousAsset ? previousAsset : currentAsset;
+  const imageUrl = api.getGeneratedAssetUrl(projectId, displayedAsset.id);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-3 md:p-6 animate-in fade-in duration-200 select-none"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Image Editor & Inpainter"
+    >
+      <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-[96vw] h-[94vh] flex flex-col shadow-2xl overflow-hidden">
+        {/* Top Header Bar */}
+        <div className="px-5 py-3 border-b border-zinc-800/90 bg-zinc-900/70 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 via-purple-600 to-pink-500 flex items-center justify-center text-white shadow-lg shadow-indigo-600/30">
+              <Sparkles className="w-5 h-5 animate-pulse" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <h2 className="text-sm font-bold text-zinc-100 truncate">
+                  Visual Asset Editor & Inpaint Studio
+                </h2>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-indigo-950 border border-indigo-700/60 text-indigo-300">
+                  {currentAsset.width} × {currentAsset.height}
+                </span>
+                {previousAsset && (
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-950 border border-emerald-700/60 text-emerald-400">
+                    INPAINTED
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-zinc-400 truncate font-mono">
+                {currentAsset.filename} · {(currentAsset.byte_size / 1024).toFixed(1)} KB
+              </p>
+            </div>
+          </div>
+
+          {/* Quick Header Actions */}
+          <div className="flex items-center gap-2">
+            {previousAsset && (
+              <button
+                type="button"
+                onMouseDown={() => setIsComparing(true)}
+                onMouseUp={() => setIsComparing(false)}
+                onMouseLeave={() => setIsComparing(false)}
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 active:scale-95 transition-all flex items-center gap-1.5"
+                title="Hold to see original image before inpainting"
+              >
+                <Layers className="w-3.5 h-3.5 text-indigo-400" />
+                <span>{isComparing ? "Showing Original" : "Hold to Compare"}</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={handleDownload}
+              className="p-2 rounded-lg text-zinc-300 hover:text-white bg-zinc-800/80 hover:bg-zinc-700 border border-zinc-700/60 active:scale-95 transition-all"
+              title="Download full resolution image"
+            >
+              <Download className="w-4 h-4" />
+            </button>
+
+            <button
+              type="button"
+              onClick={copyShaToClipboard}
+              className="p-2 rounded-lg text-zinc-300 hover:text-white bg-zinc-800/80 hover:bg-zinc-700 border border-zinc-700/60 active:scale-95 transition-all"
+              title="Copy SHA-256 hash"
+            >
+              {copiedSha ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+            </button>
+
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-zinc-400 hover:text-white hover:bg-zinc-800 active:scale-95 transition-all"
+              aria-label="Close modal"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+
+        {/* Main Workspace: Left Canvas + Right Grouped Inspector */}
+        <div className="flex-1 flex overflow-hidden">
+          {/* Left Canvas Viewport */}
+          <div
+            ref={canvasContainerRef}
+            className="flex-1 bg-zinc-950/90 relative overflow-hidden flex flex-col items-center justify-center p-4"
+            style={{
+              backgroundImage:
+                "radial-gradient(circle at 1px 1px, rgba(255,255,255,0.05) 1px, transparent 0)",
+              backgroundSize: "24px 24px",
+            }}
+          >
+            {/* Floating Top Canvas Toolbar */}
+            <div className="absolute top-4 left-4 z-20 flex items-center gap-1.5 p-1.5 rounded-xl bg-zinc-900/90 backdrop-blur-md border border-zinc-800 shadow-xl">
+              <button
+                type="button"
+                onClick={handleUndo}
+                disabled={historyStepRef.current <= 0}
+                className="p-2 rounded-lg text-zinc-300 hover:text-white hover:bg-zinc-800 disabled:opacity-30 disabled:pointer-events-none active:scale-95 transition-all"
+                title="Undo (Ctrl+Z)"
+              >
+                <Undo2 className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={handleRedo}
+                disabled={historyStepRef.current >= historyRef.current.length - 1}
+                className="p-2 rounded-lg text-zinc-300 hover:text-white hover:bg-zinc-800 disabled:opacity-30 disabled:pointer-events-none active:scale-95 transition-all"
+                title="Redo (Ctrl+Y)"
+              >
+                <Redo2 className="w-4 h-4" />
+              </button>
+              <div className="w-px h-5 bg-zinc-800 mx-1" />
+              <button
+                type="button"
+                onClick={handleClearMask}
+                disabled={!hasMaskContent}
+                className="p-2 rounded-lg text-zinc-300 hover:text-rose-400 hover:bg-zinc-800 disabled:opacity-30 disabled:pointer-events-none active:scale-95 transition-all"
+                title="Clear mask"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowMask((prev) => !prev)}
+                className={`p-2 rounded-lg text-zinc-300 hover:text-white hover:bg-zinc-800 active:scale-95 transition-all ${
+                  !showMask ? "text-amber-400 bg-amber-950/40" : ""
+                }`}
+                title={showMask ? "Hide mask overlay" : "Show mask overlay"}
+              >
+                {showMask ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+              </button>
+              <div className="w-px h-5 bg-zinc-800 mx-1" />
+              <button
+                type="button"
+                onClick={() => setZoomLevel((z) => Math.max(0.4, Number((z - 0.2).toFixed(1))))}
+                className="p-2 rounded-lg text-zinc-300 hover:text-white hover:bg-zinc-800 active:scale-95 transition-all"
+                title="Zoom Out"
+              >
+                <ZoomOut className="w-4 h-4" />
+              </button>
+              <span className="text-xs font-mono text-zinc-400 px-1 font-medium min-w-10 text-center">
+                {Math.round(zoomLevel * 100)}%
+              </span>
+              <button
+                type="button"
+                onClick={() => setZoomLevel((z) => Math.min(3, Number((z + 0.2).toFixed(1))))}
+                className="p-2 rounded-lg text-zinc-300 hover:text-white hover:bg-zinc-800 active:scale-95 transition-all"
+                title="Zoom In"
+              >
+                <ZoomIn className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setZoomLevel(1);
+                  setFitMode((m) => (m === "contain" ? "actual" : "contain"));
+                }}
+                className={`px-2 py-1 rounded-lg text-xs font-medium border transition-all ${
+                  fitMode === "actual"
+                    ? "bg-indigo-600 border-indigo-500 text-white"
+                    : "bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700"
+                }`}
+                title="Toggle 100% size or Fit to screen"
+              >
+                {fitMode === "actual" ? "100%" : "Fit"}
+              </button>
+            </div>
+
+            {/* Canvas Stage */}
+            <div
+              className="relative max-w-full max-h-full flex items-center justify-center transition-transform duration-150 ease-out"
+              style={{
+                transform: `scale(${zoomLevel})`,
+                transformOrigin: "center center",
+              }}
+              onMouseEnter={() => setIsCursorInside(true)}
+              onMouseLeave={() => {
+                setIsCursorInside(false);
+                setCursorPos(null);
+              }}
+            >
+              {/* Underlying Original / Inpainted Art Image */}
+              <img
+                ref={imageRef}
+                src={imageUrl}
+                alt="Asset preview for inpainting"
+                onLoad={initCanvas}
+                className="max-h-[80vh] max-w-[80vw] object-contain rounded-lg border border-zinc-800/80 shadow-2xl pointer-events-none transition-opacity duration-300"
+                style={{ imageRendering: "auto" }}
+              />
+
+              {/* Foreground Mask Drawing Canvas */}
+              <canvas
+                ref={maskCanvasRef}
+                onPointerDown={handlePointerDown}
+                onPointerMove={handlePointerMove}
+                onPointerUp={handlePointerUp}
+                onPointerCancel={handlePointerUp}
+                className={`absolute inset-0 w-full h-full rounded-lg touch-none ${
+                  showMask ? "opacity-100" : "opacity-0 pointer-events-none"
+                }`}
+                style={{ cursor: "none" }}
+              />
+
+              {/* Dynamic Animated Brush / Eraser Circular Cursor Tracker */}
+              {isCursorInside && cursorPos && (
+                <div
+                  className="pointer-events-none absolute rounded-full border-2 transition-transform duration-75 ease-out"
+                  style={{
+                    left: `${cursorPos.x}px`,
+                    top: `${cursorPos.y}px`,
+                    width: `${brushSize * (maskCanvasRef.current ? maskCanvasRef.current.clientWidth / maskCanvasRef.current.width : 1)}px`,
+                    height: `${brushSize * (maskCanvasRef.current ? maskCanvasRef.current.clientHeight / maskCanvasRef.current.height : 1)}px`,
+                    transform: "translate(-50%, -50%)",
+                    borderColor:
+                      tool === "eraser"
+                        ? "#38bdf8"
+                        : MASK_COLORS[maskColorIndex].hex,
+                    backgroundColor:
+                      tool === "eraser"
+                        ? "rgba(56, 189, 248, 0.2)"
+                        : MASK_COLORS[maskColorIndex].color.replace("0.6", "0.25"),
+                    boxShadow:
+                      tool === "eraser"
+                        ? "0 0 12px rgba(56, 189, 248, 0.5)"
+                        : `0 0 14px ${MASK_COLORS[maskColorIndex].hex}88`,
+                  }}
+                />
+              )}
+            </div>
+
+            {/* Quick helper tip badge at bottom of canvas */}
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 px-3 py-1.5 rounded-full bg-zinc-900/90 backdrop-blur-md border border-zinc-800/80 text-[11px] text-zinc-400 shadow-lg">
+              <span className="w-2 h-2 rounded-full bg-indigo-500 animate-ping" />
+              <span>
+                {tool === "brush"
+                  ? "Paint over any area you want to replace or edit"
+                  : "Erasing mask from canvas"}
+              </span>
+              <span className="text-zinc-600">|</span>
+              <span className="font-mono text-zinc-500">Shortcuts: B (Brush), E (Eraser), [ ] (Size)</span>
+            </div>
+          </div>
+
+          {/* Right Sidebar: Grouped Tools & Settings */}
+          <div className="w-80 md:w-96 border-l border-zinc-800 bg-zinc-900/60 overflow-y-auto p-5 space-y-6 flex flex-col">
+            {/* GROUP 1: Drawing & Masking Tools */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-indigo-400 flex items-center gap-1.5">
+                  <Paintbrush className="w-3.5 h-3.5" />
+                  1. Drawing Tool
+                </span>
+                <span className="text-[11px] text-zinc-500 font-mono">
+                  {hasMaskContent ? "Mask active" : "No mask"}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setTool("brush")}
+                  className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl border font-semibold text-xs transition-all active:scale-95 ${
+                    tool === "brush"
+                      ? "bg-indigo-600 border-indigo-500 text-white shadow-lg shadow-indigo-600/30"
+                      : "bg-zinc-950 border-zinc-800 text-zinc-300 hover:bg-zinc-800"
+                  }`}
+                >
+                  <Paintbrush className="w-4 h-4" />
+                  <span>Brush Tool [B]</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setTool("eraser")}
+                  className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl border font-semibold text-xs transition-all active:scale-95 ${
+                    tool === "eraser"
+                      ? "bg-cyan-600 border-cyan-500 text-white shadow-lg shadow-cyan-600/30"
+                      : "bg-zinc-950 border-zinc-800 text-zinc-300 hover:bg-zinc-800"
+                  }`}
+                >
+                  <Eraser className="w-4 h-4" />
+                  <span>Eraser Tool [E]</span>
+                </button>
+              </div>
+
+              {/* Mask Tint Color Selector */}
+              <div className="flex items-center justify-between pt-1">
+                <span className="text-[11px] text-zinc-400">Mask Overlay Tint:</span>
+                <div className="flex items-center gap-1.5">
+                  {MASK_COLORS.map((mc, idx) => (
+                    <button
+                      key={mc.id}
+                      type="button"
+                      onClick={() => setMaskColorIndex(idx)}
+                      className={`w-5 h-5 rounded-full border-2 transition-transform ${
+                        maskColorIndex === idx ? "scale-125 border-white shadow-md" : "border-transparent opacity-60 hover:opacity-100"
+                      }`}
+                      style={{ backgroundColor: mc.hex }}
+                      title={mc.label}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* GROUP 2: Brush Settings */}
+            <div className="space-y-3 p-4 rounded-xl bg-zinc-950/70 border border-zinc-800/80">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-zinc-300 flex items-center gap-1.5">
+                  <Sliders className="w-3.5 h-3.5 text-indigo-400" />
+                  2. Brush Settings
+                </span>
+                <span className="text-xs font-mono font-bold text-indigo-400 bg-indigo-950/60 px-2 py-0.5 rounded border border-indigo-800/50">
+                  {brushSize}px
+                </span>
+              </div>
+
+              {/* Dynamic Brush Size Slider + Live Ring Preview */}
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-3">
+                  <input
+                    type="range"
+                    min={8}
+                    max={180}
+                    value={brushSize}
+                    onChange={(e) => setBrushSize(Number(e.target.value))}
+                    className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+                  />
+                  {/* Miniature animated circle preview */}
+                  <div className="w-8 h-8 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center shrink-0">
+                    <div
+                      className="rounded-full bg-indigo-400 transition-all duration-100"
+                      style={{
+                        width: `${Math.max(4, Math.min(24, (brushSize / 180) * 24))}px`,
+                        height: `${Math.max(4, Math.min(24, (brushSize / 180) * 24))}px`,
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* Quick Size Preset Chips */}
+                <div className="flex gap-1.5 pt-1">
+                  {[
+                    { label: "Fine", size: 16 },
+                    { label: "Med", size: 40 },
+                    { label: "Wide", size: 80 },
+                    { label: "Huge", size: 140 },
+                  ].map((preset) => (
+                    <button
+                      key={preset.label}
+                      type="button"
+                      onClick={() => setBrushSize(preset.size)}
+                      className={`flex-1 py-1 rounded text-[11px] font-medium border transition-all active:scale-95 ${
+                        brushSize === preset.size
+                          ? "bg-indigo-600 border-indigo-500 text-white"
+                          : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200"
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Opacity Slider */}
+              <div className="pt-2 border-t border-zinc-800/80 space-y-1">
+                <div className="flex justify-between text-[11px] text-zinc-400">
+                  <span>Mask Opacity</span>
+                  <span className="font-mono">{Math.round(brushOpacity * 100)}%</span>
+                </div>
+                <input
+                  type="range"
+                  min={0.3}
+                  max={1.0}
+                  step={0.05}
+                  value={brushOpacity}
+                  onChange={(e) => setBrushOpacity(Number(e.target.value))}
+                  className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+                />
+              </div>
+            </div>
+
+            {/* GROUP 3: Inpaint Parameters & Action */}
+            <div className="space-y-3 p-4 rounded-xl bg-zinc-950/70 border border-zinc-800/80">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-indigo-400 flex items-center gap-1.5">
+                  <Wand2 className="w-3.5 h-3.5" />
+                  3. Inpaint Options
+                </span>
+                <span className="text-[10px] text-zinc-500">qwen_image_21_inpaint</span>
+              </div>
+
+              {/* Prompt Textarea */}
+              <div>
+                <label className="block text-xs font-medium text-zinc-300 mb-1">
+                  Inpaint Prompt (Describe replacement)
+                </label>
+                <textarea
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  rows={3}
+                  placeholder="e.g. detailed heroic anime sword, golden energy sparkles, cel shaded..."
+                  className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs text-zinc-100 focus:border-indigo-500 focus:outline-none placeholder:text-zinc-600 transition-colors"
+                  disabled={isInpainting}
+                />
+              </div>
+
+              {/* Quick Preset Prompt Chips */}
+              <div className="space-y-1.5">
+                <span className="text-[11px] text-zinc-400 font-medium">Quick Inpaint Presets:</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {INPAINT_PRESETS.map((p) => (
+                    <button
+                      key={p.label}
+                      type="button"
+                      onClick={() => setPrompt(p.prompt)}
+                      className="px-2 py-1 rounded-md text-[11px] bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white hover:bg-zinc-800 hover:border-indigo-500/50 hover:-translate-y-0.5 active:scale-95 transition-all flex items-center gap-1"
+                    >
+                      <span>{p.icon}</span>
+                      <span>{p.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Negative Prompt (Collapsible / Compact) */}
+              <div>
+                <label className="block text-[11px] text-zinc-400 mb-1">Negative Prompt</label>
+                <input
+                  type="text"
+                  value={negativePrompt}
+                  onChange={(e) => setNegativePrompt(e.target.value)}
+                  className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-2.5 py-1.5 text-xs text-zinc-300 focus:border-indigo-500 focus:outline-none"
+                  disabled={isInpainting}
+                />
+              </div>
+
+              {/* Seed with Randomizer */}
+              <div className="flex items-center gap-2">
+                <div className="flex-1">
+                  <label className="block text-[11px] text-zinc-400 mb-0.5">Seed</label>
+                  <input
+                    type="number"
+                    value={seed}
+                    onChange={(e) => setSeed(Number(e.target.value))}
+                    className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-2.5 py-1 text-xs text-zinc-200 font-mono"
+                    disabled={isInpainting}
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSeed(Math.floor(Math.random() * 900000000) + 100000000)}
+                  disabled={isInpainting}
+                  className="mt-4 p-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-indigo-400 active:scale-95 transition-all"
+                  title="Randomize seed"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              {/* Error Alert */}
+              {inpaintError && (
+                <div className="p-2.5 rounded-lg bg-rose-950/40 border border-rose-800/80 text-rose-300 text-xs flex items-start gap-2 animate-in fade-in">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-400 mt-0.5" />
+                  <span className="break-words">{inpaintError}</span>
+                </div>
+              )}
+
+              {/* Progress Feedback during Inpainting */}
+              {isInpainting && (
+                <div className="space-y-2 p-3 rounded-xl bg-indigo-950/40 border border-indigo-800/60 animate-in fade-in">
+                  <div className="flex items-center justify-between text-xs text-indigo-300 font-medium">
+                    <span className="flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-indigo-400 animate-spin" />
+                      {inpaintStatusText || "Inpainting with ComfyUI..."}
+                    </span>
+                    <span className="font-mono font-bold">{Math.round(inpaintProgress * 100)}%</span>
+                  </div>
+                  <div className="w-full h-1.5 bg-zinc-900 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 rounded-full transition-all duration-300"
+                      style={{ width: `${Math.max(10, inpaintProgress * 100)}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Inpaint Action Button */}
+              <button
+                type="button"
+                onClick={handleInpaintSubmit}
+                disabled={isInpainting || !prompt.trim() || !hasMaskContent}
+                className={`w-full py-3 px-4 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all duration-200 ${
+                  isInpainting
+                    ? "bg-zinc-800 text-zinc-500 border border-zinc-700 cursor-not-allowed"
+                    : !hasMaskContent
+                    ? "bg-zinc-900 text-zinc-500 border border-zinc-800 cursor-not-allowed"
+                    : "bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 hover:from-indigo-500 hover:via-purple-500 hover:to-pink-500 text-white shadow-lg shadow-purple-600/30 hover:shadow-purple-600/50 active:scale-[0.98] border border-indigo-400/30"
+                }`}
+              >
+                <Sparkles className={`w-4 h-4 ${isInpainting ? "animate-spin" : ""}`} />
+                <span>
+                  {isInpainting
+                    ? "Inpainting..."
+                    : !hasMaskContent
+                    ? "Paint a mask on image to inpaint"
+                    : "Inpaint Masked Area with ComfyUI"}
+                </span>
+              </button>
+            </div>
+
+            {/* Toast Feedback */}
+            {toastMessage && (
+              <div className="p-2.5 rounded-lg bg-emerald-950/80 border border-emerald-600/80 text-emerald-300 text-xs flex items-center gap-2 animate-in fade-in duration-150">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>{toastMessage}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};

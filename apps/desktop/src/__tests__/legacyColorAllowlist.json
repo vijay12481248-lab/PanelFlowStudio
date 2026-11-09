@@ -1,6 +1,7 @@
 [
   "apps/desktop/src/components/AutoPilotModal.tsx",
   "apps/desktop/src/components/GlobalLLMSelector.tsx",
+  "apps/desktop/src/components/ImageEditorModal.tsx",
   "apps/desktop/src/components/JobActivityPanel.tsx",
   "apps/desktop/src/components/ProviderHealthModal.tsx",
   "apps/desktop/src/components/audio-library/AIMusicStudio.tsx",

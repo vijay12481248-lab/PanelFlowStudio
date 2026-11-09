@@ -9,6 +9,7 @@ import type {
 import type { Job, Project } from "@panelflow/shared-types";
 import { Badge, Button, Card, Icons, ProgressBar } from "@panelflow/ui";
 import { useError } from "../context/ErrorContext";
+import { ImageEditorModal } from "../components/ImageEditorModal";
 
 export interface ComfyImageScreenProps {
   project: Project;
@@ -59,6 +60,13 @@ export const ComfyImageScreen: React.FC<ComfyImageScreenProps> = ({ project, onB
   const [activeJob, setActiveJob] = useState<Job | null>(null);
   const [comfyLoading, setComfyLoading] = useState(true);
   const [comfySubmitting, setComfySubmitting] = useState(false);
+  const [selectedAssetForModal, setSelectedAssetForModal] = useState<GeneratedAsset | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  const handleOpenAssetModal = (assetToOpen: GeneratedAsset) => {
+    setSelectedAssetForModal(assetToOpen);
+    setIsModalOpen(true);
+  };
 
   const loadAssets = useCallback(async () => {
     try {
@@ -457,16 +465,21 @@ export const ComfyImageScreen: React.FC<ComfyImageScreenProps> = ({ project, onB
             <Card className="p-4 space-y-2">
               <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">Project Assets ({assets.length})</h3>
               {latestAsset ? (
-                <div className="flex items-center gap-3 p-2 rounded-lg bg-zinc-900 border border-zinc-800">
+                <div
+                  onClick={() => handleOpenAssetModal(latestAsset)}
+                  className="flex items-center gap-3 p-2 rounded-lg bg-zinc-900 border border-zinc-800 hover:border-indigo-500 cursor-pointer transition-all hover:scale-[1.01] active:scale-[0.99]"
+                  title="Click to view full & inpaint"
+                >
                   <img
                     src={api.getGeneratedAssetUrl(project.id, latestAsset.id)}
                     alt="Latest asset thumbnail"
                     className="w-12 h-12 object-cover rounded border border-zinc-700 bg-black"
                   />
-                  <div className="text-xs text-zinc-400 overflow-hidden">
+                  <div className="text-xs text-zinc-400 overflow-hidden flex-1">
                     <p className="text-zinc-200 font-medium truncate">{latestAsset.filename}</p>
                     <p>{latestAsset.width} × {latestAsset.height} · {latestAsset.asset_type}</p>
                   </div>
+                  <span className="text-[11px] text-indigo-400 font-medium pr-1">Edit ↗</span>
                 </div>
               ) : (
                 <p className="text-xs text-zinc-500">No previous project assets recorded.</p>
@@ -520,15 +533,77 @@ export const ComfyImageScreen: React.FC<ComfyImageScreenProps> = ({ project, onB
           </Card>
 
           <Card className="p-5 space-y-4">
-            <h2 className="font-semibold text-zinc-100">Latest generated asset</h2>
+            <div className="flex items-center justify-between">
+              <h2 className="font-semibold text-zinc-100">Latest generated asset</h2>
+              {latestAsset && (
+                <button
+                  type="button"
+                  onClick={() => handleOpenAssetModal(latestAsset)}
+                  className="text-xs text-indigo-400 hover:text-indigo-300 font-semibold flex items-center gap-1 hover:underline active:scale-95 transition-all"
+                >
+                  <Icons.Sparkles className="w-3.5 h-3.5" />
+                  <span>Open Inpainter & Studio ↗</span>
+                </button>
+              )}
+            </div>
             {latestAsset ? (
               <>
-                <img src={api.getGeneratedAssetUrl(project.id, latestAsset.id)} alt="Latest generated manga asset" className="w-full rounded-lg border border-zinc-700 bg-zinc-950" />
+                <div
+                  onClick={() => handleOpenAssetModal(latestAsset)}
+                  className="group relative cursor-pointer overflow-hidden rounded-xl border border-zinc-700 bg-zinc-950 transition-all duration-200 hover:border-indigo-500 hover:shadow-2xl hover:shadow-indigo-500/25 active:scale-[0.99]"
+                  title="Click to view full image, brush mask & inpaint"
+                >
+                  <img
+                    src={api.getGeneratedAssetUrl(project.id, latestAsset.id)}
+                    alt="Latest generated manga asset"
+                    className="w-full object-contain transition-transform duration-300 group-hover:scale-[1.02]"
+                  />
+                  {/* Animated Hover Overlay with Glass Effect */}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-200 flex flex-col items-center justify-center gap-2.5 p-4 text-center backdrop-blur-[2px]">
+                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-indigo-600 to-pink-500 text-white flex items-center justify-center shadow-lg shadow-indigo-600/40 transform group-hover:scale-110 transition-transform duration-200">
+                      <Icons.Sparkles className="w-6 h-6 animate-pulse" />
+                    </div>
+                    <p className="text-sm font-bold text-white drop-shadow">Click to Open Full View & Inpaint</p>
+                    <p className="text-xs text-zinc-300 max-w-xs drop-shadow">
+                      Dual-layer brush masking, instant inpainting with Qwen 2.1 Turbo, outfit and prompt presets
+                    </p>
+                  </div>
+                </div>
                 <div className="text-xs text-zinc-400 space-y-1">
                   <p>{latestAsset.width} × {latestAsset.height} · {latestAsset.byte_size.toLocaleString()} bytes</p>
                   <p className="font-mono break-all">SHA-256: {latestAsset.sha256}</p>
                   <p>Asset status: <span className="text-emerald-400">{latestAsset.status}</span></p>
                 </div>
+
+                {/* Project Assets Bin Reel */}
+                {assets.length > 1 && (
+                  <div className="space-y-2 pt-2 border-t border-zinc-800/80">
+                    <div className="flex items-center justify-between text-xs text-zinc-400">
+                      <span className="font-semibold uppercase tracking-wider">Project Assets ({assets.length})</span>
+                      <span className="text-[11px] text-zinc-500">Click any asset to edit</span>
+                    </div>
+                    <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin">
+                      {assets.map((item) => (
+                        <div
+                          key={item.id}
+                          onClick={() => handleOpenAssetModal(item)}
+                          className={`shrink-0 w-16 h-20 rounded-lg overflow-hidden border cursor-pointer transition-all hover:scale-105 active:scale-95 ${
+                            item.id === latestAsset.id
+                              ? "border-indigo-500 ring-2 ring-indigo-500/40 shadow-md"
+                              : "border-zinc-800 hover:border-zinc-600 opacity-70 hover:opacity-100"
+                          }`}
+                          title={`${item.filename} (${item.width}x${item.height})`}
+                        >
+                          <img
+                            src={api.getGeneratedAssetUrl(project.id, item.id)}
+                            alt={item.filename}
+                            className="w-full h-full object-cover bg-black"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </>
             ) : (
               <div className="min-h-64 rounded-lg border border-dashed border-zinc-700 flex items-center justify-center text-sm text-zinc-500 text-center px-6">
@@ -538,6 +613,18 @@ export const ComfyImageScreen: React.FC<ComfyImageScreenProps> = ({ project, onB
           </Card>
         </div>
       )}
+
+      {/* Interactive Full-Image Editor & Inpainter Modal */}
+      <ImageEditorModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        projectId={project.id}
+        asset={selectedAssetForModal}
+        onAssetUpdated={(newAsset) => {
+          loadAssets();
+          setSelectedAssetForModal(newAsset);
+        }}
+      />
     </div>
   );
 };

@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { api } from "@panelflow/api-client";
+import type { YouTubeStatus } from "@panelflow/api-client";
 import type {
   ProviderHealth,
   SystemProvidersResponse,
@@ -13,10 +14,16 @@ import type {
 } from "@panelflow/shared-types";
 import { Button, Card, Badge, ProgressBar, Icons } from "@panelflow/ui";
 
+const YoutubeIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+  <svg viewBox="0 0 24 24" fill="currentColor" {...props}>
+    <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
+  </svg>
+);
+
 interface ProviderHealthModalProps {
   open: boolean;
   onClose: () => void;
-  initialTab?: "global" | "cloud_llm" | "ollama" | "system";
+  initialTab?: "global" | "cloud_llm" | "ollama" | "system" | "youtube";
 }
 
 const statusColor: Record<string, string> = {
@@ -72,7 +79,220 @@ const providerGuidance: Record<string, string> = {
 };
 
 export const ProviderHealthModal: React.FC<ProviderHealthModalProps> = ({ open, onClose, initialTab = "global" }) => {
-  const [activeTab, setActiveTab] = useState<"global" | "cloud_llm" | "ollama" | "system">(initialTab);
+  const [activeTab, setActiveTab] = useState<"global" | "cloud_llm" | "ollama" | "system" | "youtube">(initialTab);
+
+  // YouTube OAuth, Multi-Channel & Publishing State
+  const [ytStatus, setYtStatus] = useState<YouTubeStatus | null>(null);
+  const [ytClientId, setYtClientId] = useState<string>("");
+  const [ytClientSecret, setYtClientSecret] = useState<string>("");
+  const [ytBusy, setYtBusy] = useState<boolean>(false);
+  const [ytError, setYtError] = useState<string | null>(null);
+  const [ytSuccessMsg, setYtSuccessMsg] = useState<string | null>(null);
+  const [newChannelName, setNewChannelName] = useState<string>("");
+  const [showAddChannel, setShowAddChannel] = useState<boolean>(false);
+  const [showInfoModal, setShowInfoModal] = useState<boolean>(false);
+  const [agentUploadEnabled, setAgentUploadEnabled] = useState<boolean>(true);
+  const [agentDefaultPrivacy, setAgentDefaultPrivacy] = useState<"private" | "unlisted" | "public">("private");
+  const [agentPublishTime, setAgentPublishTime] = useState<string>("18:00");
+  const [agentLeadTimeMin, setAgentLeadTimeMin] = useState<number>(20);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const loadYoutubeStatus = async (channelId?: string) => {
+    try {
+      const status = await api.youtubeStatus(channelId);
+      setYtStatus(status);
+      if (status.agent_settings) {
+        setAgentUploadEnabled(status.agent_settings.enabled);
+        setAgentDefaultPrivacy(status.agent_settings.default_privacy || "private");
+        if (status.agent_settings.publish_time) {
+          setAgentPublishTime(status.agent_settings.publish_time);
+        }
+        if (typeof status.agent_settings.lead_time_min === "number") {
+          setAgentLeadTimeMin(status.agent_settings.lead_time_min);
+        }
+      }
+      if (status.masked_client_id && !ytClientId) {
+        setYtClientId(status.masked_client_id);
+      }
+      if (status.error) setYtError(status.error);
+    } catch (err: any) {
+      console.warn("Could not load YouTube status:", err);
+    }
+  };
+
+  const handleConnectYoutube = async (channelId?: string) => {
+    setYtBusy(true);
+    setYtError(null);
+    setYtSuccessMsg(null);
+    try {
+      const targetChannel = channelId || ytStatus?.active_channel_id;
+      if (ytClientId.trim() && ytClientSecret.trim()) {
+        await api.saveYoutubeClient(ytClientId.trim(), ytClientSecret.trim(), targetChannel);
+        setYtClientSecret("");
+      }
+      const { auth_url } = await api.youtubeConnect(targetChannel);
+      window.open(auth_url, "_blank", "noopener");
+      await loadYoutubeStatus(targetChannel);
+      setYtSuccessMsg("Opened Google authorization in your browser. Complete sign-in, then return to PanelFlow Studio.");
+    } catch (err: any) {
+      setYtError(err.message || String(err));
+    } finally {
+      setYtBusy(false);
+    }
+  };
+
+  const handleSaveCredentialsOnly = async () => {
+    if (!ytClientId.trim() || !ytClientSecret.trim()) {
+      setYtError("Please enter both OAuth Client ID and OAuth Client Secret.");
+      return;
+    }
+    setYtBusy(true);
+    setYtError(null);
+    setYtSuccessMsg(null);
+    try {
+      const targetChannel = ytStatus?.active_channel_id;
+      await api.saveYoutubeClient(ytClientId.trim(), ytClientSecret.trim(), targetChannel);
+      setYtClientSecret("");
+      await loadYoutubeStatus(targetChannel);
+      setYtSuccessMsg("OAuth credentials saved and encoded securely on local disk.");
+    } catch (err: any) {
+      setYtError(err.message || String(err));
+    } finally {
+      setYtBusy(false);
+    }
+  };
+
+  const handleDisconnectYoutube = async (channelId?: string) => {
+    setYtBusy(true);
+    setYtError(null);
+    setYtSuccessMsg(null);
+    try {
+      const targetChannel = channelId || ytStatus?.active_channel_id;
+      const updated = await api.youtubeDisconnect(targetChannel);
+      setYtStatus(updated);
+      setYtSuccessMsg("Disconnected channel and removed stored tokens.");
+    } catch (err: any) {
+      setYtError(err.message || String(err));
+    } finally {
+      setYtBusy(false);
+    }
+  };
+
+  const handleConfigFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setYtBusy(true);
+    setYtError(null);
+    setYtSuccessMsg(null);
+    try {
+      const text = await file.text();
+      let parsed: any;
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        throw new Error(`"${file.name}" is not a valid JSON file.`);
+      }
+
+      const source = parsed.installed || parsed.web || parsed;
+      const cid = (typeof source?.client_id === "string" ? source.client_id : "").trim();
+      const csecret = (typeof source?.client_secret === "string" ? source.client_secret : "").trim();
+
+      if (!cid || !csecret) {
+        throw new Error(
+          `The selected file "${file.name}" contains empty credentials ("client_id" or "client_secret" is missing or blank). Please download your OAuth 2.0 Client ID JSON from Google Cloud Console (Credentials > OAuth 2.0 Client IDs for Desktop app), or enter them manually in the fields below.`
+        );
+      }
+
+      setYtClientId(cid);
+      setYtClientSecret(csecret);
+
+      const targetChannel = ytStatus?.active_channel_id;
+      try {
+        const updated = await api.uploadYoutubeClientFile(parsed, targetChannel);
+        setYtStatus(updated);
+      } catch {
+        await api.saveYoutubeClient(cid, csecret, targetChannel);
+        await loadYoutubeStatus(targetChannel);
+      }
+      setYtClientSecret("");
+      setYtSuccessMsg(`Imported and encoded Google OAuth credentials from "${file.name}" successfully.`);
+    } catch (err: any) {
+      setYtError(`Failed to import OAuth credentials file: ${err.message || String(err)}`);
+    } finally {
+      setYtBusy(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const handleCreateChannel = async () => {
+    if (!newChannelName.trim()) return;
+    setYtBusy(true);
+    setYtError(null);
+    try {
+      const res = await api.createYoutubeChannel(newChannelName.trim());
+      setNewChannelName("");
+      setShowAddChannel(false);
+      await loadYoutubeStatus(res.created.id);
+      setYtSuccessMsg(`Created channel profile "${res.created.name}". You can now connect it.`);
+    } catch (err: any) {
+      setYtError(err.message || String(err));
+    } finally {
+      setYtBusy(false);
+    }
+  };
+
+  const handleActivateChannel = async (channelId: string) => {
+    setYtBusy(true);
+    setYtError(null);
+    try {
+      const updated = await api.activateYoutubeChannel(channelId);
+      setYtStatus(updated);
+      const activeName = updated.channels?.find((c) => c.id === channelId)?.name || channelId;
+      setYtSuccessMsg(`Active channel switched to "${activeName}". Agent uploads will use this channel.`);
+    } catch (err: any) {
+      setYtError(err.message || String(err));
+    } finally {
+      setYtBusy(false);
+    }
+  };
+
+  const handleDeleteChannel = async (channelId: string) => {
+    const target = ytStatus?.channels?.find((c) => c.id === channelId);
+    if (!confirm(`Are you sure you want to remove the channel profile "${target?.name || channelId}"?`)) return;
+    setYtBusy(true);
+    setYtError(null);
+    try {
+      const updated = await api.deleteYoutubeChannel(channelId);
+      setYtStatus(updated);
+      setYtSuccessMsg("Removed channel profile.");
+    } catch (err: any) {
+      setYtError(err.message || String(err));
+    } finally {
+      setYtBusy(false);
+    }
+  };
+
+  const handleSaveAgentSettings = async () => {
+    setYtBusy(true);
+    setYtError(null);
+    try {
+      const updated = await api.updateYoutubeAgentSettings({
+        enabled: agentUploadEnabled,
+        default_privacy: agentDefaultPrivacy,
+        publish_time: agentPublishTime,
+        lead_time_min: agentLeadTimeMin,
+      });
+      setAgentUploadEnabled(updated.enabled);
+      setAgentDefaultPrivacy(updated.default_privacy);
+      if (updated.publish_time) setAgentPublishTime(updated.publish_time);
+      if (typeof updated.lead_time_min === "number") setAgentLeadTimeMin(updated.lead_time_min);
+      setYtSuccessMsg("Updated Agent & Scheduler publishing settings successfully.");
+    } catch (err: any) {
+      setYtError(err.message || String(err));
+    } finally {
+      setYtBusy(false);
+    }
+  };
   const [data, setData] = useState<SystemProvidersResponse | null>(null);
   const [hardware, setHardware] = useState<HardwareDiagnostics | null>(null);
   const [loading, setLoading] = useState(false);
@@ -385,6 +605,7 @@ export const ProviderHealthModal: React.FC<ProviderHealthModalProps> = ({ open, 
       ]);
       setData(providersResult);
       if (hwResult) setHardware(hwResult);
+      await loadYoutubeStatus();
     } catch (err) {
       console.error("Failed to load provider health:", err);
     } finally {
@@ -491,6 +712,7 @@ export const ProviderHealthModal: React.FC<ProviderHealthModalProps> = ({ open, 
       loadHealth();
       loadOllamaAndResources();
       loadCloudConfig();
+      loadYoutubeStatus();
     }
   }, [open, initialTab]);
 
@@ -518,7 +740,7 @@ export const ProviderHealthModal: React.FC<ProviderHealthModalProps> = ({ open, 
         </div>
 
         {/* Navigation Tabs */}
-        <div className="shrink-0 grid grid-cols-4 border-b border-zinc-800 px-2 sm:px-6 bg-zinc-950/60">
+        <div className="shrink-0 grid grid-cols-5 border-b border-zinc-800 px-2 sm:px-6 bg-zinc-950/60">
           <button
             onClick={() => setActiveTab("global")}
             className={`min-w-0 py-2.5 px-1 sm:px-3 text-[11px] sm:text-xs font-bold border-b-2 transition-colors flex items-center justify-center gap-1.5 ${
@@ -550,6 +772,20 @@ export const ProviderHealthModal: React.FC<ProviderHealthModalProps> = ({ open, 
             }`}
           >
             Local Ollama
+          </button>
+          <button
+            onClick={() => setActiveTab("youtube")}
+            className={`min-w-0 py-2.5 px-1 sm:px-3 text-[11px] sm:text-xs font-bold border-b-2 transition-colors flex items-center justify-center gap-1.5 ${
+              activeTab === "youtube"
+                ? "border-red-500 text-red-300"
+                : "border-transparent text-zinc-400 hover:text-zinc-200"
+            }`}
+          >
+            <YoutubeIcon className={`w-3.5 h-3.5 ${activeTab === "youtube" ? "text-red-500" : "text-zinc-400"}`} />
+            YouTube
+            {ytStatus?.connected && (
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" title="Connected" />
+            )}
           </button>
           <button
             onClick={() => setActiveTab("system")}
@@ -799,7 +1035,7 @@ export const ProviderHealthModal: React.FC<ProviderHealthModalProps> = ({ open, 
               </Card>
             </div>
           )}
-          {activeTab === "system" ? (
+          {activeTab === "system" && (
             <>
               {/* Hardware Diagnostics Card */}
               {hardware && (
@@ -1016,7 +1252,9 @@ export const ProviderHealthModal: React.FC<ProviderHealthModalProps> = ({ open, 
                 )}
               </div>
             </>
-          ) : (
+          )}
+
+          {activeTab === "ollama" && (
             /* Ollama & Hardware Telemetry Tab */
             <div className="space-y-4">
               {/* Endpoint Configuration Card */}
@@ -1406,6 +1644,552 @@ export const ProviderHealthModal: React.FC<ProviderHealthModalProps> = ({ open, 
                   </div>
                 </div>
               </Card>
+            </div>
+          )}
+
+          {activeTab === "youtube" && (
+            <div className="space-y-4">
+              {/* Header Status Banner */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-gradient-to-r from-red-950/30 via-zinc-900 to-zinc-950 rounded-xl border border-red-900/40 gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-red-600/20 border border-red-500/30 flex items-center justify-center text-red-500 shrink-0">
+                    <YoutubeIcon className="w-5 h-5 fill-current" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm font-bold text-zinc-100">YouTube Studio & Video Publishing</h3>
+                      {ytStatus?.connected ? (
+                        <Badge variant="success" className="text-[10px] font-mono">
+                          Connected: {ytStatus.channels?.find((c) => c.is_active)?.name || "Active Channel"}
+                        </Badge>
+                      ) : ytStatus?.pending ? (
+                        <Badge variant="warning" className="text-[10px] font-mono">Authorization Pending</Badge>
+                      ) : (
+                        <Badge variant="neutral" className="text-[10px] font-mono">Not Connected</Badge>
+                      )}
+                    </div>
+                    <p className="text-xs text-zinc-400 mt-0.5">
+                      {ytStatus?.connected
+                        ? "Active channel authorized. Videos, custom thumbnails and metadata upload directly to YouTube via resumable chunks."
+                        : ytStatus?.pending
+                        ? "Waiting for you to authorize access in your browser window."
+                        : "Connect your channel using a Google Cloud OAuth Desktop client (scope: youtube.upload)."}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <Button variant="ghost" size="sm" onClick={() => loadYoutubeStatus()} disabled={ytBusy}>
+                    <Icons.Rotate className={`w-3.5 h-3.5 mr-1 ${ytBusy ? "animate-spin" : ""}`} />
+                    Refresh
+                  </Button>
+                  {ytStatus?.connected && (
+                    <Button variant="destructive" size="sm" onClick={() => handleDisconnectYoutube()} disabled={ytBusy}>
+                      Disconnect Active
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              {/* Status Alert Messages */}
+              {(ytError || ytStatus?.error) && (
+                <div className="p-3 rounded-lg bg-rose-950/40 border border-rose-800 text-rose-300 text-xs flex items-center justify-between">
+                  <span>{ytError || ytStatus?.error}</span>
+                  <button onClick={() => setYtError(null)} className="text-rose-400 hover:text-rose-200 ml-2">✕</button>
+                </div>
+              )}
+              {ytSuccessMsg && (
+                <div className="p-3 rounded-lg bg-emerald-950/40 border border-emerald-800 text-emerald-300 text-xs flex items-center justify-between">
+                  <span>{ytSuccessMsg}</span>
+                  <button onClick={() => setYtSuccessMsg(null)} className="text-emerald-400 hover:text-emerald-200 ml-2">✕</button>
+                </div>
+              )}
+
+              {/* Multi-Channel Management Card */}
+              <Card className="p-4 bg-zinc-950 border-zinc-800 space-y-3">
+                <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold uppercase tracking-wider text-zinc-200">
+                      Configured YouTube Channels
+                    </span>
+                    <Badge variant="accent" className="text-[9px] uppercase">
+                      {ytStatus?.channels?.length || 1} Channel Profiles
+                    </Badge>
+                  </div>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setShowAddChannel(!showAddChannel)}
+                    className="text-xs"
+                  >
+                    {showAddChannel ? "Cancel" : "+ Add Channel Profile"}
+                  </Button>
+                </div>
+
+                {showAddChannel && (
+                  <div className="p-3 rounded-lg bg-zinc-900 border border-zinc-800 space-y-2">
+                    <label className="text-xs font-semibold text-zinc-300">New Channel Profile Name</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={newChannelName}
+                        onChange={(e) => setNewChannelName(e.target.value)}
+                        placeholder="e.g. Manga Recap Studio, Gaming Highlights"
+                        className="flex-1 bg-zinc-950 border border-zinc-700 rounded px-2.5 py-1.5 text-xs text-zinc-100 focus:outline-none focus:border-indigo-500"
+                      />
+                      <Button variant="primary" size="sm" onClick={handleCreateChannel} disabled={ytBusy || !newChannelName.trim()}>
+                        Create Profile
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  {ytStatus?.channels?.map((channel) => (
+                    <div
+                      key={channel.id}
+                      className={`p-3 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-colors ${
+                        channel.is_active
+                          ? "border-indigo-500/60 bg-indigo-950/20"
+                          : "border-zinc-800 bg-zinc-900/40 hover:border-zinc-700"
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div
+                          className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold ${
+                            channel.is_active ? "bg-indigo-600 text-white" : "bg-zinc-800 text-zinc-400"
+                          }`}
+                        >
+                          {channel.is_active ? "★" : "YT"}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-semibold text-zinc-100">{channel.name}</span>
+                            {channel.is_active && (
+                              <Badge variant="success" className="text-[9px] uppercase font-mono">
+                                Active Target
+                              </Badge>
+                            )}
+                            <Badge variant={channel.connected ? "success" : "neutral"} className="text-[9px] uppercase font-mono">
+                              {channel.connected ? "Connected" : "Disconnected"}
+                            </Badge>
+                          </div>
+                          <span className="text-[11px] text-zinc-500 font-mono">ID: {channel.id}</span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {!channel.is_active && (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => handleActivateChannel(channel.id)}
+                            disabled={ytBusy}
+                            className="text-xs"
+                          >
+                            Set as Active
+                          </Button>
+                        )}
+                        {!channel.connected ? (
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            onClick={() => handleConnectYoutube(channel.id)}
+                            disabled={ytBusy}
+                            className="bg-red-600 hover:bg-red-500 text-white text-xs"
+                          >
+                            Connect
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDisconnectYoutube(channel.id)}
+                            disabled={ytBusy}
+                            className="text-xs text-zinc-400 hover:text-rose-400"
+                          >
+                            Disconnect
+                          </Button>
+                        )}
+                        {(ytStatus?.channels?.length || 0) > 1 && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDeleteChannel(channel.id)}
+                            disabled={ytBusy}
+                            className="text-xs text-zinc-500 hover:text-rose-400"
+                            title="Delete channel profile"
+                          >
+                            ✕
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+
+              {/* File Config Upload & OAuth Credentials Card */}
+              <Card className="p-4 bg-zinc-950 border-zinc-800 space-y-4">
+                <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold uppercase tracking-wider text-zinc-200">
+                      OAuth 2.0 Credentials & Config Import
+                    </span>
+                    <Badge variant={ytStatus?.configured ? "accent" : "neutral"} className="text-[9px] uppercase">
+                      {ytStatus?.configured ? "Client Configured" : "Credentials Required"}
+                    </Badge>
+                  </div>
+                </div>
+
+                <p className="text-xs text-zinc-400 leading-relaxed">
+                  Provide Google Cloud OAuth 2.0 credentials for Desktop apps. Upload the downloaded{" "}
+                  <code>client_secret_*.json</code> file, or enter your Client ID and Client Secret manually below.
+                </p>
+
+                {/* File Upload Dropzone / Action Button */}
+                <div className="p-3.5 rounded-xl border border-dashed border-zinc-700 bg-zinc-900/50 flex flex-col sm:flex-row items-center justify-between gap-3">
+                  <div className="space-y-0.5 text-center sm:text-left">
+                    <span className="text-xs font-bold text-zinc-200 block">Import Google Cloud JSON File</span>
+                    <span className="text-[11px] text-zinc-400">
+                      Auto-populates and securely encodes Client ID and Secret from your downloaded file.
+                    </span>
+                  </div>
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    accept=".json,application/json"
+                    onChange={handleConfigFileUpload}
+                    className="hidden"
+                  />
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={ytBusy}
+                    className="shrink-0 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold"
+                  >
+                    Upload client_secret.json
+                  </Button>
+                </div>
+
+                {/* Permanent Credentials Inputs (Always Visible) */}
+                <div className="space-y-3 pt-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold uppercase tracking-wider text-zinc-300">
+                      OAuth Client Credentials
+                    </span>
+                    {ytStatus?.configured && (
+                      <span className="text-[11px] text-emerald-400 font-mono flex items-center gap-1">
+                        ✓ Stored on disk (enc:v1)
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                    <div className="space-y-1">
+                      <label className="text-zinc-400 font-semibold flex items-center justify-between">
+                        <span>OAuth Client ID</span>
+                        {ytStatus?.masked_client_id && (
+                          <span className="text-[10px] text-zinc-500 font-mono">Current: {ytStatus.masked_client_id}</span>
+                        )}
+                      </label>
+                      <input
+                        type="text"
+                        value={ytClientId}
+                        onChange={(e) => setYtClientId(e.target.value)}
+                        className="w-full bg-zinc-900 border border-zinc-700 rounded px-2.5 py-1.5 font-mono text-zinc-200 text-xs focus:outline-none focus:border-indigo-500"
+                        placeholder="e.g. 123456789-abcdef.apps.googleusercontent.com"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-zinc-400 font-semibold flex items-center justify-between">
+                        <span>OAuth Client Secret</span>
+                        <span className="text-[10px] text-zinc-500">Base64 encoded on disk</span>
+                      </label>
+                      <input
+                        type="password"
+                        value={ytClientSecret}
+                        onChange={(e) => setYtClientSecret(e.target.value)}
+                        className="w-full bg-zinc-900 border border-zinc-700 rounded px-2.5 py-1.5 font-mono text-zinc-200 text-xs focus:outline-none focus:border-indigo-500"
+                        placeholder={
+                          ytStatus?.configured
+                            ? "•••••••• (Encoded & Saved — enter new to replace)"
+                            : "e.g. GOCSPX-xxxxxxxxxxxx"
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  <p className="text-[11px] text-zinc-500">
+                    Credentials are stored locally in encoded format (<code>enc:v1:&lt;base64&gt;</code>) with restricted permissions. Secrets are never logged or exposed in API responses.
+                  </p>
+
+                  <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-zinc-800">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={handleSaveCredentialsOnly}
+                      disabled={ytBusy || (!ytClientId.trim() || !ytClientSecret.trim())}
+                      className="text-xs"
+                    >
+                      Save Credentials Only
+                    </Button>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onClick={() => handleConnectYoutube()}
+                      disabled={ytBusy || (!ytStatus?.configured && (!ytClientId.trim() || !ytClientSecret.trim()))}
+                      className="bg-red-600 hover:bg-red-500 text-white text-xs"
+                    >
+                      <YoutubeIcon className="w-3.5 h-3.5 mr-1.5 fill-current" />
+                      {ytBusy
+                        ? "Connecting..."
+                        : ytStatus?.connected
+                        ? "Re-authorize Active Channel"
+                        : "Save & Authorize Channel"}
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+
+              {/* AI Agents & Scheduler Settings Card */}
+              <Card className="p-4 bg-zinc-950 border-zinc-800 space-y-3">
+                <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold uppercase tracking-wider text-zinc-200">
+                      AI Agents & Scheduler Settings
+                    </span>
+                    <Badge variant={agentUploadEnabled ? "success" : "neutral"} className="text-[9px] uppercase">
+                      {agentUploadEnabled ? "Agent Uploads Enabled" : "Manual Only"}
+                    </Badge>
+                  </div>
+                  <Button variant="secondary" size="sm" onClick={handleSaveAgentSettings} disabled={ytBusy} className="text-xs">
+                    Save Agent Permissions
+                  </Button>
+                </div>
+
+                <p className="text-xs text-zinc-400 leading-relaxed">
+                  Configure autonomous video publishing permissions, daily release slots, and default privacy for AI Agents and Autopilot jobs.
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs pt-1">
+                  <div className="p-3 rounded-lg border border-zinc-800 bg-zinc-900/40 space-y-2">
+                    <label className="flex items-center gap-2 font-semibold text-zinc-200 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={agentUploadEnabled}
+                        onChange={(e) => setAgentUploadEnabled(e.target.checked)}
+                        className="rounded accent-indigo-500 w-4 h-4"
+                      />
+                      <span>Allow Agent Uploads</span>
+                    </label>
+                    <p className="text-[11px] text-zinc-400 leading-relaxed pl-6">
+                      Target: <strong>{ytStatus?.channels?.find((c) => c.is_active)?.name || "Active Channel"}</strong>. When off, agents render locally without uploading.
+                    </p>
+                  </div>
+
+                  <div className="p-3 rounded-lg border border-zinc-800 bg-zinc-900/40 space-y-2">
+                    <label className="font-semibold text-zinc-200 block">Default Privacy</label>
+                    <select
+                      value={agentDefaultPrivacy}
+                      onChange={(e) => setAgentDefaultPrivacy(e.target.value as any)}
+                      className="w-full bg-zinc-900 border border-zinc-700 rounded px-2.5 py-1.5 text-xs text-zinc-100 focus:outline-none focus:border-indigo-500"
+                    >
+                      <option value="private">Private (Recommended)</option>
+                      <option value="unlisted">Unlisted (Link only)</option>
+                      <option value="public">Public (Instant release)</option>
+                    </select>
+                    <p className="text-[11px] text-zinc-400 leading-relaxed">
+                      Initial visibility applied to automated uploads.
+                    </p>
+                  </div>
+
+                  <div className="p-3 rounded-lg border border-zinc-800 bg-zinc-900/40 space-y-2">
+                    <label className="font-semibold text-zinc-200 block">Scheduled Release Time</label>
+                    <input
+                      type="time"
+                      value={agentPublishTime}
+                      onChange={(e) => setAgentPublishTime(e.target.value)}
+                      className="w-full bg-zinc-900 border border-zinc-700 rounded px-2.5 py-1.5 text-xs text-zinc-100 font-mono focus:outline-none focus:border-indigo-500"
+                    />
+                    <p className="text-[11px] text-zinc-400 leading-relaxed">
+                      Daily time for scheduled public video releases.
+                    </p>
+                  </div>
+
+                  <div className="p-3 rounded-lg border border-zinc-800 bg-zinc-900/40 space-y-2">
+                    <label className="font-semibold text-zinc-200 block">Pre-Publish Lead Time</label>
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="number"
+                        min="20"
+                        max="1440"
+                        step="5"
+                        value={agentLeadTimeMin}
+                        onChange={(e) => setAgentLeadTimeMin(Math.max(20, parseInt(e.target.value) || 20))}
+                        className="w-full bg-zinc-900 border border-zinc-700 rounded px-2.5 py-1.5 text-xs text-zinc-100 font-mono focus:outline-none focus:border-indigo-500"
+                      />
+                      <span className="text-zinc-500 text-[11px]">min</span>
+                    </div>
+                    <p className="text-[11px] text-zinc-400 leading-relaxed">
+                      Min 20m for YouTube HD/4K processing before live.
+                    </p>
+                  </div>
+                </div>
+              </Card>
+
+              {/* Info Card Trigger (Replaces the two old static bottom cards) */}
+              <div className="p-3.5 rounded-xl border border-blue-900/40 bg-blue-950/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-blue-500/20 border border-blue-400/40 flex items-center justify-center text-blue-400 font-bold text-xs shrink-0">
+                    i
+                  </div>
+                  <div>
+                    <span className="text-xs font-semibold text-zinc-200 block">
+                      Google Cloud Setup Guide & Publishing Policies
+                    </span>
+                    <span className="text-[11px] text-zinc-400">
+                      Step-by-step console setup, OAuth scope, quota limits, and synthetic media policies.
+                    </span>
+                  </div>
+                </div>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setShowInfoModal(true)}
+                  className="text-xs shrink-0 flex items-center gap-1.5 border-blue-800/60 hover:bg-blue-900/40"
+                >
+                  <span className="w-4 h-4 rounded-full bg-blue-500/20 border border-blue-400 flex items-center justify-center text-[10px] text-blue-300 font-bold">
+                    i
+                  </span>
+                  Open Setup Guide & Policies
+                </Button>
+              </div>
+
+              {/* Info Dialog Modal */}
+              {showInfoModal && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
+                  <div className="bg-zinc-900 border border-zinc-700 rounded-2xl shadow-2xl max-w-3xl w-full max-h-[85vh] overflow-y-auto flex flex-col">
+                    {/* Header */}
+                    <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800 shrink-0">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-7 h-7 rounded-full bg-blue-500/20 border border-blue-400/40 flex items-center justify-center text-blue-300 font-bold text-xs">
+                          i
+                        </div>
+                        <h4 className="text-sm font-bold text-zinc-100">
+                          YouTube Publishing Setup Guide & Policies
+                        </h4>
+                      </div>
+                      <button
+                        onClick={() => setShowInfoModal(false)}
+                        className="text-zinc-400 hover:text-zinc-100 text-sm p-1 rounded hover:bg-zinc-800"
+                        title="Close guide"
+                      >
+                        ✕
+                      </button>
+                    </div>
+
+                    {/* Body */}
+                    <div className="p-6 space-y-6">
+                      {/* Section 1: Google Cloud Console Setup */}
+                      <div className="space-y-3">
+                        <span className="text-xs font-bold uppercase tracking-wider text-zinc-200 block">
+                          Google Cloud Console Setup (One-Time)
+                        </span>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                          <div className="p-3.5 rounded-xl border border-zinc-800 bg-zinc-950/60 space-y-1.5">
+                            <div className="flex items-center gap-2 text-zinc-200 font-semibold">
+                              <span className="w-5 h-5 rounded-full bg-zinc-800 text-indigo-400 text-[10px] font-bold flex items-center justify-center">1</span>
+                              Enable YouTube API
+                            </div>
+                            <p className="text-[11px] text-zinc-400 leading-relaxed">
+                              In Google Cloud Console, open <strong>APIs & Services &gt; Library</strong>, search for <strong>YouTube Data API v3</strong>, and click <strong>Enable</strong>.
+                            </p>
+                          </div>
+
+                          <div className="p-3.5 rounded-xl border border-zinc-800 bg-zinc-950/60 space-y-1.5">
+                            <div className="flex items-center gap-2 text-zinc-200 font-semibold">
+                              <span className="w-5 h-5 rounded-full bg-zinc-800 text-indigo-400 text-[10px] font-bold flex items-center justify-center">2</span>
+                              Consent Screen & Scope
+                            </div>
+                            <p className="text-[11px] text-zinc-400 leading-relaxed">
+                              Set User Type to <strong>External</strong>. Under Scopes, add:
+                            </p>
+                            <code className="block break-all bg-zinc-900 border border-zinc-800 px-2 py-1 rounded text-[10px] font-mono text-indigo-300">
+                              https://www.googleapis.com/auth/youtube.upload
+                            </code>
+                          </div>
+
+                          <div className="p-3.5 rounded-xl border border-zinc-800 bg-zinc-950/60 space-y-1.5">
+                            <div className="flex items-center gap-2 text-zinc-200 font-semibold">
+                              <span className="w-5 h-5 rounded-full bg-zinc-800 text-indigo-400 text-[10px] font-bold flex items-center justify-center">3</span>
+                              Add Test User (Fix 403 access_denied)
+                            </div>
+                            <p className="text-[11px] text-zinc-400 leading-relaxed">
+                              Under <strong>OAuth consent screen &gt; Test users</strong>, click <strong>+ Add Users</strong> and enter the exact Google/Gmail address of your channel. In browser sign-in, click <em>Advanced &gt; Go to PanelFlow Studio (unsafe)</em> to authorize.
+                            </p>
+                          </div>
+
+                          <div className="p-3.5 rounded-xl border border-zinc-800 bg-zinc-950/60 space-y-1.5">
+                            <div className="flex items-center gap-2 text-zinc-200 font-semibold">
+                              <span className="w-5 h-5 rounded-full bg-zinc-800 text-indigo-400 text-[10px] font-bold flex items-center justify-center">4</span>
+                              Download Desktop JSON
+                            </div>
+                            <p className="text-[11px] text-zinc-400 leading-relaxed">
+                              Go to <strong>Credentials &gt; Create Credentials &gt; OAuth client ID</strong>. Select Application Type <strong>Desktop app</strong>, download the JSON, and upload it in PanelFlow.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Section 2: Policies & Security */}
+                      <div className="space-y-3">
+                        <span className="text-xs font-bold uppercase tracking-wider text-zinc-200 block">
+                          PanelFlow Publishing Safety & Policies
+                        </span>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                          <div className="p-3.5 rounded-xl border border-zinc-800 bg-zinc-950/60 space-y-1">
+                            <span className="font-semibold text-zinc-200 block">Private by Default</span>
+                            <p className="text-[11px] text-zinc-400 leading-relaxed">
+                              All video uploads default to <code>private</code> status. Transitioning to public requires explicit confirmation or an automated scheduled release slot to prevent accidental publishing.
+                            </p>
+                          </div>
+
+                          <div className="p-3.5 rounded-xl border border-zinc-800 bg-zinc-950/60 space-y-1">
+                            <span className="font-semibold text-zinc-200 block">AI Synthetic Media Disclosure</span>
+                            <p className="text-[11px] text-zinc-400 leading-relaxed">
+                              All video uploads automatically declare <code>containsSyntheticMedia: true</code> in compliance with YouTube community guidelines for AI-generated content.
+                            </p>
+                          </div>
+
+                          <div className="p-3.5 rounded-xl border border-zinc-800 bg-zinc-950/60 space-y-1">
+                            <span className="font-semibold text-zinc-200 block">Encoded Credential Security</span>
+                            <p className="text-[11px] text-zinc-400 leading-relaxed">
+                              Client secrets and refresh tokens are encoded (<code>enc:v1:&lt;base64&gt;</code>) and stored exclusively in your local app data config directory. Secrets are never logged or exposed via API.
+                            </p>
+                          </div>
+
+                          <div className="p-3.5 rounded-xl border border-zinc-800 bg-zinc-950/60 space-y-1">
+                            <span className="font-semibold text-zinc-200 block">API Quota Management</span>
+                            <p className="text-[11px] text-zinc-400 leading-relaxed">
+                              Standard YouTube Data API quota provides 10,000 units/day. Each video upload uses ~1,600 units, allowing ~6 full video uploads per calendar day before quota reset.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Footer */}
+                    <div className="px-6 py-3 border-t border-zinc-800 flex justify-end shrink-0">
+                      <Button variant="secondary" size="sm" onClick={() => setShowInfoModal(false)}>
+                        Close Guide
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

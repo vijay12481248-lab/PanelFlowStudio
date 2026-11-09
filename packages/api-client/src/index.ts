@@ -107,6 +107,16 @@ export interface ComfyImageRequest {
   timeout_s?: number;
 }
 
+export interface ComfyInpaintRequest {
+  asset_id?: string;
+  image_data?: string;
+  mask_data: string;
+  prompt: string;
+  negative_prompt?: string;
+  seed?: number;
+  timeout_s?: number;
+}
+
 export interface GeneratedAsset {
   id: string;
   asset_type: string;
@@ -221,11 +231,31 @@ export interface OriginalEpisode {
   youtube_privacy: string | null;
 }
 
+export interface YouTubeChannelProfile {
+  id: string;
+  name: string;
+  is_active: boolean;
+  connected: boolean;
+  configured: boolean;
+  created_at?: string;
+}
+
+export interface YouTubeAgentSettings {
+  enabled: boolean;
+  default_privacy: "private" | "unlisted" | "public";
+  publish_time?: string;
+  lead_time_min?: number;
+}
+
 export interface YouTubeStatus {
   configured: boolean;
   connected: boolean;
   pending: boolean;
   error: string | null;
+  active_channel_id?: string;
+  channels?: YouTubeChannelProfile[];
+  agent_settings?: YouTubeAgentSettings;
+  masked_client_id?: string;
 }
 
 export interface OriginalStorySummary {
@@ -2097,6 +2127,13 @@ export class PanelFlowApiClient {
     });
   }
 
+  async inpaintComfyImage(projectId: string, request: ComfyInpaintRequest): Promise<{ job_id: string; status: string; workflow_id: string }> {
+    return this.request<{ job_id: string; status: string; workflow_id: string }>(`/api/projects/${projectId}/comfyui/inpaint`, {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
+  }
+
   async listGeneratedAssets(projectId: string): Promise<{ assets: GeneratedAsset[] }> {
     return this.request<{ assets: GeneratedAsset[] }>(`/api/projects/${projectId}/assets`);
   }
@@ -2317,20 +2354,69 @@ export class PanelFlowApiClient {
   }
 
   // YouTube connection and upload
-  async youtubeStatus(): Promise<YouTubeStatus> {
-    return this.request<YouTubeStatus>("/api/youtube/status");
+  async youtubeStatus(channelId?: string): Promise<YouTubeStatus> {
+    const q = channelId ? `?channel_id=${encodeURIComponent(channelId)}` : "";
+    return this.request<YouTubeStatus>(`/api/youtube/status${q}`);
   }
 
-  async saveYoutubeClient(client_id: string, client_secret: string): Promise<YouTubeStatus> {
-    return this.request<YouTubeStatus>("/api/youtube/client", { method: "PUT", body: JSON.stringify({ client_id, client_secret }) });
+  async saveYoutubeClient(client_id: string, client_secret: string, channelId?: string): Promise<YouTubeStatus> {
+    return this.request<YouTubeStatus>("/api/youtube/client", {
+      method: "PUT",
+      body: JSON.stringify({ client_id, client_secret, channel_id: channelId }),
+    });
   }
 
-  async youtubeConnect(): Promise<{ auth_url: string }> {
-    return this.request<{ auth_url: string }>("/api/youtube/connect", { method: "POST" });
+  async uploadYoutubeClientFile(content: string | Record<string, any>, channelId?: string): Promise<YouTubeStatus> {
+    return this.request<YouTubeStatus>("/api/youtube/client/file", {
+      method: "POST",
+      body: JSON.stringify({ content, channel_id: channelId }),
+    });
   }
 
-  async youtubeDisconnect(): Promise<YouTubeStatus> {
-    return this.request<YouTubeStatus>("/api/youtube/disconnect", { method: "POST" });
+  async youtubeConnect(channelId?: string): Promise<{ auth_url: string }> {
+    const q = channelId ? `?channel_id=${encodeURIComponent(channelId)}` : "";
+    return this.request<{ auth_url: string }>(`/api/youtube/connect${q}`, { method: "POST" });
+  }
+
+  async youtubeDisconnect(channelId?: string): Promise<YouTubeStatus> {
+    return this.request<YouTubeStatus>("/api/youtube/disconnect", {
+      method: "POST",
+      body: JSON.stringify({ channel_id: channelId }),
+    });
+  }
+
+  async listYoutubeChannels(): Promise<{ channels: YouTubeChannelProfile[]; active_channel_id: string }> {
+    return this.request<{ channels: YouTubeChannelProfile[]; active_channel_id: string }>("/api/youtube/channels");
+  }
+
+  async createYoutubeChannel(name: string, channelId?: string): Promise<{ created: YouTubeChannelProfile; status: YouTubeStatus }> {
+    return this.request<{ created: YouTubeChannelProfile; status: YouTubeStatus }>("/api/youtube/channels", {
+      method: "POST",
+      body: JSON.stringify({ name, channel_id: channelId }),
+    });
+  }
+
+  async activateYoutubeChannel(channelId: string): Promise<YouTubeStatus> {
+    return this.request<YouTubeStatus>(`/api/youtube/channels/${encodeURIComponent(channelId)}/activate`, {
+      method: "POST",
+    });
+  }
+
+  async deleteYoutubeChannel(channelId: string): Promise<YouTubeStatus> {
+    return this.request<YouTubeStatus>(`/api/youtube/channels/${encodeURIComponent(channelId)}`, {
+      method: "DELETE",
+    });
+  }
+
+  async getYoutubeAgentSettings(): Promise<YouTubeAgentSettings> {
+    return this.request<YouTubeAgentSettings>("/api/youtube/agent-settings");
+  }
+
+  async updateYoutubeAgentSettings(settings: YouTubeAgentSettings): Promise<YouTubeAgentSettings> {
+    return this.request<YouTubeAgentSettings>("/api/youtube/agent-settings", {
+      method: "PUT",
+      body: JSON.stringify(settings),
+    });
   }
 
   async uploadOriginalEpisode(
