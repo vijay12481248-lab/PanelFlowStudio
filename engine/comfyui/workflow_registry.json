@@ -439,7 +439,7 @@
     "filename": "qwen_image_21.api.json",
     "sha256": "edeeec1eb7df0154004f441c83e1a0adcc33a05f540ccb2406ce9a1587b76193",
     "requires_gpu": true,
-    "gpu_vram_mb": 12000,
+    "gpu_vram_mb": 10000,
     "model_files": [
       "qwen_image_2.1_turbo_int8_convrot.safetensors",
       "qwen3vl_8b_int8_convrot.safetensors",
@@ -703,7 +703,7 @@
     "filename": "qwen_image_21_inpaint.api.json",
     "sha256": "554b2c0e16238318fa84ca386c9f9ba961ab60b05630f8ebd7234cbd256fb797",
     "requires_gpu": true,
-    "gpu_vram_mb": 12000,
+    "gpu_vram_mb": 10000,
     "model_files": [
       "qwen_image_2.1_turbo_int8_convrot.safetensors",
       "qwen3vl_8b_int8_convrot.safetensors",
@@ -1362,6 +1362,78 @@
       "min": 256,
       "max": 2048,
       "multiple_of": 32
+    }
+  },
+  {
+    "id": "wan21_14b_i2v",
+    "purpose": "image_to_video",
+    "filename": "wan21_14b_i2v.api.json",
+    "sha256": "ed361731f3d21fc09d3ff481d08a3a5d737e2a6bd58f1f3feffc2dc5189fc1e6",
+    "requires_gpu": true,
+    "gpu_vram_mb": 14000,
+    "model_files": [
+      "wan2.1_i2v_480p_14B_fp8_scaled.safetensors",
+      "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+      "wan_2.1_vae.safetensors",
+      "CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors"
+    ],
+    "required_nodes": [
+      "CLIPLoader",
+      "CLIPTextEncode",
+      "CLIPVisionEncode",
+      "CLIPVisionLoader",
+      "CreateVideo",
+      "KSampler",
+      "LoadImage",
+      "ModelSamplingSD3",
+      "SaveVideo",
+      "UNETLoader",
+      "VAEDecode",
+      "VAELoader",
+      "WanImageToVideo"
+    ],
+    "patch_slots": {
+      "reference_image": {
+        "node_id": "6",
+        "input": "image",
+        "class_type": "LoadImage"
+      },
+      "prompt": {
+        "node_id": "8",
+        "input": "text",
+        "class_type": "CLIPTextEncode"
+      },
+      "negative_prompt": {
+        "node_id": "9",
+        "input": "text",
+        "class_type": "CLIPTextEncode"
+      },
+      "seed": {
+        "node_id": "11",
+        "input": "seed",
+        "class_type": "KSampler"
+      },
+      "filename_prefix": {
+        "node_id": "14",
+        "input": "filename_prefix",
+        "class_type": "SaveVideo"
+      },
+      "width": {
+        "node_id": "10",
+        "input": "width",
+        "class_type": "WanImageToVideo"
+      },
+      "height": {
+        "node_id": "10",
+        "input": "height",
+        "class_type": "WanImageToVideo"
+      }
+    },
+    "dimension_policy": {
+      "mode": "exact",
+      "min": 256,
+      "max": 2048,
+      "multiple_of": 16
     }
   },
   {

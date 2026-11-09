@@ -483,6 +483,7 @@ class JobManager:
             succeeded = False
             requires_gpu = False
             gpu_vram_mb = 0
+            job_type = ""
             try:
                 with SessionLocal() as db:
                     job = db.query(JobRecord).filter(JobRecord.job_id == job_id).first()
@@ -498,6 +499,7 @@ class JobManager:
                             db.commit()
                             return
 
+                    job_type = str(job.job_type or "")
                     requires_gpu = bool(job.requires_gpu)
                     gpu_vram_mb = float(job.gpu_vram_mb or 0)
                     now = utc_now()
@@ -536,11 +538,12 @@ class JobManager:
                             return
 
                 heartbeat_task = asyncio.create_task(heartbeat())
+                is_comfyui = job_type == "COMFYUI_IMAGE_GENERATION"
                 if requires_gpu:
                     while not token.is_cancelled:
                         if not self._lease_is_current(job_id, lease_id):
                             return
-                        if await resource_manager.acquire_gpu_slot(lease_id, gpu_vram_mb):
+                        if await resource_manager.acquire_gpu_slot(lease_id, gpu_vram_mb, is_comfyui=is_comfyui):
                             gpu_slot_acquired = True
                             break
                         await asyncio.sleep(1.0)

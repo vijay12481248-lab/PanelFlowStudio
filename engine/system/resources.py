@@ -251,7 +251,7 @@ class SystemResourceManager:
             },
         }
 
-    def can_admit_gpu_job(self, required_vram_mb: float = 0.0) -> Tuple[bool, str]:
+    def can_admit_gpu_job(self, required_vram_mb: float = 0.0, is_comfyui: bool = False) -> Tuple[bool, str]:
         """
         Determines whether a GPU-bound job (VLM, LLM, TTS, or GPU render) can be admitted.
         Returns (True, 'Admitted') or (False, 'Reason').
@@ -271,15 +271,47 @@ class SystemResourceManager:
         # Check VRAM headroom if specified and GPU is available
         if required_vram_mb > 0:
             gpu = self.get_gpu_memory()
-            if gpu.get("available") and gpu.get("free_mb", 0) < required_vram_mb:
-                return False, f"Insufficient GPU VRAM: {gpu.get('free_mb', 0):.0f}MB free, required {required_vram_mb:.0f}MB."
+            if gpu.get("available"):
+                if is_comfyui:
+                    # ComfyUI retains model weights in its CUDA allocator across runs to accelerate
+                    # subsequent generations, so nvidia-smi free_mb reflects ComfyUI's resident memory
+                    # rather than external starvation. Verify physical GPU total capacity supports it.
+                    if gpu.get("total_mb", 0) < required_vram_mb:
+                        return False, f"GPU total VRAM {gpu.get('total_mb', 0):.0f}MB is below required {required_vram_mb:.0f}MB."
+                elif gpu.get("free_mb", 0) < required_vram_mb:
+                    return False, f"Insufficient GPU VRAM: {gpu.get('free_mb', 0):.0f}MB free, required {required_vram_mb:.0f}MB."
 
         return True, "Admitted"
 
-    async def acquire_gpu_slot(self, job_id: str, required_vram_mb: float = 0.0) -> bool:
+    async def _try_free_comfyui_cache(self) -> None:
+        """Asks ComfyUI to release model weights and free CUDA memory pool if running."""
+        try:
+            async with httpx.AsyncClient(timeout=3.0) as client:
+                await client.post("http://127.0.0.1:8188/free", json={"unload_models": True, "free_memory": True})
+        except Exception:
+            pass
+
+    async def acquire_gpu_slot(self, job_id: str, required_vram_mb: float = 0.0, is_comfyui: bool = False) -> bool:
         """Atomically claims a GPU inference execution slot."""
         async with self._lock:
-            admitted, reason = self.can_admit_gpu_job(required_vram_mb)
+            if is_comfyui and required_vram_mb > 0:
+                try:
+                    ollama_state = await self.get_ollama_runtime()
+                    ollama_vram = float(ollama_state.get("total_ollama_vram_mb", 0.0) or 0.0)
+                    gpu = self.get_gpu_memory()
+                    if gpu.get("available") and ollama_vram > 0:
+                        available_for_comfy = gpu.get("total_mb", 0.0) - ollama_vram - 4000.0
+                        if available_for_comfy < required_vram_mb:
+                            logger.info(f"Holding ComfyUI job: Ollama is using {ollama_vram:.0f}MB VRAM")
+                            return False
+                except Exception:
+                    pass
+
+            admitted, reason = self.can_admit_gpu_job(required_vram_mb, is_comfyui=is_comfyui)
+            if not admitted and not is_comfyui and required_vram_mb > 0:
+                await self._try_free_comfyui_cache()
+                admitted, reason = self.can_admit_gpu_job(required_vram_mb, is_comfyui=is_comfyui)
+
             if admitted:
                 self._active_gpu_jobs.add(job_id)
                 logger.info(f"GPU slot acquired for job {job_id} ({len(self._active_gpu_jobs)} active)")

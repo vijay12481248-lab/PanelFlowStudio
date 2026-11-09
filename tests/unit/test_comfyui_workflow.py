@@ -328,3 +328,35 @@ def test_refine_is_off_by_default_and_when_asked_stores_the_selected_image_with_
             assert seen["ws"] == tmp_path / "generated" / "comfyui_candidates"
     finally:
         engine.dispose()
+
+
+def test_submit_comfyui_inpaint_job(tmp_path, monkeypatch):
+    from engine.api.routers.comfyui import submit_comfyui_inpaint_job, ComfyInpaintRequest
+    from engine.comfyui.service import INPAINT_WORKFLOW_ID
+    from engine.database.models import Base
+    from engine.database.session import engine as db_engine, SessionLocal
+
+    Base.metadata.create_all(bind=db_engine)
+    with SessionLocal() as db:
+        db.add(ProjectRecord(id='proj1', title='test', source_type='LOCAL_FOLDER', workspace_path=str(tmp_path)))
+        db.commit()
+
+        class FakeRegistry:
+            def metadata(self, wf_id):
+                return {'requires_gpu': True, 'gpu_vram_mb': 10000}
+            def load(self, wf_id):
+                return ({}, 'a' * 64)
+            def preflight(self, wf_id):
+                return {'ready': True, 'missing_nodes': [], 'missing_models': []}
+
+        monkeypatch.setattr('engine.api.routers.comfyui.ComfyWorkflowRegistry', lambda *a, **k: FakeRegistry())
+
+        req = ComfyInpaintRequest(
+            asset_id='asset1',
+            mask_data='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+            prompt='test inpaint prompt',
+        )
+        result = submit_comfyui_inpaint_job('proj1', req, db=db)
+        assert result['status'] == 'QUEUED'
+        assert result['workflow_id'] == INPAINT_WORKFLOW_ID
+        assert 'job_id' in result

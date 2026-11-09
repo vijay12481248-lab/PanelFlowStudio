@@ -168,3 +168,46 @@ def test_job_manager_recover_expired_leases():
         assert j.status == JobStatus.FAILED.value
         assert "cannot be rehydrated" in (j.error or "").lower()
         assert j.worker_lease_id is None
+
+
+@pytest.mark.asyncio
+async def test_can_admit_gpu_job_comfyui_with_resident_vram(monkeypatch):
+    """ComfyUI jobs must not be rejected due to ComfyUI's own resident model weights."""
+    mgr = SystemResourceManager()
+    monkeypatch.setattr(mgr, "get_gpu_memory", lambda: {
+        "available": True,
+        "device_name": "NVIDIA GeForce RTX 5060 Ti",
+        "total_mb": 16311.0,
+        "free_mb": 1200.0,
+        "used_mb": 15111.0,
+    })
+
+    # Standard non-ComfyUI job is rejected because free VRAM (1200MB) < 10000MB
+    admitted_non_comfy, reason = mgr.can_admit_gpu_job(10000, is_comfyui=False)
+    assert admitted_non_comfy is False
+    assert "Insufficient GPU VRAM" in reason
+
+    # ComfyUI job is admitted because total physical GPU capacity (16311MB) supports it
+    admitted_comfy, reason_comfy = mgr.can_admit_gpu_job(10000, is_comfyui=True)
+    assert admitted_comfy is True
+    assert reason_comfy == "Admitted"
+
+
+@pytest.mark.asyncio
+async def test_acquire_gpu_slot_comfyui_held_back_by_active_ollama(monkeypatch):
+    """ComfyUI jobs must be held back if Ollama currently occupies the GPU."""
+    mgr = SystemResourceManager()
+    monkeypatch.setattr(mgr, "get_gpu_memory", lambda: {
+        "available": True,
+        "device_name": "NVIDIA GeForce RTX 5060 Ti",
+        "total_mb": 16311.0,
+        "free_mb": 1200.0,
+        "used_mb": 15111.0,
+    })
+    async def mock_ollama_runtime(*args, **kwargs):
+        return {"total_ollama_vram_mb": 8500.0, "loaded_models_count": 1}
+    monkeypatch.setattr(mgr, "get_ollama_runtime", mock_ollama_runtime)
+
+    # Held back while Ollama is loaded
+    acquired = await mgr.acquire_gpu_slot("comfy_job_01", 10000, is_comfyui=True)
+    assert acquired is False
