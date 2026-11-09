@@ -10,6 +10,7 @@ from engine.mcp.tools import (
     anime_review_tools,
     chronoflow_tools,
     autopilot_tools,
+    youtube_tools,
 )
 
 __all__ = [
@@ -22,4 +23,5 @@ __all__ = [
     "anime_review_tools",
     "chronoflow_tools",
     "autopilot_tools",
+    "youtube_tools",
 ]
