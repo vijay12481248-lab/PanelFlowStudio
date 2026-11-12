@@ -1,5 +1,6 @@
 /* ChronoFlow NLE - player, transport and multi-track timeline (Resolve-style dark theme). */
-.nle-body { flex: 1; display: flex; flex-direction: column; min-height: 0; background: #0c0d11; overflow-y: auto; }
+.nle-body { flex: 1; display: flex; flex-direction: column; min-height: 0; background: #0c0d11; overflow-y: auto; scrollbar-width: none; -ms-overflow-style: none; }
+.nle-body::-webkit-scrollbar { display: none; width: 0; height: 0; }
 .nle-stage { flex: 1 0 auto; display: flex; min-height: 220px; background: #050608; position: relative; overflow: hidden; }
 .nle-screen { flex: 1; position: relative; overflow: hidden; background: #000; }
 .nle-screen video, .nle-screen img.nle-ovl { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
@@ -28,15 +29,22 @@
 .nle-tc small { color: #64748b; font-size: 11px; margin-left: 6px; font-weight: 400; }
 .nle-sep { width: 1px; height: 18px; background: #2d2f38; margin: 0 4px; }
 
-.nle-framebar { display: flex; gap: 8px; align-items: stretch; padding: 7px 8px; background: #101116; border-top: 1px solid #23252d; }
-.nle-framebar .thumb { width: 64px; min-height: 48px; background: #000 center/contain no-repeat; border: 1px solid #2d2f38; border-radius: 3px; flex: none; }
-.nle-framebar textarea { flex: 1; min-height: 48px; max-height: 90px; resize: vertical; background: #0a0b0e; color: #f1f5f9; border: 1px solid #2d2f38; border-radius: 3px; padding: 6px 8px; font-size: .8rem; font-family: inherit; }
+.nle-framebar { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; background: #101116; border-top: 1px solid #23252d; }
+.nle-fb-top { display: flex; gap: 8px; align-items: center; justify-content: space-between; flex-wrap: wrap; font-size: 0.74rem; }
+.nle-fb-modes { display: flex; gap: 4px; align-items: center; }
+.nle-fb-range { display: flex; gap: 6px; align-items: center; color: #94a3b8; font-family: monospace; font-size: 0.72rem; }
+.nle-fb-range b { color: #f59e0b; }
+.nle-fb-main { display: flex; gap: 8px; align-items: stretch; }
+.nle-framebar .thumb { width: 72px; min-height: 52px; background: #000 center/contain no-repeat; border: 1px solid #2d2f38; border-radius: 4px; flex: none; cursor: pointer; position: relative; overflow: hidden; }
+.nle-framebar .thumb:hover::after { content: 'Upload Ref'; position: absolute; inset: 0; background: rgba(0,0,0,0.75); color: #fcd34d; font-size: 0.62rem; display: flex; align-items: center; justify-content: center; font-weight: 700; text-align: center; }
+.nle-framebar .thumb-badge { position: absolute; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.7); font-size: 0.58rem; color: #94a3b8; text-align: center; padding: 1px 0; }
+.nle-framebar textarea { flex: 1; min-height: 52px; max-height: 90px; resize: vertical; background: #0a0b0e; color: #f1f5f9; border: 1px solid #2d2f38; border-radius: 3px; padding: 6px 8px; font-size: .8rem; font-family: inherit; }
 .nle-framebar textarea:focus { outline: 1px solid #e58525; }
-.nle-framebar .col { display: flex; flex-direction: column; gap: 4px; justify-content: space-between; }
+.nle-framebar .col { display: flex; flex-direction: column; gap: 4px; justify-content: space-between; min-width: 140px; }
 .nle-resrow { display: flex; gap: 10px; align-items: center; background: #101116; padding: 0 8px 7px; }
 .nle-resrow:has(#feCands:empty):has(#feMerge:empty) { display: none; }
 .nle-cands { display: flex; gap: 6px; overflow-x: auto; max-width: 45%; }
-.nle-cand { flex: none; width: 60px; height: 60px; border: 2px solid #2d2f38; border-radius: 3px; background: #000 center/contain no-repeat; cursor: pointer; position: relative; }
+.nle-cand { flex: none; width: 64px; height: 52px; border: 2px solid #2d2f38; border-radius: 3px; background: #000 center/contain no-repeat; cursor: pointer; position: relative; }
 .nle-cand.sel { border-color: #e58525; }
 .nle-cand.busy::after { content: 'generating…'; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: .68rem; color: #fcd34d; background: rgba(0,0,0,.65); }
 .nle-merge { display: flex; gap: 8px; align-items: center; font-size: .74rem; color: #94a3b8; flex-wrap: wrap; flex: 1; }
@@ -56,7 +64,8 @@
 .nle-head .tb { margin-left: auto; display: flex; gap: 3px; }
 .nle-head .tb button { width: 20px; height: 18px; font-size: .62rem; padding: 0; background: #1f2026; border: 1px solid #2d2f38; color: #94a3b8; border-radius: 2px; cursor: pointer; }
 .nle-head .tb button.on { background: #e58525; color: #111; border-color: #e58525; }
-.nle-scroll { overflow-x: auto; overflow-y: hidden; position: relative; }
+.nle-scroll { overflow-x: auto; overflow-y: hidden; position: relative; scrollbar-width: none; -ms-overflow-style: none; }
+.nle-scroll::-webkit-scrollbar { display: none; width: 0; height: 0; }
 .nle-content { position: relative; }
 .nle-ruler { position: relative; height: 26px; background: #14151a; border-bottom: 1px solid #23252d; cursor: ew-resize; overflow: hidden; }
 .nle-tick { position: absolute; bottom: 0; width: 1px; background: #3a3d48; pointer-events: none; }
@@ -64,6 +73,11 @@
 .nle-lane { position: relative; border-bottom: 1px solid #1d1e24; background: repeating-linear-gradient(90deg, transparent 0 99px, rgba(255,255,255,.025) 99px 100px); }
 .nle-clip { position: absolute; top: 2px; bottom: 2px; border-radius: 3px; overflow: hidden; border: 1px solid #2f5fa8; background: #12233d; cursor: grab; }
 .nle-clip.sel { border-color: #f59e0b; box-shadow: 0 0 0 1px #f59e0b inset; z-index: 3; }
+.nle-clip.multi-sel { border-color: #38bdf8; box-shadow: 0 0 0 1px #38bdf8 inset; z-index: 3; }
+.nle-clip.ovl.multi-sel { border-color: #38bdf8; box-shadow: 0 0 0 1px #38bdf8 inset; }
+.nle-marquee { position: absolute; border: 1px dashed #38bdf8; background: rgba(56, 189, 248, 0.16); pointer-events: none; z-index: 99; border-radius: 2px; display: none; }
+.nle-btn[data-t="merge"].can-merge { background: rgba(56, 189, 248, 0.22); border-color: #38bdf8; color: #38bdf8; font-weight: 700; }
+.nle-btn[data-t="merge"].can-merge:hover { background: rgba(56, 189, 248, 0.4); color: #fff; }
 .nle-clip.dragging { opacity: .55; cursor: grabbing; z-index: 6; }
 .nle-film { position: absolute; inset: 0; background-repeat: no-repeat; background-color: #0e1a2e; }
 .nle-clip .lbl { position: absolute; left: 0; top: 0; max-width: 100%; padding: 1px 5px; font-size: .64rem; font-weight: 700; color: #fff; background: rgba(0,0,0,.62); border-bottom-right-radius: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; pointer-events: none; }

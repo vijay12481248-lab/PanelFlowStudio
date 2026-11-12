@@ -336,14 +336,19 @@ class ChronoFlowPipeline:
 
         return graph
 
-    async def generate_art_image(self, prompt, negative_prompt, width=1024, height=1024, seed=None, refine: bool = False) -> str:
-        return (await self.generate_art_image_ex(prompt, negative_prompt, width, height, seed, refine))[0]
+    async def generate_art_image(self, prompt, negative_prompt, width=1024, height=1024, seed=None, refine: bool = False,
+                                 ref_images: list | None = None) -> str:
+        return (await self.generate_art_image_ex(prompt, negative_prompt, width, height, seed, refine, ref_images))[0]
 
-    async def generate_art_image_ex(self, prompt, negative_prompt, width=1024, height=1024, seed=None, refine: bool = False) -> tuple[str, dict | None]:
+    async def generate_art_image_ex(self, prompt, negative_prompt, width=1024, height=1024, seed=None, refine: bool = False,
+                                    ref_images: list | None = None) -> tuple[str, dict | None]:
         """One keyframe / reference image from the central ArtEngine, saved into ComfyUI's input/ folder (Character Vault, MiniMax H3).
 
         There is exactly one text-to-image workflow in PanelFlow (see engine/comfyui/art.py); ChronoFlow does not carry its own graphs.
+        `ref_images` is the character lock: each item is a reference image (Character Vault sheet filename, a path, raw bytes, or a
+        base64 data URL) bound to the art workflow's reference conditioning so generated faces follow the approved sheets.
         """
+        resolved_refs = self._resolve_reference_inputs(ref_images) if ref_images else []
         if refine:  # opt-in: review -> plan -> repair/redraw; candidates are kept under output/chronoflow/refine
             from engine.original.refine import refine_art_image
 
@@ -354,10 +359,44 @@ class ChronoFlowPipeline:
             info = summary(refined)
         else:
             info = None
-            art = await asyncio.to_thread(ArtEngine().generate, prompt, negative_prompt, int(width), int(height), seed, "chronoflow_art")
+            art = await asyncio.to_thread(
+                ArtEngine().generate, prompt, negative_prompt, int(width), int(height), seed, "chronoflow_art",
+                reference_images=resolved_refs or None)
         filename = f"art_{uuid.uuid4().hex[:8]}.png"
         (COMFY_INPUT_DIR / filename).write_bytes(art.png)
         return filename, info
+
+    @staticmethod
+    def _resolve_reference_inputs(ref_images: list) -> list:
+        """Normalize user-supplied references into what ArtEngine.generate accepts (bytes, Path, or ComfyUI input name).
+
+        Accepts a Character Vault sheet filename (already in ComfyUI's input folder), an engine media URL such as
+        /chronoflow/inputs/<file> or /inputs/<file>, an absolute or relative path, or a base64 data URL.
+        """
+        resolved: list = []
+        for item in ref_images:
+            if item is None:
+                continue
+            if isinstance(item, bytes):
+                resolved.append(item)
+                continue
+            s = str(item).strip()
+            if s.startswith("data:"):  # base64 data URL -> raw bytes (ArtEngine uploads them)
+                _, _, payload = s.partition(",")
+                import base64 as _b64
+                resolved.append(_b64.b64decode(payload))
+                continue
+            name = s.rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
+            candidate = Path(name)
+            if not candidate.is_file():
+                in_comfy = COMFY_INPUT_DIR / name
+                if in_comfy.is_file():
+                    candidate = in_comfy
+            if candidate.is_file():
+                resolved.append(candidate)  # uploaded by content name; reruns reuse it
+            else:
+                resolved.append(name)  # assume it is already a ComfyUI input name
+        return resolved
 
     def build_inpaint_prompt(self, image_filename, mask_filename, prompt, denoise=0.85, steps=4, seed=None, model="flux"):
         if seed is None:

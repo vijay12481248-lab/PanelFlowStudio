@@ -11,7 +11,7 @@
   const r6 = (v) => Math.round(v * 1e6) / 1e6;
 
   function create(fps) {
-    return { fps: fps || 24, clips: [], overlays: [], markers: [], inPoint: null, outPoint: null, nextId: 1 };
+    return { fps: fps || 24, clips: [], overlays: [], markers: [], dismissedSrcs: [], inPoint: null, outPoint: null, nextId: 1 };
   }
   const newId = (tl, p) => `${p}${tl.nextId++}`;
   const clipDur = (c) => (c.out - c.in) / c.speed;
@@ -60,6 +60,7 @@
       id: newId(tl, 'c'), src: spec.src, label: spec.label || spec.src, srcDur: dur,
       in: spec.in || 0, out: spec.out == null ? dur : spec.out, speed: spec.speed || 1, volume: spec.volume == null ? 1 : spec.volume,
       shot: spec.shot == null ? null : spec.shot, version: spec.version || 0,
+      prompt: spec.prompt || null, originalPrompt: spec.originalPrompt || spec.prompt || null,
     };
     tl.clips.splice(index == null ? tl.clips.length : index, 0, clip);
     return clip;
@@ -100,7 +101,16 @@
   function removeClip(tl, id) {
     const i = tl.clips.findIndex((c) => c.id === id);
     if (i < 0) return false;
-    tl.clips.splice(i, 1);
+    const [c] = tl.clips.splice(i, 1);
+    if (tl) {
+      if (!Array.isArray(tl.dismissedSrcs)) tl.dismissedSrcs = [];
+      if (c && c.src && !tl.dismissedSrcs.includes(c.src)) tl.dismissedSrcs.push(c.src);
+      if (c && Array.isArray(c.sources)) {
+        c.sources.forEach((s) => {
+          if (s && s.src && !tl.dismissedSrcs.includes(s.src)) tl.dismissedSrcs.push(s.src);
+        });
+      }
+    }
     return true;
   }
 
@@ -120,6 +130,86 @@
     const copy = { ...tl.clips[i], id: newId(tl, 'c') };
     tl.clips.splice(i + 1, 0, copy);
     return copy;
+  }
+
+  /** Merge multiple selected clips on track V1.
+   * If contiguous slices of the same source video, joins them back into a single continuous take.
+   * If distinct clips, consolidates them into a single continuous merged sequence clip.
+   */
+  function mergeClips(tl, clipIds) {
+    if (!tl || !tl.clips || !clipIds || clipIds.length < 2) return null;
+    const ids = new Set(clipIds);
+    const matched = tl.clips.filter((c) => ids.has(c.id));
+    if (matched.length < 2) return null;
+
+    const firstIdx = tl.clips.indexOf(matched[0]);
+    const lastIdx = tl.clips.indexOf(matched[matched.length - 1]);
+    if (lastIdx - firstIdx + 1 !== matched.length) {
+      // Must be adjacent clips on timeline
+      return null;
+    }
+
+    const first = matched[0];
+    const sameSrc = matched.every((c) => c.src === first.src);
+
+    let mergedClip = null;
+    if (sameSrc) {
+      const minIn = Math.min(...matched.map((c) => c.in));
+      const maxOut = Math.max(...matched.map((c) => c.out));
+      mergedClip = {
+        ...first,
+        id: newId(tl, 'c'),
+        in: minIn,
+        out: maxOut,
+        transition: 'cut',
+      };
+    } else {
+      const totalDur = matched.reduce((acc, c) => acc + (c.out - c.in) / (c.speed || 1), 0);
+      const labels = matched.map((c) => c.label.replace(/^Shot\s*/i, '#')).join(' + ');
+      mergedClip = {
+        id: newId(tl, 'c'),
+        src: first.src,
+        sources: matched.map((c) => ({ src: c.src, in: c.in, out: c.out, speed: c.speed || 1 })),
+        label: `Merged (${labels})`,
+        srcDur: totalDur,
+        in: 0,
+        out: totalDur,
+        speed: 1,
+        volume: first.volume == null ? 1 : first.volume,
+        shot: first.shot != null ? first.shot : 0,
+        version: 0,
+        prompt: matched.map((c) => c.prompt).filter(Boolean).join('\n---\n') || first.prompt,
+        originalPrompt: first.originalPrompt || first.prompt,
+      };
+    }
+
+    tl.clips.splice(firstIdx, matched.length, mergedClip);
+    return mergedClip;
+  }
+
+  /** Merge multiple selected frame overlays on track V2. */
+  function mergeOverlays(tl, ovlIds) {
+    if (!tl || !tl.overlays || !ovlIds || ovlIds.length < 2) return null;
+    const ids = new Set(ovlIds);
+    const matched = tl.overlays.filter((o) => ids.has(o.id));
+    if (matched.length < 2) return null;
+
+    const minStart = Math.min(...matched.map((o) => o.start));
+    const maxEnd = Math.max(...matched.map((o) => o.start + o.dur));
+    const first = matched[0];
+
+    const mergedOvl = {
+      id: newId(tl, 'o'),
+      src: first.src,
+      label: `Merged frames (${matched.length})`,
+      start: minStart,
+      dur: r6(maxEnd - minStart),
+    };
+
+    tl.overlays = tl.overlays.filter((o) => !ids.has(o.id));
+    tl.overlays.push(mergedOvl);
+    tl.overlays.sort((a, b) => a.start - b.start);
+    return mergedOvl;
   }
 
   /** Sorted unique edit points (clip edges, markers, in/out) for magnetic snapping. */
@@ -177,8 +267,18 @@
 
   /** Payload for POST /timeline/export (the server's EDL renderer). */
   function toEdl(tl) {
+    const clips = [];
+    tl.clips.forEach((c) => {
+      if (c.sources && c.sources.length) {
+        c.sources.forEach((s) => {
+          clips.push({ filename: s.src, in_point: s.in, out_point: s.out, speed: s.speed || 1, volume: c.volume, transition: 'cut' });
+        });
+      } else {
+        clips.push({ filename: c.src, in_point: c.in, out_point: c.out, speed: c.speed, volume: c.volume, transition: c.transition || 'cut', trans_dur: c.transDur || DEFAULT_TRANS });
+      }
+    });
     return {
-      clips: tl.clips.map((c) => ({ filename: c.src, in_point: c.in, out_point: c.out, speed: c.speed, volume: c.volume, transition: c.transition || 'cut', trans_dur: c.transDur || DEFAULT_TRANS })),
+      clips: clips,
       overlays: tl.overlays.map((o) => ({ filename: o.src, start: o.start, duration: o.dur })),
     };
   }
@@ -201,7 +301,7 @@
 
   const api = {
     SPEED_MIN, SPEED_MAX, TRANSITIONS, DEFAULT_TRANS, overlapAt, setTransition, create, clipDur, minDur, frame, layout, total, locate, addClip, byId, splitAt, trimEdge, moveClip,
-    removeClip, setSpeed, setVolume, duplicateClip, snapPoints, snap, neighbour, addOverlay, updateOverlay, removeOverlay,
+    removeClip, setSpeed, setVolume, duplicateClip, mergeClips, mergeOverlays, snapPoints, snap, neighbour, addOverlay, updateOverlay, removeOverlay,
     addMarker, removeMarker, toTimecode, toEdl, createHistory,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

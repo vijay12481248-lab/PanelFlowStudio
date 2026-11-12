@@ -1,0 +1,181 @@
+{
+  "title": "THE IRON LOTUS: THE FALL OF BHISHMA",
+  "duration": 55.8,
+  "protagonist": {
+    "id": "bhishma",
+    "name": "Bhishma Pitamaha",
+    "role": "Mentor / Fallen Hero",
+    "image": "",
+    "description": "Ancient warrior, golden armor, massive wooden bed of arrows, white beard, half-closed eyes, serene expression",
+    "tag": "<Picture 1>"
+  },
+  "anchor_images": {
+    "start": "",
+    "climax": "",
+    "concept": ""
+  },
+  "parent_path": "D:\\panelflow_studio\\The_Iron_Lotus:_The_Fall_of_Bhishma",
+  "folders": [
+    {
+      "id": "scene_1",
+      "name": "Scene 1: The Setting of Desolation",
+      "description": "The camera establishes the desolate battlefield at sunset. We see the scorched landscape, the air thick with suffocating stillness after chaos. Bhishma is revealed lying upon his bed of arrows, a grotesque monument to his vow. His golden armor hangs loosely on his weakened frame, and his serene yet weary eyes accept the approaching end.",
+      "path": "D:\\panelflow_studio\\The_Iron_Lotus:_The_Fall_of_Bhishma\\Scene 1: The Setting of Desolation",
+      "shot_indices": [
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "id": "scene_2",
+      "name": "Scene 2: Dronacharya's Silent Grief",
+      "description": "Dronacharya is revealed kneeling nearby in simple grey robes, his staff resting against the earth. His face bears the weight of years and sorrow as tears silently stream down weathered cheeks mixing with battlefield dirt. He watches Bhishma without speaking, honoring the vow of silence that binds him in this final moment together with the dying master.",
+      "path": "D:\\panelflow_studio\\The_Iron_Lotus:_The_Fall_of_Bhishma\\Scene 2: Dronacharya's Silent Grief",
+      "shot_indices": [
+        4,
+        5,
+        6
+      ]
+    },
+    {
+      "id": "scene_3",
+      "name": "Scene 3: The Final Arrow and Passing",
+      "description": "Arjuna enters the frame with a heavy heart, approaching Bhishma's bedside to honor his duty to end the conflict. In a moment of profound connection that transcends master-student and warrior-enemy, Arjuna draws the Gandiva bow and releases the final arrow. The arrow strikes with decisive force yet carries no violence—only mercy. Bhishma passes away peacefully, his face returning to complete serenity. The atmosphere transforms instantly from tension into collective mourning as Dronacharya rises, and the war ends.",
+      "path": "D:\\panelflow_studio\\The_Iron_Lotus:_The_Fall_of_Bhishma\\Scene 3: The Final Arrow and Passing",
+      "shot_indices": [
+        7,
+        8,
+        9
+      ]
+    }
+  ],
+  "scenes": [
+    {
+      "shot_index": 1,
+      "title": "Shot 1: The Bleeding Horizon",
+      "shot_type": "Wide Establishing",
+      "duration": 7.5,
+      "workflow": "reference",
+      "first_frame": "",
+      "last_frame": "",
+      "ref_images": [],
+      "prompt": "subject_definitions:\nBhishma Pitamaha: Ancient warrior, golden armor, massive wooden bed of arrows, white beard, half-closed eyes, serene expression. Facial expression: The vast scorched plain of Kurukshetra with scattered debris of battle; no living subjects in frame initially, emphasizing emptiness and aftermath.\n\nsummary:\nCinematic sequence: Shot 1: The Bleeding Horizon. The vast scorched plain of Kurukshetra with scattered debris of battle; no living subjects in frame initially, emphasizi...\n\nretention_analysis:\nSubject anatomy, clothing textures, environment architecture, and atmospheric lighting are strictly preserved.\n\ndetailed_description:\ncamera_movement: Slow sweeping low-angle crane tracking forward across the terrain, tilting upward to reveal the western horizon. subject_description: The vast scorched plain of Kurukshetra with scattered debris of battle; no living subjects in frame initially, emphasizing emptiness and aftermath. environmental_details: Scorched earth with charring marks, twisted iron remnants, floating dust particles caught in the dying light, embers still drifting from smoldering fires. lighting_and_atmosphere: Bruised purple and crimson sunset casting long shadows; volumetric beams cutting through haze create stark chiaroscuro between warm rim light on distant hills and cold azure shadows on the foreground. overall_soundscape: Heavy wind howling across the plain, distant cawing of carrion birds, crackling of dying fires. Strict rule: absolutely no human speech or dialogue. non_diegetic_music: Haunting cello and violin drone, low sub-bass resonance building solemn tension, sparse percussion like a heartbeat in the distance.\n\noverall_soundscape:\nHeavy wind howling across the plain, distant cawing of carrion birds, crackling of dying fires. Strict rule: absolutely no human speech or dialogue.\n\nnon_diegetic_music:\nHaunting cello and violin drone, low sub-bass resonance building solemn tension, sparse percussion like a heartbeat in the distance.",
+      "rendered_video": null,
+      "rendered_video_filename": null,
+      "folder_id": "scene_1"
+    },
+    {
+      "shot_index": 2,
+      "title": "Shot 2: The Bed of Arrows",
+      "shot_type": "Medium Tracking",
+      "duration": 6.8,
+      "workflow": "sliding_window",
+      "first_frame": "",
+      "last_frame": "",
+      "ref_images": [],
+      "prompt": "subject_definitions:\nBhishma Pitamaha: Ancient warrior, golden armor, massive wooden bed of arrows, white beard, half-closed eyes, serene expression. Facial expression: Bhishma Pitamaha lying upon his wooden bed of thousands of arrows piercing his flesh; golden armor hangs loosely on frame that has surrendered vitality, white beard matted with dust and sweat, half-closed eyes in deep meditative trance.\n\nsummary:\nCinematic sequence: Shot 2: The Bed of Arrows. Bhishma Pitamaha lying upon his wooden bed of thousands of arrows piercing his flesh; golden armor hangs loosely on fram...\n\nretention_analysis:\nSubject anatomy, clothing textures, environment architecture, and atmospheric lighting are strictly preserved.\n\ndetailed_description:\ncamera_movement: Steadicam glide pushing in slowly from a mid-distance, circling slightly around the arrow lattice to reveal Bhishma's form. subject_description: Bhishma Pitamaha lying upon his wooden bed of thousands of arrows piercing his flesh; golden armor hangs loosely on frame that has surrendered vitality, white beard matted with dust and sweat, half-closed eyes in deep meditative trance. environmental_details: The arrow lattice forms a grotesque monument; smoke wisps rise from charred earth around the bed; dust particles dance in the ambient light shafts. lighting_and_atmosphere: High-contrast chiaroscuro with bruised sunset backlight silhouetting Bhishma's armor plates, warm rim light highlighting the texture of his white beard and sweat-streaked skin. overall_soundscape: Breath intake through cracked lips, subtle creaking of arrows in wooden bed shifting under weight of body, distant wind. Strict rule: absolutely no human speech or dialogue. non_diegetic_music: Haunting strings ascending slowly, deep sub-bass drone pulsing beneath, rising crescendo of sorrowful violin melody.\n\noverall_soundscape:\nBreath intake through cracked lips, subtle creaking of arrows in wooden bed shifting under weight of body, distant wind. Strict rule: absolutely no human speech or dialogue.\n\nnon_diegetic_music:\nHaunting strings ascending slowly, deep sub-bass drone pulsing beneath, rising crescendo of sorrowful violin melody.",
+      "rendered_video": null,
+      "rendered_video_filename": null,
+      "folder_id": "scene_1"
+    },
+    {
+      "shot_index": 3,
+      "title": "Shot 3: The Serene Acceptance",
+      "shot_type": "Macro Close-Up",
+      "duration": 5.2,
+      "workflow": "sliding_window",
+      "first_frame": "",
+      "last_frame": "",
+      "ref_images": [],
+      "prompt": "subject_definitions:\nBhishma Pitamaha: Ancient warrior, golden armor, massive wooden bed of arrows, white beard, half-closed eyes, serene expression. Facial expression: Bhishma's face in extreme close-up: half-closed eyes with serene expression, deep wrinkles around mouth and eyes, white beard partially shadowed, skin pale beneath golden armor's gleam, slight tremble of lips but not from pain but from spiritual transcendence.\n\nsummary:\nCinematic sequence: Shot 3: The Serene Acceptance. Bhishma's face in extreme close-up: half-closed eyes with serene expression, deep wrinkles around mouth and eyes, white ...\n\nretention_analysis:\nSubject anatomy, clothing textures, environment architecture, and atmospheric lighting are strictly preserved.\n\ndetailed_description:\ncamera_movement: Slow deliberate push-in on Bhishma's face, tilting slightly upward as camera glides closer. subject_description: Bhishma's face in extreme close-up: half-closed eyes with serene expression, deep wrinkles around mouth and eyes, white beard partially shadowed, skin pale beneath golden armor's gleam, slight tremble of lips but not from pain but from spiritual transcendence. environmental_details: The arrow shafts blur softly into background bokeh; atmospheric haze softens edges of frame; dust motes floating in light beams behind the subject. lighting_and_atmosphere: Soft volumetric backlight creating golden rim around silhouette, deep shadows under brow and cheekbones for dramatic depth, warm ambient glow from setting sun on skin. overall_soundscape: Audible breath intake, subtle heartbeat through flesh and armor, faint rustle of arrows. Strict rule: absolutely no human speech or dialogue. non_diegetic_music: Solo violin playing haunting melancholic melody, low cello sustaining chord underneath, sparse chime-like bell tolling softly.\n\noverall_soundscape:\nAudible breath intake, subtle heartbeat through flesh and armor, faint rustle of arrows. Strict rule: absolutely no human speech or dialogue.\n\nnon_diegetic_music:\nSolo violin playing haunting melancholic melody, low cello sustaining chord underneath, sparse chime-like bell tolling softly.",
+      "rendered_video": null,
+      "rendered_video_filename": null,
+      "folder_id": "scene_1"
+    },
+    {
+      "shot_index": 4,
+      "title": "Shot 1: The Kneeling Master",
+      "shot_type": "Wide Establishing",
+      "duration": 6.3,
+      "workflow": "sliding_window",
+      "first_frame": "",
+      "last_frame": "",
+      "ref_images": [],
+      "prompt": "subject_definitions:\nBhishma Pitamaha: Ancient warrior, golden armor, massive wooden bed of arrows, white beard, half-closed eyes, serene expression. Facial expression: Dronacharya kneeling cross-legged in simple grey robes, staff resting against earth beside him, elderly teacher figure dwarfed by scale of battlefield around him.\n\nsummary:\nCinematic sequence: Shot 1: The Kneeling Master. Dronacharya kneeling cross-legged in simple grey robes, staff resting against earth beside him, elderly teacher figure d...\n\nretention_analysis:\nSubject anatomy, clothing textures, environment architecture, and atmospheric lighting are strictly preserved.\n\ndetailed_description:\ncamera_movement: Orbital crane moving in a slow wide arc around Dronacharya's position, establishing his isolation on the vast plain. subject_description: Dronacharya kneeling cross-legged in simple grey robes, staff resting against earth beside him, elderly teacher figure dwarfed by scale of battlefield around him. environmental_details: Scorched battlefield stretching into horizon; scattered remnants of weapons and armor; low-hanging atmospheric mist hovering over terrain; dust particles suspended in air. lighting_and_atmosphere: Dramatic chiaroscuro with bruised purple sunset creating deep shadows behind figure, warm rim light on grey robes highlighting texture of fabric, cold azure tones dominate background. overall_soundscape: Soft cloth rustle as Dronacharya's robe moves in wind, distant cawing of birds, wind passing through terrain. Strict rule: absolutely no human speech or dialogue. non_diegetic_music: Low resonant cello drone continuing from previous scene, sparse percussion like a heartbeat, melancholic violin playing distant, sorrowful notes.\n\noverall_soundscape:\nSoft cloth rustle as Dronacharya's robe moves in wind, distant cawing of birds, wind passing through terrain. Strict rule: absolutely no human speech or dialogue.\n\nnon_diegetic_music:\nLow resonant cello drone continuing from previous scene, sparse percussion like a heartbeat, melancholic violin playing distant, sorrowful notes.",
+      "rendered_video": null,
+      "rendered_video_filename": null,
+      "folder_id": "scene_2"
+    },
+    {
+      "shot_index": 5,
+      "title": "Shot 2: Tears of Silence",
+      "shot_type": "Medium Tracking",
+      "duration": 5.8,
+      "workflow": "sliding_window",
+      "first_frame": "",
+      "last_frame": "",
+      "ref_images": [],
+      "prompt": "subject_definitions:\nBhishma Pitamaha: Ancient warrior, golden armor, massive wooden bed of arrows, white beard, half-closed eyes, serene expression. Facial expression: Dronacharya's face: map of sorrow etched into weathered skin, eyes wet with tears streaming silently down cheeks mixing with dirt, furrowed brow of deep grief, mouth pressed together in attempt to hold back cries but held by vow of silence.\n\nsummary:\nCinematic sequence: Shot 2: Tears of Silence. Dronacharya's face: map of sorrow etched into weathered skin, eyes wet with tears streaming silently down cheeks mixing ...\n\nretention_analysis:\nSubject anatomy, clothing textures, environment architecture, and atmospheric lighting are strictly preserved.\n\ndetailed_description:\ncamera_movement: Steadicam glide pushing in from wide shot, maintaining orbit as camera tracks toward Dronacharya's face. subject_description: Dronacharya's face: map of sorrow etched into weathered skin, eyes wet with tears streaming silently down cheeks mixing with dirt, furrowed brow of deep grief, mouth pressed together in attempt to hold back cries but held by vow of silence. environmental_details: Staff beside hand showing wood grain; grey robes dust-covered and worn; blurred background of scorched earth and arrow bed. lighting_and_atmosphere: Bioluminescent glow from sunset catching moisture in eyes, high-contrast shadows on face emphasizing grief lines, warm rim light outlining tears as they fall. overall_soundscape: Silent sobbing - breathy intake, cloth rustle of robes, wind. Strict rule: absolutely no human speech or dialogue. non_diegetic_music: Violin melody intensifying slightly, cello sustaining deeper chord underneath, sparse bell tolling echoing sorrow, rising crescendo of emotional weight.\n\noverall_soundscape:\nSilent sobbing - breathy intake, cloth rustle of robes, wind. Strict rule: absolutely no human speech or dialogue.\n\nnon_diegetic_music:\nViolin melody intensifying slightly, cello sustaining deeper chord underneath, sparse bell tolling echoing sorrow, rising crescendo of emotional weight.",
+      "rendered_video": null,
+      "rendered_video_filename": null,
+      "folder_id": "scene_2"
+    },
+    {
+      "shot_index": 6,
+      "title": "Shot 3: The Weight of the Staff",
+      "shot_type": "Macro Close-Up",
+      "duration": 4.5,
+      "workflow": "sliding_window",
+      "first_frame": "",
+      "last_frame": "",
+      "ref_images": [],
+      "prompt": "subject_definitions:\nBhishma Pitamaha: Ancient warrior, golden armor, massive wooden bed of arrows, white beard, half-closed eyes, serene expression. Facial expression: Dronacharya's hands gripping the wooden staff tightly; weathered fingers, dirt-streaked skin, deep lines in palms showing years of labor and battle, subtle tremble visible in grip reflecting internal grief.\n\nsummary:\nCinematic sequence: Shot 3: The Weight of the Staff. Dronacharya's hands gripping the wooden staff tightly; weathered fingers, dirt-streaked skin, deep lines in palms showin...\n\nretention_analysis:\nSubject anatomy, clothing textures, environment architecture, and atmospheric lighting are strictly preserved.\n\ndetailed_description:\ncamera_movement: Slow deliberate push-in focusing on staff resting against earth, then gliding up to Dronacharya's trembling hands clutching it. subject_description: Dronacharya's hands gripping the wooden staff tightly; weathered fingers, dirt-streaked skin, deep lines in palms showing years of labor and battle, subtle tremble visible in grip reflecting internal grief. environmental_details: Staff wood grain texture sharp in focus; charred earth beneath staff with small smoldering embers nearby; atmospheric haze softening background edges. lighting_and_atmosphere: Soft volumetric backlight creating golden rim around hands and staff, deep shadows under staff for dramatic depth, warm ambient glow from sunset illuminating dust particles. overall_soundscape: Wood creaks slightly as hands tense on staff, wind passing through terrain. Strict rule: absolutely no human speech or dialogue. non_diegetic_music: Solo violin playing melancholic melody, low cello sustaining chord underneath, sparse chime-like bell tolling softly echoing sorrow.\n\noverall_soundscape:\nWood creaks slightly as hands tense on staff, wind passing through terrain. Strict rule: absolutely no human speech or dialogue.\n\nnon_diegetic_music:\nSolo violin playing melancholic melody, low cello sustaining chord underneath, sparse chime-like bell tolling softly echoing sorrow.",
+      "rendered_video": null,
+      "rendered_video_filename": null,
+      "folder_id": "scene_2"
+    },
+    {
+      "shot_index": 7,
+      "title": "Shot 1: The Approach of Mercy",
+      "shot_type": "Wide Establishing",
+      "duration": 7.2,
+      "workflow": "sliding_window",
+      "first_frame": "",
+      "last_frame": "",
+      "ref_images": [],
+      "prompt": "subject_definitions:\nBhishma Pitamaha: Ancient warrior, golden armor, massive wooden bed of arrows, white beard, half-closed eyes, serene expression. Facial expression: Arjuna entering frame from right side: youthful warrior in pristine white silk armor gleaming against dark landscape, Gandiva bow slung across back, intense gaze focused ahead, sweat-streaked face showing determination and sorrow, heavy heart evident in posture.\n\nsummary:\nCinematic sequence: Shot 1: The Approach of Mercy. Arjuna entering frame from right side: youthful warrior in pristine white silk armor gleaming against dark landscape, Ga...\n\nretention_analysis:\nSubject anatomy, clothing textures, environment architecture, and atmospheric lighting are strictly preserved.\n\ndetailed_description:\ncamera_movement: Slow sweeping low-angle crane tracking forward as Arjuna enters from frame edge, moving through scorched terrain toward arrow bed. subject_description: Arjuna entering frame from right side: youthful warrior in pristine white silk armor gleaming against dark landscape, Gandiva bow slung across back, intense gaze focused ahead, sweat-streaked face showing determination and sorrow, heavy heart evident in posture. environmental_details: Scattered debris of battlefield behind Arjuna; arrow bed visible in distance; atmospheric haze creating depth between figure and target; dust particles caught in light shafts. lighting_and_atmosphere: Dramatic chiaroscuro with sunset casting long shadows, warm rim light on white armor making Arjuna stand out against cold azure background, volumetric beams cutting through smoke. overall_soundscape: Soft cloth rustle of walking, faint clink of armor plates as steps steady on ground, wind howling. Strict rule: absolutely no human speech or dialogue. non_diegetic_music: Low cello drone continues but violin melody softens to near silence, sparse bell tolling softly building emotional weight, deep sub-bass resonance pulsing.\n\noverall_soundscape:\nSoft cloth rustle of walking, faint clink of armor plates as steps steady on ground, wind howling. Strict rule: absolutely no human speech or dialogue.\n\nnon_diegetic_music:\nLow cello drone continues but violin melody softens to near silence, sparse bell tolling softly building emotional weight, deep sub-bass resonance pulsing.",
+      "rendered_video": null,
+      "rendered_video_filename": null,
+      "folder_id": "scene_3"
+    },
+    {
+      "shot_index": 8,
+      "title": "Shot 2: The Gandiva Drawn",
+      "shot_type": "Medium Tracking",
+      "duration": 6.5,
+      "workflow": "sliding_window",
+      "first_frame": "",
+      "last_frame": "",
+      "ref_images": [],
+      "prompt": "subject_definitions:\nBhishma Pitamaha: Ancient warrior, golden armor, massive wooden bed of arrows, white beard, half-closed eyes, serene expression. Facial expression: Arjuna standing beside arrow bed: body angled toward Bhishma with reverence, Gandiva bow drawn back releasing tension across his arms, hands steady showing controlled intent not violence, intense gaze fixed on Bhishma's serene face, sweat dripping from brow but expression calm.\n\nsummary:\nCinematic sequence: Shot 2: The Gandiva Drawn. Arjuna standing beside arrow bed: body angled toward Bhishma with reverence, Gandiva bow drawn back releasing tension ac...\n\nretention_analysis:\nSubject anatomy, clothing textures, environment architecture, and atmospheric lighting are strictly preserved.\n\ndetailed_description:\ncamera_movement: Steadicam glide tracking with Arjuna as he approaches bed of arrows, then orbiting slightly around to frame both Arjuna and Bhishma in composition. subject_description: Arjuna standing beside arrow bed: body angled toward Bhishma with reverence, Gandiva bow drawn back releasing tension across his arms, hands steady showing controlled intent not violence, intense gaze fixed on Bhishma's serene face, sweat dripping from brow but expression calm. environmental_details: Arrow bed filling frame behind Arjuna; Bhishma visible in background half-closed eyes turning inward; atmospheric haze softening edges of composition; dust motes floating between figures. lighting_and_atmosphere: High-contrast chiaroscuro with bruised purple backlight silhouetting Gandiva bow curve, warm rim light from sunset highlighting Arjuna's profile, cold shadows behind arrow bed for depth. overall_soundscape: String creaks as bow drawn back, subtle breath intake, cloth rustle of armor settling. Strict rule: absolutely no human speech or dialogue. non_diegetic_music: Violin ascending slowly to emotional crescendo, low cello drone sustaining deep resonance, sparse chime-like bell tolling at peak moment, rising crescendo of collective mourning beginning.\n\noverall_soundscape:\nString creaks as bow drawn back, subtle breath intake, cloth rustle of armor settling. Strict rule: absolutely no human speech or dialogue.\n\nnon_diegetic_music:\nViolin ascending slowly to emotional crescendo, low cello drone sustaining deep resonance, sparse chime-like bell tolling at peak moment, rising crescendo of collective mourning beginning.",
+      "rendered_video": null,
+      "rendered_video_filename": null,
+      "folder_id": "scene_3"
+    },
+    {
+      "shot_index": 9,
+      "title": "Shot 3: Passing and Peace",
+      "shot_type": "Macro Close-Up",
+      "duration": 6.0,
+      "workflow": "sliding_window",
+      "first_frame": "",
+      "last_frame": "",
+      "ref_images": [],
+      "prompt": "subject_definitions:\nBhishma Pitamaha: Ancient warrior, golden armor, massive wooden bed of arrows, white beard, half-closed eyes, serene expression. Facial expression: Bhishma's face after passing: eyes fully closed in peaceful slumber, half-closed transitioning to complete rest, serene expression unchanged from earlier moments, white beard softly shadowed, skin relaxed showing absence of pain only transcendence.\n\nsummary:\nCinematic sequence: Shot 3: Passing and Peace. Bhishma's face after passing: eyes fully closed in peaceful slumber, half-closed transitioning to complete rest, serene ...\n\nretention_analysis:\nSubject anatomy, clothing textures, environment architecture, and atmospheric lighting are strictly preserved.\n\ndetailed_description:\ncamera_movement: Slow deliberate push-in on Bhishma's face as arrow strikes; tilting slightly upward to show complete serenity of expression at moment of passing. subject_description: Bhishma's face after passing: eyes fully closed in peaceful slumber, half-closed transitioning to complete rest, serene expression unchanged from earlier moments, white beard softly shadowed, skin relaxed showing absence of pain only transcendence. environmental_details: Arrow shafts blur into background bokeh; atmospheric haze softens frame edges; dust particles floating gently around subject in golden light; Dronacharya visible as blurred silhouette in far background rising to stand. lighting_and_atmosphere: Soft volumetric backlight creating halo of golden rim around figure, deep shadows under chin for dramatic depth, warm ambient glow from sunset bathing scene in peace and acceptance. overall_soundscape: Arrow strikes wood bed with decisive but soft thud, breath intake as life releases, wind howling softly. Strict rule: absolutely no human speech or dialogue. non_diegetic_music: Violin melody reaching emotional peak then resolving to single sustaining cello chord, chime-like bell tolling repeatedly in echo, sparse atmospheric drone fading into silence representing war ending and collective mourning beginning.\n\noverall_soundscape:\nArrow strikes wood bed with decisive but soft thud, breath intake as life releases, wind howling softly. Strict rule: absolutely no human speech or dialogue.\n\nnon_diegetic_music:\nViolin melody reaching emotional peak then resolving to single sustaining cello chord, chime-like bell tolling repeatedly in echo, sparse atmospheric drone fading into silence representing war ending and collective mourning beginning.",
+      "rendered_video": null,
+      "rendered_video_filename": null,
+      "folder_id": "scene_3"
+    }
+  ]
+}

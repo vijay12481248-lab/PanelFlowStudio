@@ -224,7 +224,9 @@ async def panelflow_chronoflow_regenerate_shot(
     name="panelflow_chronoflow_generate_image",
     description=(
         "Generate a high-resolution reference image, character turnaround, or keyframe with PanelFlow's single art workflow "
-        "(Qwen Image 2.1 Turbo, qwen_image_21) - the same engine the Original Stories art step uses. Width and height must be multiples of 16, 256-2048."
+        "(Qwen Image 2.1 Turbo, qwen_image_21) - the same engine the Original Stories art step uses. Width and height must be multiples of 16, 256-2048. "
+        "Character lock: pass character_ids (Character Vault ids) and/or ref_images (sheet filenames, paths, or base64 data URLs) to bind "
+        "approved reference sheets to the generation so faces follow the locked identity. Never generate an identifiable character's face without it."
     ),
     input_schema={
         "type": "object",
@@ -234,6 +236,16 @@ async def panelflow_chronoflow_regenerate_shot(
             "width": {"type": "integer", "description": "Image width, multiple of 16 (default 1024)"},
             "height": {"type": "integer", "description": "Image height, multiple of 16 (default 1024)"},
             "refine": {"type": "boolean", "description": "Review the picture against the prompt, then repair or redraw it (slower, needs Ollama; default false)"},
+            "ref_images": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Character-lock reference images (max 4): vault sheet filenames, file paths, or base64 data URLs (optional)",
+            },
+            "character_ids": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Character-lock by vault id (max 4): resolves each Character Vault member to its locked reference sheet (optional)",
+            },
         },
         "required": ["prompt"],
     },
@@ -245,8 +257,18 @@ async def panelflow_chronoflow_generate_image(
     width: int | None = None,
     height: int | None = None,
     refine: bool = False,
+    ref_images: list[str] | None = None,
+    character_ids: list[str] | None = None,
 ) -> dict[str, Any]:
-    payload = {"prompt": prompt, "negative_prompt": negative_prompt, "width": width, "height": height, "refine": refine}
+    payload = {
+        "prompt": prompt,
+        "negative_prompt": negative_prompt,
+        "width": width,
+        "height": height,
+        "refine": refine,
+        "ref_images": ref_images or [],
+        "character_ids": character_ids or [],
+    }
     return await bridge.post("/api/chronoflow/generate_image", payload, timeout_s=3600.0)
 
 

@@ -38,10 +38,61 @@ class JobSupervisor:
         self.state_version = 1
         self._tasks: dict[str, asyncio.Task] = {}
         self._lock = asyncio.Lock()
+        self._last_disk_mtime = JOBS_FILE.stat().st_mtime if JOBS_FILE.exists() else 0
         self.active_jobs = self._load_jobs_from_disk()
         self._clean_orphaned_jobs_on_boot()
         self._watchdog_task = None
         self._initialized = True
+
+    def _sync_with_disk_and_storage(self):
+        """Reloads jobs.json if modified on disk, and reconciles STUDIO_OUTPUT_DIR to ensure all on-disk chunks are included."""
+        try:
+            mtime = JOBS_FILE.stat().st_mtime if JOBS_FILE.exists() else 0
+            if getattr(self, "_last_disk_mtime", 0) < mtime:
+                disk_jobs = self._load_jobs_from_disk()
+                for jid, j in disk_jobs.items():
+                    if jid not in self.active_jobs or self.active_jobs[jid].get("status") not in ("starting", "regenerating"):
+                        self.active_jobs[jid] = j
+                    else:
+                        if len(j.get("chunks", [])) > len(self.active_jobs[jid].get("chunks", [])):
+                            self.active_jobs[jid]["chunks"] = j["chunks"]
+                        if len(j.get("chunk_prompts", [])) > len(self.active_jobs[jid].get("chunk_prompts", [])):
+                            self.active_jobs[jid]["chunk_prompts"] = j["chunk_prompts"]
+                self._last_disk_mtime = mtime
+                self.state_version += 1
+        except Exception:
+            pass
+
+        changed = False
+        try:
+            for jid, job in list(self.active_jobs.items()):
+                pattern = f"{jid}_chunk_*.mp4"
+                found_files = sorted(
+                    list(STUDIO_OUTPUT_DIR.glob(pattern)),
+                    key=lambda p: int(p.stem.split("_chunk_")[-1]) if p.stem.split("_chunk_")[-1].isdigit() else 999
+                )
+                tombstones = set(job.get("deleted_chunks", []))
+                existing_chunks = job.get("chunks", [])
+                filtered_chunks = [c for c in existing_chunks if Path(c).name not in tombstones]
+                existing_basenames = {Path(c).name for c in filtered_chunks}
+                new_chunks = list(filtered_chunks)
+                for f in found_files:
+                    if f.name in tombstones:
+                        continue
+                    if f.name not in existing_basenames:
+                        new_chunks.append(f"/outputs/{f.name}")
+                        existing_basenames.add(f.name)
+                if len(new_chunks) != len(existing_chunks) or new_chunks != existing_chunks:
+                    job["chunks"] = new_chunks
+                    job["total_chunks"] = max(job.get("total_chunks", 0), len(new_chunks))
+                    job["current_chunk"] = len(new_chunks)
+                    changed = True
+        except Exception:
+            pass
+
+        if changed:
+            self.state_version += 1
+            self._save_jobs_to_disk()
 
     def _load_jobs_from_disk(self) -> dict:
         if JOBS_FILE.exists():
@@ -83,9 +134,11 @@ class JobSupervisor:
         self.state_version += 1
 
     def get_job(self, job_id: str) -> dict:
+        self._sync_with_disk_and_storage()
         return self.active_jobs.get(job_id)
 
     def list_jobs(self) -> list:
+        self._sync_with_disk_and_storage()
         return sorted(list(self.active_jobs.values()), key=lambda j: j.get("created_at", 0), reverse=True)
 
     def update_job(self, job_id: str, **kwargs):
