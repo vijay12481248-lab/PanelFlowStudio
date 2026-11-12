@@ -110,6 +110,11 @@ already made, recommends a voice that fits the character's pronouns without
 applying it, and flags a character that has no suitable voice. The voice step
 then reads each line with the voice of its speaker.
 
+**The take ledger (step 5).** Every take carries the script revision, the
+direction revision, the cast profile and the provider it came from, so a take
+that no longer matches its line is recognised as outdated instead of being
+mistaken for the current one.
+
 ### What the workflow still needs
 
 **Gap B — an uncertain brief (stop point 1).** `Understand` already raises
@@ -118,10 +123,10 @@ can be *coherent and still uncertain* — a reveal the analyst inferred rather t
 read. The brief needs to carry its own confidence and cite the evidence per
 conclusion, so "uncertain" is visible rather than inferred.
 
-**Gap C — the take ledger (step 5).** A take records its text and its model, but
-not the script revision, the direction revision, the voice profile, or the
-provider that produced it. Without those, an outdated take cannot be detected
-and the "current approved take remains available" rule cannot hold.
+**Gap C — the take ledger (step 5).** DONE. A take records its text and its
+model, but not the script revision, the direction revision, the voice profile,
+or the provider that produced it. Without those, an outdated take cannot be
+detected and the "current approved take remains available" rule cannot hold.
 
 **Gap D — audio QA (step 6).** The speech check measures intelligibility only.
 The workflow also asks for pronunciation, duration, clipping, silence and
@@ -147,9 +152,9 @@ Each milestone lands with tests and keeps the pipeline runnable.
    assignment map stored beside the bible, and the casting assistant that
    resolves it: narrator preference, existing assignments kept, missing voices
    flagged, a recommendation never applied on its own.
-3. **The take ledger.** Every take records the script revision, the direction
-   revision, the voice profile and the provider. An outdated take is detected
-   and the approved take survives.
+3. ~~**The take ledger.**~~ Every take records the script revision, the
+   direction revision, the voice profile and the provider. An outdated take is
+   detected and the approved take survives.
 4. **Audio QA.** The full check set, with reviewer suggestions and an auditable
    QA report per take.
 5. **The readiness report.** What is still open, before rendering.
