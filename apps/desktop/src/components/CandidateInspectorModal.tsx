@@ -98,41 +98,41 @@ export const CandidateInspectorModal: React.FC<CandidateInspectorModalProps> = (
   const bbox = activeIteration.bbox;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
-      <div className="relative w-full max-w-5xl bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/80 backdrop-blur-sm p-4 overflow-y-auto">
+      <div className="relative w-full max-w-5xl bg-navy border border-edge rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
         {/* Modal Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800/80 bg-zinc-900/50">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-edge bg-glass">
           <div className="flex items-center gap-3">
-            <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+            <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-accent-soft text-info border border-accent/20">
               <Layers className="w-4 h-4" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-base font-semibold text-zinc-100">
+                <h2 className="text-base font-semibold text-fg">
                   Candidate Inspector — #{beat.order} ({beat.panel_id})
                 </h2>
-                <span className="text-xs px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400 font-mono">
+                <span className="text-xs px-2 py-0.5 rounded-full bg-glass-hi text-fg-dim font-mono">
                   {beat.shot || "standard shot"}
                 </span>
                 {beat.status && (
                   <span
                     className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                       beat.status === "accept"
-                        ? "bg-emerald-950 text-emerald-400 border border-emerald-700/60"
+                        ? "bg-ok/10 text-ok border border-ok/40"
                         : beat.status === "accept_low"
-                        ? "bg-amber-950 text-amber-400 border border-amber-700/60"
+                        ? "bg-warn/10 text-warn border border-warn/40"
                         : beat.status === "needs_review"
-                        ? "bg-rose-950 text-rose-400 border border-rose-700/60"
+                        ? "bg-bad/10 text-bad border border-bad/40"
                         : beat.status === "repaired"
-                        ? "bg-purple-950 text-purple-400 border border-purple-700/60"
-                        : "bg-zinc-800 text-zinc-300 border border-zinc-700"
+                        ? "bg-accent-soft text-info border border-accent/40"
+                        : "bg-glass-hi text-fg-dim border border-edge"
                     }`}
                   >
                     {beat.status.replace("_", " ").toUpperCase()}
                   </span>
                 )}
               </div>
-              <p className="text-xs text-zinc-400 line-clamp-1 max-w-2xl mt-0.5">
+              <p className="text-xs text-fg-dim line-clamp-1 max-w-2xl mt-0.5">
                 {beat.caption || beat.action || "No narrative text available"}
               </p>
             </div>
@@ -141,7 +141,7 @@ export const CandidateInspectorModal: React.FC<CandidateInspectorModalProps> = (
           <div className="flex items-center gap-2">
             <button
               onClick={onClose}
-              className="p-1.5 text-zinc-400 hover:text-zinc-100 rounded-lg hover:bg-zinc-800 transition-colors"
+              className="p-1.5 text-fg-dim hover:text-fg rounded-lg hover:bg-glass-hi transition-colors"
               title="Close modal"
             >
               <X className="w-5 h-5" />
@@ -152,8 +152,8 @@ export const CandidateInspectorModal: React.FC<CandidateInspectorModalProps> = (
         {/* Modal Body: Split view (Image canvas + candidate details & strip) */}
         <div className="flex-1 overflow-hidden grid grid-cols-1 lg:grid-cols-12 min-h-0">
           {/* Main Inspection Canvas */}
-          <div className="lg:col-span-8 bg-zinc-950/80 p-6 flex flex-col items-center justify-center relative min-h-[350px] lg:min-h-[500px]">
-            <div className="relative max-w-full max-h-[60vh] rounded-lg overflow-hidden border border-zinc-800 shadow-xl bg-zinc-900 group">
+          <div className="lg:col-span-8 bg-navy/80 p-6 flex flex-col items-center justify-center relative min-h-[350px] lg:min-h-[500px]">
+            <div className="relative max-w-full max-h-[60vh] rounded-lg overflow-hidden border border-edge shadow-xl bg-navy group">
               <img
                 src={activeImageUrl}
                 alt={`Candidate ${candidateN}`}
@@ -163,7 +163,7 @@ export const CandidateInspectorModal: React.FC<CandidateInspectorModalProps> = (
               {/* Defect Bounding Box Overlay if available */}
               {showBoundingBoxes && bbox && bbox.length === 4 && (
                 <div
-                  className="absolute border-2 border-rose-500 bg-rose-500/20 pointer-events-none transition-all duration-200"
+                  className="absolute border-2 border-bad bg-bad/20 pointer-events-none transition-all duration-200"
                   style={{
                     left: `${bbox[0] * 100}%`,
                     top: `${bbox[1] * 100}%`,
@@ -171,27 +171,27 @@ export const CandidateInspectorModal: React.FC<CandidateInspectorModalProps> = (
                     height: `${(bbox[3] - bbox[1]) * 100}%`,
                   }}
                 >
-                  <span className="absolute -top-5 left-0 bg-rose-600 text-[10px] text-white px-1.5 py-0.5 rounded font-mono font-bold shadow">
+                  <span className="absolute -top-5 left-0 bg-bad text-[10px] text-white px-1.5 py-0.5 rounded font-mono font-bold shadow">
                     DEFECT REGION
                   </span>
                 </div>
               )}
 
               {/* Status / Iteration watermark */}
-              <div className="absolute bottom-2 left-2 bg-black/70 backdrop-blur-md px-2.5 py-1 rounded-md text-[11px] text-zinc-300 font-mono border border-white/10">
+              <div className="absolute bottom-2 left-2 bg-ink/70 backdrop-blur-md px-2.5 py-1 rounded-md text-[11px] text-fg-dim font-mono border border-white/10">
                 Iteration #{candidateN} ({activeIteration.kind || "generation"})
               </div>
             </div>
 
             {/* Canvas Toolbar Controls */}
-            <div className="mt-4 flex items-center gap-4 text-xs text-zinc-400">
+            <div className="mt-4 flex items-center gap-4 text-xs text-fg-dim">
               {bbox && bbox.length === 4 && (
-                <label className="flex items-center gap-1.5 cursor-pointer hover:text-zinc-200">
+                <label className="flex items-center gap-1.5 cursor-pointer hover:text-fg">
                   <input
                     type="checkbox"
                     checked={showBoundingBoxes}
                     onChange={(e) => setShowBoundingBoxes(e.target.checked)}
-                    className="rounded border-zinc-700 bg-zinc-900 text-indigo-600 focus:ring-0"
+                    className="rounded border-edge bg-navy text-accent focus:ring-0"
                   />
                   <span>Show Defect Bounding Box</span>
                 </label>
@@ -202,11 +202,11 @@ export const CandidateInspectorModal: React.FC<CandidateInspectorModalProps> = (
           </div>
 
           {/* Right Sidebar: Candidate selector & metadata */}
-          <div className="lg:col-span-4 border-t lg:border-t-0 lg:border-l border-zinc-800/80 bg-zinc-900/30 p-5 flex flex-col justify-between overflow-y-auto">
+          <div className="lg:col-span-4 border-t lg:border-t-0 lg:border-l border-edge bg-glass/30 p-5 flex flex-col justify-between overflow-y-auto">
             <div className="space-y-5">
               {/* Iteration Selector Strip */}
               <div>
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400 mb-2.5 flex items-center justify-between">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-fg-dim mb-2.5 flex items-center justify-between">
                   <span>Candidate Iterations ({iterations.length})</span>
                 </h3>
                 <div className="grid grid-cols-3 gap-2">
@@ -225,11 +225,11 @@ export const CandidateInspectorModal: React.FC<CandidateInspectorModalProps> = (
                         onClick={() => setSelectedIterationIndex(idx)}
                         className={`relative rounded-lg overflow-hidden border p-1 text-left transition-all ${
                           isSelected
-                            ? "border-indigo-500 bg-indigo-500/10 ring-2 ring-indigo-500/30"
-                            : "border-zinc-800 bg-zinc-900/60 hover:border-zinc-700"
+                            ? "border-accent bg-accent-soft ring-2 ring-accent/30"
+                            : "border-edge bg-glass/60 hover:border-edge"
                         }`}
                       >
-                        <div className="aspect-video w-full rounded overflow-hidden bg-black mb-1">
+                        <div className="aspect-video w-full rounded overflow-hidden bg-ink mb-1">
                           <img
                             src={iterThumbUrl}
                             alt={`Cand ${iter.n}`}
@@ -237,11 +237,11 @@ export const CandidateInspectorModal: React.FC<CandidateInspectorModalProps> = (
                           />
                         </div>
                         <div className="flex items-center justify-between px-1">
-                          <span className="text-[11px] font-mono text-zinc-300 font-medium">
+                          <span className="text-[11px] font-mono text-fg-dim font-medium">
                             c00{iter.n}
                           </span>
                           {isCanonical && (
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" title="Canonical" />
+                            <span className="w-1.5 h-1.5 rounded-full bg-ok" title="Canonical" />
                           )}
                         </div>
                       </button>
@@ -251,10 +251,10 @@ export const CandidateInspectorModal: React.FC<CandidateInspectorModalProps> = (
               </div>
 
               {/* Candidate Metadata Card */}
-              <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/50 p-4 space-y-3">
+              <div className="rounded-xl border border-edge bg-glass p-4 space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-zinc-400">VQA Consistency Score</span>
-                  <span className="text-xs font-bold font-mono text-zinc-100">
+                  <span className="text-xs text-fg-dim">VQA Consistency Score</span>
+                  <span className="text-xs font-bold font-mono text-fg">
                     {activeIteration.score != null
                       ? `${Math.round(activeIteration.score * 100)}%`
                       : beat.score != null
@@ -264,27 +264,27 @@ export const CandidateInspectorModal: React.FC<CandidateInspectorModalProps> = (
                 </div>
 
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-zinc-400">Creation Kind</span>
-                  <span className="text-xs font-mono text-zinc-300 capitalize">
+                  <span className="text-xs text-fg-dim">Creation Kind</span>
+                  <span className="text-xs font-mono text-fg-dim capitalize">
                     {activeIteration.kind || "Initial generation"}
                   </span>
                 </div>
 
                 {activeIteration.seed !== undefined && (
                   <div className="flex items-center justify-between">
-                    <span className="text-xs text-zinc-400">PRNG Seed</span>
-                    <span className="text-xs font-mono text-zinc-300">
+                    <span className="text-xs text-fg-dim">PRNG Seed</span>
+                    <span className="text-xs font-mono text-fg-dim">
                       {activeIteration.seed}
                     </span>
                   </div>
                 )}
 
                 {activeIteration.prompt && (
-                  <div className="pt-2 border-t border-zinc-800">
-                    <span className="text-[11px] font-semibold text-zinc-400 block mb-1">
+                  <div className="pt-2 border-t border-edge">
+                    <span className="text-[11px] font-semibold text-fg-dim block mb-1">
                       Render Prompt
                     </span>
-                    <p className="text-[11px] text-zinc-300 line-clamp-3 bg-zinc-950/60 p-2 rounded border border-zinc-800/60">
+                    <p className="text-[11px] text-fg-dim line-clamp-3 bg-navy/60 p-2 rounded border border-edge">
                       {activeIteration.prompt}
                     </p>
                   </div>
@@ -293,11 +293,11 @@ export const CandidateInspectorModal: React.FC<CandidateInspectorModalProps> = (
             </div>
 
             {/* Action Buttons */}
-            <div className="pt-4 mt-6 border-t border-zinc-800/80 space-y-2">
+            <div className="pt-4 mt-6 border-t border-edge space-y-2">
               <button
                 type="button"
                 onClick={handleInpaintClick}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs shadow-lg shadow-indigo-600/20 transition-colors"
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-accent hover:bg-accent/80 text-white font-medium text-xs shadow-lg shadow-accent/20 transition-colors"
               >
                 <Wand2 className="w-4 h-4" />
                 <span>Inpaint on this Candidate</span>
@@ -308,9 +308,9 @@ export const CandidateInspectorModal: React.FC<CandidateInspectorModalProps> = (
                   type="button"
                   onClick={handleSetCanonical}
                   disabled={isSubmittingCanonical}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-medium text-xs border border-zinc-700 transition-colors disabled:opacity-50"
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-glass-hi hover:bg-glass text-fg font-medium text-xs border border-edge transition-colors disabled:opacity-50"
                 >
-                  <Check className="w-4 h-4 text-emerald-400" />
+                  <Check className="w-4 h-4 text-ok" />
                   <span>Set as Canonical Active Panel</span>
                 </button>
               )}

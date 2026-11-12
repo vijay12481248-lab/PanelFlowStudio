@@ -248,7 +248,7 @@ const ProjectMediaBrowser: React.FC = () => {
                 onClick={() => setPreviewPage(page)}
                 className="group relative flex flex-col overflow-hidden rounded-card border border-edge bg-glass transition-all duration-200 hover:-translate-y-1 hover:border-glow/50 hover:shadow-xl text-left cursor-pointer"
               >
-                <div className="relative aspect-[3/4] w-full overflow-hidden bg-zinc-950">
+                <div className="relative aspect-[3/4] w-full overflow-hidden bg-ink">
                   <img
                     src={imageUrl}
                     alt={`Slice #${page.sequence}`}
@@ -293,7 +293,7 @@ const ProjectMediaBrowser: React.FC = () => {
             </div>
           }
         >
-          <div className="flex max-h-[70vh] items-center justify-center overflow-auto rounded-lg bg-zinc-950 p-2">
+          <div className="flex max-h-[70vh] items-center justify-center overflow-auto rounded-lg bg-ink p-2">
             <img
               src={api.getPageImageUrl(selectedProjectId, previewPage.id)}
               alt={`Slice #${previewPage.sequence}`}
