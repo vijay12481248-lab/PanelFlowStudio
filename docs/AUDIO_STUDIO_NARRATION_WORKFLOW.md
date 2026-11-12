@@ -80,7 +80,7 @@ workflow above is that pipeline, re-aimed at the Audio Studio's seven steps.
 | 1. Choose source and scope | `inputs.py` | `ChapterInputs` |
 | 2. Story brief | ② UNDERSTAND | `BeatSheet` |
 | 3. Narration and direction | ③ WRITE + ⑥ PERFORM | `ScriptIR` + `PerformancePlan` |
-| 4. Check and resolve the cast | — | **missing** |
+| 4. Check and resolve the cast | `casting.py` | `CastPlan` |
 | 5. Generate takes through jobs | ⑦ VOICE | `VoiceTake` |
 | 6. Review and repair | ④⑤ CRITIQUE + REPAIR, `review.py` | `CritiqueReport` + `ReviewItem` |
 | 7. Approve and assemble | ⑧ TIMELINE + `project.py` | `LockedTimeline` + `AudioTimelineRecord` |
@@ -91,8 +91,8 @@ workflow above is that pipeline, re-aimed at the Audio Studio's seven steps.
   rules block a line that invents a name, a place, or an event.
 - **Scene structure.** The brief is windowed, stitched in code, and re-asked
   until the scene and beat ranges tile the chapter exactly.
-- **Delivery direction.** `LineMarks` carries emotion, energy, rate, pause and
-  emphasis, mapped in code to a TTS rate and a pause.
+- **Delivery direction.** `LineMarks` carries emotion, energy, rate, pause,
+  emphasis and the intent of the line, mapped in code to a TTS rate and a pause.
 - **Speech verification.** Every take is transcribed and scored; a line that
   fails the speech check is retried slower, then parked for review.
 - **Approval.** `review.py` can edit, accept, fall back and regenerate a line,
@@ -100,15 +100,17 @@ workflow above is that pipeline, re-aimed at the Audio Studio's seven steps.
 - **Assembly.** The locked timeline is projected into the story editor state and
   a draft audio timeline that the real `approve_audio` accepts.
 
-### What the workflow adds
+### What the workflow has added
 
-Four gaps are real and need new code. The rest is a re-aiming of what exists.
+**The speaker and the cast (steps 3 and 4).** A line names who reads it. The
+writer proposes a speaker from the characters present, and only a line that
+quotes a character may be read in their voice. The Casting Assistant maps those
+characters to approved voice profiles: it keeps every assignment the owner
+already made, recommends a voice that fits the character's pronouns without
+applying it, and flags a character that has no suitable voice. The voice step
+then reads each line with the voice of its speaker.
 
-**Gap A — the cast (step 4).** The compiler voices every line with one narrator
-voice (`tts_cfg.voice`). It has no speaker per line, no per-character voice
-profile, and no check that a character has a voice at all. The casting
-assistant needs: a speaker on each line, a voice-profile catalog, an assignment
-map that survives a rerun, and a flag for characters who have no profile.
+### What the workflow still needs
 
 **Gap B — an uncertain brief (stop point 1).** `Understand` already raises
 `NeedsReview` when the model cannot produce a coherent beat sheet, but a brief
@@ -138,13 +140,13 @@ takes that failed QA, and the BGM/SFX state.
 
 Each milestone lands with tests and keeps the pipeline runnable.
 
-1. **Speaker on the line.** A line names its speaker. The writer proposes the
-   speaker; the rules check it against the bible. Cast dialogue stays a
+1. ~~**Speaker on the line.**~~ A line names its speaker. The writer proposes
+   the speaker; the rules check it against the bible. Cast dialogue stays a
    paraphrase in the recap, so this is a field first and a behaviour second.
-2. **The voice catalog and the cast.** Approved voice profiles, an assignment
-   map stored beside the bible, and the casting assistant that resolves it:
-   narrator preference, existing assignments kept, missing voices flagged, a
-   recommendation never applied on its own.
+2. ~~**The voice catalog and the cast.**~~ Approved voice profiles, an
+   assignment map stored beside the bible, and the casting assistant that
+   resolves it: narrator preference, existing assignments kept, missing voices
+   flagged, a recommendation never applied on its own.
 3. **The take ledger.** Every take records the script revision, the direction
    revision, the voice profile and the provider. An outdated take is detected
    and the approved take survives.
