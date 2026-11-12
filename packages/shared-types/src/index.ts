@@ -755,6 +755,24 @@ export interface NarrationLine {
   qa: NarrationQa | null; // the audio QA of the take, with the repairs it suggests
 }
 
+export interface NarrationOpenIssue {
+  kind: "line" | "voice" | "qa" | "outdated" | "music";
+  severity: "block" | "warn";
+  detail: string;
+  line_ids: string[];
+  character_ids: string[];
+}
+
+export interface NarrationReadiness {
+  ready: boolean;
+  issues: NarrationOpenIssue[];
+  lines_awaiting_review: string[];
+  characters_without_a_voice: string[];
+  failed_qa_lines: string[];
+  outdated_take_lines: string[];
+  music_tracks: number;
+}
+
 export interface NarrationRunDetail {
   run: Record<string, unknown>;
   lines: NarrationLine[];
@@ -764,6 +782,7 @@ export interface NarrationRunDetail {
     scenes: { scene_id: string; goal: string; first_panel_id: string; last_panel_id: string }[];
   } | null;
   casting: NarrationCast | null;
+  readiness: NarrationReadiness | null; // what is still open before the project renders
   review: { run_id: string; project_id: string; series_key: string; run_dir: string; reasons: string[]; line_ids: string[]; status: "pending" | "approved" } | null;
 }
 

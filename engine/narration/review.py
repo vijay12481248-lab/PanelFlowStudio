@@ -9,11 +9,13 @@ from pathlib import Path
 from typing import Literal, NamedTuple
 
 from engine.narration.artifacts import (
-    BeatSheet, CritiqueReport, PanelFacts, ReviewItem, ScriptIR, SeriesBible,
+    BeatSheet, CritiqueReport, PanelFacts, PerformancePlan, ReviewItem, ScriptIR, SeriesBible,
 )
 from engine.narration.bible.store import BibleStore, apply_once
 from engine.narration.cache import ArtifactCache
 from engine.narration.compiler import _write_json
+from engine.narration.ledger import TakeLedger, outdated_lines
+from engine.narration.qa import QaReport
 from engine.database.models import ProjectRecord
 from engine.database.session import SessionLocal
 from engine.narration.inputs import ChapterInputs
@@ -182,6 +184,31 @@ async def regenerate_line(run_dir: Path, line_id: str, hint: str, client: ModelC
     return _save(run_dir, new)
 
 
+def _qa_of(run_dir: Path) -> dict:
+    """The QA report of a run, by line id."""
+    try:
+        return {lid: QaReport.model_validate(r) for lid, r in json.loads((run_dir / "qa.json").read_text(encoding="utf-8")).items()}
+    except (ValueError, KeyError, TypeError, OSError):
+        return {}
+
+
+def _outdated_of(run_dir: Path, res) -> list[str]:
+    """The lines whose take no longer matches the line."""
+    try:
+        plan = PerformancePlan.model_validate_json((run_dir / "performance.json").read_text(encoding="utf-8"))
+    except (ValueError, OSError):
+        return []
+    try:
+        profiles = {a["character_id"]: a["profile_id"]
+                    for a in json.loads((run_dir / "casting.json").read_text(encoding="utf-8")).get("assignments", [])}
+    except (ValueError, KeyError, TypeError, OSError):
+        profiles = {}
+    if not res.takes:
+        return []
+    ledger = TakeLedger(res.script, direction_revision=plan.revision, voice_profile_ids=profiles)
+    return outdated_lines(res.takes, ledger)
+
+
 class Approval(NamedTuple):
     bible: SeriesBible
     needs_continue: bool  # False when the run already has its locked timeline
@@ -270,7 +297,7 @@ async def continue_after_approval(project_id: str, run_id: str) -> str:
             raise ValueError("; ".join(res.reasons) or f"continue ended with gate {res.gate}")
         with SessionLocal() as db:
             script_id = apply_to_project(db, project_id, res.timeline, res.script, res.beat_sheet, res.takes,
-                                         workspace, res.plan)
+                                         workspace, res.plan, qa=_qa_of(run_dir), outdated=_outdated_of(run_dir, res))
         _write_json(done, script_id)
         return script_id
     finally:

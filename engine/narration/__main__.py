@@ -96,6 +96,10 @@ async def _run(project_id: str, stop_after: str, apply: bool = False) -> int:
     if apply and res.gate == "pass":
         with SessionLocal() as db:
             print(f"video script: {apply_to_project(db, project_id, res.timeline, res.script, res.beat_sheet, res.takes, workspace, res.plan)}")
+    if res.readiness is not None:
+        print(f"readiness: {'ready' if res.readiness.ready else 'not ready'}")
+        for issue in res.readiness.issues:
+            print(f"  {issue.severity}: {issue.detail}")
     return _EXIT[res.gate]
 
 

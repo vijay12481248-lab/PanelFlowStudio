@@ -20,8 +20,9 @@ from engine.narration.bible.store import BibleStore, apply_once
 from engine.narration.cache import ArtifactCache
 from engine.narration.casting import cast_for_script
 from engine.narration.inputs import ChapterInputs
-from engine.narration.ledger import TakeLedger
-from engine.narration.qa import qa_report
+from engine.narration.ledger import TakeLedger, outdated_lines
+from engine.narration.qa import QaReport, qa_report
+from engine.narration.readiness import ReadinessReport, readiness
 from engine.narration.runtime.audio import KokoroTts, Stt, Tts, WhisperStt, release_audio_models
 from engine.narration.runtime.client import ModelClient, StepModelError
 from engine.narration.runtime.roles import load_stt_config, load_tts_config
@@ -69,6 +70,31 @@ class RunLog:
         _write_json(self.path, self._data)
 
 
+def _readiness(run_dir: Path, script: ScriptIR, takes: list[VoiceTake] | None, cast_plan) -> ReadinessReport:
+    """What is still open before the project renders."""
+    qa: dict[str, QaReport] = {}
+    try:
+        raw = json.loads((run_dir / "qa.json").read_text(encoding="utf-8"))
+        qa = {lid: QaReport.model_validate(r) for lid, r in raw.items()}
+    except (ValueError, KeyError, TypeError, OSError):
+        qa = {}
+    outdated: list[str] = []
+    try:
+        plan = PerformancePlan.model_validate_json((run_dir / "performance.json").read_text(encoding="utf-8"))
+    except (ValueError, OSError):
+        plan = None
+    try:
+        raw = json.loads((run_dir / "casting.json").read_text(encoding="utf-8"))
+        profiles = {a["character_id"]: a["profile_id"] for a in raw.get("assignments", [])}
+    except (ValueError, KeyError, TypeError, OSError):
+        profiles = {}
+    if takes:
+        ledger = TakeLedger(script, direction_revision=plan.revision if plan else script.revision,
+                            voice_profile_ids=profiles)
+        outdated = outdated_lines(takes, ledger)
+    return readiness(script, takes, qa, cast_plan, outdated)
+
+
 @dataclass
 class CompileResult:
     run_id: str
@@ -83,6 +109,7 @@ class CompileResult:
     sync: dict | None = None
     plan: PerformancePlan | None = None
     takes: list[VoiceTake] | None = None
+    readiness: ReadinessReport | None = None
 
 
 class _CountingCache:
@@ -133,10 +160,11 @@ class NarrationCompiler:
         facts = [PanelFacts.model_validate(f) for f in json.loads((run_dir / "panel_facts.json").read_text(encoding="utf-8"))]
         story_ids = [f.panel_id for f in facts if f.is_story]
         plan = takes = tl = sync = None
+        ready: ReadinessReport | None = None
 
         def result(gate: Gate, reasons: list[str]) -> CompileResult:
             log.finish(gate, reasons)
-            return CompileResult(run_dir.name, gate, reasons, run_dir, facts, sheet, script, None, tl, sync, plan, takes)
+            return CompileResult(run_dir.name, gate, reasons, run_dir, facts, sheet, script, None, tl, sync, plan, takes, ready)
 
         try:
             bible = self.bibles.load(inputs.series_key)
@@ -178,6 +206,8 @@ class NarrationCompiler:
                 sync = timeline.sync_metrics(tl, takes, script)
             _write_json(run_dir / "timeline.json", tl.model_dump(mode="json"))
             _write_json(run_dir / "sync.json", sync)
+            ready = _readiness(run_dir, script, takes, cast_plan)
+            _write_json(run_dir / "readiness.json", ready.model_dump(mode="json"))
             return result("pass", [])
         except NeedsReview as exc:  # voiced now and still bad: park it again for another look
             flagged = {t.line_id for t in takes or [] if t.flagged}
@@ -210,6 +240,7 @@ class NarrationCompiler:
         takes: list[VoiceTake] | None = None
         tl: LockedTimeline | None = None
         sync: dict | None = None
+        ready: ReadinessReport | None = None
 
         def result(gate: Gate, reasons: list[str]) -> CompileResult:
             log.finish(gate, reasons)
@@ -220,7 +251,7 @@ class NarrationCompiler:
                 _write_json(run_dir / "review.json", ReviewItem(
                     run_id=run_id, project_id=inputs.project_id, series_key=inputs.series_key, run_dir=str(run_dir),
                     reasons=list(reasons), line_ids=ids).model_dump(mode="json"))
-            return CompileResult(run_id, gate, reasons, run_dir, facts, sheet, script, report, tl, sync, plan, takes)
+            return CompileResult(run_id, gate, reasons, run_dir, facts, sheet, script, report, tl, sync, plan, takes, ready)
 
         try:
             bible = self.bibles.load(inputs.series_key)
@@ -326,6 +357,8 @@ class NarrationCompiler:
                 sync = timeline.sync_metrics(tl, takes, script)
             _write_json(run_dir / "timeline.json", tl.model_dump(mode="json"))
             _write_json(run_dir / "sync.json", sync)
+            ready = _readiness(run_dir, script, takes, cast_plan)
+            _write_json(run_dir / "readiness.json", ready.model_dump(mode="json"))
             return passed()
         except NeedsReview as exc:
             return result("review", exc.reasons)

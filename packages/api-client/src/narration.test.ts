@@ -37,6 +37,7 @@ test("run inspector parses the typed payload", async () => {
               script_revision: 3, direction_revision: 3, provider: "kokoro-82m" } }],
     beat_sheet: { hook: "h", chapter_summary: "s", scenes: [{ scene_id: "S1", goal: "g", first_panel_id: "a", last_panel_id: "b" }] },
     casting: null,
+    readiness: null,
     review: null,
   };
   const { result, calls } = await call(payload, (c) => c.getNarrationRun("p", "20260101T000000-abcdef"));

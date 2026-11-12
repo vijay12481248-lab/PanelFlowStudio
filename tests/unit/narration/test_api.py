@@ -149,6 +149,22 @@ def test_the_inspector_shows_the_audio_qa_and_its_repairs(env):
     assert l2["qa"]["checks"][0]["rule"] == "intelligibility"
 
 
+def test_the_inspector_shows_the_readiness_report(env):
+    """The owner sees what is still open before the project renders."""
+    client, res, _, _ = env
+    (res.run_dir / "readiness.json").write_text(json.dumps({
+        "ready": False,
+        "issues": [{"kind": "line", "severity": "block", "detail": "1 lines are still waiting for review",
+                    "line_ids": ["L002"], "character_ids": []}],
+        "lines_awaiting_review": ["L002"], "characters_without_a_voice": [], "failed_qa_lines": [],
+        "outdated_take_lines": [], "music_tracks": 2,
+    }), encoding="utf-8")
+    body = client.get(f"/api/narration/runs/proj-test/{res.run_id}").json()
+    assert body["readiness"]["ready"] is False
+    assert body["readiness"]["lines_awaiting_review"] == ["L002"]
+    assert body["readiness"]["issues"][0]["kind"] == "line"
+
+
 def test_edit_rejected_by_rules_is_400_and_unchanged(env):
     client, res, *_ = env
     url = f"/api/narration/runs/proj-test/{res.run_id}/lines/L002"

@@ -206,7 +206,12 @@ def inspect_run(project_id: str, run_id: str, db: Session = Depends(get_db)) -> 
         cast = _json(run_dir / "casting.json")
     except (ValueError, OSError):
         cast = None  # the run stopped before the voice step
+    try:
+        readiness_report = _json(run_dir / "readiness.json")
+    except (ValueError, OSError):
+        readiness_report = None  # the run stopped before the timeline
     return {"run": run, "lines": lines, "beat_sheet": beat_sheet, "casting": cast,
+            "readiness": readiness_report,
             "review": item.model_dump(mode="json") if item else None}
 
 

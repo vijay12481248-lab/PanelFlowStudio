@@ -78,6 +78,8 @@ import type {
   NarrationProjectCast,
   NarrationQa,
   NarrationQaCheck,
+  NarrationReadiness,
+  NarrationOpenIssue,
 } from "@panelflow/shared-types";
 
 export type {

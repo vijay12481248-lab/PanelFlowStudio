@@ -12,6 +12,8 @@ from engine.database.models import AudioTimelineRecord, ProjectRecord, ScriptSeg
 from engine.motion.models.input_contract import AudioInterval, MasterAudioTimeline
 from engine.security.paths import write_contained_json
 from engine.narration.artifacts import BeatSheet, LockedTimeline, NARRATOR_ID, PerformancePlan, ScriptIR, VoiceTake
+from engine.narration.qa import QaReport
+from engine.narration.readiness import readiness
 
 # Legacy autopilot builds these inline (engine/pipeline/autopilot.py), so there is nothing to import.
 _BACKGROUND = {"enabled": True, "preset": "duplicate_blur", "blur_sigma": 36.0, "brightness": -0.30,
@@ -54,7 +56,9 @@ def _bible_speaker_names(project: ProjectRecord, sheet: BeatSheet) -> dict[str, 
 
 def apply_to_project(db, project_id: str, tl: LockedTimeline, script: ScriptIR, sheet: BeatSheet,
                      takes: list[VoiceTake], workspace: Path, plan: PerformancePlan,
-                     speaker_names: dict[str, str] | None = None) -> str:
+                     speaker_names: dict[str, str] | None = None,
+                     qa: dict[str, QaReport] | None = None,
+                     outdated: list[str] | None = None) -> str:
     project = db.get(ProjectRecord, project_id)
     settings = dict(project.settings or {})
     state = dict(settings.get("story_editor_state") or {})
@@ -137,6 +141,9 @@ def apply_to_project(db, project_id: str, tl: LockedTimeline, script: ScriptIR, 
             casting[speaker_names.get(speaker_id, speaker_id)] = take[c.line_id].voice_id
     db.add(AudioTimelineRecord(project_id=project_id, status="DRAFT", total_duration=tl.duration, timeline_json=mat,
                                voice_casting=casting))
+    # the readiness report: what is still open before the project renders
+    report = readiness(script, takes, qa, None, outdated, music_tracks=len(state["bgm_tracks"]))
+    write_contained_json(workspace, Path("audio") / "readiness.json", report.model_dump(mode="json"))
     project.current_stage = PipelineStage.VOICE_GENERATED.value
     settings["story_editor_state"] = state
     project.settings = settings
