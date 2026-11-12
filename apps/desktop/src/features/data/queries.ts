@@ -82,9 +82,7 @@ export function useProjectCovers(projects: Project[]): Record<string, string | u
       staleTime: Infinity,
       retry: false,
       queryFn: async () => {
-        const pages = await api.listPages(project.id);
-        const first = pages.find((page) => page.sequence === 1) ?? pages[0];
-        return first ? api.getPageImageUrl(project.id, first.id) : null;
+        return api.getProjectCoverUrl(project.id);
       },
     })),
   });

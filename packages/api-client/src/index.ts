@@ -286,6 +286,124 @@ export interface OriginalSeries {
   episodes: OriginalEpisode[];
 }
 
+export interface OriginalPanelInpaintRequest {
+  mask_png_base64?: string;
+  mask?: string;
+  prompt?: string;
+  negative_prompt?: string;
+  seed?: number;
+  episode?: string;
+}
+
+export interface OriginalPanelInpaintResponse {
+  panel_id: string;
+  candidate_file: string;
+  candidate_n: number;
+  seed: number;
+  sha256: string;
+  image?: string;
+  candidate?: Record<string, any>;
+  selected?: number;
+  prompt?: string;
+  iterations?: Array<Record<string, any>>;
+}
+
+export interface CandidateIteration {
+  n: number;
+  file: string;
+  sha256?: string;
+  kind?: "generate" | "repair" | "inpaint" | "imported" | "scale_2x" | string;
+  seed?: number;
+  score?: number | null;
+  match_score?: number | null;
+  prompt?: string;
+  negative?: string;
+  mask?: string;
+  bbox?: number[];
+  parent?: number | null;
+  created_at?: string;
+}
+
+export interface StoryboardBeatCard {
+  panel_id: string;
+  order: number;
+  shot: string;
+  angle: string;
+  action: string;
+  caption: string;
+  status: "accept" | "accept_low" | "needs_review" | "repaired" | "unverified" | string;
+  score: number | null;
+  audio_duration: number;
+  image_url: string;
+  candidate_count: number;
+  selected_candidate: number;
+  iterations: CandidateIteration[];
+  defects?: string[];
+  reasons?: string[];
+}
+
+export interface StoryboardWorkbenchData {
+  slug: string;
+  episode?: string;
+  title: string;
+  genre: string;
+  total_panels: number;
+  beats: StoryboardBeatCard[];
+}
+
+export interface OriginalPanelApproveRequest {
+  episode?: string;
+  reason?: string;
+}
+
+export interface OriginalPanelApproveResponse {
+  panel_id: string;
+  status: string;
+  message: string;
+}
+
+export interface OriginalPanelRerollRequest {
+  episode?: string;
+  seed?: number;
+  prompt?: string;
+}
+
+export interface OriginalPanelRerollResponse {
+  panel_id: string;
+  status: string;
+  seed: number;
+  candidate_file: string;
+  candidate_n: number;
+  iterations: CandidateIteration[];
+}
+
+export interface OriginalPanelScaleRequest {
+  episode?: string;
+  sigma?: number;
+  steps?: number;
+}
+
+export interface OriginalPanelScaleResponse {
+  panel_id: string;
+  status: string;
+  width: number;
+  height: number;
+  scale_info: Record<string, any>;
+}
+
+export interface OriginalStoryScaleRequest {
+  episode?: string;
+  sigma?: number;
+  steps?: number;
+}
+
+export interface OriginalStoryScaleResponse {
+  slug: string;
+  episode?: string;
+  scaled_panels: number;
+  results: OriginalPanelScaleResponse[];
+}
+
 export class PanelFlowApiClient {
   private baseUrl: string;
   private engineToken?: string;
@@ -612,6 +730,10 @@ export class PanelFlowApiClient {
 
   getPageImageUrl(projectId: string, pageId: string): string {
     return this.resourceUrl(`/api/projects/${projectId}/pages/${pageId}/file`);
+  }
+
+  getProjectCoverUrl(projectId: string): string {
+    return this.resourceUrl(`/api/projects/${projectId}/cover`);
   }
 
   getNormalizedPageImageUrl(projectId: string, pageId: string): string {
@@ -2134,6 +2256,47 @@ export class PanelFlowApiClient {
     });
   }
 
+  // ChronoFlow art generation (Qwen Image 2.1 with character-locked ref2image)
+  async listChronoFlowCharacters(): Promise<{ characters: Array<{ id: string; name: string; role: string; image: string; description: string }> }> {
+    return this.request<{ characters: Array<{ id: string; name: string; role: string; image: string; description: string }> }>("/api/chronoflow/characters");
+  }
+
+  async generateChronoFlowImage(request: {
+    prompt: string;
+    negative_prompt?: string;
+    width?: number;
+    height?: number;
+    seed?: number;
+    refine?: boolean;
+    ref_images?: string[];
+    character_ids?: string[];
+  }): Promise<{
+    success: boolean;
+    filename: string;
+    url: string;
+    character_lock?: { ref_images: string[]; characters: Array<{ id: string; name: string; image: string }> };
+    refine?: { status: string; generations: number; repaired?: boolean };
+  }> {
+    return this.request<{
+      success: boolean;
+      filename: string;
+      url: string;
+      character_lock?: { ref_images: string[]; characters: Array<{ id: string; name: string; image: string }> };
+      refine?: { status: string; generations: number; repaired?: boolean };
+    }>("/api/chronoflow/generate_image", {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
+  }
+
+  async uploadChronoFlowReferenceImage(bytes: ArrayBuffer, filename: string): Promise<{ success: boolean; filename: string; url: string }> {
+    return this.request<{ success: boolean; filename: string; url: string }>("/api/chronoflow/upload_image", {
+      method: "POST",
+      headers: { "Content-Type": "application/octet-stream", "x-filename": filename },
+      body: bytes as unknown as string,
+    });
+  }
+
   async listGeneratedAssets(projectId: string): Promise<{ assets: GeneratedAsset[] }> {
     return this.request<{ assets: GeneratedAsset[] }>(`/api/projects/${projectId}/assets`);
   }
@@ -2332,7 +2495,7 @@ export class PanelFlowApiClient {
     return this.request<OriginalSeries>("/api/original/series", { method: "POST", body: JSON.stringify(req) });
   }
 
-  async queueOriginalEpisodes(seriesId: string, req: { count: number; start_date?: string; scenes?: number; refine?: boolean; animate?: boolean }): Promise<{ episode: number; job_id: string }[]> {
+  async queueOriginalEpisodes(seriesId: string, req: { count: number; start_date?: string; scenes?: number; refine?: boolean; animate?: boolean; preview?: boolean }): Promise<{ episode: number; job_id: string }[]> {
     return this.request(`/api/original/series/${encodeURIComponent(seriesId)}/episodes`, { method: "POST", body: JSON.stringify(req) });
   }
 
@@ -2351,6 +2514,73 @@ export class PanelFlowApiClient {
 
   async listOriginalJobs(): Promise<Job[]> {
     return this.request<Job[]>("/api/original/jobs");
+  }
+
+  getOriginalPanelImageUrl(slug: string, panelId: string, episode?: string, candidate?: number): string {
+    const params = new URLSearchParams();
+    if (episode) params.set("episode", episode);
+    if (candidate !== undefined) params.set("candidate", String(candidate));
+    const qs = params.toString() ? `?${params.toString()}` : "";
+    return `${this.baseUrl}/api/original/story/${encodeURIComponent(slug)}/panel/${encodeURIComponent(panelId)}/file${qs}`;
+  }
+
+  async getOriginalStoryWorkbench(slug: string, episode?: string): Promise<StoryboardWorkbenchData> {
+    const q = episode ? `?episode=${encodeURIComponent(episode)}` : "";
+    return this.request<StoryboardWorkbenchData>(`/api/original/story/${encodeURIComponent(slug)}/workbench${q}`);
+  }
+
+  async approveOriginalPanel(slug: string, panelId: string, req?: OriginalPanelApproveRequest): Promise<OriginalPanelApproveResponse> {
+    return this.request<OriginalPanelApproveResponse>(
+      `/api/original/story/${encodeURIComponent(slug)}/panel/${encodeURIComponent(panelId)}/approve`,
+      {
+        method: "POST",
+        body: JSON.stringify(req ?? {}),
+      },
+    );
+  }
+
+  async rerollOriginalPanel(slug: string, panelId: string, req?: OriginalPanelRerollRequest): Promise<OriginalPanelRerollResponse> {
+    return this.request<OriginalPanelRerollResponse>(
+      `/api/original/story/${encodeURIComponent(slug)}/panel/${encodeURIComponent(panelId)}/reroll`,
+      {
+        method: "POST",
+        body: JSON.stringify(req ?? {}),
+      },
+    );
+  }
+
+  async scaleOriginalPanel(slug: string, panelId: string, req?: OriginalPanelScaleRequest): Promise<OriginalPanelScaleResponse> {
+    return this.request<OriginalPanelScaleResponse>(
+      `/api/original/story/${encodeURIComponent(slug)}/panel/${encodeURIComponent(panelId)}/scale`,
+      {
+        method: "POST",
+        body: JSON.stringify(req ?? {}),
+      },
+    );
+  }
+
+  async scaleOriginalStory(slug: string, req?: OriginalStoryScaleRequest): Promise<OriginalStoryScaleResponse> {
+    return this.request<OriginalStoryScaleResponse>(
+      `/api/original/story/${encodeURIComponent(slug)}/scale`,
+      {
+        method: "POST",
+        body: JSON.stringify(req ?? {}),
+      },
+    );
+  }
+
+  async inpaintOriginalPanel(
+    storySlug: string,
+    panelId: string,
+    req: OriginalPanelInpaintRequest,
+  ): Promise<OriginalPanelInpaintResponse> {
+    return this.request<OriginalPanelInpaintResponse>(
+      `/api/original/story/${encodeURIComponent(storySlug)}/panel/${encodeURIComponent(panelId)}/inpaint`,
+      {
+        method: "POST",
+        body: JSON.stringify(req),
+      },
+    );
   }
 
   // YouTube connection and upload

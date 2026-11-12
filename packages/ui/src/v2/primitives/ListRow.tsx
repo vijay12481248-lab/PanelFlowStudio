@@ -57,12 +57,18 @@ export const ListRow: React.FC<ListRowProps> = ({ icon, title, subtitle, selecte
     className,
   );
   if (onSelect && !action) {
-    return <button type="button" onClick={onSelect} aria-current={selected || undefined} className={classes}>{body}</button>;
+    return <button type="button" onClick={onSelect} aria-current={selected || undefined} className={cx(classes, "cursor-pointer text-left")}>{body}</button>;
   }
   return (
-    <div className={classes}>
-      {onSelect ? <button type="button" onClick={onSelect} className="flex min-w-0 flex-1 items-center gap-3 text-left">{body}</button> : body}
-      {action}
+    <div onClick={onSelect} className={cx(classes, onSelect && "cursor-pointer select-none")}>
+      {onSelect ? (
+        <button type="button" onClick={(e) => { e.stopPropagation(); onSelect(); }} className="flex min-w-0 flex-1 items-center gap-3 text-left cursor-pointer focus:outline-none">
+          {body}
+        </button>
+      ) : (
+        body
+      )}
+      <div onClick={(e) => e.stopPropagation()} className="shrink-0">{action}</div>
     </div>
   );
 };

@@ -178,6 +178,18 @@ export const ChronoFlowScreen: React.FC<ChronoFlowScreenProps> = ({ onBack, proj
           className="w-full h-full border-none outline-none"
           allow="camera; microphone; clipboard-read; clipboard-write; display-capture"
         />
+
+        {/* Always-visible reload so engine UI updates can be picked up without leaving the screen */}
+        {!iframeLoading && (
+          <button
+            onClick={handleRefresh}
+            className="absolute top-3 right-3 z-20 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-zinc-900/85 hover:bg-zinc-800 text-zinc-300 hover:text-white text-xs font-semibold border border-zinc-700 shadow-md transition-colors"
+            title="Reload the studio UI from the engine (picks up engine-side UI updates)"
+          >
+            <RefreshCw className="w-3.5 h-3.5" aria-hidden="true" />
+            <span>Reload UI</span>
+          </button>
+        )}
       </main>
     </div>
   );

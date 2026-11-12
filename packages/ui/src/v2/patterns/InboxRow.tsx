@@ -12,15 +12,17 @@ export interface InboxRowProps {
   subtitle: string;
   actionLabel: string;
   onAction: () => void;
+  onSelect?: () => void;
   selected?: boolean;
 }
 
-export const InboxRow: React.FC<InboxRowProps> = ({ kind, title, subtitle, actionLabel, onAction, selected }) => (
+export const InboxRow: React.FC<InboxRowProps> = ({ kind, title, subtitle, actionLabel, onAction, onSelect, selected }) => (
   <ListRow
     tone={TONE[kind]}
     title={title}
     subtitle={subtitle}
     selected={selected}
+    onSelect={onSelect}
     action={<Button variant={selected ? "secondary" : "ghost"} size="sm" onClick={onAction}>{actionLabel}</Button>}
   />
 );

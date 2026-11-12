@@ -146,3 +146,29 @@ test("Continue on a hero with a review item opens the screen where it is approve
   assert.equal(view.router.state.location.pathname, "/projects/o/ocr");
   await view.cleanup();
 });
+
+test("clicking an option in NeedsYou selects that option and updates the hero project", async () => {
+  stub([
+    project("proj1", "OCR_COMPLETE", { updated_at: ago(1000) }),
+    project("proj2", "OCR_COMPLETE", { updated_at: ago(5000) }),
+  ]);
+  const view = await mountPage(<HomePage />);
+  await view.settle();
+
+  // Initially hero is proj1
+  assert.ok(view.document.querySelector("[data-hero]")!.textContent!.includes("Title proj1"));
+
+  // Find rows
+  const rows = view.document.querySelectorAll("[data-inbox-row]");
+  assert.equal(rows.length, 2);
+
+  // Click row 2 body button
+  const row2Btn = rows[1].querySelector("button");
+  assert.ok(row2Btn);
+  await view.click(row2Btn!);
+  await view.settle();
+
+  // Hero should now switch to proj2
+  assert.ok(view.document.querySelector("[data-hero]")!.textContent!.includes("Title proj2"));
+  await view.cleanup();
+});

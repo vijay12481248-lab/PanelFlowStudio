@@ -16,7 +16,9 @@ export interface ComfyImageScreenProps {
   onBack: () => void;
 }
 
-type GenerationMode = "web_ai" | "comfy_local";
+type GenerationMode = "web_ai" | "comfy_local" | "chrono";
+
+type ChronoGenType = "text2img" | "charlock" | "refupload";
 
 const PRESETS = [
   { id: "chatgpt", name: "ChatGPT / DALL-E", url: "https://chatgpt.com" },
@@ -62,6 +64,118 @@ export const ComfyImageScreen: React.FC<ComfyImageScreenProps> = ({ project, onB
   const [comfySubmitting, setComfySubmitting] = useState(false);
   const [selectedAssetForModal, setSelectedAssetForModal] = useState<GeneratedAsset | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  // ChronoFlow character-locked generation (§16 parity with the web studio)
+  const [chronoType, setChronoType] = useState<ChronoGenType>("text2img");
+  const [chronoPrompt, setChronoPrompt] = useState(SAMPLE_PROMPTS[0]);
+  const [chronoNegative, setChronoNegative] = useState("blurry, low quality, distorted, extra limbs, bad anatomy, deformed");
+  const [chronoAspect, setChronoAspect] = useState("768x1344");
+  const [chronoSeed, setChronoSeed] = useState("");
+  const [chronoRefine, setChronoRefine] = useState(false);
+  const [chronoLockedIds, setChronoLockedIds] = useState<string[]>([]);
+  const [chronoVault, setChronoVault] = useState<Array<{ id: string; name: string; role: string; image: string }>>([]);
+  const [chronoRefs, setChronoRefs] = useState<string[]>([]);
+  const [chronoBusy, setChronoBusy] = useState(false);
+  const [chronoResult, setChronoResult] = useState<{ url: string; lockedNote?: string; refineNote?: string } | null>(null);
+
+  useEffect(() => {
+    api.listChronoFlowCharacters()
+      .then((d) => setChronoVault(d.characters || []))
+      .catch(() => {});
+  }, []);
+
+  const toggleChronoLock = (id: string) => {
+    setChronoLockedIds((prev) => {
+      if (prev.includes(id)) return prev.filter((x) => x !== id);
+      if (prev.length >= 4) return prev;
+      return [...prev, id];
+    });
+  };
+
+  const handleChronoRefUpload = async (files: FileList | null) => {
+    if (!files || !files.length) return;
+    const room = 4 - chronoRefs.length;
+    if (room <= 0) {
+      reportError({ title: "Reference limit reached", message: "Max 4 reference images. Remove one first.", severity: "warning", source: "pipeline", projectId: project.id });
+      return;
+    }
+    const picked = Array.from(files).slice(0, room);
+    const uploaded: string[] = [];
+    for (const file of picked) {
+      try {
+        const bytes = await file.arrayBuffer();
+        const safe = `ref_${Date.now()}_${file.name.replace(/[^\w.\-]/g, "_")}`;
+        const res = await api.uploadChronoFlowReferenceImage(bytes, safe);
+        if (res?.filename) uploaded.push(res.filename);
+      } catch (err: any) {
+        reportError({
+          title: "Reference Upload Failed",
+          message: err.message || `Could not upload ${file.name}.`,
+          severity: "error",
+          source: "pipeline",
+          projectId: project.id,
+          rawDetails: err,
+        });
+      }
+    }
+    if (uploaded.length) setChronoRefs((prev) => [...prev, ...uploaded].slice(0, 4));
+  };
+
+  const handleChronoGenerate = async () => {
+    if (chronoType === "charlock" && !chronoLockedIds.length) {
+      reportError({ title: "Character-Locked needs references", message: "Select at least one Character Vault sheet, or switch to Text → Image.", severity: "warning", source: "pipeline", projectId: project.id });
+      return;
+    }
+    if (chronoType === "refupload" && !chronoRefs.length) {
+      reportError({ title: "Custom Reference needs uploads", message: "Upload at least one reference image, or switch to Text → Image.", severity: "warning", source: "pipeline", projectId: project.id });
+      return;
+    }
+    setChronoBusy(true);
+    setChronoResult(null);
+    const [w, h] = chronoAspect.split("x").map((n) => parseInt(n, 10));
+    const seedNum = chronoSeed.trim() !== "" && !isNaN(parseInt(chronoSeed, 10)) ? parseInt(chronoSeed, 10) : undefined;
+    try {
+      const data = await api.generateChronoFlowImage({
+        prompt: chronoPrompt,
+        negative_prompt: chronoNegative,
+        width: w,
+        height: h,
+        ...(seedNum !== undefined ? { seed: seedNum } : {}),
+        ...(chronoRefine ? { refine: true } : {}),
+        ...(chronoType === "charlock" ? { character_ids: chronoLockedIds } : {}),
+        ...(chronoType === "refupload" ? { ref_images: chronoRefs } : {}),
+      });
+      if (data.success && data.url) {
+        const names = (data.character_lock?.characters || []).map((c) => c.name).filter(Boolean);
+        setChronoResult({
+          url: data.url,
+          lockedNote: data.character_lock
+            ? `Locked to ${names.length ? names.join(", ") : `${(data.character_lock.ref_images || []).length} reference image(s)`}`
+            : undefined,
+          refineNote: data.refine
+            ? `${data.refine.generations} ${data.refine.generations === 1 ? "try" : "tries"}: ${
+                data.refine.status === "accept" ? "passed the check"
+                : data.refine.status === "accept_low" ? (data.refine.repaired ? "repaired" : "kept with low confidence")
+                : data.refine.status === "needs_review" ? "still failing the check; best try kept — please review"
+                : "could not be checked"
+              }`
+            : undefined,
+        });
+        await loadAssets();
+      }
+    } catch (error: any) {
+      reportError({
+        title: "ChronoFlow Image Generation Failed",
+        message: error.message || "The character-locked generation job failed.",
+        severity: "error",
+        source: "pipeline",
+        projectId: project.id,
+        rawDetails: error,
+      });
+    } finally {
+      setChronoBusy(false);
+    }
+  };
 
   const handleOpenAssetModal = (assetToOpen: GeneratedAsset) => {
     setSelectedAssetForModal(assetToOpen);
@@ -237,6 +351,18 @@ export const ComfyImageScreen: React.FC<ComfyImageScreenProps> = ({ project, onB
         >
           <Icons.Sparkles className="w-4 h-4" />
           Local ComfyUI Pipeline
+        </button>
+        <button
+          type="button"
+          onClick={() => setMode("chrono")}
+          className={`flex items-center gap-2 px-4 py-2.5 font-medium text-sm border-b-2 transition-colors ${
+            mode === "chrono"
+              ? "border-indigo-500 text-indigo-400 bg-indigo-500/10 rounded-t-lg"
+              : "border-transparent text-zinc-400 hover:text-zinc-200"
+          }`}
+        >
+          🔒
+          ChronoFlow Art (ref2image)
         </button>
       </div>
 
@@ -608,6 +734,194 @@ export const ComfyImageScreen: React.FC<ComfyImageScreenProps> = ({ project, onB
             ) : (
               <div className="min-h-64 rounded-lg border border-dashed border-zinc-700 flex items-center justify-center text-sm text-zinc-500 text-center px-6">
                 Generated assets will appear here after verification.
+              </div>
+            )}
+          </Card>
+        </div>
+      )}
+
+      {/* Mode 3: ChronoFlow character-locked generation (§16 parity) */}
+      {mode === "chrono" && (
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(300px,420px)]">
+          <Card className="p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="font-semibold text-zinc-100">Generation type</h2>
+              <Badge variant="success">QWEN IMAGE 2.1</Badge>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {([
+                { t: "text2img", icon: "✍️", name: "Text → Image", desc: "Pure prompt, no references" },
+                { t: "charlock", icon: "🔒", name: "Character-Locked", desc: "ref2image from vault sheets" },
+                { t: "refupload", icon: "🖼️", name: "Custom Reference", desc: "ref2image with uploads" },
+              ] as const).map((opt) => (
+                <button
+                  key={opt.t}
+                  type="button"
+                  onClick={() => setChronoType(opt.t)}
+                  className={`rounded-lg border p-3 text-center transition-all ${
+                    chronoType === opt.t
+                      ? "border-indigo-500 bg-indigo-500/10 shadow-sm"
+                      : "border-zinc-700 bg-zinc-900/60 hover:border-zinc-500"
+                  }`}
+                >
+                  <div className="text-lg">{opt.icon}</div>
+                  <div className={`text-xs font-bold mt-1 ${chronoType === opt.t ? "text-indigo-300" : "text-zinc-200"}`}>{opt.name}</div>
+                  <div className="text-[10px] text-zinc-500 mt-0.5 leading-tight">{opt.desc}</div>
+                </button>
+              ))}
+            </div>
+
+            <label className="block text-sm text-zinc-300">
+              ✅ Positive prompt
+              <textarea value={chronoPrompt} onChange={(e) => setChronoPrompt(e.target.value)} rows={5} className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100" disabled={chronoBusy} />
+            </label>
+            <label className="block text-sm text-zinc-300">
+              🚫 Negative prompt
+              <textarea value={chronoNegative} onChange={(e) => setChronoNegative(e.target.value)} rows={2} className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100" disabled={chronoBusy} />
+            </label>
+
+            {chronoType === "charlock" && (
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-semibold uppercase tracking-wider text-zinc-400">🔒 Character Lock (max 4)</label>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 font-semibold">
+                    {chronoLockedIds.length ? `${chronoLockedIds.length} locked` : "off"}
+                  </span>
+                </div>
+                {chronoVault.length ? (
+                  <>
+                    <div className="flex flex-wrap gap-2">
+                      {chronoVault.map((c) => {
+                        const on = chronoLockedIds.includes(c.id);
+                        return (
+                          <button
+                            key={c.id}
+                            type="button"
+                            title={`${c.name} — ${c.role}`}
+                            onClick={() => toggleChronoLock(c.id)}
+                            className={`relative w-12 h-12 rounded-lg overflow-hidden border-2 transition-all ${
+                              on ? "border-purple-400 scale-105" : "border-zinc-800 hover:border-zinc-600"
+                            }`}
+                          >
+                            <img src={api.resourceUrl(`/inputs/${c.image}`)} alt={c.name} className="w-full h-full object-cover" />
+                            {on && (
+                              <span className="absolute bottom-0 right-0 w-4 h-4 bg-purple-500 rounded-tl flex items-center justify-center text-white text-[9px]">✓</span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className="text-[10px] text-zinc-500 mt-1">Generated faces follow the selected approved sheets (max 4). Never generate a character's face unlocked.</p>
+                  </>
+                ) : (
+                  <p className="text-[11px] text-zinc-500">Character Vault is empty or unreachable — add reference sheets in the ChronoFlow Studio vault first.</p>
+                )}
+              </div>
+            )}
+
+            {chronoType === "refupload" && (
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-semibold uppercase tracking-wider text-zinc-400">🖼️ Reference images</label>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-semibold">
+                    {chronoRefs.length}/4
+                  </span>
+                </div>
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  multiple
+                  onChange={(e) => { handleChronoRefUpload(e.target.files); e.target.value = ""; }}
+                  className="block w-full text-xs text-zinc-400 file:mr-3 file:rounded-lg file:border-0 file:bg-zinc-800 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-zinc-200 hover:file:bg-zinc-700"
+                  disabled={chronoBusy}
+                />
+                {chronoRefs.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {chronoRefs.map((fn, i) => (
+                      <div key={fn} className="relative w-12 h-12 rounded-lg overflow-hidden border-2 border-zinc-800">
+                        <img src={api.resourceUrl(`/chronoflow/inputs/${fn}`)} alt={fn} className="w-full h-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => setChronoRefs((prev) => prev.filter((_, idx) => idx !== i))}
+                          title="Remove"
+                          className="absolute bottom-0 right-0 w-4 h-4 bg-red-600 rounded-tl flex items-center justify-center text-white text-[9px]"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <p className="text-[10px] text-zinc-500 mt-1">Upload 1–4 reference images (faces, sheets, style frames) — identity follows them.</p>
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-3 pt-1 border-t border-zinc-800">
+              <label className="text-sm text-zinc-300">
+                Aspect ratio
+                <select value={chronoAspect} onChange={(e) => setChronoAspect(e.target.value)} className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100" disabled={chronoBusy}>
+                  <option value="1344x768">16:9 Landscape (1344×768)</option>
+                  <option value="768x1344">9:16 Portrait (768×1344)</option>
+                  <option value="1024x1024">1:1 Square (1024×1024)</option>
+                </select>
+              </label>
+              <label className="text-sm text-zinc-300">
+                Seed <span className="text-zinc-500 text-xs">(optional)</span>
+                <input type="number" min={0} value={chronoSeed} onChange={(e) => setChronoSeed(e.target.value)} placeholder="Random" className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm" disabled={chronoBusy} />
+              </label>
+            </div>
+            <label className="flex items-center gap-2 text-xs text-zinc-300 cursor-pointer">
+              <input type="checkbox" checked={chronoRefine} onChange={(e) => setChronoRefine(e.target.checked)} className="rounded border-zinc-700 text-indigo-600 focus:ring-0" disabled={chronoBusy} />
+              <span>🛠️ Auto-Refine — AI reviews the picture, then repairs or redraws it (slower)</span>
+            </label>
+
+            {chronoBusy && (
+              <div className="space-y-2 rounded-lg border border-indigo-900/60 bg-indigo-950/40 p-3">
+                <div className="flex items-center justify-between text-xs text-indigo-300 font-medium">
+                  <span className="animate-pulse">Generating with Qwen Image 2.1{chronoType !== "text2img" ? " (reference-locked)" : ""}...</span>
+                  <Badge variant="neutral" className="text-[10px]">9–25s typical</Badge>
+                </div>
+                <div className="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                  <div className="h-full bg-indigo-500 animate-pulse rounded-full w-2/3" />
+                </div>
+              </div>
+            )}
+
+            <Button variant="primary" onClick={handleChronoGenerate} disabled={chronoBusy || chronoPrompt.trim().length < 5} className="w-full justify-center py-2.5 font-semibold text-sm">
+              <Icons.Sparkles className="w-4 h-4 mr-2" />
+              {chronoBusy ? "Generating..." : "✨ Generate"}
+            </Button>
+          </Card>
+
+          <Card className="p-5 space-y-4">
+            <h2 className="font-semibold text-zinc-100">Result</h2>
+            {chronoResult ? (
+              <div className="space-y-3">
+                <img src={api.resourceUrl(chronoResult.url)} alt="Generated result" className="w-full rounded-xl border border-zinc-700 bg-black/40 object-contain" />
+                {chronoResult.lockedNote && (
+                  <p className="text-[11px] text-purple-300 bg-purple-500/10 border border-purple-500/30 rounded-lg px-3 py-2">🔒 {chronoResult.lockedNote}</p>
+                )}
+                {chronoResult.refineNote && (
+                  <p className="text-[11px] text-emerald-300 bg-emerald-500/10 border border-emerald-500/30 rounded-lg px-3 py-2">🛠️ Auto-refine: {chronoResult.refineNote}</p>
+                )}
+                {latestAsset && (
+                  <button
+                    type="button"
+                    onClick={() => handleOpenAssetModal(latestAsset)}
+                    className="text-xs text-indigo-400 hover:text-indigo-300 font-semibold flex items-center gap-1 hover:underline"
+                  >
+                    <Icons.Sparkles className="w-3.5 h-3.5" />
+                    <span>Open Inpainter &amp; Studio ↗</span>
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="min-h-64 rounded-lg border border-dashed border-zinc-700 flex flex-col items-center justify-center text-sm text-zinc-500 text-center px-6 space-y-2">
+                <span className="text-2xl">🔒</span>
+                <p className="font-medium text-zinc-400">No Character-Locked Output Yet</p>
+                <p className="text-xs text-zinc-500 max-w-xs">
+                  Pick a generation type, write the positive/negative prompt, choose references if applicable, and generate. Results appear here and join the project assets.
+                </p>
               </div>
             )}
           </Card>

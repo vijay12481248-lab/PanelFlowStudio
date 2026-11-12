@@ -22,7 +22,24 @@ export const HomePage: React.FC = () => {
 
   const all = projects.data ?? [];
   const items = React.useMemo(() => buildInbox({ projects: all, jobs: jobs.data ?? [], series: series.data ?? [] }), [all, jobs.data, series.data]);
-  const focus = pickFocusProject(all, items);
+  const [selectedItemId, setSelectedItemId] = React.useState<string | undefined>(undefined);
+
+  const activeItem = React.useMemo(() => {
+    if (selectedItemId) {
+      const match = items.find((item) => item.id === selectedItemId);
+      if (match) return match;
+    }
+    return items[0];
+  }, [items, selectedItemId]);
+
+  const focus = React.useMemo(() => {
+    if (activeItem?.projectId) {
+      const match = all.find((p) => p.id === activeItem.projectId);
+      if (match) return match;
+    }
+    return pickFocusProject(all, items);
+  }, [all, items, activeItem]);
+
   const recent = React.useMemo(() => [...all].sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at)).slice(0, RECENT), [all]);
   const covers = useProjectCovers(focus ? [focus, ...recent.filter((p) => p.id !== focus.id)] : recent);
   const titles = React.useMemo(() => new Map(all.map((p) => [p.id, p.title])), [all]);
@@ -45,7 +62,7 @@ export const HomePage: React.FC = () => {
     return <div className="mx-auto grid max-w-6xl gap-4 p-8 grid-cols-1"><Skeleton className="h-10 w-48" /><Skeleton className="h-64" /></div>;
   }
 
-  const focusItem = focus ? items.find((item) => item.projectId === focus.id) : undefined;
+  const focusItem = activeItem ?? (focus ? items.find((item) => item.projectId === focus.id) : undefined);
   return (
     <div className="mx-auto grid w-full max-w-6xl gap-6 p-6 md:p-8 grid-cols-1">
       <PageHeader title="Home" meta={<span>{items.length === 0 ? "All clear" : `${items.length} ${items.length === 1 ? "thing needs" : "things need"} you`}</span>} />
@@ -69,7 +86,14 @@ export const HomePage: React.FC = () => {
         <div className="grid content-start gap-6 grid-cols-1">
           <GlassPanel className="grid gap-3 p-4 grid-cols-1">
             <h2 className="font-display text-sm font-semibold text-fg">Needs you</h2>
-            <NeedsYou items={items} onAction={(item) => void act(item)} onCreate={() => navigate(paths.create("new"))} onOpenStories={() => navigate(paths.create("stories"))} />
+            <NeedsYou
+              items={items}
+              selectedId={activeItem?.id}
+              onSelect={(item) => setSelectedItemId(item.id)}
+              onAction={(item) => void act(item)}
+              onCreate={() => navigate(paths.create("new"))}
+              onOpenStories={() => navigate(paths.create("stories"))}
+            />
           </GlassPanel>
           <RunningNow jobs={jobs.data ?? []} projectTitles={titles} />
         </div>

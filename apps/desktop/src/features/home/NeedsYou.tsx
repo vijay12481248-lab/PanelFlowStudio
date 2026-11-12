@@ -7,13 +7,24 @@ const CAP = 8;
 
 export interface NeedsYouProps {
   items: InboxItem[];
+  selectedId?: string;
+  onSelect?: (item: InboxItem) => void;
   onAction: (item: InboxItem) => void;
   onCreate: () => void;
   onOpenStories: () => void;
 }
 
-export const NeedsYou: React.FC<NeedsYouProps> = ({ items, onAction, onCreate, onOpenStories }) => {
+export const NeedsYou: React.FC<NeedsYouProps> = ({ items, selectedId, onSelect, onAction, onCreate, onOpenStories }) => {
+  const [internalSelectedId, setInternalSelectedId] = React.useState<string | undefined>(undefined);
   const [showAll, setShowAll] = React.useState(false);
+
+  const activeSelectedId = selectedId !== undefined ? selectedId : (internalSelectedId ?? items[0]?.id);
+
+  const handleSelect = (item: InboxItem) => {
+    setInternalSelectedId(item.id);
+    onSelect?.(item);
+  };
+
   if (items.length === 0) {
     return (
       <EmptyState
@@ -33,7 +44,15 @@ export const NeedsYou: React.FC<NeedsYouProps> = ({ items, onAction, onCreate, o
             <h3 data-inbox-group className="px-2 text-xs font-medium text-fg-faint">{label}</h3>
             {rows.map((item) => (
               <div key={item.id} data-inbox-row>
-                <InboxRow kind={item.kind} title={item.title} subtitle={item.subtitle} actionLabel={item.actionLabel} selected={item === items[0]} onAction={() => onAction(item)} />
+                <InboxRow
+                  kind={item.kind}
+                  title={item.title}
+                  subtitle={item.subtitle}
+                  actionLabel={item.actionLabel}
+                  selected={item.id === activeSelectedId}
+                  onSelect={() => handleSelect(item)}
+                  onAction={() => onAction(item)}
+                />
               </div>
             ))}
           </section>

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@panelflow/api-client";
 import type { GeneratedAsset } from "@panelflow/api-client";
 import type { Job } from "@panelflow/shared-types";
@@ -26,11 +26,16 @@ import {
   AlertCircle,
 } from "lucide-react";
 
+export type ImageEditorTarget =
+  | { mode: 'project'; projectId: string; asset: GeneratedAsset; onAssetUpdated?: (newAsset: GeneratedAsset) => void }
+  | { mode: 'story'; storySlug: string; episodeSlug?: string; panelId: string; imageSrc: string; onPanelUpdated?: (newImagePath: string) => void };
+
 export interface ImageEditorModalProps {
   isOpen: boolean;
   onClose: () => void;
-  projectId: string;
-  asset: GeneratedAsset | null;
+  target?: ImageEditorTarget;
+  projectId?: string;
+  asset?: GeneratedAsset | null;
   onAssetUpdated?: (newAsset: GeneratedAsset) => void;
 }
 
@@ -60,16 +65,32 @@ const MASK_COLORS = [
 export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   isOpen,
   onClose,
+  target,
   projectId,
   asset,
   onAssetUpdated,
 }) => {
-  if (!isOpen || !asset) return null;
+  const effectiveTarget: ImageEditorTarget | null = useMemo(() => {
+    if (target) return target;
+    if (projectId && asset) {
+      return { mode: 'project', projectId, asset, onAssetUpdated };
+    }
+    return null;
+  }, [target, projectId, asset?.id, asset?.sha256, onAssetUpdated]);
 
-  // Active asset (can update when inpainting finishes)
-  const [currentAsset, setCurrentAsset] = useState<GeneratedAsset>(asset);
+  if (!isOpen || !effectiveTarget) return null;
+
+  // Active asset / story image
+  const [currentAsset, setCurrentAsset] = useState<GeneratedAsset | null>(
+    effectiveTarget.mode === 'project' ? effectiveTarget.asset : null
+  );
   const [previousAsset, setPreviousAsset] = useState<GeneratedAsset | null>(null);
+  const [currentImageSrc, setCurrentImageSrc] = useState<string>(
+    effectiveTarget.mode === 'story' ? effectiveTarget.imageSrc : ''
+  );
+  const [previousImageSrc, setPreviousImageSrc] = useState<string | null>(null);
   const [isComparing, setIsComparing] = useState(false);
+  const [imageNaturalSize, setImageNaturalSize] = useState<{ width: number; height: number }>({ width: 1024, height: 1024 });
 
   // Tool states
   const [tool, setTool] = useState<ToolMode>("brush");
@@ -113,10 +134,55 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   const isDrawingRef = useRef<boolean>(false);
   const lastPointRef = useRef<{ x: number; y: number } | null>(null);
 
-  // Sync currentAsset when props asset changes
+  // Track active session key to prevent wiping comparison history (Hold to Compare)
+  // on subsequent renders or after an inpaint operation updates the active asset.
+  const activeSessionKeyRef = useRef<string | null>(null);
+
   useEffect(() => {
-    setCurrentAsset(asset);
-  }, [asset]);
+    if (!isOpen || !effectiveTarget) {
+      activeSessionKeyRef.current = null;
+      return;
+    }
+
+    const sessionKey =
+      effectiveTarget.mode === "story"
+        ? `story:${effectiveTarget.storySlug}:${effectiveTarget.panelId}`
+        : `project:${effectiveTarget.projectId}:${effectiveTarget.asset.id}`;
+
+    // Already tracking this session; keep current inpaint/compare state
+    if (activeSessionKeyRef.current === sessionKey) {
+      return;
+    }
+
+    // When an inpaint operation finishes in project mode, currentAsset has already
+    // been set to the newly created asset and previousAsset holds the pre-inpaint asset.
+    if (
+      effectiveTarget.mode === "project" &&
+      currentAsset &&
+      effectiveTarget.asset.id === currentAsset.id &&
+      previousAsset
+    ) {
+      activeSessionKeyRef.current = sessionKey;
+      return;
+    }
+
+    activeSessionKeyRef.current = sessionKey;
+    if (effectiveTarget.mode === "story") {
+      setCurrentImageSrc(effectiveTarget.imageSrc);
+      setPreviousImageSrc(null);
+    } else {
+      setCurrentAsset(effectiveTarget.asset);
+      setPreviousAsset(null);
+    }
+  }, [
+    isOpen,
+    effectiveTarget?.mode,
+    effectiveTarget?.mode === "story"
+      ? effectiveTarget.panelId
+      : effectiveTarget?.mode === "project"
+      ? effectiveTarget.asset.id
+      : undefined,
+  ]);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -129,8 +195,9 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
     const img = imageRef.current;
     if (!canvas || !img) return;
 
-    const w = img.naturalWidth || currentAsset.width || 512;
-    const h = img.naturalHeight || currentAsset.height || 768;
+    const w = img.naturalWidth || currentAsset?.width || 1024;
+    const h = img.naturalHeight || currentAsset?.height || 1024;
+    setImageNaturalSize({ width: w, height: h });
     canvas.width = w;
     canvas.height = h;
 
@@ -333,40 +400,65 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
     setInpaintError(null);
     setIsInpainting(true);
     setInpaintProgress(0.05);
-    setInpaintStatusText("Uploading image & mask to ComfyUI...");
 
     try {
-      const queued = await api.inpaintComfyImage(projectId, {
-        asset_id: currentAsset.id,
-        mask_data: maskData,
-        prompt: prompt.trim(),
-        negative_prompt: negativePrompt.trim(),
-        seed,
-        timeout_s: 900,
-      });
+      if (effectiveTarget.mode === 'project') {
+        setInpaintStatusText("Uploading image & mask to ComfyUI...");
+        const activeAsset = currentAsset || effectiveTarget.asset;
+        const queued = await api.inpaintComfyImage(effectiveTarget.projectId, {
+          asset_id: activeAsset.id,
+          mask_data: maskData,
+          prompt: prompt.trim(),
+          negative_prompt: negativePrompt.trim(),
+          seed,
+          timeout_s: 900,
+        });
 
-      setInpaintStatusText("ComfyUI inpainting with Qwen 2.1 Turbo...");
+        setInpaintStatusText("ComfyUI inpainting with Qwen 2.1 Turbo...");
 
-      const completedJob = await api.waitForWorkflowJob(queued.job_id, (job: Job) => {
-        if (job.progress != null) setInpaintProgress(job.progress);
-        if (job.message) setInpaintStatusText(job.message);
-      });
+        const completedJob = await api.waitForWorkflowJob(queued.job_id, (job: Job) => {
+          if (job.progress != null) setInpaintProgress(job.progress);
+          if (job.message) setInpaintStatusText(job.message);
+        });
 
-      if (completedJob.status === "FAILED") {
-        throw new Error(completedJob.error || "Inpainting job failed in engine.");
-      }
+        if (completedJob.status === "FAILED") {
+          throw new Error(completedJob.error || "Inpainting job failed in engine.");
+        }
 
-      setInpaintStatusText("Retrieving newly generated asset...");
-      setInpaintProgress(0.95);
+        setInpaintStatusText("Retrieving newly generated asset...");
+        setInpaintProgress(0.95);
 
-      // Refresh project assets
-      const assetList = await api.listGeneratedAssets(projectId);
-      if (assetList.assets && assetList.assets.length > 0) {
-        const newest = assetList.assets[0];
-        setPreviousAsset(currentAsset);
-        setCurrentAsset(newest);
-        if (onAssetUpdated) onAssetUpdated(newest);
-        showToast("✨ Inpainting complete! New asset created.");
+        // Refresh project assets
+        const assetList = await api.listGeneratedAssets(effectiveTarget.projectId);
+        if (assetList.assets && assetList.assets.length > 0) {
+          const newest = assetList.assets[0];
+          setPreviousAsset(currentAsset || effectiveTarget.asset);
+          setCurrentAsset(newest);
+          if (effectiveTarget.onAssetUpdated) effectiveTarget.onAssetUpdated(newest);
+          showToast("✨ Inpainting complete! New asset created.");
+        }
+      } else {
+        setInpaintStatusText("Inpainting story panel with Qwen 2.1 inpaint workflow...");
+        setInpaintProgress(0.3);
+        const res = await api.inpaintOriginalPanel(effectiveTarget.storySlug, effectiveTarget.panelId, {
+          mask_png_base64: maskData,
+          prompt: prompt.trim(),
+          negative_prompt: negativePrompt.trim(),
+          seed,
+          episode: effectiveTarget.episodeSlug,
+        });
+        setInpaintProgress(0.95);
+        const updatedUrl = api.getOriginalPanelImageUrl(
+          effectiveTarget.storySlug,
+          effectiveTarget.panelId,
+          effectiveTarget.episodeSlug,
+        ) + `?t=${Date.now()}`;
+        setPreviousImageSrc(currentImageSrc);
+        setCurrentImageSrc(updatedUrl);
+        if (effectiveTarget.onPanelUpdated) {
+          effectiveTarget.onPanelUpdated(res.candidate_file || updatedUrl);
+        }
+        showToast("✨ Story panel inpainted successfully!");
       }
 
       // Reset mask canvas for further edits
@@ -381,17 +473,38 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   };
 
   const copyShaToClipboard = () => {
-    navigator.clipboard.writeText(currentAsset.sha256);
-    setCopiedSha(true);
-    showToast("SHA-256 copied to clipboard");
-    setTimeout(() => setCopiedSha(false), 2000);
+    const sha = effectiveTarget.mode === 'project'
+      ? (currentAsset || effectiveTarget.asset).sha256
+      : effectiveTarget.panelId;
+    if (sha) {
+      navigator.clipboard.writeText(sha);
+      setCopiedSha(true);
+      showToast("Identifier copied to clipboard");
+      setTimeout(() => setCopiedSha(false), 2000);
+    }
   };
 
+  const imageUrl = effectiveTarget.mode === 'project'
+    ? api.getGeneratedAssetUrl(
+        effectiveTarget.projectId,
+        (isComparing && previousAsset ? previousAsset : (currentAsset || effectiveTarget.asset)).id
+      )
+    : (isComparing && previousImageSrc ? previousImageSrc : currentImageSrc);
+
+  const displayWidth = currentAsset?.width ?? imageNaturalSize.width;
+  const displayHeight = currentAsset?.height ?? imageNaturalSize.height;
+  const displayFilename = effectiveTarget.mode === 'project'
+    ? (currentAsset?.filename || "asset.png")
+    : `story-panel-${effectiveTarget.panelId}.png`;
+  const displaySubtext = effectiveTarget.mode === 'project'
+    ? (currentAsset ? `${(currentAsset.byte_size / 1024).toFixed(1)} KB` : "")
+    : `Panel ${effectiveTarget.panelId}`;
+  const hasInpainted = effectiveTarget.mode === 'project' ? !!previousAsset : !!previousImageSrc;
+
   const handleDownload = () => {
-    const url = api.getGeneratedAssetUrl(projectId, currentAsset.id);
     const link = document.createElement("a");
-    link.href = url;
-    link.download = currentAsset.filename || `asset-${currentAsset.id}.png`;
+    link.href = imageUrl;
+    link.download = displayFilename;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -426,9 +539,6 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  const displayedAsset = isComparing && previousAsset ? previousAsset : currentAsset;
-  const imageUrl = api.getGeneratedAssetUrl(projectId, displayedAsset.id);
-
   return (
     <div
       className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-3 md:p-6 animate-in fade-in duration-200 select-none"
@@ -449,23 +559,23 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                   Visual Asset Editor & Inpaint Studio
                 </h2>
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-indigo-950 border border-indigo-700/60 text-indigo-300">
-                  {currentAsset.width} × {currentAsset.height}
+                  {displayWidth} × {displayHeight}
                 </span>
-                {previousAsset && (
+                {hasInpainted && (
                   <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-950 border border-emerald-700/60 text-emerald-400">
                     INPAINTED
                   </span>
                 )}
               </div>
               <p className="text-xs text-zinc-400 truncate font-mono">
-                {currentAsset.filename} · {(currentAsset.byte_size / 1024).toFixed(1)} KB
+                {displayFilename} · {displaySubtext}
               </p>
             </div>
           </div>
 
           {/* Quick Header Actions */}
           <div className="flex items-center gap-2">
-            {previousAsset && (
+            {hasInpainted && (
               <button
                 type="button"
                 onMouseDown={() => setIsComparing(true)}

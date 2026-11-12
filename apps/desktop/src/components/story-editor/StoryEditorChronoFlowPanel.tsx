@@ -1,7 +1,88 @@
 import React, { useState } from "react";
-import { Film, Sparkles, Image as ImageIcon, Play, Check, X, ExternalLink, RefreshCw, Layers } from "lucide-react";
+import { Film, Sparkles, Image as ImageIcon, Play, Check, X, ExternalLink, RefreshCw, Layers, Lock } from "lucide-react";
 import type { Project, VideoScene } from "@panelflow/shared-types";
 import { api } from "@panelflow/api-client";
+
+interface VaultCharacter {
+  id: string;
+  name: string;
+  role: string;
+  image: string;
+  description: string;
+}
+
+/** Character Lock picker: bind Character Vault reference sheets to image generation so faces follow the locked identity. */
+const CharacterLockPicker: React.FC<{
+  selected: string[];
+  onToggle: (id: string) => void;
+  max?: number;
+}> = ({ selected, onToggle, max = 4 }) => {
+  const [chars, setChars] = useState<VaultCharacter[]>([]);
+  React.useEffect(() => {
+    let cancelled = false;
+    fetch("http://127.0.0.1:8765/api/chronoflow/characters")
+      .then((r) => r.json())
+      .then((d) => {
+        if (!cancelled) setChars(d.characters || []);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (!chars.length) {
+    return (
+      <div>
+        <label className="flex items-center gap-1.5 text-xs font-semibold text-zinc-300 mb-1.5">
+          <Lock className="w-3.5 h-3.5" />
+          Character Lock
+        </label>
+        <p className="text-[11px] text-zinc-500">Character Vault is empty — add reference sheets in the ChronoFlow Studio vault first.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1.5">
+        <label className="flex items-center gap-1.5 text-xs font-semibold text-zinc-300">
+          <Lock className="w-3.5 h-3.5" />
+          Character Lock
+        </label>
+        <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 font-semibold">
+          {selected.length ? `${selected.length} locked` : "off"}
+        </span>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {chars.map((c) => {
+          const on = selected.includes(c.id);
+          return (
+            <button
+              key={c.id}
+              type="button"
+              title={`${c.name} — ${c.role}`}
+              onClick={() => onToggle(c.id)}
+              className={`relative w-12 h-12 rounded-lg overflow-hidden border-2 transition-all ${
+                on ? "border-purple-400 scale-105" : "border-zinc-800 hover:border-zinc-600"
+              }`}
+            >
+              <img src={`http://127.0.0.1:8765/inputs/${c.image}`} alt={c.name} className="w-full h-full object-cover" />
+              {on && (
+                <span className="absolute bottom-0 right-0 w-4 h-4 bg-purple-500 rounded-tl flex items-center justify-center">
+                  <Check className="w-2.5 h-2.5 text-white" />
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+      <p className="text-[10px] text-zinc-500 mt-1">
+        Generated faces follow the selected approved sheets (max {max}). Never generate a character's face unlocked.
+      </p>
+    </div>
+  );
+};
 
 interface StoryEditorChronoFlowPanelProps {
   project: Project;
@@ -34,6 +115,7 @@ export const StoryEditorChronoFlowPanel: React.FC<StoryEditorChronoFlowPanelProp
   const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
   const [refine, setRefine] = useState(false);
   const [refineNote, setRefineNote] = useState<string | null>(null);
+  const [lockedIds, setLockedIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   // Active frame image from scene layers
@@ -79,6 +161,7 @@ export const StoryEditorChronoFlowPanel: React.FC<StoryEditorChronoFlowPanelProp
           prompt,
           width: 1344,
           height: 768,
+          character_ids: lockedIds,
           ...(refine ? { refine: true } : {}),
         }),
       });
@@ -290,6 +373,15 @@ export const StoryEditorChronoFlowPanel: React.FC<StoryEditorChronoFlowPanelProp
                 Check and fix the picture (slower)
               </label>
               {refineNote && <p className="text-xs text-amber-300" role="status">{refineNote}</p>}
+
+              <CharacterLockPicker
+                selected={lockedIds}
+                onToggle={(id) =>
+                  setLockedIds((prev) =>
+                    prev.includes(id) ? prev.filter((x) => x !== id) : prev.length >= 4 ? prev : [...prev, id]
+                  )
+                }
+              />
 
               <button
                 onClick={handleGenerateImage}
