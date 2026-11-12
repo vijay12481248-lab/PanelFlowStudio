@@ -84,9 +84,21 @@ def submit_comfyui_image_job(project_id: str, request: ComfyImageRequest, db: Se
         registry.load(request.workflow_id)
         preflight = registry.preflight(request.workflow_id)
         if not preflight["ready"]:
-            raise WorkflowRegistryError(
-                f"ComfyUI workflow preflight failed: missing nodes={preflight['missing_nodes']}, missing models={preflight['missing_models']}"
-            )
+            if not preflight.get("comfy_online", True):
+                try:
+                    from engine.system.setup import comfyui_manager
+                    if comfyui_manager.is_installed():
+                        res = comfyui_manager.ensure_running(timeout_s=15.0)
+                        if res.get("running"):
+                            preflight = registry.preflight(request.workflow_id)
+                except Exception:
+                    pass
+            if not preflight["ready"]:
+                if not preflight.get("comfy_online", True):
+                    raise WorkflowRegistryError("ComfyUI is offline or unreachable at 127.0.0.1:8188. Please start ComfyUI to generate images.")
+                raise WorkflowRegistryError(
+                    f"ComfyUI workflow preflight failed: missing nodes={preflight['missing_nodes']}, missing models={preflight['missing_models']}"
+                )
     except (ComfyUIError, WorkflowRegistryError) as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
@@ -142,9 +154,21 @@ def submit_comfyui_inpaint_job(project_id: str, request: ComfyInpaintRequest, db
         registry.load(INPAINT_WORKFLOW_ID)
         preflight = registry.preflight(INPAINT_WORKFLOW_ID)
         if not preflight["ready"]:
-            raise WorkflowRegistryError(
-                f"ComfyUI workflow preflight failed: missing nodes={preflight['missing_nodes']}, missing models={preflight['missing_models']}"
-            )
+            if not preflight.get("comfy_online", True):
+                try:
+                    from engine.system.setup import comfyui_manager
+                    if comfyui_manager.is_installed():
+                        res = comfyui_manager.ensure_running(timeout_s=15.0)
+                        if res.get("running"):
+                            preflight = registry.preflight(INPAINT_WORKFLOW_ID)
+                except Exception:
+                    pass
+            if not preflight["ready"]:
+                if not preflight.get("comfy_online", True):
+                    raise WorkflowRegistryError("ComfyUI is offline or unreachable at 127.0.0.1:8188. Please start ComfyUI to inpaint images.")
+                raise WorkflowRegistryError(
+                    f"ComfyUI workflow preflight failed: missing nodes={preflight['missing_nodes']}, missing models={preflight['missing_models']}"
+                )
     except (ComfyUIError, WorkflowRegistryError) as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 

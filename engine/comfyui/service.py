@@ -362,9 +362,23 @@ def generate_video_operation(
         metadata = registry.metadata(workflow_id)
         preflight = registry.preflight(workflow_id)
         if not preflight["ready"]:
-            raise ComfyVideoGenerationError(
-                f"ComfyUI workflow preflight failed: missing nodes={preflight['missing_nodes']}, missing models={preflight['missing_models']}"
-            )
+            if not preflight.get("comfy_online", True):
+                try:
+                    from engine.system.setup import comfyui_manager
+                    if comfyui_manager.is_installed():
+                        res = comfyui_manager.ensure_running(timeout_s=15.0)
+                        if res.get("running"):
+                            preflight = registry.preflight(workflow_id)
+                except Exception:
+                    pass
+            if not preflight["ready"]:
+                if not preflight.get("comfy_online", True):
+                    raise ComfyVideoGenerationError(
+                        f"ComfyUI is offline or unreachable at {client.base_url}. Please launch ComfyUI to generate video."
+                    )
+                raise ComfyVideoGenerationError(
+                    f"ComfyUI workflow preflight failed: missing nodes={preflight['missing_nodes']}, missing models={preflight['missing_models']}"
+                )
     except (ComfyUIError, WorkflowRegistryError, ValueError) as exc:
         raise ComfyVideoGenerationError(str(exc)) from exc
 

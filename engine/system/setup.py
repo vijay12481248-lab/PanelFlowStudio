@@ -391,3 +391,199 @@ class OllamaModelPullManager:
 
 
 ollama_pull_manager = OllamaModelPullManager()
+
+
+# ---------------------------------------------------------------------------
+# 5. ComfyUI Process & Dependency Auto-Launcher
+# ---------------------------------------------------------------------------
+
+class ComfyUIManager:
+    """
+    Manages discovery, status probing, and automated background lifecycle
+    of the local ComfyUI AI image/video generation engine.
+    """
+
+    DEFAULT_PORT = 8188
+    DEFAULT_ENDPOINT = "http://127.0.0.1:8188"
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._proc: Optional[subprocess.Popen] = None
+        self._cached_install: Optional[Dict[str, Any]] = None
+
+    def locate(self) -> Dict[str, Any]:
+        """Scans known installation roots for ComfyUI and its python executable."""
+        if self._cached_install and self._cached_install.get("installed"):
+            return self._cached_install
+
+        candidates = [
+            os.environ.get("PANELFLOW_COMFYUI_DIR"),
+            r"E:\VIJAY SEKAR\ComfyUI",
+            r"D:\ComfyUI",
+            r"C:\ComfyUI",
+            str(Path.home() / "ComfyUI"),
+        ]
+
+        found_info: Dict[str, Any] = {
+            "installed": False,
+            "root": None,
+            "python": None,
+            "main_py": None,
+        }
+
+        for c in candidates:
+            if not c:
+                continue
+            p = Path(c).resolve()
+            if not p.exists() or not p.is_dir():
+                continue
+            main_py = p / "main.py"
+            if not main_py.exists():
+                continue
+
+            # Look for virtualenv python
+            py_candidates = [
+                p / "venv" / "Scripts" / "python.exe",
+                p / "python_embeded" / "python.exe",
+                p / ".venv" / "Scripts" / "python.exe",
+                p / "venv" / "bin" / "python",
+            ]
+            py_exe = next((py for py in py_candidates if py.exists()), None)
+            if not py_exe:
+                py_exe = Path(sys.executable)
+
+            found_info = {
+                "installed": True,
+                "root": str(p),
+                "python": str(py_exe),
+                "main_py": str(main_py),
+            }
+            self._cached_install = found_info
+            return found_info
+
+        return found_info
+
+    def is_installed(self) -> bool:
+        return bool(self.locate().get("installed"))
+
+    def is_running(self, host: str = "127.0.0.1", port: int = DEFAULT_PORT) -> bool:
+        """Checks whether ComfyUI is actively listening on the target port."""
+        import socket
+        try:
+            with socket.create_connection((host, port), timeout=0.4):
+                return True
+        except (OSError, socket.error):
+            return False
+
+    def start(self, host: str = "127.0.0.1", port: int = DEFAULT_PORT) -> Dict[str, Any]:
+        with self._lock:
+            if self.is_running(host, port):
+                return {
+                    "status": "ALREADY_RUNNING",
+                    "running": True,
+                    "message": f"ComfyUI is already active on http://{host}:{port}",
+                    "endpoint": f"http://{host}:{port}",
+                }
+
+            loc = self.locate()
+            if not loc.get("installed"):
+                return {
+                    "status": "NOT_FOUND",
+                    "running": False,
+                    "message": "ComfyUI installation was not found on local disks.",
+                }
+
+            root = Path(loc["root"])
+            py_exe = Path(loc["python"])
+            main_py = Path(loc["main_py"])
+
+            creation_flags = 0
+            if sys.platform == "win32":
+                creation_flags = 0x08000000  # CREATE_NO_WINDOW
+
+            cmd = [
+                str(py_exe),
+                str(main_py),
+                "--listen", host,
+                "--port", str(port),
+                "--enable-cors-header", "*",
+            ]
+
+            env = dict(os.environ)
+            workflow_dir = root / "workflow"
+            if workflow_dir.exists():
+                env.setdefault("PANELFLOW_COMFYUI_WORKFLOW_DIR", str(workflow_dir))
+
+            try:
+                proc = subprocess.Popen(
+                    cmd,
+                    cwd=str(root),
+                    creationflags=creation_flags,
+                    env=env,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                self._proc = proc
+                logger.info("Launched ComfyUI daemon PID %d at %s", proc.pid, root)
+                return {
+                    "status": "STARTING",
+                    "running": False,
+                    "pid": proc.pid,
+                    "message": f"Launching ComfyUI on http://{host}:{port}...",
+                    "endpoint": f"http://{host}:{port}",
+                }
+            except Exception as e:
+                logger.exception("Failed to launch ComfyUI: %s", e)
+                return {
+                    "status": "FAILED",
+                    "running": False,
+                    "message": f"Failed to spawn ComfyUI process: {e}",
+                }
+
+    def ensure_running(self, host: str = "127.0.0.1", port: int = DEFAULT_PORT, timeout_s: float = 15.0) -> Dict[str, Any]:
+        """Ensures ComfyUI is up, starting it if necessary and awaiting connectivity."""
+        if self.is_running(host, port):
+            return {
+                "status": "RUNNING",
+                "running": True,
+                "message": f"ComfyUI is running on http://{host}:{port}",
+                "endpoint": f"http://{host}:{port}",
+            }
+
+        res = self.start(host, port)
+        if res.get("status") in ("FAILED", "NOT_FOUND"):
+            return res
+
+        import time
+        start_time = time.monotonic()
+        while time.monotonic() - start_time < timeout_s:
+            if self.is_running(host, port):
+                return {
+                    "status": "RUNNING",
+                    "running": True,
+                    "message": f"ComfyUI started successfully on http://{host}:{port}",
+                    "endpoint": f"http://{host}:{port}",
+                }
+            time.sleep(0.5)
+
+        return {
+            "status": "STARTING",
+            "running": False,
+            "message": f"ComfyUI launch initiated, but port {port} is not yet listening. It may still be loading models.",
+            "endpoint": f"http://{host}:{port}",
+        }
+
+    def get_status(self, host: str = "127.0.0.1", port: int = DEFAULT_PORT) -> Dict[str, Any]:
+        running = self.is_running(host, port)
+        loc = self.locate()
+        return {
+            "running": running,
+            "installed": bool(loc.get("installed")),
+            "root": loc.get("root"),
+            "endpoint": f"http://{host}:{port}",
+            "can_launch": bool(loc.get("installed")) and not running,
+        }
+
+
+comfyui_manager = ComfyUIManager()
+
