@@ -11,6 +11,7 @@ from engine.mcp.tools import (
     chronoflow_tools,
     autopilot_tools,
     youtube_tools,
+    creative_agent_tools,
 )
 
 __all__ = [
@@ -24,4 +25,5 @@ __all__ = [
     "chronoflow_tools",
     "autopilot_tools",
     "youtube_tools",
+    "creative_agent_tools",
 ]
