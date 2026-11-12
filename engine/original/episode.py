@@ -3,9 +3,13 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
+import threading
 import time
 from pathlib import Path
 from typing import Callable
+
+logger = logging.getLogger("panelflow.original.episode")
 
 from engine.anime.review.channels import ChannelPreset
 from engine.original import art, pages, video
@@ -47,8 +51,50 @@ def animate_stage(story: OriginalStory, ws, step: Progress, is_cancelled: Callab
         return [f"animation skipped: {str(exc)[:160]}"]
 
 
+def _pre_synthesize_episode_audio_async(
+    story: OriginalStory,
+    ws: Path,
+    channel: ChannelPreset | None,
+    is_cancelled: Callable[[], bool],
+) -> threading.Thread:
+    """Pre-synthesizes Kokoro audio on CPU while ComfyUI renders images on the GPU."""
+    def _worker():
+        try:
+            from engine.narration.runtime import audio as rt
+            from engine.original import video
+
+            tts = rt.KokoroTts()
+            narrator = (channel.voice, channel.voice_rate) if channel else None
+            narrator_tuple, chars = video.voices_for(story, narrator)
+            (ws / "voice").mkdir(parents=True, exist_ok=True)
+            meta_path = ws / "video_meta.json"
+            meta = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.exists() else {}
+
+            for p in story.panels:
+                if is_cancelled():
+                    break
+                wav = ws / "voice" / f"{p.id}.wav"
+                vkey = video._digest(json.dumps(video.spoken_parts(p)), json.dumps(narrator_tuple), json.dumps(chars))
+                if not (wav.exists() and meta.get(p.id, {}).get("voice") == vkey):
+                    video.voice_panel(tts, p, narrator_tuple, chars, 30.0, wav)
+                    meta[p.id] = {**(meta.get(p.id, {})), "voice": vkey}
+            meta_path.write_text(json.dumps(meta), encoding="utf-8")
+        except Exception as exc:
+            logger.debug(f"Audio pre-synthesis background worker encountered non-fatal error: {exc}")
+        finally:
+            try:
+                from engine.narration.runtime import audio as rt
+                rt.release_audio_models()
+            except Exception:
+                pass
+
+    t = threading.Thread(target=_worker, name="kokoro_tts_overlap", daemon=True)
+    t.start()
+    return t
+
+
 def run_episode(store: SeriesStore, series_id: str, number: int, channel: ChannelPreset | None, provider, runner_factory,
-                progress: Progress, is_cancelled: Callable[[], bool], scenes: int | None = None, check: bool = True, refine: bool = False, animate: bool = False) -> dict:
+                progress: Progress, is_cancelled: Callable[[], bool], scenes: int | None = None, check: bool = True, refine: bool = False, animate: bool = False, preview: bool = False) -> dict:
     wait_for_previous(store, series_id, number, is_cancelled)
     series = store.get(series_id)
     ws = store.episode_dir(series_id, number)
@@ -85,9 +131,25 @@ def run_episode(store: SeriesStore, series_id: str, number: int, channel: Channe
         step(0.2, "Drawing the pictures")
         store.pull_sheets(series_id, ws)
         runner = runner_factory()
-        report = art.generate_art(story, ws, runner, provider if check else None,
-                                  progress=lambda p, m: step(0.2 + 0.35 * p, m), is_cancelled=is_cancelled, refine=True if refine else None)
+
+        # Overlap CPU-bound Kokoro TTS audio rendering with GPU image rendering
+        audio_thread = _pre_synthesize_episode_audio_async(story, ws, channel, is_cancelled)
+
+        try:
+            report = art.generate_art(story, ws, runner, provider if check else None,
+                                      progress=lambda p, m: step(0.2 + 0.35 * p, m), is_cancelled=is_cancelled,
+                                      refine=True if refine else None, preview=preview)
+        finally:
+            audio_thread.join(timeout=120.0)
+
         store.push_sheets(series_id, ws)
+
+        if preview:
+            warnings = list(story.warnings) + [f"panel {p} below the consistency threshold" for p in report.get("below_threshold", [])]
+            ep = ep.model_copy(update={"status": "draft", "warnings": warnings})
+            store.update_episode(series_id, ep)
+            progress(1.0, f"Episode {number} draft ready")
+            return {"series": series_id, "episode": number, "title": ep.title, "preview": True, "art": report, "panels": len(story.panels)}
 
         animate_note = animate_stage(story, ws, step, is_cancelled) if animate else []
 

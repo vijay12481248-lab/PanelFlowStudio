@@ -284,3 +284,118 @@ def refine_art_image(prompt: str, negative: str | None, width: int, height: int,
                    model_files=list(meta.get("model_files", [])), source_output={"filename": f"{key}.png", "subfolder": "", "type": "output"},
                    seed=origin["seed"])
     return art, res
+
+
+def upscale_2x(
+    image_bytes: bytes,
+    filter_mode: Image.Resampling = Image.Resampling.LANCZOS,
+) -> tuple[bytes, tuple[int, int]]:
+    """Stage 1: Spatial 2x upscaling preserving macro composition, framing, and layout."""
+    with Image.open(io.BytesIO(image_bytes)) as im:
+        w, h = im.size
+        target_w, target_h = w * 2, h * 2
+        if target_w % 16 or target_h % 16:
+            raise ValueError(f"Upscaled dimensions {target_w}x{target_h} must be multiples of 16")
+        upscaled = im.resize((target_w, target_h), resample=filter_mode)
+        buf = io.BytesIO()
+        upscaled.save(buf, format="PNG")
+        return buf.getvalue(), (target_w, target_h)
+
+
+def calculate_refiner_sigmas(start_sigma: float = 0.35, steps: int = 4) -> str:
+    """Stage 2 helper: Generates partial-denoise sigma schedule down to 0.0. Clamped to sigma <= 0.40."""
+    clamped_sigma = min(0.40, max(0.05, float(start_sigma)))
+    steps = max(2, min(12, int(steps)))
+    sigmas = [clamped_sigma * (1.0 - i / steps) for i in range(steps)] + [0.0]
+    return ", ".join(f"{s:.6f}" for s in sigmas)
+
+
+def refiner_pass(
+    runner: Any,
+    base_image: bytes | Path,
+    prompt: str,
+    neg: str,
+    seed: int,
+    sigma: float = 0.35,
+    steps: int = 4,
+    timeout: float = 300.0,
+    is_cancelled: Callable[[], bool] = lambda: False,
+) -> bytes:
+    """Stage 2: Partial-denoise refiner pass executing qwen_image_21_inpaint with full mask and custom sigmas."""
+    from engine.comfyui.art import _patch_workflow
+
+    base_bytes = base_image if isinstance(base_image, bytes) else Path(base_image).read_bytes()
+    with Image.open(io.BytesIO(base_bytes)) as im:
+        w, h = im.size
+    if w % 16 or h % 16:
+        raise ValueError(f"Image sides must be multiples of 16, got {w}x{h}")
+
+    sigmas_str = calculate_refiner_sigmas(start_sigma=sigma, steps=steps)
+    full_mask = Image.new("L", (w, h), 255)
+    mask_buf = io.BytesIO()
+    full_mask.save(mask_buf, format="PNG")
+    mask_bytes = mask_buf.getvalue()
+
+    ref_name = runner._upload_bytes(base_bytes)
+    mask_name = runner._upload_bytes(mask_bytes)
+
+    if getattr(runner, "qwen_inpaint_wf", None) is None:
+        raise RuntimeError("qwen_image_21_inpaint workflow is not available on runner")
+
+    wf, meta = runner.qwen_inpaint_wf
+    patched = _patch_workflow(
+        wf,
+        meta["patch_slots"],
+        prompt=prompt,
+        negative_prompt=neg,
+        width=w,
+        height=h,
+        seed=seed,
+        prefix="panelflow_refine_scale",
+        reference_image=ref_name,
+        mask_image=mask_name,
+    )
+    if "7" in patched and patched["7"].get("class_type") == "ManualSigmas":
+        patched["7"]["inputs"]["sigmas"] = sigmas_str
+
+    res_run = runner.art.run(patched, timeout=timeout, is_cancelled=is_cancelled)
+    raw_out = res_run[0] if isinstance(res_run, (tuple, list)) else res_run
+    out = raw_out[0] if isinstance(raw_out, list) else raw_out
+    with Image.open(io.BytesIO(out)) as res:
+        if res.size != (w, h):
+            raise RuntimeError(f"ComfyUI returned {res.size[0]}x{res.size[1]} for expected {w}x{h}")
+    return out
+
+
+def scale_and_refine_panel(
+    runner: Any,
+    draft_bytes: bytes,
+    prompt: str,
+    neg: str,
+    seed: int,
+    sigma: float = 0.35,
+    steps: int = 4,
+) -> tuple[bytes, dict]:
+    """Execute complete two-stage composition-preserving scaling pipeline."""
+    upscaled_bytes, (uw, uh) = upscale_2x(draft_bytes)
+    refined_bytes = refiner_pass(
+        runner=runner,
+        base_image=upscaled_bytes,
+        prompt=prompt,
+        neg=neg,
+        seed=seed,
+        sigma=sigma,
+        steps=steps,
+    )
+    return refined_bytes, {
+        "stage1_upscale": "2x_lanczos",
+        "stage2_refiner_sigma": min(0.40, max(0.05, float(sigma))),
+        "refiner_sigma": min(0.40, max(0.05, float(sigma))),
+        "refiner_steps": steps,
+        "steps": steps,
+        "width": uw,
+        "height": uh,
+        "upscaled_size": (uw, uh),
+        "scale_factor": 2.0,
+        "seed": seed,
+    }

@@ -14,10 +14,11 @@ import hashlib
 import io
 import json
 import os
+import random
 from pathlib import Path
 from typing import Any, Callable
 
-from PIL import Image
+from PIL import Image, ImageFilter
 from pydantic import BaseModel, Field
 
 from engine.comfyui import ComfyUIClient, ComfyWorkflowRegistry
@@ -343,7 +344,10 @@ class ComfyRunner:
                 depth_weight=d_weight,
             )
         elif self.engine == "qwen":
-            return self.art.generate(pos, neg, width, height, seed, prefix, timeout=timeout, is_cancelled=is_cancelled).png
+            kwargs: dict[str, Any] = {"timeout": timeout, "is_cancelled": is_cancelled}
+            if reference is not None:
+                kwargs["reference_image"] = str(reference)
+            return self.art.generate(pos, neg, width, height, seed, prefix, **kwargs).png
         elif reference is not None and reference_b is not None and self.ipa2 is not None and (width, height) == (W, H):
             wf = _patch_workflow(self.ipa2[0], self.ipa2[1]["patch_slots"], pos, neg, width, height, seed, prefix,
                                  reference_image=self._upload(reference), reference_image_b=self._upload(reference_b))
@@ -540,16 +544,18 @@ class ArtRecord(BaseModel):
 
 
 FRAME_SIZES = {"16:9": (W, H), "9:16": (H, W)}  # 9:16 = a YouTube Short (768x1344, a multiple of 32 like the landscape bucket)
+FRAME_SIZES_PREVIEW = {"16:9": (W // 2, H // 2), "9:16": (H // 2, W // 2)}
 
 
-def frame_size(story: OriginalStory) -> tuple[int, int] | None:
+def frame_size(story: OriginalStory, preview: bool = False) -> tuple[int, int] | None:
     """The one picture size a story asks for (`meta["frame"]`, set by the explainer / short formats), else None (per-shot shapes)."""
-    return FRAME_SIZES.get((story.meta or {}).get("frame", ""))
+    table = FRAME_SIZES_PREVIEW if preview else FRAME_SIZES
+    return table.get((story.meta or {}).get("frame", ""))
 
 
-def frame_16x9(story: OriginalStory) -> bool:
+def frame_16x9(story: OriginalStory, preview: bool = False) -> bool:
     """True when the story fixes ONE picture size for every picture (the name is historical: it now also covers 9:16)."""
-    return frame_size(story) is not None
+    return frame_size(story, preview=preview) is not None
 
 
 def _hash(pos: str, neg: str, ref: str = "", dims: tuple[int, int] | None = None) -> str:
@@ -562,7 +568,7 @@ _BUILD_PROMPT_EXTRA = {"runner", "engine"} & set(inspect.signature(build_prompt)
 
 
 def _refine_directed_panel(*, story, p, ws, runner, provider, claims, chars, spec, style, engine, must, neg, dims, spec_shot, shown_n, refs,
-                           iters, is_cancelled):
+                           iters, is_cancelled, preview: bool = False, review_mode: str = "autonomous"):
     """One directed panel through the generic refinement loop (engine/original/refine.py). Returns (best, attempt) in the shape generate_art stores.
     Repairs run only on the Qwen art engine (a masked redraw of reviewer-reported boxes); otherwise a located defect is redrawn as a whole."""
     pw, ph = dims
@@ -572,28 +578,29 @@ def _refine_directed_panel(*, story, p, ws, runner, provider, claims, chars, spe
         extra = {k: v for k, v in (("runner", runner), ("engine", engine)) if k in _BUILD_PROMPT_EXTRA}
         pos_i, _ = build_prompt(story, p, plan.emphasis if plan else [], style, must, attempt, **extra)
         w, h = pw, ph
-        if attempt >= 2 and style == "natural" and not frame_16x9(story):
+        if attempt >= 2 and style == "natural" and not frame_16x9(story, preview=preview):
             widened = {"close": "medium", "extreme_close": "medium", "medium": "wide"}.get(spec_shot, spec_shot)
-            w, h = shotspec.resolve_dimensions(widened, num_characters=shown_n, default=(W, H))
+            w, h = shotspec.resolve_dimensions(widened, num_characters=shown_n, default=(W, H), preview=preview)
         seed = seed_for(story, p.id, attempt)
         png = runner.generate(pos_i, neg, seed, w, h, f"panel_{p.id}", reference=refs["ref"], reference_b=refs["ref_b"],
                               reference_weight=POSE_WEIGHT if (pose_sensitive(p) or attempt > 0) else None,
                               pose_image=refs["pose"], depth_image=refs["depth"], pose_weight=refs["pose_wt"], depth_weight=refs["depth_wt"])
         state["pos"], state["seed"] = pos_i, seed
         return png, {"seed": seed, "prompt": pos_i, "negative": neg, "width": w, "height": h, "engine": str(engine),
-                     "workflow": ART_WORKFLOW_ID if engine == "qwen" else ""}
+                     "workflow": ART_WORKFLOW_ID if engine == "qwen" else "", "preview": preview}
 
     def look(png):
         tmp = ws / "panels" / f"_try_{p.id}.png"
         tmp.write_bytes(png)
         try:
-            return asyncio.run(review_mod.review_image(provider, tmp, claims, spec, chars, locate_defects=True))
+            return asyncio.run(review_mod.review_image(provider, tmp, claims, spec, chars, locate_defects=True, review_mode=review_mode))
         finally:
             tmp.unlink(missing_ok=True)
 
     can_edit = engine == "qwen" and getattr(runner, "qwen_inpaint_wf", None) is not None
+    budget_attempts = 1 if review_mode == "assisted" else DIRECTED_ATTEMPTS
     result = refine_image(
-        generate=generate, review=look, budget=Budget(max_attempts=DIRECTED_ATTEMPTS), is_cancelled=is_cancelled,
+        generate=generate, review=look, budget=Budget(max_attempts=budget_attempts), is_cancelled=is_cancelled,
         repair=(lambda png, rev, plan: qwen_repair(runner, png, plan, state["pos"], neg, state["seed"] + 1)) if can_edit else None,
         verify=(lambda png, plan: verify_targets(provider, png, plan.targets)) if can_edit else None,
         record=lambda data, **meta: _record_candidate(ws, p.id, iters, data, **meta))
@@ -611,7 +618,8 @@ def _refine_directed_panel(*, story, p, ws, runner, provider, claims, chars, spe
 
 def generate_art(story: OriginalStory, ws: Path, runner: ComfyRunner, provider=None, limit: int | None = None,
                  progress: Callable[[float, str], None] = lambda p, m: None,
-                 is_cancelled: Callable[[], bool] = lambda: False, refine: bool | None = None) -> dict:
+                 is_cancelled: Callable[[], bool] = lambda: False, refine: bool | None = None,
+                 preview: bool = False, review_mode: str = "autonomous") -> dict:
     """Character sheets first, then panels in story order. Existing images with an unchanged prompt are reused.
 
     refine=True (or PANELFLOW_REFINE_LOOP=1) runs directed panels through the generic refinement loop: planner-driven redraws, masked Qwen repair
@@ -625,14 +633,44 @@ def generate_art(story: OriginalStory, ws: Path, runner: ComfyRunner, provider=N
     def save():
         db_path.write_text(json.dumps([r.model_dump() for r in db.values()], indent=1), encoding="utf-8")
 
-    sheet_dims = shotspec.resolve_dimensions("character_sheet", default=(832, 1216))
+    sheet_dims = shotspec.resolve_dimensions("character_sheet", default=(832, 1216), preview=preview)
+    turnaround_dims = shotspec.resolve_dimensions("turnaround", default=(1536, 768), preview=preview)
+    (ws / "sheets").mkdir(parents=True, exist_ok=True)
+    (ws / "rigging").mkdir(parents=True, exist_ok=True)
+
+    engine_kind = getattr(runner, "engine", "sdxl")
+
+    # 1. Automate 4-view character turnaround sheets (1536x768, 2:1 ratio) on clean white background for Qwen
     for c in story.bible.characters:
-        f = ws / "sheets" / f"{c.id}.png"
-        if not f.exists():
-            f.write_bytes(runner.generate(sheet_prompt(c, story, getattr(runner, "style", "tags")),
-                                          "" if getattr(runner, "style", "tags") == "natural" else SHEET_NEGATIVE,
-                                          seed_for(story, "sheet_" + c.id),
-                                          sheet_dims[0], sheet_dims[1], f"sheet_{c.id}"))
+        if engine_kind == "qwen" or c.turnaround_sheet:
+            t_file = ws / "sheets" / f"{c.id}_turnaround.png"
+            if not t_file.exists():
+                rigging_file = ws / "rigging" / f"{c.id}_turnaround.png"
+                if rigging_file.exists():
+                    import shutil
+                    shutil.copy2(rigging_file, t_file)
+                elif hasattr(runner, "generate_turnaround"):
+                    sheet = runner.generate_turnaround(c, story, ws)
+                    if getattr(sheet, "image_path", None) and Path(sheet.image_path).exists() and not t_file.exists():
+                        import shutil
+                        shutil.copy2(sheet.image_path, t_file)
+                else:
+                    from engine.original import rigging
+                    sheet = rigging.generate_turnaround_sheet(c, story, ws, runner=runner)
+                    if getattr(sheet, "image_path", None) and Path(sheet.image_path).exists() and not t_file.exists():
+                        import shutil
+                        shutil.copy2(sheet.image_path, t_file)
+            if t_file.exists():
+                c.turnaround_sheet = str(t_file)
+
+        # 2. Legacy / SDXL bust portrait fallback
+        if engine_kind != "qwen" or not (ws / "sheets" / f"{c.id}_turnaround.png").exists():
+            f = ws / "sheets" / f"{c.id}.png"
+            if not f.exists():
+                f.write_bytes(runner.generate(sheet_prompt(c, story, getattr(runner, "style", "tags")),
+                                              "" if getattr(runner, "style", "tags") == "natural" else SHEET_NEGATIVE,
+                                              seed_for(story, "sheet_" + c.id),
+                                              sheet_dims[0], sheet_dims[1], f"sheet_{c.id}"))
     chars = {c.id: c for c in story.bible.characters}
     panels = story.panels[:limit] if limit else story.panels
     done = reused = 0
@@ -647,11 +685,28 @@ def generate_art(story: OriginalStory, ws: Path, runner: ComfyRunner, provider=N
         spec_shot = spec.shot if spec else p.shot
         # a story that asks for the video frame (meta["frame"] == "16:9", the explainer format) draws EVERY picture 16:9: a square close-up would sit
         # on blurred side bars in the video (as film.py's FRAME); other stories keep the per-shot shapes (portrait full-body, square close-up)
-        pw, ph = frame_size(story) or shotspec.resolve_dimensions(spec_shot, num_characters=len(shown), default=(W, H))
-        # the first character on screen has its face pinned to its sheet
-        ref = ws / "sheets" / f"{shown[0].id}.png" if shown and getattr(runner, "ipa", None) is not None else None
-        # two characters: the first is pinned to the left half, the second to the right half (needs the masked workflow)
-        ref_b = ws / "sheets" / f"{shown[1].id}.png" if len(shown) == 2 and getattr(runner, "ipa2", None) is not None else None
+        pw, ph = frame_size(story, preview=preview) or shotspec.resolve_dimensions(spec_shot, num_characters=len(shown), default=(W, H), preview=preview)
+        # Character reference conditioning:
+        # Under Qwen Image 2.1 Turbo, the lead character's 4-view turnaround sheet is bound as reference.
+        # Under legacy SDXL, IP-Adapter uses the bust portrait.
+        ref = None
+        ref_b = None
+        if shown:
+            lead = shown[0]
+            if engine == "qwen":
+                if getattr(lead, "turnaround_sheet", None) and Path(lead.turnaround_sheet).exists():
+                    ref = Path(lead.turnaround_sheet)
+                elif (ws / "sheets" / f"{lead.id}_turnaround.png").exists():
+                    ref = ws / "sheets" / f"{lead.id}_turnaround.png"
+                elif (ws / "rigging" / f"{lead.id}_turnaround.png").exists():
+                    ref = ws / "rigging" / f"{lead.id}_turnaround.png"
+                elif (ws / "sheets" / f"{lead.id}.png").exists():
+                    ref = ws / "sheets" / f"{lead.id}.png"
+            elif engine == "sdxl":
+                if getattr(runner, "ipa", None) is not None:
+                    ref = ws / "sheets" / f"{lead.id}.png"
+                if len(shown) == 2 and getattr(runner, "ipa2", None) is not None:
+                    ref_b = ws / "sheets" / f"{shown[1].id}.png"
         pose_img = None
         depth_img = None
         pose_wt = None
@@ -708,26 +763,28 @@ def generate_art(story: OriginalStory, ws: Path, runner: ComfyRunner, provider=N
             best, attempt = _refine_directed_panel(
                 story=story, p=p, ws=ws, runner=runner, provider=provider, claims=claims, chars=chars, spec=spec, style=style, engine=engine,
                 must=must, neg=neg, dims=(pw, ph), spec_shot=spec_shot, shown_n=len(shown), iters=iters, is_cancelled=is_cancelled,
-                refs={"ref": ref, "ref_b": ref_b, "pose": pose_img, "depth": depth_img, "pose_wt": pose_wt, "depth_wt": depth_wt})
+                refs={"ref": ref, "ref_b": ref_b, "pose": pose_img, "depth": depth_img, "pose_wt": pose_wt, "depth_wt": depth_wt},
+                preview=preview, review_mode=review_mode)
         for attempt in (range(DIRECTED_ATTEMPTS if p.director else MAX_ATTEMPTS) if best is None else ()):
             seed = seed_for(story, p.id, attempt)
             pos_i, _ = build_prompt(story, p, emphasis, style, must, attempt, runner=runner, engine=engine)
-            if attempt >= 2 and p.director and style == "natural" and not frame_16x9(story):
+            if attempt >= 2 and p.director and style == "natural" and not frame_16x9(story, preview=preview):
                 widened_shot = {"close": "medium", "extreme_close": "medium", "medium": "wide"}.get(spec_shot, spec_shot)
-                pw, ph = shotspec.resolve_dimensions(widened_shot, num_characters=len(shown), default=(W, H))
+                pw, ph = shotspec.resolve_dimensions(widened_shot, num_characters=len(shown), default=(W, H), preview=preview)
             png = runner.generate(pos_i, neg, seed, pw, ph, f"panel_{p.id}", reference=ref, reference_b=ref_b,
                                   reference_weight=POSE_WEIGHT if (pose_sensitive(p) or attempt > 0) else None,
                                   pose_image=pose_img, depth_image=depth_img,
                                   pose_weight=pose_wt, depth_weight=depth_wt)
             cur = cand = _record_candidate(ws, p.id, iters, png, kind="generate", attempt=attempt, seed=seed, prompt=pos_i, negative=neg,
-                                           width=pw, height=ph, engine=str(engine), workflow=ART_WORKFLOW_ID if engine == "qwen" else "")
+                                           width=pw, height=ph, engine=str(engine), workflow=ART_WORKFLOW_ID if engine == "qwen" else "",
+                                           preview=preview)
             score, missing, match, unmatched, desc, rev = 1.0, [], 1.0, [], "", None
             if provider is not None and (shown or p.key_visuals):
                 tmp = ws / "panels" / f"_try_{p.id}.png"
                 tmp.write_bytes(png)
                 if spec is not None:
                     try:
-                        rev = asyncio.run(review_mod.review_image(provider, tmp, claims, spec, chars))
+                        rev = asyncio.run(review_mod.review_image(provider, tmp, claims, spec, chars, review_mode=review_mode))
                         cand["review"] = _review_summary(rev)
                         match, desc = rev.score, rev.description
                     except Exception as e:  # a model hiccup must not stop a whole episode: keep the picture, mark it unverified
@@ -757,7 +814,7 @@ def generate_art(story: OriginalStory, ws: Path, runner: ComfyRunner, provider=N
                                 tmp_rep = ws / "panels" / f"_try_rep_{p.id}.png"
                                 tmp_rep.write_bytes(candidate_png)
                                 try:
-                                    rep_rev = asyncio.run(review_mod.review_image(provider, tmp_rep, claims, spec, chars))
+                                    rep_rev = asyncio.run(review_mod.review_image(provider, tmp_rep, claims, spec, chars, review_mode=review_mode))
                                 finally:
                                     tmp_rep.unlink(missing_ok=True)
 
@@ -767,7 +824,8 @@ def generate_art(story: OriginalStory, ws: Path, runner: ComfyRunner, provider=N
                                 )
                                 rep_cand = _record_candidate(ws, p.id, iters, candidate_png, kind="repair", parent=cand["n"], attempt=attempt,
                                                              seed=seed + 1, prompt=pos_inpaint, negative=neg_inpaint, denoise=0.75,
-                                                             review=_review_summary(rep_rev), kept=bool(score_improved))
+                                                             review=_review_summary(rep_rev), kept=bool(score_improved),
+                                                             preview=preview)
                                 (ws / "panels" / "_candidates" / p.id / f"c{rep_cand['n']:03d}_mask.png").write_bytes(buf_m.getvalue())
                                 if score_improved:
                                     cur = rep_cand
@@ -785,8 +843,8 @@ def generate_art(story: OriginalStory, ws: Path, runner: ComfyRunner, provider=N
             key = (rank, match)
             if best is None or key > best[0]:
                 best = (key, png, seed, missing, score, match, unmatched, desc, rev, cur["n"])
-            if provider is None or rank >= 2 or (rev is None and spec is not None):
-                break  # accepted, or unverifiable (a model error): do not burn attempts on a judge that is not answering
+            if review_mode == "assisted" or provider is None or rank >= 2 or (rev is None and spec is not None):
+                break  # assisted mode stops after attempt 0 for human review; accepted, or unverifiable: do not burn attempts
             emphasis = (rev.missing_critical + [i.item for i in rev.items if not i.critical and i.verdict != "shown"][:2]) if rev else missing + unmatched
         key, png, seed, missing, score, match, unmatched, desc, rev, selected = best
         img.write_bytes(png)
@@ -810,3 +868,141 @@ def generate_art(story: OriginalStory, ws: Path, runner: ComfyRunner, provider=N
             "needs_review": [r.panel_id for r in recs if r.status == "needs_review"],
             "below_threshold": [r.panel_id for r in recs if r.status == "needs_review"
                                 or (not r.status and r.match_score is not None and r.match_score < MATCH_THRESHOLD)]}
+
+
+def inpaint_panel(
+    ws: Path,
+    panel_id: str,
+    mask_bytes: bytes,
+    prompt: str = "",
+    neg: str = "",
+    seed: int | None = None,
+    runner: ComfyRunner | None = None,
+) -> dict:
+    """Surgically inpaint a single panel using the approved Qwen inpaint workflow.
+    Guarantees 0-pixel drift outside the mask via splice_repaired_image.
+    Updates panels/<panel_id>.png, archives to panels/_candidates/<panel_id>/, and syncs art.json.
+    """
+    panel_file = ws / "panels" / f"{panel_id}.png"
+    if not panel_file.exists():
+        raise FileNotFoundError(f"Panel image not found: {panel_file}")
+
+    base_bytes = panel_file.read_bytes()
+    with Image.open(io.BytesIO(base_bytes)) as base_im:
+        base_size = base_im.size
+        base_rgb = base_im.convert("RGB")
+
+    try:
+        mask_im = Image.open(io.BytesIO(mask_bytes))
+    except Exception as exc:
+        raise ValueError(f"Invalid mask image bytes: {exc}")
+
+    mask_l = mask_im.convert("L")
+    if mask_l.size != base_size:
+        mask_l = mask_l.resize(base_size, Image.Resampling.LANCZOS)
+
+    bbox = mask_l.getbbox()
+    if bbox is None:
+        raise ValueError("Mask has no painted region to inpaint")
+
+    # 15% adaptive padding: bw = x2 - x1, bh = y2 - y1, pad = min(48, max(6, round(0.15 * max(bw, bh))))
+    x1, y1, x2, y2 = bbox
+    bw = x2 - x1
+    bh = y2 - y1
+    pad = min(48, max(6, round(0.15 * max(bw, bh))))
+
+    # Morphological dilation using MaxFilter
+    padded_mask = mask_l.filter(ImageFilter.MaxFilter(2 * pad + 1))
+
+    # 6px Gaussian blur feathering
+    feathered_mask = padded_mask.filter(ImageFilter.GaussianBlur(6))
+
+    mask_buf = io.BytesIO()
+    feathered_mask.save(mask_buf, format="PNG")
+    feathered_mask_bytes = mask_buf.getvalue()
+
+    if seed is None:
+        seed = random.randint(1, 2**31 - 1)
+
+    active_runner = runner or ComfyRunner()
+    redrawn_bytes = active_runner.inpaint_qwen(
+        base_image=base_bytes,
+        mask_image=feathered_mask_bytes,
+        prompt=prompt,
+        neg=neg,
+        seed=seed,
+    )
+
+    with Image.open(io.BytesIO(redrawn_bytes)) as redrawn_im:
+        spliced_im = review_mod.splice_repaired_image(base_rgb, redrawn_im, feathered_mask)
+
+    spliced_buf = io.BytesIO()
+    spliced_im.save(spliced_buf, format="PNG")
+    spliced_bytes = spliced_buf.getvalue()
+
+    # Load existing art.json
+    db_path = ws / "art.json"
+    db: dict[str, ArtRecord] = {}
+    if db_path.exists():
+        try:
+            db = {r["panel_id"]: ArtRecord(**r) for r in json.loads(db_path.read_text(encoding="utf-8"))}
+        except Exception:
+            db = {}
+
+    rec = db.get(panel_id)
+    iters = list(rec.iterations) if rec else []
+    parent_n = rec.selected if rec else (iters[-1]["n"] if iters else None)
+
+    entry = _record_candidate(
+        ws,
+        panel_id,
+        iters,
+        spliced_bytes,
+        mask=feathered_mask_bytes,
+        kind="inpaint",
+        parent=parent_n,
+        seed=seed,
+        prompt=prompt,
+        negative=neg,
+        padding=pad,
+        blur=6,
+    )
+
+    # Update canonical panel file
+    panel_file.write_bytes(spliced_bytes)
+
+    # Update art.json
+    if rec:
+        rec.iterations = iters
+        rec.selected = entry["n"]
+        rec.seed = seed
+        rec.attempts += 1
+        if rec.status == "accept":
+            rec.status = "accept_low"
+    else:
+        db[panel_id] = ArtRecord(
+            panel_id=panel_id,
+            image=f"panels/{panel_id}.png",
+            prompt_hash=_hash(prompt, neg, dims=base_size),
+            seed=seed,
+            attempts=1,
+            status="repaired",
+            iterations=iters,
+            selected=entry["n"],
+        )
+
+    db_path.write_text(json.dumps([r.model_dump() for r in db.values()], indent=1), encoding="utf-8")
+
+    return {
+        "panel_id": panel_id,
+        "candidate_file": entry["file"],
+        "candidate_n": entry["n"],
+        "seed": seed,
+        "sha256": entry["sha256"],
+        "image": f"panels/{panel_id}.png",
+        "candidate": entry,
+        "selected": entry["n"],
+        "prompt": prompt,
+        "iterations": iters,
+    }
+

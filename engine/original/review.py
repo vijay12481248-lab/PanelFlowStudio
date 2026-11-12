@@ -31,7 +31,7 @@ from engine.original.models import Character, Claim, ItemVerdict, Review
 
 ACCEPT_SCORE, ACCEPT_CONFIDENCE, LOW_SCORE = 0.75, 0.6, 0.6
 VERDICT_SCORE = {"shown": 1.0, "partial": 0.5, "missing": 0.0}
-RANK = {"accept": 2, "accept_low": 1, "regenerate": 0}
+RANK = {"accept": 2, "accept_low": 1, "needs_review": 0, "regenerate": 0}
 
 
 class AuditVerdictList(list):
@@ -631,8 +631,9 @@ def combine(
     stated: list[bool],
     description: str = "",
     audit_items: list[ItemVerdict] | None = None,
+    review_mode: str = "autonomous",
 ) -> Review:
-    """Pure decision logic: two witnesses per requirement -> verdict, confidence, score and accept/regenerate."""
+    """Pure decision logic: two witnesses per requirement -> verdict, confidence, score and accept/regenerate/needs_review."""
     items: list[ItemVerdict] = []
     for req, a, said in zip(reqs, qa, stated):
         text = req.text if isinstance(req, Claim) else req[0]
@@ -659,7 +660,7 @@ def combine(
         items.extend(audit_items)
 
     if not items:
-        return Review(items=[], score=1.0, confidence=0.0, decision="accept_low", reasons=["nothing to check"], description=description)
+        return Review(items=[], score=1.0, confidence=0.0, decision="accept_low" if review_mode != "assisted" else "accept", reasons=["nothing to check"], description=description, review_mode=review_mode)
 
     w = [2.0 if i.critical else 1.0 for i in items]
     score = sum(wi * VERDICT_SCORE[i.verdict] for wi, i in zip(w, items)) / sum(w)
@@ -682,15 +683,21 @@ def combine(
     spatial_passed = len(spatial_fails) == 0
     defects = [i.defect_type or i.item for i in anatomy_fails + spatial_fails]
 
-    if not anatomy_passed or not spatial_passed:
-        decision = "regenerate"
-    elif not crit_missing and not crit_partial and score >= ACCEPT_SCORE and confidence >= ACCEPT_CONFIDENCE:
-        decision = "accept"
-    elif not crit_missing and score >= LOW_SCORE:
-        decision = "accept_low"
-        reasons.append(f"score {score:.2f} / confidence {confidence:.2f} is below the accept bar")
+    if review_mode == "assisted":
+        if not crit_missing and not crit_partial and score >= ACCEPT_SCORE and confidence >= ACCEPT_CONFIDENCE and anatomy_passed and spatial_passed:
+            decision = "accept"
+        else:
+            decision = "needs_review"
     else:
-        decision = "regenerate"
+        if not anatomy_passed or not spatial_passed:
+            decision = "regenerate"
+        elif not crit_missing and not crit_partial and score >= ACCEPT_SCORE and confidence >= ACCEPT_CONFIDENCE:
+            decision = "accept"
+        elif not crit_missing and score >= LOW_SCORE:
+            decision = "accept_low"
+            reasons.append(f"score {score:.2f} / confidence {confidence:.2f} is below the accept bar")
+        else:
+            decision = "regenerate"
 
     return Review(
         items=items,
@@ -702,6 +709,7 @@ def combine(
         anatomy_passed=anatomy_passed,
         spatial_contact_passed=spatial_passed,
         defects=defects,
+        review_mode=review_mode,
     )
 
 
@@ -714,10 +722,11 @@ async def review_image(
     audit_gates: bool = True,
     caption: str = "",
     locate_defects: bool = False,  # off by default: the story loop keeps its heuristic repair mask until the planner uses real boxes
+    review_mode: str = "autonomous",
 ) -> Review:
     reqs = requirements(claims, spec, chars)
     if not reqs and not audit_gates:
-        return combine([], [], [], "")
+        return combine([], [], [], "", review_mode=review_mode)
 
     description = await _describe(provider, image)
     qa = await _vqa(provider, image, reqs) if reqs else []
@@ -730,7 +739,7 @@ async def review_image(
         audit_items.extend(anatomy_items)
         audit_items.extend(spatial_items)
 
-    review = combine(reqs, qa, stated, description, audit_items=audit_items)
+    review = combine(reqs, qa, stated, description, audit_items=audit_items, review_mode=review_mode)
     if locate_defects:
         await locate_failed_items(provider, image, review)
     return review

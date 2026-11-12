@@ -19,6 +19,7 @@ class Character(BaseModel):
     personality: str
     species: str = "human"  # "human" or what they are: "fox cub", "clockwork assistant" (a human tag must never be put on a creature)
     gender: str = "neutral"  # male | female | neutral (humans only)
+    turnaround_sheet: str | None = None  # path or relative uri to 4-view turnaround master sheet (1536x768)
 
 
 class Location(BaseModel):
@@ -127,6 +128,7 @@ class Review(BaseModel):
     spatial_contact_passed: bool = True
     defects: list[str] = Field(default_factory=list)
     unverifiable: list[str] = Field(default_factory=list)  # requirements a picture cannot show (sound, ideas): for a human, never "fixed"
+    review_mode: str = "autonomous"
 
     @property
     def missing_critical(self) -> list[str]:
@@ -161,16 +163,24 @@ class Review(BaseModel):
 
         if has_anatomy_defect:
             self.anatomy_passed = False
-            self.decision = "regenerate"
+            if self.review_mode != "assisted":
+                self.decision = "regenerate"
         if has_spatial_defect:
             self.spatial_contact_passed = False
-            self.decision = "regenerate"
+            if self.review_mode != "assisted":
+                self.decision = "regenerate"
 
         new_defects = [i.defect_type or i.item for i in af + sf if (i.defect_type or i.item)]
         merged_defects = list(dict.fromkeys(self.defects + new_defects))
         self.defects = merged_defects
 
+        if self.review_mode == "assisted" and self.decision == "needs_review":
+            return self
+
         if self.defects or not self.anatomy_passed or not self.spatial_contact_passed:
-            self.decision = "regenerate"
+            if self.review_mode == "assisted":
+                self.decision = "needs_review"
+            else:
+                self.decision = "regenerate"
         return self
 
