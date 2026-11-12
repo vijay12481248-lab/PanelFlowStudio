@@ -80,7 +80,7 @@ def test_inspector_payload_shape(env):
     body = client.get(f"/api/narration/runs/proj-test/{res.run_id}").json()
     assert body["run"]["run_id"] == res.run_id
     l2 = next(ln for ln in body["lines"] if ln["line_id"] == "L002")
-    assert set(l2) == {"line_id", "panel_id", "text", "status", "kind", "speaker_id", "speaker_name", "checks", "facts", "take", "outdated"}
+    assert set(l2) == {"line_id", "panel_id", "text", "status", "kind", "speaker_id", "speaker_name", "checks", "facts", "take", "outdated", "qa"}
     assert l2["take"] is None and "action:" in l2["facts"]
     assert l2["checks"]
     assert set(l2["checks"][0]) == {"rule", "passed", "severity", "reason"}
@@ -133,6 +133,22 @@ def test_the_inspector_leaves_a_current_take_alone(env):
     assert l2["outdated"] is False
 
 
+def test_the_inspector_shows_the_audio_qa_and_its_repairs(env):
+    """The reviewer sees what is wrong with a take and what to do about it."""
+    client, res, _, _ = env
+    (res.run_dir / "qa.json").write_text(json.dumps({
+        "L002": {"line_id": "L002", "passed": False,
+                 "checks": [{"rule": "intelligibility", "passed": False, "severity": "block",
+                             "reason": "word error rate 80%",
+                             "repair": "regenerate the line with a slower pace"}]},
+    }), encoding="utf-8")
+    lines = client.get(f"/api/narration/runs/proj-test/{res.run_id}").json()["lines"]
+    l2 = next(ln for ln in lines if ln["line_id"] == "L002")
+    assert l2["qa"]["passed"] is False
+    assert l2["qa"]["repairs"] == ["regenerate the line with a slower pace"]
+    assert l2["qa"]["checks"][0]["rule"] == "intelligibility"
+
+
 def test_edit_rejected_by_rules_is_400_and_unchanged(env):
     client, res, *_ = env
     url = f"/api/narration/runs/proj-test/{res.run_id}/lines/L002"
@@ -181,7 +197,7 @@ def test_action_returns_inspector_shape_with_fresh_checks(env):
     client, res, *_ = env
     base = f"/api/narration/runs/proj-test/{res.run_id}"
     out = client.post(f"{base}/lines/L002", json={"action": "edit", "text": "He walks through the quiet hall slowly"}).json()
-    assert set(out) == {"line_id", "panel_id", "text", "status", "kind", "speaker_id", "speaker_name", "checks", "facts", "take", "outdated"}
+    assert set(out) == {"line_id", "panel_id", "text", "status", "kind", "speaker_id", "speaker_name", "checks", "facts", "take", "outdated", "qa"}
     assert out["checks"] and "action:" in out["facts"]
     insp = next(ln for ln in client.get(base).json()["lines"] if ln["line_id"] == "L002")
     assert insp == out

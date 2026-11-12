@@ -21,6 +21,7 @@ from engine.narration.cache import ArtifactCache
 from engine.narration.casting import cast_for_script
 from engine.narration.inputs import ChapterInputs
 from engine.narration.ledger import TakeLedger
+from engine.narration.qa import qa_report
 from engine.narration.runtime.audio import KokoroTts, Stt, Tts, WhisperStt, release_audio_models
 from engine.narration.runtime.client import ModelClient, StepModelError
 from engine.narration.runtime.roles import load_stt_config, load_tts_config
@@ -167,6 +168,8 @@ class NarrationCompiler:
                     n = sum(t.flagged for t in takes)
                     reasons = [f"{n} of {len(takes)} takes failed the speech check"] if n > voice.FLAG_LIMIT * len(takes) else []
                 _write_json(run_dir / "takes.json", [t.model_dump(mode="json") for t in takes])
+                _write_json(run_dir / "qa.json", {lid: r.model_dump(mode="json") for lid, r in
+                                                  qa_report(takes, {ln.line_id: ln.text for ln in script.lines}).items()})
                 if reasons:
                     raise NeedsReview(reasons)
 
@@ -311,6 +314,8 @@ class NarrationCompiler:
                     script, plan, bible, self.tts or KokoroTts(), self.stt or WhisperStt(),
                     Path(workspace) / "narration" / "voice", tts_cfg.voice, facts, cast_voices, ledger)
                 _write_json(run_dir / "takes.json", [t.model_dump(mode="json") for t in takes])
+                _write_json(run_dir / "qa.json", {lid: r.model_dump(mode="json") for lid, r in
+                                                  qa_report(takes, {ln.line_id: ln.text for ln in script.lines}).items()})
                 if reasons:
                     raise NeedsReview(reasons)
             if stop_after == "voice":

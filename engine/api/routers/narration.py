@@ -22,6 +22,7 @@ from engine.narration.artifacts import (
 from engine.narration.bible.store import BibleStore, series_key_for
 from engine.narration.casting import apply_recommendations, load_cast, resolve_cast, save_cast
 from engine.narration.ledger import TakeLedger, outdated_lines
+from engine.narration.qa import QaReport, repairs
 from engine.narration.runtime.roles import load_voice_catalog
 from engine.narration.steps.critique.judges import JUDGES
 from engine.narration.steps.critique.rules import rule_checks
@@ -89,7 +90,7 @@ def list_runs(project_id: str, db: Session = Depends(get_db)) -> list[dict]:
 
 def _context(run_dir: Path, item) -> dict:
     """Everything a line view needs. Checks are recomputed from the current text; critique.json is the fallback."""
-    ctx = {"sheet": None, "facts": None, "names": None, "takes": {}, "checks": {}}
+    ctx = {"sheet": None, "facts": None, "names": None, "takes": {}, "checks": {}, "qa": {}}
     report = None
     try:
         report = CritiqueReport.model_validate_json((run_dir / "critique.json").read_text(encoding="utf-8"))
@@ -103,6 +104,11 @@ def _context(run_dir: Path, item) -> dict:
                                        "direction_revision": t.get("direction_revision", 0),
                                        "provider": t.get("provider", "")}
                         for t in _json(run_dir / "takes.json")}
+    except (ValueError, KeyError, TypeError, OSError):
+        pass
+    try:
+        ctx["qa"] = {lid: {"passed": r["passed"], "checks": r["checks"], "repairs": repairs(QaReport(**r))}
+                     for lid, r in _json(run_dir / "qa.json").items()}
     except (ValueError, KeyError, TypeError, OSError):
         pass
     try:
@@ -165,11 +171,13 @@ def _line_view(ln, ctx: dict) -> dict:
         facts = ""  # panel missing from panel_facts.json
     speaker_id = getattr(ln, "speaker_id", NARRATOR_ID)
     take = ctx["takes"].get(ln.line_id)
+    qa = ctx["qa"].get(ln.line_id)
     return {"line_id": ln.line_id, "panel_id": ln.panel_id, "text": ln.text, "status": ln.status, "kind": ln.kind,
             "speaker_id": speaker_id,
             "speaker_name": "Narrator" if speaker_id == NARRATOR_ID else ctx["names"].get(speaker_id, speaker_id),
             "checks": ctx["checks"].get(ln.line_id, []), "facts": facts, "take": take,
-            "outdated": ln.line_id in ctx.get("outdated", [])}
+            "outdated": ln.line_id in ctx.get("outdated", []),
+            "qa": qa}
 
 @router.get("/runs/{project_id}/{run_id}")
 def inspect_run(project_id: str, run_id: str, db: Session = Depends(get_db)) -> dict:

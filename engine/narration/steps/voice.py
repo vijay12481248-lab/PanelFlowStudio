@@ -17,6 +17,7 @@ from engine.narration.artifacts import (
 )
 from engine.narration.cache import ArtifactCache
 from engine.narration.ledger import TakeLedger
+from engine.narration.qa import qa_report
 from engine.narration.runtime.audio import Stt, Tts, _tokens, normalize_silence, wer, write_wav_atomic
 from engine.narration.runtime.roles import load_tts_config
 
@@ -105,9 +106,11 @@ async def voice_lines(script: ScriptIR, plan: PerformancePlan, bible: SeriesBibl
     model = load_tts_config().model
     marks = {m.line_id: m for m in plan.lines}
     takes: list[VoiceTake] = []
+    spoken_by_line: dict[str, str] = {}
     for line in script.lines:
         rate = marks[line.line_id].rate
         spoken = tts_text(line.text, bible)
+        spoken_by_line[line.line_id] = spoken
         line_voice = (cast or {}).get(getattr(line, "speaker_id", NARRATOR_ID), "") or voice
         key = _key(spoken, line_voice, rate, bible, model)  # base rate: a retried take is still found on rerun
         wav, meta = out_dir / f"{key}.wav", out_dir / f"{key}.json"
@@ -125,5 +128,10 @@ async def voice_lines(script: ScriptIR, plan: PerformancePlan, bible: SeriesBibl
         takes.append(take.model_copy(update={"line_id": line.line_id}))
     flagged = sum(t.flagged for t in takes)
     reasons = [f"{flagged} of {len(takes)} takes failed the speech check"] if flagged > FLAG_LIMIT * len(takes) else []
+    # the full QA runs on every take, so the reviewer sees what is wrong and what to do
+    reports = qa_report(takes, {ln.line_id: ln.text for ln in script.lines}, spoken_by_line)
+    blocked = [r for r in reports.values() if not r.passed]
+    if blocked:
+        reasons.append(f"{len(blocked)} of {len(takes)} takes failed the audio QA")
     return takes, reasons
 

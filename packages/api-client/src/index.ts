@@ -76,6 +76,8 @@ import type {
   NarrationCastAssignment,
   NarrationVoiceProfile,
   NarrationProjectCast,
+  NarrationQa,
+  NarrationQaCheck,
 } from "@panelflow/shared-types";
 
 export type {

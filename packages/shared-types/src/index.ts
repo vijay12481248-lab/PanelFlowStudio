@@ -718,6 +718,20 @@ export interface NarrationLineCheck {
   reason: string;
 }
 
+export interface NarrationQaCheck {
+  rule: string;
+  passed: boolean;
+  severity: "block" | "warn";
+  reason: string;
+  repair: string; // what the reviewer can do about it
+}
+
+export interface NarrationQa {
+  passed: boolean;
+  checks: NarrationQaCheck[];
+  repairs: string[]; // the repairs the report suggests
+}
+
 export interface NarrationLine {
   line_id: string;
   panel_id: string;
@@ -738,6 +752,7 @@ export interface NarrationLine {
     provider: string; // the TTS provider that produced the take
   } | null;
   outdated: boolean; // the take no longer matches the line: the text, the direction or the voice moved on
+  qa: NarrationQa | null; // the audio QA of the take, with the repairs it suggests
 }
 
 export interface NarrationRunDetail {
