@@ -107,7 +107,7 @@ def test_generate_art_image_uses_the_central_art_engine_and_saves_into_the_input
     seen = []
 
     class FakeArt:
-        def generate(self, prompt, negative, width, height, seed, prefix):
+        def generate(self, prompt, negative, width, height, seed, prefix, **kwargs):
             seen.append((prompt, negative, width, height, seed, prefix))
             return type("Img", (), {"png": b"png-bytes"})()
 

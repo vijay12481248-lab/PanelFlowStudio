@@ -8,7 +8,7 @@ from engine.comfyui import art as art_mod
 from engine.comfyui.art import ART_WORKFLOW_ID, ArtEngine, ArtTimeoutError, ComfyImageGenerationError
 
 WORKFLOW = {
-    "4": {"class_type": "TextEncodeQwenImage21", "inputs": {"prompt": "", "negative_prompt": ""}},
+    "4": {"class_type": "TextEncodeQwenImage21", "inputs": {"prompt": "", "negative_prompt": "", "images.image_1": None}},
     "8": {"class_type": "RandomNoise", "inputs": {"noise_seed": 0}},
     "11": {"class_type": "SaveImage", "inputs": {"filename_prefix": "x"}},
     "12": {"class_type": "EmptySD3LatentImage", "inputs": {"width": 1, "height": 1}},
@@ -20,6 +20,7 @@ SLOTS = {
     "width": {"node_id": "12", "input": "width", "class_type": "EmptySD3LatentImage"},
     "height": {"node_id": "12", "input": "height", "class_type": "EmptySD3LatentImage"},
     "filename_prefix": {"node_id": "11", "input": "filename_prefix", "class_type": "SaveImage"},
+    "reference_image": {"node_id": "4", "input": "images.image_1", "class_type": "TextEncodeQwenImage21"},
 }
 
 
@@ -32,6 +33,7 @@ def png(w, h):
 class FakeClient:
     def __init__(self, image=None, history_ready=True):
         self.image, self.history_ready, self.submitted = image, history_ready, []
+        self.uploaded = []
 
     def submit_prompt(self, workflow, client_id=None):
         self.submitted.append((workflow, client_id))
@@ -44,6 +46,16 @@ class FakeClient:
 
     def download_output(self, *args, **kwargs):
         return self.image
+
+    def upload_image_bytes(self, data, filename=None):
+        name = filename or "uploaded.png"
+        self.uploaded.append(name)
+        return name
+
+    def upload_image(self, path):
+        name = getattr(path, "name", str(path))
+        self.uploaded.append(name)
+        return name
 
 
 class FakeRegistry:
@@ -116,3 +128,119 @@ def test_there_is_exactly_one_text_to_image_workflow_in_the_registry():
         entries = json.loads((Path(art_mod.__file__).parent / "workflow_registry.json").read_text(encoding="utf-8"))
     text_to_image = [w["id"] for w in entries if w.get("purpose") == "text_to_image"]
     assert text_to_image == [ART_WORKFLOW_ID], text_to_image
+
+
+def test_run_fails_fast_on_comfyui_execution_error():
+    class ErrorClient(FakeClient):
+        def history(self, prompt_id):
+            return {
+                prompt_id: {
+                    "outputs": {},
+                    "status": {
+                        "status_str": "error",
+                        "completed": False,
+                        "messages": [
+                            [
+                                "execution_error",
+                                {
+                                    "exception_message": "torch.cuda.OutOfMemoryError: CUDA out of memory. Tried to allocate 2.40 GiB",
+                                    "exception_type": "torch.cuda.OutOfMemoryError",
+                                    "node_id": "5",
+                                    "node_type": "KSampler",
+                                },
+                            ]
+                        ],
+                    },
+                }
+            }
+
+    with pytest.raises(ComfyImageGenerationError) as exc_info:
+        ArtEngine(ErrorClient(), FakeRegistry()).run({})
+    assert "CUDA out of memory" in str(exc_info.value)
+    assert "KSampler" in str(exc_info.value)
+
+
+def test_run_fails_fast_on_execution_interrupted():
+    class InterruptedClient(FakeClient):
+        def history(self, prompt_id):
+            return {
+                prompt_id: {
+                    "outputs": {},
+                    "status": {
+                        "status_str": "error",
+                        "completed": False,
+                        "messages": [["execution_interrupted", {"node_id": "8", "node_type": "RandomNoise"}]],
+                    },
+                }
+            }
+
+    with pytest.raises(ComfyImageGenerationError) as exc_info:
+        ArtEngine(InterruptedClient(), FakeRegistry()).run({})
+    assert "interrupted" in str(exc_info.value)
+
+
+def test_run_fails_fast_on_malformed_error_status():
+    class MalformedErrorClient(FakeClient):
+        def history(self, prompt_id):
+            return {
+                prompt_id: {
+                    "outputs": {},
+                    "status": {
+                        "status_str": "error",
+                        "completed": False,
+                        "messages": [],
+                    },
+                }
+            }
+
+    with pytest.raises(ComfyImageGenerationError) as exc_info:
+        ArtEngine(MalformedErrorClient(), FakeRegistry()).run({})
+    assert "ComfyUI execution failed" in str(exc_info.value)
+
+
+def test_generate_with_reference_image_uploads_and_binds_to_text_encode_node(tmp_path):
+    from pathlib import Path
+    dummy_ref = tmp_path / "mira_turnaround.png"
+    dummy_ref.write_bytes(png(1536, 768))
+
+    client, reg = FakeClient(png(1344, 768)), FakeRegistry()
+    engine = ArtEngine(client, reg)
+    img = engine.generate("portrait of Mira", reference_image=dummy_ref)
+
+    assert "mira_turnaround.png" in client.uploaded
+    sent, _ = client.submitted[0]
+    # Verify LoadImage node 13 was dynamically injected
+    assert "13" in sent
+    assert sent["13"]["class_type"] == "LoadImage"
+    assert sent["13"]["inputs"]["image"] == "mira_turnaround.png"
+    # Verify node 4 images.image_1 wires into [13, 0]
+    assert sent["4"]["inputs"]["images.image_1"] == ["13", 0]
+
+
+def test_generate_without_reference_image_leaves_graph_unconditioned():
+    client, reg = FakeClient(png(1344, 768)), FakeRegistry()
+    engine = ArtEngine(client, reg)
+    img = engine.generate("portrait without ref", reference_image=None)
+
+    assert client.uploaded == []
+    sent, _ = client.submitted[0]
+    # Verify no LoadImage node was injected
+    assert "13" not in sent
+    # Verify images.image_1 was popped from node 4
+    assert "images.image_1" not in sent["4"]["inputs"]
+
+
+def test_real_qwen_image_21_registry_loads_and_validates_reference_image_slot():
+    from engine.comfyui.registry import ComfyWorkflowRegistry
+    reg = ComfyWorkflowRegistry()
+    wf, sha = reg.load(ART_WORKFLOW_ID)
+    meta = reg.metadata(ART_WORKFLOW_ID)
+    assert sha == meta["sha256"]
+    assert "reference_image" in meta["patch_slots"]
+    slot = meta["patch_slots"]["reference_image"]
+    assert slot["node_id"] == "4"
+    assert slot["input"] == "images.image_1"
+    assert slot["class_type"] == "TextEncodeQwenImage21"
+    assert "LoadImage" in meta["required_nodes"]
+
+

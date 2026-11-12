@@ -442,3 +442,152 @@ def test_a_repaired_panel_is_accepted_but_flagged_for_a_human_glance(tmp_path, m
     rec = json.loads((tmp_path / "art.json").read_text())[0]
     assert rec["status"] == "accept_low" and out["accepted_low_confidence"] == ["p002"] and rec["selected"] == 2
     assert "check the repaired area by eye" in " ".join(rec["review"]["reasons"])
+
+
+def test_inpaint_panel_padding_splicing_and_metadata(tmp_path):
+    from PIL import ImageDraw
+    import numpy as np
+
+    panels_dir = tmp_path / "panels"
+    panels_dir.mkdir(parents=True)
+
+    # 128x128 green base image (multiples of 16)
+    base_img = Image.new("RGB", (128, 128), (0, 180, 0))
+    panel_path = panels_dir / "p001.png"
+    base_img.save(panel_path, "PNG")
+
+    # art.json with initial iteration
+    art_json = tmp_path / "art.json"
+    init_rec = [{
+        "panel_id": "p001",
+        "image": str(panel_path),
+        "prompt_hash": "hash1",
+        "seed": 42,
+        "attempts": 1,
+        "status": "accept",
+        "iterations": [{"n": 1, "file": "panels/_candidates/p001/c001.png", "sha256": "abc"}],
+        "selected": 1,
+    }]
+    art_json.write_text(json.dumps(init_rec), encoding="utf-8")
+
+    # 20x20 white mask in center
+    mask_im = Image.new("L", (128, 128), 0)
+    draw = ImageDraw.Draw(mask_im)
+    draw.rectangle([54, 54, 74, 74], fill=255)
+    mask_buf = io.BytesIO()
+    mask_im.save(mask_buf, "PNG")
+    mask_bytes = mask_buf.getvalue()
+
+    # Fake runner returning full red image
+    class FakeRunner:
+        def inpaint_qwen(self, base_image, mask_image, prompt, neg, seed):
+            red = Image.new("RGB", (128, 128), (255, 0, 0))
+            buf = io.BytesIO()
+            red.save(buf, "PNG")
+            return buf.getvalue()
+
+    res = art.inpaint_panel(
+        ws=tmp_path,
+        panel_id="p001",
+        mask_bytes=mask_bytes,
+        prompt="red center",
+        seed=12345,
+        runner=FakeRunner(),
+    )
+
+    assert res["panel_id"] == "p001"
+    assert res["candidate_n"] == 2
+    assert (tmp_path / "panels" / "_candidates" / "p001" / "c002.png").exists()
+    assert (tmp_path / "panels" / "_candidates" / "p001" / "c002_mask.png").exists()
+
+    # Canonical panel updated
+    updated_panel = Image.open(panel_path)
+    up_arr = np.array(updated_panel)
+    # Center must have red drawn pixels
+    assert up_arr[64, 64, 0] > 200
+    # Far corner must have exact zero drift (still original green (0, 180, 0))
+    assert tuple(up_arr[10, 10]) == (0, 180, 0)
+
+    # Check art.json
+    db = json.loads(art_json.read_text(encoding="utf-8"))
+    assert db[0]["selected"] == 2
+    assert len(db[0]["iterations"]) == 2
+    assert db[0]["status"] == "accept_low"  # lowered from accept on manual inpaint
+
+
+def test_inpaint_panel_zero_drift_outside_feathered_mask(tmp_path):
+    import numpy as np
+    from PIL import ImageDraw
+
+    panels_dir = tmp_path / "panels"
+    panels_dir.mkdir(parents=True)
+
+    # Base image with unique non-trivial values
+    base_arr = np.arange(128 * 128, dtype=np.uint8).reshape((128, 128))
+    base_rgb = np.stack([base_arr, base_arr // 2, 255 - base_arr], axis=-1)
+    base_im = Image.fromarray(base_rgb, mode="RGB")
+    panel_path = panels_dir / "p002.png"
+    base_im.save(panel_path, "PNG")
+
+    # Mask in upper-left quadrant
+    mask_im = Image.new("L", (128, 128), 0)
+    draw = ImageDraw.Draw(mask_im)
+    draw.rectangle([20, 20, 40, 40], fill=255)
+    mask_buf = io.BytesIO()
+    mask_im.save(mask_buf, "PNG")
+
+    class InvertingRunner:
+        def inpaint_qwen(self, base_image, mask_image, prompt, neg, seed):
+            # Inspect mask passed to runner: verify it is padded and feathered
+            with Image.open(io.BytesIO(mask_image)) as mk:
+                # Bbox must be larger than original 20x20 due to adaptive padding
+                bbox = mk.getbbox()
+                bw = bbox[2] - bbox[0]
+                bh = bbox[3] - bbox[1]
+                assert bw > 20 and bh > 20
+            # Return inverted image
+            with Image.open(io.BytesIO(base_image)) as base:
+                arr = 255 - np.array(base)
+                out_im = Image.fromarray(arr, mode="RGB")
+                buf = io.BytesIO()
+                out_im.save(buf, "PNG")
+                return buf.getvalue()
+
+    art.inpaint_panel(tmp_path, "p002", mask_buf.getvalue(), runner=InvertingRunner())
+
+    # Read output
+    spliced_im = Image.open(panel_path)
+    spliced_arr = np.array(spliced_im)
+
+    # Load the actual saved feathered mask
+    saved_mask = Image.open(tmp_path / "panels" / "_candidates" / "p002" / "c001_mask.png")
+    mask_arr = np.array(saved_mask)
+
+    # Where mask is 0, maximum difference between base and spliced must be strictly 0
+    zero_mask = (mask_arr == 0)
+    diff = np.abs(base_rgb[zero_mask].astype(int) - spliced_arr[zero_mask].astype(int))
+    assert np.max(diff) == 0
+
+
+def test_inpaint_panel_empty_mask_raises_value_error(tmp_path):
+    panels_dir = tmp_path / "panels"
+    panels_dir.mkdir(parents=True)
+    Image.new("RGB", (128, 128), "blue").save(panels_dir / "p003.png", "PNG")
+
+    # All black mask
+    empty_mask = Image.new("L", (128, 128), 0)
+    buf = io.BytesIO()
+    empty_mask.save(buf, "PNG")
+
+    with pytest.raises(ValueError, match="no painted region"):
+        art.inpaint_panel(tmp_path, "p003", buf.getvalue())
+
+
+def test_inpaint_panel_missing_file_raises_file_not_found(tmp_path):
+    mask = Image.new("L", (128, 128), 255)
+    buf = io.BytesIO()
+    mask.save(buf, "PNG")
+
+    with pytest.raises(FileNotFoundError, match="Panel image not found"):
+        art.inpaint_panel(tmp_path, "nonexistent", buf.getvalue())
+
