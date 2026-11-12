@@ -7,12 +7,14 @@ import json
 import os
 import re
 import uuid
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 import numpy as np
 
-from engine.narration.artifacts import PanelFacts, PerformancePlan, ScriptIR, SeriesBible, VoiceTake
+from engine.narration.artifacts import (
+    NARRATOR_ID, PanelFacts, PerformancePlan, ScriptIR, SeriesBible, VoiceTake,
+)
 from engine.narration.runtime.audio import Stt, Tts, _tokens, normalize_silence, wer, write_wav_atomic
 from engine.narration.runtime.roles import load_tts_config
 
@@ -88,7 +90,10 @@ async def _take(line, rate: float, spoken: str, key: str, model: str, tts: Tts, 
 
 
 async def voice_lines(script: ScriptIR, plan: PerformancePlan, bible: SeriesBible, tts: Tts, stt: Stt,
-                      out_dir: Path, voice: str, facts: Sequence[PanelFacts] = ()) -> tuple[list[VoiceTake], list[str]]:
+                      out_dir: Path, voice: str, facts: Sequence[PanelFacts] = (),
+                      cast: Mapping[str, str] | None = None) -> tuple[list[VoiceTake], list[str]]:
+    """One take per line. `cast` maps a character id to the engine voice that reads it;
+    a character with no entry in it is read by the narrator."""
     out_dir = Path(out_dir)
     names = _names(bible, facts)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -98,7 +103,8 @@ async def voice_lines(script: ScriptIR, plan: PerformancePlan, bible: SeriesBibl
     for line in script.lines:
         rate = marks[line.line_id].rate
         spoken = tts_text(line.text, bible)
-        key = _key(spoken, voice, rate, bible, model)  # base rate: a retried take is still found on rerun
+        line_voice = (cast or {}).get(getattr(line, "speaker_id", NARRATOR_ID), "") or voice
+        key = _key(spoken, line_voice, rate, bible, model)  # base rate: a retried take is still found on rerun
         wav, meta = out_dir / f"{key}.wav", out_dir / f"{key}.json"
         take = None
         if wav.exists() and meta.exists():
@@ -107,7 +113,7 @@ async def voice_lines(script: ScriptIR, plan: PerformancePlan, bible: SeriesBibl
             except ValueError:
                 take = None
         if take is None:
-            take = await _take(line, rate, spoken, key, model, tts, stt, out_dir, voice, names)
+            take = await _take(line, rate, spoken, key, model, tts, stt, out_dir, line_voice, names)
             tmp = meta.with_suffix(f".json.{uuid.uuid4().hex[:8]}.tmp")
             tmp.write_text(take.model_dump_json(), encoding="utf-8")
             os.replace(tmp, meta)

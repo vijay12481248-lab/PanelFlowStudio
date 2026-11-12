@@ -17,7 +17,9 @@ from engine.database.session import get_db
 from engine.jobs.workflow import enqueue_project_operation, register_operation_factory
 from engine.narration import review
 from engine.narration.artifacts import CritiqueReport, NARRATOR_ID, ScriptIR, SeriesBible
-from engine.narration.bible.store import BibleStore
+from engine.narration.bible.store import BibleStore, series_key_for
+from engine.narration.casting import apply_recommendations, load_cast, resolve_cast, save_cast
+from engine.narration.runtime.roles import load_voice_catalog
 from engine.narration.steps.critique.judges import JUDGES
 from engine.narration.steps.critique.rules import rule_checks
 from engine.narration.steps.factview import char_names, cues_of, panel_line
@@ -159,7 +161,11 @@ def inspect_run(project_id: str, run_id: str, db: Session = Depends(get_db)) -> 
         beat_sheet = {"hook": sheet.hook, "chapter_summary": sheet.chapter_summary,
                       "scenes": [{"scene_id": s.scene_id, "goal": s.goal, "first_panel_id": s.first_panel_id,
                                   "last_panel_id": s.last_panel_id} for s in sheet.scenes]}
-    return {"run": run, "lines": lines, "beat_sheet": beat_sheet,
+    try:
+        cast = _json(run_dir / "casting.json")
+    except (ValueError, OSError):
+        cast = None  # the run stopped before the voice step
+    return {"run": run, "lines": lines, "beat_sheet": beat_sheet, "casting": cast,
             "review": item.model_dump(mode="json") if item else None}
 
 
@@ -173,6 +179,73 @@ def take_audio(project_id: str, run_id: str, line_id: str, db: Session = Depends
         return contained_file_response(workspace, p, media_type="audio/wav", filename=p.name)
     except (StopIteration, KeyError, TypeError, ValueError, OSError):
         raise HTTPException(404, "Take audio not found")
+
+
+@router.get("/projects/{project_id}/cast")
+def get_cast(project_id: str, db: Session = Depends(get_db)):
+    """The cast of a project: the voices it uses, the ones it recommends, and the ones it lacks."""
+    project = db.get(ProjectRecord, project_id)
+    if project is None:
+        raise HTTPException(404, "Project not found")
+    key = series_key_for(project.title or "", project.source_metadata)
+    if not key:
+        raise HTTPException(404, "Project has no series")
+    bible = _bibles().load(key)
+    catalog = load_voice_catalog()
+    assigned = load_cast(key)
+    characters = [c.id for c in bible.characters]
+    plan = resolve_cast(key, bible, characters, catalog, assigned)
+    return {
+        "series_key": key,
+        "catalog": [p.model_dump(mode="json") for p in catalog],
+        "assigned": assigned,
+        "cast": [a.model_dump(mode="json") for a in plan.assignments],
+        "recommendations": [r.model_dump(mode="json") for r in plan.recommendations],
+        "uncast": plan.uncast,
+    }
+
+
+class CastRequest(BaseModel):
+    character_id: str
+    profile_id: str
+
+
+@router.post("/projects/{project_id}/cast")
+def set_cast(project_id: str, req: CastRequest, db: Session = Depends(get_db)):
+    """Cast a character to a voice, or clear the casting by sending an empty profile id."""
+    project = db.get(ProjectRecord, project_id)
+    if project is None:
+        raise HTTPException(404, "Project not found")
+    key = series_key_for(project.title or "", project.source_metadata)
+    if not key:
+        raise HTTPException(404, "Project has no series")
+    if req.profile_id:
+        known = {p.id for p in load_voice_catalog()}
+        if req.profile_id not in known:
+            raise HTTPException(400, "That voice is not an approved profile")
+    current = load_cast(key)
+    if req.profile_id:
+        current[req.character_id] = req.profile_id
+    else:
+        current.pop(req.character_id, None)
+    save_cast(key, current)
+    return {"series_key": key, "assigned": current}
+
+
+@router.post("/projects/{project_id}/cast/accept")
+def accept_cast_recommendations(project_id: str, db: Session = Depends(get_db)):
+    """Accept every proposed voice, keeping the assignments already made."""
+    project = db.get(ProjectRecord, project_id)
+    if project is None:
+        raise HTTPException(404, "Project not found")
+    key = series_key_for(project.title or "", project.source_metadata)
+    if not key:
+        raise HTTPException(404, "Project has no series")
+    bible = _bibles().load(key)
+    catalog = load_voice_catalog()
+    plan = resolve_cast(key, bible, [c.id for c in bible.characters], catalog, load_cast(key))
+    assigned = apply_recommendations(plan, key, catalog)
+    return {"series_key": key, "assigned": assigned}
 
 
 # ---- background jobs: the same durable job manager autopilot uses; handlers never wait on models ----

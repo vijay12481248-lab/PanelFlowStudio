@@ -129,8 +129,14 @@ def apply_to_project(db, project_id: str, tl: LockedTimeline, script: ScriptIR, 
     mat = MasterAudioTimeline(project_id=project_id, total_duration_sec=tl.duration, intervals=intervals,
                               sample_rate=48000, channels=2).model_dump()
     write_contained_json(workspace, Path("audio") / "master_audio_timeline.json", mat)
+    # the cast of the chapter: the voice each speaker reads with, by the name shown on the clip
+    casting = {"Narrator": takes[0].voice_id} if takes else {}
+    for c in tl.clips:
+        speaker_id = line[c.line_id].speaker_id
+        if speaker_id != NARRATOR_ID:
+            casting[speaker_names.get(speaker_id, speaker_id)] = take[c.line_id].voice_id
     db.add(AudioTimelineRecord(project_id=project_id, status="DRAFT", total_duration=tl.duration, timeline_json=mat,
-                               voice_casting={"Narrator": takes[0].voice_id}))
+                               voice_casting=casting))
     project.current_stage = PipelineStage.VOICE_GENERATED.value
     settings["story_editor_state"] = state
     project.settings = settings

@@ -739,7 +739,38 @@ export interface NarrationRunDetail {
     chapter_summary: string;
     scenes: { scene_id: string; goal: string; first_panel_id: string; last_panel_id: string }[];
   } | null;
+  casting: NarrationCast | null;
   review: { run_id: string; project_id: string; series_key: string; run_dir: string; reasons: string[]; line_ids: string[]; status: "pending" | "approved" } | null;
+}
+
+export interface NarrationVoiceProfile {
+  id: string;
+  name: string;
+  voice: string;
+  gender: "female" | "male" | "neutral";
+  engine: string;
+}
+
+export interface NarrationCastAssignment {
+  character_id: string;
+  profile_id: string;
+  source: "assigned" | "recommended" | "narrator";
+}
+
+export interface NarrationCast {
+  series_key: string;
+  assignments: NarrationCastAssignment[];
+  uncast: string[];
+  recommendations: NarrationCastAssignment[];
+}
+
+export interface NarrationProjectCast {
+  series_key: string;
+  catalog: NarrationVoiceProfile[];
+  assigned: Record<string, string>;
+  cast: NarrationCastAssignment[];
+  recommendations: NarrationCastAssignment[];
+  uncast: string[];
 }
 
 export interface NarrationLineActionRequest {

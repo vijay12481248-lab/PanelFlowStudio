@@ -18,6 +18,7 @@ from engine.narration.artifacts import (
 )
 from engine.narration.bible.store import BibleStore, apply_once
 from engine.narration.cache import ArtifactCache
+from engine.narration.casting import cast_for_script
 from engine.narration.inputs import ChapterInputs
 from engine.narration.runtime.audio import KokoroTts, Stt, Tts, WhisperStt, release_audio_models
 from engine.narration.runtime.client import ModelClient, StepModelError
@@ -151,10 +152,12 @@ class NarrationCompiler:
             heard = {}  # voice review: takes the owner listened to; audio_path is keyed on the line text, so an edited line differs
             if (run_dir / "takes.json").exists():
                 heard = {t["line_id"]: t["audio_path"] for t in json.loads((run_dir / "takes.json").read_text(encoding="utf-8"))}
+            cast_plan, cast_voices = cast_for_script(inputs.series_key, bible, script)
+            _write_json(run_dir / "casting.json", cast_plan.model_dump(mode="json"))
             with _recorded(log, "voice", audio_model, "-", _CountingCache(self.cache)):
                 takes, reasons = await voice.voice_lines(  # cached takes cost no synthesis; an edited line is voiced fresh
                     script, plan, bible, self.tts or KokoroTts(), self.stt or WhisperStt(),
-                    Path(workspace) / "narration" / "voice", tts_cfg.voice, facts)
+                    Path(workspace) / "narration" / "voice", tts_cfg.voice, facts, cast_voices)
                 takes = [t.model_copy(update={"flagged": False}) if heard.get(t.line_id) == t.audio_path else t for t in takes]
                 if heard:
                     n = sum(t.flagged for t in takes)
@@ -294,10 +297,12 @@ class NarrationCompiler:
             await self.scheduler.release()  # the LLM leaves the GPU before Kokoro arrives
             tts_cfg = load_tts_config()
             audio_model = f"{tts_cfg.model} + {load_stt_config().model}"
+            cast_plan, cast_voices = cast_for_script(inputs.series_key, bible, script)
+            _write_json(run_dir / "casting.json", cast_plan.model_dump(mode="json"))
             with _recorded(log, "voice", audio_model, "-", _CountingCache(self.cache)):
                 takes, reasons = await voice.voice_lines(
                     script, plan, bible, self.tts or KokoroTts(), self.stt or WhisperStt(),
-                    Path(workspace) / "narration" / "voice", tts_cfg.voice, facts)
+                    Path(workspace) / "narration" / "voice", tts_cfg.voice, facts, cast_voices)
                 _write_json(run_dir / "takes.json", [t.model_dump(mode="json") for t in takes])
                 if reasons:
                     raise NeedsReview(reasons)

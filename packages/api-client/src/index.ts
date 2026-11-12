@@ -72,6 +72,10 @@ import type {
   NarrationLine,
   NarrationLineActionRequest,
   NarrationApproveResponse,
+  NarrationCast,
+  NarrationCastAssignment,
+  NarrationVoiceProfile,
+  NarrationProjectCast,
 } from "@panelflow/shared-types";
 
 export type {
@@ -1539,6 +1543,32 @@ export class PanelFlowApiClient {
     return this.request<NarrationLine | { job_id: string }>(
       `/api/narration/runs/${encodeURIComponent(projectId)}/${encodeURIComponent(runId)}/lines/${encodeURIComponent(lineId)}`,
       { method: "POST", body: JSON.stringify(body) }
+    );
+  }
+
+  async getNarrationCast(projectId: string): Promise<NarrationProjectCast> {
+    return this.request<NarrationProjectCast>(
+      `/api/narration/projects/${encodeURIComponent(projectId)}/cast`
+    );
+  }
+
+  async setNarrationCast(
+    projectId: string,
+    characterId: string,
+    profileId: string
+  ): Promise<{ series_key: string; assigned: Record<string, string> }> {
+    return this.request<{ series_key: string; assigned: Record<string, string> }>(
+      `/api/narration/projects/${encodeURIComponent(projectId)}/cast`,
+      { method: "POST", body: JSON.stringify({ character_id: characterId, profile_id: profileId }) }
+    );
+  }
+
+  async acceptNarrationCast(
+    projectId: string
+  ): Promise<{ series_key: string; assigned: Record<string, string> }> {
+    return this.request<{ series_key: string; assigned: Record<string, string> }>(
+      `/api/narration/projects/${encodeURIComponent(projectId)}/cast/accept`,
+      { method: "POST" }
     );
   }
 

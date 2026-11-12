@@ -30,8 +30,10 @@ test("run inspector parses the typed payload", async () => {
   const payload = {
     run: { run_id: "r" },
     lines: [{ line_id: "L1", panel_id: "x", text: "t", status: "passed", kind: "beat", facts: "P1 | chars: -",
+      speaker_id: "narrator", speaker_name: "Narrator",
       checks: [{ rule: "order", passed: true, severity: "block", reason: "" }], take: { wer: 0.1, flagged: false, stt_text: "t" } }],
     beat_sheet: { hook: "h", chapter_summary: "s", scenes: [{ scene_id: "S1", goal: "g", first_panel_id: "a", last_panel_id: "b" }] },
+    casting: null,
     review: null,
   };
   const { result, calls } = await call(payload, (c) => c.getNarrationRun("p", "20260101T000000-abcdef"));
@@ -41,8 +43,8 @@ test("run inspector parses the typed payload", async () => {
 });
 
 test("line actions and approve POST the right bodies", async () => {
-  const edit = await call({ line_id: "L1", panel_id: "x", text: "new", status: "passed", kind: "beat", checks: [], facts: "P1 | chars: -", take: null }, (c) => c.narrationLineAction("p", "r1", "L1", { action: "edit", text: "new" }));
-  assert.deepEqual(Object.keys(edit.result as object).sort(), ["checks", "facts", "kind", "line_id", "panel_id", "status", "take", "text"]);
+  const edit = await call({ line_id: "L1", panel_id: "x", text: "new", status: "passed", kind: "beat", checks: [], facts: "P1 | chars: -", take: null, speaker_id: "narrator", speaker_name: "Narrator" }, (c) => c.narrationLineAction("p", "r1", "L1", { action: "edit", text: "new" }));
+  assert.deepEqual(Object.keys(edit.result as object).sort(), ["checks", "facts", "kind", "line_id", "panel_id", "speaker_id", "speaker_name", "status", "take", "text"]);
   assert.match(edit.calls[0].url, /\/api\/narration\/runs\/p\/r1\/lines\/L1$/);
   assert.equal(edit.calls[0].method, "POST");
   assert.deepEqual(edit.calls[0].body, { action: "edit", text: "new" });
@@ -53,4 +55,31 @@ test("line actions and approve POST the right bodies", async () => {
   assert.match(ap.calls[0].url, /\/api\/narration\/runs\/p\/r1\/approve$/);
   assert.equal(ap.calls[0].method, "POST");
   assert.deepEqual(ap.result, { bible_version: 3, job_id: null });
+});
+
+test("the cast is read, cast and accepted through the project endpoints", async () => {
+  const cast = {
+    series_key: "s",
+    catalog: [{ id: "narrator", name: "The Narrator", voice: "am_michael", gender: "male", engine: "" }],
+    assigned: { c1: "aria" },
+    cast: [{ character_id: "narrator", profile_id: "narrator", source: "narrator" }],
+    recommendations: [{ character_id: "c2", profile_id: "aria", source: "recommended" }],
+    uncast: ["c3"],
+  };
+  const got = await call(cast, (c) => c.getNarrationCast("p 1"));
+  assert.match(got.calls[0].url, /\/api\/narration\/projects\/p%201\/cast$/);
+  assert.equal(got.calls[0].method ?? "GET", "GET");
+  assert.equal(got.result.assigned.c1, "aria");
+  assert.deepEqual(got.result.uncast, ["c3"]);
+
+  const set = await call({ series_key: "s", assigned: { c1: "aria" } },
+    (c) => c.setNarrationCast("p", "c1", "aria"));
+  assert.equal(set.calls[0].method, "POST");
+  assert.deepEqual(set.calls[0].body, { character_id: "c1", profile_id: "aria" });
+
+  const accept = await call({ series_key: "s", assigned: { c1: "aria", c2: "aria" } },
+    (c) => c.acceptNarrationCast("p"));
+  assert.match(accept.calls[0].url, /\/api\/narration\/projects\/p\/cast\/accept$/);
+  assert.equal(accept.calls[0].method, "POST");
+  assert.equal(accept.result.assigned.c2, "aria");
 });
