@@ -147,7 +147,7 @@ class LocalApiSecurityMiddleware(BaseHTTPMiddleware):
     @staticmethod
     def _is_resource_path(path: str) -> bool:
         return (
-            path.endswith(("/file", "/normalized-file", "/output", "/contact-sheet"))
+            path.endswith(("/file", "/normalized-file", "/output", "/contact-sheet", "/cover", "/text-blur-preview"))
             or "/samples/" in path
             or "/chronoflow/" in path
             or path.startswith(("/outputs/", "/inputs/"))
