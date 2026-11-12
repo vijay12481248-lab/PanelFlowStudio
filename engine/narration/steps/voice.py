@@ -15,6 +15,8 @@ import numpy as np
 from engine.narration.artifacts import (
     NARRATOR_ID, PanelFacts, PerformancePlan, ScriptIR, SeriesBible, VoiceTake,
 )
+from engine.narration.cache import ArtifactCache
+from engine.narration.ledger import TakeLedger
 from engine.narration.runtime.audio import Stt, Tts, _tokens, normalize_silence, wer, write_wav_atomic
 from engine.narration.runtime.roles import load_tts_config
 
@@ -54,7 +56,7 @@ def _key(spoken: str, voice: str, rate: float, bible: SeriesBible, model: str) -
 
 
 async def _take(line, rate: float, spoken: str, key: str, model: str, tts: Tts, stt: Stt, out_dir: Path, voice: str,
-                names: frozenset[str] = frozenset()) -> VoiceTake:
+                names: frozenset[str] = frozenset(), ledger: "TakeLedger | None" = None) -> VoiceTake:
     best: tuple[VoiceTake, Path] | None = None
     for attempt, step in enumerate(RATE_STEPS, 1):
         eff = rate * step
@@ -70,7 +72,8 @@ async def _take(line, rate: float, spoken: str, key: str, model: str, tts: Tts, 
         take = VoiceTake(
             line_id=line.line_id, audio_path=str(out_dir / f"{key}.wav"), duration=duration, words=words,
             lead_ms=lead, tail_ms=tail, stt_text=stt_text, wer=min(err, 1.0), tts_model=model,
-            voice_id=voice, rate=eff, attempt=attempt, flagged=err > WER_LIMIT)
+            voice_id=voice, rate=eff, attempt=attempt, flagged=err > WER_LIMIT,
+            **(ledger.provenance(line) if ledger else {}))
         if best is None or take.wer <= best[0].wer:
             best = (take, path)
         if err <= WER_LIMIT:
@@ -80,7 +83,8 @@ async def _take(line, rate: float, spoken: str, key: str, model: str, tts: Tts, 
         duration = write_wav_atomic(path, np.zeros(2 * SILENT_PAD, dtype=np.float32))
         best = (VoiceTake(line_id=line.line_id, audio_path=str(out_dir / f"{key}.wav"), duration=duration, words=[],
                           lead_ms=0, tail_ms=0, stt_text="", wer=1.0, tts_model=model, voice_id=voice,
-                          rate=rate * RATE_STEPS[-1], attempt=len(RATE_STEPS), flagged=True), path)
+                          rate=rate * RATE_STEPS[-1], attempt=len(RATE_STEPS), flagged=True,
+                          **(ledger.provenance(line) if ledger else {})), path)
     take, src = best
     for p in out_dir.glob(f"{key}.a*.wav"):
         if p != src:
@@ -91,7 +95,8 @@ async def _take(line, rate: float, spoken: str, key: str, model: str, tts: Tts, 
 
 async def voice_lines(script: ScriptIR, plan: PerformancePlan, bible: SeriesBible, tts: Tts, stt: Stt,
                       out_dir: Path, voice: str, facts: Sequence[PanelFacts] = (),
-                      cast: Mapping[str, str] | None = None) -> tuple[list[VoiceTake], list[str]]:
+                      cast: Mapping[str, str] | None = None,
+                      ledger: "TakeLedger | None" = None) -> tuple[list[VoiceTake], list[str]]:
     """One take per line. `cast` maps a character id to the engine voice that reads it;
     a character with no entry in it is read by the narrator."""
     out_dir = Path(out_dir)
@@ -113,7 +118,7 @@ async def voice_lines(script: ScriptIR, plan: PerformancePlan, bible: SeriesBibl
             except ValueError:
                 take = None
         if take is None:
-            take = await _take(line, rate, spoken, key, model, tts, stt, out_dir, line_voice, names)
+            take = await _take(line, rate, spoken, key, model, tts, stt, out_dir, line_voice, names, ledger)
             tmp = meta.with_suffix(f".json.{uuid.uuid4().hex[:8]}.tmp")
             tmp.write_text(take.model_dump_json(), encoding="utf-8")
             os.replace(tmp, meta)

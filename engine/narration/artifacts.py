@@ -246,6 +246,7 @@ class LineMarks(_Strict):
 class PerformancePlan(_Strict):
     project_id: str
     script_revision: int
+    revision: int = 0  # the direction as it stands; it moves when the delivery is changed
     lines: list[LineMarks] = Field(min_length=1)
 
     @model_validator(mode="after")
@@ -282,6 +283,11 @@ class VoiceTake(_Strict):
     rate: float
     attempt: int = Field(ge=1, le=3)
     flagged: bool = False
+    # what this take was made from, so an outdated take can be recognised later
+    script_revision: int = 0  # the script revision the spoken text came from
+    direction_revision: int = 0  # the performance plan revision the delivery came from
+    voice_profile_id: str = ""  # the cast profile that read it, not the engine voice id
+    provider: str = ""  # the TTS provider that produced it
 
 
 class TimelinePanel(_Strict):

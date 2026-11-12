@@ -30,8 +30,10 @@ test("run inspector parses the typed payload", async () => {
   const payload = {
     run: { run_id: "r" },
     lines: [{ line_id: "L1", panel_id: "x", text: "t", status: "passed", kind: "beat", facts: "P1 | chars: -",
-      speaker_id: "narrator", speaker_name: "Narrator",
-      checks: [{ rule: "order", passed: true, severity: "block", reason: "" }], take: { wer: 0.1, flagged: false, stt_text: "t" } }],
+      speaker_id: "narrator", speaker_name: "Narrator", outdated: false,
+      checks: [{ rule: "order", passed: true, severity: "block", reason: "" }],
+      take: { wer: 0.1, flagged: false, stt_text: "t", voice_profile_id: "narrator",
+              script_revision: 3, direction_revision: 3, provider: "kokoro-82m" } }],
     beat_sheet: { hook: "h", chapter_summary: "s", scenes: [{ scene_id: "S1", goal: "g", first_panel_id: "a", last_panel_id: "b" }] },
     casting: null,
     review: null,
@@ -43,8 +45,8 @@ test("run inspector parses the typed payload", async () => {
 });
 
 test("line actions and approve POST the right bodies", async () => {
-  const edit = await call({ line_id: "L1", panel_id: "x", text: "new", status: "passed", kind: "beat", checks: [], facts: "P1 | chars: -", take: null, speaker_id: "narrator", speaker_name: "Narrator" }, (c) => c.narrationLineAction("p", "r1", "L1", { action: "edit", text: "new" }));
-  assert.deepEqual(Object.keys(edit.result as object).sort(), ["checks", "facts", "kind", "line_id", "panel_id", "speaker_id", "speaker_name", "status", "take", "text"]);
+  const edit = await call({ line_id: "L1", panel_id: "x", text: "new", status: "passed", kind: "beat", checks: [], facts: "P1 | chars: -", take: null, speaker_id: "narrator", speaker_name: "Narrator", outdated: false }, (c) => c.narrationLineAction("p", "r1", "L1", { action: "edit", text: "new" }));
+  assert.deepEqual(Object.keys(edit.result as object).sort(), ["checks", "facts", "kind", "line_id", "outdated", "panel_id", "speaker_id", "speaker_name", "status", "take", "text"]);
   assert.match(edit.calls[0].url, /\/api\/narration\/runs\/p\/r1\/lines\/L1$/);
   assert.equal(edit.calls[0].method, "POST");
   assert.deepEqual(edit.calls[0].body, { action: "edit", text: "new" });

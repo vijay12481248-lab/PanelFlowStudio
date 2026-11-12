@@ -16,9 +16,12 @@ from engine.database.models import ProjectRecord
 from engine.database.session import get_db
 from engine.jobs.workflow import enqueue_project_operation, register_operation_factory
 from engine.narration import review
-from engine.narration.artifacts import CritiqueReport, NARRATOR_ID, ScriptIR, SeriesBible
+from engine.narration.artifacts import (
+    CritiqueReport, NARRATOR_ID, PerformancePlan, ScriptIR, SeriesBible, VoiceTake,
+)
 from engine.narration.bible.store import BibleStore, series_key_for
 from engine.narration.casting import apply_recommendations, load_cast, resolve_cast, save_cast
+from engine.narration.ledger import TakeLedger, outdated_lines
 from engine.narration.runtime.roles import load_voice_catalog
 from engine.narration.steps.critique.judges import JUDGES
 from engine.narration.steps.critique.rules import rule_checks
@@ -94,7 +97,11 @@ def _context(run_dir: Path, item) -> dict:
     except (ValueError, OSError):
         pass
     try:
-        ctx["takes"] = {t["line_id"]: {"wer": t["wer"], "flagged": t["flagged"], "stt_text": t["stt_text"]}
+        ctx["takes"] = {t["line_id"]: {"wer": t["wer"], "flagged": t["flagged"], "stt_text": t["stt_text"],
+                                       "voice_profile_id": t.get("voice_profile_id", ""),
+                                       "script_revision": t.get("script_revision", 0),
+                                       "direction_revision": t.get("direction_revision", 0),
+                                       "provider": t.get("provider", "")}
                         for t in _json(run_dir / "takes.json")}
     except (ValueError, KeyError, TypeError, OSError):
         pass
@@ -121,9 +128,33 @@ def _context(run_dir: Path, item) -> dict:
                     checks.setdefault(ln.line_id, []).extend(
                         c.model_dump(mode="json") for c in old[ln.line_id].checks if c.rule in JUDGES)
         ctx["checks"] = checks
+        ctx["outdated"] = _outdated_takes(run_dir, script)
     except (ValueError, KeyError, OSError):
         pass
     return ctx
+
+
+def _outdated_takes(run_dir: Path, script: ScriptIR) -> list[str]:
+    """The lines whose take no longer matches the line: the text, the direction or the voice moved on."""
+    try:
+        takes = [VoiceTake.model_validate(t) for t in _json(run_dir / "takes.json")]
+    except (ValueError, KeyError, TypeError, OSError):
+        return []
+    if not takes:
+        return []
+    plan = None
+    try:
+        plan = PerformancePlan.model_validate_json((run_dir / "performance.json").read_text(encoding="utf-8"))
+    except (ValueError, OSError):
+        pass
+    profiles = {}
+    try:
+        profiles = {a["character_id"]: a["profile_id"] for a in (_json(run_dir / "casting.json") or {}).get("assignments", [])}
+    except (ValueError, KeyError, TypeError, OSError):
+        profiles = {}
+    ledger = TakeLedger(script, direction_revision=plan.revision if plan else script.revision,
+                        voice_profile_ids=profiles)
+    return outdated_lines(takes, ledger)
 
 
 def _line_view(ln, ctx: dict) -> dict:
@@ -133,10 +164,12 @@ def _line_view(ln, ctx: dict) -> dict:
     except (KeyError, TypeError):
         facts = ""  # panel missing from panel_facts.json
     speaker_id = getattr(ln, "speaker_id", NARRATOR_ID)
+    take = ctx["takes"].get(ln.line_id)
     return {"line_id": ln.line_id, "panel_id": ln.panel_id, "text": ln.text, "status": ln.status, "kind": ln.kind,
             "speaker_id": speaker_id,
             "speaker_name": "Narrator" if speaker_id == NARRATOR_ID else ctx["names"].get(speaker_id, speaker_id),
-            "checks": ctx["checks"].get(ln.line_id, []), "facts": facts, "take": ctx["takes"].get(ln.line_id)}
+            "checks": ctx["checks"].get(ln.line_id, []), "facts": facts, "take": take,
+            "outdated": ln.line_id in ctx.get("outdated", [])}
 
 @router.get("/runs/{project_id}/{run_id}")
 def inspect_run(project_id: str, run_id: str, db: Session = Depends(get_db)) -> dict:

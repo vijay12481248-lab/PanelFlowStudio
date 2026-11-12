@@ -728,7 +728,16 @@ export interface NarrationLine {
   speaker_name: string; // the display name of that speaker
   checks: NarrationLineCheck[];
   facts: string;
-  take: { wer: number; flagged: boolean; stt_text: string } | null;
+  take: {
+    wer: number;
+    flagged: boolean;
+    stt_text: string;
+    voice_profile_id: string; // the cast profile that read the line
+    script_revision: number; // the script revision the words came from
+    direction_revision: number; // the direction revision the delivery came from
+    provider: string; // the TTS provider that produced the take
+  } | null;
+  outdated: boolean; // the take no longer matches the line: the text, the direction or the voice moved on
 }
 
 export interface NarrationRunDetail {

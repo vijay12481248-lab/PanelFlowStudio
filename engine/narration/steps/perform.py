@@ -99,4 +99,4 @@ async def perform(script: ScriptIR, sheet: BeatSheet, facts: list[PanelFacts], b
                                  pause_after_ms=max(150, pause), emphasis_words=words,
                                  intent=" ".join(d.intent.split())[:160])
     return PerformancePlan(project_id=script.project_id, script_revision=script.revision,
-                           lines=[marks[i] for i in range(len(script.lines))])
+                           revision=script.revision, lines=[marks[i] for i in range(len(script.lines))])
