@@ -16,7 +16,7 @@ from engine.database.models import ProjectRecord
 from engine.database.session import get_db
 from engine.jobs.workflow import enqueue_project_operation, register_operation_factory
 from engine.narration import review
-from engine.narration.artifacts import CritiqueReport, ScriptIR, SeriesBible
+from engine.narration.artifacts import CritiqueReport, NARRATOR_ID, ScriptIR, SeriesBible
 from engine.narration.bible.store import BibleStore
 from engine.narration.steps.critique.judges import JUDGES
 from engine.narration.steps.critique.rules import rule_checks
@@ -130,7 +130,10 @@ def _line_view(ln, ctx: dict) -> dict:
         facts = panel_line(1, ctx["facts"][ln.panel_id], ctx["names"])
     except (KeyError, TypeError):
         facts = ""  # panel missing from panel_facts.json
+    speaker_id = getattr(ln, "speaker_id", NARRATOR_ID)
     return {"line_id": ln.line_id, "panel_id": ln.panel_id, "text": ln.text, "status": ln.status, "kind": ln.kind,
+            "speaker_id": speaker_id,
+            "speaker_name": "Narrator" if speaker_id == NARRATOR_ID else ctx["names"].get(speaker_id, speaker_id),
             "checks": ctx["checks"].get(ln.line_id, []), "facts": facts, "take": ctx["takes"].get(ln.line_id)}
 
 @router.get("/runs/{project_id}/{run_id}")

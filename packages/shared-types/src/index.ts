@@ -724,6 +724,8 @@ export interface NarrationLine {
   text: string;
   status: string;
   kind: string;
+  speaker_id: string; // "narrator", or the id of the character who reads the line
+  speaker_name: string; // the display name of that speaker
   checks: NarrationLineCheck[];
   facts: string;
   take: { wer: number; flagged: boolean; stt_text: string } | null;

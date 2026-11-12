@@ -139,6 +139,8 @@ LineKind = Literal["hook", "narration", "paraphrase", "transition", "cliffhanger
 LineStatus = Literal["draft", "passed", "repaired", "fallback", "needs_review"]
 _FACT_REF = r"^(action|emotion|dialogue|characters|setting|sfx|beat:[A-Za-z0-9_-]+)$"
 
+NARRATOR_ID = "narrator"  # the voice that reads the recap; a character id otherwise
+
 
 class ScriptLine(_Strict):
     line_id: str
@@ -148,6 +150,7 @@ class ScriptLine(_Strict):
     kind: LineKind
     target_words: int = 8
     status: LineStatus = "draft"
+    speaker_id: str = NARRATOR_ID  # who reads this line: the narrator, or a bible character id
 
     @field_validator("text")
     @classmethod
@@ -237,6 +240,7 @@ class LineMarks(_Strict):
     rate: float = Field(ge=0.9, le=1.1)
     pause_after_ms: int = Field(ge=150, le=800)
     emphasis_words: list[str] = Field(default_factory=list)
+    intent: str = ""  # why this line is said, in one clause ("hold the tension before the reveal")
 
 
 class PerformancePlan(_Strict):

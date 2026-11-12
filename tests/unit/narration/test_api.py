@@ -80,7 +80,7 @@ def test_inspector_payload_shape(env):
     body = client.get(f"/api/narration/runs/proj-test/{res.run_id}").json()
     assert body["run"]["run_id"] == res.run_id
     l2 = next(ln for ln in body["lines"] if ln["line_id"] == "L002")
-    assert set(l2) == {"line_id", "panel_id", "text", "status", "kind", "checks", "facts", "take"}
+    assert set(l2) == {"line_id", "panel_id", "text", "status", "kind", "speaker_id", "speaker_name", "checks", "facts", "take"}
     assert l2["take"] is None and "action:" in l2["facts"]
     assert l2["checks"]
     assert set(l2["checks"][0]) == {"rule", "passed", "severity", "reason"}
@@ -91,6 +91,14 @@ def test_inspector_payload_shape(env):
                                                          "stt_text": "heard"}]), encoding="utf-8")
     l2 = next(ln for ln in client.get(f"/api/narration/runs/proj-test/{res.run_id}").json()["lines"] if ln["line_id"] == "L002")
     assert l2["take"] == {"wer": 0.4, "flagged": True, "stt_text": "heard"}
+
+
+def test_the_inspector_names_the_speaker_of_each_line(env):
+    """The Audio Studio can show who reads a line and who the reader is called."""
+    client, res, _, _ = env
+    body = client.get(f"/api/narration/runs/proj-test/{res.run_id}").json()
+    assert all(ln["speaker_id"] == "narrator" for ln in body["lines"])
+    assert all(ln["speaker_name"] == "Narrator" for ln in body["lines"])
 
 
 def test_edit_rejected_by_rules_is_400_and_unchanged(env):
@@ -141,7 +149,7 @@ def test_action_returns_inspector_shape_with_fresh_checks(env):
     client, res, *_ = env
     base = f"/api/narration/runs/proj-test/{res.run_id}"
     out = client.post(f"{base}/lines/L002", json={"action": "edit", "text": "He walks through the quiet hall slowly"}).json()
-    assert set(out) == {"line_id", "panel_id", "text", "status", "kind", "checks", "facts", "take"}
+    assert set(out) == {"line_id", "panel_id", "text", "status", "kind", "speaker_id", "speaker_name", "checks", "facts", "take"}
     assert out["checks"] and "action:" in out["facts"]
     insp = next(ln for ln in client.get(base).json()["lines"] if ln["line_id"] == "L002")
     assert insp == out
