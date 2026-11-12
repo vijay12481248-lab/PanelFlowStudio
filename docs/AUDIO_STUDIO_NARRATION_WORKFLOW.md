@@ -115,6 +115,12 @@ direction revision, the cast profile and the provider it came from, so a take
 that no longer matches its line is recognised as outdated instead of being
 mistaken for the current one.
 
+**The audio QA (step 6).** Every take is checked for intelligibility,
+pronunciation, duration, clipping, silence and timing. Each failed check names
+the repair that would fix it: regenerate the line at a slower pace, adjust the
+pronunciation in the series bible, regenerate at a lower level, trim the
+silence around the take.
+
 ### What the workflow still needs
 
 **Gap B — an uncertain brief (stop point 1).** `Understand` already raises
@@ -122,16 +128,6 @@ mistaken for the current one.
 can be *coherent and still uncertain* — a reveal the analyst inferred rather than
 read. The brief needs to carry its own confidence and cite the evidence per
 conclusion, so "uncertain" is visible rather than inferred.
-
-**Gap C — the take ledger (step 5).** DONE. A take records its text and its
-model, but not the script revision, the direction revision, the voice profile,
-or the provider that produced it. Without those, an outdated take cannot be
-detected and the "current approved take remains available" rule cannot hold.
-
-**Gap D — audio QA (step 6).** The speech check measures intelligibility only.
-The workflow also asks for pronunciation, duration, clipping, silence and
-timing, and for the reviewer to *suggest* a repair rather than only retry
-silently.
 
 ### The readiness report (step 7)
 
@@ -155,7 +151,7 @@ Each milestone lands with tests and keeps the pipeline runnable.
 3. ~~**The take ledger.**~~ Every take records the script revision, the
    direction revision, the voice profile and the provider. An outdated take is
    detected and the approved take survives.
-4. **Audio QA.** The full check set, with reviewer suggestions and an auditable
+4. ~~**Audio QA.**~~ The full check set, with reviewer suggestions and an auditable
    QA report per take.
 5. **The readiness report.** What is still open, before rendering.
 6. **Stop points.** The brief's uncertainty, the voice approval and the casting
