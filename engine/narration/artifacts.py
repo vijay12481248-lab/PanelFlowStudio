@@ -99,6 +99,9 @@ class Beat(_Strict):
     what_happens: str
     function: Literal["setup", "escalate", "reveal", "payoff", "cliffhanger"]
     intensity: float = Field(ge=0, le=1)
+    evidence: list[str] = Field(default_factory=list)  # the panels this conclusion draws on
+    confidence: float = Field(default=1.0, ge=0, le=1)
+    uncertain: str = ""  # what the analyst is not sure about, or "" when sure
 
 
 class Scene(_Strict):
@@ -218,6 +221,24 @@ class ReviewItem(_Strict):
     reasons: list[str]
     line_ids: list[str]
     status: Literal["pending", "approved"] = "pending"
+
+
+class StopPoint(_Strict):
+    """A decision the workflow cannot make on its own, and pauses for.
+
+    The workflow pauses for the owner when the story brief is uncertain, when a
+    voice needs approval, or when a proposed casting change would affect an
+    assignment the owner already made. Routine generation and repair continue
+    on their own.
+    """
+
+    kind: Literal["brief", "voice", "casting"]
+    detail: str
+    severity: Literal["block", "warn"] = "block"
+    line_ids: list[str] = Field(default_factory=list)
+    character_ids: list[str] = Field(default_factory=list)
+    options: list[str] = Field(default_factory=list)  # what the owner can choose
+    resolution: str = ""  # what the owner chose, once the stop point is settled
 
 
 def check_script_ids(script: ScriptIR, story_panel_ids: list[str]) -> list[str]:

@@ -80,6 +80,7 @@ import type {
   NarrationQaCheck,
   NarrationReadiness,
   NarrationOpenIssue,
+  NarrationStopPoint,
 } from "@panelflow/shared-types";
 
 export type {
@@ -1573,6 +1574,27 @@ export class PanelFlowApiClient {
     return this.request<{ series_key: string; assigned: Record<string, string> }>(
       `/api/narration/projects/${encodeURIComponent(projectId)}/cast/accept`,
       { method: "POST" }
+    );
+  }
+
+  async listNarrationStopPoints(
+    projectId: string,
+    runId: string
+  ): Promise<{ stop_points: NarrationStopPoint[] }> {
+    return this.request<{ stop_points: NarrationStopPoint[] }>(
+      `/api/narration/runs/${encodeURIComponent(projectId)}/${encodeURIComponent(runId)}/stop-points`
+    );
+  }
+
+  async answerNarrationStopPoint(
+    projectId: string,
+    runId: string,
+    kind: string,
+    choice: string
+  ): Promise<{ stop_points: NarrationStopPoint[] }> {
+    return this.request<{ stop_points: NarrationStopPoint[] }>(
+      `/api/narration/runs/${encodeURIComponent(projectId)}/${encodeURIComponent(runId)}/stop-points`,
+      { method: "POST", body: JSON.stringify({ kind, choice }) }
     );
   }
 

@@ -32,7 +32,7 @@ class CastAssignment(_Strict):
 
     character_id: str
     profile_id: str
-    source: Literal["assigned", "recommended", "narrator"]
+    source: Literal["assigned", "recommended", "narrator", "change"]
 
 
 class CastPlan(_Strict):
@@ -42,6 +42,7 @@ class CastPlan(_Strict):
     assignments: list[CastAssignment] = Field(default_factory=list)
     uncast: list[str] = Field(default_factory=list)  # characters with no voice at all
     recommendations: list[CastAssignment] = Field(default_factory=list)  # proposals, not applied
+    changes: list[CastAssignment] = Field(default_factory=list)  # a proposal that would replace an assignment
 
     def assignment_of(self, character_id: str) -> CastAssignment | None:
         return next((a for a in self.assignments if a.character_id == character_id), None)
@@ -134,6 +135,7 @@ def resolve_cast(
     recommendations: list[CastAssignment] = []
     uncast: list[str] = []
     taken: set[str] = set()
+    changes: list[CastAssignment] = []
 
     for cid in dict.fromkeys(character_ids):
         if cid == NARRATOR_ID:
@@ -144,6 +146,11 @@ def resolve_cast(
         if keep and keep in by_id:  # the owner's own assignment is never replaced
             assignments.append(CastAssignment(character_id=cid, profile_id=keep, source="assigned"))
             taken.add(keep)
+            # a voice that fits the character better is a change the owner must approve, not one
+            # the assistant makes: it is offered, and the assignment stands until it is accepted.
+            fit = _match_gender(cid, bible, catalog, taken)
+            if fit is not None and fit.id != keep:
+                changes.append(CastAssignment(character_id=cid, profile_id=fit.id, source="change"))
             continue
         fit = _match_gender(cid, bible, catalog, taken)
         if fit is None:
@@ -153,7 +160,7 @@ def resolve_cast(
         taken.add(fit.id)
 
     return CastPlan(series_key=series_key, assignments=assignments, uncast=uncast,
-                    recommendations=recommendations)
+                    recommendations=recommendations, changes=changes)
 
 
 def speakers_of(script) -> list[str]:

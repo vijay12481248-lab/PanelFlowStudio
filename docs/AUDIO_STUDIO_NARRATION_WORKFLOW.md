@@ -121,19 +121,26 @@ the repair that would fix it: regenerate the line at a slower pace, adjust the
 pronunciation in the series bible, regenerate at a lower level, trim the
 silence around the take.
 
+**The readiness report (step 7).** What is still open before the project
+renders: the lines awaiting review, the characters without a voice, the takes
+that failed the QA, the takes that no longer match their line, and the music
+state.
+
+**The stop points.** The workflow pauses for the owner when the story brief is
+uncertain, when a voice needs approval, or when a proposed casting change
+would affect an assignment the owner already made. A beat now carries the
+evidence it draws on, its confidence, and what the analyst is unsure about; a
+beat it is unsure about becomes a stop point. A proposed voice that would
+replace an assignment is offered, never applied. Routine generation and repair
+carry on on their own.
+
 ### What the workflow still needs
 
-**Gap B — an uncertain brief (stop point 1).** `Understand` already raises
-`NeedsReview` when the model cannot produce a coherent beat sheet, but a brief
-can be *coherent and still uncertain* — a reveal the analyst inferred rather than
-read. The brief needs to carry its own confidence and cite the evidence per
-conclusion, so "uncertain" is visible rather than inferred.
-
-### The readiness report (step 7)
-
-`sync_metrics` already computes the sync targets. The readiness report is that
-plus what is still open: lines awaiting review, characters without a voice,
-takes that failed QA, and the BGM/SFX state.
+Nothing is left that blocks the workflow. The remaining work is the desktop
+surface: the Audio Studio still shows the run inspector and the review queue,
+but it does not yet show the cast, the audio QA, the readiness report or the
+stop points as panels of their own. The engine produces all four; the desktop
+reads them through the API.
 
 ---
 
@@ -153,8 +160,8 @@ Each milestone lands with tests and keeps the pipeline runnable.
    detected and the approved take survives.
 4. ~~**Audio QA.**~~ The full check set, with reviewer suggestions and an auditable
    QA report per take.
-5. **The readiness report.** What is still open, before rendering.
-6. **Stop points.** The brief's uncertainty, the voice approval and the casting
+5. ~~**The readiness report.**~~ What is still open, before rendering.
+6. ~~**Stop points.**~~ The brief's uncertainty, the voice approval and the casting
    change become explicit review items instead of silent behaviour.
 
 ## Invariants

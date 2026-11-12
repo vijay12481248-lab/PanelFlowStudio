@@ -24,6 +24,7 @@ from engine.narration.casting import apply_recommendations, load_cast, resolve_c
 from engine.narration.ledger import TakeLedger, outdated_lines
 from engine.narration.qa import QaReport, repairs
 from engine.narration.runtime.roles import load_voice_catalog
+from engine.narration.stoppoints import load_stop_points, open_stop_points, resolve_stop_point
 from engine.narration.steps.critique.judges import JUDGES
 from engine.narration.steps.critique.rules import rule_checks
 from engine.narration.steps.factview import char_names, cues_of, panel_line
@@ -212,7 +213,31 @@ def inspect_run(project_id: str, run_id: str, db: Session = Depends(get_db)) -> 
         readiness_report = None  # the run stopped before the timeline
     return {"run": run, "lines": lines, "beat_sheet": beat_sheet, "casting": cast,
             "readiness": readiness_report,
+            "stop_points": [p.model_dump(mode="json") for p in open_stop_points(run_dir)],
             "review": item.model_dump(mode="json") if item else None}
+
+
+class StopPointRequest(BaseModel):
+    kind: str
+    choice: str
+
+
+@router.get("/runs/{project_id}/{run_id}/stop-points")
+def list_stop_points(project_id: str, run_id: str, db: Session = Depends(get_db)):
+    """The decisions this run is waiting for."""
+    run_dir = _run_dir(db, project_id, run_id)
+    return {"stop_points": [p.model_dump(mode="json") for p in load_stop_points(run_dir)]}
+
+
+@router.post("/runs/{project_id}/{run_id}/stop-points")
+def answer_stop_point(project_id: str, run_id: str, req: StopPointRequest, db: Session = Depends(get_db)):
+    """Answer a stop point: the owner chose, and the run carries on."""
+    run_dir = _run_dir(db, project_id, run_id)
+    try:
+        remaining = resolve_stop_point(run_dir, req.kind, req.choice)
+    except (ValueError, OSError) as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return {"stop_points": [p.model_dump(mode="json") for p in remaining]}
 
 
 @router.get("/runs/{project_id}/{run_id}/takes/{line_id}/audio")

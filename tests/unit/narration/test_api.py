@@ -165,6 +165,26 @@ def test_the_inspector_shows_the_readiness_report(env):
     assert body["readiness"]["issues"][0]["kind"] == "line"
 
 
+def test_a_stop_point_is_listed_and_answered(env):
+    """The workflow pauses for a decision, and the owner's answer settles it."""
+    client, res, _, _ = env
+    (res.run_dir / "stop_points.json").write_text(json.dumps([
+        {"kind": "brief", "detail": "the speaker of P4 is unclear", "severity": "block",
+         "line_ids": ["P4"], "character_ids": [], "options": ["accept as read"], "resolution": ""},
+    ]), encoding="utf-8")
+    body = client.get(f"/api/narration/runs/proj-test/{res.run_id}").json()
+    assert [p["kind"] for p in body["stop_points"]] == ["brief"]
+
+    listed = client.get(f"/api/narration/runs/proj-test/{res.run_id}/stop-points").json()
+    assert listed["stop_points"][0]["detail"] == "the speaker of P4 is unclear"
+
+    answered = client.post(f"/api/narration/runs/proj-test/{res.run_id}/stop-points",
+                           json={"kind": "brief", "choice": "accept as read"}).json()
+    assert answered["stop_points"] == []  # the only one is settled
+    kept = json.loads((res.run_dir / "stop_points.json").read_text(encoding="utf-8"))
+    assert kept[0]["resolution"] == "accept as read"
+
+
 def test_edit_rejected_by_rules_is_400_and_unchanged(env):
     client, res, *_ = env
     url = f"/api/narration/runs/proj-test/{res.run_id}/lines/L002"

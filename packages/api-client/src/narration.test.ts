@@ -38,6 +38,7 @@ test("run inspector parses the typed payload", async () => {
     beat_sheet: { hook: "h", chapter_summary: "s", scenes: [{ scene_id: "S1", goal: "g", first_panel_id: "a", last_panel_id: "b" }] },
     casting: null,
     readiness: null,
+    stop_points: [],
     review: null,
   };
   const { result, calls } = await call(payload, (c) => c.getNarrationRun("p", "20260101T000000-abcdef"));
@@ -86,4 +87,17 @@ test("the cast is read, cast and accepted through the project endpoints", async 
   assert.match(accept.calls[0].url, /\/api\/narration\/projects\/p\/cast\/accept$/);
   assert.equal(accept.calls[0].method, "POST");
   assert.equal(accept.result.assigned.c2, "aria");
+});
+
+test("the stop points are listed and answered", async () => {
+  const point = { kind: "brief", detail: "the speaker of P4 is unclear", severity: "block",
+                  line_ids: ["P4"], character_ids: [], options: ["accept as read"], resolution: "" };
+  const listed = await call({ stop_points: [point] }, (c) => c.listNarrationStopPoints("p", "r1"));
+  assert.match(listed.calls[0].url, /\/api\/narration\/runs\/p\/r1\/stop-points$/);
+  assert.equal(listed.calls[0].method ?? "GET", "GET");
+  assert.equal(listed.result.stop_points[0].kind, "brief");
+
+  const answered = await call({ stop_points: [] }, (c) => c.answerNarrationStopPoint("p", "r1", "brief", "accept as read"));
+  assert.equal(answered.calls[0].method, "POST");
+  assert.deepEqual(answered.calls[0].body, { kind: "brief", choice: "accept as read" });
 });

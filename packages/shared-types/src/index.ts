@@ -773,6 +773,16 @@ export interface NarrationReadiness {
   music_tracks: number;
 }
 
+export interface NarrationStopPoint {
+  kind: "brief" | "voice" | "casting";
+  detail: string;
+  severity: "block" | "warn";
+  line_ids: string[];
+  character_ids: string[];
+  options: string[]; // what the owner can choose
+  resolution: string; // what the owner chose, once the stop point is settled
+}
+
 export interface NarrationRunDetail {
   run: Record<string, unknown>;
   lines: NarrationLine[];
@@ -783,6 +793,7 @@ export interface NarrationRunDetail {
   } | null;
   casting: NarrationCast | null;
   readiness: NarrationReadiness | null; // what is still open before the project renders
+  stop_points: NarrationStopPoint[]; // the decisions this run is waiting for
   review: { run_id: string; project_id: string; series_key: string; run_dir: string; reasons: string[]; line_ids: string[]; status: "pending" | "approved" } | null;
 }
 

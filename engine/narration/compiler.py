@@ -14,7 +14,8 @@ from typing import Literal
 from pydantic import BaseModel
 
 from engine.narration.artifacts import (
-    BeatSheet, CritiqueReport, LockedTimeline, PanelFacts, PerformancePlan, ReviewItem, ScriptIR, VoiceTake,
+    BeatSheet, CritiqueReport, LockedTimeline, PanelFacts, PerformancePlan, ReviewItem, ScriptIR, StopPoint,
+    VoiceTake,
 )
 from engine.narration.bible.store import BibleStore, apply_once
 from engine.narration.cache import ArtifactCache
@@ -184,6 +185,22 @@ class NarrationCompiler:
                 heard = {t["line_id"]: t["audio_path"] for t in json.loads((run_dir / "takes.json").read_text(encoding="utf-8"))}
             cast_plan, cast_voices = cast_for_script(inputs.series_key, bible, script)
             _write_json(run_dir / "casting.json", cast_plan.model_dump(mode="json"))
+            # a proposed voice that would replace an assignment the owner made pauses for them
+            for change in cast_plan.changes:
+                add_stop_point(run_dir, StopPoint(
+                    kind="casting",
+                    detail=f"{change.character_id} is cast to {change.profile_id}, not the voice already chosen",
+                    character_ids=[change.character_id],
+                    options=["keep the current voice", "use the proposed voice"],
+                ))
+            # a character with no voice yet needs one approved before it can be read
+            for rec in cast_plan.recommendations:
+                add_stop_point(run_dir, StopPoint(
+                    kind="voice",
+                    detail=f"{rec.character_id} has no voice yet; {rec.profile_id} is proposed",
+                    character_ids=[rec.character_id],
+                    options=["use the proposed voice", "choose another"],
+                ))
             ledger = TakeLedger(script, direction_revision=plan.revision,
                                 voice_profile_ids={a.character_id: a.profile_id for a in cast_plan.assignments},
                                 provider=tts_cfg.model)
@@ -273,6 +290,14 @@ class NarrationCompiler:
                 sheet = await understand.understand_chapter(
                     inputs.project_id, facts, bible, self.client, self.scheduler, counter)
             _write_json(run_dir / "beat_sheet.json", sheet.model_dump(mode="json"))
+            # a brief the analyst is unsure about pauses for the owner
+            for beat in understand.uncertain_beats(sheet):
+                add_stop_point(run_dir, StopPoint(
+                    kind="brief",
+                    detail=beat.uncertain or f"{beat.beat_id} is read with low confidence",
+                    line_ids=list(beat.panel_ids),
+                    options=["accept as read", "edit the beat", "leave for later"],
+                ))
             if stop_after == "understand":
                 return result("pass", [])
 

@@ -13,9 +13,12 @@ from engine.narration.runtime.client import ModelClient, guard_prompt
 from engine.narration.runtime.prompts import load_prompt
 from engine.narration.runtime.scheduler import ModelScheduler
 
-UNDERSTAND_PROMPT_VERSION = "v2"
+UNDERSTAND_PROMPT_VERSION = "v3"
 WINDOW_STEP = "understand_window"
 MERGE_STEP = "understand_merge"
+
+# A beat the analyst is not sure about: the workflow pauses for the owner on it.
+UNCERTAIN_BELOW = 0.7
 
 
 class NeedsReview(Exception):
@@ -29,6 +32,9 @@ class WindowBeatDraft(BaseModel):
     what_happens: str
     function: Literal["setup", "escalate", "reveal", "payoff", "cliffhanger"]
     intensity: float = Field(ge=0, le=1)
+    evidence: list[str] = Field(default_factory=list)
+    confidence: float = Field(default=1.0, ge=0, le=1)
+    uncertain: str = ""
 
 
 class WindowSceneDraft(BaseModel):
@@ -217,10 +223,21 @@ def _scenes(stitched: list[WindowSceneDraft], ids: list[str]) -> list[Scene]:
         Scene(scene_id=f"s{i}", first_panel_id=ids[s.first - 1], last_panel_id=ids[s.last - 1],
               goal=s.goal, conflict=s.conflict, turn=s.turn,
               beats=[Beat(beat_id=f"s{i}b{j}", panel_ids=[ids[p - 1] for p in sorted(set(b.panels))],
-                          what_happens=b.what_happens, function=b.function, intensity=b.intensity)
+                          what_happens=b.what_happens, function=b.function, intensity=b.intensity,
+                          evidence=list(b.evidence), confidence=b.confidence, uncertain=b.uncertain)
                      for j, b in enumerate(s.beats)])
         for i, s in enumerate(stitched)
     ]
+
+
+def uncertain_beats(sheet: BeatSheet) -> list[Beat]:
+    """The beats the analyst is not sure about: the ones the workflow pauses on."""
+    out = []
+    for s in sheet.scenes:
+        for b in s.beats:
+            if b.confidence < UNCERTAIN_BELOW or b.uncertain.strip():
+                out.append(b)
+    return out
 
 
 async def understand_chapter(
