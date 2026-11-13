@@ -1700,7 +1700,7 @@
     "filename": "minimax_h3_image_edit.api.json",
     "sha256": "cb23927552dbfeacc7c945a47afea1097a4a4696207318bf6417224cd428b160",
     "requires_gpu": true,
-    "gpu_vram_mb": 16000,
+    "gpu_vram_mb": 14000,
     "model_files": [
       "minimax_h3_image_pruned_int8_convrot.safetensors",
       "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",

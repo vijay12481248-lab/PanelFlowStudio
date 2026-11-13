@@ -1,10 +1,11 @@
 """Adversarial stress testing of reference_image slot validation across ALL approved workflows.
 
 Mission requirements:
-1. qwen_image_21 (TextEncodeQwenImage21):
-   - reference_image=None succeeds and cleans node 4 inputs (removes images.image_1 placeholder).
+1. The workflows that bind their pictures through autogrow slots on the conditioning node
+   (qwen_image_21 and the MiniMax-H3-Image edit):
+   - reference_image=None succeeds and cleans the conditioning node's images.image_1 slot.
    - reference_image='path.png' uploads and dynamically injects LoadImage node.
-2. Every other approved workflow declaring reference_image where class_type != TextEncodeQwenImage21:
+2. Every other approved workflow declaring reference_image binds it through a LoadImage node:
    - omitting reference_image strictly raises ComfyImageGenerationError("Approved workflow does not declare every required patch slot").
 3. Adversarial edge cases:
    - empty strings, None, mock workflows with fake class types, missing patch_slots entry,
@@ -264,9 +265,16 @@ ALL_NON_QWEN_REFERENCE_WORKFLOWS = [
     "herrgott_h3_chain_start",
 ]
 
+# The conditioning nodes that bind their pictures through autogrow slots: the picture may be
+# left out (the slot is cleaned from the graph, and the run becomes a text to image run).
+# Every other reference workflow binds the picture through a LoadImage node, where the
+# picture is a mandatory input.
+AUTOGROW_REFERENCE_CLASS_TYPES = ("TextEncodeQwenImage21", "MiniMaxH3ImageConditioning")
+AUTOGROW_REFERENCE_WORKFLOWS = ["qwen_image_21", "minimax_h3_image_edit"]
+
 
 def test_registry_contains_exactly_16_non_qwen_reference_image_workflows():
-    """Verify our list of 16 workflows matches every non-qwen workflow with reference_image slot."""
+    """Verify our list of 16 workflows matches every reference workflow that needs its picture."""
     with open("engine/comfyui/workflow_registry.json", "r", encoding="utf-8") as f:
         raw = json.load(f)
     workflows = raw if isinstance(raw, list) else raw.get("workflows", [])
@@ -274,9 +282,46 @@ def test_registry_contains_exactly_16_non_qwen_reference_image_workflows():
         w["id"]
         for w in workflows
         if "reference_image" in w.get("patch_slots", {})
-        and w["patch_slots"]["reference_image"].get("class_type") != "TextEncodeQwenImage21"
+        and w["patch_slots"]["reference_image"].get("class_type") not in AUTOGROW_REFERENCE_CLASS_TYPES
     ]
     assert sorted(found) == sorted(ALL_NON_QWEN_REFERENCE_WORKFLOWS)
+
+
+def test_the_autogrow_reference_workflows_are_the_ones_that_may_leave_the_picture_out():
+    """The picture is optional only where the conditioning node takes it through an autogrow slot."""
+    with open("engine/comfyui/workflow_registry.json", "r", encoding="utf-8") as f:
+        raw = json.load(f)
+    workflows = raw if isinstance(raw, list) else raw.get("workflows", [])
+    found = [
+        w["id"]
+        for w in workflows
+        if "reference_image" in w.get("patch_slots", {})
+        and w["patch_slots"]["reference_image"].get("class_type") in AUTOGROW_REFERENCE_CLASS_TYPES
+    ]
+    assert sorted(found) == sorted(AUTOGROW_REFERENCE_WORKFLOWS)
+
+
+@pytest.mark.parametrize("workflow_id", AUTOGROW_REFERENCE_WORKFLOWS)
+def test_an_autogrow_reference_workflow_may_leave_the_picture_out(workflow_id):
+    """Omitting the picture cleans the slot from the graph instead of refusing to run."""
+    reg = ComfyWorkflowRegistry()
+    wf, _ = reg.load(workflow_id)
+    meta = reg.metadata(workflow_id)
+    slot = meta["patch_slots"]["reference_image"]
+
+    patched = _patch_workflow(
+        wf,
+        meta["patch_slots"],
+        prompt="A quiet street at dusk",
+        negative_prompt="",
+        width=2048,
+        height=2048,
+        seed=7,
+        prefix="test",
+        reference_image=None,
+    )
+    assert "images.image_1" not in patched[slot["node_id"]]["inputs"]
+    assert not any(n.get("class_type") == "LoadImage" for n in patched.values())
 
 
 @pytest.mark.parametrize("workflow_id", ALL_NON_QWEN_REFERENCE_WORKFLOWS)

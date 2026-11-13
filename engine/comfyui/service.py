@@ -23,6 +23,7 @@ from engine.comfyui.art import (  # noqa: F401  (re-exported: callers and tests 
     _patch_workflow,
     _validate_output_dimensions,
 )
+from engine.comfyui.edit_prompt import compose_edit_prompt, release_local_model
 from engine.database.models import AssetRecord, ProjectRecord
 from engine.jobs.workflow import register_operation_factory
 from engine.security.paths import open_contained_output, resolve_contained_path
@@ -187,6 +188,42 @@ def generate_image_operation(
 
 INPAINT_WORKFLOW_ID = "qwen_image_21_inpaint"
 
+# MiniMax-H3-Image needs a picture of about 4 megapixels or more: below that the edit comes
+# out soft. Comfy-Org's own edit template scales the input picture to 4 MP before it starts,
+# and keeps the picture's shape; the result is the size the edit is made at.
+H3_EDIT_AREA_PIXELS = 4 * 1024 * 1024
+H3_EDIT_GRID = 32
+H3_EDIT_MAX_SIDE = 4096
+H3_EDIT_MIN_SIDE = 256
+
+
+def h3_edit_size(width: int, height: int) -> tuple[int, int]:
+    """The size a MiniMax-H3-Image edit runs at: the picture's shape at the model's working area.
+
+    The picture's aspect is kept, the area is the working area of the model, and both sides
+    land on the 32-pixel grid the canvas uses. A picture larger than the working area is
+    scaled down rather than kept: the edit is made at one size, and the model's own range
+    ends at 20 megapixels.
+    """
+    if width <= 0 or height <= 0:
+        raise ComfyImageGenerationError("The picture to edit has no readable size")
+    scale = (H3_EDIT_AREA_PIXELS / float(width * height)) ** 0.5
+    target_w = max(H3_EDIT_GRID, int(round(width * scale / H3_EDIT_GRID)) * H3_EDIT_GRID)
+    target_h = max(H3_EDIT_GRID, int(round(height * scale / H3_EDIT_GRID)) * H3_EDIT_GRID)
+    if target_w > H3_EDIT_MAX_SIDE or target_h > H3_EDIT_MAX_SIDE:
+        shrink = H3_EDIT_MAX_SIDE / float(max(target_w, target_h))
+        target_w = int(target_w * shrink / H3_EDIT_GRID) * H3_EDIT_GRID
+        target_h = int(target_h * shrink / H3_EDIT_GRID) * H3_EDIT_GRID
+    target_w = max(target_w, H3_EDIT_GRID)
+    target_h = max(target_h, H3_EDIT_GRID)
+    if min(target_w, target_h) < H3_EDIT_MIN_SIDE:
+        raise ComfyImageGenerationError(
+            f"The picture is too wide or too tall to edit: the model works between {H3_EDIT_MIN_SIDE} "
+            f"and {H3_EDIT_MAX_SIDE} pixels on each side, and this shape needs "
+            f"{target_w}x{target_h}"
+        )
+    return target_w, target_h
+
 
 def edit_image_operation(
     db: Session,
@@ -224,9 +261,20 @@ def edit_image_operation(
             raise ComfyImageGenerationError(f"Reference asset {ref_id} not found in project")
         references.append(resolve_contained_path(workspace, asset.relative_path).read_bytes())
 
+    # The edit is made at the model's working size, so the picture being edited is scaled to it
+    # first: the reference the model sees then carries the same detail as the result.
     try:
         with Image.open(io.BytesIO(base_bytes)) as picture:
-            width, height = picture.size
+            picture = picture.convert("RGB")
+            source_width, source_height = picture.size
+            width, height = h3_edit_size(source_width, source_height)
+            if (width, height) != (source_width, source_height):
+                picture = picture.resize((width, height), Image.Resampling.LANCZOS)
+            scaled = io.BytesIO()
+            picture.save(scaled, format="PNG")
+            references[0] = scaled.getvalue()
+    except ComfyImageGenerationError:
+        raise
     except Exception as exc:
         raise ComfyImageGenerationError(f"Base asset is not a readable image: {exc}") from exc
 
@@ -243,9 +291,17 @@ def edit_image_operation(
             f"missing models={preflight['missing_models']}"
         )
 
+    # The checkpoint wants a caption of the finished picture, not a one-line instruction.
+    # The local model writes it; the instruction is used as it is when the model is away.
+    caption = compose_edit_prompt(prompt, references[0])
+    if caption != prompt.strip():
+        progress(0.1, "Writing the caption for the edited picture")
+    # The local model and the H3 checkpoint do not fit in the VRAM together.
+    release_local_model()
+
     try:
         art = ArtEngine(client, reg).edit(
-            prompt, references, width=width, height=height, seed=seed,
+            caption, references, width=width, height=height, seed=seed,
             prefix=f"panelflow/{project_id}/{EDIT_WORKFLOW_ID}",
             timeout=timeout_s, is_cancelled=is_cancelled, progress=progress,
             client_id=f"panelflow-{project_id}")
@@ -267,9 +323,12 @@ def edit_image_operation(
         "workflow_sha256": art.workflow_sha256,
         "model_files": art.model_files,
         "prompt": prompt,
+        "caption": caption,
         "seed": seed,
         "requested_width": width,
         "requested_height": height,
+        "source_width": source_width,
+        "source_height": source_height,
         "source_output": art.source_output,
         "base_asset_id": base_asset_id,
     }

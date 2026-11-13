@@ -11,6 +11,8 @@ from PIL import Image
 
 from engine.comfyui import art as art_mod
 from engine.comfyui.art import EDIT_WORKFLOW_ID, ArtEngine, ComfyImageGenerationError
+from engine.comfyui.edit_prompt import compose_edit_prompt
+from engine.comfyui.service import h3_edit_size
 
 # The approved MiniMax-H3-Image graph: a MiniMax conditioning node that takes its
 # reference pictures through autogrow images.image_<n> slots.
@@ -161,3 +163,85 @@ def test_the_edit_reports_the_workflow_it_used():
     assert art.workflow_id == EDIT_WORKFLOW_ID
     assert art.seed is not None
     assert art.width == 2048 and art.height == 2048
+
+
+# The size the edit runs at, and the caption it runs on.
+
+
+def test_a_small_picture_is_scaled_up_to_the_working_size():
+    """Below about 4 megapixels the model gives a soft edit, so the picture is scaled up."""
+    width, height = h3_edit_size(1024, 1024)
+    assert (width, height) == (2048, 2048)
+
+
+def test_the_edit_keeps_the_shape_of_the_picture():
+    width, height = h3_edit_size(1920, 1080)
+    assert abs(width / height - 1920 / 1080) < 0.05
+    assert width * height > 3.5 * 1024 * 1024
+
+
+def test_the_edit_size_lands_on_the_canvas_grid():
+    for source in ((1000, 777), (3333, 999), (640, 480)):
+        width, height = h3_edit_size(*source)
+        assert width % 32 == 0 and height % 32 == 0
+
+
+def test_a_very_wide_picture_stays_inside_the_limit():
+    width, height = h3_edit_size(8000, 1000)
+    assert width <= 4096 and height <= 4096
+
+
+def test_a_picture_too_wide_to_edit_says_so():
+    with pytest.raises(ComfyImageGenerationError, match="too wide or too tall"):
+        h3_edit_size(20000, 200)
+
+
+def test_the_caption_falls_back_to_the_instruction_when_the_local_model_is_away(monkeypatch):
+    """The local model is a convenience, never a gate: the edit runs without it."""
+    import httpx
+
+    class BrokenClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def post(self, *args, **kwargs):
+            raise httpx.ConnectError("the local model is not running")
+
+    monkeypatch.setattr(httpx, "Client", BrokenClient)
+    assert compose_edit_prompt("make the sky stormy", png(64, 64)) == "make the sky stormy"
+
+
+def test_the_caption_uses_the_local_model_when_it_answers(monkeypatch):
+    import httpx
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"response": "The street of <Picture 1> is lit by a low orange sunset."}
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def post(self, url, json=None, **kwargs):
+            assert url.endswith("/api/generate")
+            assert json["images"], "the picture has to be sent, the caption is about it"
+            return FakeResponse()
+
+    monkeypatch.setattr(httpx, "Client", FakeClient)
+    caption = compose_edit_prompt("make the sky stormy", png(64, 64))
+    assert caption == "The street of <Picture 1> is lit by a low orange sunset."
