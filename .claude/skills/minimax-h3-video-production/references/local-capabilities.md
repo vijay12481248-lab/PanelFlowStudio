@@ -11,6 +11,7 @@
 ## H3-Image edits `[verified]`
 - Registered as `minimax_h3_image_edit` (purpose `image_edit`, not `text_to_image`: `qwen_image_21` stays the one art workflow). Graph: `engine/comfyui/workflows/minimax_h3_image_edit.api.json`. 6 steps, cfg 1, euler/simple, no negative prompt.
 - The picture being edited is scaled to about 4 MP (the model's working size) before it is sent; below that the edit comes out soft. The caption is written by the local `qwen3.5:9b` (the official template expands it in-graph with a 6.8 GB second text encoder, which PanelFlow does not carry), and Ollama is unloaded before ComfyUI runs: they do not fit in the VRAM together.
+- Measured (RTX 5060 Ti 16 GB): 55.9 s for a 2720x1536 edit, peak VRAM 15,563 of 16,311 MiB; 63.3 s for the whole operation including the caption. The instruction was followed and the scene around it was kept.
 - Docs: `docs/H3_IMAGE_EDIT.md`.
 
 ## Workflows `[verified]` (registered in `engine/comfyui/workflow_registry.json`)
