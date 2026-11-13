@@ -31,6 +31,9 @@ COMFY_OUTPUT_DIR = BASE_DIR / "output" / "video"
 STUDIO_OUTPUT_DIR = Path("E:/VIJAY SEKAR/PanelFlow Studio/output/chronoflow")
 STUDIO_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
+FAST_H3_UNET = "fastvideo_fasth3_8step_v2_pruned_int8_convrot.safetensors"
+
+
 class ChronoFlowPipeline:
     def __init__(self, comfy_url=COMFY_URL, ws_url=COMFY_WS_URL):
         self.comfy_url = comfy_url
@@ -118,27 +121,31 @@ class ChronoFlowPipeline:
     def build_h3_prompt(self, prompt, width, height, length, steps, lora_name, 
                         workflow_mode="sliding_window", first_frame_filename=None, 
                         last_frame_filename=None, ref_images=None, seed=None,
-                        face_refine=False, upscale_mode="none"):
+                        face_refine=False, upscale_mode="none", fast_h3=True):
         if seed is None:
             import random
             seed = random.randint(1, 1000000000)
+        # FastH3 (the distilled 8-step checkpoint with sparse attention, as in engine/comfyui/workflows/fastvideo_h3_i2v) replaces the
+        # full model + turbo LoRA. Reference-to-video keeps the full model: FastH3 was not tried with that node.
+        fast_h3 = fast_h3 and workflow_mode != "reference" and (BASE_DIR / "models" / "diffusion_models" / FAST_H3_UNET).exists()
 
+        if fast_h3:
+            steps = 8
+            model_nodes = {
+                "1": {"class_type": "UNETLoader", "inputs": {"unet_name": FAST_H3_UNET, "weight_dtype": "default"}},
+                "shift": {"class_type": "MiniMaxH3SigmaShift", "inputs": {"model": ["1", 0], "shift_video": 10, "shift_audio": 3}},
+                "attn": {"class_type": "ModelAttentionBackend", "inputs": {"model": ["shift", 0], "attention": "comfy kitchen attention"}},
+                "2": {"class_type": "BlockSparseAttention", "inputs": {
+                    "model": ["attn", 0], "selection": "vsa", "selection.keep_percent": 10, "start_percent": 0.2, "end_percent": 1,
+                    "dense_blocks": "", "min_tokens": 12288, "extra_tokens": 256, "sink_conditioning": "exact_kv_and_rows", "verbose": False}},
+            }
+        else:
+            model_nodes = {
+                "1": {"class_type": "UNETLoader", "inputs": {"unet_name": "minimax_h3_fl2va_pruned_int8_convrot.safetensors", "weight_dtype": "default"}},
+                "2": {"class_type": "LoraLoaderModelOnly", "inputs": {"model": ["1", 0], "lora_name": lora_name, "strength_model": 1.0}},
+            }
         graph = {
-            "1": {
-                "class_type": "UNETLoader",
-                "inputs": {
-                    "unet_name": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
-                    "weight_dtype": "default"
-                }
-            },
-            "2": {
-                "class_type": "LoraLoaderModelOnly",
-                "inputs": {
-                    "model": ["1", 0],
-                    "lora_name": lora_name,
-                    "strength_model": 1.0
-                }
-            },
+            **model_nodes,
             "3": {
                 "class_type": "CLIPLoader",
                 "inputs": {
