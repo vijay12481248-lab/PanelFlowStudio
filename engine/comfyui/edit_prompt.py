@@ -112,12 +112,24 @@ def release_local_model() -> None:
     """Unload the local model so ComfyUI has the VRAM: they do not fit together.
 
     Ollama loads it again on the next request, so this costs nothing but a moment.
+    The models are the ones PanelFlow's own provider knows about; the endpoint and the
+    fallback model are the ones this module talks to.
     """
+    endpoint = OLLAMA_ENDPOINT
+    models = {OLLAMA_MODEL}
+    try:
+        from engine.llm.registry import llm_registry
+
+        provider = llm_registry.get_ollama_provider()
+        endpoint = provider.endpoint_url
+        models |= {provider.vision_model, provider.text_model, provider.reasoning_model, provider.narration_model}
+    except Exception:
+        pass
     try:
         import httpx
 
         with httpx.Client(timeout=20.0) as client:
-            for model in {OLLAMA_MODEL}:
-                client.post(f"{OLLAMA_ENDPOINT}/api/generate", json={"model": model, "keep_alive": 0})
+            for model in {m for m in models if m}:
+                client.post(f"{endpoint}/api/generate", json={"model": model, "keep_alive": 0})
     except Exception:
         pass
