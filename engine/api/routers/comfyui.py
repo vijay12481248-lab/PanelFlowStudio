@@ -27,6 +27,7 @@ class ComfyImageRequest(BaseModel):
     seed: int = Field(default=20261019, ge=0, le=2**63 - 1)
     timeout_s: float = Field(default=900.0, ge=30.0, le=3600.0)
     refine: bool = Field(default=False, description="Review the picture, then repair or redraw it (slower: needs the local vision model); every candidate is kept")
+    reference_asset_ids: list[str] = Field(default_factory=list, max_length=4, description="Existing assets of this project the picture should match (character lock); not combinable with refine")
 
 
 class ComfyInpaintRequest(BaseModel):
@@ -76,6 +77,13 @@ def submit_comfyui_image_job(project_id: str, request: ComfyImageRequest, db: Se
     project = db.query(ProjectRecord).filter(ProjectRecord.id == project_id).first()
     if not project:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+    if request.reference_asset_ids:
+        if request.refine:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="refine does not support reference images; use one or the other")
+        found = {a.id for a in db.query(AssetRecord.id).filter(AssetRecord.project_id == project_id, AssetRecord.id.in_(request.reference_asset_ids))}
+        missing = [i for i in request.reference_asset_ids if i not in found]
+        if missing:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Reference assets not found in this project: {', '.join(missing)}")
     try:
         if request.workflow_id != ART_WORKFLOW_ID:
             raise WorkflowRegistryError(f"The only image workflow is {ART_WORKFLOW_ID!r}; got {request.workflow_id!r}")
@@ -116,6 +124,7 @@ def submit_comfyui_image_job(project_id: str, request: ComfyImageRequest, db: Se
             seed=request.seed,
             timeout_s=request.timeout_s,
             refine=request.refine,
+            reference_asset_ids=request.reference_asset_ids,
         )
 
     job_id = enqueue_project_operation(
@@ -135,6 +144,7 @@ def submit_comfyui_image_job(project_id: str, request: ComfyImageRequest, db: Se
             "seed": request.seed,
             "timeout_s": request.timeout_s,
             "refine": request.refine,
+            "reference_asset_ids": request.reference_asset_ids,
         },
     )
     return {"job_id": job_id, "status": "QUEUED", "workflow_id": request.workflow_id}

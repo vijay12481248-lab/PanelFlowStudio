@@ -75,6 +75,7 @@ def generate_image_operation(
     seed: int,
     timeout_s: float = 900.0,
     refine: bool = False,
+    reference_asset_ids: list[str] | None = None,
 ) -> dict[str, Any]:
     """Generate one image with the central ArtEngine and persist it as a project asset.
 
@@ -92,6 +93,18 @@ def generate_image_operation(
     if output_dir.is_symlink() or not output_dir.is_dir():
         raise ComfyImageGenerationError("ComfyUI output directory is not a safe directory")
 
+    references: list[Path] = []
+    for ref_id in reference_asset_ids or []:
+        ref_asset = db.query(AssetRecord).filter(AssetRecord.id == ref_id, AssetRecord.project_id == project_id).first()
+        if ref_asset is None:
+            raise ComfyImageGenerationError(f"Reference asset {ref_id} not found in this project")
+        ref_path = resolve_contained_path(workspace, ref_asset.relative_path)
+        if not ref_path.is_file():
+            raise ComfyImageGenerationError(f"Reference asset {ref_id} has no file on disk")
+        references.append(ref_path)
+    if references and refine:
+        raise ComfyImageGenerationError("refine does not support reference images; use one or the other")
+
     client = ComfyUIClient()
     refined = None
     try:
@@ -103,6 +116,7 @@ def generate_image_operation(
         else:
             art = ArtEngine(client, ComfyWorkflowRegistry(client)).generate(
                 prompt, negative_prompt, width, height, seed, f"panelflow/{project_id}/{ART_WORKFLOW_ID}",
+                reference_images=references or None,
                 timeout=timeout_s, is_cancelled=is_cancelled, progress=progress, client_id=f"panelflow-{project_id}",
             )
     except (ComfyUIError, WorkflowRegistryError, ValueError) as exc:
@@ -129,6 +143,8 @@ def generate_image_operation(
         "requested_height": height,
         "source_output": art.source_output,
     }
+    if reference_asset_ids:
+        provenance["reference_asset_ids"] = list(reference_asset_ids)
     if refined is not None:
         from engine.original.refine import summary
 
@@ -323,6 +339,7 @@ def build_comfy_image_operation(project_id: str, payload: dict[str, Any]):
         seed=payload["seed"],
         timeout_s=payload.get("timeout_s", 900.0),
         refine=bool(payload.get("refine", False)),
+        reference_asset_ids=payload.get("reference_asset_ids") or None,
     )
 
 

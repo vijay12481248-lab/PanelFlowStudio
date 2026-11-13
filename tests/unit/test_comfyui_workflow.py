@@ -360,3 +360,112 @@ def test_submit_comfyui_inpaint_job(tmp_path, monkeypatch):
         assert result['status'] == 'QUEUED'
         assert result['workflow_id'] == INPAINT_WORKFLOW_ID
         assert 'job_id' in result
+
+
+def _png(colour="red"):
+    buf = io.BytesIO()
+    Image.new("RGB", (64, 64), colour).save(buf, "PNG")
+    return buf.getvalue()
+
+
+def _reference_fixture(tmp_path):
+    """A project with one stored asset on disk that can serve as a character reference."""
+    (tmp_path / "generated" / "comfyui").mkdir(parents=True)
+    (tmp_path / "generated" / "comfyui" / "hero.png").write_bytes(_png("teal"))
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    Base.metadata.create_all(engine)
+    db = Session(engine)
+    db.add(ProjectRecord(id="project", title="t", source_type="LOCAL_FOLDER", workspace_path=str(tmp_path)))
+    db.add(ProjectRecord(id="other", title="o", source_type="LOCAL_FOLDER", workspace_path=str(tmp_path / "other")))
+    db.add(AssetRecord(id="hero", project_id="project", asset_type="COMFYUI_GENERATED_IMAGE", filename="hero.png",
+                       relative_path="generated/comfyui/hero.png", content_type="image/png", width=64, height=64,
+                       byte_size=1, sha256="0" * 64, status="READY", provenance={}))
+    db.commit()
+    return engine, db
+
+
+def test_reference_assets_reach_the_art_engine_and_are_recorded(tmp_path, monkeypatch):
+    import types
+
+    from engine.comfyui.art import ArtImage
+
+    seen = {}
+
+    class FakeArt:
+        def __init__(self, *a, **k):
+            pass
+
+        def generate(self, *a, **k):
+            seen.update(k)
+            return ArtImage(png=_png(), width=64, height=64, prompt_id="p1", workflow_id=service.ART_WORKFLOW_ID,
+                            workflow_sha256="a" * 64, model_files=["m"],
+                            source_output={"filename": "k.png", "subfolder": "", "type": "output"}, seed=1)
+
+    monkeypatch.setattr(service, "ArtEngine", FakeArt)
+    monkeypatch.setattr(service, "ComfyUIClient", lambda: types.SimpleNamespace(base_url="http://x/"))
+    monkeypatch.setattr(service, "ComfyWorkflowRegistry", lambda *a, **k: None)
+    engine, db = _reference_fixture(tmp_path)
+    try:
+        service.generate_image_operation(db, lambda *_: None, lambda: False, project_id="project", workflow_id=service.ART_WORKFLOW_ID,
+                                         prompt="same hero, running", negative_prompt="", width=64, height=64, seed=1,
+                                         reference_asset_ids=["hero"])
+        assert seen["reference_images"] == [tmp_path / "generated" / "comfyui" / "hero.png"]
+        new = db.query(AssetRecord).filter(AssetRecord.id != "hero").one()
+        assert new.provenance["reference_asset_ids"] == ["hero"]
+
+        seen.clear()  # no references: the engine call must not change for existing callers
+        service.generate_image_operation(db, lambda *_: None, lambda: False, project_id="project", workflow_id=service.ART_WORKFLOW_ID,
+                                         prompt="a lamp", negative_prompt="", width=64, height=64, seed=2)
+        assert seen["reference_images"] is None
+    finally:
+        db.close()
+        engine.dispose()
+
+
+def test_bad_references_fail_before_any_gpu_work(tmp_path, monkeypatch):
+    monkeypatch.setattr(service, "ArtEngine", lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not generate")))
+    engine, db = _reference_fixture(tmp_path)
+    kw = dict(project_id="project", workflow_id=service.ART_WORKFLOW_ID, prompt="a lamp", negative_prompt="", width=64, height=64, seed=1)
+    try:
+        with pytest.raises(service.ComfyImageGenerationError, match="not found in this project"):
+            service.generate_image_operation(db, lambda *_: None, lambda: False, reference_asset_ids=["nope"], **kw)
+        with pytest.raises(service.ComfyImageGenerationError, match="refine does not support"):
+            service.generate_image_operation(db, lambda *_: None, lambda: False, reference_asset_ids=["hero"], refine=True, **kw)
+        (tmp_path / "generated" / "comfyui" / "hero.png").unlink()
+        with pytest.raises(service.ComfyImageGenerationError, match="no file on disk"):
+            service.generate_image_operation(db, lambda *_: None, lambda: False, reference_asset_ids=["hero"], **kw)
+    finally:
+        db.close()
+        engine.dispose()
+
+
+def test_route_rejects_unknown_or_foreign_references_and_refine_combination(tmp_path):
+    from fastapi import HTTPException
+
+    from engine.api.routers.comfyui import ComfyImageRequest, submit_comfyui_image_job
+
+    engine, db = _reference_fixture(tmp_path)
+    try:
+        with pytest.raises(HTTPException) as e:
+            submit_comfyui_image_job("other", ComfyImageRequest(prompt="same hero, running", reference_asset_ids=["hero"]), db=db)
+        assert e.value.status_code == 400 and "not found in this project" in e.value.detail  # an asset of another project
+        with pytest.raises(HTTPException) as e:
+            submit_comfyui_image_job("project", ComfyImageRequest(prompt="same hero, running", reference_asset_ids=["hero"], refine=True), db=db)
+        assert e.value.status_code == 400 and "refine" in e.value.detail
+        with pytest.raises(ValueError):
+            ComfyImageRequest(prompt="same hero, running", reference_asset_ids=["a", "b", "c", "d", "e"])  # the workflow has four slots
+    finally:
+        db.close()
+        engine.dispose()
+
+
+def test_recovered_job_keeps_its_references(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(service, "generate_image_operation", lambda *a, **k: captured.update(k))
+    payload = {"workflow_id": service.ART_WORKFLOW_ID, "prompt": "p" * 12, "width": 64, "height": 64, "seed": 1,
+               "reference_asset_ids": ["hero"]}
+    service.build_comfy_image_operation("project", payload)(None, None, None)
+    assert captured["reference_asset_ids"] == ["hero"]
+    captured.clear()
+    service.build_comfy_image_operation("project", {k: v for k, v in payload.items() if k != "reference_asset_ids"})(None, None, None)
+    assert captured["reference_asset_ids"] is None  # jobs queued before this change still rehydrate
