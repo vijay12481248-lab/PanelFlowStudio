@@ -25,6 +25,11 @@ SPEECH_JOB_TYPE = "STUDIO_SPEECH_GENERATION"
 MUSIC_VRAM_MB = 3000   # measured 2026-11-13: ACE-Step turbo raised GPU use by 2.1 GB (a 24 s take, cold start 152 s); the gate admits on this number
 SPEECH_VRAM_MB = 1500  # Kokoro-82M: measured +1.2 GB (a 5 s line, 14 s)
 KOKORO_SR = 24000
+SPEECH_PROVIDERS = ("kokoro", "qwen3_tts")
+QWEN3_TTS_VRAM_MB = 5000  # an estimate until measured (1.7B model in bf16); the first live run replaces it
+QWEN3_TTS_PYTHON = Path(os.environ.get("PANELFLOW_QWEN3_TTS_PYTHON", r"D:\Tools\Qwen3-TTS\.venv\Scripts\python.exe"))
+QWEN3_TTS_RUNNER = Path(os.environ.get("PANELFLOW_QWEN3_TTS_RUNNER", r"D:\Tools\Qwen3-TTS\runner.py"))
+VOICE_REFERENCE_DIR = Path(os.environ.get("PANELFLOW_VOICE_REFERENCE_DIR", "")) if os.environ.get("PANELFLOW_VOICE_REFERENCE_DIR") else Path(os.environ.get("LOCALAPPDATA", "")) / "PanelFlow Studio" / "voice_references"
 
 
 class StudioAudioError(RuntimeError):
@@ -81,9 +86,14 @@ def generate_music_operation(db: Session, progress, is_cancelled, *, project_id:
     return result
 
 
-def generate_speech_operation(db: Session, progress, is_cancelled, *, project_id: str, text: str, voice: str, speed: float) -> dict[str, Any]:
+def generate_speech_operation(db: Session, progress, is_cancelled, *, project_id: str, text: str, voice: str, speed: float,
+                             provider: str = "kokoro", language: str = "English") -> dict[str, Any]:
     os.environ.setdefault("HF_HUB_OFFLINE", "1")
     os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+    if provider == "qwen3_tts":
+        return _qwen3_speech(db, progress, is_cancelled, project_id, text, voice, language)
+    if provider != "kokoro":
+        raise StudioAudioError(f"unknown speech provider '{provider}'; known: {', '.join(SPEECH_PROVIDERS)}")
     import soundfile as sf
     from kokoro import KPipeline
 
@@ -105,6 +115,42 @@ def generate_speech_operation(db: Session, progress, is_cancelled, *, project_id
     return result
 
 
+def qwen3_voices() -> dict[str, Path]:
+    """Voice name -> reference clip. Qwen3-TTS clones the voice of a reference recording, so the available voices are the files in the reference folder."""
+    if not VOICE_REFERENCE_DIR.is_dir():
+        return {}
+    return {f.stem: f for f in sorted(VOICE_REFERENCE_DIR.iterdir()) if f.suffix.lower() in (".wav", ".mp3")}
+
+
+def _qwen3_speech(db: Session, progress, is_cancelled, project_id: str, text: str, voice: str, language: str) -> dict[str, Any]:
+    """Qwen3-TTS 1.7B through its own runner and virtualenv (the same runner the engine's narration uses)."""
+    import json
+    import subprocess
+    import tempfile
+
+    _, workspace = _project(db, project_id)
+    voices = qwen3_voices()
+    if voice not in voices:
+        raise StudioAudioError(f"Qwen3-TTS has no voice '{voice}'; reference voices on disk: {', '.join(voices) or 'none'}")
+    if not (QWEN3_TTS_PYTHON.exists() and QWEN3_TTS_RUNNER.exists()):
+        raise StudioAudioError(f"Qwen3-TTS runner not found ({QWEN3_TTS_PYTHON} / {QWEN3_TTS_RUNNER})")
+    if is_cancelled():
+        raise StudioAudioError("Speech generation cancelled before it started")
+    progress(0.1, f"Speaking with Qwen3-TTS, voice {voice}")
+    with tempfile.TemporaryDirectory() as tmp:
+        out = Path(tmp) / "line.wav"
+        env = {**os.environ, "HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1", "PYTHONIOENCODING": "utf-8"}
+        proc = subprocess.run([str(QWEN3_TTS_PYTHON), str(QWEN3_TTS_RUNNER), "synth", "--text", text, "--output", str(out), "--ref-audio", str(voices[voice]),
+                               "--language", language], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=900, env=env)
+        if proc.returncode != 0 or not out.exists():
+            raise StudioAudioError(f"Qwen3-TTS: {(proc.stderr or proc.stdout)[-400:].strip()}")
+        wav = out.read_bytes()
+    result = _persist(db, project_id, workspace, wav, "STUDIO_SPEECH", {"provider": "qwen3_tts", "model": "qwen3-tts-12hz-1.7b-base", "voice": voice,
+                                                                         "language": language, "text": text})
+    progress(1.0, "Speech persisted")
+    return result
+
+
 def build_music_operation(project_id: str, payload: dict[str, Any]):
     return lambda db, progress, is_cancelled: generate_music_operation(
         db, progress, is_cancelled, project_id=project_id, prompt=payload["prompt"], seconds=payload["seconds"], bpm=payload["bpm"],
@@ -113,7 +159,8 @@ def build_music_operation(project_id: str, payload: dict[str, Any]):
 
 def build_speech_operation(project_id: str, payload: dict[str, Any]):
     return lambda db, progress, is_cancelled: generate_speech_operation(
-        db, progress, is_cancelled, project_id=project_id, text=payload["text"], voice=payload["voice"], speed=payload["speed"])
+        db, progress, is_cancelled, project_id=project_id, text=payload["text"], voice=payload["voice"], speed=payload["speed"],
+        provider=payload.get("provider", "kokoro"), language=payload.get("language", "English"))
 
 
 register_operation_factory(MUSIC_JOB_TYPE, build_music_operation)

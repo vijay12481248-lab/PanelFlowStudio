@@ -119,3 +119,87 @@ def test_both_job_types_are_rehydrated_after_a_restart(monkeypatch):
     workflow.build_operation(studio_audio.MUSIC_JOB_TYPE, "project", {"prompt": "calm folk", "seconds": 24, "bpm": 84, "key_scale": "D Major", "seed": 7})(None, None, None)
     workflow.build_operation(studio_audio.SPEECH_JOB_TYPE, "project", {"text": "hi", "voice": "bm_george", "speed": 0.9})(None, None, None)
     assert seen["music"]["seed"] == 7 and seen["music"]["model"] == "acestep-v15-turbo" and seen["speech"]["voice"] == "bm_george"
+
+
+def _qwen_setup(monkeypatch, tmp_path, voices=("marcus_male",)):
+    refs = tmp_path / "refs"
+    refs.mkdir()
+    for v in voices:
+        (refs / f"{v}.wav").write_bytes(b"ref")
+    (refs / "notes.txt").write_text("not a voice")
+    fake_py, fake_runner = tmp_path / "python.exe", tmp_path / "runner.py"
+    fake_py.write_text("")
+    fake_runner.write_text("")
+    monkeypatch.setattr(studio_audio, "VOICE_REFERENCE_DIR", refs)
+    monkeypatch.setattr(studio_audio, "QWEN3_TTS_PYTHON", fake_py)
+    monkeypatch.setattr(studio_audio, "QWEN3_TTS_RUNNER", fake_runner)
+    return refs
+
+
+def test_qwen3_voices_are_the_reference_recordings_on_disk(monkeypatch, tmp_path):
+    _qwen_setup(monkeypatch, tmp_path, voices=("marcus_male", "aria_female"))
+    assert sorted(studio_audio.qwen3_voices()) == ["aria_female", "marcus_male"]  # the text file is not a voice
+    monkeypatch.setattr(studio_audio, "VOICE_REFERENCE_DIR", tmp_path / "missing")
+    assert studio_audio.qwen3_voices() == {}
+
+
+def test_qwen3_speech_runs_the_runner_with_the_reference_voice_and_persists_the_result(db_and_workspace, monkeypatch, tmp_path):
+    import subprocess
+
+    db, workspace = db_and_workspace
+    refs = _qwen_setup(monkeypatch, tmp_path)
+    seen = {}
+
+    def fake_run(argv, **kw):
+        seen["argv"], seen["env"] = argv, kw["env"]
+        out = Path(argv[argv.index("--output") + 1])
+        sf.write(str(out), _tone(1.5, 24000), 24000, subtype="PCM_16")
+        return subprocess.CompletedProcess(argv, 0, stdout='{"success": true}', stderr="")
+
+    monkeypatch.setattr("subprocess.run", fake_run)
+    out = studio_audio.generate_speech_operation(db, lambda *a: None, lambda: False, project_id="project", text="Mind the ledge.", voice="marcus_male",
+                                                 speed=0.95, provider="qwen3_tts", language="English")
+    argv = seen["argv"]
+    assert argv[2] == "synth" and argv[argv.index("--ref-audio") + 1] == str(refs / "marcus_male.wav") and argv[argv.index("--language") + 1] == "English"
+    assert seen["env"]["HF_HUB_OFFLINE"] == "1"  # a missing weight is an error, never a download
+    asset = db.query(AssetRecord).filter(AssetRecord.id == out["asset_id"]).one()
+    assert asset.provenance["provider"] == "qwen3_tts" and asset.provenance["voice"] == "marcus_male" and out["seconds"] == pytest.approx(1.5, abs=0.01)
+
+
+def test_qwen3_refuses_an_unknown_voice_and_reports_a_runner_failure_without_leaving_an_asset(db_and_workspace, monkeypatch, tmp_path):
+    import subprocess
+
+    db, _ = db_and_workspace
+    _qwen_setup(monkeypatch, tmp_path)
+    with pytest.raises(studio_audio.StudioAudioError, match="no voice 'ghost'.*marcus_male"):
+        studio_audio.generate_speech_operation(db, lambda *a: None, lambda: False, project_id="project", text="hi", voice="ghost", speed=0.95, provider="qwen3_tts")
+    monkeypatch.setattr("subprocess.run", lambda argv, **kw: subprocess.CompletedProcess(argv, 1, stdout="", stderr="CUDA out of memory"))
+    with pytest.raises(studio_audio.StudioAudioError, match="Qwen3-TTS: CUDA out of memory"):
+        studio_audio.generate_speech_operation(db, lambda *a: None, lambda: False, project_id="project", text="hi", voice="marcus_male", speed=0.95, provider="qwen3_tts")
+    with pytest.raises(studio_audio.StudioAudioError, match="unknown speech provider"):
+        studio_audio.generate_speech_operation(db, lambda *a: None, lambda: False, project_id="project", text="hi", voice="bm_george", speed=0.95, provider="nope")
+    assert db.query(AssetRecord).count() == 0
+
+
+def test_the_speech_route_picks_the_provider_and_its_gate_number_and_rehydrates_it(db_and_workspace, monkeypatch, tmp_path):
+    from pydantic import ValidationError
+
+    from engine.api.routers import studio_audio as routes
+    from engine.jobs import workflow
+
+    db, _ = db_and_workspace
+    queued = []
+    monkeypatch.setattr(routes, "enqueue_project_operation", lambda **kw: queued.append(kw) or "job-1")
+    routes.queue_studio_speech("project", routes.StudioSpeechRequest(text="hi", voice="marcus_male", provider="qwen3_tts"), db=db)
+    routes.queue_studio_speech("project", routes.StudioSpeechRequest(text="hi", voice="bm_george"), db=db)
+    assert [q["gpu_vram_mb"] for q in queued] == [studio_audio.QWEN3_TTS_VRAM_MB, studio_audio.SPEECH_VRAM_MB]
+    assert queued[0]["job_input"]["provider"] == "qwen3_tts" and queued[1]["job_input"]["provider"] == "kokoro"
+    for bad in ("../x", "marcus male", "C:\a_b"):
+        with pytest.raises(ValidationError):
+            routes.StudioSpeechRequest(text="hi", voice=bad, provider="qwen3_tts")
+    with pytest.raises(ValidationError):
+        routes.StudioSpeechRequest(text="hi", voice="bm_george", provider="elevenlabs")
+    seen = {}
+    monkeypatch.setattr(studio_audio, "generate_speech_operation", lambda *a, **k: seen.update(k))
+    workflow.build_operation(studio_audio.SPEECH_JOB_TYPE, "project", {"text": "hi", "voice": "marcus_male", "speed": 0.95, "provider": "qwen3_tts", "language": "German"})(None, None, None)
+    assert seen["provider"] == "qwen3_tts" and seen["language"] == "German"
