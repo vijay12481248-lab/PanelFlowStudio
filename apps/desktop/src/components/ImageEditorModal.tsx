@@ -982,21 +982,21 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold uppercase tracking-wider text-indigo-400 flex items-center gap-1.5">
                   <Wand2 className="w-3.5 h-3.5" />
-                  3. Inpaint Options
+                  3. Inpaint &amp; Edit Options
                 </span>
-                <span className="text-[10px] text-zinc-500">qwen_image_21_inpaint</span>
+                <span className="text-[10px] text-zinc-500">qwen_image_21_inpaint / minimax_h3_image_edit</span>
               </div>
 
               {/* Prompt Textarea */}
               <div>
                 <label className="block text-xs font-medium text-zinc-300 mb-1">
-                  Inpaint Prompt (Describe replacement)
+                  Prompt (inpaint: what to draw in the mask. edit: what the picture should become)
                 </label>
                 <textarea
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
                   rows={3}
-                  placeholder="e.g. detailed heroic anime sword, golden energy sparkles, cel shaded..."
+                  placeholder="e.g. a stormy sky over the street, golden sparks around the sword"
                   className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs text-zinc-100 focus:border-indigo-500 focus:outline-none placeholder:text-zinc-600 transition-colors"
                   disabled={isInpainting}
                 />
