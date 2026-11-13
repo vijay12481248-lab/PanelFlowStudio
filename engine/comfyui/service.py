@@ -61,6 +61,17 @@ def _write_project_image(workspace: Path, relative_path: Path | str, raw: bytes)
     return target
 
 
+def _project_asset_file(db: Session, project_id: str, workspace: Path, asset_id: str, label: str, error: type[RuntimeError]) -> Path:
+    """The file of an asset that belongs to this project, contained in its workspace. Raises `error` if there is none."""
+    asset = db.query(AssetRecord).filter(AssetRecord.id == asset_id, AssetRecord.project_id == project_id).first()
+    if asset is None:
+        raise error(f"{label} {asset_id} not found in this project")
+    path = resolve_contained_path(workspace, asset.relative_path)
+    if not path.is_file():
+        raise error(f"{label} {asset_id} has no file on disk")
+    return path
+
+
 def generate_image_operation(
     db: Session,
     progress,
@@ -93,15 +104,8 @@ def generate_image_operation(
     if output_dir.is_symlink() or not output_dir.is_dir():
         raise ComfyImageGenerationError("ComfyUI output directory is not a safe directory")
 
-    references: list[Path] = []
-    for ref_id in reference_asset_ids or []:
-        ref_asset = db.query(AssetRecord).filter(AssetRecord.id == ref_id, AssetRecord.project_id == project_id).first()
-        if ref_asset is None:
-            raise ComfyImageGenerationError(f"Reference asset {ref_id} not found in this project")
-        ref_path = resolve_contained_path(workspace, ref_asset.relative_path)
-        if not ref_path.is_file():
-            raise ComfyImageGenerationError(f"Reference asset {ref_id} has no file on disk")
-        references.append(ref_path)
+    references = [_project_asset_file(db, project_id, workspace, ref_id, "Reference asset", ComfyImageGenerationError)
+                  for ref_id in reference_asset_ids or []]
     if references and refine:
         raise ComfyImageGenerationError("refine does not support reference images; use one or the other")
 
@@ -344,6 +348,107 @@ def build_comfy_image_operation(project_id: str, payload: dict[str, Any]):
 
 
 register_operation_factory("COMFYUI_IMAGE_GENERATION", build_comfy_image_operation)
+
+
+H3_CLIP_JOB_TYPE = "COMFYUI_H3_CLIP_GENERATION"  # also listed in engine.jobs.manager.COMFYUI_JOB_TYPES (the GPU gate)
+
+
+class H3ClipGenerationError(RuntimeError):
+    """Raised when an H3 clip cannot be rendered, verified or persisted."""
+
+
+def _probe_video(path: Path) -> tuple[int, int, int, float]:
+    """(width, height, frame count, fps) of a video file, or an error if it cannot be decoded."""
+    import cv2
+
+    cap = cv2.VideoCapture(str(path))
+    try:
+        width, height = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        frames, fps = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)), float(cap.get(cv2.CAP_PROP_FPS))
+    finally:
+        cap.release()
+    if width <= 0 or height <= 0 or frames <= 0:
+        raise H3ClipGenerationError("H3 returned a video that cannot be decoded")
+    return width, height, frames, fps
+
+
+def generate_clip_operation(
+    db: Session,
+    progress,
+    is_cancelled,
+    *,
+    project_id: str,
+    action: str,
+    seconds: float,
+    seed: int,
+    first_asset_id: str,
+    last_asset_id: str | None = None,
+    timeout_s: float = 1500.0,
+) -> dict[str, Any]:
+    """Render one MiniMax H3 clip from project pictures and persist it as a project video asset.
+
+    One picture is image-to-video; a first and a last picture is FL2VA (give the same asset twice for a clip that loops).
+    The H3 prompt skeleton is built here (engine.original.h3_modes), so the caller sends only the change, in plain words.
+    shortcut: the render itself cannot be cancelled once ComfyUI has it (h3_modes.make_clip has no cancel hook); cancel is honoured before it starts.
+    """
+    from engine.original import animate, h3_modes  # lazy: they import this package
+
+    project = db.query(ProjectRecord).filter(ProjectRecord.id == project_id).first()
+    if not project:
+        raise H3ClipGenerationError("Project not found")
+    workspace = Path(str(project.workspace_path))
+    first = _project_asset_file(db, project_id, workspace, first_asset_id, "First-frame asset", H3ClipGenerationError)
+    last = _project_asset_file(db, project_id, workspace, last_asset_id, "Last-frame asset", H3ClipGenerationError) if last_asset_id else None
+    mode = "fl2va" if last else "i2va"
+    workflow_id = h3_modes.WORKFLOWS[mode]
+    prompt = h3_modes.fl2va_prompt(action, seconds) if last else h3_modes.i2va_prompt(action)
+    output_dir = resolve_contained_path(workspace, Path("generated") / "comfyui")
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    if is_cancelled():
+        raise H3ClipGenerationError("Clip generation cancelled before rendering")
+    client = ComfyUIClient()
+    try:
+        _workflow, workflow_sha256 = ComfyWorkflowRegistry(client).load(workflow_id)
+        progress(0.05, f"Verified workflow {workflow_id}")
+        animate.release_ollama()  # the film pipeline frees the local LLM before every H3 clip
+        progress(0.1, f"Rendering {mode} clip with MiniMax H3")
+        raw = h3_modes.make_clip(mode, prompt, seed=seed, seconds=seconds, first=first, last=last, client=client, timeout=timeout_s,
+                                 prefix=f"panelflow/{project_id}/h3")
+    except (ComfyUIError, WorkflowRegistryError, ValueError, RuntimeError) as exc:
+        raise H3ClipGenerationError(str(exc)) from exc
+
+    asset_id = str(uuid.uuid4())
+    filename = f"{asset_id}.mp4"
+    target = _write_project_image(workspace, Path("generated") / "comfyui" / filename, raw)  # generic exclusive byte writer despite its name
+    try:
+        width, height, frames, fps = _probe_video(target)
+    except H3ClipGenerationError:
+        target.unlink(missing_ok=True)  # never leave an unreadable file behind as an asset
+        raise
+    sha256 = hashlib.sha256(raw).hexdigest()
+    relative_path = target.relative_to(workspace).as_posix()
+    db.add(AssetRecord(
+        id=asset_id, project_id=project_id, asset_type="COMFYUI_GENERATED_VIDEO", filename=filename, relative_path=relative_path,
+        content_type="video/mp4", width=width, height=height, byte_size=len(raw), sha256=sha256, status="READY",
+        provenance={"provider": "comfyui", "endpoint": client.base_url.rstrip("/"), "workflow_id": workflow_id, "workflow_sha256": workflow_sha256,
+                    "mode": mode, "prompt": prompt, "action": action, "seed": seed, "requested_seconds": seconds, "frames": frames, "fps": fps,
+                    "first_asset_id": first_asset_id, "last_asset_id": last_asset_id},
+    ))
+    db.commit()
+    progress(1.0, "H3 clip verified and persisted")
+    return {"asset_id": asset_id, "relative_path": relative_path, "filename": filename, "content_type": "video/mp4", "width": width,
+            "height": height, "byte_size": len(raw), "sha256": sha256, "workflow_id": workflow_id, "mode": mode, "frames": frames, "fps": fps}
+
+
+def build_h3_clip_operation(project_id: str, payload: dict[str, Any]):
+    """Rehydrate an H3 clip operation from its persisted validated input."""
+    return lambda db, progress, is_cancelled: generate_clip_operation(
+        db, progress, is_cancelled, project_id=project_id, action=payload["action"], seconds=payload["seconds"], seed=payload["seed"],
+        first_asset_id=payload["first_asset_id"], last_asset_id=payload.get("last_asset_id"), timeout_s=payload.get("timeout_s", 1500.0))
+
+
+register_operation_factory(H3_CLIP_JOB_TYPE, build_h3_clip_operation)
 
 
 class ComfyVideoGenerationError(RuntimeError):

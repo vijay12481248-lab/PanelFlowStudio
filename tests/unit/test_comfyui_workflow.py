@@ -469,3 +469,120 @@ def test_recovered_job_keeps_its_references(monkeypatch):
     captured.clear()
     service.build_comfy_image_operation("project", {k: v for k, v in payload.items() if k != "reference_asset_ids"})(None, None, None)
     assert captured["reference_asset_ids"] is None  # jobs queued before this change still rehydrate
+
+
+def _mp4(tmp_path, frames=6, size=(64, 48)):
+    import cv2
+    import numpy as np
+
+    path = tmp_path / "fake_clip.mp4"
+    writer = cv2.VideoWriter(str(path), cv2.VideoWriter_fourcc(*"mp4v"), 24.0, size)
+    for i in range(frames):
+        writer.write(np.full((size[1], size[0], 3), i * 30, dtype=np.uint8))
+    writer.release()
+    return path.read_bytes()
+
+
+def _clip_fixture(tmp_path, monkeypatch, video=None):
+    """A project with a stored picture, the GPU render faked (it records how it was called), everything else real."""
+    import types
+
+    from engine.original import animate, h3_modes
+
+    calls = {}
+
+    def fake_make_clip(mode, prompt, **kw):
+        calls.update(mode=mode, prompt=prompt, **kw)
+        return video if video is not None else _mp4(tmp_path)
+
+    monkeypatch.setattr(h3_modes, "make_clip", fake_make_clip)
+    monkeypatch.setattr(animate, "release_ollama", lambda: calls.update(ollama_released=True))
+    monkeypatch.setattr(service, "ComfyUIClient", lambda: types.SimpleNamespace(base_url="http://x/"))
+    monkeypatch.setattr(service, "ComfyWorkflowRegistry", lambda *a, **k: types.SimpleNamespace(load=lambda wid: ({}, "b" * 64)))
+    engine, db = _reference_fixture(tmp_path)
+    return calls, engine, db
+
+
+def _run_clip(db, **kw):
+    args = dict(project_id="project", action="The hero runs in place", seconds=2.3, seed=7, first_asset_id="hero")
+    return service.generate_clip_operation(db, lambda *_: None, kw.pop("is_cancelled", lambda: False), **{**args, **kw})
+
+
+def test_one_picture_makes_an_image_to_video_clip_that_is_stored_as_an_asset(tmp_path, monkeypatch):
+    calls, engine, db = _clip_fixture(tmp_path, monkeypatch)
+    try:
+        out = _run_clip(db)
+        assert calls["mode"] == "i2va" and calls["first"] == tmp_path / "generated" / "comfyui" / "hero.png" and calls["last"] is None
+        assert "<Picture 1>" in calls["prompt"] and "The hero runs in place" in calls["prompt"] and calls["ollama_released"]
+        asset = db.query(AssetRecord).filter(AssetRecord.id == out["asset_id"]).one()
+        assert asset.asset_type == "COMFYUI_GENERATED_VIDEO" and asset.content_type == "video/mp4"
+        assert (asset.width, asset.height, out["frames"]) == (64, 48, 6)
+        assert (tmp_path / asset.relative_path).stat().st_size == asset.byte_size == out["byte_size"]
+        assert asset.provenance["workflow_id"] == "fastvideo_h3_film_free" and asset.provenance["workflow_sha256"] == "b" * 64
+        assert asset.provenance["seed"] == 7 and asset.provenance["first_asset_id"] == "hero"
+    finally:
+        db.close()
+        engine.dispose()
+
+
+def test_the_same_picture_as_first_and_last_frame_makes_a_loop(tmp_path, monkeypatch):
+    calls, engine, db = _clip_fixture(tmp_path, monkeypatch)
+    try:
+        out = _run_clip(db, last_asset_id="hero")
+        hero = tmp_path / "generated" / "comfyui" / "hero.png"
+        assert calls["mode"] == "fl2va" and calls["first"] == hero and calls["last"] == hero and out["mode"] == "fl2va"
+        assert "2.33-second mark" in calls["prompt"]  # the alignment line uses the length H3 really renders, not the 2.3 asked for
+    finally:
+        db.close()
+        engine.dispose()
+
+
+def test_clip_failures_leave_no_asset_and_no_file(tmp_path, monkeypatch):
+    calls, engine, db = _clip_fixture(tmp_path, monkeypatch, video=b"this is not a video")
+    try:
+        with pytest.raises(service.H3ClipGenerationError, match="cannot be decoded"):
+            _run_clip(db)
+        assert db.query(AssetRecord).filter(AssetRecord.asset_type == "COMFYUI_GENERATED_VIDEO").count() == 0
+        assert [p.name for p in (tmp_path / "generated" / "comfyui").iterdir()] == ["hero.png"]  # the unreadable file was removed
+        calls.clear()
+        with pytest.raises(service.H3ClipGenerationError, match="not found in this project"):
+            _run_clip(db, first_asset_id="nope")
+        with pytest.raises(service.H3ClipGenerationError, match="Last-frame asset"):
+            _run_clip(db, last_asset_id="nope")
+        with pytest.raises(service.H3ClipGenerationError, match="cancelled"):
+            _run_clip(db, is_cancelled=lambda: True)
+        assert "mode" not in calls  # none of those reached the GPU
+    finally:
+        db.close()
+        engine.dispose()
+
+
+def test_clip_route_refuses_assets_of_another_project(tmp_path):
+    from fastapi import HTTPException
+
+    from engine.api.routers.comfyui import ComfyClipRequest, submit_comfyui_clip_job
+
+    engine, db = _reference_fixture(tmp_path)
+    try:
+        for kw in ({}, {"last_asset_id": "hero"}):  # "hero" belongs to "project", not "other"
+            with pytest.raises(HTTPException) as e:
+                submit_comfyui_clip_job("other", ComfyClipRequest(action="The hero runs in place", first_asset_id="hero", **kw), db=db)
+            assert e.value.status_code == 400 and "not found in this project" in e.value.detail
+        with pytest.raises(HTTPException) as e:
+            submit_comfyui_clip_job("missing", ComfyClipRequest(action="The hero runs in place", first_asset_id="hero"), db=db)
+        assert e.value.status_code == 404
+    finally:
+        db.close()
+        engine.dispose()
+
+
+def test_clip_job_survives_a_restart_and_is_gated_as_a_comfyui_job(monkeypatch):
+    from engine.jobs.manager import COMFYUI_JOB_TYPES
+
+    assert service.H3_CLIP_JOB_TYPE in COMFYUI_JOB_TYPES  # else the GPU gate would refuse it whenever ComfyUI holds its weights
+    captured = {}
+    monkeypatch.setattr(service, "generate_clip_operation", lambda *a, **k: captured.update(k))
+    payload = {"action": "The hero runs in place", "first_asset_id": "hero", "last_asset_id": "hero", "seconds": 2.3, "seed": 7, "timeout_s": 900.0}
+    service.build_h3_clip_operation("project", payload)(None, None, None)
+    assert captured == {"project_id": "project", "action": "The hero runs in place", "seconds": 2.3, "seed": 7, "first_asset_id": "hero",
+                        "last_asset_id": "hero", "timeout_s": 900.0}

@@ -14,6 +14,10 @@ from engine.system.resources import resource_manager
 
 logger = logging.getLogger(__name__)
 
+# Jobs that run on ComfyUI: it keeps model weights resident, so "free VRAM" is not the admission test for them (see SystemResourceManager.can_admit_gpu_job).
+COMFYUI_JOB_TYPES = ("COMFYUI_IMAGE_GENERATION", "COMFYUI_H3_CLIP_GENERATION")
+
+
 def utc_now():
     return datetime.now(timezone.utc)
 
@@ -538,7 +542,7 @@ class JobManager:
                             return
 
                 heartbeat_task = asyncio.create_task(heartbeat())
-                is_comfyui = job_type == "COMFYUI_IMAGE_GENERATION"
+                is_comfyui = job_type in COMFYUI_JOB_TYPES
                 if requires_gpu:
                     while not token.is_cancelled:
                         if not self._lease_is_current(job_id, lease_id):

@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from engine.comfyui import ComfyUIClient, ComfyUIError, ComfyWorkflowRegistry, WorkflowRegistryError
 from engine.comfyui.art import ART_WORKFLOW_ID
-from engine.comfyui.service import INPAINT_WORKFLOW_ID, generate_image_operation, inpaint_image_operation
+from engine.comfyui.service import H3_CLIP_JOB_TYPE, INPAINT_WORKFLOW_ID, generate_clip_operation, generate_image_operation, inpaint_image_operation
 from engine.database.models import AssetRecord, ProjectRecord
 from engine.database.session import get_db
 from engine.jobs.workflow import enqueue_project_operation
@@ -28,6 +28,15 @@ class ComfyImageRequest(BaseModel):
     timeout_s: float = Field(default=900.0, ge=30.0, le=3600.0)
     refine: bool = Field(default=False, description="Review the picture, then repair or redraw it (slower: needs the local vision model); every candidate is kept")
     reference_asset_ids: list[str] = Field(default_factory=list, max_length=4, description="Existing assets of this project the picture should match (character lock); not combinable with refine")
+
+
+class ComfyClipRequest(BaseModel):
+    action: str = Field(..., min_length=10, max_length=2000, description="What changes, in plain words; the H3 prompt skeleton and the static-camera sentence are added by the engine")
+    first_asset_id: str = Field(..., min_length=1, description="Project asset used as the first frame")
+    last_asset_id: str | None = Field(default=None, description="Project asset used as the last frame (FL2VA); the same asset as the first frame makes a clip that loops")
+    seconds: float = Field(default=2.3, ge=1.0, le=8.0, description="Snapped by H3 to its frame grid (17k+5 frames at 24 fps)")
+    seed: int = Field(default=2026, ge=0, le=2**63 - 1)
+    timeout_s: float = Field(default=1500.0, ge=60.0, le=3600.0)
 
 
 class ComfyInpaintRequest(BaseModel):
@@ -148,6 +157,50 @@ def submit_comfyui_image_job(project_id: str, request: ComfyImageRequest, db: Se
         },
     )
     return {"job_id": job_id, "status": "QUEUED", "workflow_id": request.workflow_id}
+
+
+@project_router.post("/{project_id}/comfyui/clip")
+def submit_comfyui_clip_job(project_id: str, request: ComfyClipRequest, db: Session = Depends(get_db)) -> dict:
+    """Queue one MiniMax H3 clip made from project pictures (image-to-video, or first + last frame)."""
+    from engine.original.h3_modes import WORKFLOWS
+
+    project = db.query(ProjectRecord).filter(ProjectRecord.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+    wanted = [request.first_asset_id] + ([request.last_asset_id] if request.last_asset_id else [])
+    found = {a.id for a in db.query(AssetRecord.id).filter(AssetRecord.project_id == project_id, AssetRecord.id.in_(wanted))}
+    missing = [i for i in wanted if i not in found]
+    if missing:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Assets not found in this project: {', '.join(missing)}")
+    workflow_id = WORKFLOWS["fl2va" if request.last_asset_id else "i2va"]
+    try:
+        registry = ComfyWorkflowRegistry()
+        metadata = registry.metadata(workflow_id)
+        registry.load(workflow_id)
+        preflight = registry.preflight(workflow_id)
+        if not preflight["ready"]:
+            if not preflight.get("comfy_online", True):
+                raise WorkflowRegistryError("ComfyUI is offline or unreachable at 127.0.0.1:8188. Please start ComfyUI to generate clips.")
+            raise WorkflowRegistryError(f"ComfyUI workflow preflight failed: missing nodes={preflight['missing_nodes']}, missing models={preflight['missing_models']}")
+    except (ComfyUIError, WorkflowRegistryError) as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    def operation(operation_db, progress, is_cancelled):
+        return generate_clip_operation(operation_db, progress, is_cancelled, project_id=project_id, action=request.action, seconds=request.seconds,
+                                       seed=request.seed, first_asset_id=request.first_asset_id, last_asset_id=request.last_asset_id,
+                                       timeout_s=request.timeout_s)
+
+    job_id = enqueue_project_operation(
+        project_id=project_id,
+        job_type=H3_CLIP_JOB_TYPE,
+        operation=operation,
+        priority=20,
+        requires_gpu=bool(metadata.get("requires_gpu", True)),
+        gpu_vram_mb=int(metadata.get("gpu_vram_mb", 0) or 0),
+        max_retries=0,  # a failed render costs minutes of GPU; the caller decides whether to try again
+        job_input=request.model_dump(),
+    )
+    return {"job_id": job_id, "status": "QUEUED", "workflow_id": workflow_id}
 
 
 @project_router.post("/{project_id}/comfyui/inpaint")
