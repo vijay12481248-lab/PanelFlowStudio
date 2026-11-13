@@ -472,6 +472,61 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
     }
   };
 
+  const handleEditSubmit = async () => {
+    if (!prompt.trim()) {
+      setInpaintError("Please enter an instruction describing what the picture should become.");
+      return;
+    }
+    if (effectiveTarget.mode !== 'project') {
+      setInpaintError("Editing with words needs a project picture.");
+      return;
+    }
+
+    setInpaintError(null);
+    setIsInpainting(true);
+    setInpaintProgress(0.05);
+
+    try {
+      setInpaintStatusText("Sending the picture and the instruction to ComfyUI...");
+      const activeAsset = currentAsset || effectiveTarget.asset;
+      const queued = await api.editComfyImage(effectiveTarget.projectId, {
+        asset_id: activeAsset.id,
+        prompt: prompt.trim(),
+        seed,
+        timeout_s: 1800,
+      });
+
+      setInpaintStatusText("Editing with MiniMax H3 Image...");
+
+      const completedJob = await api.waitForWorkflowJob(queued.job_id, (job: Job) => {
+        if (job.progress != null) setInpaintProgress(job.progress);
+        if (job.message) setInpaintStatusText(job.message);
+      });
+
+      if (completedJob.status === "FAILED") {
+        throw new Error(completedJob.error || "Edit job failed in engine.");
+      }
+
+      setInpaintStatusText("Retrieving the edited asset...");
+      setInpaintProgress(0.95);
+
+      const assetList = await api.listGeneratedAssets(effectiveTarget.projectId);
+      if (assetList.assets && assetList.assets.length > 0) {
+        const newest = assetList.assets[0];
+        setPreviousAsset(currentAsset || effectiveTarget.asset);
+        setCurrentAsset(newest);
+        if (effectiveTarget.onAssetUpdated) effectiveTarget.onAssetUpdated(newest);
+        showToast("✨ Edit complete! New asset created.");
+      }
+    } catch (err: any) {
+      setInpaintError(err.message || "Failed to execute the edit.");
+    } finally {
+      setIsInpainting(false);
+      setInpaintProgress(0);
+      setInpaintStatusText("");
+    }
+  };
+
   const copyShaToClipboard = () => {
     const sha = effectiveTarget.mode === 'project'
       ? (currentAsset || effectiveTarget.asset).sha256
@@ -1049,6 +1104,29 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                     : "Inpaint Masked Area with ComfyUI"}
                 </span>
               </button>
+
+              {/* Edit with words (MiniMax-H3-Image): no mask needed, the instruction says what to change */}
+              {effectiveTarget.mode === 'project' && (
+                <button
+                  type="button"
+                  onClick={handleEditSubmit}
+                  disabled={isInpainting || !prompt.trim()}
+                  className={`w-full py-3 px-4 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all duration-200 ${
+                    isInpainting
+                      ? "bg-zinc-800 text-zinc-500 border border-zinc-700 cursor-not-allowed"
+                      : !prompt.trim()
+                      ? "bg-zinc-900 text-zinc-500 border border-zinc-800 cursor-not-allowed"
+                      : "bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 hover:from-emerald-500 hover:via-teal-500 hover:to-cyan-500 text-white shadow-lg shadow-teal-600/30 hover:shadow-teal-600/50 active:scale-[0.98] border border-emerald-400/30"
+                  }`}
+                >
+                  <Wand2 className={`w-4 h-4 ${isInpainting ? "animate-spin" : ""}`} />
+                  <span>
+                    {isInpainting
+                      ? "Editing..."
+                      : "Edit Whole Picture from Instructions (H3 Image)"}
+                  </span>
+                </button>
+              )}
             </div>
 
             {/* Toast Feedback */}
