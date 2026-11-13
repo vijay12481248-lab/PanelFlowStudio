@@ -5,7 +5,7 @@ import pytest
 from PIL import Image
 
 from engine.comfyui import art as art_mod
-from engine.comfyui.art import ART_WORKFLOW_ID, ArtEngine, ArtTimeoutError, ComfyImageGenerationError
+from engine.comfyui.art import ART_WORKFLOW_ID, EDIT_WORKFLOW_ID, ArtEngine, ArtTimeoutError, ComfyImageGenerationError
 
 WORKFLOW = {
     "4": {"class_type": "TextEncodeQwenImage21", "inputs": {"prompt": "", "negative_prompt": "", "images.image_1": None}},
@@ -244,3 +244,30 @@ def test_real_qwen_image_21_registry_loads_and_validates_reference_image_slot():
     assert "LoadImage" in meta["required_nodes"]
 
 
+
+
+def test_the_h3_image_graph_draws_from_text_when_no_picture_is_bound():
+    """The second image model is the registered H3-Image graph with its picture slots left out, not a second text_to_image entry."""
+    import json
+    from pathlib import Path
+
+    root = Path(art_mod.__file__).parent
+    entry = next(w for w in json.loads((root / "workflow_registry.json").read_text(encoding="utf-8")) if w["id"] == EDIT_WORKFLOW_ID)
+    graph = json.loads((root / "workflows" / entry["filename"]).read_text(encoding="utf-8"))
+
+    class Registry(FakeRegistry):
+        def load(self, workflow_id):
+            self.asked.append(workflow_id)
+            return graph, "c" * 64
+
+        def metadata(self, workflow_id):
+            return entry
+
+    client, reg = FakeClient(png(2048, 2048)), Registry()
+    img = ArtEngine(client, reg).generate("a lantern on a stone stair", None, 2048, 2048, 7, "p", workflow_id=EDIT_WORKFLOW_ID)
+    node = client.submitted[0][0]["4"]["inputs"]
+    assert reg.asked == [EDIT_WORKFLOW_ID] and img.workflow_id == EDIT_WORKFLOW_ID
+    assert node["prompt"] == "a lantern on a stone stair" and (node["width"], node["height"]) == (2048, 2048)
+    assert not [name for name in node if name.startswith("images.")]  # no picture bound: text to image
+    with pytest.raises(ComfyImageGenerationError, match="Image workflows"):
+        ArtEngine(client, reg).generate("p", "", 1024, 768, workflow_id="anime_sdxl")

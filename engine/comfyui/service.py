@@ -17,6 +17,7 @@ from engine.comfyui import ComfyUIClient, ComfyUIError, ComfyWorkflowRegistry, W
 from engine.comfyui.art import (  # noqa: F401  (re-exported: callers and tests import these names from here)
     ART_WORKFLOW_ID,
     EDIT_WORKFLOW_ID,
+    IMAGE_WORKFLOW_IDS,
     ArtEngine,
     ComfyImageGenerationError,
     _history_images,
@@ -97,8 +98,10 @@ def generate_image_operation(
     project = db.query(ProjectRecord).filter(ProjectRecord.id == project_id).first()
     if not project:
         raise ComfyImageGenerationError("Project not found")
-    if workflow_id != ART_WORKFLOW_ID:
-        raise ComfyImageGenerationError(f"The only image workflow is {ART_WORKFLOW_ID!r}; got {workflow_id!r}")
+    if workflow_id not in IMAGE_WORKFLOW_IDS:
+        raise ComfyImageGenerationError(f"Image workflows are {IMAGE_WORKFLOW_IDS}; got {workflow_id!r}")
+    if refine and workflow_id != ART_WORKFLOW_ID:
+        raise ComfyImageGenerationError(f"refine only runs on {ART_WORKFLOW_ID!r}")
     workspace = Path(str(project.workspace_path))
     output_dir = resolve_contained_path(workspace, Path("generated") / "comfyui")
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -120,15 +123,28 @@ def generate_image_operation(
             art, refined = refine_art_image(prompt, negative_prompt, width, height, seed, ws=workspace / "generated" / "comfyui_candidates",
                                             key=f"{project_id}_{uuid.uuid4().hex[:8]}", client=client, timeout=timeout_s, is_cancelled=is_cancelled)
         else:
+            draw_width, draw_height = width, height
+            if workflow_id == EDIT_WORKFLOW_ID:
+                # H3-Image draws soft below its working area, so it draws there in the same shape and the
+                # picture is resized back to what was asked for (what MiniMax's own API does).
+                draw_width, draw_height = h3_edit_size(width, height)
+                release_local_model()  # the local model and the H3 checkpoint do not fit in the VRAM together
             art = ArtEngine(client, ComfyWorkflowRegistry(client)).generate(
-                prompt, negative_prompt, width, height, seed, f"panelflow/{project_id}/{ART_WORKFLOW_ID}",
+                prompt, negative_prompt, draw_width, draw_height, seed, f"panelflow/{project_id}/{workflow_id}",
                 reference_images=references or None,
                 timeout=timeout_s, is_cancelled=is_cancelled, progress=progress, client_id=f"panelflow-{project_id}",
+                workflow_id=workflow_id,
             )
     except (ComfyUIError, WorkflowRegistryError, ValueError) as exc:
         raise ComfyImageGenerationError(str(exc)) from exc
 
     raw = art.png
+    drawn_size = (art.width, art.height)
+    if drawn_size != (width, height):  # drawn at the model's working size: back to the size that was asked for
+        with Image.open(io.BytesIO(raw)) as picture:
+            resized = io.BytesIO()
+            picture.convert("RGB").resize((width, height), Image.Resampling.LANCZOS).save(resized, format="PNG")
+        raw = resized.getvalue()
     asset_id = str(uuid.uuid4())
     suffix = Path(art.source_output["filename"]).suffix.lower() or ".png"
     filename = f"{asset_id}{suffix}"
@@ -144,6 +160,8 @@ def generate_image_operation(
         "model_files": art.model_files,
         "prompt": prompt,
         "negative_prompt": negative_prompt or "",
+        "drawn_width": drawn_size[0],
+        "drawn_height": drawn_size[1],
         "seed": seed,
         "requested_width": width,
         "requested_height": height,
@@ -162,8 +180,8 @@ def generate_image_operation(
         filename=filename,
         relative_path=relative_path,
         content_type="image/png",
-        width=art.width,
-        height=art.height,
+        width=width,
+        height=height,
         byte_size=len(raw),
         sha256=sha256,
         status="READY",
@@ -177,8 +195,8 @@ def generate_image_operation(
         "relative_path": relative_path,
         "filename": filename,
         "content_type": "image/png",
-        "width": art.width,
-        "height": art.height,
+        "width": width,
+        "height": height,
         "byte_size": len(raw),
         "sha256": sha256,
         "prompt_id": art.prompt_id,

@@ -422,6 +422,49 @@ def test_reference_assets_reach_the_art_engine_and_are_recorded(tmp_path, monkey
         engine.dispose()
 
 
+def test_an_h3_image_job_draws_at_the_working_size_and_stores_the_size_that_was_asked_for(tmp_path, monkeypatch):
+    import types
+
+    from engine.comfyui.art import ArtImage
+
+    seen, released = {}, []
+
+    class FakeArt:
+        def __init__(self, *a, **k):
+            pass
+
+        def generate(self, prompt, negative, width, height, *a, **k):
+            seen.update(k, size=(width, height))
+            buf = io.BytesIO()
+            Image.new("RGB", (width, height), "red").save(buf, "PNG")
+            return ArtImage(png=buf.getvalue(), width=width, height=height, prompt_id="p1", workflow_id=k["workflow_id"],
+                            workflow_sha256="a" * 64, model_files=["m"],
+                            source_output={"filename": "k.png", "subfolder": "", "type": "output"}, seed=1)
+
+    monkeypatch.setattr(service, "ArtEngine", FakeArt)
+    monkeypatch.setattr(service, "release_local_model", lambda: released.append(True))
+    monkeypatch.setattr(service, "ComfyUIClient", lambda: types.SimpleNamespace(base_url="http://x/"))
+    monkeypatch.setattr(service, "ComfyWorkflowRegistry", lambda *a, **k: None)
+    engine, db = _reference_fixture(tmp_path)
+    kw = dict(project_id="project", workflow_id=service.EDIT_WORKFLOW_ID, prompt="a lamp on a table", negative_prompt="", seed=1)
+    try:
+        out = service.generate_image_operation(db, lambda *_: None, lambda: False, width=1344, height=768, **kw)
+        assert seen["size"] == service.h3_edit_size(1344, 768) == (2720, 1536) and seen["workflow_id"] == service.EDIT_WORKFLOW_ID
+        assert released == [True]  # the local model leaves the VRAM first
+        new = db.query(AssetRecord).filter(AssetRecord.id == out["asset_id"]).one()
+        with Image.open(tmp_path / new.relative_path) as stored:
+            assert stored.size == (new.width, new.height) == (out["width"], out["height"]) == (1344, 768)
+        assert (new.provenance["drawn_width"], new.provenance["drawn_height"]) == (2720, 1536)
+        assert new.provenance["workflow_id"] == service.EDIT_WORKFLOW_ID
+        with pytest.raises(service.ComfyImageGenerationError, match="refine only runs"):
+            service.generate_image_operation(db, lambda *_: None, lambda: False, width=1344, height=768, refine=True, **kw)
+        with pytest.raises(service.ComfyImageGenerationError, match="Image workflows"):
+            service.generate_image_operation(db, lambda *_: None, lambda: False, width=1344, height=768, **{**kw, "workflow_id": "anime_sdxl"})
+    finally:
+        db.close()
+        engine.dispose()
+
+
 def test_bad_references_fail_before_any_gpu_work(tmp_path, monkeypatch):
     monkeypatch.setattr(service, "ArtEngine", lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not generate")))
     engine, db = _reference_fixture(tmp_path)

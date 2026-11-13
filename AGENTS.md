@@ -14,7 +14,9 @@ episodes and original stories into narrated YouTube videos. Everything runs on t
 - **One art workflow: `qwen_image_21` (Qwen Image 2.1 Turbo), run only by `engine/comfyui/art.py` (`ArtEngine`).** Original Stories,
   ChronoFlow, the Comfy image screen, YouTube thumbnails and autopilot all call it; do not add a second text-to-image workflow or a
   private submit/poll loop - extend `ArtEngine`. `tests/unit/test_art_engine.py` fails if the registry gains another `text_to_image`
-  workflow. The SDXL entries (`purpose: sdxl_conditioning`, `inpaint`, `matting`) are the legacy substrate of the ControlNet / IP-Adapter /
+  workflow. The owner's one exception (2026-11-13): an image job may name `minimax_h3_image_edit` as its `workflow_id`; that same registered
+  H3-Image graph with no picture bound is text to image (`IMAGE_WORKFLOW_IDS` in `art.py`). Qwen stays the default everywhere; only the AI Game
+  Studio's image model picker selects H3-Image. The SDXL entries (`purpose: sdxl_conditioning`, `inpaint`, `matting`) are the legacy substrate of the ControlNet / IP-Adapter /
   inpaint / matting tools, not art workflows. `PANELFLOW_IMAGE_ENGINE` is `qwen` (default) or `sdxl` (for those tools' tests).
 - ComfyUI and Ollama together use ~13 GB of VRAM; the job manager holds GPU jobs back when memory is not free (by design).
 

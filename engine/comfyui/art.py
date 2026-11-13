@@ -12,6 +12,7 @@ nor `service.py` has to import the other.
 from __future__ import annotations
 
 import io
+import logging
 import random
 import time
 from copy import deepcopy
@@ -25,6 +26,10 @@ from engine.comfyui import ComfyUIClient, ComfyWorkflowRegistry
 
 ART_WORKFLOW_ID = "qwen_image_21"
 EDIT_WORKFLOW_ID = "minimax_h3_image_edit"  # MiniMax-H3-Image: edit an existing picture from a written instruction
+# What an image job may run. Qwen is the default everywhere; the H3-Image graph with no picture bound is text to image
+# (the same registered graph as the edit, not a second text_to_image entry), chosen per job by its caller.
+IMAGE_WORKFLOW_IDS = (ART_WORKFLOW_ID, EDIT_WORKFLOW_ID)
+logger = logging.getLogger(__name__)
 POLL_SECONDS = 1.5
 
 # The conditioning nodes that take their reference pictures through autogrow
@@ -296,12 +301,12 @@ class ArtEngine:
     def __init__(self, client: ComfyUIClient | None = None, registry: ComfyWorkflowRegistry | None = None):
         self.client = client or ComfyUIClient()
         self.registry = registry or ComfyWorkflowRegistry(self.client)
-        self._ready = False
+        self._ready: set[str] = set()
 
-    def require_ready(self) -> None:
-        if self._ready:
+    def require_ready(self, workflow_id: str = ART_WORKFLOW_ID) -> None:
+        if workflow_id in self._ready:
             return
-        preflight = self.registry.preflight(ART_WORKFLOW_ID)
+        preflight = self.registry.preflight(workflow_id)
         if not preflight["ready"]:
             if not preflight.get("comfy_online", True):
                 # Try auto-launching ComfyUI if available on the local machine
@@ -311,9 +316,9 @@ class ArtEngine:
                         logger.info("ComfyUI is offline. Attempting automated startup...")
                         res = comfyui_manager.ensure_running(timeout_s=15.0)
                         if res.get("running"):
-                            preflight = self.registry.preflight(ART_WORKFLOW_ID)
+                            preflight = self.registry.preflight(workflow_id)
                             if preflight["ready"]:
-                                self._ready = True
+                                self._ready.add(workflow_id)
                                 return
                 except Exception as e:
                     logger.warning("Could not auto-launch ComfyUI: %s", e)
@@ -323,7 +328,7 @@ class ArtEngine:
             raise ComfyImageGenerationError(
                 f"ComfyUI workflow preflight failed: missing nodes={preflight['missing_nodes']}, missing models={preflight['missing_models']}"
             )
-        self._ready = True
+        self._ready.add(workflow_id)
 
     def run(
         self,
@@ -389,10 +394,13 @@ class ArtEngine:
         is_cancelled: Callable[[], bool] = _never,
         progress: Callable[[float, str], None] | None = None,
         client_id: str | None = None,
+        workflow_id: str = ART_WORKFLOW_ID,
     ) -> ArtImage:
-        self.require_ready()
-        workflow, workflow_sha256 = self.registry.load(ART_WORKFLOW_ID)
-        metadata = self.registry.metadata(ART_WORKFLOW_ID)
+        if workflow_id not in IMAGE_WORKFLOW_IDS:
+            raise ComfyImageGenerationError(f"Image workflows are {IMAGE_WORKFLOW_IDS}; got {workflow_id!r}")
+        self.require_ready(workflow_id)
+        workflow, workflow_sha256 = self.registry.load(workflow_id)
+        metadata = self.registry.metadata(workflow_id)
         policy = metadata["dimension_policy"]
         _validate_output_dimensions(actual_width=width, actual_height=height, requested_width=width, requested_height=height,
                                     dimension_policy=policy)  # rejects a request the workflow cannot honour before any GPU time is spent
@@ -420,7 +428,7 @@ class ArtEngine:
             reference_images=ref_image_names,
         )
         if progress:
-            progress(0.05, f"Verified workflow {ART_WORKFLOW_ID}")
+            progress(0.05, f"Verified workflow {workflow_id}")
         raw, prompt_id, ref = self.run(patched, timeout=timeout, is_cancelled=is_cancelled, progress=progress, client_id=client_id)
         try:
             with Image.open(io.BytesIO(raw)) as image:
@@ -431,7 +439,7 @@ class ArtEngine:
             raise ComfyImageGenerationError("ComfyUI returned an invalid image artifact") from exc
         _validate_output_dimensions(actual_width=actual_width, actual_height=actual_height, requested_width=width, requested_height=height,
                                     dimension_policy=policy)
-        return ArtImage(png=raw, width=actual_width, height=actual_height, prompt_id=prompt_id, workflow_id=ART_WORKFLOW_ID,
+        return ArtImage(png=raw, width=actual_width, height=actual_height, prompt_id=prompt_id, workflow_id=workflow_id,
                         workflow_sha256=workflow_sha256, model_files=list(metadata.get("model_files", [])), source_output=ref, seed=seed)
 
     def edit(

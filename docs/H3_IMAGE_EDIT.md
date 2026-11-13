@@ -2,8 +2,9 @@
 
 One open-weights checkpoint that edits an existing picture: you give it the picture and what the
 picture should become, and it gives you the new picture. The same checkpoint also does text to
-image, but PanelFlow keeps `qwen_image_21` as the one art workflow, so H3-Image is registered as
-`image_edit` and never as a second text-to-image path.
+image: the same graph with no picture bound. `qwen_image_21` stays the default art workflow and
+H3-Image stays registered once, as `image_edit`; an image job can ask for it by name (see
+"Text to image" below).
 
 ## What is installed
 
@@ -91,8 +92,24 @@ time) gave the same instruction followed in two different ways: the first a roun
 glowing window, the second a van with a scalloped awning. The scene around it was kept in both.
 
 Not measured: other seeds, an edit where a face has to stay the same, the second reference picture
-(the instruction refers to another picture), the text to image mode of the same checkpoint (PanelFlow
-does not expose it: `qwen_image_21` stays the one art workflow).
+(the instruction refers to another picture).
+
+## Text to image
+
+`POST /api/projects/{id}/comfyui/image` with `"workflow_id": "minimax_h3_image_edit"` runs the same
+graph through `ArtEngine.generate` with no picture bound. The picture is drawn at the working size
+(the requested shape at about 4 megapixels, `h3_edit_size`) and resized to the size that was asked
+for; the local model is unloaded first. `refine` is refused (it is built on Qwen). The AI Game Studio
+selects it as its image model (`studio/providers.py::H3Image`).
+
+Measured once (2026-11-13, through the studio's provider, 1344x768 asked, 2720x1536 drawn, seed
+2026): 51.4 s, peak VRAM 15,512 MiB; the same prompt and seed on Qwen Image 2.1 took 15.3 s. For a
+"hand-painted 2D game environment" prompt H3-Image gave a painted picture and Qwen a photographic
+one; H3-Image added a string of pennant flags the prompt did not ask for.
+
+Not measured: other prompts and seeds, a character picture, reference pictures on a text to image
+job (the character lock was only measured on Qwen), the studio's tile and parallax pipelines on
+H3-Image pictures.
 
 ## Known limits
 
