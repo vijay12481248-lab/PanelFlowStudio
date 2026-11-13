@@ -126,6 +126,15 @@ export interface ComfyInpaintRequest {
   timeout_s?: number;
 }
 
+/** Edit a picture from a written instruction (MiniMax-H3-Image). */
+export interface ComfyEditRequest {
+  asset_id: string; // the picture to edit
+  prompt: string; // what the picture should become
+  reference_asset_ids?: string[]; // other assets the instruction may refer to
+  seed?: number;
+  timeout_s?: number;
+}
+
 export interface GeneratedAsset {
   id: string;
   asset_type: string;
@@ -2085,6 +2094,26 @@ export class PanelFlowApiClient {
     });
   }
 
+  async getDependenciesStatus(): Promise<{
+    comfyui: { running: boolean; installed: boolean; root: string | null; endpoint: string; can_launch: boolean };
+    ollama: { running: boolean; endpoint: string; model: string };
+    ffmpeg: { installed: boolean; version: string | null; path: string | null };
+  }> {
+    return this.request("/api/system/dependencies/status");
+  }
+
+  async launchComfyUI(waitSeconds: number = 0): Promise<{
+    status: string;
+    running: boolean;
+    message?: string;
+    endpoint?: string;
+    pid?: number;
+  }> {
+    return this.request(`/api/system/dependencies/launch_comfyui?wait_seconds=${waitSeconds}`, {
+      method: "POST",
+    });
+  }
+
   // ---------------------------------------------------------------------------
   // Ollama Configuration & Capabilities
   // ---------------------------------------------------------------------------
@@ -2307,6 +2336,14 @@ export class PanelFlowApiClient {
 
   async inpaintComfyImage(projectId: string, request: ComfyInpaintRequest): Promise<{ job_id: string; status: string; workflow_id: string }> {
     return this.request<{ job_id: string; status: string; workflow_id: string }>(`/api/projects/${projectId}/comfyui/inpaint`, {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
+  }
+
+  /** Edit a picture from a written instruction, with the MiniMax-H3-Image workflow. */
+  async editComfyImage(projectId: string, request: ComfyEditRequest): Promise<{ job_id: string; status: string; workflow_id: string }> {
+    return this.request<{ job_id: string; status: string; workflow_id: string }>(`/api/projects/${projectId}/comfyui/edit`, {
       method: "POST",
       body: JSON.stringify(request),
     });

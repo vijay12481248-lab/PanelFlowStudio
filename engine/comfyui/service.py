@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from engine.comfyui import ComfyUIClient, ComfyUIError, ComfyWorkflowRegistry, WorkflowRegistryError
 from engine.comfyui.art import (  # noqa: F401  (re-exported: callers and tests import these names from here)
     ART_WORKFLOW_ID,
+    EDIT_WORKFLOW_ID,
     ArtEngine,
     ComfyImageGenerationError,
     _history_images,
@@ -185,6 +186,124 @@ def generate_image_operation(
 
 
 INPAINT_WORKFLOW_ID = "qwen_image_21_inpaint"
+
+
+def edit_image_operation(
+    db: Session,
+    progress,
+    is_cancelled,
+    *,
+    project_id: str,
+    base_asset_id: str,
+    prompt: str,
+    reference_asset_ids: list[str] | None = None,
+    seed: int = 20261019,
+    timeout_s: float = 1800.0,
+) -> dict[str, Any]:
+    """Edit an existing picture from a written instruction, with the approved MiniMax-H3-Image workflow.
+
+    The picture being edited is `base_asset_id`; any extra assets are references the
+    instruction may refer to. The result is persisted as a new project asset.
+    """
+    project = db.query(ProjectRecord).filter(ProjectRecord.id == project_id).first()
+    if not project:
+        raise ComfyImageGenerationError("Project not found")
+    workspace = Path(str(project.workspace_path))
+
+    base = db.query(AssetRecord).filter(
+        AssetRecord.id == base_asset_id, AssetRecord.project_id == project_id).first()
+    if not base:
+        raise ComfyImageGenerationError(f"Base asset {base_asset_id} not found in project")
+    base_bytes = resolve_contained_path(workspace, base.relative_path).read_bytes()
+
+    references = [base_bytes]
+    for ref_id in reference_asset_ids or []:
+        asset = db.query(AssetRecord).filter(
+            AssetRecord.id == ref_id, AssetRecord.project_id == project_id).first()
+        if not asset:
+            raise ComfyImageGenerationError(f"Reference asset {ref_id} not found in project")
+        references.append(resolve_contained_path(workspace, asset.relative_path).read_bytes())
+
+    try:
+        with Image.open(io.BytesIO(base_bytes)) as picture:
+            width, height = picture.size
+    except Exception as exc:
+        raise ComfyImageGenerationError(f"Base asset is not a readable image: {exc}") from exc
+
+    client = ComfyUIClient()
+    reg = ComfyWorkflowRegistry(client)
+    try:
+        reg.load(EDIT_WORKFLOW_ID)
+        preflight = reg.preflight(EDIT_WORKFLOW_ID)
+    except (ComfyUIError, WorkflowRegistryError) as exc:
+        raise ComfyImageGenerationError(str(exc)) from exc
+    if not preflight["ready"]:
+        raise ComfyImageGenerationError(
+            f"ComfyUI workflow preflight failed: missing nodes={preflight['missing_nodes']}, "
+            f"missing models={preflight['missing_models']}"
+        )
+
+    try:
+        art = ArtEngine(client, reg).edit(
+            prompt, references, width=width, height=height, seed=seed,
+            prefix=f"panelflow/{project_id}/{EDIT_WORKFLOW_ID}",
+            timeout=timeout_s, is_cancelled=is_cancelled, progress=progress,
+            client_id=f"panelflow-{project_id}")
+    except (ComfyUIError, WorkflowRegistryError, ValueError) as exc:
+        raise ComfyImageGenerationError(str(exc)) from exc
+
+    raw = art.png
+    asset_id = str(uuid.uuid4())
+    suffix = Path(art.source_output["filename"]).suffix.lower() or ".png"
+    filename = f"{asset_id}{suffix}"
+    target = _write_project_image(workspace, Path("generated") / "comfyui" / filename, raw)
+    sha256 = hashlib.sha256(raw).hexdigest()
+    relative_path = target.relative_to(workspace).as_posix()
+    provenance = {
+        "provider": "comfyui",
+        "endpoint": client.base_url.rstrip("/"),
+        "prompt_id": art.prompt_id,
+        "workflow_id": art.workflow_id,
+        "workflow_sha256": art.workflow_sha256,
+        "model_files": art.model_files,
+        "prompt": prompt,
+        "seed": seed,
+        "requested_width": width,
+        "requested_height": height,
+        "source_output": art.source_output,
+        "base_asset_id": base_asset_id,
+    }
+    if reference_asset_ids:
+        provenance["reference_asset_ids"] = list(reference_asset_ids)
+    asset = AssetRecord(
+        id=asset_id,
+        project_id=project_id,
+        asset_type="COMFYUI_GENERATED_IMAGE",
+        filename=filename,
+        relative_path=relative_path,
+        content_type="image/png",
+        width=art.width,
+        height=art.height,
+        byte_size=len(raw),
+        sha256=sha256,
+        status="READY",
+        provenance=provenance,
+    )
+    db.add(asset)
+    db.commit()
+    progress(1.0, "Edited image verified and persisted")
+    return {
+        "asset_id": asset_id,
+        "relative_path": relative_path,
+        "filename": filename,
+        "content_type": "image/png",
+        "width": art.width,
+        "height": art.height,
+        "byte_size": len(raw),
+        "sha256": sha256,
+        "prompt_id": art.prompt_id,
+        "workflow_id": art.workflow_id,
+    }
 
 
 def inpaint_image_operation(

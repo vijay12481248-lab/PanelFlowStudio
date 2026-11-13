@@ -17,14 +17,20 @@ import time
 from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Sequence
 
 from PIL import Image
 
 from engine.comfyui import ComfyUIClient, ComfyWorkflowRegistry
 
 ART_WORKFLOW_ID = "qwen_image_21"
+EDIT_WORKFLOW_ID = "minimax_h3_image_edit"  # MiniMax-H3-Image: edit an existing picture from a written instruction
 POLL_SECONDS = 1.5
+
+# The conditioning nodes that take their reference pictures through autogrow
+# "images.image_<n>" slots. A picture is bound by injecting a LoadImage node, and
+# a slot that is left unsupplied is removed from the graph rather than sent empty.
+_AUTOGROW_REFERENCE_NODES = frozenset({"TextEncodeQwenImage21", "MiniMaxH3ImageConditioning"})
 
 
 class ComfyImageGenerationError(RuntimeError):
@@ -100,14 +106,14 @@ def _patch_workflow(
 
     optional_unsupplied = set()
     ref_slot = patch_slots.get("reference_image", {})
-    if "reference_image" not in values and ref_slot.get("class_type") == "TextEncodeQwenImage21":
+    if "reference_image" not in values and ref_slot.get("class_type") in _AUTOGROW_REFERENCE_NODES:
         optional_unsupplied.add("reference_image")
     for extra_ref_slot in ("reference_image_b", "reference_image_c", "reference_image_d"):
-        # Only the Qwen text-to-image workflow binds references through TextEncodeQwenImage21 and lets a
-        # slot go unbound; every other approved workflow (e.g. anime_sdxl_ipa2) declares its reference
+        # Only the conditioning nodes that bind references through autogrow slots let a slot go
+        # unbound; every other approved workflow (e.g. anime_sdxl_ipa2) declares its reference
         # slots as mandatory, so omitting one must still refuse to run.
         if (extra_ref_slot in patch_slots and extra_ref_slot not in values
-                and patch_slots[extra_ref_slot].get("class_type") == "TextEncodeQwenImage21"):
+                and patch_slots[extra_ref_slot].get("class_type") in _AUTOGROW_REFERENCE_NODES):
             optional_unsupplied.add(extra_ref_slot)
     if duration is None and "duration" in patch_slots:
         optional_unsupplied.add("duration")
@@ -139,8 +145,8 @@ def _patch_workflow(
         if not isinstance(input_name, str) or not isinstance(inputs, dict) or input_name not in inputs:
             raise ComfyImageGenerationError(f"Approved {slot_name} patch slot input is unavailable")
 
-        # WP-3.1: TextEncodeQwenImage21 autogrow reference image binding via LoadImage DAG injection
-        if slot.get("class_type") == "TextEncodeQwenImage21" and input_name.startswith("images.image_"):
+        # The autogrow reference slots: bind the picture by injecting a LoadImage node.
+        if slot.get("class_type") in _AUTOGROW_REFERENCE_NODES and input_name.startswith("images.image_"):
             if isinstance(value, (list, tuple)):
                 inputs[input_name] = list(value)
             else:
@@ -155,11 +161,11 @@ def _patch_workflow(
         else:
             inputs[input_name] = value
 
-    # Unsupplied reference slots: clean their null placeholders from TextEncodeQwenImage21
+    # Unsupplied reference slots: clean their null placeholders from the conditioning node.
     for unsupplied_slot in [n for n in ("reference_image", "reference_image_b", "reference_image_c", "reference_image_d")
                             if n in patch_slots and n not in values]:
         slot_meta = patch_slots[unsupplied_slot]
-        if slot_meta.get("class_type") == "TextEncodeQwenImage21":
+        if slot_meta.get("class_type") in _AUTOGROW_REFERENCE_NODES:
             ref_node = patched.get(str(slot_meta.get("node_id")))
             if isinstance(ref_node, dict) and isinstance(ref_node.get("inputs"), dict):
                 ref_node["inputs"].pop(slot_meta.get("input"), None)
@@ -426,4 +432,60 @@ class ArtEngine:
         _validate_output_dimensions(actual_width=actual_width, actual_height=actual_height, requested_width=width, requested_height=height,
                                     dimension_policy=policy)
         return ArtImage(png=raw, width=actual_width, height=actual_height, prompt_id=prompt_id, workflow_id=ART_WORKFLOW_ID,
+                        workflow_sha256=workflow_sha256, model_files=list(metadata.get("model_files", [])), source_output=ref, seed=seed)
+
+    def edit(
+        self,
+        prompt: str,
+        reference_images: Sequence[Path | str | bytes],
+        *,
+        width: int = 2048,
+        height: int = 2048,
+        seed: int | None = None,
+        prefix: str = "panelflow_art",
+        timeout: float = 1800.0,
+        is_cancelled: Callable[[], bool] = _never,
+        progress: Callable[[float, str], None] | None = None,
+        client_id: str | None = None,
+    ) -> ArtImage:
+        """Edit a picture with a written instruction, through the approved MiniMax-H3-Image workflow.
+
+        One checkpoint does both jobs: the picture in `reference_images` is the one being edited
+        (the first one), and any others are references the instruction may refer to. The prompt is
+        what the picture should become; the model does the rest.
+        """
+        if not reference_images:
+            raise ComfyImageGenerationError("Editing needs at least one picture to edit")
+        workflow, workflow_sha256 = self.registry.load(EDIT_WORKFLOW_ID)
+        metadata = self.registry.metadata(EDIT_WORKFLOW_ID)
+        policy = metadata["dimension_policy"]
+        _validate_output_dimensions(actual_width=width, actual_height=height, requested_width=width, requested_height=height,
+                                    dimension_policy=policy)  # rejects a request the workflow cannot honour
+        if seed is None:
+            seed = random.randint(1, 2**31 - 1)
+        names = [self._resolve_reference(item) for item in reference_images]
+        patched = _patch_workflow(
+            workflow,
+            metadata["patch_slots"],
+            prompt,
+            None,  # the checkpoint is distilled: no negative prompt, no CFG
+            width,
+            height,
+            seed,
+            prefix,
+            reference_images=names,  # the first picture is the one being edited
+        )
+        if progress:
+            progress(0.05, f"Verified workflow {EDIT_WORKFLOW_ID}")
+        raw, prompt_id, ref = self.run(patched, timeout=timeout, is_cancelled=is_cancelled, progress=progress, client_id=client_id)
+        try:
+            with Image.open(io.BytesIO(raw)) as image:
+                image.verify()
+            with Image.open(io.BytesIO(raw)) as image:
+                actual_width, actual_height = image.size
+        except Exception as exc:
+            raise ComfyImageGenerationError("ComfyUI returned an invalid image artifact") from exc
+        _validate_output_dimensions(actual_width=actual_width, actual_height=actual_height, requested_width=width, requested_height=height,
+                                    dimension_policy=policy)
+        return ArtImage(png=raw, width=actual_width, height=actual_height, prompt_id=prompt_id, workflow_id=EDIT_WORKFLOW_ID,
                         workflow_sha256=workflow_sha256, model_files=list(metadata.get("model_files", [])), source_output=ref, seed=seed)

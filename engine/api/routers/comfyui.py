@@ -7,8 +7,11 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from engine.comfyui import ComfyUIClient, ComfyUIError, ComfyWorkflowRegistry, WorkflowRegistryError
-from engine.comfyui.art import ART_WORKFLOW_ID
-from engine.comfyui.service import H3_CLIP_JOB_TYPE, INPAINT_WORKFLOW_ID, generate_clip_operation, generate_image_operation, inpaint_image_operation
+from engine.comfyui.art import ART_WORKFLOW_ID, EDIT_WORKFLOW_ID
+from engine.comfyui.service import (
+    H3_CLIP_JOB_TYPE, INPAINT_WORKFLOW_ID, edit_image_operation, generate_clip_operation, generate_image_operation,
+    inpaint_image_operation,
+)
 from engine.database.models import AssetRecord, ProjectRecord
 from engine.database.session import get_db
 from engine.jobs.workflow import enqueue_project_operation
@@ -47,6 +50,14 @@ class ComfyInpaintRequest(BaseModel):
     negative_prompt: str | None = Field(default=None, max_length=12000)
     seed: int = Field(default=20261019, ge=0, le=2**63 - 1)
     timeout_s: float = Field(default=900.0, ge=30.0, le=3600.0)
+
+
+class ComfyEditRequest(BaseModel):
+    asset_id: str = Field(..., min_length=1, description="The picture to edit")
+    prompt: str = Field(..., min_length=3, max_length=12000, description="What the picture should become, in plain words")
+    reference_asset_ids: list[str] = Field(default_factory=list, max_length=3, description="Other project assets the instruction may refer to")
+    seed: int = Field(default=20261019, ge=0, le=2**63 - 1)
+    timeout_s: float = Field(default=1800.0, ge=30.0, le=3600.0)
 
 
 @router.get("/capabilities")
@@ -201,6 +212,68 @@ def submit_comfyui_clip_job(project_id: str, request: ComfyClipRequest, db: Sess
         job_input=request.model_dump(),
     )
     return {"job_id": job_id, "status": "QUEUED", "workflow_id": workflow_id}
+
+
+@project_router.post("/{project_id}/comfyui/edit")
+def submit_comfyui_edit_job(project_id: str, request: ComfyEditRequest, db: Session = Depends(get_db)):
+    """Queue one picture edited from a written instruction, with the MiniMax-H3-Image workflow."""
+    project = db.query(ProjectRecord).filter(ProjectRecord.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+    wanted = [request.asset_id, *request.reference_asset_ids]
+    found = {a.id for a in db.query(AssetRecord.id).filter(AssetRecord.project_id == project_id, AssetRecord.id.in_(wanted))}
+    missing = [i for i in wanted if i not in found]
+    if missing:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Assets not found in this project: {', '.join(missing)}")
+
+    try:
+        registry = ComfyWorkflowRegistry()
+        metadata = registry.metadata(EDIT_WORKFLOW_ID)
+        registry.load(EDIT_WORKFLOW_ID)
+        preflight = registry.preflight(EDIT_WORKFLOW_ID)
+        if not preflight["ready"]:
+            if not preflight.get("comfy_online", True):
+                try:
+                    from engine.system.setup import comfyui_manager
+                    if comfyui_manager.is_installed():
+                        res = comfyui_manager.ensure_running(timeout_s=15.0)
+                        if res.get("running"):
+                            preflight = registry.preflight(EDIT_WORKFLOW_ID)
+                except Exception:
+                    pass
+            if not preflight["ready"]:
+                if not preflight.get("comfy_online", True):
+                    raise WorkflowRegistryError("ComfyUI is offline or unreachable at 127.0.0.1:8188. Please start ComfyUI to edit images.")
+                raise WorkflowRegistryError(
+                    f"ComfyUI workflow preflight failed: missing nodes={preflight['missing_nodes']}, missing models={preflight['missing_models']}"
+                )
+    except (ComfyUIError, WorkflowRegistryError) as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    def operation(operation_db, progress, is_cancelled):
+        return edit_image_operation(
+            operation_db,
+            progress,
+            is_cancelled,
+            project_id=project_id,
+            base_asset_id=request.asset_id,
+            prompt=request.prompt,
+            reference_asset_ids=request.reference_asset_ids,
+            seed=request.seed,
+            timeout_s=request.timeout_s,
+        )
+
+    job_id = enqueue_project_operation(
+        project_id=project_id,
+        job_type="COMFYUI_IMAGE_GENERATION",
+        operation=operation,
+        priority=20,
+        requires_gpu=bool(metadata.get("requires_gpu", True)),
+        gpu_vram_mb=int(metadata.get("gpu_vram_mb", 0) or 0),
+        max_retries=1,
+        job_input=request.model_dump(),
+    )
+    return {"job_id": job_id, "status": "QUEUED", "workflow_id": EDIT_WORKFLOW_ID}
 
 
 @project_router.post("/{project_id}/comfyui/inpaint")
