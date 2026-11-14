@@ -1100,6 +1100,14 @@ def cancel_job(payload: dict[str, Any]) -> dict[str, Any]:
     return {"success": success}
 
 
+@router.post("/dependencies/launch_comfyui")
+def launch_comfyui() -> dict[str, Any]:
+    """Start ComfyUI (the image and video backend) if it is installed and not running. Waits up to 15 seconds."""
+    from engine.system.setup import comfyui_manager
+
+    return comfyui_manager.ensure_running(timeout_s=15.0)
+
+
 @router.post("/job/{job_id}/review")
 async def submit_job_review(job_id: str, payload: ReviewPayload) -> dict[str, Any]:
     data = payload.model_dump()

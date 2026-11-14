@@ -28,6 +28,8 @@ episodes and original stories into narrated YouTube videos. Everything runs on t
 - `.claude/skills/shorts-reels-production/SKILL.md` - vertical Shorts/Reels (20-32 s, 9:16): concept formula, `tools/reels/` pipeline (Qwen3-TTS, ACE-Step,
   MiniMax-H3-Image, FastH3, ffmpeg), thumbnails, upload copy, gotchas. Any agent making short-form content reads it first (the file is plain Markdown);
   H3 clip prompting lives in `.claude/skills/minimax-h3-video-production/`.
+- `docs/ONE_SERVER.md` - one engine (port 8765) serves PanelFlow and ChronoFlow (API + studio UI), and one MCP server (`scripts/run_mcp_server.py`, profiles `all`
+  / `creative` / `chronoflow`) drives both. The old standalone ChronoFlow server (7860) and its two extra MCP servers are gone; do not bring them back.
 - Code map: `engine/anime/review/` (anime), `engine/original/` (stories), `engine/youtube/` (OAuth + upload), `engine/comfyui/`
   (approved workflows, bundled in `engine/comfyui/workflows/`), `engine/api/routers/{anime_review,original,youtube}.py`,
   desktop screens `AnimeReviewScreen.tsx` and `OriginalStoriesScreen.tsx`. Long jobs run through the durable `JobManager`

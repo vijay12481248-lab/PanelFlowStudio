@@ -30,9 +30,6 @@ _DEFAULT_DESKTOP_ORIGINS = frozenset(
         "http://localhost:8765",
         "http://127.0.0.1:8765",
         "http://[::1]:8765",
-        "http://localhost:7860",
-        "http://127.0.0.1:7860",
-        "http://[::1]:7860",
         "null",
     }
 )

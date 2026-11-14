@@ -56,7 +56,7 @@ def test_storyboard_workbench_missing_workspace():
 
 def test_somatic_archetypes_dictionary():
     """Verify that all 6 Somatic Emotional Archetypes are defined with micro-anatomy, posture, and anti-stoic negatives."""
-    from engine.chronoflow.server import SOMATIC_ARCHETYPES
+    from engine.chronoflow.somatic import SOMATIC_ARCHETYPES
     expected_archetypes = [
         "visceral_pain",
         "lethal_wrath",

@@ -17,9 +17,7 @@ interface ChronoFlowScreenProps {
 export const ChronoFlowScreen: React.FC<ChronoFlowScreenProps> = ({ onBack, project, jobId, tab, story }) => {
   const [iframeKey, setIframeKey] = useState(0);
   const [iframeLoading, setIframeLoading] = useState(true);
-  const [selectedPort, setSelectedPort] = useState<"7860" | "8765">("7860");
   const [token, setToken] = useState<string>("");
-  const [detected7860, setDetected7860] = useState<boolean | null>(null);
   const [loadTimedOut, setLoadTimedOut] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
@@ -54,45 +52,10 @@ export const ChronoFlowScreen: React.FC<ChronoFlowScreenProps> = ({ onBack, proj
     fetchToken();
   }, []);
 
-  // Probe standalone server on 7860 vs integrated on 8765
-  useEffect(() => {
-    let cancelled = false;
-    const probe = async () => {
-      try {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 1200);
-        const res = await fetch("http://127.0.0.1:7860/api/status", {
-          signal: controller.signal,
-        });
-        clearTimeout(timeout);
-        if (!cancelled) {
-          if (res.ok) {
-            setDetected7860(true);
-            setSelectedPort("7860");
-          } else {
-            setDetected7860(false);
-            setSelectedPort("8765");
-          }
-        }
-      } catch {
-        if (!cancelled) {
-          setDetected7860(false);
-          setSelectedPort("8765");
-        }
-      }
-    };
-    probe();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
   // Compute studio URL passing embedded=1 and project name for the unified single bar
   const extraParams = `${tab ? `&tab=${encodeURIComponent(tab)}` : ""}${story ? `&story=${encodeURIComponent(story)}` : ""}`;
-  const studioUrl =
-    selectedPort === "7860"
-      ? `http://127.0.0.1:7860/?embedded=1${project?.title ? `&project=${encodeURIComponent(project.title)}` : ""}${jobId ? `&job=${encodeURIComponent(jobId)}` : ""}${extraParams}`
-      : `http://127.0.0.1:8765/chronoflow/ui?embedded=1${token ? `&token=${encodeURIComponent(token)}` : ""}${project?.title ? `&project=${encodeURIComponent(project.title)}` : ""}${jobId ? `&job=${encodeURIComponent(jobId)}` : ""}${extraParams}`;
+  // ChronoFlow is part of the PanelFlow engine: one server on port 8765 serves the studio UI and its API.
+  const studioUrl = `http://127.0.0.1:8765/chronoflow/ui?embedded=1${token ? `&token=${encodeURIComponent(token)}` : ""}${project?.title ? `&project=${encodeURIComponent(project.title)}` : ""}${jobId ? `&job=${encodeURIComponent(jobId)}` : ""}${extraParams}`;
 
   // Loading timeout fallback
   useEffect(() => {
@@ -144,7 +107,7 @@ export const ChronoFlowScreen: React.FC<ChronoFlowScreenProps> = ({ onBack, proj
                   <span>Studio Server Not Responding Fast Enough</span>
                 </div>
                 <p className="text-[11px] text-fg-dim leading-relaxed">
-                  Make sure <code className="text-info">engine/chronoflow/run_studio.py</code> is running (Port 7860) or the PanelFlow Engine is active on port 8765.
+                  Make sure the PanelFlow Engine is running (port 8765). ChronoFlow is part of the engine, there is no separate server to start.
                 </p>
                 <div className="flex justify-center gap-2 pt-1">
                   <button
@@ -157,16 +120,13 @@ export const ChronoFlowScreen: React.FC<ChronoFlowScreenProps> = ({ onBack, proj
                     onClick={handleOpenBrowser}
                     className="px-3 py-1.5 rounded-lg bg-accent hover:bg-accent text-white text-xs font-semibold"
                   >
-                    Open Standalone
+                    Open in browser
                   </button>
                   <button
-                    onClick={() => {
-                      setSelectedPort(selectedPort === "7860" ? "8765" : "7860");
-                      setIframeLoading(true);
-                    }}
+                    onClick={handleRefresh}
                     className="px-3 py-1.5 rounded-lg bg-flat hover:bg-glass-hi text-fg text-xs font-semibold border border-edge"
                   >
-                    Try Port {selectedPort === "7860" ? "8765" : "7860"}
+                    Try again
                   </button>
                 </div>
               </div>
