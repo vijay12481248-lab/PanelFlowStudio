@@ -528,28 +528,28 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
   };
 
   return (
-    <div aria-label="Contextual inspector" className={`pf-inspector h-full flex flex-col text-zinc-100 select-none overflow-hidden ${expanded ? "fixed inset-6 z-40 rounded-xl border border-violet-500/50 shadow-2xl" : ""}`}>
+    <div aria-label="Contextual inspector" className={`pf-inspector h-full flex flex-col text-fg select-none overflow-hidden ${expanded ? "fixed inset-6 z-40 rounded-xl border border-accent/50 shadow-2xl" : ""}`}>
       {/* Top Header: Inspector Title and Window Controls */}
-      <div className="p-3 border-b border-zinc-800 bg-zinc-950/70 flex items-center justify-between shrink-0">
-        <h3 className="text-xs font-bold text-zinc-100 uppercase tracking-wider flex items-center gap-1.5">
+      <div className="p-3 border-b border-edge bg-ink/70 flex items-center justify-between shrink-0">
+        <h3 className="text-xs font-bold text-fg uppercase tracking-wider flex items-center gap-1.5">
           {selectedNarration ? (
             <>
-              <Icons.MessageSquare className="w-3.5 h-3.5 text-emerald-400" />
+              <Icons.MessageSquare className="w-3.5 h-3.5 text-ok" />
               Narration Inspector
             </>
           ) : selectedBgm ? (
             <>
-              <Icons.Music className="w-3.5 h-3.5 text-amber-400" />
+              <Icons.Music className="w-3.5 h-3.5 text-warn" />
               Music Inspector
             </>
           ) : selectedSfx ? (
             <>
-              <Icons.Volume className="w-3.5 h-3.5 text-cyan-400" />
+              <Icons.Volume className="w-3.5 h-3.5 text-info" />
               SFX Inspector
             </>
           ) : (
             <>
-              <Icons.Sliders className="w-3.5 h-3.5 text-indigo-400" />
+              <Icons.Sliders className="w-3.5 h-3.5 text-info" />
               Inspector
             </>
           )}
@@ -559,7 +559,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
             <button
               type="button"
               onClick={() => onOpenNarrationStudio(selectedNarration.id)}
-              className="px-2 py-0.5 rounded bg-emerald-950/80 border border-emerald-700/80 text-[10px] font-semibold text-emerald-300 hover:bg-emerald-900 hover:text-white transition-colors mr-1"
+              className="px-2 py-0.5 rounded bg-ok/80 border border-ok/80 text-[10px] font-semibold text-ok hover:bg-ok/20 hover:text-white transition-colors mr-1"
               title="Open full Narration Studio workspace"
             >
               Open Studio
@@ -569,7 +569,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
             <button
               type="button"
               onClick={() => onOpenAudioLibrary(selectedBgm ? "music" : "sfx")}
-              className="px-2 py-0.5 rounded bg-amber-950/80 border border-amber-700/80 text-[10px] font-semibold text-amber-300 hover:bg-amber-900 hover:text-white transition-colors mr-1"
+              className="px-2 py-0.5 rounded bg-warn/80 border border-warn/80 text-[10px] font-semibold text-warn hover:bg-warn/20 hover:text-white transition-colors mr-1"
               title="Open Audio Library"
             >
               Audio Library
@@ -577,7 +577,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
           )}
           <button
             type="button"
-            className="p-1 text-zinc-400 hover:text-white rounded"
+            className="p-1 text-fg-dim hover:text-white rounded"
             title={expanded ? "Restore Inspector" : "Maximize Panel"}
             aria-label={expanded ? "Restore inspector" : "Expand inspector"}
             aria-expanded={expanded}
@@ -589,7 +589,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="p-1 text-zinc-400 hover:text-white rounded"
+              className="p-1 text-fg-dim hover:text-white rounded"
               title="Close Inspector"
             >
               <Icons.Minimize className="w-3.5 h-3.5" />
@@ -600,7 +600,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
 
       {/* Tab Navigation: Image | Motion | Effects | Timing (only for layers/scenes) */}
       {!selectedNarration && !selectedBgm && !selectedSfx && (
-        <div className="flex flex-wrap items-center border-b border-zinc-800 bg-zinc-950/40 px-2 pt-1 gap-1 shrink-0">
+        <div className="flex flex-wrap items-center border-b border-edge bg-ink/40 px-2 pt-1 gap-1 shrink-0">
           {((((selectedScene as any)?.type === "motion_graphic" || (selectedScene as any)?.motion_preset_id) ? ["motion_graphic", "timing"] : ["image", "background", "motion", "effects", "timing"]) as InspectorTab[]).map((tab) => {
             const isActive = activeTab === tab;
             return (
@@ -611,8 +611,8 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                 aria-pressed={isActive}
                 className={`px-3 py-1.5 text-xs font-medium capitalize rounded-t-lg transition-colors border-b-2 ${
                   isActive
-                    ? "border-indigo-500 text-indigo-400 bg-zinc-900/80 font-bold"
-                    : "border-transparent text-zinc-400 hover:text-zinc-200"
+                    ? "border-accent text-info bg-navy/80 font-bold"
+                    : "border-transparent text-fg-dim hover:text-fg"
                 }`}
               >
                 {tab}
@@ -624,8 +624,8 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
 
       {/* Selected Item Summary Card (only for layers) */}
       {!selectedNarration && selectedLayer && (
-        <div className="p-3 bg-zinc-950/60 border-b border-zinc-800/80 flex items-center gap-3 shrink-0">
-          <div className="w-12 h-12 rounded-lg bg-zinc-900 border border-zinc-700/80 overflow-hidden shrink-0 shadow-md">
+        <div className="p-3 bg-ink/60 border-b border-edge/80 flex items-center gap-3 shrink-0">
+          <div className="w-12 h-12 rounded-lg bg-navy border border-edge/80 overflow-hidden shrink-0 shadow-md">
             <img
               src={getLayerImageUrl(selectedLayer)}
               alt="Layer thumb"
@@ -633,10 +633,10 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
             />
           </div>
           <div className="flex-1 min-w-0">
-            <span className="text-xs font-bold text-zinc-100 block truncate">
+            <span className="text-xs font-bold text-fg block truncate">
               {selectedLayer.name || `Panel 1`}
             </span>
-            <span className="text-[10px] text-zinc-400 font-mono block">
+            <span className="text-[10px] text-fg-dim font-mono block">
               From Page {selectedLayer.page_sequence}
             </span>
           </div>
@@ -651,7 +651,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                   onDeleteLayer(selectedLayer.id, selectedScene.id);
                 }
               }}
-              className="text-rose-400 hover:text-rose-300 hover:bg-rose-500/20 p-1.5 h-7"
+              className="text-bad hover:text-bad hover:bg-bad/20 p-1.5 h-7"
               title="Delete panel from timeline (Del)"
               aria-label="Delete panel from timeline"
             >
@@ -667,20 +667,20 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
         {selectedNarration ? (
           <div className="space-y-4">
             {/* 1. Speaker Profile & Review Status Card */}
-            <div className="p-3 bg-zinc-950/70 border border-zinc-800 rounded-xl space-y-2.5 shadow-sm">
+            <div className="p-3 bg-ink/70 border border-edge rounded-xl space-y-2.5 shadow-sm">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-full bg-emerald-950 border border-emerald-600/60 flex items-center justify-center font-bold text-xs text-emerald-300">
+                  <div className="w-8 h-8 rounded-full bg-ok/20 border border-ok/60 flex items-center justify-center font-bold text-xs text-ok">
                     {(selectedNarration.speaker || "N").slice(0, 2).toUpperCase()}
                   </div>
                   <div>
-                    <div className="text-xs font-bold text-zinc-100 flex items-center gap-1.5">
+                    <div className="text-xs font-bold text-fg flex items-center gap-1.5">
                       {selectedNarration.speaker || "The Narrator"}
-                      <span className="text-[9px] px-1 py-0.5 rounded bg-zinc-800 text-zinc-400 font-mono">
+                      <span className="text-[9px] px-1 py-0.5 rounded bg-flat text-fg-dim font-mono">
                         {selectedNarration.speaker_type || "NARRATOR"}
                       </span>
                     </div>
-                    <div className="text-[10px] text-zinc-400 font-mono">
+                    <div className="text-[10px] text-fg-dim font-mono">
                       ID: {selectedNarration.id}
                     </div>
                   </div>
@@ -690,7 +690,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                   <button
                     type="button"
                     onClick={() => onOpenNarrationStudio(selectedNarration.id)}
-                    className="px-2 py-1 bg-emerald-950/90 hover:bg-emerald-900 text-emerald-300 hover:text-white border border-emerald-700/80 rounded-lg text-[10px] font-semibold flex items-center gap-1 transition-colors shadow-sm"
+                    className="px-2 py-1 bg-ok/90 hover:bg-ok/20 text-ok hover:text-white border border-ok/80 rounded-lg text-[10px] font-semibold flex items-center gap-1 transition-colors shadow-sm"
                     title="Open in full Narration Studio workspace"
                   >
                     <Icons.ExternalLink className="w-3 h-3" />
@@ -700,9 +700,9 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
               </div>
 
               {/* Review Status & Audio Status Row */}
-              <div className="flex items-center justify-between pt-1 border-t border-zinc-800/60 gap-2">
+              <div className="flex items-center justify-between pt-1 border-t border-edge/60 gap-2">
                 <div className="flex items-center gap-1">
-                  <span className="text-[10px] text-zinc-400">Review:</span>
+                  <span className="text-[10px] text-fg-dim">Review:</span>
                   <select
                     value={selectedNarration.review_status || "DRAFT"}
                     onChange={(e) => {
@@ -720,12 +720,12 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                         } : prev.narration_chapter,
                       }));
                     }}
-                    className={`text-[10px] font-bold rounded px-1.5 py-0.5 border bg-zinc-900 focus:outline-none ${
+                    className={`text-[10px] font-bold rounded px-1.5 py-0.5 border bg-navy focus:outline-none ${
                       selectedNarration.review_status === "APPROVED"
-                        ? "text-emerald-300 border-emerald-700"
+                        ? "text-ok border-ok"
                         : selectedNarration.review_status === "NEEDS_REVIEW"
-                        ? "text-amber-300 border-amber-700"
-                        : "text-zinc-400 border-zinc-700"
+                        ? "text-warn border-warn"
+                        : "text-fg-dim border-edge"
                     }`}
                   >
                     <option value="APPROVED">Approved</option>
@@ -736,24 +736,24 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
 
                 {/* Audio Status Badge */}
                 <div className="flex items-center gap-1">
-                  <span className="text-[10px] text-zinc-400">Audio:</span>
+                  <span className="text-[10px] text-fg-dim">Audio:</span>
                   {selectedNarration.status === "OUTDATED" ? (
-                    <span className="px-1.5 py-0.5 rounded bg-amber-950/80 text-amber-300 text-[10px] font-bold border border-amber-500 flex items-center gap-1 animate-pulse">
-                      <Icons.AlertTriangle className="w-3 h-3 text-amber-400" />
+                    <span className="px-1.5 py-0.5 rounded bg-warn/80 text-warn text-[10px] font-bold border border-warn flex items-center gap-1 animate-pulse">
+                      <Icons.AlertTriangle className="w-3 h-3 text-warn" />
                       <span>Take Outdated</span>
                     </span>
                   ) : selectedNarration.status === "READY" ? (
-                    <span className="px-1.5 py-0.5 rounded bg-emerald-950/80 text-emerald-300 text-[10px] font-bold border border-emerald-700 flex items-center gap-1.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]" />
+                    <span className="px-1.5 py-0.5 rounded bg-ok/80 text-ok text-[10px] font-bold border border-ok flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-ok shadow-[0_0_6px_rgba(70,214,163,0.8)]" />
                       <span>Ready</span>
                     </span>
                   ) : selectedNarration.status === "PROCESSING" ? (
-                    <span className="px-1.5 py-0.5 rounded bg-blue-950/80 text-blue-300 text-[10px] font-bold border border-blue-700 flex items-center gap-1.5">
-                      <Icons.Rotate className="w-3 h-3 animate-spin text-blue-400" />
+                    <span className="px-1.5 py-0.5 rounded bg-accent/80 text-info text-[10px] font-bold border border-accent flex items-center gap-1.5">
+                      <Icons.Rotate className="w-3 h-3 animate-spin text-info" />
                       <span>Processing</span>
                     </span>
                   ) : (
-                    <span className="px-1.5 py-0.5 rounded bg-purple-950/80 text-purple-300 text-[10px] font-bold border border-purple-700 flex items-center gap-1">
+                    <span className="px-1.5 py-0.5 rounded bg-accent/80 text-info text-[10px] font-bold border border-accent flex items-center gap-1">
                       Queued
                     </span>
                   )}
@@ -765,11 +765,11 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
             {/* 2. Script Editor & Audio Regeneration Policy */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-zinc-300 flex items-center gap-1.5">
-                  <Icons.FileText className="w-3.5 h-3.5 text-indigo-400" />
+                <label className="text-xs font-bold text-fg-dim flex items-center gap-1.5">
+                  <Icons.FileText className="w-3.5 h-3.5 text-info" />
                   Narration Script
                 </label>
-                <div className="text-[10px] font-mono text-zinc-400">
+                <div className="text-[10px] font-mono text-fg-dim">
                   Rev #{selectedNarration.text_revision || 1} • {estimateReadingDuration(selectedNarration.text, selectedNarration.speed)}s est
                 </div>
               </div>
@@ -792,18 +792,18 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                     narration_chapter: updatedChapter || prev.narration_chapter,
                   }));
                 }}
-                className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-xs text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-indigo-500 font-sans leading-relaxed resize-none"
+                className="w-full bg-ink border border-edge rounded-lg p-2.5 text-xs text-fg placeholder-fg-faint focus:outline-none focus:border-accent font-sans leading-relaxed resize-none"
                 placeholder="Enter narration script text..."
               />
 
               {/* Outdated Notice Banner */}
               {selectedNarration.status === "OUTDATED" && (
-                <div className="p-2.5 bg-amber-950/40 border border-amber-600/60 rounded-lg text-amber-200 text-xs flex flex-col gap-1.5">
-                  <div className="flex items-center gap-1.5 font-bold text-[11px] text-amber-300">
+                <div className="p-2.5 bg-warn/40 border border-warn/60 rounded-lg text-warn text-xs flex flex-col gap-1.5">
+                  <div className="flex items-center gap-1.5 font-bold text-[11px] text-warn">
                     <Icons.AlertTriangle className="w-3.5 h-3.5 shrink-0" />
                     Audio Take Outdated
                   </div>
-                  <p className="text-[10px] text-amber-200/90 leading-tight">
+                  <p className="text-[10px] text-warn/90 leading-tight">
                     Script text was modified after audio synthesis. The previous take has been preserved below for review.
                   </p>
                 </div>
@@ -811,16 +811,16 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
             </div>
 
             {/* 3. Audio Take Lifecycle & Player */}
-            <div className="p-3 bg-zinc-950/60 border border-zinc-800 rounded-xl space-y-2.5">
-              <h4 className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider flex items-center justify-between">
+            <div className="p-3 bg-ink/60 border border-edge rounded-xl space-y-2.5">
+              <h4 className="text-[11px] font-bold text-fg-dim uppercase tracking-wider flex items-center justify-between">
                 <span>Audio Takes</span>
-                <span className="text-[10px] text-zinc-500 font-mono">
+                <span className="text-[10px] text-fg-faint font-mono">
                   {selectedNarration.duration_sec}s
                 </span>
               </h4>
 
               {/* Current Active Take */}
-              <div className="p-2 bg-zinc-900/80 border border-zinc-800 rounded-lg flex items-center justify-between gap-2">
+              <div className="p-2 bg-navy/80 border border-edge rounded-lg flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2 min-w-0">
                   <button
                     type="button"
@@ -828,20 +828,20 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                     disabled={!selectedNarration.audio_url}
                     className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 transition-colors ${
                       !selectedNarration.audio_url
-                        ? "bg-zinc-800 text-zinc-600 cursor-not-allowed"
+                        ? "bg-flat text-fg-faint cursor-not-allowed"
                         : playingTake === "current"
-                        ? "bg-emerald-600 text-white animate-pulse"
-                        : "bg-emerald-950 text-emerald-300 hover:bg-emerald-900 border border-emerald-700/80"
+                        ? "bg-ok text-white animate-pulse"
+                        : "bg-ok/20 text-ok hover:bg-ok/20 border border-ok/80"
                     }`}
                     title={!selectedNarration.audio_url ? "No audio synthesized yet" : playingTake === "current" ? "Pause" : "Play Current Take"}
                   >
                     {playingTake === "current" ? <Icons.Pause className="w-3.5 h-3.5" /> : <Icons.Play className="w-3.5 h-3.5 ml-0.5" />}
                   </button>
                   <div className="min-w-0">
-                    <div className="text-[11px] font-medium text-zinc-200 truncate">
+                    <div className="text-[11px] font-medium text-fg truncate">
                       {selectedNarration.status === "OUTDATED" ? "Prior Take (Active)" : selectedNarration.audio_url ? "Active Take" : "No Audio Take"}
                     </div>
-                    <div className="text-[9px] text-zinc-400 font-mono truncate">
+                    <div className="text-[9px] text-fg-dim font-mono truncate">
                       {selectedNarration.duration_sec}s • {selectedNarration.speed || 1.0}x
                     </div>
                   </div>
@@ -853,7 +853,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                   size="sm"
                   onClick={() => handleRegenerateNarrationTake(selectedNarration.id)}
                   disabled={isGeneratingTake}
-                  className="h-7 text-[10px] px-2 bg-zinc-800 border-zinc-700 hover:bg-zinc-700 text-zinc-200 font-medium shrink-0"
+                  className="h-7 text-[10px] px-2 bg-flat border-edge hover:bg-glass-hi text-fg font-medium shrink-0"
                 >
                   {isGeneratingTake ? "Synthesizing..." : "Regenerate Take"}
                 </Button>
@@ -861,28 +861,28 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
 
               {/* Preserved Previous Take (when outdated or revision > 1) */}
               {selectedNarration.previous_audio_asset_uri && (
-                <div className="p-2 bg-zinc-900/40 border border-zinc-800/60 rounded-lg flex items-center justify-between gap-2">
+                <div className="p-2 bg-navy/40 border border-edge/60 rounded-lg flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2 min-w-0">
                     <button
                       type="button"
                       onClick={() => handlePlayTake(selectedNarration.previous_audio_asset_uri, "previous")}
                       className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 transition-colors ${
                         playingTake === "previous"
-                          ? "bg-amber-600 text-white animate-pulse"
-                          : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700 border border-zinc-700"
+                          ? "bg-warn text-white animate-pulse"
+                          : "bg-flat text-fg-dim hover:bg-glass-hi border border-edge"
                       }`}
                       title="Play Preserved Previous Take"
                     >
                       {playingTake === "previous" ? <Icons.Pause className="w-3 h-3" /> : <Icons.Play className="w-3 h-3 ml-0.5" />}
                     </button>
                     <div className="min-w-0">
-                      <div className="text-[10px] font-medium text-zinc-300 truncate">
+                      <div className="text-[10px] font-medium text-fg-dim truncate">
                         Preserved Take (Rev #{Math.max(1, (selectedNarration.text_revision || 2) - 1)})
                       </div>
-                      <div className="text-[8px] text-zinc-500 font-mono">Reference Take</div>
+                      <div className="text-[8px] text-fg-faint font-mono">Reference Take</div>
                     </div>
                   </div>
-                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 border border-zinc-700">
+                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-flat text-fg-dim border border-edge">
                     Previous
                   </span>
                 </div>
@@ -890,15 +890,15 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
             </div>
 
             {/* 4. Voice & Delivery Tuning */}
-            <div className="space-y-3 p-3 bg-zinc-950/60 border border-zinc-800 rounded-xl">
-              <h4 className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
-                <Icons.Mic className="w-3.5 h-3.5 text-indigo-400" />
+            <div className="space-y-3 p-3 bg-ink/60 border border-edge rounded-xl">
+              <h4 className="text-[11px] font-bold text-fg-dim uppercase tracking-wider flex items-center gap-1.5">
+                <Icons.Mic className="w-3.5 h-3.5 text-info" />
                 Delivery & Emotion
               </h4>
 
               {/* Emotion Selector */}
               <div className="space-y-1">
-                <label className="text-[11px] text-zinc-400 block">Performance Emotion</label>
+                <label className="text-[11px] text-fg-dim block">Performance Emotion</label>
                 <select
                   value={selectedNarration.emotion || "Neutral"}
                   onChange={(e) => {
@@ -910,7 +910,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                       ),
                     }));
                   }}
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1.5 text-xs text-zinc-100 font-medium focus:outline-none focus:border-indigo-500"
+                  className="w-full bg-navy border border-edge rounded px-2.5 py-1.5 text-xs text-fg font-medium focus:outline-none focus:border-accent"
                 >
                   {[
                     "Neutral",
@@ -935,8 +935,8 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
               {/* Speech Speed Slider */}
               <div className="space-y-1">
                 <div className="flex items-center justify-between text-[11px]">
-                  <span className="text-zinc-400">Speech Pace</span>
-                  <span className="text-zinc-200 font-mono">{selectedNarration.speed || 1.0}x</span>
+                  <span className="text-fg-dim">Speech Pace</span>
+                  <span className="text-fg font-mono">{selectedNarration.speed || 1.0}x</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <input
@@ -955,7 +955,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                         ),
                       }));
                     }}
-                    className="flex-1 accent-indigo-500 h-1 bg-zinc-800 rounded cursor-pointer"
+                    className="flex-1 accent-accent h-1 bg-flat rounded cursor-pointer"
                   />
                   <button
                     type="button"
@@ -968,7 +968,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                         ),
                       }));
                     }}
-                    className="text-[9px] px-1 py-0.5 rounded bg-zinc-800 text-zinc-400 hover:text-white"
+                    className="text-[9px] px-1 py-0.5 rounded bg-flat text-fg-dim hover:text-white"
                   >
                     Reset
                   </button>
@@ -978,8 +978,8 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
               {/* Delivery Intensity */}
               <div className="space-y-1">
                 <div className="flex items-center justify-between text-[11px]">
-                  <span className="text-zinc-400">Emotional Intensity</span>
-                  <span className="text-zinc-200 font-mono">
+                  <span className="text-fg-dim">Emotional Intensity</span>
+                  <span className="text-fg font-mono">
                     {Math.round((selectedNarration.delivery_intensity ?? 0.6) * 100)}%
                   </span>
                 </div>
@@ -998,22 +998,22 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                       ),
                     }));
                   }}
-                  className="w-full accent-indigo-500 h-1 bg-zinc-800 rounded cursor-pointer"
+                  className="w-full accent-accent h-1 bg-flat rounded cursor-pointer"
                 />
               </div>
             </div>
 
             {/* 5. Smart Scene Binding Section */}
-            <div className="space-y-3 p-3 bg-zinc-950/60 border border-zinc-800 rounded-xl">
-              <h4 className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider flex items-center justify-between">
+            <div className="space-y-3 p-3 bg-ink/60 border border-edge rounded-xl">
+              <h4 className="text-[11px] font-bold text-fg-dim uppercase tracking-wider flex items-center justify-between">
                 <span className="flex items-center gap-1.5">
-                  <Icons.Layers className="w-3.5 h-3.5 text-emerald-400" />
+                  <Icons.Layers className="w-3.5 h-3.5 text-ok" />
                   Smart Scene Binding
                 </span>
                 <span className={`text-[9px] px-1.5 py-0.5 rounded font-mono ${
                   selectedNarration.linked_to_scene !== false
-                    ? "bg-emerald-950 text-emerald-300 border border-emerald-800"
-                    : "bg-zinc-800 text-zinc-400"
+                    ? "bg-ok/20 text-ok border border-ok/40"
+                    : "bg-flat text-fg-dim"
                 }`}>
                   {selectedNarration.linked_to_scene !== false ? "LINKED" : "UNLINKED"}
                 </span>
@@ -1026,11 +1026,11 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                     const parentScene = state.scenes.find((s) => s.id === selectedNarration.scene_id);
                     return (
                       <>
-                        <div className="p-2 bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-300">
-                          <div className="font-medium text-zinc-200 truncate">
+                        <div className="p-2 bg-navy border border-edge rounded-lg text-fg-dim">
+                          <div className="font-medium text-fg truncate">
                             {parentScene?.title || `Scene ID: ${selectedNarration.scene_id || "Unassigned"}`}
                           </div>
-                          <div className="text-[10px] text-zinc-500 font-mono mt-0.5">
+                          <div className="text-[10px] text-fg-faint font-mono mt-0.5">
                             Scene start: {parentScene?.start_time_sec ?? 0}s • Offset: +{selectedNarration.scene_offset_sec ?? 0}s
                           </div>
                         </div>
@@ -1041,12 +1041,12 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                           const overflowSec = Math.round((neededSec - parentScene.duration_sec) * 10) / 10;
                           if (overflowSec <= 0) return null;
                           return (
-                            <div className="p-2 rounded bg-amber-950/40 border border-amber-800/80 text-amber-300 text-xs space-y-1.5">
+                            <div className="p-2 rounded bg-warn/40 border border-warn/80 text-warn text-xs space-y-1.5">
                               <div className="flex items-center justify-between font-bold text-[11px]">
                                 <span>Speech Exceeds Scene</span>
                                 <span className="font-mono text-[10px]">+{overflowSec}s</span>
                               </div>
-                              <p className="text-[10px] text-amber-200/80 leading-normal">
+                              <p className="text-[10px] text-warn/80 leading-normal">
                                 Narration ({selectedNarration.duration_sec}s) extends beyond scene duration ({parentScene.duration_sec}s).
                               </p>
                               <button
@@ -1072,7 +1072,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                                     };
                                   });
                                 }}
-                                className="w-full py-1 bg-amber-600 hover:bg-amber-500 text-white rounded text-[10px] font-bold transition-colors"
+                                className="w-full py-1 bg-warn hover:bg-warn text-white rounded text-[10px] font-bold transition-colors"
                               >
                                 Extend Scene to {Math.round((neededSec + 0.5) * 10) / 10}s
                               </button>
@@ -1094,7 +1094,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                                 ),
                               }));
                             }}
-                            className="px-2 py-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded text-[10px] font-semibold text-zinc-200 transition-colors"
+                            className="px-2 py-1 bg-navy hover:bg-flat border border-edge rounded text-[10px] font-semibold text-fg transition-colors"
                           >
                             Snap to Start (0s)
                           </button>
@@ -1110,7 +1110,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                                 ),
                               }));
                             }}
-                            className="px-2 py-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded text-[10px] font-semibold text-zinc-200 transition-colors"
+                            className="px-2 py-1 bg-navy hover:bg-flat border border-edge rounded text-[10px] font-semibold text-fg transition-colors"
                           >
                             Preserve Offset
                           </button>
@@ -1127,7 +1127,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                               ),
                             }));
                           }}
-                          className="w-full mt-1 px-2 py-1 bg-zinc-900 hover:bg-rose-950/40 hover:text-rose-300 border border-zinc-800 hover:border-rose-800/60 rounded text-[10px] font-medium text-zinc-400 transition-colors"
+                          className="w-full mt-1 px-2 py-1 bg-navy hover:bg-bad/40 hover:text-bad border border-edge hover:border-bad/60 rounded text-[10px] font-medium text-fg-dim transition-colors"
                         >
                           Unlink from Scene (Keep absolute time)
                         </button>
@@ -1138,12 +1138,12 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
               ) : (
                 /* Unlinked Independent Mode */
                 <div className="space-y-2 text-xs">
-                  <p className="text-[10px] text-zinc-400">
+                  <p className="text-[10px] text-fg-dim">
                     This narration clip operates independently on absolute timeline coordinates ({selectedNarration.start_time_sec}s). It will not shift when scenes ripple.
                   </p>
 
                   <div className="pt-1 space-y-1.5">
-                    <label className="text-[10px] text-zinc-400 block font-medium">Relink to a Scene:</label>
+                    <label className="text-[10px] text-fg-dim block font-medium">Relink to a Scene:</label>
                     <select
                       defaultValue=""
                       onChange={(e) => {
@@ -1159,7 +1159,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                           ),
                         }));
                       }}
-                      className="w-full bg-zinc-900 border border-zinc-800 rounded px-2 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500"
+                      className="w-full bg-navy border border-edge rounded px-2 py-1.5 text-xs text-fg focus:outline-none focus:border-accent"
                     >
                       <option value="" disabled>Select scene to link...</option>
                       {state.scenes.map((sc) => (
@@ -1176,17 +1176,17 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
         ) : selectedBgm ? (
           <div className="space-y-4">
             {/* 1. Track Info & Availability */}
-            <div className="p-3 bg-zinc-950/70 border border-zinc-800 rounded-xl space-y-2.5 shadow-sm">
+            <div className="p-3 bg-ink/70 border border-edge rounded-xl space-y-2.5 shadow-sm">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-full bg-indigo-950 border border-indigo-600/60 flex items-center justify-center font-bold text-xs text-indigo-300">
+                  <div className="w-8 h-8 rounded-full bg-accent/20 border border-accent/60 flex items-center justify-center font-bold text-xs text-info">
                     <Icons.Music className="w-4 h-4" />
                   </div>
                   <div className="min-w-0">
-                    <div className="text-xs font-bold text-zinc-100 flex items-center gap-1.5 truncate">
+                    <div className="text-xs font-bold text-fg flex items-center gap-1.5 truncate">
                       <span className="truncate">{selectedBgm.title || "Background Music"}</span>
                     </div>
-                    <div className="text-[10px] text-zinc-400 font-mono">
+                    <div className="text-[10px] text-fg-dim font-mono">
                       ID: {selectedBgm.id}
                     </div>
                   </div>
@@ -1196,7 +1196,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                   <button
                     type="button"
                     onClick={() => onOpenAudioLibrary("music")}
-                    className="px-2 py-1 bg-indigo-950/90 hover:bg-indigo-900 text-indigo-300 hover:text-white border border-indigo-700/80 rounded-lg text-[10px] font-semibold flex items-center gap-1 transition-colors shadow-sm"
+                    className="px-2 py-1 bg-accent/90 hover:bg-accent/20 text-info hover:text-white border border-accent/80 rounded-lg text-[10px] font-semibold flex items-center gap-1 transition-colors shadow-sm"
                     title="Browse BGM in Audio Library"
                   >
                     <Icons.ExternalLink className="w-3 h-3" />
@@ -1206,18 +1206,18 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
               </div>
 
               {/* Badges Row */}
-              <div className="flex items-center justify-between pt-1 border-t border-zinc-800/60 gap-2">
+              <div className="flex items-center justify-between pt-1 border-t border-edge/60 gap-2">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300 font-medium">
+                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-flat text-fg-dim font-medium">
                     {selectedBgm.category || "Background Music"}
                   </span>
                   {selectedBgm.bpm && (
-                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 font-mono">
+                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-flat text-fg-dim font-mono">
                       {selectedBgm.bpm} BPM
                     </span>
                   )}
                   {selectedBgm.key && (
-                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 font-mono">
+                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-flat text-fg-dim font-mono">
                       {selectedBgm.key}
                     </span>
                   )}
@@ -1225,11 +1225,11 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
 
                 <div className="flex items-center gap-1">
                   {selectedBgm.availability === "UNAVAILABLE" ? (
-                    <span className="px-1.5 py-0.5 rounded bg-rose-950/80 text-rose-300 text-[10px] font-bold border border-rose-700 flex items-center gap-1">
+                    <span className="px-1.5 py-0.5 rounded bg-bad/80 text-bad text-[10px] font-bold border border-bad flex items-center gap-1">
                       Missing Audio
                     </span>
                   ) : (
-                    <span className="px-1.5 py-0.5 rounded bg-emerald-950/80 text-emerald-300 text-[10px] font-bold border border-emerald-700 flex items-center gap-1">
+                    <span className="px-1.5 py-0.5 rounded bg-ok/80 text-ok text-[10px] font-bold border border-ok flex items-center gap-1">
                       Ready
                     </span>
                   )}
@@ -1237,25 +1237,25 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
               </div>
 
               {/* Audio Playback Preview */}
-              <div className="p-2 bg-zinc-900/60 border border-zinc-800/80 rounded-lg flex items-center justify-between gap-2">
+              <div className="p-2 bg-navy/60 border border-edge/80 rounded-lg flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2 min-w-0">
                   <button
                     type="button"
                     onClick={() => handlePlayTake(selectedBgm.file_url || "/assets/demo/crystal_resonance_bgm.mp3", selectedBgm.id)}
                     className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 transition-colors ${
                       playingTake === selectedBgm.id
-                        ? "bg-indigo-600 text-white animate-pulse"
-                        : "bg-indigo-950 text-indigo-300 hover:bg-indigo-900 border border-indigo-700/80"
+                        ? "bg-accent text-white animate-pulse"
+                        : "bg-accent/20 text-info hover:bg-accent/20 border border-accent/80"
                     }`}
                     title={playingTake === selectedBgm.id ? "Pause" : "Play BGM Track"}
                   >
                     {playingTake === selectedBgm.id ? <Icons.Pause className="w-3.5 h-3.5" /> : <Icons.Play className="w-3.5 h-3.5 ml-0.5" />}
                   </button>
                   <div className="min-w-0">
-                    <div className="text-[11px] font-medium text-zinc-200 truncate">
+                    <div className="text-[11px] font-medium text-fg truncate">
                       Track Preview
                     </div>
-                    <div className="text-[9px] text-zinc-400 font-mono truncate">
+                    <div className="text-[9px] text-fg-dim font-mono truncate">
                       {selectedBgm.duration_sec.toFixed(1)}s • {Math.round(selectedBgm.volume * 100)}% Vol
                     </div>
                   </div>
@@ -1264,7 +1264,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                 <button
                   type="button"
                   onClick={() => onUpdateState((prev) => duplicateAudioClip(prev, selectedBgm!.id, "bgm"))}
-                  className="px-2 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded text-[10px] font-medium transition-colors"
+                  className="px-2 py-1 bg-flat hover:bg-glass-hi text-fg rounded text-[10px] font-medium transition-colors"
                 >
                   Duplicate
                 </button>
@@ -1272,17 +1272,17 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
             </div>
 
             {/* 2. Timing Controls */}
-            <div className="space-y-3 p-3 bg-zinc-950/60 border border-zinc-800 rounded-xl">
-              <h4 className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider flex items-center justify-between">
+            <div className="space-y-3 p-3 bg-ink/60 border border-edge rounded-xl">
+              <h4 className="text-[11px] font-bold text-fg-dim uppercase tracking-wider flex items-center justify-between">
                 <span>Timing & Placement</span>
-                <span className="text-[10px] font-mono text-zinc-400">
+                <span className="text-[10px] font-mono text-fg-dim">
                   End: {(selectedBgm.start_time_sec + selectedBgm.duration_sec).toFixed(2)}s
                 </span>
               </h4>
 
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1">
-                  <label className="text-[10px] text-zinc-400 block font-medium">Start Time (sec)</label>
+                  <label className="text-[10px] text-fg-dim block font-medium">Start Time (sec)</label>
                   <input
                     type="number"
                     step="0.1"
@@ -1292,12 +1292,12 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                       const val = Math.max(0, parseFloat(e.target.value) || 0);
                       onUpdateState((prev) => updateBgmClip(prev, selectedBgm!.id, { start_time_sec: val }));
                     }}
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded px-2 py-1.5 text-xs text-zinc-200 font-mono focus:outline-none focus:border-indigo-500"
+                    className="w-full bg-navy border border-edge rounded px-2 py-1.5 text-xs text-fg font-mono focus:outline-none focus:border-accent"
                   />
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[10px] text-zinc-400 block font-medium">Duration (sec)</label>
+                  <label className="text-[10px] text-fg-dim block font-medium">Duration (sec)</label>
                   <input
                     type="number"
                     step="0.1"
@@ -1307,17 +1307,17 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                       const val = Math.max(0.5, parseFloat(e.target.value) || 0.5);
                       onUpdateState((prev) => updateBgmClip(prev, selectedBgm!.id, { duration_sec: val }));
                     }}
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded px-2 py-1.5 text-xs text-zinc-200 font-mono focus:outline-none focus:border-indigo-500"
+                    className="w-full bg-navy border border-edge rounded px-2 py-1.5 text-xs text-fg font-mono focus:outline-none focus:border-accent"
                   />
                 </div>
               </div>
             </div>
 
             {/* 3. Audio Levels & Fades */}
-            <div className="space-y-3 p-3 bg-zinc-950/60 border border-zinc-800 rounded-xl">
-              <h4 className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider flex items-center justify-between">
+            <div className="space-y-3 p-3 bg-ink/60 border border-edge rounded-xl">
+              <h4 className="text-[11px] font-bold text-fg-dim uppercase tracking-wider flex items-center justify-between">
                 <span>Audio Levels & Fades</span>
-                <span className="text-[10px] font-mono text-indigo-400">
+                <span className="text-[10px] font-mono text-info">
                   {Math.round(selectedBgm.volume * 100)}%
                 </span>
               </h4>
@@ -1325,8 +1325,8 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
               {/* Master Volume Slider */}
               <div className="space-y-1">
                 <div className="flex items-center justify-between text-[11px]">
-                  <span className="text-zinc-400">Track Volume</span>
-                  <span className="text-zinc-200 font-mono">{Math.round(selectedBgm.volume * 100)}%</span>
+                  <span className="text-fg-dim">Track Volume</span>
+                  <span className="text-fg font-mono">{Math.round(selectedBgm.volume * 100)}%</span>
                 </div>
                 <input
                   type="range"
@@ -1338,14 +1338,14 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                     const nextVol = parseFloat(e.target.value) / 100;
                     onUpdateState((prev) => updateBgmClip(prev, selectedBgm!.id, { volume: nextVol }));
                   }}
-                  className="w-full accent-indigo-500 h-1 bg-zinc-800 rounded cursor-pointer"
+                  className="w-full accent-accent h-1 bg-flat rounded cursor-pointer"
                 />
               </div>
 
               {/* Fade In & Fade Out */}
               <div className="grid grid-cols-2 gap-2 pt-1">
                 <div className="space-y-1">
-                  <label className="text-[10px] text-zinc-400 block font-medium">Fade In (sec)</label>
+                  <label className="text-[10px] text-fg-dim block font-medium">Fade In (sec)</label>
                   <input
                     type="number"
                     step="0.25"
@@ -1356,12 +1356,12 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                       const val = Math.max(0, parseFloat(e.target.value) || 0);
                       onUpdateState((prev) => updateBgmClip(prev, selectedBgm!.id, { fade_in_sec: val }));
                     }}
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded px-2 py-1.5 text-xs text-zinc-200 font-mono focus:outline-none focus:border-indigo-500"
+                    className="w-full bg-navy border border-edge rounded px-2 py-1.5 text-xs text-fg font-mono focus:outline-none focus:border-accent"
                   />
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[10px] text-zinc-400 block font-medium">Fade Out (sec)</label>
+                  <label className="text-[10px] text-fg-dim block font-medium">Fade Out (sec)</label>
                   <input
                     type="number"
                     step="0.25"
@@ -1372,21 +1372,21 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                       const val = Math.max(0, parseFloat(e.target.value) || 0);
                       onUpdateState((prev) => updateBgmClip(prev, selectedBgm!.id, { fade_out_sec: val }));
                     }}
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded px-2 py-1.5 text-xs text-zinc-200 font-mono focus:outline-none focus:border-indigo-500"
+                    className="w-full bg-navy border border-edge rounded px-2 py-1.5 text-xs text-fg font-mono focus:outline-none focus:border-accent"
                   />
                 </div>
               </div>
 
               {/* Loop Toggle */}
               <div className="flex items-center justify-between pt-1">
-                <span className="text-xs text-zinc-300">Continuous Loop</span>
+                <span className="text-xs text-fg-dim">Continuous Loop</span>
                 <button
                   type="button"
                   onClick={() => {
                     onUpdateState((prev) => updateBgmClip(prev, selectedBgm!.id, { loop: !(selectedBgm?.loop ?? true) }));
                   }}
                   className={`w-8 h-4 rounded-full transition-colors relative ${
-                    (selectedBgm.loop ?? true) ? "bg-indigo-600" : "bg-zinc-800"
+                    (selectedBgm.loop ?? true) ? "bg-accent" : "bg-flat"
                   }`}
                 >
                   <div
@@ -1399,10 +1399,10 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
             </div>
 
             {/* 4. Narration Ducking Settings */}
-            <div className="space-y-3 p-3 bg-zinc-950/60 border border-zinc-800 rounded-xl">
-              <h4 className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider flex items-center justify-between">
+            <div className="space-y-3 p-3 bg-ink/60 border border-edge rounded-xl">
+              <h4 className="text-[11px] font-bold text-fg-dim uppercase tracking-wider flex items-center justify-between">
                 <span className="flex items-center gap-1.5">
-                  <Icons.Volume className="w-3.5 h-3.5 text-indigo-400" />
+                  <Icons.Volume className="w-3.5 h-3.5 text-info" />
                   Narration Ducking
                 </span>
                 <button
@@ -1411,7 +1411,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                     onUpdateState((prev) => updateBgmClip(prev, selectedBgm!.id, { ducking_enabled: !(selectedBgm?.ducking_enabled ?? true) }));
                   }}
                   className={`w-8 h-4 rounded-full transition-colors relative ${
-                    (selectedBgm.ducking_enabled ?? true) ? "bg-indigo-600" : "bg-zinc-800"
+                    (selectedBgm.ducking_enabled ?? true) ? "bg-accent" : "bg-flat"
                   }`}
                 >
                   <div
@@ -1422,15 +1422,15 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                 </button>
               </h4>
 
-              <p className="text-[10px] text-zinc-400 leading-relaxed">
+              <p className="text-[10px] text-fg-dim leading-relaxed">
                 Automatically suppresses background music volume during active narration dialogue to preserve vocal clarity.
               </p>
 
               {(selectedBgm.ducking_enabled ?? true) && (
                 <div className="space-y-1.5 pt-1">
                   <div className="flex items-center justify-between text-[11px]">
-                    <span className="text-zinc-400">Ducking Attenuation</span>
-                    <span className="text-indigo-300 font-mono">
+                    <span className="text-fg-dim">Ducking Attenuation</span>
+                    <span className="text-info font-mono">
                       {selectedBgm.ducking_amount_db ?? -12} dB
                     </span>
                   </div>
@@ -1444,9 +1444,9 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                       const val = parseInt(e.target.value, 10);
                       onUpdateState((prev) => updateBgmClip(prev, selectedBgm!.id, { ducking_amount_db: val }));
                     }}
-                    className="w-full accent-indigo-500 h-1 bg-zinc-800 rounded cursor-pointer"
+                    className="w-full accent-accent h-1 bg-flat rounded cursor-pointer"
                   />
-                  <div className="flex justify-between text-[9px] text-zinc-500 font-mono">
+                  <div className="flex justify-between text-[9px] text-fg-faint font-mono">
                     <span>-24 dB (Aggressive)</span>
                     <span>-12 dB (Standard)</span>
                     <span>-3 dB (Subtle)</span>
@@ -1461,7 +1461,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                 variant="outline"
                 size="sm"
                 onClick={() => onUpdateState((prev) => deleteAudioClip(prev, selectedBgm!.id, "bgm"))}
-                className="w-full bg-rose-950/20 hover:bg-rose-950/50 text-rose-300 border-rose-900/50 text-xs flex items-center justify-center gap-1.5"
+                className="w-full bg-bad/20 hover:bg-bad/50 text-bad border-bad/50 text-xs flex items-center justify-center gap-1.5"
               >
                 <Icons.Trash className="w-3.5 h-3.5" />
                 Remove BGM Track
@@ -1471,17 +1471,17 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
         ) : selectedSfx ? (
           <div className="space-y-4">
             {/* 1. SFX Cue Info */}
-            <div className="p-3 bg-zinc-950/70 border border-zinc-800 rounded-xl space-y-2.5 shadow-sm">
+            <div className="p-3 bg-ink/70 border border-edge rounded-xl space-y-2.5 shadow-sm">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-full bg-amber-950 border border-amber-600/60 flex items-center justify-center font-bold text-xs text-amber-300">
+                  <div className="w-8 h-8 rounded-full bg-warn/20 border border-warn/60 flex items-center justify-center font-bold text-xs text-warn">
                     <Icons.Volume className="w-4 h-4" />
                   </div>
                   <div className="min-w-0">
-                    <div className="text-xs font-bold text-zinc-100 flex items-center gap-1.5 truncate">
+                    <div className="text-xs font-bold text-fg flex items-center gap-1.5 truncate">
                       <span className="truncate">{selectedSfx.name || "Sound Effect"}</span>
                     </div>
-                    <div className="text-[10px] text-zinc-400 font-mono">
+                    <div className="text-[10px] text-fg-dim font-mono">
                       ID: {selectedSfx.id}
                     </div>
                   </div>
@@ -1491,7 +1491,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                   <button
                     type="button"
                     onClick={() => onOpenAudioLibrary("sfx")}
-                    className="px-2 py-1 bg-amber-950/90 hover:bg-amber-900 text-amber-300 hover:text-white border border-amber-700/80 rounded-lg text-[10px] font-semibold flex items-center gap-1 transition-colors shadow-sm"
+                    className="px-2 py-1 bg-warn/90 hover:bg-warn/20 text-warn hover:text-white border border-warn/80 rounded-lg text-[10px] font-semibold flex items-center gap-1 transition-colors shadow-sm"
                     title="Browse SFX in Audio Library"
                   >
                     <Icons.ExternalLink className="w-3 h-3" />
@@ -1501,18 +1501,18 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
               </div>
 
               {/* Badges Row */}
-              <div className="flex items-center justify-between pt-1 border-t border-zinc-800/60 gap-2">
-                <span className="text-[9px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300 font-medium">
+              <div className="flex items-center justify-between pt-1 border-t border-edge/60 gap-2">
+                <span className="text-[9px] px-1.5 py-0.5 rounded bg-flat text-fg-dim font-medium">
                   {selectedSfx.category || "Sound Effect"}
                 </span>
 
                 <div className="flex items-center gap-1">
                   {selectedSfx.availability === "UNAVAILABLE" ? (
-                    <span className="px-1.5 py-0.5 rounded bg-rose-950/80 text-rose-300 text-[10px] font-bold border border-rose-700 flex items-center gap-1">
+                    <span className="px-1.5 py-0.5 rounded bg-bad/80 text-bad text-[10px] font-bold border border-bad flex items-center gap-1">
                       Missing Audio
                     </span>
                   ) : (
-                    <span className="px-1.5 py-0.5 rounded bg-emerald-950/80 text-emerald-300 text-[10px] font-bold border border-emerald-700 flex items-center gap-1">
+                    <span className="px-1.5 py-0.5 rounded bg-ok/80 text-ok text-[10px] font-bold border border-ok flex items-center gap-1">
                       Ready
                     </span>
                   )}
@@ -1520,25 +1520,25 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
               </div>
 
               {/* Audio Playback Preview */}
-              <div className="p-2 bg-zinc-900/60 border border-zinc-800/80 rounded-lg flex items-center justify-between gap-2">
+              <div className="p-2 bg-navy/60 border border-edge/80 rounded-lg flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2 min-w-0">
                   <button
                     type="button"
                     onClick={() => handlePlayTake(selectedSfx.file_url || "/assets/demo/blade_shimmer_sfx.mp3", selectedSfx.id)}
                     className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 transition-colors ${
                       playingTake === selectedSfx.id
-                        ? "bg-amber-600 text-white animate-pulse"
-                        : "bg-amber-950 text-amber-300 hover:bg-amber-900 border border-amber-700/80"
+                        ? "bg-warn text-white animate-pulse"
+                        : "bg-warn/20 text-warn hover:bg-warn/20 border border-warn/80"
                     }`}
                     title={playingTake === selectedSfx.id ? "Pause" : "Play SFX Cue"}
                   >
                     {playingTake === selectedSfx.id ? <Icons.Pause className="w-3.5 h-3.5" /> : <Icons.Play className="w-3.5 h-3.5 ml-0.5" />}
                   </button>
                   <div className="min-w-0">
-                    <div className="text-[11px] font-medium text-zinc-200 truncate">
+                    <div className="text-[11px] font-medium text-fg truncate">
                       Cue Preview
                     </div>
-                    <div className="text-[9px] text-zinc-400 font-mono truncate">
+                    <div className="text-[9px] text-fg-dim font-mono truncate">
                       {selectedSfx.duration_sec.toFixed(1)}s • {Math.round(selectedSfx.volume * 100)}% Vol
                     </div>
                   </div>
@@ -1547,7 +1547,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                 <button
                   type="button"
                   onClick={() => onUpdateState((prev) => duplicateAudioClip(prev, selectedSfx!.id, "sfx"))}
-                  className="px-2 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded text-[10px] font-medium transition-colors"
+                  className="px-2 py-1 bg-flat hover:bg-glass-hi text-fg rounded text-[10px] font-medium transition-colors"
                 >
                   Duplicate
                 </button>
@@ -1555,17 +1555,17 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
             </div>
 
             {/* 2. Timing Controls */}
-            <div className="space-y-3 p-3 bg-zinc-950/60 border border-zinc-800 rounded-xl">
-              <h4 className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider flex items-center justify-between">
+            <div className="space-y-3 p-3 bg-ink/60 border border-edge rounded-xl">
+              <h4 className="text-[11px] font-bold text-fg-dim uppercase tracking-wider flex items-center justify-between">
                 <span>Trigger Timing</span>
-                <span className="text-[10px] font-mono text-zinc-400">
+                <span className="text-[10px] font-mono text-fg-dim">
                   End: {(selectedSfx.start_time_sec + selectedSfx.duration_sec).toFixed(2)}s
                 </span>
               </h4>
 
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1">
-                  <label className="text-[10px] text-zinc-400 block font-medium">Trigger Time (sec)</label>
+                  <label className="text-[10px] text-fg-dim block font-medium">Trigger Time (sec)</label>
                   <input
                     type="number"
                     step="0.05"
@@ -1575,12 +1575,12 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                       const val = Math.max(0, parseFloat(e.target.value) || 0);
                       onUpdateState((prev) => updateSfxClip(prev, selectedSfx!.id, { start_time_sec: val }));
                     }}
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded px-2 py-1.5 text-xs text-zinc-200 font-mono focus:outline-none focus:border-amber-500"
+                    className="w-full bg-navy border border-edge rounded px-2 py-1.5 text-xs text-fg font-mono focus:outline-none focus:border-warn"
                   />
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[10px] text-zinc-400 block font-medium">Duration (sec)</label>
+                  <label className="text-[10px] text-fg-dim block font-medium">Duration (sec)</label>
                   <input
                     type="number"
                     step="0.05"
@@ -1590,17 +1590,17 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                       const val = Math.max(0.1, parseFloat(e.target.value) || 0.1);
                       onUpdateState((prev) => updateSfxClip(prev, selectedSfx!.id, { duration_sec: val }));
                     }}
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded px-2 py-1.5 text-xs text-zinc-200 font-mono focus:outline-none focus:border-amber-500"
+                    className="w-full bg-navy border border-edge rounded px-2 py-1.5 text-xs text-fg font-mono focus:outline-none focus:border-warn"
                   />
                 </div>
               </div>
             </div>
 
             {/* 3. Audio Levels & Fades */}
-            <div className="space-y-3 p-3 bg-zinc-950/60 border border-zinc-800 rounded-xl">
-              <h4 className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider flex items-center justify-between">
+            <div className="space-y-3 p-3 bg-ink/60 border border-edge rounded-xl">
+              <h4 className="text-[11px] font-bold text-fg-dim uppercase tracking-wider flex items-center justify-between">
                 <span>Audio Levels & Fades</span>
-                <span className="text-[10px] font-mono text-amber-400">
+                <span className="text-[10px] font-mono text-warn">
                   {Math.round(selectedSfx.volume * 100)}%
                 </span>
               </h4>
@@ -1608,8 +1608,8 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
               {/* Master Volume Slider */}
               <div className="space-y-1">
                 <div className="flex items-center justify-between text-[11px]">
-                  <span className="text-zinc-400">Cue Volume</span>
-                  <span className="text-zinc-200 font-mono">{Math.round(selectedSfx.volume * 100)}%</span>
+                  <span className="text-fg-dim">Cue Volume</span>
+                  <span className="text-fg font-mono">{Math.round(selectedSfx.volume * 100)}%</span>
                 </div>
                 <input
                   type="range"
@@ -1621,14 +1621,14 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                     const nextVol = parseFloat(e.target.value) / 100;
                     onUpdateState((prev) => updateSfxClip(prev, selectedSfx!.id, { volume: nextVol }));
                   }}
-                  className="w-full accent-amber-500 h-1 bg-zinc-800 rounded cursor-pointer"
+                  className="w-full accent-warn h-1 bg-flat rounded cursor-pointer"
                 />
               </div>
 
               {/* Fade In & Fade Out */}
               <div className="grid grid-cols-2 gap-2 pt-1">
                 <div className="space-y-1">
-                  <label className="text-[10px] text-zinc-400 block font-medium">Fade In (sec)</label>
+                  <label className="text-[10px] text-fg-dim block font-medium">Fade In (sec)</label>
                   <input
                     type="number"
                     step="0.05"
@@ -1639,12 +1639,12 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                       const val = Math.max(0, parseFloat(e.target.value) || 0);
                       onUpdateState((prev) => updateSfxClip(prev, selectedSfx!.id, { fade_in_sec: val }));
                     }}
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded px-2 py-1.5 text-xs text-zinc-200 font-mono focus:outline-none focus:border-amber-500"
+                    className="w-full bg-navy border border-edge rounded px-2 py-1.5 text-xs text-fg font-mono focus:outline-none focus:border-warn"
                   />
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[10px] text-zinc-400 block font-medium">Fade Out (sec)</label>
+                  <label className="text-[10px] text-fg-dim block font-medium">Fade Out (sec)</label>
                   <input
                     type="number"
                     step="0.05"
@@ -1655,7 +1655,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                       const val = Math.max(0, parseFloat(e.target.value) || 0);
                       onUpdateState((prev) => updateSfxClip(prev, selectedSfx!.id, { fade_out_sec: val }));
                     }}
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded px-2 py-1.5 text-xs text-zinc-200 font-mono focus:outline-none focus:border-amber-500"
+                    className="w-full bg-navy border border-edge rounded px-2 py-1.5 text-xs text-fg font-mono focus:outline-none focus:border-warn"
                   />
                 </div>
               </div>
@@ -1667,7 +1667,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                 variant="outline"
                 size="sm"
                 onClick={() => onUpdateState((prev) => deleteAudioClip(prev, selectedSfx!.id, "sfx"))}
-                className="w-full bg-rose-950/20 hover:bg-rose-950/50 text-rose-300 border-rose-900/50 text-xs flex items-center justify-center gap-1.5"
+                className="w-full bg-bad/20 hover:bg-bad/50 text-bad border-bad/50 text-xs flex items-center justify-center gap-1.5"
               >
                 <Icons.Trash className="w-3.5 h-3.5" />
                 Remove SFX Cue
@@ -1684,18 +1684,18 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                 {/* Transform Block */}
                 <div className="space-y-3">
                   <div className="flex items-center justify-between gap-2">
-                    <h4 className="text-xs font-semibold text-zinc-300">Transform</h4>
-                    <button type="button" aria-label="Reset transform" onClick={() => updateSelectedLayer({ transform: resetLayerTransform(selectedLayer.transform) })} className="rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-[11px] text-zinc-300 hover:text-white flex items-center gap-1">
+                    <h4 className="text-xs font-semibold text-fg-dim">Transform</h4>
+                    <button type="button" aria-label="Reset transform" onClick={() => updateSelectedLayer({ transform: resetLayerTransform(selectedLayer.transform) })} className="rounded-md border border-edge bg-navy px-2 py-1 text-[11px] text-fg-dim hover:text-white flex items-center gap-1">
                       <Icons.Rotate className="w-3 h-3" /> Reset
                     </button>
                   </div>
 
                   {/* Position X / Y */}
                   <div className="grid grid-cols-2 gap-2 items-center">
-                    <span className="text-xs text-zinc-300">Position</span>
+                    <span className="text-xs text-fg-dim">Position</span>
                     <div className="flex items-center gap-1.5">
-                      <div className="flex items-center bg-zinc-950 border border-zinc-800 rounded px-2 py-1">
-                        <span className="text-[10px] text-zinc-500 font-mono mr-1">X</span>
+                      <div className="flex items-center bg-ink border border-edge rounded px-2 py-1">
+                        <span className="text-[10px] text-fg-faint font-mono mr-1">X</span>
                         <input
                           type="number"
                           aria-label="Position X"
@@ -1705,11 +1705,11 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                               x: (parseFloat(e.target.value) - 320) / 6.4,
                             })
                           }
-                          className="w-12 bg-transparent text-xs font-mono text-zinc-100 text-right focus:outline-none"
+                          className="w-12 bg-transparent text-xs font-mono text-fg text-right focus:outline-none"
                         />
                       </div>
-                      <div className="flex items-center bg-zinc-950 border border-zinc-800 rounded px-2 py-1">
-                        <span className="text-[10px] text-zinc-500 font-mono mr-1">Y</span>
+                      <div className="flex items-center bg-ink border border-edge rounded px-2 py-1">
+                        <span className="text-[10px] text-fg-faint font-mono mr-1">Y</span>
                         <input
                           type="number"
                           aria-label="Position Y"
@@ -1719,7 +1719,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                               y: (parseFloat(e.target.value) - 180) / 3.6,
                             })
                           }
-                          className="w-12 bg-transparent text-xs font-mono text-zinc-100 text-right focus:outline-none"
+                          className="w-12 bg-transparent text-xs font-mono text-fg text-right focus:outline-none"
                         />
                       </div>
                     </div>
@@ -1727,7 +1727,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
 
                   {/* Scale Slider */}
                   <div className="grid grid-cols-2 gap-2 items-center">
-                    <span className="text-xs text-zinc-300">Scale</span>
+                    <span className="text-xs text-fg-dim">Scale</span>
                     <div className="flex items-center gap-2">
                       <input
                         type="range"
@@ -1741,9 +1741,9 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                             scale: parseFloat(e.target.value) / 100,
                           })
                         }
-                        className="flex-1 accent-indigo-500 h-1 bg-zinc-800 rounded cursor-pointer"
+                        className="flex-1 accent-accent h-1 bg-flat rounded cursor-pointer"
                       />
-                      <span className="text-xs font-mono text-zinc-300 w-10 text-right">
+                      <span className="text-xs font-mono text-fg-dim w-10 text-right">
                         {Math.round(selectedLayer.transform.scale * 100)}%
                       </span>
                     </div>
@@ -1751,7 +1751,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
 
                   {/* Rotation Dropdown */}
                   <div className="grid grid-cols-2 gap-2 items-center">
-                    <span className="text-xs text-zinc-300">Rotation</span>
+                    <span className="text-xs text-fg-dim">Rotation</span>
                     <select
                       aria-label="Layer rotation"
                       value={selectedLayer.transform.rotation}
@@ -1760,7 +1760,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                           rotation: parseInt(e.target.value) || 0,
                         })
                       }
-                      className="bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500"
+                      className="bg-ink border border-edge rounded px-2 py-1 text-xs text-fg focus:outline-none focus:border-accent"
                     >
                       <option value="0">0°</option>
                       <option value="90">90°</option>
@@ -1771,7 +1771,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
 
                   {/* Opacity Slider */}
                   <div className="grid grid-cols-2 gap-2 items-center">
-                    <span className="text-xs text-zinc-300">Opacity</span>
+                    <span className="text-xs text-fg-dim">Opacity</span>
                     <div className="flex items-center gap-2">
                       <input
                         type="range"
@@ -1785,9 +1785,9 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                             opacity: parseFloat(e.target.value) / 100,
                           })
                         }
-                        className="flex-1 accent-indigo-500 h-1 bg-zinc-800 rounded cursor-pointer"
+                        className="flex-1 accent-accent h-1 bg-flat rounded cursor-pointer"
                       />
-                      <span className="text-xs font-mono text-zinc-300 w-10 text-right">
+                      <span className="text-xs font-mono text-fg-dim w-10 text-right">
                         {Math.round(selectedLayer.transform.opacity * 100)}%
                       </span>
                     </div>
@@ -1795,11 +1795,11 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                 </div>
 
                 {/* Crop / Frame Section */}
-                <div className="space-y-2 pt-3 border-t border-zinc-800">
-                  <h4 className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">
+                <div className="space-y-2 pt-3 border-t border-edge">
+                  <h4 className="text-[11px] font-bold text-fg-dim uppercase tracking-wider">
                     Crop / Frame
                   </h4>
-                  <div className="flex items-center justify-between gap-2 p-2 bg-zinc-950 rounded-lg border border-zinc-800">
+                  <div className="flex items-center justify-between gap-2 p-2 bg-ink rounded-lg border border-edge">
                     <button
                       type="button"
                       onClick={() =>
@@ -1807,12 +1807,12 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                           x: selectedLayer.transform.x - 5,
                         })
                       }
-                      className="p-1 text-zinc-400 hover:text-white"
+                      className="p-1 text-fg-dim hover:text-white"
                       title="Nudge Left"
                     >
                       <Icons.ChevronDown className="w-4 h-4 rotate-90" />
                     </button>
-                    <div className="h-10 w-16 rounded overflow-hidden border border-zinc-700">
+                    <div className="h-10 w-16 rounded overflow-hidden border border-edge">
                       <img
                         src={getLayerImageUrl(selectedLayer)}
                         alt="Crop preview"
@@ -1826,7 +1826,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                           x: selectedLayer.transform.x + 5,
                         })
                       }
-                      className="p-1 text-zinc-400 hover:text-white"
+                      className="p-1 text-fg-dim hover:text-white"
                       title="Nudge Right"
                     >
                       <Icons.ChevronDown className="w-4 h-4 -rotate-90" />
@@ -1852,7 +1852,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
 
                 {/* Remove Panel from Timeline Action */}
                 {(onDeleteLayer || onDeleteScene) && selectedScene && (
-                  <div className="pt-3 border-t border-zinc-800">
+                  <div className="pt-3 border-t border-edge">
                     <button
                       type="button"
                       onClick={() => {
@@ -1862,10 +1862,10 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                           onDeleteLayer(selectedLayer.id, selectedScene.id);
                         }
                       }}
-                      className="w-full py-2 px-3 rounded-lg border border-rose-800/60 bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 hover:text-white flex items-center justify-center gap-2 text-xs font-semibold transition-all shadow-sm"
+                      className="w-full py-2 px-3 rounded-lg border border-bad/60 bg-bad/40 hover:bg-bad/60 text-bad hover:text-white flex items-center justify-center gap-2 text-xs font-semibold transition-all shadow-sm"
                       title="Delete this panel from timeline (Del)"
                     >
-                      <Icons.Trash className="w-3.5 h-3.5 text-rose-400" />
+                      <Icons.Trash className="w-3.5 h-3.5 text-bad" />
                       <span>Remove Panel from Timeline</span>
                     </button>
                   </div>
@@ -1877,14 +1877,14 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
             {activeTab === "motion" && (
               <div className="space-y-3">
                 {/* Sub-mode Segmented Switcher */}
-                <div className="grid grid-cols-3 gap-1 bg-zinc-950 p-1 rounded-lg border border-zinc-800 text-xs">
+                <div className="grid grid-cols-3 gap-1 bg-ink p-1 rounded-lg border border-edge text-xs">
                   <button
                     type="button"
                     onClick={() => setMotionSubTab("layer")}
                     className={`py-1 rounded font-medium transition-colors ${
                       motionSubTab === "layer"
-                        ? "bg-indigo-600 text-white font-bold"
-                        : "text-zinc-400 hover:text-white"
+                        ? "bg-accent text-white font-bold"
+                        : "text-fg-dim hover:text-white"
                     }`}
                   >
                     Layer Motion
@@ -1894,8 +1894,8 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                     onClick={() => setMotionSubTab("camera")}
                     className={`py-1 rounded font-medium transition-colors ${
                       motionSubTab === "camera"
-                        ? "bg-indigo-600 text-white font-bold"
-                        : "text-zinc-400 hover:text-white"
+                        ? "bg-accent text-white font-bold"
+                        : "text-fg-dim hover:text-white"
                     }`}
                   >
                     Camera
@@ -1905,8 +1905,8 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                     onClick={() => setMotionSubTab("keyframes")}
                     className={`py-1 rounded font-medium transition-colors ${
                       motionSubTab === "keyframes"
-                        ? "bg-indigo-600 text-white font-bold"
-                        : "text-zinc-400 hover:text-white"
+                        ? "bg-accent text-white font-bold"
+                        : "text-fg-dim hover:text-white"
                     }`}
                   >
                     Keyframes
@@ -1919,14 +1919,14 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                     {/* Visual Preset Selector with Categories */}
                     <div className="space-y-1.5">
                       <div className="flex items-center justify-between">
-                        <h4 className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">
+                        <h4 className="text-[11px] font-bold text-fg-dim uppercase tracking-wider">
                           Layer Motion Preset
                         </h4>
                         <div className="flex items-center gap-1">
                           <button
                             type="button"
                             onClick={handleCopyAnimation}
-                            className="text-[10px] text-zinc-400 hover:text-indigo-300 px-1.5 py-0.5 rounded bg-zinc-800"
+                            className="text-[10px] text-fg-dim hover:text-info px-1.5 py-0.5 rounded bg-flat"
                             title="Copy animation config to clipboard"
                           >
                             Copy
@@ -1935,7 +1935,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                             type="button"
                             onClick={handlePasteAnimation}
                             disabled={!state.clipboard_animation}
-                            className="text-[10px] text-zinc-400 hover:text-indigo-300 disabled:opacity-30 px-1.5 py-0.5 rounded bg-zinc-800"
+                            className="text-[10px] text-fg-dim hover:text-info disabled:opacity-30 px-1.5 py-0.5 rounded bg-flat"
                             title="Paste animation config from clipboard"
                           >
                             Paste
@@ -1950,7 +1950,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                           updateSelectedLayer({ motion_preset: preset });
                           updateLayerAnimationConfig((cfg) => ({ ...cfg, preset }));
                         }}
-                        className="w-full bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1.5 text-xs text-zinc-100 focus:outline-none focus:border-indigo-500 font-medium"
+                        className="w-full bg-ink border border-edge rounded px-2.5 py-1.5 text-xs text-fg focus:outline-none focus:border-accent font-medium"
                       >
                         <optgroup label="Static">
                           <option value="none">None (Static)</option>
@@ -1997,8 +1997,8 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                     </div>
 
                     {/* Motion Direction Controls */}
-                    <div className="space-y-1.5 pt-2 border-t border-zinc-800">
-                      <h4 className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">
+                    <div className="space-y-1.5 pt-2 border-t border-edge">
+                      <h4 className="text-[11px] font-bold text-fg-dim uppercase tracking-wider">
                         Direction
                       </h4>
                       <div className="grid grid-cols-4 gap-1">
@@ -2021,8 +2021,8 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                               }}
                               className={`py-1.5 rounded border text-sm font-bold transition-all flex items-center justify-center ${
                                 isCurrent
-                                  ? "bg-indigo-600 border-indigo-500 text-white shadow-sm"
-                                  : "bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-white"
+                                  ? "bg-accent border-accent text-white shadow-sm"
+                                  : "bg-ink border-edge text-fg-dim hover:text-white"
                               }`}
                               title={item.title}
                             >
@@ -2035,10 +2035,10 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                     </div>
 
                     {/* Duration Slider */}
-                    <div className="space-y-1 pt-2 border-t border-zinc-800">
+                    <div className="space-y-1 pt-2 border-t border-edge">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs text-zinc-300">Duration</span>
-                        <span className="text-xs font-mono text-zinc-100 font-bold">
+                        <span className="text-xs text-fg-dim">Duration</span>
+                        <span className="text-xs font-mono text-fg font-bold">
                           {selectedLayer.motion_duration_sec || 2.5}s
                         </span>
                       </div>
@@ -2053,16 +2053,16 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                           updateSelectedLayer({ motion_duration_sec: val });
                           updateLayerAnimationConfig((cfg) => ({ ...cfg, duration_sec: val }));
                         }}
-                        className="w-full accent-indigo-500 h-1 bg-zinc-800 rounded cursor-pointer"
+                        className="w-full accent-accent h-1 bg-flat rounded cursor-pointer"
                       />
                     </div>
 
                     {/* Intensity & Speed Sliders */}
-                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-zinc-800">
+                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-edge">
                       <div className="space-y-1">
                         <div className="flex items-center justify-between">
-                          <span className="text-[11px] text-zinc-400">Intensity</span>
-                          <span className="text-[10px] font-mono text-zinc-200">
+                          <span className="text-[11px] text-fg-dim">Intensity</span>
+                          <span className="text-[10px] font-mono text-fg">
                             {selectedLayer.animation_config?.intensity ?? 1.0}x
                           </span>
                         </div>
@@ -2076,14 +2076,14 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                             const val = parseFloat(e.target.value);
                             updateLayerAnimationConfig((cfg) => ({ ...cfg, intensity: val }));
                           }}
-                          className="w-full accent-indigo-500 h-1 bg-zinc-800 rounded cursor-pointer"
+                          className="w-full accent-accent h-1 bg-flat rounded cursor-pointer"
                         />
                       </div>
 
                       <div className="space-y-1">
                         <div className="flex items-center justify-between">
-                          <span className="text-[11px] text-zinc-400">Speed</span>
-                          <span className="text-[10px] font-mono text-zinc-200">
+                          <span className="text-[11px] text-fg-dim">Speed</span>
+                          <span className="text-[10px] font-mono text-fg">
                             {selectedLayer.animation_config?.speed ?? 1.0}x
                           </span>
                         </div>
@@ -2097,21 +2097,21 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                             const val = parseFloat(e.target.value);
                             updateLayerAnimationConfig((cfg) => ({ ...cfg, speed: val }));
                           }}
-                          className="w-full accent-indigo-500 h-1 bg-zinc-800 rounded cursor-pointer"
+                          className="w-full accent-accent h-1 bg-flat rounded cursor-pointer"
                         />
                       </div>
                     </div>
 
                     {/* Easing Function */}
-                    <div className="space-y-1 pt-2 border-t border-zinc-800">
-                      <label className="text-[11px] text-zinc-400 block">Easing Curve</label>
+                    <div className="space-y-1 pt-2 border-t border-edge">
+                      <label className="text-[11px] text-fg-dim block">Easing Curve</label>
                       <select
                         value={selectedLayer.animation_config?.easing || "ease_in_out"}
                         onChange={(e) => {
                           const easing = e.target.value as AnimationEasing;
                           updateLayerAnimationConfig((cfg) => ({ ...cfg, easing }));
                         }}
-                        className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-200"
+                        className="w-full bg-ink border border-edge rounded px-2 py-1 text-xs text-fg"
                       >
                         <option value="linear">Linear (Constant Speed)</option>
                         <option value="ease_in">Ease In (Accelerate)</option>
@@ -2122,7 +2122,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                     </div>
 
                     {/* Quick Action Buttons: Preview / Reset / Remove */}
-                    <div className="flex items-center gap-1.5 pt-2 border-t border-zinc-800">
+                    <div className="flex items-center gap-1.5 pt-2 border-t border-edge">
                       <Button
                         variant="secondary"
                         size="sm"
@@ -2135,7 +2135,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                             }));
                           }
                         }}
-                        className="flex-1 text-xs h-7 text-indigo-400 hover:text-white"
+                        className="flex-1 text-xs h-7 text-info hover:text-white"
                       >
                         <Icons.Play className="w-3 h-3 mr-1" />
                         Preview
@@ -2151,7 +2151,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                             animation_config: undefined,
                           });
                         }}
-                        className="text-xs h-7 px-2 text-rose-400 hover:text-rose-300"
+                        className="text-xs h-7 px-2 text-bad hover:text-bad"
                         title="Remove Animation"
                       >
                         Remove
@@ -2180,7 +2180,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                 {motionSubTab === "camera" && selectedScene && (
                   <div className="space-y-3">
                     <div className="space-y-1.5">
-                      <h4 className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">
+                      <h4 className="text-[11px] font-bold text-fg-dim uppercase tracking-wider">
                         Scene Camera Preset
                       </h4>
                       <select
@@ -2271,7 +2271,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                             updateSceneCamera({ preset: "custom" });
                           }
                         }}
-                        className="w-full bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1.5 text-xs text-zinc-100 font-medium"
+                        className="w-full bg-ink border border-edge rounded px-2.5 py-1.5 text-xs text-fg font-medium"
                       >
                         <option value="static">Static (No Camera Move)</option>
                         <option value="slow_zoom_in">Slow Zoom In (1.0x → 1.25x)</option>
@@ -2286,13 +2286,13 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                     </div>
 
                     {/* Camera Zoom Controls */}
-                    <div className="space-y-2 pt-2 border-t border-zinc-800">
-                      <h4 className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">
+                    <div className="space-y-2 pt-2 border-t border-edge">
+                      <h4 className="text-[11px] font-bold text-fg-dim uppercase tracking-wider">
                         Camera Zoom Range
                       </h4>
                       <div className="grid grid-cols-2 gap-2">
                         <div>
-                          <label className="text-[10px] text-zinc-500 block">Start Zoom</label>
+                          <label className="text-[10px] text-fg-faint block">Start Zoom</label>
                           <div className="flex items-center gap-1">
                             <input
                               type="number"
@@ -2306,13 +2306,13 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                                   zoom_start: parseFloat(e.target.value) || 1.0,
                                 })
                               }
-                              className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs font-mono text-zinc-100"
+                              className="w-full bg-ink border border-edge rounded px-2 py-1 text-xs font-mono text-fg"
                             />
-                            <span className="text-[10px] text-zinc-500">x</span>
+                            <span className="text-[10px] text-fg-faint">x</span>
                           </div>
                         </div>
                         <div>
-                          <label className="text-[10px] text-zinc-500 block">End Zoom</label>
+                          <label className="text-[10px] text-fg-faint block">End Zoom</label>
                           <div className="flex items-center gap-1">
                             <input
                               type="number"
@@ -2326,22 +2326,22 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                                   zoom_end: parseFloat(e.target.value) || 1.0,
                                 })
                               }
-                              className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs font-mono text-zinc-100"
+                              className="w-full bg-ink border border-edge rounded px-2 py-1 text-xs font-mono text-fg"
                             />
-                            <span className="text-[10px] text-zinc-500">x</span>
+                            <span className="text-[10px] text-fg-faint">x</span>
                           </div>
                         </div>
                       </div>
                     </div>
 
                     {/* Camera Pan Controls */}
-                    <div className="space-y-2 pt-2 border-t border-zinc-800">
-                      <h4 className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">
+                    <div className="space-y-2 pt-2 border-t border-edge">
+                      <h4 className="text-[11px] font-bold text-fg-dim uppercase tracking-wider">
                         Camera Pan Range (%)
                       </h4>
                       <div className="grid grid-cols-2 gap-2 text-xs">
                         <div>
-                          <label className="text-[10px] text-zinc-500 block">Pan X: Start → End</label>
+                          <label className="text-[10px] text-fg-faint block">Pan X: Start → End</label>
                           <div className="flex items-center gap-1">
                             <input
                               type="number"
@@ -2355,9 +2355,9 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                                   pan_x_start: parseFloat(e.target.value) || 0,
                                 })
                               }
-                              className="w-12 bg-zinc-950 border border-zinc-800 rounded px-1.5 py-1 text-xs font-mono text-zinc-100 text-center"
+                              className="w-12 bg-ink border border-edge rounded px-1.5 py-1 text-xs font-mono text-fg text-center"
                             />
-                            <span className="text-zinc-600">→</span>
+                            <span className="text-fg-faint">→</span>
                             <input
                               type="number"
                               min="-50"
@@ -2370,13 +2370,13 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                                   pan_x_end: parseFloat(e.target.value) || 0,
                                 })
                               }
-                              className="w-12 bg-zinc-950 border border-zinc-800 rounded px-1.5 py-1 text-xs font-mono text-zinc-100 text-center"
+                              className="w-12 bg-ink border border-edge rounded px-1.5 py-1 text-xs font-mono text-fg text-center"
                             />
                           </div>
                         </div>
 
                         <div>
-                          <label className="text-[10px] text-zinc-500 block">Pan Y: Start → End</label>
+                          <label className="text-[10px] text-fg-faint block">Pan Y: Start → End</label>
                           <div className="flex items-center gap-1">
                             <input
                               type="number"
@@ -2390,9 +2390,9 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                                   pan_y_start: parseFloat(e.target.value) || 0,
                                 })
                               }
-                              className="w-12 bg-zinc-950 border border-zinc-800 rounded px-1.5 py-1 text-xs font-mono text-zinc-100 text-center"
+                              className="w-12 bg-ink border border-edge rounded px-1.5 py-1 text-xs font-mono text-fg text-center"
                             />
-                            <span className="text-zinc-600">→</span>
+                            <span className="text-fg-faint">→</span>
                             <input
                               type="number"
                               min="-50"
@@ -2405,7 +2405,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                                   pan_y_end: parseFloat(e.target.value) || 0,
                                 })
                               }
-                              className="w-12 bg-zinc-950 border border-zinc-800 rounded px-1.5 py-1 text-xs font-mono text-zinc-100 text-center"
+                              className="w-12 bg-ink border border-edge rounded px-1.5 py-1 text-xs font-mono text-fg text-center"
                             />
                           </div>
                         </div>
@@ -2413,14 +2413,14 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                     </div>
 
                     {/* Camera Easing */}
-                    <div className="space-y-1 pt-2 border-t border-zinc-800">
-                      <label className="text-[11px] text-zinc-400 block">Camera Easing</label>
+                    <div className="space-y-1 pt-2 border-t border-edge">
+                      <label className="text-[11px] text-fg-dim block">Camera Easing</label>
                       <select
                         value={selectedScene.camera?.easing || "ease_in_out"}
                         onChange={(e) =>
                           updateSceneCamera({ easing: e.target.value as AnimationEasing })
                         }
-                        className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-200"
+                        className="w-full bg-ink border border-edge rounded px-2 py-1 text-xs text-fg"
                       >
                         <option value="ease_in_out">Ease In-Out (Smooth Start/Stop)</option>
                         <option value="linear">Linear (Constant Speed)</option>
@@ -2456,10 +2456,10 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                     {/* Property Pills */}
                     <div className="space-y-1">
                       <div className="flex items-center justify-between">
-                        <h4 className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">
+                        <h4 className="text-[11px] font-bold text-fg-dim uppercase tracking-wider">
                           Keyframe Property
                         </h4>
-                        <span className="text-[10px] font-mono text-indigo-400">
+                        <span className="text-[10px] font-mono text-info">
                           @{relativePlayheadSec.toFixed(2)}s
                         </span>
                       </div>
@@ -2475,13 +2475,13 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                                 onClick={() => setActiveKeyframeProperty(prop)}
                                 className={`px-2 py-1 rounded capitalize border transition-all text-center flex items-center justify-between ${
                                   activeKeyframeProperty === prop
-                                    ? "bg-indigo-600/30 border-indigo-500 text-indigo-300 font-bold"
-                                    : "bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-white"
+                                    ? "bg-accent/30 border-accent text-info font-bold"
+                                    : "bg-ink border-edge text-fg-dim hover:text-white"
                                 }`}
                               >
                                 <span>{prop}</span>
                                 {count > 0 && (
-                                  <span className="w-4 h-4 rounded-full bg-amber-500/20 text-amber-300 text-[9px] flex items-center justify-center font-mono">
+                                  <span className="w-4 h-4 rounded-full bg-warn/20 text-warn text-[9px] flex items-center justify-center font-mono">
                                     {count}
                                   </span>
                                 )}
@@ -2497,15 +2497,15 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                       variant="secondary"
                       size="sm"
                       onClick={() => handleAddKeyframeAtPlayhead(activeKeyframeProperty)}
-                      className="w-full text-xs h-8 text-amber-300 border-amber-800/60 hover:bg-amber-950/40"
+                      className="w-full text-xs h-8 text-warn border-warn/60 hover:bg-warn/40"
                     >
-                      <Icons.Plus className="w-3.5 h-3.5 mr-1 text-amber-400" />
+                      <Icons.Plus className="w-3.5 h-3.5 mr-1 text-warn" />
                       + Keyframe at {relativePlayheadSec.toFixed(2)}s ({activeKeyframeProperty})
                     </Button>
 
                     {/* List of Existing Keyframes for this property */}
-                    <div className="space-y-1.5 pt-2 border-t border-zinc-800">
-                      <div className="flex items-center justify-between text-[11px] text-zinc-400">
+                    <div className="space-y-1.5 pt-2 border-t border-edge">
+                      <div className="flex items-center justify-between text-[11px] text-fg-dim">
                         <span>Time / Value</span>
                         <span>Easing / Del</span>
                       </div>
@@ -2517,8 +2517,8 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
 
                         if (keyframes.length === 0) {
                           return (
-                            <div className="p-3 text-center text-xs text-zinc-500 bg-zinc-950 rounded border border-zinc-800/80">
-                              No keyframes on <span className="font-mono text-zinc-400">{activeKeyframeProperty}</span> yet. Scrub playhead and click "+ Keyframe".
+                            <div className="p-3 text-center text-xs text-fg-faint bg-ink rounded border border-edge/80">
+                              No keyframes on <span className="font-mono text-fg-dim">{activeKeyframeProperty}</span> yet. Scrub playhead and click "+ Keyframe".
                             </div>
                           );
                         }
@@ -2526,7 +2526,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                         return keyframes.map((kf) => (
                           <div
                             key={kf.id}
-                            className="flex items-center gap-1.5 p-1.5 rounded bg-zinc-950 border border-zinc-800 text-xs"
+                            className="flex items-center gap-1.5 p-1.5 rounded bg-ink border border-edge text-xs"
                           >
                             {/* Time input */}
                             <div className="flex items-center gap-0.5">
@@ -2541,9 +2541,9 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                                     time_offset_sec: Math.max(0, parseFloat(e.target.value) || 0),
                                   })
                                 }
-                                className="w-12 bg-zinc-900 border border-zinc-700 rounded px-1 py-0.5 font-mono text-[11px] text-right"
+                                className="w-12 bg-navy border border-edge rounded px-1 py-0.5 font-mono text-[11px] text-right"
                               />
-                              <span className="text-[10px] text-zinc-500 font-mono">s</span>
+                              <span className="text-[10px] text-fg-faint font-mono">s</span>
                             </div>
 
                             {/* Value input */}
@@ -2556,7 +2556,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                                   value: parseFloat(e.target.value) || 0,
                                 })
                               }
-                              className="w-14 bg-zinc-900 border border-zinc-700 rounded px-1 py-0.5 font-mono text-[11px] text-right"
+                              className="w-14 bg-navy border border-edge rounded px-1 py-0.5 font-mono text-[11px] text-right"
                             />
 
                             {/* Easing */}
@@ -2567,7 +2567,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                                   easing: e.target.value as AnimationEasing,
                                 })
                               }
-                              className="flex-1 bg-zinc-900 border border-zinc-700 rounded px-1 py-0.5 text-[10px] text-zinc-300"
+                              className="flex-1 bg-navy border border-edge rounded px-1 py-0.5 text-[10px] text-fg-dim"
                             >
                               <option value="ease_in_out">Ease In-Out</option>
                               <option value="linear">Linear</option>
@@ -2579,7 +2579,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                             <button
                               type="button"
                               onClick={() => handleDeleteKeyframe(activeKeyframeProperty, kf.id)}
-                              className="p-1 text-zinc-500 hover:text-rose-400"
+                              className="p-1 text-fg-faint hover:text-bad"
                               title="Delete Keyframe"
                             >
                               <Icons.Trash className="w-3 h-3" />
@@ -2590,7 +2590,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                     </div>
 
                     {/* Copy / Paste row */}
-                    <div className="flex items-center gap-2 pt-2 border-t border-zinc-800">
+                    <div className="flex items-center gap-2 pt-2 border-t border-edge">
                       <Button
                         variant="outline"
                         size="sm"
@@ -2616,14 +2616,14 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
 
                 {/* Delete Scene / Panel Action */}
                 {onDeleteScene && selectedScene && (
-                  <div className="pt-4 border-t border-zinc-800">
+                  <div className="pt-4 border-t border-edge">
                     <button
                       type="button"
                       onClick={() => onDeleteScene(selectedScene.id)}
-                      className="w-full py-2 px-3 rounded-lg border border-rose-800/60 bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 hover:text-white flex items-center justify-center gap-2 text-xs font-semibold transition-all shadow-sm"
+                      className="w-full py-2 px-3 rounded-lg border border-bad/60 bg-bad/40 hover:bg-bad/60 text-bad hover:text-white flex items-center justify-center gap-2 text-xs font-semibold transition-all shadow-sm"
                       title="Delete this scene from timeline (Del)"
                     >
-                      <Icons.Trash className="w-3.5 h-3.5 text-rose-400" />
+                      <Icons.Trash className="w-3.5 h-3.5 text-bad" />
                       <span>Delete Scene from Timeline</span>
                     </button>
                   </div>
@@ -2635,7 +2635,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
             {activeTab === "effects" && selectedLayer && (
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <h4 className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">
+                  <h4 className="text-[11px] font-bold text-fg-dim uppercase tracking-wider">
                     Comic Effects & Overlays
                   </h4>
                   <div className="space-y-1.5">
@@ -2654,17 +2654,17 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                         }}
                         className={`w-full text-left p-2 rounded-lg border text-xs flex items-center justify-between transition-colors ${
                           selectedLayer.motion_preset === fx.preset
-                            ? "bg-indigo-950 border-indigo-500 text-indigo-300 font-bold"
-                            : "bg-zinc-950 border-zinc-800 hover:border-indigo-500 text-zinc-300"
+                            ? "bg-accent/20 border-accent text-info font-bold"
+                            : "bg-ink border-edge hover:border-accent text-fg-dim"
                         }`}
                       >
                         <span>{fx.name}</span>
                         {selectedLayer.motion_preset === fx.preset ? (
-                          <span className="text-[10px] bg-indigo-500 text-white px-1.5 py-0.5 rounded font-mono">
+                          <span className="text-[10px] bg-accent text-white px-1.5 py-0.5 rounded font-mono">
                             Active
                           </span>
                         ) : (
-                          <Icons.Plus className="w-3.5 h-3.5 text-zinc-500" />
+                          <Icons.Plus className="w-3.5 h-3.5 text-fg-faint" />
                         )}
                       </button>
                     ))}
@@ -2678,7 +2678,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
               <div className="space-y-4">
                 {/* Scene Duration */}
                 <div className="space-y-2">
-                  <label className="text-xs text-zinc-300 block">Scene Total Duration</label>
+                  <label className="text-xs text-fg-dim block">Scene Total Duration</label>
                   <div className="flex items-center gap-2">
                     <input
                       type="number"
@@ -2691,15 +2691,15 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                           duration_sec: Math.max(0.5, parseFloat(e.target.value) || 1),
                         })
                       }
-                      className="w-24 bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1 text-xs font-mono text-zinc-100"
+                      className="w-24 bg-ink border border-edge rounded px-2.5 py-1 text-xs font-mono text-fg"
                     />
-                    <span className="text-xs text-zinc-400">seconds</span>
+                    <span className="text-xs text-fg-dim">seconds</span>
                   </div>
                 </div>
 
                 {/* Scene Transition Selector */}
-                <div className="space-y-2 pt-2 border-t border-zinc-800">
-                  <label className="text-xs text-zinc-300 block">Scene Entrance Transition</label>
+                <div className="space-y-2 pt-2 border-t border-edge">
+                  <label className="text-xs text-fg-dim block">Scene Entrance Transition</label>
                   <select
                     value={selectedScene.transition_in || "none"}
                     onChange={(e) =>
@@ -2707,7 +2707,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                         transition_in: e.target.value as SceneTransitionType,
                       })
                     }
-                    className="w-full bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1.5 text-xs text-zinc-200"
+                    className="w-full bg-ink border border-edge rounded px-2.5 py-1.5 text-xs text-fg"
                   >
                     <option value="none">Direct Cut (None)</option>
                     <option value="fade_to_black">Fade to Black</option>
@@ -2720,7 +2720,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
 
                   {/* Transition Duration */}
                   <div className="flex items-center justify-between pt-1">
-                    <span className="text-[11px] text-zinc-400">Transition Duration</span>
+                    <span className="text-[11px] text-fg-dim">Transition Duration</span>
                     <div className="flex items-center gap-1">
                       <input
                         type="number"
@@ -2733,22 +2733,22 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                             transition_duration_sec: Math.max(0.1, parseFloat(e.target.value) || 0.5),
                           })
                         }
-                        className="w-16 bg-zinc-950 border border-zinc-800 rounded px-2 py-0.5 text-xs font-mono text-zinc-100 text-right"
+                        className="w-16 bg-ink border border-edge rounded px-2 py-0.5 text-xs font-mono text-fg text-right"
                       />
-                      <span className="text-[10px] text-zinc-500">s</span>
+                      <span className="text-[10px] text-fg-faint">s</span>
                     </div>
                   </div>
                 </div>
 
                 {/* Layer Timing (Relative to Scene) */}
                 {selectedLayer && (
-                  <div className="space-y-3 pt-3 border-t border-zinc-800">
-                    <h4 className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">
+                  <div className="space-y-3 pt-3 border-t border-edge">
+                    <h4 className="text-[11px] font-bold text-fg-dim uppercase tracking-wider">
                       Layer Timing (Relative to Scene)
                     </h4>
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <label className="text-[11px] text-zinc-400 block mb-1">Start Offset</label>
+                        <label className="text-[11px] text-fg-dim block mb-1">Start Offset</label>
                         <div className="flex items-center gap-1">
                           <input
                             type="number"
@@ -2761,13 +2761,13 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                                 start_offset_sec: Math.max(0, parseFloat(e.target.value) || 0),
                               })
                             }
-                            className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs font-mono text-zinc-100"
+                            className="w-full bg-ink border border-edge rounded px-2 py-1 text-xs font-mono text-fg"
                           />
-                          <span className="text-[10px] text-zinc-500">s</span>
+                          <span className="text-[10px] text-fg-faint">s</span>
                         </div>
                       </div>
                       <div>
-                        <label className="text-[11px] text-zinc-400 block mb-1">Duration</label>
+                        <label className="text-[11px] text-fg-dim block mb-1">Duration</label>
                         <div className="flex items-center gap-1">
                           <input
                             type="number"
@@ -2780,9 +2780,9 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
                                 duration_sec: Math.max(0.4, parseFloat(e.target.value) || 1),
                               })
                             }
-                            className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs font-mono text-zinc-100"
+                            className="w-full bg-ink border border-edge rounded px-2 py-1 text-xs font-mono text-fg"
                           />
-                          <span className="text-[10px] text-zinc-500">s</span>
+                          <span className="text-[10px] text-fg-faint">s</span>
                         </div>
                       </div>
                     </div>
@@ -2791,14 +2791,14 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
 
                 {/* Delete Scene / Panel Action */}
                 {onDeleteScene && selectedScene && (
-                  <div className="pt-4 border-t border-zinc-800">
+                  <div className="pt-4 border-t border-edge">
                     <button
                       type="button"
                       onClick={() => onDeleteScene(selectedScene.id)}
-                      className="w-full py-2 px-3 rounded-lg border border-rose-800/60 bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 hover:text-white flex items-center justify-center gap-2 text-xs font-semibold transition-all shadow-sm"
+                      className="w-full py-2 px-3 rounded-lg border border-bad/60 bg-bad/40 hover:bg-bad/60 text-bad hover:text-white flex items-center justify-center gap-2 text-xs font-semibold transition-all shadow-sm"
                       title="Delete this scene from timeline (Del)"
                     >
-                      <Icons.Trash className="w-3.5 h-3.5 text-rose-400" />
+                      <Icons.Trash className="w-3.5 h-3.5 text-bad" />
                       <span>Delete Scene from Timeline</span>
                     </button>
                   </div>
@@ -2807,7 +2807,7 @@ export const ContextualInspector: React.FC<ContextualInspectorProps> = ({
             )}
           </>
         ) : (
-          <div className="flex flex-col items-center justify-center h-48 text-zinc-500 text-center">
+          <div className="flex flex-col items-center justify-center h-48 text-fg-faint text-center">
             <Icons.Sliders className="w-8 h-8 opacity-30 mb-2" />
             <p className="text-xs">Select a panel or clip to edit transform, motion, and effects.</p>
           </div>

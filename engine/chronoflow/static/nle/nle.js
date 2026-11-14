@@ -79,7 +79,7 @@
       const sceneCount = (job && job.scenes && job.scenes.length) || (job && job.total_chunks) || 0;
       if (sceneCount > 0) {
         const scTitle = (job && (job.folder_name || job.screenplay_title || 'Imported Scene')) || 'Imported Scene';
-        empty.querySelector('.msg').innerHTML = `<span style="font-weight: 700; color: #a5b4fc;">Scene "${scTitle}" Loaded (${sceneCount} Shots)</span><br><span style="font-size: 0.74rem; color: #94a3b8; margin-top: 4px; display: block;">Select a shot card in the Media Pool below or the Prompts tab to render clips onto the timeline.</span>`;
+        empty.querySelector('.msg').innerHTML = `<span style="font-weight: 700; color: #a9c1ff;">Scene "${scTitle}" Loaded (${sceneCount} Shots)</span><br><span style="font-size: 0.74rem; color: #9aa6d0; margin-top: 4px; display: block;">Select a shot card in the Media Pool below or the Prompts tab to render clips onto the timeline.</span>`;
       } else {
         empty.querySelector('.msg').textContent = job ? 'This job has no rendered clips yet' : 'No job selected';
       }
@@ -489,7 +489,7 @@
     const w = canvas.width = Math.max(2, Math.min(6000, Math.round(canvas.parentNode.clientWidth))), h = canvas.height = H.a1 - 6;
     const g = canvas.getContext('2d'); g.clearRect(0, 0, w, h);
     if (!peaks.length) return;
-    g.fillStyle = '#34d399';
+    g.fillStyle = '#46d6a3';
     const a = (c.in / c.srcDur) * peaks.length, z = (c.out / c.srcDur) * peaks.length;
     for (let x = 0; x < w; x++) {
       const i = Math.floor(a + (x / w) * (z - a)); const p = Math.min(1, (peaks[i] || 0) * c.volume * 1.4), bh = Math.max(1, p * h);
@@ -574,7 +574,7 @@
         <input type="number" id="inspTD" min="0.1" max="3" step="0.1" value="${c.transDur || M.DEFAULT_TRANS}" ${c.transition && c.transition !== 'cut' ? '' : 'disabled'}> s</label>
       <span class="grow" style="flex:1"></span>
       <button class="nle-btn" id="inspRegen">🔄 Regenerate shot</button>
-      <div style="flex-basis:100%;margin-top:4px;padding:4px 8px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:4px;font-size:0.75rem;color:#cbd5e1;line-height:1.4;max-height:48px;overflow-y:auto;white-space:pre-wrap;"><b style="color:#f59e0b;">Clip Prompt:</b> ${pText}</div>`;
+      <div style="flex-basis:100%;margin-top:4px;padding:4px 8px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:4px;font-size:0.75rem;color:#d5dcf5;line-height:1.4;max-height:48px;overflow-y:auto;white-space:pre-wrap;"><b style="color:#7aa2ff;">Clip Prompt:</b> ${pText}</div>`;
     $('#inspSpeed', i).onchange = (e) => edit(() => M.setSpeed(tl, c.id, e.target.value));
     $('#inspTrans', i).value = c.transition || 'cut';
     $('#inspTrans', i).onchange = (e) => edit(() => M.setTransition(tl, c.id, e.target.value, c.transDur));
@@ -1136,7 +1136,7 @@
           <div class="nle-head" style="height:26px"></div>
           <div class="nle-head" style="height:${H.v2}px"><i class="strip" style="background:#a855f7"></i><b>V2</b> Frames</div>
           <div class="nle-head" style="height:${H.v1}px"><i class="strip" style="background:#3b82f6"></i><b>V1</b> Video</div>
-          <div class="nle-head" style="height:${H.a1}px"><i class="strip" style="background:#10b981"></i><b>A1</b> Voice<span class="tb"><button data-t="amute" title="Mute audio">M</button></span></div>
+          <div class="nle-head" style="height:${H.a1}px"><i class="strip" style="background:#46d6a3"></i><b>A1</b> Voice<span class="tb"><button data-t="amute" title="Mute audio">M</button></span></div>
         </div>
         <div class="nle-scroll"><div class="nle-content">
           <div class="nle-ruler"></div>

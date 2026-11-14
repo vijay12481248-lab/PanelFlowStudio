@@ -108,7 +108,7 @@ const RunInspectorTab: React.FC = () => {
   useEffect(() => { void api.listProjects().then(setProjects).catch(fail("projects")); }, []);
   return (
     <>
-      {loadError && <p role="alert" className="px-4 pt-2 text-xs text-red-400">{loadError}</p>}
+      {loadError && <p role="alert" className="px-4 pt-2 text-xs text-bad">{loadError}</p>}
       <NarrationRunInspector
         projects={projects} projectId={projectId} runs={runs} runId={runId} run={run}
         onSelectProject={(id) => {
@@ -989,9 +989,9 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
   };
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-zinc-950 text-zinc-100 font-sans antialiased overflow-hidden select-none">
+    <div className="flex flex-col h-screen w-screen bg-ink text-fg font-sans antialiased overflow-hidden select-none">
       {/* Top Header Bar */}
-      <header className="h-14 min-h-[56px] border-b border-zinc-800 bg-zinc-950 px-4 flex items-center justify-between sticky top-0 z-40 shrink-0">
+      <header className="h-14 min-h-[56px] border-b border-edge bg-ink px-4 flex items-center justify-between sticky top-0 z-40 shrink-0">
         {/* Left: Branding & Chapter Breadcrumbs */}
         <div className="flex items-center gap-2.5 min-w-0 shrink">
           {onClose && (
@@ -999,7 +999,7 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
               variant="secondary"
               size="sm"
               onClick={onClose}
-              className="text-xs h-8 px-2.5 bg-zinc-900 border border-zinc-700 hover:bg-zinc-800 text-zinc-300 font-medium flex items-center gap-1.5 whitespace-nowrap shrink-0"
+              className="text-xs h-8 px-2.5 bg-navy border border-edge hover:bg-flat text-fg-dim font-medium flex items-center gap-1.5 whitespace-nowrap shrink-0"
               title="Return to Story Editor"
             >
               <Icons.ArrowLeft className="w-3.5 h-3.5 shrink-0" />
@@ -1012,35 +1012,35 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
             className="flex items-center gap-2 cursor-pointer group shrink-0"
             title="Return to Story Editor"
           >
-            <div className="w-7 h-7 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-black text-sm shadow-md shadow-indigo-600/30 group-hover:bg-indigo-500 transition-colors shrink-0">
+            <div className="w-7 h-7 rounded-lg bg-accent flex items-center justify-center text-white font-black text-sm shadow-md shadow-accent/30 group-hover:bg-accent transition-colors shrink-0">
               P
             </div>
             <div className="flex flex-col justify-center">
               <div className="font-extrabold text-sm text-white tracking-tight leading-none flex items-center gap-1.5 whitespace-nowrap">
                 <h1 className="text-sm font-extrabold text-white whitespace-nowrap">Narration Studio</h1>
-                <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-indigo-950 text-indigo-400 border border-indigo-800 whitespace-nowrap">
+                <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-accent/20 text-info border border-accent/40 whitespace-nowrap">
                   AI Storyteller
                 </span>
               </div>
-              <span className="hidden xl:block text-[10px] text-zinc-400 font-medium leading-none mt-1 whitespace-nowrap">
+              <span className="hidden xl:block text-[10px] text-fg-dim font-medium leading-none mt-1 whitespace-nowrap">
                 Grounded Manga Narration & Emotional Voice Engine
               </span>
             </div>
           </div>
 
-          <div className="h-5 w-px bg-zinc-800 mx-1 shrink-0 hidden md:block" />
+          <div className="h-5 w-px bg-flat mx-1 shrink-0 hidden md:block" />
 
           {/* Breadcrumb Path */}
-          <div className="hidden md:flex items-center gap-1.5 text-xs text-zinc-400 font-medium min-w-0">
+          <div className="hidden md:flex items-center gap-1.5 text-xs text-fg-dim font-medium min-w-0">
             <span
-              className="text-zinc-400 truncate max-w-[120px] lg:max-w-[180px] whitespace-nowrap"
+              className="text-fg-dim truncate max-w-[120px] lg:max-w-[180px] whitespace-nowrap"
               title={chapter.project_title}
             >
               {chapter.project_title}
             </span>
-            <span className="text-zinc-600 shrink-0">›</span>
+            <span className="text-fg-faint shrink-0">›</span>
             <span
-              className="text-indigo-400 font-semibold truncate max-w-[140px] lg:max-w-[200px] whitespace-nowrap"
+              className="text-info font-semibold truncate max-w-[140px] lg:max-w-[200px] whitespace-nowrap"
               title={chapter.chapter_title}
             >
               {chapter.chapter_title}
@@ -1053,25 +1053,25 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
           {/* Save Status */}
           <div className="flex items-center gap-1 text-xs font-medium mr-1 shrink-0 whitespace-nowrap">
             {saveStatus === "saving" ? (
-              <span className="text-amber-400 flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+              <span className="text-warn flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-warn animate-pulse" />
                 Saving...
               </span>
             ) : saveStatus === "unsaved" ? (
-              <span className="text-zinc-400 flex items-center gap-1.5" title="Changes auto-save shortly">
-                <span className="w-2 h-2 rounded-full bg-amber-500/80" />
+              <span className="text-fg-dim flex items-center gap-1.5" title="Changes auto-save shortly">
+                <span className="w-2 h-2 rounded-full bg-warn/80" />
                 Unsaved
               </span>
             ) : (
-              <span className="text-emerald-400 flex items-center gap-1.5">
-                <Icons.Check className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="text-ok flex items-center gap-1.5">
+                <Icons.Check className="w-3.5 h-3.5 text-ok" />
                 Saved
               </span>
             )}
           </div>
 
           {/* Undo / Redo */}
-          <div className="flex items-center gap-1 text-zinc-400 shrink-0">
+          <div className="flex items-center gap-1 text-fg-dim shrink-0">
             <button
               type="button"
               onClick={handleUndo}
@@ -1092,7 +1092,7 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
             </button>
           </div>
 
-          <div className="h-4 w-px bg-zinc-800 shrink-0" />
+          <div className="h-4 w-px bg-flat shrink-0" />
 
           {/* Centralized Global & Flow-Wise LLM Selector */}
           <GlobalLLMSelector
@@ -1109,17 +1109,17 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
           {/* 3-Tier AI Narration Multi-Action Generator */}
           <div className="relative flex items-center shrink-0">
             {isDraftingNarration ? (
-              <div className="flex items-center gap-1.5 bg-zinc-900 border border-indigo-500/60 rounded-lg p-1 pr-2 shadow-lg shadow-indigo-950/60">
-                <div className="flex items-center gap-2 px-2 py-0.5 text-xs text-indigo-300 font-medium">
-                  <span className="w-3 h-3 border-2 border-indigo-400/30 border-t-indigo-400 rounded-full animate-spin shrink-0" />
+              <div className="flex items-center gap-1.5 bg-navy border border-accent/60 rounded-lg p-1 pr-2 shadow-lg shadow-accent/60">
+                <div className="flex items-center gap-2 px-2 py-0.5 text-xs text-info font-medium">
+                  <span className="w-3 h-3 border-2 border-accent/30 border-t-indigo-400 rounded-full animate-spin shrink-0" />
                   <span className="whitespace-nowrap max-w-[260px] truncate" title={generationStep}>
                     {generationStep || "Processing narration..."}
                   </span>
-                  <span className="text-[11px] font-mono text-indigo-300 bg-indigo-950 px-1.5 py-0.5 rounded border border-indigo-800/80">
+                  <span className="text-[11px] font-mono text-info bg-accent/20 px-1.5 py-0.5 rounded border border-accent/80">
                     ⏱️ {Math.floor(elapsedSec / 60)}:{(elapsedSec % 60).toString().padStart(2, "0")}
                   </span>
                   {jobProgress && (
-                    <span className="text-[10px] font-bold text-amber-300 bg-amber-950/80 px-1.5 py-0.5 rounded border border-amber-700/60">
+                    <span className="text-[10px] font-bold text-warn bg-warn/80 px-1.5 py-0.5 rounded border border-warn/60">
                       {jobProgress.percent}%
                     </span>
                   )}
@@ -1133,10 +1133,10 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
                       handleCancelDrafting();
                       handleTriggerJob("full");
                     }}
-                    className="text-[10px] h-6 px-2 rounded bg-indigo-800 hover:bg-indigo-700 border border-indigo-600 text-white font-bold transition-all active:scale-95 flex items-center gap-1 shrink-0"
+                    className="text-[10px] h-6 px-2 rounded bg-accent/20 hover:bg-accent border border-accent text-white font-bold transition-all active:scale-95 flex items-center gap-1 shrink-0"
                     title="Move to background Job scheduler so you can monitor or continue working"
                   >
-                    <Icons.Zap className="w-3 h-3 text-amber-300" />
+                    <Icons.Zap className="w-3 h-3 text-warn" />
                     <span>Trigger Job</span>
                   </button>
                 )}
@@ -1144,7 +1144,7 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
                 <button
                   type="button"
                   onClick={handleCancelDrafting}
-                  className="text-[11px] h-6 px-2 rounded bg-rose-900/80 hover:bg-rose-800 border border-rose-700 text-rose-200 font-bold transition-all active:scale-95 flex items-center gap-1 shrink-0"
+                  className="text-[11px] h-6 px-2 rounded bg-bad/80 hover:bg-bad/20 border border-bad text-bad font-bold transition-all active:scale-95 flex items-center gap-1 shrink-0"
                   title="Cancel active generation"
                 >
                   <Icons.X className="w-3 h-3" />
@@ -1156,16 +1156,16 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
                 <button
                   type="button"
                   onClick={() => handleGenerateAiNarration("full")}
-                  className="text-xs h-8 px-3 rounded-l-lg bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-bold shadow-md shadow-indigo-600/30 flex items-center gap-1.5 transition-all active:scale-95 whitespace-nowrap shrink-0"
+                  className="text-xs h-8 px-3 rounded-l-lg bg-gradient-to-r from-accent to-accent hover:from-accent hover:to-accent text-white font-bold shadow-md shadow-accent/30 flex items-center gap-1.5 transition-all active:scale-95 whitespace-nowrap shrink-0"
                   title="Execute full 3-tier narration workflow (Page Recap -> Panel Breakdown -> Harmonize & Sync)"
                 >
-                  <Icons.Sparkles className="w-3.5 h-3.5 text-indigo-200 shrink-0" />
+                  <Icons.Sparkles className="w-3.5 h-3.5 text-info shrink-0" />
                   <span className="whitespace-nowrap">Generate 3-Tier Narration</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setShowTierDropdown((v) => !v)}
-                  className="text-xs h-8 px-1.5 rounded-r-lg bg-violet-700 hover:bg-violet-600 border-l border-violet-500 text-white font-bold transition-all shrink-0"
+                  className="text-xs h-8 px-1.5 rounded-r-lg bg-accent hover:bg-accent border-l border-accent text-white font-bold transition-all shrink-0"
                   title="Select specific narration stage or trigger background job"
                 >
                   <Icons.ChevronDown className="w-3 h-3" />
@@ -1176,71 +1176,71 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
             {/* Dropdown Menu */}
             {showTierDropdown && (
               <div
-                className="absolute right-0 top-10 w-72 rounded-xl bg-zinc-900 border border-zinc-700 shadow-2xl p-1.5 z-50 space-y-1 text-xs"
+                className="absolute right-0 top-10 w-72 rounded-xl bg-navy border border-edge shadow-2xl p-1.5 z-50 space-y-1 text-xs"
                 onClick={() => setShowTierDropdown(false)}
               >
                 <button
                   type="button"
                   onClick={() => handleGenerateAiNarration("full")}
-                  className="w-full text-left p-2 rounded-lg hover:bg-indigo-950/80 text-zinc-100 hover:text-indigo-200 flex items-start gap-2"
+                  className="w-full text-left p-2 rounded-lg hover:bg-accent/80 text-fg hover:text-info flex items-start gap-2"
                 >
-                  <Icons.Sparkles className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
+                  <Icons.Sparkles className="w-4 h-4 text-info shrink-0 mt-0.5" />
                   <div>
                     <span className="font-bold block">Run Direct (Interactive)</span>
-                    <span className="text-[10px] text-zinc-400">Page Story (5-10 lines) ➔ Panel Micro ➔ Harmonize</span>
+                    <span className="text-[10px] text-fg-dim">Page Story (5-10 lines) ➔ Panel Micro ➔ Harmonize</span>
                   </div>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => handleTriggerJob("full")}
-                  className="w-full text-left p-2 rounded-lg hover:bg-violet-950/80 text-violet-100 hover:text-violet-200 flex items-start gap-2 bg-violet-950/30 border border-violet-800/40"
+                  className="w-full text-left p-2 rounded-lg hover:bg-accent/80 text-info hover:text-info flex items-start gap-2 bg-accent/30 border border-accent/40"
                 >
-                  <Icons.Zap className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                  <Icons.Zap className="w-4 h-4 text-warn shrink-0 mt-0.5" />
                   <div>
                     <span className="font-bold block flex items-center gap-1.5">
                       Trigger Background Job
-                      <span className="text-[9px] bg-amber-500/20 text-amber-300 px-1 rounded font-semibold">Recommended</span>
+                      <span className="text-[9px] bg-warn/20 text-warn px-1 rounded font-semibold">Recommended</span>
                     </span>
-                    <span className="text-[10px] text-zinc-400">Tracked with real-time %, durable queue & cancel</span>
+                    <span className="text-[10px] text-fg-dim">Tracked with real-time %, durable queue & cancel</span>
                   </div>
                 </button>
 
-                <div className="h-px bg-zinc-800" />
+                <div className="h-px bg-flat" />
 
                 <button
                   type="button"
                   onClick={() => handleGenerateAiNarration("page_only")}
-                  className="w-full text-left p-2 rounded-lg hover:bg-amber-950/60 text-zinc-100 hover:text-amber-200 flex items-start gap-2"
+                  className="w-full text-left p-2 rounded-lg hover:bg-warn/60 text-fg hover:text-warn flex items-start gap-2"
                 >
-                  <Icons.BookOpen className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                  <Icons.BookOpen className="w-4 h-4 text-warn shrink-0 mt-0.5" />
                   <div>
                     <span className="font-bold block">Tier 1: Page Stories (5-10 Lines) Only</span>
-                    <span className="text-[10px] text-zinc-400">Full page image analysis with witty recap</span>
+                    <span className="text-[10px] text-fg-dim">Full page image analysis with witty recap</span>
                   </div>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => handleGenerateAiNarration("panel_only")}
-                  className="w-full text-left p-2 rounded-lg hover:bg-emerald-950/60 text-zinc-100 hover:text-emerald-200 flex items-start gap-2"
+                  className="w-full text-left p-2 rounded-lg hover:bg-ok/60 text-fg hover:text-ok flex items-start gap-2"
                 >
-                  <Icons.Eye className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                  <Icons.Eye className="w-4 h-4 text-ok shrink-0 mt-0.5" />
                   <div>
                     <span className="font-bold block">Tier 2: Panel Breakdown Only</span>
-                    <span className="text-[10px] text-zinc-400">Micro visual framing & OCR extraction</span>
+                    <span className="text-[10px] text-fg-dim">Micro visual framing & OCR extraction</span>
                   </div>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => handleGenerateAiNarration("harmonize")}
-                  className="w-full text-left p-2 rounded-lg hover:bg-purple-950/60 text-zinc-100 hover:text-purple-200 flex items-start gap-2"
+                  className="w-full text-left p-2 rounded-lg hover:bg-accent/60 text-fg hover:text-info flex items-start gap-2"
                 >
-                  <Icons.Layout className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
+                  <Icons.Layout className="w-4 h-4 text-info shrink-0 mt-0.5" />
                   <div>
                     <span className="font-bold block">Tier 3: Compare & Harmonize Only</span>
-                    <span className="text-[10px] text-zinc-400">Sync witty page lines with panel durations</span>
+                    <span className="text-[10px] text-fg-dim">Sync witty page lines with panel durations</span>
                   </div>
                 </button>
               </div>
@@ -1252,17 +1252,17 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
             type="button"
             onClick={handleSynthesizeAllVoices}
             disabled={isSynthesizingAll || chapter.segments.length === 0}
-            className="text-xs h-8 px-3 rounded-lg bg-zinc-900 border border-zinc-700/80 hover:border-cyan-500/50 hover:bg-zinc-800 text-zinc-100 font-semibold shadow-sm flex items-center gap-1.5 transition-all active:scale-95 disabled:opacity-50 whitespace-nowrap shrink-0"
+            className="text-xs h-8 px-3 rounded-lg bg-navy border border-edge/80 hover:border-info/50 hover:bg-flat text-fg font-semibold shadow-sm flex items-center gap-1.5 transition-all active:scale-95 disabled:opacity-50 whitespace-nowrap shrink-0"
             title="Synthesize audio for all segments via Chatterbox Turbo (MIT)"
           >
             {isSynthesizingAll ? (
               <>
-                <span className="w-3 h-3 border-2 border-cyan-400/30 border-t-cyan-400 rounded-full animate-spin shrink-0" />
+                <span className="w-3 h-3 border-2 border-info/30 border-t-cyan-400 rounded-full animate-spin shrink-0" />
                 <span className="whitespace-nowrap">Synthesizing...</span>
               </>
             ) : (
               <>
-                <Icons.Mic className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                <Icons.Mic className="w-3.5 h-3.5 text-info shrink-0" />
                 <span className="whitespace-nowrap">Generate Voices</span>
               </>
             )}
@@ -1273,7 +1273,7 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
             type="button"
             onClick={() => setTimelineModalOpen(true)}
             disabled={chapter.segments.length === 0}
-            className="text-xs h-8 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold shadow-md shadow-emerald-600/30 flex items-center gap-1.5 transition-all active:scale-95 disabled:opacity-50 whitespace-nowrap shrink-0"
+            className="text-xs h-8 px-3 rounded-lg bg-ok hover:bg-ok text-white font-bold shadow-md shadow-ok/30 flex items-center gap-1.5 transition-all active:scale-95 disabled:opacity-50 whitespace-nowrap shrink-0"
             title="Confirm adding narration to video timeline"
           >
             <Icons.Plus className="w-3.5 h-3.5 shrink-0" />
@@ -1284,7 +1284,7 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="hover:text-rose-400 p-1 text-zinc-500 hover:bg-zinc-800 rounded-lg transition-colors ml-1 shrink-0"
+              className="hover:text-bad p-1 text-fg-faint hover:bg-flat rounded-lg transition-colors ml-1 shrink-0"
               title="Close Workspace"
             >
               <Icons.X className="w-4 h-4" />
@@ -1294,9 +1294,9 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
       </header>
 
       {/* 3-Tier Storyteller Workflow Progression Bar */}
-      <div className="bg-zinc-900/90 border-b border-zinc-800/80 px-4 py-2 flex items-center justify-between text-xs shrink-0 select-none overflow-x-auto no-scrollbar gap-4">
+      <div className="bg-navy/90 border-b border-edge/80 px-4 py-2 flex items-center justify-between text-xs shrink-0 select-none overflow-x-auto no-scrollbar gap-4">
         <div className="flex items-center gap-3 shrink-0">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-400 bg-indigo-950/80 border border-indigo-800/60 px-2 py-0.5 rounded flex items-center gap-1 whitespace-nowrap shrink-0">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-info bg-accent/80 border border-accent/60 px-2 py-0.5 rounded flex items-center gap-1 whitespace-nowrap shrink-0">
             <Icons.Layers className="w-3 h-3" />
             3-Tier Storyteller Flow
           </span>
@@ -1305,43 +1305,43 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
             {/* Step 1 */}
             <div className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border whitespace-nowrap shrink-0 ${
               Object.keys(chapter.page_scripts || {}).length > 0
-                ? "bg-amber-950/60 border-amber-800/80 text-amber-300 font-semibold"
-                : "bg-zinc-950 border-zinc-800 text-zinc-400"
+                ? "bg-warn/60 border-warn/80 text-warn font-semibold"
+                : "bg-ink border-edge text-fg-dim"
             }`}>
-              <span className="w-3.5 h-3.5 rounded-full bg-amber-500/20 text-amber-300 font-mono text-[9px] flex items-center justify-center font-bold shrink-0">1</span>
+              <span className="w-3.5 h-3.5 rounded-full bg-warn/20 text-warn font-mono text-[9px] flex items-center justify-center font-bold shrink-0">1</span>
               <span>Page Story (5-10 Lines)</span>
               {Object.keys(chapter.page_scripts || {}).length > 0 && (
-                <Icons.Check className="w-3 h-3 text-amber-400 shrink-0" />
+                <Icons.Check className="w-3 h-3 text-warn shrink-0" />
               )}
             </div>
 
-            <Icons.ArrowRight className="w-3 h-3 text-zinc-600 shrink-0" />
+            <Icons.ArrowRight className="w-3 h-3 text-fg-faint shrink-0" />
 
             {/* Step 2 */}
             <div className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border whitespace-nowrap shrink-0 ${
               chapter.segments.some((s) => s.panel_narration_text)
-                ? "bg-emerald-950/60 border-emerald-800/80 text-emerald-300 font-semibold"
-                : "bg-zinc-950 border-zinc-800 text-zinc-400"
+                ? "bg-ok/60 border-ok/80 text-ok font-semibold"
+                : "bg-ink border-edge text-fg-dim"
             }`}>
-              <span className="w-3.5 h-3.5 rounded-full bg-emerald-500/20 text-emerald-300 font-mono text-[9px] flex items-center justify-center font-bold shrink-0">2</span>
+              <span className="w-3.5 h-3.5 rounded-full bg-ok/20 text-ok font-mono text-[9px] flex items-center justify-center font-bold shrink-0">2</span>
               <span>Panel Breakdown</span>
               {chapter.segments.some((s) => s.panel_narration_text) && (
-                <Icons.Check className="w-3 h-3 text-emerald-400 shrink-0" />
+                <Icons.Check className="w-3 h-3 text-ok shrink-0" />
               )}
             </div>
 
-            <Icons.ArrowRight className="w-3 h-3 text-zinc-600 shrink-0" />
+            <Icons.ArrowRight className="w-3 h-3 text-fg-faint shrink-0" />
 
             {/* Step 3 */}
             <div className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border whitespace-nowrap shrink-0 ${
               chapter.segments.some((s) => s.synthesis_notes || s.review_status === "APPROVED")
-                ? "bg-purple-950/60 border-purple-800/80 text-purple-300 font-semibold"
-                : "bg-zinc-950 border-zinc-800 text-zinc-400"
+                ? "bg-accent/60 border-accent/80 text-info font-semibold"
+                : "bg-ink border-edge text-fg-dim"
             }`}>
-              <span className="w-3.5 h-3.5 rounded-full bg-purple-500/20 text-purple-300 font-mono text-[9px] flex items-center justify-center font-bold shrink-0">3</span>
+              <span className="w-3.5 h-3.5 rounded-full bg-accent/20 text-info font-mono text-[9px] flex items-center justify-center font-bold shrink-0">3</span>
               <span>Harmonized & Synced Script</span>
               {chapter.segments.some((s) => s.synthesis_notes || s.review_status === "APPROVED") && (
-                <Icons.Check className="w-3 h-3 text-purple-400 shrink-0" />
+                <Icons.Check className="w-3 h-3 text-info shrink-0" />
               )}
             </div>
           </div>
@@ -1349,13 +1349,13 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
 
         <div className="flex items-center gap-2 shrink-0 whitespace-nowrap">
           {isDraftingNarration ? (
-            <div className="flex items-center gap-2 text-indigo-300 font-semibold text-xs whitespace-nowrap bg-indigo-950/60 px-2.5 py-1 rounded-lg border border-indigo-800/60">
-              <span className="w-3 h-3 border-2 border-indigo-400/30 border-t-indigo-400 rounded-full animate-spin shrink-0" />
+            <div className="flex items-center gap-2 text-info font-semibold text-xs whitespace-nowrap bg-accent/60 px-2.5 py-1 rounded-lg border border-accent/60">
+              <span className="w-3 h-3 border-2 border-accent/30 border-t-indigo-400 rounded-full animate-spin shrink-0" />
               <span>{generationStep || "Running 3-tier narration..."}</span>
-              <span className="font-mono text-indigo-400 font-bold">({elapsedSec}s)</span>
+              <span className="font-mono text-info font-bold">({elapsedSec}s)</span>
             </div>
           ) : (
-            <span className="text-[11px] text-zinc-400 whitespace-nowrap">
+            <span className="text-[11px] text-fg-dim whitespace-nowrap">
               {chapter.segments.length} panels • {Object.keys(chapter.page_scripts || {}).length} page stories ready
             </span>
           )}
@@ -1364,13 +1364,13 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
 
       {/* Post-Draft Action Notification Banner */}
       {postDraftPrompt && (
-        <div className="bg-gradient-to-r from-indigo-950/90 via-zinc-900 to-emerald-950/90 border-b border-indigo-700/60 px-4 py-2 flex items-center justify-between text-xs animate-fadeIn shrink-0">
+        <div className="bg-gradient-to-r from-accent/90 via-navy to-ok/90 border-b border-accent/60 px-4 py-2 flex items-center justify-between text-xs animate-fadeIn shrink-0">
           <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="font-semibold text-zinc-100">
+            <span className="w-2 h-2 rounded-full bg-ok animate-pulse" />
+            <span className="font-semibold text-fg">
               AI Narration Drafted ({chapter.segments.length} grounded beats via {selectedOllamaModel})
             </span>
-            <span className="text-zinc-400 hidden sm:inline">• Ready for emotional voice synthesis and timeline integration.</span>
+            <span className="text-fg-dim hidden sm:inline">• Ready for emotional voice synthesis and timeline integration.</span>
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -1379,7 +1379,7 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
                 setPostDraftPrompt(false);
                 handleSynthesizeAllVoices();
               }}
-              className="px-2.5 py-1 rounded bg-cyan-600 hover:bg-cyan-500 text-white font-bold flex items-center gap-1 shadow-sm transition-all"
+              className="px-2.5 py-1 rounded bg-info hover:bg-info text-white font-bold flex items-center gap-1 shadow-sm transition-all"
             >
               <Icons.Mic className="w-3.5 h-3.5" />
               <span>Generate Voices Now</span>
@@ -1390,7 +1390,7 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
                 setPostDraftPrompt(false);
                 setTimelineModalOpen(true);
               }}
-              className="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-bold flex items-center gap-1 shadow-sm transition-all"
+              className="px-2.5 py-1 rounded bg-ok hover:bg-ok text-white font-bold flex items-center gap-1 shadow-sm transition-all"
             >
               <Icons.Plus className="w-3.5 h-3.5" />
               <span>Add to Timeline</span>
@@ -1398,7 +1398,7 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
             <button
               type="button"
               onClick={() => setPostDraftPrompt(false)}
-              className="p-1 rounded text-zinc-400 hover:text-white"
+              className="p-1 rounded text-fg-dim hover:text-white"
             >
               <Icons.X className="w-3.5 h-3.5" />
             </button>
@@ -1406,7 +1406,7 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
         </div>
       )}
 
-      <div role="tablist" aria-label="Narration Studio views" className="flex gap-1 px-4 pt-2 border-b border-zinc-800 shrink-0">
+      <div role="tablist" aria-label="Narration Studio views" className="flex gap-1 px-4 pt-2 border-b border-edge shrink-0">
         {([["script", "Script"], ["review", "Review queue"], ["inspector", "Run inspector"]] as const).map(([id, label]) => (
           <button
             key={id}
@@ -1415,7 +1415,7 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
             aria-selected={studioTab === id}
             aria-label={label}
             onClick={() => setStudioTab(id)}
-            className={`px-3 py-1.5 text-xs font-semibold rounded-t-lg ${studioTab === id ? "bg-zinc-800 text-white" : "text-zinc-400 hover:text-zinc-200"}`}
+            className={`px-3 py-1.5 text-xs font-semibold rounded-t-lg ${studioTab === id ? "bg-flat text-white" : "text-fg-dim hover:text-fg"}`}
           >
             {label}
           </button>
@@ -1442,7 +1442,7 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
         </div>
 
         {/* Center Column: Story Script Editor (6 cols / ~50%) */}
-        <div className="col-span-12 md:col-span-6 min-h-0 h-full overflow-y-auto flex flex-col border-r border-zinc-800/90 bg-zinc-950">
+        <div className="col-span-12 md:col-span-6 min-h-0 h-full overflow-y-auto flex flex-col border-r border-edge/90 bg-ink">
           <NarrationSegmentEditor
             segment={selectedSegment}
             previousSegment={previousSegment}
@@ -1497,19 +1497,19 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
         </div>
 
         {/* Right Column: Voice & Delivery Inspector (3 cols / ~25%) */}
-        <div className="col-span-12 md:col-span-3 min-h-0 h-full overflow-y-auto bg-zinc-950 p-3 space-y-3.5 select-none">
+        <div className="col-span-12 md:col-span-3 min-h-0 h-full overflow-y-auto bg-ink p-3 space-y-3.5 select-none">
           {selectedSegment ? (
             <>
               {/* Speaker & Voice Assignment Bar */}
-              <div className="p-3 rounded-xl bg-zinc-900/60 border border-zinc-800 space-y-2.5">
+              <div className="p-3 rounded-xl bg-navy/60 border border-edge space-y-2.5">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold uppercase tracking-wider text-zinc-300">
+                  <span className="text-xs font-bold uppercase tracking-wider text-fg-dim">
                     Speaker & Voice
                   </span>
                   <button
                     type="button"
                     onClick={() => setShowVoiceManagerModal(true)}
-                    className="text-[10px] text-indigo-400 hover:text-indigo-300 font-semibold underline"
+                    className="text-[10px] text-info hover:text-info font-semibold underline"
                   >
                     Edit Casting
                   </button>
@@ -1517,7 +1517,7 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
 
                 {/* Speaker Dropdown */}
                 <div className="space-y-1">
-                  <label className="text-[10px] text-zinc-400 font-medium block">
+                  <label className="text-[10px] text-fg-dim font-medium block">
                     Speaker Assignment:
                   </label>
                   <select
@@ -1533,7 +1533,7 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
                         });
                       }
                     }}
-                    className="w-full p-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 font-semibold focus:outline-none focus:border-indigo-500 cursor-pointer"
+                    className="w-full p-2 rounded-lg bg-ink border border-edge text-xs text-fg font-semibold focus:outline-none focus:border-accent cursor-pointer"
                   >
                     {chapter.characters.map((c) => (
                       <option key={c.id} value={c.id}>
@@ -1545,7 +1545,7 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
 
                 {/* Voice Profile Dropdown */}
                 <div className="space-y-1">
-                  <label className="text-[10px] text-zinc-400 font-medium block">
+                  <label className="text-[10px] text-fg-dim font-medium block">
                     Voice Profile:
                   </label>
                   <select
@@ -1561,7 +1561,7 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
                             : selectedSegment.generation_status,
                       });
                     }}
-                    className="w-full p-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 font-semibold focus:outline-none focus:border-indigo-500 cursor-pointer"
+                    className="w-full p-2 rounded-lg bg-ink border border-edge text-xs text-fg font-semibold focus:outline-none focus:border-accent cursor-pointer"
                   >
                     {chapter.voice_profiles.map((v) => (
                       <option key={v.id} value={v.id}>
@@ -1573,7 +1573,7 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
               </div>
 
               {/* Emotional Delivery Editor */}
-              <div className="p-3.5 rounded-xl bg-zinc-900/60 border border-zinc-800">
+              <div className="p-3.5 rounded-xl bg-navy/60 border border-edge">
                 <EmotionDeliveryControls
                   delivery={selectedSegment.delivery}
                   onChangeDelivery={(updates) => {
@@ -1613,7 +1613,7 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
               />
             </>
           ) : (
-            <div className="p-8 text-center text-zinc-500 text-xs">
+            <div className="p-8 text-center text-fg-faint text-xs">
               Select a segment to inspect voice delivery
             </div>
           )}
@@ -1640,23 +1640,23 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
       {/* Export Timeline Integration Contract Modal */}
       {showExportModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl max-w-2xl w-full p-6 space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+          <div className="bg-navy border border-edge rounded-xl max-w-2xl w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-edge pb-3">
               <div>
-                <h3 className="text-base font-bold text-zinc-100 flex items-center gap-2">
+                <h3 className="text-base font-bold text-fg flex items-center gap-2">
                   <span>Export Chapter 3 Timeline Contract</span>
-                  <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-indigo-950 text-indigo-400 border border-indigo-800">
+                  <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-accent/20 text-info border border-accent/40">
                     Schema 5A-v2
                   </span>
                 </h3>
-                <p className="text-xs text-zinc-400 mt-0.5">
+                <p className="text-xs text-fg-dim mt-0.5">
                   Pre-formatted JSON ready for ingestion by future Chapter 3 timeline adapters
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setShowExportModal(false)}
-                className="text-zinc-400 hover:text-zinc-200 p-1 rounded-lg hover:bg-zinc-800 transition-colors"
+                className="text-fg-dim hover:text-fg p-1 rounded-lg hover:bg-flat transition-colors"
               >
                 <Icons.X className="w-4 h-4" />
               </button>
@@ -1664,16 +1664,16 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
             </div>
 
             <div className="space-y-2">
-              <span className="text-xs font-semibold text-zinc-300">
+              <span className="text-xs font-semibold text-fg-dim">
                 Generated Serializable Payload ({timelineContract.clips.length} Clips):
               </span>
-              <pre className="p-3 rounded-lg bg-zinc-950 border border-zinc-800 text-[11px] font-mono text-zinc-300 max-h-64 overflow-y-auto leading-relaxed select-all">
+              <pre className="p-3 rounded-lg bg-ink border border-edge text-[11px] font-mono text-fg-dim max-h-64 overflow-y-auto leading-relaxed select-all">
                 {JSON.stringify(timelineContract, null, 2)}
               </pre>
             </div>
 
-            <div className="flex items-center justify-between pt-2 border-t border-zinc-800 text-xs">
-              <span className="text-zinc-500 text-[11px]">
+            <div className="flex items-center justify-between pt-2 border-t border-edge text-xs">
+              <span className="text-fg-faint text-[11px]">
                 Contract verified: Compatible with Chapter 3 Timeline Clip schema
               </span>
               <div className="flex gap-2">
@@ -1692,7 +1692,7 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
                   variant="primary"
                   size="sm"
                   onClick={() => setShowExportModal(false)}
-                  className="text-xs h-8 bg-indigo-600 hover:bg-indigo-500"
+                  className="text-xs h-8 bg-accent hover:bg-accent"
                 >
                   Done
                 </Button>
@@ -1705,17 +1705,17 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
       {/* "May I add this narration to the timeline?" Confirmation Modal */}
       {timelineModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn">
-          <div className="bg-zinc-900 border border-zinc-750 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl ring-1 ring-white/10">
-            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+          <div className="bg-navy border border-edge rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl ring-1 ring-white/10">
+            <div className="flex items-center justify-between border-b border-edge pb-3">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-emerald-950/80 border border-emerald-700/60 flex items-center justify-center text-emerald-400 shadow-inner">
-                  <Icons.Mic className="w-4 h-4 text-emerald-400" />
+                <div className="w-8 h-8 rounded-xl bg-ok/80 border border-ok/60 flex items-center justify-center text-ok shadow-inner">
+                  <Icons.Mic className="w-4 h-4 text-ok" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-zinc-100 leading-tight">
+                  <h3 className="text-sm font-bold text-fg leading-tight">
                     Add Narration to Timeline
                   </h3>
-                  <span className="text-[11px] text-zinc-400">
+                  <span className="text-[11px] text-fg-dim">
                     May I add this narration to the timeline?
                   </span>
                 </div>
@@ -1723,7 +1723,7 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
               <button
                 type="button"
                 onClick={() => setTimelineModalOpen(false)}
-                className="text-zinc-400 hover:text-zinc-200 p-1 rounded-lg hover:bg-zinc-800 transition-colors"
+                className="text-fg-dim hover:text-fg p-1 rounded-lg hover:bg-flat transition-colors"
                 title="Close (Esc)"
               >
                 <Icons.X className="w-4 h-4" />
@@ -1731,7 +1731,7 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
 
             </div>
 
-            <p className="text-xs text-zinc-300 leading-relaxed">
+            <p className="text-xs text-fg-dim leading-relaxed">
               Choose how you would like to synchronize your narrative voice takes into the active video project:
             </p>
 
@@ -1742,17 +1742,17 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
                   setTimelineModalOpen(false);
                   onAddToTimeline?.("all");
                 }}
-                className="w-full text-left p-3.5 rounded-xl bg-zinc-950 hover:bg-indigo-950/50 border border-zinc-800 hover:border-indigo-500/80 transition-all group flex items-start gap-3.5 shadow-sm"
+                className="w-full text-left p-3.5 rounded-xl bg-ink hover:bg-accent/50 border border-edge hover:border-accent/80 transition-all group flex items-start gap-3.5 shadow-sm"
               >
-                <div className="w-9 h-9 rounded-lg bg-indigo-600/20 border border-indigo-500/40 flex items-center justify-center text-indigo-400 shrink-0 mt-0.5 group-hover:scale-110 transition-transform">
-                  <Icons.Sparkles className="w-4 h-4 text-indigo-400" />
+                <div className="w-9 h-9 rounded-lg bg-accent/20 border border-accent/40 flex items-center justify-center text-info shrink-0 mt-0.5 group-hover:scale-110 transition-transform">
+                  <Icons.Sparkles className="w-4 h-4 text-info" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-xs font-bold text-zinc-100 group-hover:text-indigo-300 flex items-center justify-between">
+                  <div className="text-xs font-bold text-fg group-hover:text-info flex items-center justify-between">
                     <span>Auto-Sync All Segments to Scenes</span>
-                    <span className="text-[10px] text-zinc-500 font-mono font-normal">Enter ↵</span>
+                    <span className="text-[10px] text-fg-faint font-mono font-normal">Enter ↵</span>
                   </div>
-                  <div className="text-[11px] text-zinc-400 mt-0.5 leading-normal">
+                  <div className="text-[11px] text-fg-dim mt-0.5 leading-normal">
                     Synchronizes all {chapter.segments.length} narration clips directly into corresponding scenes across the timeline with ripple timing.
                   </div>
                 </div>
@@ -1764,16 +1764,16 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
                   setTimelineModalOpen(false);
                   onAddToTimeline?.("selected", selectedSegmentId);
                 }}
-                className="w-full text-left p-3.5 rounded-xl bg-zinc-950 hover:bg-cyan-950/50 border border-zinc-800 hover:border-cyan-500/80 transition-all group flex items-start gap-3.5 shadow-sm"
+                className="w-full text-left p-3.5 rounded-xl bg-ink hover:bg-info/50 border border-edge hover:border-info/80 transition-all group flex items-start gap-3.5 shadow-sm"
               >
-                <div className="w-9 h-9 rounded-lg bg-cyan-600/20 border border-cyan-500/40 flex items-center justify-center text-cyan-400 shrink-0 mt-0.5 group-hover:scale-110 transition-transform">
-                  <Icons.Play className="w-4 h-4 text-cyan-400" />
+                <div className="w-9 h-9 rounded-lg bg-info/20 border border-info/40 flex items-center justify-center text-info shrink-0 mt-0.5 group-hover:scale-110 transition-transform">
+                  <Icons.Play className="w-4 h-4 text-info" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-xs font-bold text-zinc-100 group-hover:text-cyan-300">
+                  <div className="text-xs font-bold text-fg group-hover:text-info">
                     Insert Selected Segment at Playhead
                   </div>
-                  <div className="text-[11px] text-zinc-400 mt-0.5 leading-normal">
+                  <div className="text-[11px] text-fg-dim mt-0.5 leading-normal">
                     Places segment #{selectedSegment?.sequence || 1} (&ldquo;{selectedSegment?.scene_title || "Scene"}&rdquo;) at the current timeline playhead cursor.
                   </div>
                 </div>
@@ -1781,19 +1781,19 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
 
               {/* Option 3: Target Specific Timeline Scene */}
               {scenes && scenes.length > 0 && (
-                <div className="p-3.5 rounded-xl bg-zinc-950 border border-zinc-800 space-y-2">
-                  <div className="flex items-center justify-between text-xs font-bold text-zinc-200">
+                <div className="p-3.5 rounded-xl bg-ink border border-edge space-y-2">
+                  <div className="flex items-center justify-between text-xs font-bold text-fg">
                     <span className="flex items-center gap-1.5">
-                      <Icons.Layers className="w-3.5 h-3.5 text-emerald-400" />
+                      <Icons.Layers className="w-3.5 h-3.5 text-ok" />
                       Attach Selected to Specific Scene
                     </span>
-                    <span className="text-[10px] text-zinc-500 font-mono font-normal">Direct Target</span>
+                    <span className="text-[10px] text-fg-faint font-mono font-normal">Direct Target</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <select
                       value={targetSceneId}
                       onChange={(e) => setTargetSceneId(e.target.value)}
-                      className="flex-1 bg-zinc-900 border border-zinc-700 rounded-lg p-2 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500"
+                      className="flex-1 bg-navy border border-edge rounded-lg p-2 text-xs text-fg focus:outline-none focus:border-accent"
                     >
                       {scenes.map((sc, scIdx) => (
                         <option key={sc.id} value={sc.id}>
@@ -1810,7 +1810,7 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
                         handleUpdateSegment({ scene_id: targetSceneId });
                         onAddToTimeline?.("selected", selectedSegmentId);
                       }}
-                      className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold h-8 px-3 shrink-0"
+                      className="bg-ok hover:bg-ok text-white text-xs font-bold h-8 px-3 shrink-0"
                     >
                       Attach
                     </Button>
@@ -1819,7 +1819,7 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
               )}
             </div>
 
-            <div className="flex justify-end pt-3 border-t border-zinc-800/80">
+            <div className="flex justify-end pt-3 border-t border-edge/80">
               <Button
                 variant="secondary"
                 size="sm"
@@ -1836,21 +1836,21 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
       {/* Ollama Real-Time Engine & Model Diagnostics Guide Modal */}
       {showOllamaGuideModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fadeIn">
-          <div className="bg-zinc-900 border border-zinc-750 rounded-2xl max-w-2xl w-full p-6 space-y-4 shadow-2xl ring-1 ring-white/10 max-h-[85vh] flex flex-col">
+          <div className="bg-navy border border-edge rounded-2xl max-w-2xl w-full p-6 space-y-4 shadow-2xl ring-1 ring-white/10 max-h-[85vh] flex flex-col">
             {/* Header */}
-            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+            <div className="flex items-center justify-between border-b border-edge pb-3">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-indigo-950/80 border border-indigo-700/60 flex items-center justify-center text-indigo-400 shadow-inner">
+                <div className="w-8 h-8 rounded-xl bg-accent/80 border border-accent/60 flex items-center justify-center text-info shadow-inner">
                   <Icons.Cpu className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-zinc-100 flex items-center gap-2">
+                  <h3 className="text-sm font-bold text-fg flex items-center gap-2">
                     <span>Ollama Real-Time Engine & Models</span>
-                    <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full ${isOllamaOnline ? "bg-emerald-950 text-emerald-300 border border-emerald-800" : "bg-rose-950 text-rose-300 border border-rose-800"}`}>
+                    <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full ${isOllamaOnline ? "bg-ok/20 text-ok border border-ok/40" : "bg-bad/20 text-bad border border-bad/40"}`}>
                       {isOllamaOnline ? "127.0.0.1:11434 Connected" : "Ollama Offline"}
                     </span>
                   </h3>
-                  <span className="text-[11px] text-zinc-400">
+                  <span className="text-[11px] text-fg-dim">
                     Multimodal vision understanding & cinematic storytelling model inventory
                   </span>
                 </div>
@@ -1858,7 +1858,7 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
               <button
                 type="button"
                 onClick={() => setShowOllamaGuideModal(false)}
-                className="text-zinc-400 hover:text-zinc-200 p-1 rounded-lg hover:bg-zinc-800 transition-colors"
+                className="text-fg-dim hover:text-fg p-1 rounded-lg hover:bg-flat transition-colors"
                 title="Close (Esc)"
               >
                 <Icons.X className="w-4 h-4" />
@@ -1866,9 +1866,9 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
             </div>
 
             {/* Guidance Explainer */}
-            <div className="p-3.5 rounded-xl bg-indigo-950/30 border border-indigo-800/50 text-xs text-zinc-300 space-y-1.5 leading-relaxed">
-              <h4 className="font-bold text-indigo-300 flex items-center gap-1.5 text-xs">
-                <Icons.Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+            <div className="p-3.5 rounded-xl bg-accent/30 border border-accent/50 text-xs text-fg-dim space-y-1.5 leading-relaxed">
+              <h4 className="font-bold text-info flex items-center gap-1.5 text-xs">
+                <Icons.Sparkles className="w-3.5 h-3.5 text-info" />
                 How PanelFlow Works With Ollama Models
               </h4>
               <p className="text-[11px]">
@@ -1884,7 +1884,7 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
 
             {/* Installed Models Grid */}
             <div className="flex-1 overflow-y-auto space-y-2 pr-1">
-              <h4 className="text-xs font-bold text-zinc-200 uppercase tracking-wider">
+              <h4 className="text-xs font-bold text-fg uppercase tracking-wider">
                 Installed Models ({ollamaDetailedModels.length || ollamaModels.length})
               </h4>
 
@@ -1915,40 +1915,40 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
                       key={name}
                       className={`p-3 rounded-xl border flex items-center justify-between gap-3 transition-all ${
                         isSelected
-                          ? "bg-zinc-850 border-indigo-500 shadow-md ring-1 ring-indigo-500/30"
-                          : "bg-zinc-950 border-zinc-800 hover:border-zinc-700"
+                          ? "bg-flat border-accent shadow-md ring-1 ring-accent/30"
+                          : "bg-ink border-edge hover:border-edge"
                       }`}
                     >
                       <div className="flex items-center gap-3 min-w-0">
                         <div
                           className={`w-8 h-8 rounded-lg flex items-center justify-center font-mono font-bold text-xs shrink-0 ${
-                            isSelected ? "bg-indigo-600 text-white" : "bg-zinc-800 text-zinc-300"
+                            isSelected ? "bg-accent text-white" : "bg-flat text-fg-dim"
                           }`}
                         >
                           {name.slice(0, 2).toUpperCase()}
                         </div>
                         <div className="min-w-0">
                           <div className="flex items-center gap-2">
-                            <span className="font-mono text-xs font-bold text-zinc-100 truncate">
+                            <span className="font-mono text-xs font-bold text-fg truncate">
                               {name}
                             </span>
                             {supportsVision && (
-                              <span className="text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-300 border border-emerald-800">
+                              <span className="text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.2 rounded bg-ok/20 text-ok border border-ok/40">
                                 Vision Capable
                               </span>
                             )}
                             {!isCoder && (
-                              <span className="text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.2 rounded bg-indigo-950 text-indigo-300 border border-indigo-800">
+                              <span className="text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.2 rounded bg-accent/20 text-info border border-accent/40">
                                 Narration
                               </span>
                             )}
                             {isCoder && (
-                              <span className="text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.2 rounded bg-amber-950 text-amber-300 border border-amber-800">
+                              <span className="text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.2 rounded bg-warn/20 text-warn border border-warn/40">
                                 Code
                               </span>
                             )}
                           </div>
-                          <span className="text-[10px] text-zinc-500 font-mono block mt-0.5">
+                          <span className="text-[10px] text-fg-faint font-mono block mt-0.5">
                             {model.details?.parameter_size ? `Params: ${model.details.parameter_size} • ` : ""}
                             {model.details?.quantization_level ? `Quant: ${model.details.quantization_level} • ` : ""}
                             {supportsVision ? "Supports vision panel inspection" : "Text & script generation"}
@@ -1958,7 +1958,7 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
 
                       <div className="shrink-0">
                         {isSelected ? (
-                          <span className="px-2.5 py-1 rounded-lg bg-indigo-600 text-white font-bold text-xs flex items-center gap-1 shadow-sm">
+                          <span className="px-2.5 py-1 rounded-lg bg-accent text-white font-bold text-xs flex items-center gap-1 shadow-sm">
                             <Icons.Check className="w-3.5 h-3.5" />
                             Active Model
                           </span>
@@ -1968,7 +1968,7 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
                             onClick={() => {
                               setSelectedOllamaModel(name);
                             }}
-                            className="px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-semibold text-xs border border-zinc-700 transition-colors"
+                            className="px-2.5 py-1 rounded-lg bg-flat hover:bg-glass-hi text-fg font-semibold text-xs border border-edge transition-colors"
                           >
                             Select Model
                           </button>
@@ -1981,9 +1981,9 @@ export const NarrationStudio: React.FC<NarrationStudioProps> = ({
             </div>
 
             {/* Footer */}
-            <div className="border-t border-zinc-800 pt-3 flex items-center justify-between text-xs">
-              <span className="text-zinc-500 font-mono text-[11px]">
-                Install additional models: <code className="text-zinc-300">ollama run qwen3.5:9b</code>
+            <div className="border-t border-edge pt-3 flex items-center justify-between text-xs">
+              <span className="text-fg-faint font-mono text-[11px]">
+                Install additional models: <code className="text-fg-dim">ollama run qwen3.5:9b</code>
               </span>
               <Button
                 variant="secondary"

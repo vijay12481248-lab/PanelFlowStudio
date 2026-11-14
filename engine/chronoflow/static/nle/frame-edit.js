@@ -32,11 +32,11 @@
           </div>
           <div class="nle-fb-range" id="feRangeInfo">
             <button class="nle-btn" id="feMarkIn" title="Set In point [I] at playhead">[I] In</button>
-            <input type="number" id="feInInput" min="0" step="0.1" value="0.0" style="width:58px;background:#0a0b0e;color:#f1f5f9;border:1px solid #2d2f38;border-radius:3px;padding:2px 4px;font-family:monospace;font-size:0.75rem;text-align:center;" title="In point in seconds (editable)">
+            <input type="number" id="feInInput" min="0" step="0.1" value="0.0" style="width:58px;background:#050816;color:#eef1ff;border:1px solid #222d5e;border-radius:3px;padding:2px 4px;font-family:monospace;font-size:0.75rem;text-align:center;" title="In point in seconds (editable)">
             <span>&rarr;</span>
             <button class="nle-btn" id="feMarkOut" title="Set Out point [O] at playhead">[O] Out</button>
-            <input type="number" id="feOutInput" min="0" step="0.1" value="10.0" style="width:58px;background:#0a0b0e;color:#f1f5f9;border:1px solid #2d2f38;border-radius:3px;padding:2px 4px;font-family:monospace;font-size:0.75rem;text-align:center;" title="Out point in seconds (editable)">
-            <small>(<b id="feDurText" style="color:#f59e0b">10.0s</b>)</small>
+            <input type="number" id="feOutInput" min="0" step="0.1" value="10.0" style="width:58px;background:#050816;color:#eef1ff;border:1px solid #222d5e;border-radius:3px;padding:2px 4px;font-family:monospace;font-size:0.75rem;text-align:center;" title="Out point in seconds (editable)">
+            <small>(<b id="feDurText" style="color:#7aa2ff">10.0s</b>)</small>
             <button class="nle-btn" id="feClearRange" title="Clear In/Out range (Reset to full video) [Alt+X]">✕</button>
           </div>
         </div>
@@ -46,9 +46,9 @@
           </div>
           <div style="flex:1; display:flex; flex-direction:column; gap:4px; min-width:0;">
             <div style="display:flex; justify-content:space-between; align-items:center; padding:0 2px;">
-              <span id="feClipPromptBadge" style="font-size:0.75rem; color:#94a3b8; font-weight:600;"><span id="feClipName" style="color:#f59e0b;">Selected Clip</span> Prompt <small style="color:#64748b;">(original generation prompt)</small>:</span>
+              <span id="feClipPromptBadge" style="font-size:0.75rem; color:#9aa6d0; font-weight:600;"><span id="feClipName" style="color:#7aa2ff;">Selected Clip</span> Prompt <small style="color:#6a76a3;">(original generation prompt)</small>:</span>
               <div style="display:flex; gap:6px; align-items:center;">
-                <button class="nle-btn" id="feAutoPromptBtn" style="font-size:0.7rem; padding:1px 8px; height:20px; line-height:18px; color:#fcd34d; border-color:rgba(252,211,77,0.4);" title="Analyze visual scene in range [X → Y] and auto-generate prompt incorporating your adjustments">⚡ Auto-Gen Prompt</button>
+                <button class="nle-btn" id="feAutoPromptBtn" style="font-size:0.7rem; padding:1px 8px; height:20px; line-height:18px; color:#a9c1ff; border-color:rgba(252,211,77,0.4);" title="Analyze visual scene in range [X → Y] and auto-generate prompt incorporating your adjustments">⚡ Auto-Gen Prompt</button>
                 <button class="nle-btn" id="feResetPromptBtn" style="font-size:0.7rem; padding:1px 6px; height:20px; line-height:18px;" title="Reset back to original generation prompt">↺ Reset Original</button>
               </div>
             </div>
@@ -326,7 +326,7 @@
 
   function buildHud() {
     const hud = document.getElementById('nleBrushHud');
-    hud.innerHTML = `<b style="color:#f59e0b">✨ Magic Brush</b>
+    hud.innerHTML = `<b style="color:#7aa2ff">✨ Magic Brush</b>
       <label>Size <input type="range" id="feSize" min="6" max="160" value="${S.size}"></label>
       <button class="nle-btn" id="feErase">Erase</button><button class="nle-btn" id="feClear">Clear</button>
       <label title="How strongly the painted area is repainted">Strength <input type="range" id="feStr" min="0.3" max="1" step="0.05" value="${S.strength}"></label>
@@ -415,7 +415,7 @@
       d.className = `nle-cand${c.busy ? ' busy' : ''}${S.sel === c ? ' sel' : ''}`;
       if (c.url) d.style.backgroundImage = `url("${c.url}")`;
       if (c.isRange) {
-        d.innerHTML = `<span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:0.6rem;color:#fcd34d;background:#15161a;text-align:center;padding:2px;font-weight:700;">Range Clip<br>${(c.t1 - c.t0).toFixed(1)}s</span>`;
+        d.innerHTML = `<span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:0.6rem;color:#a9c1ff;background:#0b1230;text-align:center;padding:2px;font-weight:700;">Range Clip<br>${(c.t1 - c.t0).toFixed(1)}s</span>`;
       }
       d.title = c.prompt || '';
       d.onclick = () => { if (!c.busy) selectCand(c); };
@@ -501,7 +501,7 @@
     const m = $('#feMerge');
     if (c.isRange) {
       m.innerHTML = `
-        <span style="color:#fcd34d;font-weight:700;">Replacement Clip: ${c.clipFilename} [${c.t0.toFixed(1)}s &rarr; ${c.t1.toFixed(1)}s]</span>
+        <span style="color:#a9c1ff;font-weight:700;">Replacement Clip: ${c.clipFilename} [${c.t0.toFixed(1)}s &rarr; ${c.t1.toFixed(1)}s]</span>
         <button class="nle-btn primary" id="feApplyRangeBtn">⧫ Splice Range into Master Video</button>
         <button class="nle-btn" id="feDiscard">Discard</button>
       `;
@@ -534,7 +534,7 @@
 
     const img = nle.root.ovl; img.setAttribute('data-k', 'preview'); img.src = c.url; img.style.display = 'block';
     const hit = nle.clipAtPlayhead(), rest = hit ? Math.max(0.5, +(hit.end - S.base.t).toFixed(2)) : 2;
-    m.innerHTML = `<b style="color:#e2e8f0">Merge into timeline:</b>
+    m.innerHTML = `<b style="color:#e3e8fb">Merge into timeline:</b>
       <select id="feMode"><option value="hold">Replace the picture (instant) — still overlay on V2</option><option value="anim" ${S.mergeMode === 'anim' ? 'selected' : ''}>Re-animate shot from this frame (GPU, minutes)</option></select>
       <label id="feDurL">for <input type="number" id="feDur" min="0.2" step="0.1" value="${rest}" style="width:64px"> s</label>
       <button class="nle-btn primary" id="feMergeGo">⇥ Merge</button><button class="nle-btn" id="feDiscard">Discard</button>`;

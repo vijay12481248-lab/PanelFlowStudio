@@ -57,9 +57,9 @@ const INPAINT_PRESETS: InpaintPreset[] = [
 ];
 
 const MASK_COLORS = [
-  { id: "rose", label: "Hot Rose", color: "rgba(244, 63, 94, 0.6)", hex: "#f43f5e" },
-  { id: "cyan", label: "Neon Cyan", color: "rgba(6, 182, 212, 0.6)", hex: "#06b6d4" },
-  { id: "amber", label: "Electric Gold", color: "rgba(245, 158, 11, 0.6)", hex: "#f59e0b" },
+  { id: "rose", label: "Hot Rose", color: "rgba(242,102,122, 0.6)", hex: "#f2667a" },
+  { id: "cyan", label: "Neon Cyan", color: "rgba(122,162,255, 0.6)", hex: "#7aa2ff" },
+  { id: "amber", label: "Electric Gold", color: "rgba(240,179,90, 0.6)", hex: "#f0b35a" },
 ];
 
 export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
@@ -601,28 +601,28 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
       aria-modal="true"
       aria-label="Image Editor & Inpainter"
     >
-      <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-[96vw] h-[94vh] flex flex-col shadow-2xl overflow-hidden">
+      <div className="bg-ink border border-edge rounded-2xl w-full max-w-[96vw] h-[94vh] flex flex-col shadow-2xl overflow-hidden">
         {/* Top Header Bar */}
-        <div className="px-5 py-3 border-b border-zinc-800/90 bg-zinc-900/70 flex items-center justify-between gap-4">
+        <div className="px-5 py-3 border-b border-edge/90 bg-navy/70 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 via-purple-600 to-pink-500 flex items-center justify-center text-white shadow-lg shadow-indigo-600/30">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-accent via-accent to-accent flex items-center justify-center text-white shadow-lg shadow-accent/30">
               <Sparkles className="w-5 h-5 animate-pulse" />
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <h2 className="text-sm font-bold text-zinc-100 truncate">
+                <h2 className="text-sm font-bold text-fg truncate">
                   Visual Asset Editor & Inpaint Studio
                 </h2>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-indigo-950 border border-indigo-700/60 text-indigo-300">
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-accent/20 border border-accent/60 text-info">
                   {displayWidth} × {displayHeight}
                 </span>
                 {hasInpainted && (
-                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-950 border border-emerald-700/60 text-emerald-400">
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-ok/20 border border-ok/60 text-ok">
                     INPAINTED
                   </span>
                 )}
               </div>
-              <p className="text-xs text-zinc-400 truncate font-mono">
+              <p className="text-xs text-fg-dim truncate font-mono">
                 {displayFilename} · {displaySubtext}
               </p>
             </div>
@@ -636,10 +636,10 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                 onMouseDown={() => setIsComparing(true)}
                 onMouseUp={() => setIsComparing(false)}
                 onMouseLeave={() => setIsComparing(false)}
-                className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 active:scale-95 transition-all flex items-center gap-1.5"
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-flat hover:bg-glass-hi text-fg border border-edge active:scale-95 transition-all flex items-center gap-1.5"
                 title="Hold to see original image before inpainting"
               >
-                <Layers className="w-3.5 h-3.5 text-indigo-400" />
+                <Layers className="w-3.5 h-3.5 text-info" />
                 <span>{isComparing ? "Showing Original" : "Hold to Compare"}</span>
               </button>
             )}
@@ -647,7 +647,7 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
             <button
               type="button"
               onClick={handleDownload}
-              className="p-2 rounded-lg text-zinc-300 hover:text-white bg-zinc-800/80 hover:bg-zinc-700 border border-zinc-700/60 active:scale-95 transition-all"
+              className="p-2 rounded-lg text-fg-dim hover:text-white bg-flat/80 hover:bg-glass-hi border border-edge/60 active:scale-95 transition-all"
               title="Download full resolution image"
             >
               <Download className="w-4 h-4" />
@@ -656,16 +656,16 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
             <button
               type="button"
               onClick={copyShaToClipboard}
-              className="p-2 rounded-lg text-zinc-300 hover:text-white bg-zinc-800/80 hover:bg-zinc-700 border border-zinc-700/60 active:scale-95 transition-all"
+              className="p-2 rounded-lg text-fg-dim hover:text-white bg-flat/80 hover:bg-glass-hi border border-edge/60 active:scale-95 transition-all"
               title="Copy SHA-256 hash"
             >
-              {copiedSha ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+              {copiedSha ? <Check className="w-4 h-4 text-ok" /> : <Copy className="w-4 h-4" />}
             </button>
 
             <button
               type="button"
               onClick={onClose}
-              className="w-8 h-8 rounded-lg flex items-center justify-center text-zinc-400 hover:text-white hover:bg-zinc-800 active:scale-95 transition-all"
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-fg-dim hover:text-white hover:bg-flat active:scale-95 transition-all"
               aria-label="Close modal"
             >
               <X className="w-5 h-5" />
@@ -678,7 +678,7 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
           {/* Left Canvas Viewport */}
           <div
             ref={canvasContainerRef}
-            className="flex-1 bg-zinc-950/90 relative overflow-hidden flex flex-col items-center justify-center p-4"
+            className="flex-1 bg-ink/90 relative overflow-hidden flex flex-col items-center justify-center p-4"
             style={{
               backgroundImage:
                 "radial-gradient(circle at 1px 1px, rgba(255,255,255,0.05) 1px, transparent 0)",
@@ -686,12 +686,12 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
             }}
           >
             {/* Floating Top Canvas Toolbar */}
-            <div className="absolute top-4 left-4 z-20 flex items-center gap-1.5 p-1.5 rounded-xl bg-zinc-900/90 backdrop-blur-md border border-zinc-800 shadow-xl">
+            <div className="absolute top-4 left-4 z-20 flex items-center gap-1.5 p-1.5 rounded-xl bg-navy/90 backdrop-blur-md border border-edge shadow-xl">
               <button
                 type="button"
                 onClick={handleUndo}
                 disabled={historyStepRef.current <= 0}
-                className="p-2 rounded-lg text-zinc-300 hover:text-white hover:bg-zinc-800 disabled:opacity-30 disabled:pointer-events-none active:scale-95 transition-all"
+                className="p-2 rounded-lg text-fg-dim hover:text-white hover:bg-flat disabled:opacity-30 disabled:pointer-events-none active:scale-95 transition-all"
                 title="Undo (Ctrl+Z)"
               >
                 <Undo2 className="w-4 h-4" />
@@ -700,17 +700,17 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                 type="button"
                 onClick={handleRedo}
                 disabled={historyStepRef.current >= historyRef.current.length - 1}
-                className="p-2 rounded-lg text-zinc-300 hover:text-white hover:bg-zinc-800 disabled:opacity-30 disabled:pointer-events-none active:scale-95 transition-all"
+                className="p-2 rounded-lg text-fg-dim hover:text-white hover:bg-flat disabled:opacity-30 disabled:pointer-events-none active:scale-95 transition-all"
                 title="Redo (Ctrl+Y)"
               >
                 <Redo2 className="w-4 h-4" />
               </button>
-              <div className="w-px h-5 bg-zinc-800 mx-1" />
+              <div className="w-px h-5 bg-flat mx-1" />
               <button
                 type="button"
                 onClick={handleClearMask}
                 disabled={!hasMaskContent}
-                className="p-2 rounded-lg text-zinc-300 hover:text-rose-400 hover:bg-zinc-800 disabled:opacity-30 disabled:pointer-events-none active:scale-95 transition-all"
+                className="p-2 rounded-lg text-fg-dim hover:text-bad hover:bg-flat disabled:opacity-30 disabled:pointer-events-none active:scale-95 transition-all"
                 title="Clear mask"
               >
                 <Trash2 className="w-4 h-4" />
@@ -718,29 +718,29 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
               <button
                 type="button"
                 onClick={() => setShowMask((prev) => !prev)}
-                className={`p-2 rounded-lg text-zinc-300 hover:text-white hover:bg-zinc-800 active:scale-95 transition-all ${
-                  !showMask ? "text-amber-400 bg-amber-950/40" : ""
+                className={`p-2 rounded-lg text-fg-dim hover:text-white hover:bg-flat active:scale-95 transition-all ${
+                  !showMask ? "text-warn bg-warn/40" : ""
                 }`}
                 title={showMask ? "Hide mask overlay" : "Show mask overlay"}
               >
                 {showMask ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
               </button>
-              <div className="w-px h-5 bg-zinc-800 mx-1" />
+              <div className="w-px h-5 bg-flat mx-1" />
               <button
                 type="button"
                 onClick={() => setZoomLevel((z) => Math.max(0.4, Number((z - 0.2).toFixed(1))))}
-                className="p-2 rounded-lg text-zinc-300 hover:text-white hover:bg-zinc-800 active:scale-95 transition-all"
+                className="p-2 rounded-lg text-fg-dim hover:text-white hover:bg-flat active:scale-95 transition-all"
                 title="Zoom Out"
               >
                 <ZoomOut className="w-4 h-4" />
               </button>
-              <span className="text-xs font-mono text-zinc-400 px-1 font-medium min-w-10 text-center">
+              <span className="text-xs font-mono text-fg-dim px-1 font-medium min-w-10 text-center">
                 {Math.round(zoomLevel * 100)}%
               </span>
               <button
                 type="button"
                 onClick={() => setZoomLevel((z) => Math.min(3, Number((z + 0.2).toFixed(1))))}
-                className="p-2 rounded-lg text-zinc-300 hover:text-white hover:bg-zinc-800 active:scale-95 transition-all"
+                className="p-2 rounded-lg text-fg-dim hover:text-white hover:bg-flat active:scale-95 transition-all"
                 title="Zoom In"
               >
                 <ZoomIn className="w-4 h-4" />
@@ -753,8 +753,8 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                 }}
                 className={`px-2 py-1 rounded-lg text-xs font-medium border transition-all ${
                   fitMode === "actual"
-                    ? "bg-indigo-600 border-indigo-500 text-white"
-                    : "bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700"
+                    ? "bg-accent border-accent text-white"
+                    : "bg-flat border-edge text-fg-dim hover:bg-glass-hi"
                 }`}
                 title="Toggle 100% size or Fit to screen"
               >
@@ -781,7 +781,7 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                 src={imageUrl}
                 alt="Asset preview for inpainting"
                 onLoad={initCanvas}
-                className="max-h-[80vh] max-w-[80vw] object-contain rounded-lg border border-zinc-800/80 shadow-2xl pointer-events-none transition-opacity duration-300"
+                className="max-h-[80vh] max-w-[80vw] object-contain rounded-lg border border-edge/80 shadow-2xl pointer-events-none transition-opacity duration-300"
                 style={{ imageRendering: "auto" }}
               />
 
@@ -810,15 +810,15 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                     transform: "translate(-50%, -50%)",
                     borderColor:
                       tool === "eraser"
-                        ? "#38bdf8"
+                        ? "#7aa2ff"
                         : MASK_COLORS[maskColorIndex].hex,
                     backgroundColor:
                       tool === "eraser"
-                        ? "rgba(56, 189, 248, 0.2)"
+                        ? "rgba(122,162,255, 0.2)"
                         : MASK_COLORS[maskColorIndex].color.replace("0.6", "0.25"),
                     boxShadow:
                       tool === "eraser"
-                        ? "0 0 12px rgba(56, 189, 248, 0.5)"
+                        ? "0 0 12px rgba(122,162,255, 0.5)"
                         : `0 0 14px ${MASK_COLORS[maskColorIndex].hex}88`,
                   }}
                 />
@@ -826,28 +826,28 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
             </div>
 
             {/* Quick helper tip badge at bottom of canvas */}
-            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 px-3 py-1.5 rounded-full bg-zinc-900/90 backdrop-blur-md border border-zinc-800/80 text-[11px] text-zinc-400 shadow-lg">
-              <span className="w-2 h-2 rounded-full bg-indigo-500 animate-ping" />
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 px-3 py-1.5 rounded-full bg-navy/90 backdrop-blur-md border border-edge/80 text-[11px] text-fg-dim shadow-lg">
+              <span className="w-2 h-2 rounded-full bg-accent animate-ping" />
               <span>
                 {tool === "brush"
                   ? "Paint over any area you want to replace or edit"
                   : "Erasing mask from canvas"}
               </span>
-              <span className="text-zinc-600">|</span>
-              <span className="font-mono text-zinc-500">Shortcuts: B (Brush), E (Eraser), [ ] (Size)</span>
+              <span className="text-fg-faint">|</span>
+              <span className="font-mono text-fg-faint">Shortcuts: B (Brush), E (Eraser), [ ] (Size)</span>
             </div>
           </div>
 
           {/* Right Sidebar: Grouped Tools & Settings */}
-          <div className="w-80 md:w-96 border-l border-zinc-800 bg-zinc-900/60 overflow-y-auto p-5 space-y-6 flex flex-col">
+          <div className="w-80 md:w-96 border-l border-edge bg-navy/60 overflow-y-auto p-5 space-y-6 flex flex-col">
             {/* GROUP 1: Drawing & Masking Tools */}
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold uppercase tracking-wider text-indigo-400 flex items-center gap-1.5">
+                <span className="text-xs font-bold uppercase tracking-wider text-info flex items-center gap-1.5">
                   <Paintbrush className="w-3.5 h-3.5" />
                   1. Drawing Tool
                 </span>
-                <span className="text-[11px] text-zinc-500 font-mono">
+                <span className="text-[11px] text-fg-faint font-mono">
                   {hasMaskContent ? "Mask active" : "No mask"}
                 </span>
               </div>
@@ -858,8 +858,8 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                   onClick={() => setTool("brush")}
                   className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl border font-semibold text-xs transition-all active:scale-95 ${
                     tool === "brush"
-                      ? "bg-indigo-600 border-indigo-500 text-white shadow-lg shadow-indigo-600/30"
-                      : "bg-zinc-950 border-zinc-800 text-zinc-300 hover:bg-zinc-800"
+                      ? "bg-accent border-accent text-white shadow-lg shadow-accent/30"
+                      : "bg-ink border-edge text-fg-dim hover:bg-flat"
                   }`}
                 >
                   <Paintbrush className="w-4 h-4" />
@@ -871,8 +871,8 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                   onClick={() => setTool("eraser")}
                   className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl border font-semibold text-xs transition-all active:scale-95 ${
                     tool === "eraser"
-                      ? "bg-cyan-600 border-cyan-500 text-white shadow-lg shadow-cyan-600/30"
-                      : "bg-zinc-950 border-zinc-800 text-zinc-300 hover:bg-zinc-800"
+                      ? "bg-info border-info text-white shadow-lg shadow-info/30"
+                      : "bg-ink border-edge text-fg-dim hover:bg-flat"
                   }`}
                 >
                   <Eraser className="w-4 h-4" />
@@ -882,7 +882,7 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
 
               {/* Mask Tint Color Selector */}
               <div className="flex items-center justify-between pt-1">
-                <span className="text-[11px] text-zinc-400">Mask Overlay Tint:</span>
+                <span className="text-[11px] text-fg-dim">Mask Overlay Tint:</span>
                 <div className="flex items-center gap-1.5">
                   {MASK_COLORS.map((mc, idx) => (
                     <button
@@ -901,13 +901,13 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
             </div>
 
             {/* GROUP 2: Brush Settings */}
-            <div className="space-y-3 p-4 rounded-xl bg-zinc-950/70 border border-zinc-800/80">
+            <div className="space-y-3 p-4 rounded-xl bg-ink/70 border border-edge/80">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold uppercase tracking-wider text-zinc-300 flex items-center gap-1.5">
-                  <Sliders className="w-3.5 h-3.5 text-indigo-400" />
+                <span className="text-xs font-bold uppercase tracking-wider text-fg-dim flex items-center gap-1.5">
+                  <Sliders className="w-3.5 h-3.5 text-info" />
                   2. Brush Settings
                 </span>
-                <span className="text-xs font-mono font-bold text-indigo-400 bg-indigo-950/60 px-2 py-0.5 rounded border border-indigo-800/50">
+                <span className="text-xs font-mono font-bold text-info bg-accent/60 px-2 py-0.5 rounded border border-accent/50">
                   {brushSize}px
                 </span>
               </div>
@@ -921,12 +921,12 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                     max={180}
                     value={brushSize}
                     onChange={(e) => setBrushSize(Number(e.target.value))}
-                    className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+                    className="w-full h-1.5 bg-flat rounded-lg appearance-none cursor-pointer accent-accent"
                   />
                   {/* Miniature animated circle preview */}
-                  <div className="w-8 h-8 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center shrink-0">
+                  <div className="w-8 h-8 rounded-lg bg-navy border border-edge flex items-center justify-center shrink-0">
                     <div
-                      className="rounded-full bg-indigo-400 transition-all duration-100"
+                      className="rounded-full bg-accent transition-all duration-100"
                       style={{
                         width: `${Math.max(4, Math.min(24, (brushSize / 180) * 24))}px`,
                         height: `${Math.max(4, Math.min(24, (brushSize / 180) * 24))}px`,
@@ -949,8 +949,8 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                       onClick={() => setBrushSize(preset.size)}
                       className={`flex-1 py-1 rounded text-[11px] font-medium border transition-all active:scale-95 ${
                         brushSize === preset.size
-                          ? "bg-indigo-600 border-indigo-500 text-white"
-                          : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200"
+                          ? "bg-accent border-accent text-white"
+                          : "bg-navy border-edge text-fg-dim hover:text-fg"
                       }`}
                     >
                       {preset.label}
@@ -960,8 +960,8 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
               </div>
 
               {/* Opacity Slider */}
-              <div className="pt-2 border-t border-zinc-800/80 space-y-1">
-                <div className="flex justify-between text-[11px] text-zinc-400">
+              <div className="pt-2 border-t border-edge/80 space-y-1">
+                <div className="flex justify-between text-[11px] text-fg-dim">
                   <span>Mask Opacity</span>
                   <span className="font-mono">{Math.round(brushOpacity * 100)}%</span>
                 </div>
@@ -972,24 +972,24 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                   step={0.05}
                   value={brushOpacity}
                   onChange={(e) => setBrushOpacity(Number(e.target.value))}
-                  className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+                  className="w-full h-1.5 bg-flat rounded-lg appearance-none cursor-pointer accent-accent"
                 />
               </div>
             </div>
 
             {/* GROUP 3: Inpaint Parameters & Action */}
-            <div className="space-y-3 p-4 rounded-xl bg-zinc-950/70 border border-zinc-800/80">
+            <div className="space-y-3 p-4 rounded-xl bg-ink/70 border border-edge/80">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold uppercase tracking-wider text-indigo-400 flex items-center gap-1.5">
+                <span className="text-xs font-bold uppercase tracking-wider text-info flex items-center gap-1.5">
                   <Wand2 className="w-3.5 h-3.5" />
                   3. Inpaint &amp; Edit Options
                 </span>
-                <span className="text-[10px] text-zinc-500">qwen_image_21_inpaint / minimax_h3_image_edit</span>
+                <span className="text-[10px] text-fg-faint">qwen_image_21_inpaint / minimax_h3_image_edit</span>
               </div>
 
               {/* Prompt Textarea */}
               <div>
-                <label className="block text-xs font-medium text-zinc-300 mb-1">
+                <label className="block text-xs font-medium text-fg-dim mb-1">
                   Prompt (inpaint: what to draw in the mask. edit: what the picture should become)
                 </label>
                 <textarea
@@ -997,21 +997,21 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                   onChange={(e) => setPrompt(e.target.value)}
                   rows={3}
                   placeholder="e.g. a stormy sky over the street, golden sparks around the sword"
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs text-zinc-100 focus:border-indigo-500 focus:outline-none placeholder:text-zinc-600 transition-colors"
+                  className="w-full rounded-lg border border-edge bg-navy px-3 py-2 text-xs text-fg focus:border-accent focus:outline-none placeholder:text-fg-faint transition-colors"
                   disabled={isInpainting}
                 />
               </div>
 
               {/* Quick Preset Prompt Chips */}
               <div className="space-y-1.5">
-                <span className="text-[11px] text-zinc-400 font-medium">Quick Inpaint Presets:</span>
+                <span className="text-[11px] text-fg-dim font-medium">Quick Inpaint Presets:</span>
                 <div className="flex flex-wrap gap-1.5">
                   {INPAINT_PRESETS.map((p) => (
                     <button
                       key={p.label}
                       type="button"
                       onClick={() => setPrompt(p.prompt)}
-                      className="px-2 py-1 rounded-md text-[11px] bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white hover:bg-zinc-800 hover:border-indigo-500/50 hover:-translate-y-0.5 active:scale-95 transition-all flex items-center gap-1"
+                      className="px-2 py-1 rounded-md text-[11px] bg-navy border border-edge text-fg-dim hover:text-white hover:bg-flat hover:border-accent/50 hover:-translate-y-0.5 active:scale-95 transition-all flex items-center gap-1"
                     >
                       <span>{p.icon}</span>
                       <span>{p.label}</span>
@@ -1022,12 +1022,12 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
 
               {/* Negative Prompt (Collapsible / Compact) */}
               <div>
-                <label className="block text-[11px] text-zinc-400 mb-1">Negative Prompt</label>
+                <label className="block text-[11px] text-fg-dim mb-1">Negative Prompt</label>
                 <input
                   type="text"
                   value={negativePrompt}
                   onChange={(e) => setNegativePrompt(e.target.value)}
-                  className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-2.5 py-1.5 text-xs text-zinc-300 focus:border-indigo-500 focus:outline-none"
+                  className="w-full rounded-lg border border-edge bg-navy px-2.5 py-1.5 text-xs text-fg-dim focus:border-accent focus:outline-none"
                   disabled={isInpainting}
                 />
               </div>
@@ -1035,12 +1035,12 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
               {/* Seed with Randomizer */}
               <div className="flex items-center gap-2">
                 <div className="flex-1">
-                  <label className="block text-[11px] text-zinc-400 mb-0.5">Seed</label>
+                  <label className="block text-[11px] text-fg-dim mb-0.5">Seed</label>
                   <input
                     type="number"
                     value={seed}
                     onChange={(e) => setSeed(Number(e.target.value))}
-                    className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-2.5 py-1 text-xs text-zinc-200 font-mono"
+                    className="w-full rounded-lg border border-edge bg-navy px-2.5 py-1 text-xs text-fg font-mono"
                     disabled={isInpainting}
                   />
                 </div>
@@ -1048,7 +1048,7 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                   type="button"
                   onClick={() => setSeed(Math.floor(Math.random() * 900000000) + 100000000)}
                   disabled={isInpainting}
-                  className="mt-4 p-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-indigo-400 active:scale-95 transition-all"
+                  className="mt-4 p-2 rounded-lg bg-navy hover:bg-flat border border-edge text-fg-dim hover:text-info active:scale-95 transition-all"
                   title="Randomize seed"
                 >
                   <RefreshCw className="w-3.5 h-3.5" />
@@ -1057,25 +1057,25 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
 
               {/* Error Alert */}
               {inpaintError && (
-                <div className="p-2.5 rounded-lg bg-rose-950/40 border border-rose-800/80 text-rose-300 text-xs flex items-start gap-2 animate-in fade-in">
-                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-400 mt-0.5" />
+                <div className="p-2.5 rounded-lg bg-bad/40 border border-bad/80 text-bad text-xs flex items-start gap-2 animate-in fade-in">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-bad mt-0.5" />
                   <span className="break-words">{inpaintError}</span>
                 </div>
               )}
 
               {/* Progress Feedback during Inpainting */}
               {isInpainting && (
-                <div className="space-y-2 p-3 rounded-xl bg-indigo-950/40 border border-indigo-800/60 animate-in fade-in">
-                  <div className="flex items-center justify-between text-xs text-indigo-300 font-medium">
+                <div className="space-y-2 p-3 rounded-xl bg-accent/40 border border-accent/60 animate-in fade-in">
+                  <div className="flex items-center justify-between text-xs text-info font-medium">
                     <span className="flex items-center gap-1.5">
-                      <Sparkles className="w-3.5 h-3.5 text-indigo-400 animate-spin" />
+                      <Sparkles className="w-3.5 h-3.5 text-info animate-spin" />
                       {inpaintStatusText || "Inpainting with ComfyUI..."}
                     </span>
                     <span className="font-mono font-bold">{Math.round(inpaintProgress * 100)}%</span>
                   </div>
-                  <div className="w-full h-1.5 bg-zinc-900 rounded-full overflow-hidden">
+                  <div className="w-full h-1.5 bg-navy rounded-full overflow-hidden">
                     <div
-                      className="h-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 rounded-full transition-all duration-300"
+                      className="h-full bg-gradient-to-r from-accent via-accent to-accent rounded-full transition-all duration-300"
                       style={{ width: `${Math.max(10, inpaintProgress * 100)}%` }}
                     />
                   </div>
@@ -1089,10 +1089,10 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                 disabled={isInpainting || !prompt.trim() || !hasMaskContent}
                 className={`w-full py-3 px-4 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all duration-200 ${
                   isInpainting
-                    ? "bg-zinc-800 text-zinc-500 border border-zinc-700 cursor-not-allowed"
+                    ? "bg-flat text-fg-faint border border-edge cursor-not-allowed"
                     : !hasMaskContent
-                    ? "bg-zinc-900 text-zinc-500 border border-zinc-800 cursor-not-allowed"
-                    : "bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 hover:from-indigo-500 hover:via-purple-500 hover:to-pink-500 text-white shadow-lg shadow-purple-600/30 hover:shadow-purple-600/50 active:scale-[0.98] border border-indigo-400/30"
+                    ? "bg-navy text-fg-faint border border-edge cursor-not-allowed"
+                    : "bg-gradient-to-r from-accent via-accent to-accent hover:from-accent hover:via-accent hover:to-accent text-white shadow-lg shadow-accent/30 hover:shadow-accent/50 active:scale-[0.98] border border-accent/30"
                 }`}
               >
                 <Sparkles className={`w-4 h-4 ${isInpainting ? "animate-spin" : ""}`} />
@@ -1113,10 +1113,10 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                   disabled={isInpainting || !prompt.trim()}
                   className={`w-full py-3 px-4 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all duration-200 ${
                     isInpainting
-                      ? "bg-zinc-800 text-zinc-500 border border-zinc-700 cursor-not-allowed"
+                      ? "bg-flat text-fg-faint border border-edge cursor-not-allowed"
                       : !prompt.trim()
-                      ? "bg-zinc-900 text-zinc-500 border border-zinc-800 cursor-not-allowed"
-                      : "bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 hover:from-emerald-500 hover:via-teal-500 hover:to-cyan-500 text-white shadow-lg shadow-teal-600/30 hover:shadow-teal-600/50 active:scale-[0.98] border border-emerald-400/30"
+                      ? "bg-navy text-fg-faint border border-edge cursor-not-allowed"
+                      : "bg-gradient-to-r from-ok via-info to-info hover:from-ok hover:via-info hover:to-info text-white shadow-lg shadow-info/30 hover:shadow-info/50 active:scale-[0.98] border border-ok/30"
                   }`}
                 >
                   <Wand2 className={`w-4 h-4 ${isInpainting ? "animate-spin" : ""}`} />
@@ -1131,8 +1131,8 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
 
             {/* Toast Feedback */}
             {toastMessage && (
-              <div className="p-2.5 rounded-lg bg-emerald-950/80 border border-emerald-600/80 text-emerald-300 text-xs flex items-center gap-2 animate-in fade-in duration-150">
-                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              <div className="p-2.5 rounded-lg bg-ok/80 border border-ok/80 text-ok text-xs flex items-center gap-2 animate-in fade-in duration-150">
+                <CheckCircle2 className="w-4 h-4 text-ok shrink-0" />
                 <span>{toastMessage}</span>
               </div>
             )}

@@ -33,29 +33,29 @@ export const EnhancedSystemCard: React.FC<EnhancedSystemCardProps> = ({
 
   const statusColors = {
     healthy: {
-      bg: "from-emerald-500/10 to-emerald-500/5",
-      border: "border-emerald-500/30",
-      icon: "text-emerald-400",
-      glow: "shadow-emerald-500/20",
+      bg: "from-ok/10 to-ok/5",
+      border: "border-ok/30",
+      icon: "text-ok",
+      glow: "shadow-ok/20",
     },
     warning: {
-      bg: "from-amber-500/10 to-amber-500/5",
-      border: "border-amber-500/30",
-      icon: "text-amber-400",
-      glow: "shadow-amber-500/20",
+      bg: "from-warn/10 to-warn/5",
+      border: "border-warn/30",
+      icon: "text-warn",
+      glow: "shadow-warn/20",
     },
     error: {
-      bg: "from-rose-500/10 to-rose-500/5",
-      border: "border-rose-500/30",
-      icon: "text-rose-400",
-      glow: "shadow-rose-500/20",
+      bg: "from-bad/10 to-bad/5",
+      border: "border-bad/30",
+      icon: "text-bad",
+      glow: "shadow-bad/20",
     },
   };
 
   const cardStyles = {
-    glass: "bg-zinc-900/60 backdrop-blur-xl border border-zinc-800/50",
-    solid: "bg-zinc-900 border border-zinc-800",
-    minimal: "bg-transparent border border-zinc-800/30",
+    glass: "bg-navy/60 backdrop-blur-xl border border-edge/50",
+    solid: "bg-navy border border-edge",
+    minimal: "bg-transparent border border-edge/30",
   };
 
   return (
@@ -63,7 +63,7 @@ export const EnhancedSystemCard: React.FC<EnhancedSystemCardProps> = ({
       className={`
         relative group cursor-pointer transition-all duration-300
         ${cardStyles[variant]}
-        hover:scale-[1.02] hover:border-zinc-700
+        hover:scale-[1.02] hover:border-edge
         rounded-2xl p-5
         ${isHovered ? "shadow-2xl" : "shadow-xl"}
         ${statusColors[status].glow}
@@ -94,9 +94,9 @@ export const EnhancedSystemCard: React.FC<EnhancedSystemCardProps> = ({
           <div className="flex items-center gap-1 text-xs font-medium">
             <span className={`
               px-2 py-1 rounded-full
-              ${trend === "up" ? "bg-emerald-500/10 text-emerald-400" : ""}
-              ${trend === "down" ? "bg-rose-500/10 text-rose-400" : ""}
-              ${trend === "stable" ? "bg-zinc-700 text-zinc-400" : ""}
+              ${trend === "up" ? "bg-ok/10 text-ok" : ""}
+              ${trend === "down" ? "bg-bad/10 text-bad" : ""}
+              ${trend === "stable" ? "bg-glass-hi text-fg-dim" : ""}
             `}>
               {trendValue}
             </span>
@@ -106,16 +106,16 @@ export const EnhancedSystemCard: React.FC<EnhancedSystemCardProps> = ({
 
       {/* Content */}
       <div className="relative space-y-2">
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-fg-faint">
           {title}
         </h3>
         
         <div className="space-y-1">
-          <div className="text-2xl font-bold text-zinc-100 tracking-tight">
+          <div className="text-2xl font-bold text-fg tracking-tight">
             {primaryMetric}
           </div>
           {secondaryMetric && (
-            <div className="text-sm text-zinc-400">
+            <div className="text-sm text-fg-dim">
               {secondaryMetric}
             </div>
           )}
@@ -123,7 +123,7 @@ export const EnhancedSystemCard: React.FC<EnhancedSystemCardProps> = ({
 
         {/* Progress Bar (if applicable) */}
         <div className="pt-2">
-          <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+          <div className="h-1.5 bg-flat rounded-full overflow-hidden">
             <div 
               className={`h-full bg-gradient-to-r ${statusColors[status].bg} transition-all duration-500`}
               style={{ width: `${isHovered ? "75%" : "60%"}` }}
@@ -134,7 +134,7 @@ export const EnhancedSystemCard: React.FC<EnhancedSystemCardProps> = ({
 
       {/* Hover Effect Overlay */}
       <div className={`
-        absolute inset-0 rounded-2xl bg-gradient-to-t from-indigo-500/5 to-transparent
+        absolute inset-0 rounded-2xl bg-gradient-to-t from-accent/5 to-transparent
         opacity-0 group-hover:opacity-100 transition-opacity duration-300
         pointer-events-none
       `} />
@@ -175,11 +175,11 @@ export const EnhancedProjectCard: React.FC<EnhancedProjectCardProps> = ({
 
   return (
     <div
-      className="group relative bg-zinc-900/80 backdrop-blur-xl border border-zinc-800 rounded-2xl overflow-hidden hover:border-zinc-700 transition-all duration-300 hover:scale-[1.02] hover:shadow-2xl hover:shadow-indigo-500/10 cursor-pointer"
+      className="group relative bg-navy/80 backdrop-blur-xl border border-edge rounded-2xl overflow-hidden hover:border-edge transition-all duration-300 hover:scale-[1.02] hover:shadow-2xl hover:shadow-accent/10 cursor-pointer"
       onClick={onClick}
     >
       {/* Cover Image */}
-      <div className="relative h-48 overflow-hidden bg-zinc-800">
+      <div className="relative h-48 overflow-hidden bg-flat">
         {project.coverUrl ? (
           <img
             src={project.coverUrl}
@@ -187,13 +187,13 @@ export const EnhancedProjectCard: React.FC<EnhancedProjectCardProps> = ({
             className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-zinc-800 to-zinc-900">
-            <div className="text-zinc-600">No Cover</div>
+          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-flat to-navy">
+            <div className="text-fg-faint">No Cover</div>
           </div>
         )}
         
         {/* Gradient Overlay */}
-        <div className="absolute inset-0 bg-gradient-to-t from-zinc-900 via-zinc-900/50 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-navy via-navy/50 to-transparent" />
         
         {/* Stage Badge */}
         <div className="absolute top-3 left-3">
@@ -210,7 +210,7 @@ export const EnhancedProjectCard: React.FC<EnhancedProjectCardProps> = ({
                 cx="24"
                 cy="24"
                 r="20"
-                stroke="rgba(39, 39, 42, 0.5)"
+                stroke="rgba(16,26,61, 0.5)"
                 strokeWidth="3"
                 fill="none"
               />
@@ -227,13 +227,13 @@ export const EnhancedProjectCard: React.FC<EnhancedProjectCardProps> = ({
               />
               <defs>
                 <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stopColor="#6366f1" />
-                  <stop offset="100%" stopColor="#8b5cf6" />
+                  <stop offset="0%" stopColor="#3b6bf5" />
+                  <stop offset="100%" stopColor="#3b6bf5" />
                 </linearGradient>
               </defs>
             </svg>
             <div className="absolute inset-0 flex items-center justify-center">
-              <span className="text-xs font-bold text-zinc-100">{project.progress}%</span>
+              <span className="text-xs font-bold text-fg">{project.progress}%</span>
             </div>
           </div>
         </div>
@@ -241,25 +241,25 @@ export const EnhancedProjectCard: React.FC<EnhancedProjectCardProps> = ({
 
       {/* Content */}
       <div className="p-4 space-y-3">
-        <h3 className="font-semibold text-zinc-100 group-hover:text-indigo-400 transition-colors">
+        <h3 className="font-semibold text-fg group-hover:text-info transition-colors">
           {project.name}
         </h3>
         
         {/* Metadata */}
-        <div className="flex items-center justify-between text-xs text-zinc-500">
+        <div className="flex items-center justify-between text-xs text-fg-faint">
           <span>Last activity: {project.lastActivity}</span>
           <span className="flex items-center gap-1">
-            <div className="w-2 h-2 rounded-full bg-emerald-500" />
+            <div className="w-2 h-2 rounded-full bg-ok" />
             {project.collaborators} active
           </span>
         </div>
 
         {/* Quick Actions (visible on hover) */}
         <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-          <button className="flex-1 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-xs font-medium text-zinc-300 transition-colors">
+          <button className="flex-1 px-3 py-1.5 bg-flat hover:bg-glass-hi rounded-lg text-xs font-medium text-fg-dim transition-colors">
             Open
           </button>
-          <button className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-xs font-medium text-zinc-300 transition-colors">
+          <button className="px-3 py-1.5 bg-flat hover:bg-glass-hi rounded-lg text-xs font-medium text-fg-dim transition-colors">
             ⋯
           </button>
         </div>

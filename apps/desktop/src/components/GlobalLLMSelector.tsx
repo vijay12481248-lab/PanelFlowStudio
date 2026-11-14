@@ -143,7 +143,7 @@ export const GlobalLLMSelector: React.FC<GlobalLLMSelectorProps> = ({
 
   return (
     <div
-      className={`inline-flex items-center gap-1.5 bg-zinc-950/80 border border-zinc-800 rounded-lg px-2 py-1 shadow-inner whitespace-nowrap shrink-0 ${className}`}
+      className={`inline-flex items-center gap-1.5 bg-ink/80 border border-edge rounded-lg px-2 py-1 shadow-inner whitespace-nowrap shrink-0 ${className}`}
     >
       {/* Provider Selector */}
       <div className="flex items-center gap-1 shrink-0">
@@ -153,14 +153,14 @@ export const GlobalLLMSelector: React.FC<GlobalLLMSelectorProps> = ({
         <select
           value={selectedProviderId}
           onChange={(e) => handleProviderChange(e.target.value)}
-          className="bg-transparent text-[11px] font-semibold text-zinc-200 focus:outline-none cursor-pointer border-r border-zinc-800/80 pr-1.5 mr-0.5 max-w-[130px] sm:max-w-[155px] truncate"
+          className="bg-transparent text-[11px] font-semibold text-fg focus:outline-none cursor-pointer border-r border-edge/80 pr-1.5 mr-0.5 max-w-[130px] sm:max-w-[155px] truncate"
           title="Select active LLM Provider (Inherit Global Default or Choose Flow Override)"
         >
-          <option value="global" className="bg-zinc-900 text-zinc-200">
+          <option value="global" className="bg-navy text-fg">
             🌐 Global Default ({globalProviderObj?.name || globalDefaultProviderId})
           </option>
           {providers.map((p) => (
-            <option key={p.id} value={p.id} className="bg-zinc-900 text-zinc-200">
+            <option key={p.id} value={p.id} className="bg-navy text-fg">
               {getProviderIcon(p.id)} {p.name}
             </option>
           ))}
@@ -172,21 +172,21 @@ export const GlobalLLMSelector: React.FC<GlobalLLMSelectorProps> = ({
         <select
           value={selectedModel || (selectedProviderId === "global" ? "" : currentProviderObj?.default_model || "")}
           onChange={(e) => handleModelChange(e.target.value)}
-          className="bg-transparent text-xs text-zinc-300 font-mono focus:outline-none cursor-pointer max-w-[110px] sm:max-w-[140px] truncate"
+          className="bg-transparent text-xs text-fg-dim font-mono focus:outline-none cursor-pointer max-w-[110px] sm:max-w-[140px] truncate"
           title="Select LLM model for this operation"
         >
           {selectedProviderId === "global" && (
-            <option value="" className="bg-zinc-900 text-zinc-400">
+            <option value="" className="bg-navy text-fg-dim">
               Auto: {globalDefaultModel}
             </option>
           )}
           {availableModels.map((m) => (
-            <option key={m} value={m} className="bg-zinc-900 text-zinc-200 font-mono">
+            <option key={m} value={m} className="bg-navy text-fg font-mono">
               {m}
             </option>
           ))}
           {selectedModel && !availableModels.includes(selectedModel) && (
-            <option value={selectedModel} className="bg-zinc-900 text-zinc-200 font-mono">
+            <option value={selectedModel} className="bg-navy text-fg font-mono">
               {selectedModel}
             </option>
           )}
@@ -197,7 +197,7 @@ export const GlobalLLMSelector: React.FC<GlobalLLMSelectorProps> = ({
       <div className="flex items-center pl-0.5 shrink-0">
         <span
           className={`w-1.5 h-1.5 rounded-full ${
-            currentProviderObj?.is_healthy ? "bg-emerald-400" : "bg-amber-400"
+            currentProviderObj?.is_healthy ? "bg-ok" : "bg-warn"
           }`}
           title={currentProviderObj?.is_healthy ? "Provider online & ready" : "Provider unverified or offline"}
         />
@@ -208,7 +208,7 @@ export const GlobalLLMSelector: React.FC<GlobalLLMSelectorProps> = ({
         <button
           type="button"
           onClick={onOpenSettings}
-          className="ml-0.5 p-1 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 rounded transition-colors shrink-0"
+          className="ml-0.5 p-1 text-fg-dim hover:text-fg hover:bg-flat rounded transition-colors shrink-0"
           title="Configure Global LLM Routing & Provider Endpoints"
         >
           <Icons.Settings className="w-3.5 h-3.5" />

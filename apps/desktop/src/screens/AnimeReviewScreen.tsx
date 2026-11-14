@@ -82,32 +82,32 @@ export const AnimeReviewScreen: React.FC<AnimeReviewScreenProps> = ({ onBack }) 
   };
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 p-6 max-w-4xl mx-auto space-y-6">
-      <button onClick={onBack} className="text-sm text-zinc-400 hover:text-zinc-200">
+    <div className="min-h-screen bg-ink text-fg p-6 max-w-4xl mx-auto space-y-6">
+      <button onClick={onBack} className="text-sm text-fg-dim hover:text-fg">
         ← Back to projects
       </button>
       <h1 className="text-xl font-bold">Anime Review</h1>
-      <p className="text-sm text-zinc-400">
+      <p className="text-sm text-fg-dim">
         Paste episode links or file paths (one per line). Each becomes a hands-off job: analysis, short illustrative clips,
         a narrated review, render and YouTube package. Narration is the main content; clips are capped.
       </p>
 
-      <section className="space-y-3 rounded-lg border border-zinc-800 p-4">
+      <section className="space-y-3 rounded-lg border border-edge p-4">
         <input
-          className="w-full bg-zinc-900 border border-zinc-800 rounded px-3 py-2 text-sm"
+          className="w-full bg-navy border border-edge rounded px-3 py-2 text-sm"
           placeholder="Series title (e.g. Solo Leveling Ep 12)"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
         />
         <textarea
-          className="w-full h-24 bg-zinc-900 border border-zinc-800 rounded px-3 py-2 text-sm font-mono"
+          className="w-full h-24 bg-navy border border-edge rounded px-3 py-2 text-sm font-mono"
           placeholder={"https://… or C:\\videos\\episode.mkv"}
           value={lines}
           onChange={(e) => setLines(e.target.value)}
         />
         <div className="flex gap-2">
           <select
-            className="flex-1 bg-zinc-900 border border-zinc-800 rounded px-3 py-2 text-sm"
+            className="flex-1 bg-navy border border-edge rounded px-3 py-2 text-sm"
             value={channelId}
             onChange={(e) => setChannelId(e.target.value)}
           >
@@ -119,19 +119,19 @@ export const AnimeReviewScreen: React.FC<AnimeReviewScreenProps> = ({ onBack }) 
             ))}
           </select>
           <input
-            className="w-40 bg-zinc-900 border border-zinc-800 rounded px-3 py-2 text-sm"
+            className="w-40 bg-navy border border-edge rounded px-3 py-2 text-sm"
             placeholder="New channel name"
             value={newChannel}
             onChange={(e) => setNewChannel(e.target.value)}
           />
-          <button onClick={addChannel} className="px-3 rounded bg-zinc-800 hover:bg-zinc-700 text-sm">
+          <button onClick={addChannel} className="px-3 rounded bg-flat hover:bg-glass-hi text-sm">
             Add
           </button>
         </div>
         <div className="space-y-2">
-          <label className="text-xs uppercase tracking-wide text-zinc-400">Rights basis (required)</label>
+          <label className="text-xs uppercase tracking-wide text-fg-dim">Rights basis (required)</label>
           <select
-            className="w-full bg-zinc-900 border border-zinc-800 rounded px-3 py-2 text-sm"
+            className="w-full bg-navy border border-edge rounded px-3 py-2 text-sm"
             value={basis}
             onChange={(e) => setBasis(e.target.value)}
           >
@@ -142,7 +142,7 @@ export const AnimeReviewScreen: React.FC<AnimeReviewScreenProps> = ({ onBack }) 
             ))}
           </select>
           <input
-            className="w-full bg-zinc-900 border border-zinc-800 rounded px-3 py-2 text-sm"
+            className="w-full bg-navy border border-edge rounded px-3 py-2 text-sm"
             placeholder={needsNotes ? "Required: why this is commentary/review" : "Notes (optional)"}
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
@@ -151,27 +151,27 @@ export const AnimeReviewScreen: React.FC<AnimeReviewScreenProps> = ({ onBack }) 
         <button
           disabled={!canQueue || busy}
           onClick={queue}
-          className="px-4 py-2 rounded bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-sm font-semibold"
+          className="px-4 py-2 rounded bg-accent hover:bg-accent disabled:opacity-40 text-sm font-semibold"
         >
           {busy ? "Queuing…" : `Queue ${sources.length || ""} episode${sources.length === 1 ? "" : "s"}`}
         </button>
       </section>
 
       <section className="space-y-2">
-        <h2 className="text-sm font-bold uppercase tracking-wide text-zinc-300">Queue</h2>
-        {jobs.length === 0 && <p className="text-sm text-zinc-500">No review jobs yet.</p>}
+        <h2 className="text-sm font-bold uppercase tracking-wide text-fg-dim">Queue</h2>
+        {jobs.length === 0 && <p className="text-sm text-fg-faint">No review jobs yet.</p>}
         {jobs.map((j) => (
-          <div key={j.job_id} className="rounded border border-zinc-800 p-3 text-sm">
+          <div key={j.job_id} className="rounded border border-edge p-3 text-sm">
             <div className="flex justify-between">
               <span>{(j.input as { title?: string }).title ?? j.job_id}</span>
-              <span className="text-zinc-400">{j.status}</span>
+              <span className="text-fg-dim">{j.status}</span>
             </div>
-            <div className="h-1.5 bg-zinc-800 rounded mt-2">
-              <div className="h-1.5 bg-indigo-500 rounded" style={{ width: `${Math.round(j.progress * 100)}%` }} />
+            <div className="h-1.5 bg-flat rounded mt-2">
+              <div className="h-1.5 bg-accent rounded" style={{ width: `${Math.round(j.progress * 100)}%` }} />
             </div>
-            <div className="text-xs text-zinc-400 mt-1">{j.error ?? j.message}</div>
+            <div className="text-xs text-fg-dim mt-1">{j.error ?? j.message}</div>
             {j.status === "SUCCEEDED" && (
-              <div className="text-xs text-emerald-400 mt-1 break-all">
+              <div className="text-xs text-ok mt-1 break-all">
                 {String((j.output as { video?: string }).video ?? "")}
               </div>
             )}

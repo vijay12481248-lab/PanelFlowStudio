@@ -314,11 +314,11 @@ export const ComfyImageScreen: React.FC<ComfyImageScreenProps> = ({ project, onB
       <div className="flex items-center justify-between">
         <div>
           <div className="flex items-center gap-2">
-            <p className="text-xs uppercase tracking-widest text-indigo-400 font-semibold">AI Creation Studio</p>
+            <p className="text-xs uppercase tracking-widest text-info font-semibold">AI Creation Studio</p>
             <Badge variant="neutral" className="text-[10px]">Playwright Connected</Badge>
           </div>
-          <h1 className="text-2xl font-bold text-zinc-100 mt-0.5">Generate Original Images & Panels</h1>
-          <p className="text-sm text-zinc-400">Project: {project.title}</p>
+          <h1 className="text-2xl font-bold text-fg mt-0.5">Generate Original Images & Panels</h1>
+          <p className="text-sm text-fg-dim">Project: {project.title}</p>
         </div>
         <Button variant="ghost" onClick={onBack}>
           <Icons.ArrowLeft className="w-4 h-4 mr-2" />
@@ -327,14 +327,14 @@ export const ComfyImageScreen: React.FC<ComfyImageScreenProps> = ({ project, onB
       </div>
 
       {/* Mode Switcher Tabs */}
-      <div className="flex border-b border-zinc-800 gap-2">
+      <div className="flex border-b border-edge gap-2">
         <button
           type="button"
           onClick={() => setMode("web_ai")}
           className={`flex items-center gap-2 px-4 py-2.5 font-medium text-sm border-b-2 transition-colors ${
             mode === "web_ai"
-              ? "border-indigo-500 text-indigo-400 bg-indigo-500/10 rounded-t-lg"
-              : "border-transparent text-zinc-400 hover:text-zinc-200"
+              ? "border-accent text-info bg-accent/10 rounded-t-lg"
+              : "border-transparent text-fg-dim hover:text-fg"
           }`}
         >
           <Icons.Globe className="w-4 h-4" />
@@ -345,8 +345,8 @@ export const ComfyImageScreen: React.FC<ComfyImageScreenProps> = ({ project, onB
           onClick={() => setMode("comfy_local")}
           className={`flex items-center gap-2 px-4 py-2.5 font-medium text-sm border-b-2 transition-colors ${
             mode === "comfy_local"
-              ? "border-indigo-500 text-indigo-400 bg-indigo-500/10 rounded-t-lg"
-              : "border-transparent text-zinc-400 hover:text-zinc-200"
+              ? "border-accent text-info bg-accent/10 rounded-t-lg"
+              : "border-transparent text-fg-dim hover:text-fg"
           }`}
         >
           <Icons.Sparkles className="w-4 h-4" />
@@ -357,8 +357,8 @@ export const ComfyImageScreen: React.FC<ComfyImageScreenProps> = ({ project, onB
           onClick={() => setMode("chrono")}
           className={`flex items-center gap-2 px-4 py-2.5 font-medium text-sm border-b-2 transition-colors ${
             mode === "chrono"
-              ? "border-indigo-500 text-indigo-400 bg-indigo-500/10 rounded-t-lg"
-              : "border-transparent text-zinc-400 hover:text-zinc-200"
+              ? "border-accent text-info bg-accent/10 rounded-t-lg"
+              : "border-transparent text-fg-dim hover:text-fg"
           }`}
         >
           🔒
@@ -372,7 +372,7 @@ export const ComfyImageScreen: React.FC<ComfyImageScreenProps> = ({ project, onB
           {/* Left: Input & Control Panel */}
           <Card className="p-5 space-y-5">
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-400 mb-2">
+              <label className="block text-xs font-semibold uppercase tracking-wider text-fg-dim mb-2">
                 1. Target AI Platform Preset
               </label>
               <div className="flex flex-wrap gap-2">
@@ -383,8 +383,8 @@ export const ComfyImageScreen: React.FC<ComfyImageScreenProps> = ({ project, onB
                     onClick={() => handleSelectPreset(p)}
                     className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
                       selectedPreset === p.id
-                        ? "bg-indigo-600 border-indigo-500 text-white shadow-sm"
-                        : "bg-zinc-900 border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+                        ? "bg-accent border-accent text-white shadow-sm"
+                        : "bg-navy border-edge text-fg-dim hover:bg-flat"
                     }`}
                   >
                     {p.name}
@@ -395,13 +395,13 @@ export const ComfyImageScreen: React.FC<ComfyImageScreenProps> = ({ project, onB
 
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <label className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
+                <label className="text-xs font-semibold uppercase tracking-wider text-fg-dim">
                   Target Website URL
                 </label>
                 <button
                   type="button"
                   onClick={handleOpenBrowserSession}
-                  className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1 font-medium underline"
+                  className="text-xs text-info hover:text-info flex items-center gap-1 font-medium underline"
                   title="Opens a visible browser with your persistent session profile so you can log into your account"
                 >
                   Sign In / Manage Session ↗
@@ -412,39 +412,39 @@ export const ComfyImageScreen: React.FC<ComfyImageScreenProps> = ({ project, onB
                 value={webUrl}
                 onChange={(e) => setWebUrl(e.target.value)}
                 placeholder="https://chatgpt.com or https://gemini.google.com"
-                className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 focus:border-indigo-500 focus:outline-none"
+                className="w-full rounded-lg border border-edge bg-ink px-3 py-2 text-sm text-fg focus:border-accent focus:outline-none"
                 disabled={webSubmitting}
               />
-              <p className="text-[11px] text-zinc-500 mt-1">
+              <p className="text-[11px] text-fg-faint mt-1">
                 Your login cookies & session are saved persistently so future generations execute automatically.
               </p>
             </div>
 
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <label className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
+                <label className="text-xs font-semibold uppercase tracking-wider text-fg-dim">
                   Prompt
                 </label>
-                <span className="text-[11px] text-zinc-500">{webPrompt.length} chars</span>
+                <span className="text-[11px] text-fg-faint">{webPrompt.length} chars</span>
               </div>
               <textarea
                 value={webPrompt}
                 onChange={(e) => setWebPrompt(e.target.value)}
                 rows={5}
                 placeholder="Enter prompt for the AI to execute..."
-                className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 focus:border-indigo-500 focus:outline-none"
+                className="w-full rounded-lg border border-edge bg-ink px-3 py-2 text-sm text-fg focus:border-accent focus:outline-none"
                 disabled={webSubmitting}
               />
 
               {/* Quick sample prompt chips */}
               <div className="mt-2 flex flex-wrap gap-1.5">
-                <span className="text-[11px] text-zinc-500 self-center mr-1">Suggestions:</span>
+                <span className="text-[11px] text-fg-faint self-center mr-1">Suggestions:</span>
                 {SAMPLE_PROMPTS.map((sample, idx) => (
                   <button
                     key={idx}
                     type="button"
                     onClick={() => setWebPrompt(sample)}
-                    className="text-[11px] px-2 py-0.5 rounded bg-zinc-800/80 text-zinc-300 hover:bg-zinc-700 border border-zinc-700/60"
+                    className="text-[11px] px-2 py-0.5 rounded bg-flat/80 text-fg-dim hover:bg-glass-hi border border-edge/60"
                   >
                     Sample {idx + 1}
                   </button>
@@ -453,15 +453,15 @@ export const ComfyImageScreen: React.FC<ComfyImageScreenProps> = ({ project, onB
             </div>
 
             {/* Execution Options */}
-            <div className="grid grid-cols-2 gap-4 pt-1 border-t border-zinc-800">
+            <div className="grid grid-cols-2 gap-4 pt-1 border-t border-edge">
               <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-400 mb-1">
+                <label className="block text-xs font-semibold uppercase tracking-wider text-fg-dim mb-1">
                   Extract Type
                 </label>
                 <select
                   value={extractType}
                   onChange={(e) => setExtractType(e.target.value as any)}
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-100"
+                  className="w-full rounded-lg border border-edge bg-navy px-3 py-1.5 text-xs text-fg"
                   disabled={webSubmitting}
                 >
                   <option value="all">All (Images & Text Response)</option>
@@ -471,12 +471,12 @@ export const ComfyImageScreen: React.FC<ComfyImageScreenProps> = ({ project, onB
               </div>
 
               <div className="flex items-center pt-5">
-                <label className="flex items-center gap-2 cursor-pointer text-xs text-zinc-300">
+                <label className="flex items-center gap-2 cursor-pointer text-xs text-fg-dim">
                   <input
                     type="checkbox"
                     checked={headless}
                     onChange={(e) => setHeadless(e.target.checked)}
-                    className="rounded border-zinc-700 text-indigo-600 focus:ring-0"
+                    className="rounded border-edge text-accent focus:ring-0"
                     disabled={webSubmitting}
                   />
                   <span>Run Headless (Background)</span>
@@ -486,13 +486,13 @@ export const ComfyImageScreen: React.FC<ComfyImageScreenProps> = ({ project, onB
 
             {/* Live Progress Bar when executing */}
             {webSubmitting && (
-              <div className="space-y-2 rounded-lg border border-indigo-900/60 bg-indigo-950/40 p-3">
-                <div className="flex items-center justify-between text-xs text-indigo-300 font-medium">
+              <div className="space-y-2 rounded-lg border border-accent/60 bg-accent/40 p-3">
+                <div className="flex items-center justify-between text-xs text-info font-medium">
                   <span className="animate-pulse">{webStep || "Executing prompt on web tool..."}</span>
                   <Badge variant="neutral" className="text-[10px]">Processing</Badge>
                 </div>
-                <div className="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-                  <div className="h-full bg-indigo-500 animate-pulse rounded-full w-2/3" />
+                <div className="w-full h-1.5 bg-flat rounded-full overflow-hidden">
+                  <div className="h-full bg-accent animate-pulse rounded-full w-2/3" />
                 </div>
               </div>
             )}
@@ -513,7 +513,7 @@ export const ComfyImageScreen: React.FC<ComfyImageScreenProps> = ({ project, onB
           <div className="space-y-4">
             <Card className="p-5 space-y-4">
               <div className="flex items-center justify-between">
-                <h2 className="font-semibold text-zinc-100">Extracted Results</h2>
+                <h2 className="font-semibold text-fg">Extracted Results</h2>
                 {webResult && (
                   <Badge variant={webResult.success ? "success" : "danger"}>
                     {webResult.success ? `Done (${webResult.execution_time_sec}s)` : "Failed"}
@@ -523,11 +523,11 @@ export const ComfyImageScreen: React.FC<ComfyImageScreenProps> = ({ project, onB
 
               {/* If webResult has error */}
               {webResult && !webResult.success && (
-                <div className="p-3 bg-red-950/50 border border-red-800 rounded-lg text-xs text-red-300 space-y-1">
+                <div className="p-3 bg-bad/50 border border-bad/40 rounded-lg text-xs text-bad space-y-1">
                   <p className="font-bold">Execution Error</p>
                   <p className="break-words">{webResult.error}</p>
-                  <p className="text-zinc-400 mt-2">
-                    Tip: If login is required, click <span className="text-indigo-400 font-medium">Sign In / Manage Session</span> above to log in to your account.
+                  <p className="text-fg-dim mt-2">
+                    Tip: If login is required, click <span className="text-info font-medium">Sign In / Manage Session</span> above to log in to your account.
                   </p>
                 </div>
               )}
@@ -535,20 +535,20 @@ export const ComfyImageScreen: React.FC<ComfyImageScreenProps> = ({ project, onB
               {/* Extracted Images Gallery */}
               {webResult && webResult.images && webResult.images.length > 0 && (
                 <div className="space-y-3">
-                  <p className="text-xs font-semibold text-zinc-300">
+                  <p className="text-xs font-semibold text-fg-dim">
                     Generated Images ({webResult.images.length})
                   </p>
                   <div className="grid gap-3">
                     {webResult.images.map((img, i) => (
-                      <div key={i} className="rounded-lg border border-zinc-700 bg-zinc-950 overflow-hidden space-y-2 p-2">
+                      <div key={i} className="rounded-lg border border-edge bg-ink overflow-hidden space-y-2 p-2">
                         <img
                           src={img.url.startsWith("/api") ? api.resourceUrl(img.url) : img.url}
                           alt={`Extracted result ${i + 1}`}
                           className="w-full max-h-80 object-contain rounded bg-black/40"
                         />
-                        <div className="flex items-center justify-between text-[11px] text-zinc-400 px-1">
+                        <div className="flex items-center justify-between text-[11px] text-fg-dim px-1">
                           <span>{img.width} × {img.height} · {(img.byte_size / 1024).toFixed(0)} KB</span>
-                          <span className="text-emerald-400 font-medium">Saved as Asset</span>
+                          <span className="text-ok font-medium">Saved as Asset</span>
                         </div>
                       </div>
                     ))}
@@ -560,16 +560,16 @@ export const ComfyImageScreen: React.FC<ComfyImageScreenProps> = ({ project, onB
               {webResult && webResult.text_response && (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <p className="text-xs font-semibold text-zinc-300">Response Text</p>
+                    <p className="text-xs font-semibold text-fg-dim">Response Text</p>
                     <button
                       type="button"
                       onClick={() => copyToClipboard(webResult.text_response)}
-                      className="text-[11px] text-indigo-400 hover:text-indigo-300 underline"
+                      className="text-[11px] text-info hover:text-info underline"
                     >
                       {copiedText ? "Copied!" : "Copy Text"}
                     </button>
                   </div>
-                  <div className="max-h-48 overflow-y-auto p-3 rounded-lg border border-zinc-800 bg-zinc-950 text-xs text-zinc-200 whitespace-pre-wrap font-sans leading-relaxed">
+                  <div className="max-h-48 overflow-y-auto p-3 rounded-lg border border-edge bg-ink text-xs text-fg whitespace-pre-wrap font-sans leading-relaxed">
                     {webResult.text_response}
                   </div>
                 </div>
@@ -577,10 +577,10 @@ export const ComfyImageScreen: React.FC<ComfyImageScreenProps> = ({ project, onB
 
               {/* Empty state when no result yet */}
               {!webResult && (
-                <div className="min-h-64 rounded-lg border border-dashed border-zinc-700 flex flex-col items-center justify-center text-sm text-zinc-500 text-center px-6 space-y-2">
-                  <Icons.Globe className="w-8 h-8 text-zinc-600 mb-1" />
-                  <p className="font-medium text-zinc-400">No Web AI Output Yet</p>
-                  <p className="text-xs text-zinc-500 max-w-xs">
+                <div className="min-h-64 rounded-lg border border-dashed border-edge flex flex-col items-center justify-center text-sm text-fg-faint text-center px-6 space-y-2">
+                  <Icons.Globe className="w-8 h-8 text-fg-faint mb-1" />
+                  <p className="font-medium text-fg-dim">No Web AI Output Yet</p>
+                  <p className="text-xs text-fg-faint max-w-xs">
                     Choose a website, enter a prompt, and click execute. The tool will input the prompt, wait for generation, and collect the images & text here automatically.
                   </p>
                 </div>
@@ -589,26 +589,26 @@ export const ComfyImageScreen: React.FC<ComfyImageScreenProps> = ({ project, onB
 
             {/* Existing Project Assets */}
             <Card className="p-4 space-y-2">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">Project Assets ({assets.length})</h3>
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-fg-dim">Project Assets ({assets.length})</h3>
               {latestAsset ? (
                 <div
                   onClick={() => handleOpenAssetModal(latestAsset)}
-                  className="flex items-center gap-3 p-2 rounded-lg bg-zinc-900 border border-zinc-800 hover:border-indigo-500 cursor-pointer transition-all hover:scale-[1.01] active:scale-[0.99]"
+                  className="flex items-center gap-3 p-2 rounded-lg bg-navy border border-edge hover:border-accent cursor-pointer transition-all hover:scale-[1.01] active:scale-[0.99]"
                   title="Click to view full & inpaint"
                 >
                   <img
                     src={api.getGeneratedAssetUrl(project.id, latestAsset.id)}
                     alt="Latest asset thumbnail"
-                    className="w-12 h-12 object-cover rounded border border-zinc-700 bg-black"
+                    className="w-12 h-12 object-cover rounded border border-edge bg-black"
                   />
-                  <div className="text-xs text-zinc-400 overflow-hidden flex-1">
-                    <p className="text-zinc-200 font-medium truncate">{latestAsset.filename}</p>
+                  <div className="text-xs text-fg-dim overflow-hidden flex-1">
+                    <p className="text-fg font-medium truncate">{latestAsset.filename}</p>
                     <p>{latestAsset.width} × {latestAsset.height} · {latestAsset.asset_type}</p>
                   </div>
-                  <span className="text-[11px] text-indigo-400 font-medium pr-1">Edit ↗</span>
+                  <span className="text-[11px] text-info font-medium pr-1">Edit ↗</span>
                 </div>
               ) : (
-                <p className="text-xs text-zinc-500">No previous project assets recorded.</p>
+                <p className="text-xs text-fg-faint">No previous project assets recorded.</p>
               )}
             </Card>
           </div>
@@ -620,35 +620,35 @@ export const ComfyImageScreen: React.FC<ComfyImageScreenProps> = ({ project, onB
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(300px,420px)]">
           <Card className="p-5 space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="font-semibold text-zinc-100">Approved workflow</h2>
+              <h2 className="font-semibold text-fg">Approved workflow</h2>
               <Badge variant={workflows.length ? "success" : "danger"}>{workflows.length ? "READY" : "UNAVAILABLE"}</Badge>
             </div>
             <select
               value={workflowId}
               onChange={(event) => setWorkflowId(event.target.value)}
-              className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100"
+              className="w-full rounded-lg border border-edge bg-navy px-3 py-2 text-sm text-fg"
               disabled={comfyLoading || comfySubmitting}
             >
               {workflows.map((workflow) => (
                 <option key={workflow.id} value={workflow.id}>{workflow.id}</option>
               ))}
             </select>
-            <label className="block text-sm text-zinc-300">
+            <label className="block text-sm text-fg-dim">
               Prompt
-              <textarea value={comfyPrompt} onChange={(event) => setComfyPrompt(event.target.value)} rows={6} className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100" disabled={comfySubmitting} />
+              <textarea value={comfyPrompt} onChange={(event) => setComfyPrompt(event.target.value)} rows={6} className="mt-1 w-full rounded-lg border border-edge bg-ink px-3 py-2 text-sm text-fg" disabled={comfySubmitting} />
             </label>
-            <label className="block text-sm text-zinc-300">
+            <label className="block text-sm text-fg-dim">
               Negative prompt
-              <textarea value={negativePrompt} onChange={(event) => setNegativePrompt(event.target.value)} rows={3} className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100" disabled={comfySubmitting} />
+              <textarea value={negativePrompt} onChange={(event) => setNegativePrompt(event.target.value)} rows={3} className="mt-1 w-full rounded-lg border border-edge bg-ink px-3 py-2 text-sm text-fg" disabled={comfySubmitting} />
             </label>
             <div className="grid grid-cols-3 gap-3">
-              <label className="text-sm text-zinc-300">Width<input type="number" min={256} max={2048} value={width} onChange={(event) => setWidth(Number(event.target.value))} className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm" disabled={comfySubmitting} /></label>
-              <label className="text-sm text-zinc-300">Height<input type="number" min={256} max={2048} value={height} onChange={(event) => setHeight(Number(event.target.value))} className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm" disabled={comfySubmitting} /></label>
-              <label className="text-sm text-zinc-300">Seed<input type="number" min={0} value={seed} onChange={(event) => setSeed(Number(event.target.value))} className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm" disabled={comfySubmitting} /></label>
+              <label className="text-sm text-fg-dim">Width<input type="number" min={256} max={2048} value={width} onChange={(event) => setWidth(Number(event.target.value))} className="mt-1 w-full rounded-lg border border-edge bg-ink px-3 py-2 text-sm" disabled={comfySubmitting} /></label>
+              <label className="text-sm text-fg-dim">Height<input type="number" min={256} max={2048} value={height} onChange={(event) => setHeight(Number(event.target.value))} className="mt-1 w-full rounded-lg border border-edge bg-ink px-3 py-2 text-sm" disabled={comfySubmitting} /></label>
+              <label className="text-sm text-fg-dim">Seed<input type="number" min={0} value={seed} onChange={(event) => setSeed(Number(event.target.value))} className="mt-1 w-full rounded-lg border border-edge bg-ink px-3 py-2 text-sm" disabled={comfySubmitting} /></label>
             </div>
             {activeJob && (
-              <div className="space-y-2 rounded-lg border border-zinc-800 bg-zinc-950/60 p-3">
-                <div className="flex justify-between text-xs text-zinc-400"><span>{activeJob.message || activeJob.status}</span><span>{Math.round(progress * 100)}%</span></div>
+              <div className="space-y-2 rounded-lg border border-edge bg-ink/60 p-3">
+                <div className="flex justify-between text-xs text-fg-dim"><span>{activeJob.message || activeJob.status}</span><span>{Math.round(progress * 100)}%</span></div>
                 <ProgressBar progress={progress} />
               </div>
             )}
@@ -660,12 +660,12 @@ export const ComfyImageScreen: React.FC<ComfyImageScreenProps> = ({ project, onB
 
           <Card className="p-5 space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="font-semibold text-zinc-100">Latest generated asset</h2>
+              <h2 className="font-semibold text-fg">Latest generated asset</h2>
               {latestAsset && (
                 <button
                   type="button"
                   onClick={() => handleOpenAssetModal(latestAsset)}
-                  className="text-xs text-indigo-400 hover:text-indigo-300 font-semibold flex items-center gap-1 hover:underline active:scale-95 transition-all"
+                  className="text-xs text-info hover:text-info font-semibold flex items-center gap-1 hover:underline active:scale-95 transition-all"
                 >
                   <Icons.Sparkles className="w-3.5 h-3.5" />
                   <span>Open Inpainter & Studio ↗</span>
@@ -676,7 +676,7 @@ export const ComfyImageScreen: React.FC<ComfyImageScreenProps> = ({ project, onB
               <>
                 <div
                   onClick={() => handleOpenAssetModal(latestAsset)}
-                  className="group relative cursor-pointer overflow-hidden rounded-xl border border-zinc-700 bg-zinc-950 transition-all duration-200 hover:border-indigo-500 hover:shadow-2xl hover:shadow-indigo-500/25 active:scale-[0.99]"
+                  className="group relative cursor-pointer overflow-hidden rounded-xl border border-edge bg-ink transition-all duration-200 hover:border-accent hover:shadow-2xl hover:shadow-accent/25 active:scale-[0.99]"
                   title="Click to view full image, brush mask & inpaint"
                 >
                   <img
@@ -686,27 +686,27 @@ export const ComfyImageScreen: React.FC<ComfyImageScreenProps> = ({ project, onB
                   />
                   {/* Animated Hover Overlay with Glass Effect */}
                   <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-200 flex flex-col items-center justify-center gap-2.5 p-4 text-center backdrop-blur-[2px]">
-                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-indigo-600 to-pink-500 text-white flex items-center justify-center shadow-lg shadow-indigo-600/40 transform group-hover:scale-110 transition-transform duration-200">
+                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-accent to-accent text-white flex items-center justify-center shadow-lg shadow-accent/40 transform group-hover:scale-110 transition-transform duration-200">
                       <Icons.Sparkles className="w-6 h-6 animate-pulse" />
                     </div>
                     <p className="text-sm font-bold text-white drop-shadow">Click to Open Full View & Inpaint</p>
-                    <p className="text-xs text-zinc-300 max-w-xs drop-shadow">
+                    <p className="text-xs text-fg-dim max-w-xs drop-shadow">
                       Dual-layer brush masking, instant inpainting with Qwen 2.1 Turbo, outfit and prompt presets
                     </p>
                   </div>
                 </div>
-                <div className="text-xs text-zinc-400 space-y-1">
+                <div className="text-xs text-fg-dim space-y-1">
                   <p>{latestAsset.width} × {latestAsset.height} · {latestAsset.byte_size.toLocaleString()} bytes</p>
                   <p className="font-mono break-all">SHA-256: {latestAsset.sha256}</p>
-                  <p>Asset status: <span className="text-emerald-400">{latestAsset.status}</span></p>
+                  <p>Asset status: <span className="text-ok">{latestAsset.status}</span></p>
                 </div>
 
                 {/* Project Assets Bin Reel */}
                 {assets.length > 1 && (
-                  <div className="space-y-2 pt-2 border-t border-zinc-800/80">
-                    <div className="flex items-center justify-between text-xs text-zinc-400">
+                  <div className="space-y-2 pt-2 border-t border-edge/80">
+                    <div className="flex items-center justify-between text-xs text-fg-dim">
                       <span className="font-semibold uppercase tracking-wider">Project Assets ({assets.length})</span>
-                      <span className="text-[11px] text-zinc-500">Click any asset to edit</span>
+                      <span className="text-[11px] text-fg-faint">Click any asset to edit</span>
                     </div>
                     <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin">
                       {assets.map((item) => (
@@ -715,8 +715,8 @@ export const ComfyImageScreen: React.FC<ComfyImageScreenProps> = ({ project, onB
                           onClick={() => handleOpenAssetModal(item)}
                           className={`shrink-0 w-16 h-20 rounded-lg overflow-hidden border cursor-pointer transition-all hover:scale-105 active:scale-95 ${
                             item.id === latestAsset.id
-                              ? "border-indigo-500 ring-2 ring-indigo-500/40 shadow-md"
-                              : "border-zinc-800 hover:border-zinc-600 opacity-70 hover:opacity-100"
+                              ? "border-accent ring-2 ring-accent/40 shadow-md"
+                              : "border-edge hover:border-edge opacity-70 hover:opacity-100"
                           }`}
                           title={`${item.filename} (${item.width}x${item.height})`}
                         >
@@ -732,7 +732,7 @@ export const ComfyImageScreen: React.FC<ComfyImageScreenProps> = ({ project, onB
                 )}
               </>
             ) : (
-              <div className="min-h-64 rounded-lg border border-dashed border-zinc-700 flex items-center justify-center text-sm text-zinc-500 text-center px-6">
+              <div className="min-h-64 rounded-lg border border-dashed border-edge flex items-center justify-center text-sm text-fg-faint text-center px-6">
                 Generated assets will appear here after verification.
               </div>
             )}
@@ -745,7 +745,7 @@ export const ComfyImageScreen: React.FC<ComfyImageScreenProps> = ({ project, onB
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(300px,420px)]">
           <Card className="p-5 space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="font-semibold text-zinc-100">Generation type</h2>
+              <h2 className="font-semibold text-fg">Generation type</h2>
               <Badge variant="success">QWEN IMAGE 2.1</Badge>
             </div>
             <div className="grid grid-cols-3 gap-2">
@@ -760,31 +760,31 @@ export const ComfyImageScreen: React.FC<ComfyImageScreenProps> = ({ project, onB
                   onClick={() => setChronoType(opt.t)}
                   className={`rounded-lg border p-3 text-center transition-all ${
                     chronoType === opt.t
-                      ? "border-indigo-500 bg-indigo-500/10 shadow-sm"
-                      : "border-zinc-700 bg-zinc-900/60 hover:border-zinc-500"
+                      ? "border-accent bg-accent/10 shadow-sm"
+                      : "border-edge bg-navy/60 hover:border-fg-faint"
                   }`}
                 >
                   <div className="text-lg">{opt.icon}</div>
-                  <div className={`text-xs font-bold mt-1 ${chronoType === opt.t ? "text-indigo-300" : "text-zinc-200"}`}>{opt.name}</div>
-                  <div className="text-[10px] text-zinc-500 mt-0.5 leading-tight">{opt.desc}</div>
+                  <div className={`text-xs font-bold mt-1 ${chronoType === opt.t ? "text-info" : "text-fg"}`}>{opt.name}</div>
+                  <div className="text-[10px] text-fg-faint mt-0.5 leading-tight">{opt.desc}</div>
                 </button>
               ))}
             </div>
 
-            <label className="block text-sm text-zinc-300">
+            <label className="block text-sm text-fg-dim">
               ✅ Positive prompt
-              <textarea value={chronoPrompt} onChange={(e) => setChronoPrompt(e.target.value)} rows={5} className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100" disabled={chronoBusy} />
+              <textarea value={chronoPrompt} onChange={(e) => setChronoPrompt(e.target.value)} rows={5} className="mt-1 w-full rounded-lg border border-edge bg-ink px-3 py-2 text-sm text-fg" disabled={chronoBusy} />
             </label>
-            <label className="block text-sm text-zinc-300">
+            <label className="block text-sm text-fg-dim">
               🚫 Negative prompt
-              <textarea value={chronoNegative} onChange={(e) => setChronoNegative(e.target.value)} rows={2} className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100" disabled={chronoBusy} />
+              <textarea value={chronoNegative} onChange={(e) => setChronoNegative(e.target.value)} rows={2} className="mt-1 w-full rounded-lg border border-edge bg-ink px-3 py-2 text-sm text-fg" disabled={chronoBusy} />
             </label>
 
             {chronoType === "charlock" && (
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-xs font-semibold uppercase tracking-wider text-zinc-400">🔒 Character Lock (max 4)</label>
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 font-semibold">
+                  <label className="text-xs font-semibold uppercase tracking-wider text-fg-dim">🔒 Character Lock (max 4)</label>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent/20 text-info border border-accent/30 font-semibold">
                     {chronoLockedIds.length ? `${chronoLockedIds.length} locked` : "off"}
                   </span>
                 </div>
@@ -800,21 +800,21 @@ export const ComfyImageScreen: React.FC<ComfyImageScreenProps> = ({ project, onB
                             title={`${c.name} — ${c.role}`}
                             onClick={() => toggleChronoLock(c.id)}
                             className={`relative w-12 h-12 rounded-lg overflow-hidden border-2 transition-all ${
-                              on ? "border-purple-400 scale-105" : "border-zinc-800 hover:border-zinc-600"
+                              on ? "border-accent scale-105" : "border-edge hover:border-edge"
                             }`}
                           >
                             <img src={api.resourceUrl(`/inputs/${c.image}`)} alt={c.name} className="w-full h-full object-cover" />
                             {on && (
-                              <span className="absolute bottom-0 right-0 w-4 h-4 bg-purple-500 rounded-tl flex items-center justify-center text-white text-[9px]">✓</span>
+                              <span className="absolute bottom-0 right-0 w-4 h-4 bg-accent rounded-tl flex items-center justify-center text-white text-[9px]">✓</span>
                             )}
                           </button>
                         );
                       })}
                     </div>
-                    <p className="text-[10px] text-zinc-500 mt-1">Generated faces follow the selected approved sheets (max 4). Never generate a character's face unlocked.</p>
+                    <p className="text-[10px] text-fg-faint mt-1">Generated faces follow the selected approved sheets (max 4). Never generate a character's face unlocked.</p>
                   </>
                 ) : (
-                  <p className="text-[11px] text-zinc-500">Character Vault is empty or unreachable — add reference sheets in the ChronoFlow Studio vault first.</p>
+                  <p className="text-[11px] text-fg-faint">Character Vault is empty or unreachable — add reference sheets in the ChronoFlow Studio vault first.</p>
                 )}
               </div>
             )}
@@ -822,8 +822,8 @@ export const ComfyImageScreen: React.FC<ComfyImageScreenProps> = ({ project, onB
             {chronoType === "refupload" && (
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-xs font-semibold uppercase tracking-wider text-zinc-400">🖼️ Reference images</label>
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-semibold">
+                  <label className="text-xs font-semibold uppercase tracking-wider text-fg-dim">🖼️ Reference images</label>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent/20 text-info border border-accent/30 font-semibold">
                     {chronoRefs.length}/4
                   </span>
                 </div>
@@ -832,19 +832,19 @@ export const ComfyImageScreen: React.FC<ComfyImageScreenProps> = ({ project, onB
                   accept="image/png,image/jpeg,image/webp"
                   multiple
                   onChange={(e) => { handleChronoRefUpload(e.target.files); e.target.value = ""; }}
-                  className="block w-full text-xs text-zinc-400 file:mr-3 file:rounded-lg file:border-0 file:bg-zinc-800 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-zinc-200 hover:file:bg-zinc-700"
+                  className="block w-full text-xs text-fg-dim file:mr-3 file:rounded-lg file:border-0 file:bg-flat file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-fg hover:file:bg-glass-hi"
                   disabled={chronoBusy}
                 />
                 {chronoRefs.length > 0 && (
                   <div className="flex flex-wrap gap-2 mt-2">
                     {chronoRefs.map((fn, i) => (
-                      <div key={fn} className="relative w-12 h-12 rounded-lg overflow-hidden border-2 border-zinc-800">
+                      <div key={fn} className="relative w-12 h-12 rounded-lg overflow-hidden border-2 border-edge">
                         <img src={api.resourceUrl(`/chronoflow/inputs/${fn}`)} alt={fn} className="w-full h-full object-cover" />
                         <button
                           type="button"
                           onClick={() => setChronoRefs((prev) => prev.filter((_, idx) => idx !== i))}
                           title="Remove"
-                          className="absolute bottom-0 right-0 w-4 h-4 bg-red-600 rounded-tl flex items-center justify-center text-white text-[9px]"
+                          className="absolute bottom-0 right-0 w-4 h-4 bg-bad rounded-tl flex items-center justify-center text-white text-[9px]"
                         >
                           ✕
                         </button>
@@ -852,37 +852,37 @@ export const ComfyImageScreen: React.FC<ComfyImageScreenProps> = ({ project, onB
                     ))}
                   </div>
                 )}
-                <p className="text-[10px] text-zinc-500 mt-1">Upload 1–4 reference images (faces, sheets, style frames) — identity follows them.</p>
+                <p className="text-[10px] text-fg-faint mt-1">Upload 1–4 reference images (faces, sheets, style frames) — identity follows them.</p>
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-3 pt-1 border-t border-zinc-800">
-              <label className="text-sm text-zinc-300">
+            <div className="grid grid-cols-2 gap-3 pt-1 border-t border-edge">
+              <label className="text-sm text-fg-dim">
                 Aspect ratio
-                <select value={chronoAspect} onChange={(e) => setChronoAspect(e.target.value)} className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100" disabled={chronoBusy}>
+                <select value={chronoAspect} onChange={(e) => setChronoAspect(e.target.value)} className="mt-1 w-full rounded-lg border border-edge bg-navy px-3 py-2 text-sm text-fg" disabled={chronoBusy}>
                   <option value="1344x768">16:9 Landscape (1344×768)</option>
                   <option value="768x1344">9:16 Portrait (768×1344)</option>
                   <option value="1024x1024">1:1 Square (1024×1024)</option>
                 </select>
               </label>
-              <label className="text-sm text-zinc-300">
-                Seed <span className="text-zinc-500 text-xs">(optional)</span>
-                <input type="number" min={0} value={chronoSeed} onChange={(e) => setChronoSeed(e.target.value)} placeholder="Random" className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm" disabled={chronoBusy} />
+              <label className="text-sm text-fg-dim">
+                Seed <span className="text-fg-faint text-xs">(optional)</span>
+                <input type="number" min={0} value={chronoSeed} onChange={(e) => setChronoSeed(e.target.value)} placeholder="Random" className="mt-1 w-full rounded-lg border border-edge bg-ink px-3 py-2 text-sm" disabled={chronoBusy} />
               </label>
             </div>
-            <label className="flex items-center gap-2 text-xs text-zinc-300 cursor-pointer">
-              <input type="checkbox" checked={chronoRefine} onChange={(e) => setChronoRefine(e.target.checked)} className="rounded border-zinc-700 text-indigo-600 focus:ring-0" disabled={chronoBusy} />
+            <label className="flex items-center gap-2 text-xs text-fg-dim cursor-pointer">
+              <input type="checkbox" checked={chronoRefine} onChange={(e) => setChronoRefine(e.target.checked)} className="rounded border-edge text-accent focus:ring-0" disabled={chronoBusy} />
               <span>🛠️ Auto-Refine — AI reviews the picture, then repairs or redraws it (slower)</span>
             </label>
 
             {chronoBusy && (
-              <div className="space-y-2 rounded-lg border border-indigo-900/60 bg-indigo-950/40 p-3">
-                <div className="flex items-center justify-between text-xs text-indigo-300 font-medium">
+              <div className="space-y-2 rounded-lg border border-accent/60 bg-accent/40 p-3">
+                <div className="flex items-center justify-between text-xs text-info font-medium">
                   <span className="animate-pulse">Generating with Qwen Image 2.1{chronoType !== "text2img" ? " (reference-locked)" : ""}...</span>
                   <Badge variant="neutral" className="text-[10px]">9–25s typical</Badge>
                 </div>
-                <div className="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-                  <div className="h-full bg-indigo-500 animate-pulse rounded-full w-2/3" />
+                <div className="w-full h-1.5 bg-flat rounded-full overflow-hidden">
+                  <div className="h-full bg-accent animate-pulse rounded-full w-2/3" />
                 </div>
               </div>
             )}
@@ -894,21 +894,21 @@ export const ComfyImageScreen: React.FC<ComfyImageScreenProps> = ({ project, onB
           </Card>
 
           <Card className="p-5 space-y-4">
-            <h2 className="font-semibold text-zinc-100">Result</h2>
+            <h2 className="font-semibold text-fg">Result</h2>
             {chronoResult ? (
               <div className="space-y-3">
-                <img src={api.resourceUrl(chronoResult.url)} alt="Generated result" className="w-full rounded-xl border border-zinc-700 bg-black/40 object-contain" />
+                <img src={api.resourceUrl(chronoResult.url)} alt="Generated result" className="w-full rounded-xl border border-edge bg-black/40 object-contain" />
                 {chronoResult.lockedNote && (
-                  <p className="text-[11px] text-purple-300 bg-purple-500/10 border border-purple-500/30 rounded-lg px-3 py-2">🔒 {chronoResult.lockedNote}</p>
+                  <p className="text-[11px] text-info bg-accent/10 border border-accent/30 rounded-lg px-3 py-2">🔒 {chronoResult.lockedNote}</p>
                 )}
                 {chronoResult.refineNote && (
-                  <p className="text-[11px] text-emerald-300 bg-emerald-500/10 border border-emerald-500/30 rounded-lg px-3 py-2">🛠️ Auto-refine: {chronoResult.refineNote}</p>
+                  <p className="text-[11px] text-ok bg-ok/10 border border-ok/30 rounded-lg px-3 py-2">🛠️ Auto-refine: {chronoResult.refineNote}</p>
                 )}
                 {latestAsset && (
                   <button
                     type="button"
                     onClick={() => handleOpenAssetModal(latestAsset)}
-                    className="text-xs text-indigo-400 hover:text-indigo-300 font-semibold flex items-center gap-1 hover:underline"
+                    className="text-xs text-info hover:text-info font-semibold flex items-center gap-1 hover:underline"
                   >
                     <Icons.Sparkles className="w-3.5 h-3.5" />
                     <span>Open Inpainter &amp; Studio ↗</span>
@@ -916,10 +916,10 @@ export const ComfyImageScreen: React.FC<ComfyImageScreenProps> = ({ project, onB
                 )}
               </div>
             ) : (
-              <div className="min-h-64 rounded-lg border border-dashed border-zinc-700 flex flex-col items-center justify-center text-sm text-zinc-500 text-center px-6 space-y-2">
+              <div className="min-h-64 rounded-lg border border-dashed border-edge flex flex-col items-center justify-center text-sm text-fg-faint text-center px-6 space-y-2">
                 <span className="text-2xl">🔒</span>
-                <p className="font-medium text-zinc-400">No Character-Locked Output Yet</p>
-                <p className="text-xs text-zinc-500 max-w-xs">
+                <p className="font-medium text-fg-dim">No Character-Locked Output Yet</p>
+                <p className="text-xs text-fg-faint max-w-xs">
                   Pick a generation type, write the positive/negative prompt, choose references if applicable, and generate. Results appear here and join the project assets.
                 </p>
               </div>

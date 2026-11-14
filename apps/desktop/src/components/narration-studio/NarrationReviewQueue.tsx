@@ -40,37 +40,37 @@ const LineCard: React.FC<{
   const [draft, setDraft] = useState(line.text);
   const [hint, setHint] = useState("");
   return (
-    <li className="flex gap-3 p-3 rounded-xl border border-zinc-800 bg-zinc-950">
-      <img src={imageUrl} alt={`Panel ${line.panel_id}`} className="w-28 h-28 object-contain rounded bg-zinc-900 shrink-0" />
+    <li className="flex gap-3 p-3 rounded-xl border border-edge bg-ink">
+      <img src={imageUrl} alt={`Panel ${line.panel_id}`} className="w-28 h-28 object-contain rounded bg-navy shrink-0" />
       <div className="flex-1 min-w-0 space-y-2">
-        <div className="flex items-center gap-2 text-[10px] font-mono text-zinc-500">
+        <div className="flex items-center gap-2 text-[10px] font-mono text-fg-faint">
           <span>{line.line_id}</span>
-          <span className="uppercase font-bold text-amber-400">{line.status}</span>
+          <span className="uppercase font-bold text-warn">{line.status}</span>
         </div>
         <textarea
           aria-label={`Edit text for ${line.line_id}`}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           rows={3}
-          className="w-full bg-zinc-900 border border-zinc-800 rounded-lg p-2 text-xs text-zinc-100"
+          className="w-full bg-navy border border-edge rounded-lg p-2 text-xs text-fg"
         />
         {errors.length > 0 && (
-          <ul role="alert" className="text-xs text-red-400 list-disc pl-4">
+          <ul role="alert" className="text-xs text-bad list-disc pl-4">
             {errors.map((r) => <li key={r}>{r}</li>)}
           </ul>
         )}
         <ul className="text-[11px] space-y-0.5">
           {line.checks.filter((c) => !c.passed).map((c) => (
-            <li key={c.rule} className={c.severity === "block" ? "text-red-400" : "text-amber-400"}>
+            <li key={c.rule} className={c.severity === "block" ? "text-bad" : "text-warn"}>
               <span className="font-bold uppercase">{c.severity}</span> {c.rule}: {c.reason}
             </li>
           ))}
         </ul>
-        <p className="text-[11px] text-zinc-500 font-mono">{line.facts}</p>
+        <p className="text-[11px] text-fg-faint font-mono">{line.facts}</p>
         {audioSrc && (
-          <div className="flex items-center gap-2 text-[11px] text-zinc-400">
+          <div className="flex items-center gap-2 text-[11px] text-fg-dim">
             <audio controls preload="none" src={audioSrc} aria-label={`Listen to ${line.line_id}`} />
-            {line.take?.flagged && <span className="text-amber-400">flagged: heard “{line.take.stt_text}”</span>}
+            {line.take?.flagged && <span className="text-warn">flagged: heard “{line.take.stt_text}”</span>}
           </div>
         )}
         <div className="flex flex-wrap items-center gap-2">
@@ -82,7 +82,7 @@ const LineCard: React.FC<{
             value={hint}
             onChange={(e) => setHint(e.target.value)}
             placeholder="Hint"
-            className="bg-zinc-900 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-100"
+            className="bg-navy border border-edge rounded px-2 py-1 text-xs text-fg"
           />
           <Button size="sm" variant="secondary" disabled={regenerating} aria-label={`Regenerate ${line.line_id}`} onClick={() => onAction({ action: "regenerate", hint })}>
             {regenerating ? "regenerating…" : "Regenerate"}
@@ -104,12 +104,12 @@ export const NarrationReviewQueue: React.FC<NarrationReviewQueueProps> = ({
   const blocked = (run?.lines ?? []).some((l) => !RESOLVED.has(l.status));
 
   return (
-    <div className="flex h-full min-h-0 text-zinc-100">
-      <nav aria-label="Pending runs" className="w-72 shrink-0 border-r border-zinc-800 overflow-y-auto p-3 space-y-4">
-        {items.length === 0 && <p className="text-xs text-zinc-500">Nothing waiting for review.</p>}
+    <div className="flex h-full min-h-0 text-fg">
+      <nav aria-label="Pending runs" className="w-72 shrink-0 border-r border-edge overflow-y-auto p-3 space-y-4">
+        {items.length === 0 && <p className="text-xs text-fg-faint">Nothing waiting for review.</p>}
         {[...byProject].map(([pid, runs]) => (
           <section key={pid}>
-            <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-300 mb-1">{runs[0].project_title}</h3>
+            <h3 className="text-xs font-bold uppercase tracking-wider text-fg-dim mb-1">{runs[0].project_title}</h3>
             <ul className="space-y-1">
               {runs.map((r) => (
                 <li key={r.run_id}>
@@ -117,10 +117,10 @@ export const NarrationReviewQueue: React.FC<NarrationReviewQueueProps> = ({
                     type="button"
                     aria-label={`Open run ${r.run_id}`}
                     onClick={() => onSelectRun(pid, r.run_id)}
-                    className={`w-full text-left p-2 rounded-lg border text-xs ${selected?.runId === r.run_id ? "border-indigo-500 bg-zinc-900" : "border-zinc-800 hover:border-zinc-700"}`}
+                    className={`w-full text-left p-2 rounded-lg border text-xs ${selected?.runId === r.run_id ? "border-accent bg-navy" : "border-edge hover:border-edge"}`}
                   >
-                    <span className="block font-mono text-[10px] text-zinc-500">{r.created}</span>
-                    {r.reasons.map((reason) => <span key={reason} className="block text-zinc-300">{reason}</span>)}
+                    <span className="block font-mono text-[10px] text-fg-faint">{r.created}</span>
+                    {r.reasons.map((reason) => <span key={reason} className="block text-fg-dim">{reason}</span>)}
                   </button>
                 </li>
               ))}
@@ -129,7 +129,7 @@ export const NarrationReviewQueue: React.FC<NarrationReviewQueueProps> = ({
         ))}
       </nav>
       <div className="flex-1 min-w-0 overflow-y-auto p-4 space-y-3">
-        {loadError && <p role="alert" className="text-xs text-red-400">{loadError}</p>}
+        {loadError && <p role="alert" className="text-xs text-bad">{loadError}</p>}
         {run ? (
           <>
             <div className="flex items-center gap-3">
@@ -145,7 +145,7 @@ export const NarrationReviewQueue: React.FC<NarrationReviewQueueProps> = ({
               {approveProgress != null && <ProgressBar progress={approveProgress} label="Continuing" className="max-w-xs" />}
             </div>
             {(errors.approve ?? []).length > 0 && (
-              <ul role="alert" aria-label="Approve errors" className="text-xs text-red-400 list-disc pl-4">
+              <ul role="alert" aria-label="Approve errors" className="text-xs text-bad list-disc pl-4">
                 {errors.approve.map((r) => <li key={r}>{r}</li>)}
               </ul>
             )}
@@ -164,7 +164,7 @@ export const NarrationReviewQueue: React.FC<NarrationReviewQueueProps> = ({
             </ul>
           </>
         ) : (
-          <p className="text-xs text-zinc-500">Select a run to review its lines.</p>
+          <p className="text-xs text-fg-faint">Select a run to review its lines.</p>
         )}
       </div>
     </div>

@@ -80,7 +80,7 @@ export function SourceSetupCanvas(props: Props) {
   };
   const editingPanel = selected || (props.page ? { id: `new-page-${props.page.id}`, page_id: props.page.id, x: 0, y: 0,
     width: props.page.width || 1200, height: props.page.height || 1800, crop_filename: "", page_sequence: 1 } as Panel : null);
-  return <section aria-label="Source page setup" className="pf-setup-editor flex flex-col flex-1 min-h-0 min-w-0 text-zinc-200 overflow-hidden">
+  return <section aria-label="Source page setup" className="pf-setup-editor flex flex-col flex-1 min-h-0 min-w-0 text-fg overflow-hidden">
     <div className="pf-setup-commandbar">
       <div role="tablist" aria-label="Setup view" className="flex gap-1">
         {(["pages", "panels", "both"] as const).map(tab => <button key={tab} type="button" role="tab" id={`setup-tab-${tab}`} aria-controls="setup-view-content"
@@ -90,7 +90,7 @@ export function SourceSetupCanvas(props: Props) {
             event.preventDefault(); const tabs = ["pages", "panels", "both"] as const;
             const index = event.key === "Home" ? 0 : event.key === "End" ? 2 : (tabs.indexOf(tab) + (event.key === "ArrowLeft" ? 2 : 1)) % 3;
             setView(tabs[index]); document.getElementById(`setup-tab-${tabs[index]}`)?.focus();
-          }} className={`${control} ${view === tab ? "bg-indigo-600/30 border-indigo-400 text-indigo-200" : "text-zinc-400"}`}>{tab === "pages" ? "Pages" : tab === "panels" ? "Panels" : "Both"}</button>)}
+          }} className={`${control} ${view === tab ? "bg-accent/30 border-accent text-info" : "text-fg-dim"}`}>{tab === "pages" ? "Pages" : tab === "panels" ? "Panels" : "Both"}</button>)}
       </div>
       <div>
         <select aria-label="Setup panel selection" className={control} disabled={busy || !pagePanels.length} value={selected?.id || ""}
@@ -118,19 +118,19 @@ export function SourceSetupCanvas(props: Props) {
         <button type="button" className={control} title="Detect panels on the current page; edited, confirmed or linked panels are preserved." disabled={busy || !props.page} onClick={() => void detect()}>{detecting ? "Detecting…" : "Auto Detect"}</button>
       </div>
     </div>
-    {notice && <p role="status" className="px-3 py-1 text-xs text-amber-200 shrink-0">{notice}</p>}
-    <div id="setup-panelstrip" hidden={!stripOpen} aria-label="Detected panel crops" className="pf-setup-panelstrip flex gap-2 overflow-x-auto px-2 py-1 shrink-0 border-b border-zinc-800">
+    {notice && <p role="status" className="px-3 py-1 text-xs text-warn shrink-0">{notice}</p>}
+    <div id="setup-panelstrip" hidden={!stripOpen} aria-label="Detected panel crops" className="pf-setup-panelstrip flex gap-2 overflow-x-auto px-2 py-1 shrink-0 border-b border-edge">
       {pagePanels.map(panel => <button key={panel.id} type="button" aria-label={`Edit panel ${panel.page_sequence}`} aria-pressed={selected?.id === panel.id}
-        disabled={busy} onClick={() => props.onSelectPanel(panel)} className={`shrink-0 flex items-center gap-2 rounded-md border p-1 text-xs ${selected?.id === panel.id ? "border-indigo-400 bg-indigo-950" : "border-zinc-700"}`}>
+        disabled={busy} onClick={() => props.onSelectPanel(panel)} className={`shrink-0 flex items-center gap-2 rounded-md border p-1 text-xs ${selected?.id === panel.id ? "border-accent bg-accent/20" : "border-edge"}`}>
         <img src={`${api.getPanelImageUrl(props.projectId, panel.id)}?v=${encodeURIComponent(panel.crop_filename || "detected")}`} alt={`Detected panel ${panel.page_sequence}`} className="w-8 h-10 object-contain bg-black" /><span>Panel {panel.page_sequence}</span>
       </button>)}
-      {!pagePanels.length && <p className="text-xs text-zinc-400">No detected panels on this page. Use Auto Detect or draw a selector.</p>}
+      {!pagePanels.length && <p className="text-xs text-fg-dim">No detected panels on this page. Use Auto Detect or draw a selector.</p>}
     </div>
     {editingPanel && props.page ? <SelectorEditor key={`${editingPanel.id}:${editingPanel.crop_filename}:${editingPanel.width}:${editingPanel.height}`} {...props}
       page={props.page} panel={editingPanel} view={view} onViewChange={setView} pagePanels={pagePanels}
       zoom={zoom} onScaleChange={setLiveZoom}
       splitRatio={splitRatio} onSplitRatioChange={setSplitRatio} onBusyChange={setEditorBusy} onDirtyChange={setHasUnsaved} detectionBusy={detecting} /> :
-      <div className="flex-1 flex items-center justify-center p-8 text-sm text-zinc-400">No source pages available.</div>}
+      <div className="flex-1 flex items-center justify-center p-8 text-sm text-fg-dim">No source pages available.</div>}
   </section>;
 }
 
@@ -471,7 +471,7 @@ function SelectorEditor({ projectId, page, panel, panels, onPanelSaved, onPanels
           onClick={event => { if (!busy && tool === "select") { event.stopPropagation(); onSelectPanel(p); if (event.detail >= 2) onViewChange("panels"); } }}
           onDoubleClick={event => { if (!busy && tool === "select") { event.stopPropagation(); onSelectPanel(p); onViewChange("panels"); } }}
           onKeyDown={event => { if (!busy && event.key === "Enter") { event.preventDefault(); onSelectPanel(p); } }}>
-          <rect x={p.x} y={p.y} width={p.width} height={p.height} fill="rgba(34,211,238,.06)" stroke="#22d3ee" strokeWidth={2} vectorEffect="non-scaling-stroke" className="cursor-pointer" />
+          <rect x={p.x} y={p.y} width={p.width} height={p.height} fill="rgba(122,162,255,.06)" stroke="#7aa2ff" strokeWidth={2} vectorEffect="non-scaling-stroke" className="cursor-pointer" />
           <text x={p.x + radius} y={p.y + radius * 3} fontSize={radius * 2.5} fill="white" stroke="black" paintOrder="stroke" pointerEvents="none">P{p.page_sequence}</text>
         </g>)}
         {selectors.map((s, index) => <g key={s.id} onPointerDown={e => beginHandle(e, s, "center")} data-selected-panel={isPage ? "true" : undefined}
@@ -479,8 +479,8 @@ function SelectorEditor({ projectId, page, panel, panels, onPanelSaved, onPanels
           aria-pressed={isPage ? true : undefined} onDoubleClick={event => { if (isPage && tool === "select" && !busy) { event.stopPropagation(); onViewChange("panels"); } }}
           onClick={event => { if (isPage && tool === "select" && !busy && event.detail >= 2) onViewChange("panels"); }}
           onKeyDown={event => { if (isPage && event.key === "Enter" && !busy) { event.preventDefault(); onViewChange("panels"); } }}>
-          {s.points ? <polygon points={s.points.map(p => `${p.x},${p.y}`).join(" ")} fill="rgba(99,102,241,.15)" stroke={activeId === s.id ? "#a5b4fc" : "#22d3ee"} strokeWidth={2} vectorEffect="non-scaling-stroke" /> :
-            <rect x={s.x} y={s.y} width={s.width} height={s.height} fill="rgba(99,102,241,.12)" stroke={activeId === s.id ? "#a5b4fc" : "#22d3ee"} strokeWidth={2} vectorEffect="non-scaling-stroke" />}
+          {s.points ? <polygon points={s.points.map(p => `${p.x},${p.y}`).join(" ")} fill="rgba(59,107,245,.15)" stroke={activeId === s.id ? "#7aa2ff" : "#7aa2ff"} strokeWidth={2} vectorEffect="non-scaling-stroke" /> :
+            <rect x={s.x} y={s.y} width={s.width} height={s.height} fill="rgba(59,107,245,.12)" stroke={activeId === s.id ? "#7aa2ff" : "#7aa2ff"} strokeWidth={2} vectorEffect="non-scaling-stroke" />}
           <text x={s.x + radius} y={s.y + radius * 3} fontSize={radius * 2.5} fill="white" stroke="black" strokeWidth={1} paintOrder="stroke" pointerEvents="none">{index + 1}</text>
         </g>)}
         {tool === "select" && activeHandles.map(([handle, x, y]) => <g key={handle} role="button" tabIndex={busy ? -1 : 0} aria-label={`Selector ${handle} handle`}
@@ -492,8 +492,8 @@ function SelectorEditor({ projectId, page, panel, panels, onPanelSaved, onPanels
               event.key === "ArrowUp" ? -step : event.key === "ArrowDown" ? step : 0, editingBounds) : s));
           }} style={{ cursor: handle === "center" ? "move" : `${handle}-resize`, touchAction: "none" }}>
           <rect x={x - radius * 1.7} y={y - radius * 1.7} width={radius * 3.4} height={radius * 3.4} fill="transparent" />
-          {handle.length === 2 ? <><circle cx={x} cy={y} r={radius} fill="white" stroke="#6366f1" strokeWidth={2} vectorEffect="non-scaling-stroke" /><circle cx={x} cy={y} r={radius / 3} fill="#6366f1" /></> :
-            <rect x={x - radius} y={y - radius / 1.3} width={radius * 2} height={radius * 1.54} rx={radius / 3} fill={handle === "center" ? "#22d3ee" : "white"} stroke="#6366f1" vectorEffect="non-scaling-stroke" />}
+          {handle.length === 2 ? <><circle cx={x} cy={y} r={radius} fill="white" stroke="#3b6bf5" strokeWidth={2} vectorEffect="non-scaling-stroke" /><circle cx={x} cy={y} r={radius / 3} fill="#3b6bf5" /></> :
+            <rect x={x - radius} y={y - radius / 1.3} width={radius * 2} height={radius * 1.54} rx={radius / 3} fill={handle === "center" ? "#7aa2ff" : "white"} stroke="#3b6bf5" vectorEffect="non-scaling-stroke" />}
         </g>)}
         {tool === "select" && active?.kind === "polygon" && active.points && <>
           {/* Edge Midpoint "+" Handles to insert a vertex along any edge */}
@@ -506,7 +506,7 @@ function SelectorEditor({ projectId, page, panel, panels, onPanelSaved, onPanels
               onPointerDown={e => { e.stopPropagation(); handleAddVertexAtMidpoint(index); }}
               className="cursor-pointer">
               <circle cx={mx} cy={my} r={radius * 1.8} fill="transparent" />
-              <circle cx={mx} cy={my} r={radius * 0.75} fill="#10b981" stroke="#ffffff" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
+              <circle cx={mx} cy={my} r={radius * 0.75} fill="#46d6a3" stroke="#ffffff" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
               <line x1={mx - radius * 0.35} y1={my} x2={mx + radius * 0.35} y2={my} stroke="#ffffff" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
               <line x1={mx} y1={my - radius * 0.35} x2={mx} y2={my + radius * 0.35} stroke="#ffffff" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
             </g>;
@@ -521,8 +521,8 @@ function SelectorEditor({ projectId, page, panel, panels, onPanelSaved, onPanels
               onDoubleClick={e => { e.stopPropagation(); handleRemoveVertexAt(index); }}
               onContextMenu={e => { e.preventDefault(); e.stopPropagation(); handleRemoveVertexAt(index); }}>
               <circle cx={p.x} cy={p.y} r={radius * 2} fill="transparent" />
-              <circle cx={p.x} cy={p.y} r={radius * 1.15} fill={isSelected ? "#f59e0b" : "#22d3ee"} stroke="#ffffff" strokeWidth={2} vectorEffect="non-scaling-stroke" />
-              <circle cx={p.x} cy={p.y} r={radius * 0.45} fill={isSelected ? "#ffffff" : "#0e7490"} vectorEffect="non-scaling-stroke" />
+              <circle cx={p.x} cy={p.y} r={radius * 1.15} fill={isSelected ? "#f0b35a" : "#7aa2ff"} stroke="#ffffff" strokeWidth={2} vectorEffect="non-scaling-stroke" />
+              <circle cx={p.x} cy={p.y} r={radius * 0.45} fill={isSelected ? "#ffffff" : "#7aa2ff"} vectorEffect="non-scaling-stroke" />
             </g>;
           })}
         </>}
@@ -532,30 +532,30 @@ function SelectorEditor({ projectId, page, panel, panels, onPanelSaved, onPanels
             <g role="button" tabIndex={busy ? -1 : 0} aria-label="Add custom vertices to selector"
               onClick={e => { e.stopPropagation(); handleConvertToPolygon(); }} className="cursor-pointer">
               <rect x={active.x + active.width / 2 - radius * 12} y={active.y + active.height + radius * 2}
-                width={radius * 24} height={radius * 4} rx={radius * 2} fill="#18181b" stroke="#6366f1" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
+                width={radius * 24} height={radius * 4} rx={radius * 2} fill="#0c1433" stroke="#3b6bf5" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
               <text x={active.x + active.width / 2} y={active.y + active.height + radius * 4.6} fontSize={radius * 1.8}
-                fontWeight="bold" fill="#c7d2fe" textAnchor="middle" pointerEvents="none">✦ Custom Vertices</text>
+                fontWeight="bold" fill="#7aa2ff" textAnchor="middle" pointerEvents="none">✦ Custom Vertices</text>
             </g>
           ) : (
             <g>
               <g role="button" tabIndex={busy ? -1 : 0} aria-label="Add vertex to polygon"
                 onClick={e => { e.stopPropagation(); handleAddVertex(); }} className="cursor-pointer">
                 <rect x={active.x + active.width / 2 - radius * 13} y={active.y + active.height + radius * 2}
-                  width={radius * 12} height={radius * 4} rx={radius * 2} fill="#18181b" stroke="#10b981" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
+                  width={radius * 12} height={radius * 4} rx={radius * 2} fill="#0c1433" stroke="#46d6a3" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
                 <text x={active.x + active.width / 2 - radius * 7} y={active.y + active.height + radius * 4.6} fontSize={radius * 1.7}
-                  fontWeight="bold" fill="#a7f3d0" textAnchor="middle" pointerEvents="none">+ Add Vertex</text>
+                  fontWeight="bold" fill="#46d6a3" textAnchor="middle" pointerEvents="none">+ Add Vertex</text>
               </g>
               <g role="button" tabIndex={busy ? -1 : 0} aria-label="Convert polygon to rectangle"
                 onClick={e => { e.stopPropagation(); handleConvertToRect(); }} className="cursor-pointer">
                 <rect x={active.x + active.width / 2 + radius * 0.5} y={active.y + active.height + radius * 2}
-                  width={radius * 12.5} height={radius * 4} rx={radius * 2} fill="#18181b" stroke="#71717a" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
+                  width={radius * 12.5} height={radius * 4} rx={radius * 2} fill="#0c1433" stroke="#6a76a3" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
                 <text x={active.x + active.width / 2 + radius * 6.75} y={active.y + active.height + radius * 4.6} fontSize={radius * 1.7}
-                  fontWeight="bold" fill="#d4d4d8" textAnchor="middle" pointerEvents="none">↺ To Rectangle</text>
+                  fontWeight="bold" fill="#d5dcf5" textAnchor="middle" pointerEvents="none">↺ To Rectangle</text>
               </g>
             </g>
           )}
         </g>}
-        {points.length > 0 && <polyline points={points.map(p => `${p.x},${p.y}`).join(" ")} fill="rgba(34,211,238,.12)" stroke="#22d3ee" strokeWidth={2} vectorEffect="non-scaling-stroke" pointerEvents="none" />}
+        {points.length > 0 && <polyline points={points.map(p => `${p.x},${p.y}`).join(" ")} fill="rgba(122,162,255,.12)" stroke="#7aa2ff" strokeWidth={2} vectorEffect="non-scaling-stroke" pointerEvents="none" />}
       </svg>;
   };
   const surface = (kind: "page" | "panel") => {
@@ -600,7 +600,7 @@ function SelectorEditor({ projectId, page, panel, panels, onPanelSaved, onPanels
     <fieldset disabled={busy} aria-label="Setup tools" className="pf-setup-tools">
       {([["select", "Select", Icons.Layout], ["rect", "Rectangle", Icons.Maximize], ["polygon", "Polygon", Icons.Sparkles], ["pen", "Pen", Icons.Scissors]] as const).map(([value, label, Icon]) =>
         <button type="button" key={value} aria-pressed={tool === value} onClick={() => { setTool(value); setPoints([]); setMessage(""); }}
-          className={`${control} inline-flex items-center gap-1 ${tool === value ? "bg-indigo-600/30 border-indigo-400 text-indigo-200" : "text-zinc-300"}`}><Icon className="w-3.5 h-3.5" />{label}</button>)}
+          className={`${control} inline-flex items-center gap-1 ${tool === value ? "bg-accent/30 border-accent text-info" : "text-fg-dim"}`}><Icon className="w-3.5 h-3.5" />{label}</button>)}
       {(tool === "polygon" || tool === "pen") && <><button className={control} type="button" onClick={finishPolygon} disabled={points.length < 3}>Finish shape</button>
         <button className={control} type="button" onClick={() => setPoints([])}>Clear shape</button></>}
       <button className={control} type="button" disabled={!history.getState().canUndo} onClick={() => restoreDraft("undo")}>Undo</button>
@@ -610,7 +610,7 @@ function SelectorEditor({ projectId, page, panel, panels, onPanelSaved, onPanels
       {view === "pages" ? renderPage() : view === "panels" ? renderPanel() : <>
         <div className="flex min-w-0 min-h-0" style={{ width: `${splitRatio}%` }}>{renderPage()}</div>
         <div role="separator" aria-label="Resize page and panel views" aria-orientation="vertical" aria-valuemin={25} aria-valuemax={75} aria-valuenow={Math.round(splitRatio)} tabIndex={busy ? -1 : 0}
-          className="w-2 shrink-0 cursor-col-resize bg-zinc-800 hover:bg-indigo-500 focus:bg-indigo-500 outline-none" style={{ touchAction: "none" }}
+          className="w-2 shrink-0 cursor-col-resize bg-flat hover:bg-accent focus:bg-accent outline-none" style={{ touchAction: "none" }}
           onDoubleClick={() => onSplitRatioChange(50)} onPointerDown={event => { if (!busy && event.button === 0) { splitPointer.current = event.pointerId; event.currentTarget.setPointerCapture?.(event.pointerId); event.preventDefault(); } }}
           onPointerMove={event => {
             if (splitPointer.current !== event.pointerId || !splitHost.current) return;
@@ -627,10 +627,10 @@ function SelectorEditor({ projectId, page, panel, panels, onPanelSaved, onPanels
     </div>
     <div className="pf-setup-actions">
       <fieldset disabled={busy} className="flex flex-wrap gap-2 items-center">
-        <label className="text-xs">Selector <select aria-label="Active selector" value={activeId} onChange={e => setActiveId(e.target.value)} className="bg-zinc-900 border border-zinc-700 rounded p-1">
+        <label className="text-xs">Selector <select aria-label="Active selector" value={activeId} onChange={e => setActiveId(e.target.value)} className="bg-navy border border-edge rounded p-1">
           {selectors.map((s, i) => <option key={s.id} value={s.id}>{i + 1} · {s.kind}</option>)}
         </select></label>
-        <label className="text-xs">Parts <input aria-label="Split parts" type="number" min={2} max={12} value={parts} onChange={e => setParts(Number(e.target.value))} className="w-12 bg-zinc-900 border border-zinc-700 rounded p-1" /></label>
+        <label className="text-xs">Parts <input aria-label="Split parts" type="number" min={2} max={12} value={parts} onChange={e => setParts(Number(e.target.value))} className="w-12 bg-navy border border-edge rounded p-1" /></label>
         {(["vertical", "horizontal"] as const).map(direction => <button key={direction} className={control} type="button" disabled={!active || active.kind !== "rect"} onClick={() => {
           // IMMEDIATE undo snapshot before live selector mutation (split changes selectors locally)
           onPreMutation?.();
@@ -663,10 +663,10 @@ function SelectorEditor({ projectId, page, panel, panels, onPanelSaved, onPanels
           }
         }}>Delete selector</button>
         <button className={control} type="button" disabled={isNew} onClick={() => setConfirmDelete(true)}>Delete panel</button>
-        <span className="pf-setup-status text-amber-300 font-medium" aria-live="polite">{dirty ? (selectors.length > 1 ? `● Unsaved (${selectors.length} parts ready)` : "● Unsaved changes") : ""}</span>
+        <span className="pf-setup-status text-warn font-medium" aria-live="polite">{dirty ? (selectors.length > 1 ? `● Unsaved (${selectors.length} parts ready)` : "● Unsaved changes") : ""}</span>
         <button
           aria-label="Save selectors"
-          className={`${control} pf-setup-save ${dirty ? "bg-indigo-600 hover:bg-indigo-500 text-white font-semibold ring-2 ring-indigo-400/80 shadow" : ""}`}
+          className={`${control} pf-setup-save ${dirty ? "bg-accent hover:bg-accent text-white font-semibold ring-2 ring-accent/80 shadow" : ""}`}
           type="button"
           onClick={() => void save()}
           disabled={!dirty || !!points.length}
@@ -676,16 +676,16 @@ function SelectorEditor({ projectId, page, panel, panels, onPanelSaved, onPanels
         <button className={control} type="button" disabled={isNew || !!points.length || busy} onClick={() => void handleAddActiveToTimeline()}>Add panel to timeline</button>
       </fieldset>
       {dirty && selectors.length > 1 && (
-        <div role="status" className="flex items-center justify-between gap-3 bg-indigo-950/80 border border-indigo-500/40 text-indigo-200 text-xs px-3 py-1.5 rounded mt-2">
+        <div role="status" className="flex items-center justify-between gap-3 bg-accent/80 border border-accent/40 text-info text-xs px-3 py-1.5 rounded mt-2">
           <span className="flex items-center gap-1.5">
-            <span className="text-amber-400 font-bold">ℹ</span>
+            <span className="text-warn font-bold">ℹ</span>
             <span>Split created <strong>{selectors.length} selectors</strong> on canvas. Click <strong>Save selectors</strong> to apply and display them in the Source Pages panel gallery.</span>
           </span>
           <button
             type="button"
             disabled={busy}
             onClick={() => void save()}
-            className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-2.5 py-1 rounded text-xs transition-colors shrink-0 shadow cursor-pointer"
+            className="bg-accent hover:bg-accent text-white font-bold px-2.5 py-1 rounded text-xs transition-colors shrink-0 shadow cursor-pointer"
           >
             {busy ? "Saving…" : "Save selectors now"}
           </button>
@@ -695,7 +695,7 @@ function SelectorEditor({ projectId, page, panel, panels, onPanelSaved, onPanels
         <button className={control} disabled={busy} onClick={() => void deletePanel()}>Confirm delete panel</button><button className={control} disabled={busy} onClick={() => setConfirmDelete(false)}>Cancel</button>
       </div>}
       <p className="pf-setup-hint" hidden={tool === "select"}>{tool === "polygon" ? "Click vertices, then Finish shape." : tool === "pen" ? "Draw an outline, then Finish shape." : "Drag to add a rectangle selector."}</p>
-      {message && <p role="status" className="text-xs text-amber-200">{message}</p>}
+      {message && <p role="status" className="text-xs text-warn">{message}</p>}
     </div>
   </div>;
 }

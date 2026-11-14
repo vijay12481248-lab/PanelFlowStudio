@@ -16,16 +16,16 @@ export const SvgProductionTrophy: React.FC<SvgProductionTrophyProps> = ({
   const isPass = status === "PRODUCTION_READY" || status === "VALID";
   const isWarning = status === "WARNING";
 
-  const primaryColor = isPass ? "#10b981" : isWarning ? "#f59e0b" : "#f43f5e";
-  const goldColor = isPass ? "#fbbf24" : isWarning ? "#d97706" : "#e11d48";
+  const primaryColor = isPass ? "#46d6a3" : isWarning ? "#f0b35a" : "#f2667a";
+  const goldColor = isPass ? "#f0b35a" : isWarning ? "#f0b35a" : "#f2667a";
 
   return (
-    <div className={`relative flex items-center gap-4 p-4 rounded-xl border bg-zinc-950/80 backdrop-blur-md ${
+    <div className={`relative flex items-center gap-4 p-4 rounded-xl border bg-ink/80 backdrop-blur-md ${
       isPass
-        ? "border-emerald-500/40 shadow-lg shadow-emerald-950/30 ring-1 ring-emerald-500/20"
+        ? "border-ok/40 shadow-lg shadow-ok/30 ring-1 ring-ok/20"
         : isWarning
-        ? "border-amber-500/40 shadow-lg shadow-amber-950/30 ring-1 ring-amber-500/20"
-        : "border-rose-500/40 shadow-lg shadow-rose-950/30"
+        ? "border-warn/40 shadow-lg shadow-warn/30 ring-1 ring-warn/20"
+        : "border-bad/40 shadow-lg shadow-bad/30"
     } ${className}`}>
       {/* SVG Shimmer Trophy Seal */}
       <div className="relative flex-shrink-0 w-14 h-14 flex items-center justify-center">
@@ -45,15 +45,15 @@ export const SvgProductionTrophy: React.FC<SvgProductionTrophyProps> = ({
             </filter>
 
             <linearGradient id="gold-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#fef08a" />
+              <stop offset="0%" stopColor="#f0b35a" />
               <stop offset="50%" stopColor={goldColor} />
-              <stop offset="100%" stopColor="#b45309" />
+              <stop offset="100%" stopColor="#f0b35a" />
             </linearGradient>
 
             <linearGradient id="emerald-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#6ee7b7" />
+              <stop offset="0%" stopColor="#46d6a3" />
               <stop offset="50%" stopColor={primaryColor} />
-              <stop offset="100%" stopColor="#047857" />
+              <stop offset="100%" stopColor="#123d36" />
             </linearGradient>
           </defs>
 
@@ -93,7 +93,7 @@ export const SvgProductionTrophy: React.FC<SvgProductionTrophyProps> = ({
           {/* Solid Shield Background */}
           <path
             d="M32 8L48 15V31C48 41.5 41.2 51.2 32 54C22.8 51.2 16 41.5 16 31V15L32 8Z"
-            fill="#18181b"
+            fill="#0c1433"
             stroke={`url(#${isPass ? "emerald-grad" : "gold-grad"})`}
             strokeWidth="2"
           />
@@ -128,7 +128,7 @@ export const SvgProductionTrophy: React.FC<SvgProductionTrophyProps> = ({
           {/* Corner Sparkles */}
           <polygon
             points="50,14 52,19 57,21 52,23 50,28 48,23 43,21 48,19"
-            fill="#fef08a"
+            fill="#f0b35a"
             opacity="0.8"
             className="star-sparkle"
           />
@@ -138,20 +138,20 @@ export const SvgProductionTrophy: React.FC<SvgProductionTrophyProps> = ({
       {/* Text & Metadata */}
       <div className="space-y-0.5">
         <div className="flex items-center gap-2">
-          <h4 className="text-sm font-bold text-zinc-100 tracking-wide">
+          <h4 className="text-sm font-bold text-fg tracking-wide">
             {title}
           </h4>
           <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full border ${
             isPass
-              ? "bg-emerald-950/80 text-emerald-400 border-emerald-700/60"
+              ? "bg-ok/80 text-ok border-ok/60"
               : isWarning
-              ? "bg-amber-950/80 text-amber-400 border-amber-700/60"
-              : "bg-rose-950/80 text-rose-400 border-rose-700/60"
+              ? "bg-warn/80 text-warn border-warn/60"
+              : "bg-bad/80 text-bad border-bad/60"
           }`}>
             {status}
           </span>
         </div>
-        <p className="text-xs text-zinc-400 font-medium leading-relaxed">
+        <p className="text-xs text-fg-dim font-medium leading-relaxed">
           {subtitle}
         </p>
       </div>

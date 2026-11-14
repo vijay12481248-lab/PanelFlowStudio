@@ -294,12 +294,12 @@ export const OriginalStoriesScreen: React.FC<OriginalStoriesScreenProps> = ({ on
   const needsReviewBeats = workbenchData?.beats.filter((b) => b.status === "needs_review") || [];
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 p-6 max-w-6xl mx-auto space-y-6">
-      <button onClick={onBack} className="text-sm text-zinc-400 hover:text-zinc-200">
+    <div className="min-h-screen bg-ink text-fg p-6 max-w-6xl mx-auto space-y-6">
+      <button onClick={onBack} className="text-sm text-fg-dim hover:text-fg">
         ← Back to projects
       </button>
       <h1 className="text-xl font-bold">Original Stories</h1>
-      <p className="text-sm text-zinc-400">
+      <p className="text-sm text-fg-dim">
         A series keeps one cast, one world and the same character faces across episodes. Queue
         episodes and each becomes a story, illustrated panels, a narrated video, a comic PDF and a
         YouTube package, one publish slot per day. Read every script before you publish: these are
@@ -308,25 +308,25 @@ export const OriginalStoriesScreen: React.FC<OriginalStoriesScreenProps> = ({ on
 
       {/* Storyboard Workbench (Collapsible Grid) */}
       {workbenchData && activeStoryboard && (
-        <section className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5 space-y-4 shadow-xl">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800 pb-4">
+        <section className="rounded-2xl border border-edge bg-navy/40 p-5 space-y-4 shadow-xl">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-edge pb-4">
             <div className="flex items-center gap-3">
-              <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+              <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-accent/10 text-info border border-accent/20">
                 <Film className="w-5 h-5" />
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h2 className="text-base font-bold text-zinc-100">
+                  <h2 className="text-base font-bold text-fg">
                     Storyboard Workbench — {activeStoryboard.title}
                   </h2>
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400 font-mono">
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-flat text-fg-dim font-mono">
                     {workbenchData.beats.length} beats
                   </span>
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-950/60 text-indigo-300 border border-indigo-800/40 font-medium capitalize">
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-accent/60 text-info border border-accent/40 font-medium capitalize">
                     {workbenchData.genre}
                   </span>
                 </div>
-                <p className="text-xs text-zinc-400 mt-0.5">
+                <p className="text-xs text-fg-dim mt-0.5">
                   Visual beat cards in narrative order. Click inspect for candidate iterations or
                   inpaint to surgically fix defective regions.
                 </p>
@@ -338,7 +338,7 @@ export const OriginalStoriesScreen: React.FC<OriginalStoriesScreenProps> = ({ on
                 type="button"
                 onClick={handleScaleStory}
                 disabled={scalingAll || loadingWorkbench}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow transition-colors disabled:opacity-50"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent hover:bg-accent text-white text-xs font-semibold shadow transition-colors disabled:opacity-50"
                 title="Scale all draft panels via 2x Lanczos + partial-denoise refiner"
               >
                 <Sparkles className="w-3.5 h-3.5" />
@@ -355,7 +355,7 @@ export const OriginalStoriesScreen: React.FC<OriginalStoriesScreenProps> = ({ on
                   )
                 }
                 disabled={loadingWorkbench}
-                className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs transition-colors"
+                className="p-1.5 rounded-lg bg-flat hover:bg-glass-hi text-fg-dim text-xs transition-colors"
                 title="Refresh workbench"
               >
                 <RefreshCw className={`w-4 h-4 ${loadingWorkbench ? "animate-spin" : ""}`} />
@@ -364,7 +364,7 @@ export const OriginalStoriesScreen: React.FC<OriginalStoriesScreenProps> = ({ on
               <button
                 type="button"
                 onClick={() => setIsWorkbenchOpen(!isWorkbenchOpen)}
-                className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs transition-colors"
+                className="p-1.5 rounded-lg bg-flat hover:bg-glass-hi text-fg-dim text-xs transition-colors"
                 title={isWorkbenchOpen ? "Collapse workbench" : "Expand workbench"}
               >
                 {isWorkbenchOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
@@ -374,11 +374,11 @@ export const OriginalStoriesScreen: React.FC<OriginalStoriesScreenProps> = ({ on
 
           {/* Status Alert / Feedback */}
           {statusMessage && (
-            <div className="text-xs px-3 py-2 rounded-lg bg-indigo-950/50 border border-indigo-800 text-indigo-300 flex items-center justify-between">
+            <div className="text-xs px-3 py-2 rounded-lg bg-accent/50 border border-accent/40 text-info flex items-center justify-between">
               <span>{statusMessage}</span>
               <button
                 onClick={() => setStatusMessage(null)}
-                className="text-zinc-400 hover:text-zinc-200"
+                className="text-fg-dim hover:text-fg"
               >
                 ✕
               </button>
@@ -387,12 +387,12 @@ export const OriginalStoriesScreen: React.FC<OriginalStoriesScreenProps> = ({ on
 
           {/* Interactive Review Notification Banner */}
           {needsReviewBeats.length > 0 && (
-            <div className="rounded-xl border border-rose-800/60 bg-rose-950/30 p-4 space-y-3">
-              <div className="flex items-center gap-2 text-rose-300 font-semibold text-xs uppercase tracking-wide">
-                <AlertTriangle className="w-4 h-4 text-rose-400" />
+            <div className="rounded-xl border border-bad/60 bg-bad/30 p-4 space-y-3">
+              <div className="flex items-center gap-2 text-bad font-semibold text-xs uppercase tracking-wide">
+                <AlertTriangle className="w-4 h-4 text-bad" />
                 <span>Creator Review Needed — {needsReviewBeats.length} panel(s) flagged</span>
               </div>
-              <p className="text-xs text-zinc-300">
+              <p className="text-xs text-fg-dim">
                 The assisted quality inspector paused auto-retry on these panels. Review and choose
                 an action:
               </p>
@@ -400,10 +400,10 @@ export const OriginalStoriesScreen: React.FC<OriginalStoriesScreenProps> = ({ on
                 {needsReviewBeats.map((beat) => (
                   <div
                     key={beat.panel_id}
-                    className="flex flex-wrap items-center justify-between gap-3 bg-zinc-950/70 p-3 rounded-lg border border-rose-900/40 text-xs"
+                    className="flex flex-wrap items-center justify-between gap-3 bg-ink/70 p-3 rounded-lg border border-bad/40 text-xs"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-14 h-9 rounded overflow-hidden bg-black flex-shrink-0 border border-zinc-800">
+                      <div className="w-14 h-9 rounded overflow-hidden bg-black flex-shrink-0 border border-edge">
                         <img
                           src={`${api.getOriginalPanelImageUrl(
                             workbenchData.slug,
@@ -415,10 +415,10 @@ export const OriginalStoriesScreen: React.FC<OriginalStoriesScreenProps> = ({ on
                         />
                       </div>
                       <div>
-                        <div className="font-semibold text-zinc-200">
+                        <div className="font-semibold text-fg">
                           #{beat.order} ({beat.panel_id}) — {beat.shot}
                         </div>
-                        <div className="text-[11px] text-zinc-400 line-clamp-1 max-w-md">
+                        <div className="text-[11px] text-fg-dim line-clamp-1 max-w-md">
                           {beat.caption || beat.action}
                         </div>
                       </div>
@@ -429,7 +429,7 @@ export const OriginalStoriesScreen: React.FC<OriginalStoriesScreenProps> = ({ on
                         type="button"
                         onClick={() => handleApprovePanel(beat.panel_id)}
                         disabled={operatingPanelId === beat.panel_id}
-                        className="px-2.5 py-1 rounded-md bg-emerald-700 hover:bg-emerald-600 text-white font-medium text-[11px] transition-colors disabled:opacity-50"
+                        className="px-2.5 py-1 rounded-md bg-ok hover:bg-ok text-white font-medium text-[11px] transition-colors disabled:opacity-50"
                       >
                         Approve As-Is
                       </button>
@@ -437,7 +437,7 @@ export const OriginalStoriesScreen: React.FC<OriginalStoriesScreenProps> = ({ on
                         type="button"
                         onClick={() => handleRerollPanel(beat.panel_id)}
                         disabled={operatingPanelId === beat.panel_id}
-                        className="px-2.5 py-1 rounded-md bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 font-medium text-[11px] transition-colors disabled:opacity-50"
+                        className="px-2.5 py-1 rounded-md bg-flat hover:bg-glass-hi text-fg border border-edge font-medium text-[11px] transition-colors disabled:opacity-50"
                       >
                         Reroll Seed
                       </button>
@@ -462,7 +462,7 @@ export const OriginalStoriesScreen: React.FC<OriginalStoriesScreenProps> = ({ on
                               ),
                           })
                         }
-                        className="px-2.5 py-1 rounded-md bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-[11px] transition-colors"
+                        className="px-2.5 py-1 rounded-md bg-accent hover:bg-accent text-white font-medium text-[11px] transition-colors"
                       >
                         Inpaint Region
                       </button>
@@ -488,24 +488,24 @@ export const OriginalStoriesScreen: React.FC<OriginalStoriesScreenProps> = ({ on
                 return (
                   <div
                     key={beat.panel_id}
-                    className="flex flex-col rounded-xl border border-zinc-800 bg-zinc-950/80 overflow-hidden shadow hover:border-zinc-700 transition-all group"
+                    className="flex flex-col rounded-xl border border-edge bg-ink/80 overflow-hidden shadow hover:border-edge transition-all group"
                   >
                     {/* Beat Card Header */}
-                    <div className="flex items-center justify-between px-3 py-2 bg-zinc-900/60 border-b border-zinc-800 text-xs">
-                      <div className="font-semibold text-zinc-300 font-mono">
+                    <div className="flex items-center justify-between px-3 py-2 bg-navy/60 border-b border-edge text-xs">
+                      <div className="font-semibold text-fg-dim font-mono">
                         #{beat.order} ({beat.panel_id})
                       </div>
                       <span
                         className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
                           beat.status === "accept"
-                            ? "bg-emerald-950 text-emerald-400 border border-emerald-700/60"
+                            ? "bg-ok/20 text-ok border border-ok/60"
                             : beat.status === "accept_low"
-                            ? "bg-amber-950 text-amber-400 border border-amber-700/60"
+                            ? "bg-warn/20 text-warn border border-warn/60"
                             : beat.status === "needs_review"
-                            ? "bg-rose-950 text-rose-400 border border-rose-700/60"
+                            ? "bg-bad/20 text-bad border border-bad/60"
                             : beat.status === "repaired"
-                            ? "bg-purple-950 text-purple-400 border border-purple-700/60"
-                            : "bg-zinc-800 text-zinc-400 border border-zinc-700"
+                            ? "bg-accent/20 text-info border border-accent/60"
+                            : "bg-flat text-fg-dim border border-edge"
                         }`}
                       >
                         {(beat.status || "unverified").replace("_", " ").toUpperCase()}
@@ -521,8 +521,8 @@ export const OriginalStoriesScreen: React.FC<OriginalStoriesScreenProps> = ({ on
                       />
 
                       {/* Audio Duration Chip */}
-                      <div className="absolute bottom-2 left-2 flex items-center gap-1 bg-black/70 backdrop-blur-sm px-2 py-0.5 rounded text-[10px] text-zinc-300 font-mono border border-white/10">
-                        <Clock className="w-3 h-3 text-zinc-400" />
+                      <div className="absolute bottom-2 left-2 flex items-center gap-1 bg-black/70 backdrop-blur-sm px-2 py-0.5 rounded text-[10px] text-fg-dim font-mono border border-white/10">
+                        <Clock className="w-3 h-3 text-fg-dim" />
                         <span>
                           {beat.audio_duration ? `${beat.audio_duration}s` : "Est. 3.0s"}
                         </span>
@@ -530,7 +530,7 @@ export const OriginalStoriesScreen: React.FC<OriginalStoriesScreenProps> = ({ on
 
                       {/* Iterations Count Chip */}
                       {beat.candidate_count > 1 && (
-                        <div className="absolute top-2 right-2 flex items-center gap-1 bg-indigo-950/80 backdrop-blur-sm px-2 py-0.5 rounded text-[10px] text-indigo-300 font-mono border border-indigo-700/50">
+                        <div className="absolute top-2 right-2 flex items-center gap-1 bg-accent/80 backdrop-blur-sm px-2 py-0.5 rounded text-[10px] text-info font-mono border border-accent/50">
                           <Layers className="w-3 h-3" />
                           <span>{beat.candidate_count} cands</span>
                         </div>
@@ -540,21 +540,21 @@ export const OriginalStoriesScreen: React.FC<OriginalStoriesScreenProps> = ({ on
                     {/* Caption & Metadata */}
                     <div className="p-3 flex-1 flex flex-col justify-between space-y-2">
                       <p
-                        className="text-xs text-zinc-300 line-clamp-2 leading-relaxed"
+                        className="text-xs text-fg-dim line-clamp-2 leading-relaxed"
                         title={beat.caption || beat.action}
                       >
                         {beat.caption || beat.action || "No narrative caption"}
                       </p>
 
                       {/* Action Buttons */}
-                      <div className="pt-2 border-t border-zinc-800/80 flex items-center gap-1.5">
+                      <div className="pt-2 border-t border-edge/80 flex items-center gap-1.5">
                         <button
                           type="button"
                           onClick={() => setInspectingBeat(beat)}
-                          className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-[11px] font-medium transition-colors"
+                          className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg bg-flat hover:bg-glass-hi text-fg text-[11px] font-medium transition-colors"
                           title="Inspect candidate iterations & defect bboxes"
                         >
-                          <Eye className="w-3 h-3 text-zinc-400" />
+                          <Eye className="w-3 h-3 text-fg-dim" />
                           <span>Inspect</span>
                         </button>
 
@@ -575,7 +575,7 @@ export const OriginalStoriesScreen: React.FC<OriginalStoriesScreenProps> = ({ on
                                 ),
                             })
                           }
-                          className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg bg-indigo-600/80 hover:bg-indigo-600 text-white text-[11px] font-medium transition-colors"
+                          className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg bg-accent/80 hover:bg-accent text-white text-[11px] font-medium transition-colors"
                           title="Inpaint mask on panel"
                         >
                           <Wand2 className="w-3 h-3" />
@@ -586,11 +586,11 @@ export const OriginalStoriesScreen: React.FC<OriginalStoriesScreenProps> = ({ on
                           type="button"
                           onClick={() => handleScalePanel(beat.panel_id)}
                           disabled={isOperating}
-                          className="px-2 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[11px] font-medium transition-colors disabled:opacity-50"
+                          className="px-2 py-1.5 rounded-lg bg-flat hover:bg-glass-hi text-fg-dim text-[11px] font-medium transition-colors disabled:opacity-50"
                           title="Scale 2x with refiner denoise"
                         >
                           <Sparkles
-                            className={`w-3 h-3 text-indigo-400 ${
+                            className={`w-3 h-3 text-info ${
                               isOperating ? "animate-spin" : ""
                             }`}
                           />
@@ -606,26 +606,26 @@ export const OriginalStoriesScreen: React.FC<OriginalStoriesScreenProps> = ({ on
       )}
 
       {/* YouTube Section */}
-      <section className="space-y-2 rounded-lg border border-zinc-800 p-4 text-sm">
-        <h2 className="text-sm font-bold uppercase tracking-wide text-zinc-300">YouTube</h2>
-        <div className="text-zinc-400">
+      <section className="space-y-2 rounded-lg border border-edge p-4 text-sm">
+        <h2 className="text-sm font-bold uppercase tracking-wide text-fg-dim">YouTube</h2>
+        <div className="text-fg-dim">
           {yt?.connected
             ? "Connected. Uploads are private unless you schedule a public release."
             : yt?.pending
             ? "Waiting for you to approve access in the browser…"
             : "Not connected. Create an OAuth client (Desktop app) in your Google Cloud project with the YouTube Data API enabled, then paste its id and secret."}
-          {yt?.error && <span className="text-amber-400"> {yt.error}</span>}
+          {yt?.error && <span className="text-warn"> {yt.error}</span>}
         </div>
         {!yt?.connected && (
           <div className="flex gap-2">
             <input
-              className="flex-1 bg-zinc-900 border border-zinc-800 rounded px-3 py-2"
+              className="flex-1 bg-navy border border-edge rounded px-3 py-2"
               placeholder="OAuth client id"
               value={ytId}
               onChange={(e) => setYtId(e.target.value)}
             />
             <input
-              className="flex-1 bg-zinc-900 border border-zinc-800 rounded px-3 py-2"
+              className="flex-1 bg-navy border border-edge rounded px-3 py-2"
               type="password"
               placeholder="OAuth client secret"
               value={ytSecret}
@@ -634,7 +634,7 @@ export const OriginalStoriesScreen: React.FC<OriginalStoriesScreenProps> = ({ on
             <button
               disabled={busy}
               onClick={connectYoutube}
-              className="px-3 rounded bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40"
+              className="px-3 rounded bg-accent hover:bg-accent disabled:opacity-40"
             >
               Connect
             </button>
@@ -643,12 +643,12 @@ export const OriginalStoriesScreen: React.FC<OriginalStoriesScreenProps> = ({ on
         {yt?.connected && (
           <button
             onClick={() => api.youtubeDisconnect().then(setYt).catch(fail)}
-            className="px-3 py-1 rounded bg-zinc-800 hover:bg-zinc-700"
+            className="px-3 py-1 rounded bg-flat hover:bg-glass-hi"
           >
             Disconnect
           </button>
         )}
-        <div className="flex gap-4 text-zinc-300">
+        <div className="flex gap-4 text-fg-dim">
           <span>Made for kids?</span>
           <label>
             <input
@@ -672,17 +672,17 @@ export const OriginalStoriesScreen: React.FC<OriginalStoriesScreenProps> = ({ on
       </section>
 
       {/* New Series Section */}
-      <section className="space-y-3 rounded-lg border border-zinc-800 p-4">
-        <h2 className="text-sm font-bold uppercase tracking-wide text-zinc-300">New series</h2>
+      <section className="space-y-3 rounded-lg border border-edge p-4">
+        <h2 className="text-sm font-bold uppercase tracking-wide text-fg-dim">New series</h2>
         <div className="flex gap-2">
           <input
-            className="flex-1 bg-zinc-900 border border-zinc-800 rounded px-3 py-2 text-sm"
+            className="flex-1 bg-navy border border-edge rounded px-3 py-2 text-sm"
             placeholder="Series name (e.g. Moon Tales)"
             value={name}
             onChange={(e) => setName(e.target.value)}
           />
           <select
-            className="bg-zinc-900 border border-zinc-800 rounded px-3 py-2 text-sm"
+            className="bg-navy border border-edge rounded px-3 py-2 text-sm"
             value={genre}
             onChange={(e) => setGenre(e.target.value)}
           >
@@ -692,13 +692,13 @@ export const OriginalStoriesScreen: React.FC<OriginalStoriesScreenProps> = ({ on
           </select>
         </div>
         <input
-          className="w-full bg-zinc-900 border border-zinc-800 rounded px-3 py-2 text-sm"
+          className="w-full bg-navy border border-edge rounded px-3 py-2 text-sm"
           placeholder="Idea (optional): a sleepy fox who collects lullabies"
           value={idea}
           onChange={(e) => setIdea(e.target.value)}
         />
         <select
-          className="w-full bg-zinc-900 border border-zinc-800 rounded px-3 py-2 text-sm"
+          className="w-full bg-navy border border-edge rounded px-3 py-2 text-sm"
           value={channelId}
           onChange={(e) => setChannelId(e.target.value)}
         >
@@ -712,7 +712,7 @@ export const OriginalStoriesScreen: React.FC<OriginalStoriesScreenProps> = ({ on
         <button
           disabled={busy || name.trim().length < 2}
           onClick={create}
-          className="px-4 py-2 rounded bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-sm font-semibold"
+          className="px-4 py-2 rounded bg-accent hover:bg-accent disabled:opacity-40 text-sm font-semibold"
         >
           {busy ? "Working…" : "Create series"}
         </button>
@@ -721,24 +721,24 @@ export const OriginalStoriesScreen: React.FC<OriginalStoriesScreenProps> = ({ on
       {/* Series & Episodes Queue Section */}
       <section className="space-y-3">
         <div className="flex flex-wrap items-center gap-3 text-sm">
-          <span className="text-zinc-400">Queue</span>
+          <span className="text-fg-dim">Queue</span>
           <input
             type="number"
             min={1}
             max={30}
-            className="w-16 bg-zinc-900 border border-zinc-800 rounded px-2 py-1"
+            className="w-16 bg-navy border border-edge rounded px-2 py-1"
             value={count}
             onChange={(e) => setCount(Math.max(1, Math.min(30, Number(e.target.value) || 1)))}
           />
-          <span className="text-zinc-400">episodes, first live on</span>
+          <span className="text-fg-dim">episodes, first live on</span>
           <input
             type="date"
-            className="bg-zinc-900 border border-zinc-800 rounded px-2 py-1"
+            className="bg-navy border border-edge rounded px-2 py-1"
             value={startDate}
             onChange={(e) => setStartDate(e.target.value)}
           />
           <label
-            className="flex items-center gap-1.5 text-zinc-400 cursor-pointer"
+            className="flex items-center gap-1.5 text-fg-dim cursor-pointer"
             title="Review every picture against its narration, then repair or redraw the ones that fail. Slower (about a minute more per picture); every try is kept, and repaired pictures are flagged for a look."
           >
             <input
@@ -749,7 +749,7 @@ export const OriginalStoriesScreen: React.FC<OriginalStoriesScreenProps> = ({ on
             check and fix pictures (slower)
           </label>
           <label
-            className="flex items-center gap-1.5 text-zinc-400 cursor-pointer"
+            className="flex items-center gap-1.5 text-fg-dim cursor-pointer"
             title="Move about one picture in five with the fast H3 video model (about a minute each). The rest stay still. If a clip fails, that picture just stays still."
           >
             <input
@@ -760,7 +760,7 @@ export const OriginalStoriesScreen: React.FC<OriginalStoriesScreenProps> = ({ on
             animate key moments (slower)
           </label>
           <label
-            className="flex items-center gap-1.5 text-indigo-400 font-medium cursor-pointer"
+            className="flex items-center gap-1.5 text-info font-medium cursor-pointer"
             title="Fast 0.25 MP draft pass (8-11s sampling). Skips final TTS/video render so you can inspect beats in the Storyboard Studio before full scaling."
           >
             <input
@@ -772,16 +772,16 @@ export const OriginalStoriesScreen: React.FC<OriginalStoriesScreenProps> = ({ on
           </label>
         </div>
 
-        {series.length === 0 && <p className="text-sm text-zinc-500">No series yet.</p>}
+        {series.length === 0 && <p className="text-sm text-fg-faint">No series yet.</p>}
         {series.map((s) => (
-          <div key={s.id} className="rounded-xl border border-zinc-800 p-4 text-sm space-y-3 bg-zinc-900/30">
+          <div key={s.id} className="rounded-xl border border-edge p-4 text-sm space-y-3 bg-navy/30">
             <div className="flex justify-between items-start gap-3">
               <div>
-                <div className="font-semibold text-base text-zinc-100">{s.name}</div>
-                <div className="text-xs text-zinc-400">
+                <div className="font-semibold text-base text-fg">{s.name}</div>
+                <div className="text-xs text-fg-dim">
                   {s.genre} · {s.bible.premise.logline}
                 </div>
-                <div className="text-xs text-zinc-500">
+                <div className="text-xs text-fg-faint">
                   Cast: {s.bible.characters.map((c) => c.name).join(", ")}
                 </div>
               </div>
@@ -789,14 +789,14 @@ export const OriginalStoriesScreen: React.FC<OriginalStoriesScreenProps> = ({ on
                 <button
                   type="button"
                   onClick={() => loadWorkbench(s.id, undefined, `${s.name} (Latest)`)}
-                  className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium border border-zinc-700"
+                  className="px-3 py-1.5 rounded-lg bg-flat hover:bg-glass-hi text-fg text-xs font-medium border border-edge"
                 >
                   Workbench
                 </button>
                 <button
                   disabled={busy}
                   onClick={() => queue(s.id)}
-                  className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold disabled:opacity-40 whitespace-nowrap"
+                  className="px-3 py-1.5 rounded-lg bg-accent hover:bg-accent text-white text-xs font-semibold disabled:opacity-40 whitespace-nowrap"
                 >
                   Queue {count}
                 </button>
@@ -806,7 +806,7 @@ export const OriginalStoriesScreen: React.FC<OriginalStoriesScreenProps> = ({ on
             {s.episodes.map((e) => (
               <div
                 key={e.number}
-                className="text-xs flex flex-wrap items-center justify-between border-t border-zinc-800/80 pt-2 gap-2"
+                className="text-xs flex flex-wrap items-center justify-between border-t border-edge/80 pt-2 gap-2"
               >
                 <div className="flex items-center gap-2">
                   <button
@@ -814,35 +814,35 @@ export const OriginalStoriesScreen: React.FC<OriginalStoriesScreenProps> = ({ on
                     onClick={() =>
                       loadWorkbench(s.id, e.number.toString(), `${s.name} — Ep ${e.number}`)
                     }
-                    className="font-medium text-indigo-400 hover:text-indigo-300 hover:underline text-left"
+                    className="font-medium text-info hover:text-info hover:underline text-left"
                   >
                     Ep {e.number}: {e.title || "…"}
                   </button>
                   {e.warnings.length > 0 && (
-                    <span className="text-amber-400"> · {e.warnings.length} warnings</span>
+                    <span className="text-warn"> · {e.warnings.length} warnings</span>
                   )}
                 </div>
 
-                <div className="text-zinc-400 flex items-center gap-2">
+                <div className="text-fg-dim flex items-center gap-2">
                   <span
                     className={`px-1.5 py-0.5 rounded text-[10px] uppercase font-mono ${
                       e.status === "done"
-                        ? "bg-emerald-950 text-emerald-400"
+                        ? "bg-ok/20 text-ok"
                         : e.status === "draft"
-                        ? "bg-indigo-950 text-indigo-300 border border-indigo-800"
-                        : "bg-zinc-800 text-zinc-400"
+                        ? "bg-accent/20 text-info border border-accent/40"
+                        : "bg-flat text-fg-dim"
                     }`}
                   >
                     {e.status}
                   </span>
                   {e.publish_at ? (
-                    <span className="text-zinc-500">
+                    <span className="text-fg-faint">
                       slot {e.publish_at.slice(0, 16).replace("T", " ")}
                     </span>
                   ) : null}
                   {e.youtube_url ? (
                     <a
-                      className="text-emerald-400 hover:underline"
+                      className="text-ok hover:underline"
                       href={e.youtube_url}
                       target="_blank"
                       rel="noreferrer"
@@ -852,7 +852,7 @@ export const OriginalStoriesScreen: React.FC<OriginalStoriesScreenProps> = ({ on
                   ) : null}
                   {e.upload_status === "uploading" && <span>uploading…</span>}
                   {e.upload_status === "failed" && (
-                    <span className="text-amber-400" title={e.upload_error}>
+                    <span className="text-warn" title={e.upload_error}>
                       upload failed
                     </span>
                   )}
@@ -862,7 +862,7 @@ export const OriginalStoriesScreen: React.FC<OriginalStoriesScreenProps> = ({ on
                     onClick={() =>
                       loadWorkbench(s.id, e.number.toString(), `${s.name} — Ep ${e.number}`)
                     }
-                    className="px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[11px]"
+                    className="px-2 py-0.5 rounded bg-flat hover:bg-glass-hi text-fg-dim text-[11px]"
                   >
                     Open Storyboard
                   </button>
@@ -875,14 +875,14 @@ export const OriginalStoriesScreen: React.FC<OriginalStoriesScreenProps> = ({ on
                         <button
                           disabled={busy}
                           onClick={() => upload(s.id, e.number, false)}
-                          className="px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300"
+                          className="px-2 py-0.5 rounded bg-flat hover:bg-glass-hi text-fg-dim"
                         >
                           Upload private
                         </button>
                         <button
                           disabled={busy || !e.publish_at}
                           onClick={() => upload(s.id, e.number, true)}
-                          className="px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300"
+                          className="px-2 py-0.5 rounded bg-flat hover:bg-glass-hi text-fg-dim"
                         >
                           Schedule public
                         </button>
@@ -897,23 +897,23 @@ export const OriginalStoriesScreen: React.FC<OriginalStoriesScreenProps> = ({ on
 
       {/* Jobs Section */}
       <section className="space-y-2">
-        <h2 className="text-sm font-bold uppercase tracking-wide text-zinc-300">Jobs</h2>
-        {jobs.length === 0 && <p className="text-sm text-zinc-500">No episode jobs yet.</p>}
+        <h2 className="text-sm font-bold uppercase tracking-wide text-fg-dim">Jobs</h2>
+        {jobs.length === 0 && <p className="text-sm text-fg-faint">No episode jobs yet.</p>}
         {jobs.map((j) => (
-          <div key={j.job_id} className="rounded-xl border border-zinc-800 p-3 text-sm bg-zinc-900/30">
+          <div key={j.job_id} className="rounded-xl border border-edge p-3 text-sm bg-navy/30">
             <div className="flex justify-between">
               <span>{(j.input as { title?: string }).title ?? j.job_id}</span>
-              <span className="text-zinc-400 font-mono text-xs">{j.status}</span>
+              <span className="text-fg-dim font-mono text-xs">{j.status}</span>
             </div>
-            <div className="h-1.5 bg-zinc-800 rounded mt-2 overflow-hidden">
+            <div className="h-1.5 bg-flat rounded mt-2 overflow-hidden">
               <div
-                className="h-1.5 bg-indigo-500 rounded transition-all duration-300"
+                className="h-1.5 bg-accent rounded transition-all duration-300"
                 style={{ width: `${Math.round(j.progress * 100)}%` }}
               />
             </div>
-            <div className="text-xs text-zinc-400 mt-1">{j.error ?? j.message}</div>
+            <div className="text-xs text-fg-dim mt-1">{j.error ?? j.message}</div>
             {j.status === "SUCCEEDED" && (
-              <div className="text-xs text-emerald-400 mt-1 break-all">
+              <div className="text-xs text-ok mt-1 break-all">
                 {String((j.output as { video?: string }).video ?? "")}
               </div>
             )}

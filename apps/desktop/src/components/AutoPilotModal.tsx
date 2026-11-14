@@ -146,26 +146,26 @@ export const AutoPilotModal: React.FC<AutoPilotModalProps> = ({
       aria-modal="true"
       aria-label="PanelFlow Auto-Pilot Orchestrator"
     >
-      <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-5xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden">
+      <div className="bg-ink border border-edge rounded-2xl w-full max-w-5xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-zinc-800/80 bg-zinc-900/60 flex items-center justify-between">
+        <div className="px-6 py-4 border-b border-edge/80 bg-navy/60 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 via-purple-600 to-pink-600 flex items-center justify-center text-white shadow-lg shadow-indigo-600/30">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-accent via-accent to-accent flex items-center justify-center text-white shadow-lg shadow-accent/30">
               <Icons.Zap className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-zinc-100 flex items-center gap-2">
+              <h2 className="text-base font-bold text-fg flex items-center gap-2">
                 1-Click End-to-End Pipeline Auto-Pilot
                 <Badge variant="accent" className="text-[10px]">AUTONOMOUS</Badge>
               </h2>
-              <p className="text-xs text-zinc-400">
-                Executes all 9 stages from raw pages to certified MP4 video & ComfyUI thumbnail for <span className="text-zinc-200 font-medium">{project.title}</span>
+              <p className="text-xs text-fg-dim">
+                Executes all 9 stages from raw pages to certified MP4 video & ComfyUI thumbnail for <span className="text-fg font-medium">{project.title}</span>
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-lg flex items-center justify-center text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors"
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-fg-dim hover:text-fg hover:bg-flat transition-colors"
             aria-label="Close dialog"
           >
             <Icons.X className="w-4 h-4" />
@@ -173,15 +173,15 @@ export const AutoPilotModal: React.FC<AutoPilotModalProps> = ({
         </div>
 
         {/* Configuration Bar */}
-        <div className="px-6 py-3 border-b border-zinc-800/80 bg-zinc-900/40 flex flex-wrap items-center justify-between gap-4 text-xs">
+        <div className="px-6 py-3 border-b border-edge/80 bg-navy/40 flex flex-wrap items-center justify-between gap-4 text-xs">
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
-              <span className="text-zinc-400 font-medium">Output Profile:</span>
+              <span className="text-fg-dim font-medium">Output Profile:</span>
               <select
                 value={targetProfile}
                 onChange={(e) => setTargetProfile(e.target.value)}
                 disabled={running}
-                className="bg-zinc-950 border border-zinc-700 rounded-md px-2.5 py-1 text-xs text-zinc-200"
+                className="bg-ink border border-edge rounded-md px-2.5 py-1 text-xs text-fg"
               >
                 <option value="standard_1080p">1080p Landscape (16:9)</option>
                 <option value="vertical_shorts">1080p Vertical Shorts (9:16)</option>
@@ -189,32 +189,32 @@ export const AutoPilotModal: React.FC<AutoPilotModalProps> = ({
               </select>
             </div>
 
-            <label className="flex items-center gap-1.5 text-zinc-300 cursor-pointer">
+            <label className="flex items-center gap-1.5 text-fg-dim cursor-pointer">
               <input
                 type="checkbox"
                 checked={skipExisting}
                 onChange={(e) => setSkipExisting(e.target.checked)}
                 disabled={running}
-                className="rounded border-zinc-700 bg-zinc-900 text-indigo-500 focus:ring-0"
+                className="rounded border-edge bg-navy text-accent focus:ring-0"
               />
               <span>Smart Skip (Preserve existing verified stages)</span>
             </label>
 
-            <label className="flex items-center gap-1.5 text-zinc-300 cursor-pointer">
+            <label className="flex items-center gap-1.5 text-fg-dim cursor-pointer">
               <input
                 type="checkbox"
                 checked={enableThumbnails}
                 onChange={(e) => setEnableThumbnails(e.target.checked)}
                 disabled={running}
-                className="rounded border-zinc-700 bg-zinc-900 text-indigo-500 focus:ring-0"
+                className="rounded border-edge bg-navy text-accent focus:ring-0"
               />
               <span>Generate ComfyUI Thumbnail & YouTube Packaging</span>
             </label>
           </div>
 
           <div className="flex items-center gap-2">
-            <span className="text-[11px] text-zinc-400 font-mono">
-              Status: <span className="font-bold text-zinc-200">{statusData?.status || "READY"}</span>
+            <span className="text-[11px] text-fg-dim font-mono">
+              Status: <span className="font-bold text-fg">{statusData?.status || "READY"}</span>
             </span>
           </div>
         </div>
@@ -222,16 +222,16 @@ export const AutoPilotModal: React.FC<AutoPilotModalProps> = ({
         {/* Content Body */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
           {/* Progress Overview */}
-          <div className="bg-zinc-900/60 p-4 rounded-xl border border-zinc-800 space-y-2">
+          <div className="bg-navy/60 p-4 rounded-xl border border-edge space-y-2">
             <div className="flex justify-between items-center text-xs">
-              <span className="font-bold text-zinc-200 flex items-center gap-2">
-                <Icons.Activity className="w-4 h-4 text-indigo-400" />
+              <span className="font-bold text-fg flex items-center gap-2">
+                <Icons.Activity className="w-4 h-4 text-info" />
                 Pipeline Orchestration Progress
               </span>
-              <span className="font-mono text-indigo-400 font-bold text-sm">{progressPercent}%</span>
+              <span className="font-mono text-info font-bold text-sm">{progressPercent}%</span>
             </div>
             <ProgressBar progress={statusData?.overall_progress ?? 0} />
-            <div className="flex justify-between text-[11px] text-zinc-400 font-mono">
+            <div className="flex justify-between text-[11px] text-fg-dim font-mono">
               <span>Current: {statusData?.current_stage_id ? statusData.current_stage_id.toUpperCase() : "Ready to launch"}</span>
               <span>9 Stages Synchronized</span>
             </div>
@@ -239,15 +239,15 @@ export const AutoPilotModal: React.FC<AutoPilotModalProps> = ({
 
           {/* Success Banner */}
           {isCompleted && (
-            <div className="p-4 bg-gradient-to-r from-emerald-950/40 via-zinc-900 to-indigo-950/40 border border-emerald-600/60 rounded-xl space-y-3">
+            <div className="p-4 bg-gradient-to-r from-ok/40 via-navy to-accent/40 border border-ok/60 rounded-xl space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+                  <div className="w-8 h-8 rounded-full bg-ok/20 text-ok flex items-center justify-center">
                     <Icons.CheckCircle className="w-5 h-5" />
                   </div>
                   <div>
-                    <h3 className="text-sm font-bold text-zinc-100">End-to-End Pipeline Execution Successful!</h3>
-                    <p className="text-xs text-zinc-400">
+                    <h3 className="text-sm font-bold text-fg">End-to-End Pipeline Execution Successful!</h3>
+                    <p className="text-xs text-fg-dim">
                       Production video rendered, A/V validated, and YouTube packaging generated.
                     </p>
                   </div>
@@ -256,7 +256,7 @@ export const AutoPilotModal: React.FC<AutoPilotModalProps> = ({
               </div>
 
               {statusData?.result?.output_mp4_path && (
-                <div className="p-2.5 bg-zinc-950 border border-zinc-800 rounded-lg text-xs font-mono text-zinc-300 truncate">
+                <div className="p-2.5 bg-ink border border-edge rounded-lg text-xs font-mono text-fg-dim truncate">
                   Output: {statusData.result.output_mp4_path}
                 </div>
               )}
@@ -267,7 +267,7 @@ export const AutoPilotModal: React.FC<AutoPilotModalProps> = ({
                     variant="primary"
                     size="sm"
                     onClick={onOpenPackaging}
-                    className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center gap-1.5"
+                    className="bg-accent hover:bg-accent text-white font-bold text-xs flex items-center gap-1.5"
                   >
                     <Icons.Sparkles className="w-3.5 h-3.5" />
                     <span>View YouTube Packaging & AI Thumbnail</span>
@@ -278,7 +278,7 @@ export const AutoPilotModal: React.FC<AutoPilotModalProps> = ({
                     variant="secondary"
                     size="sm"
                     onClick={onOpenRenderScreen}
-                    className="text-xs flex items-center gap-1.5 border-zinc-700"
+                    className="text-xs flex items-center gap-1.5 border-edge"
                   >
                     <Icons.Film className="w-3.5 h-3.5" />
                     <span>Open Video Player & Media Samples</span>
@@ -290,25 +290,25 @@ export const AutoPilotModal: React.FC<AutoPilotModalProps> = ({
 
           {/* Error Banner with Diagnostics & Actionable Troubleshooting */}
           {isFailed && (
-            <div className="p-4 bg-rose-950/40 border border-rose-800 rounded-xl space-y-3">
+            <div className="p-4 bg-bad/40 border border-bad/40 rounded-xl space-y-3">
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-start gap-3">
-                  <Icons.XCircle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+                  <Icons.XCircle className="w-5 h-5 text-bad shrink-0 mt-0.5" />
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
-                      <h4 className="font-bold text-rose-300 text-sm">Pipeline Stopped</h4>
+                      <h4 className="font-bold text-bad text-sm">Pipeline Stopped</h4>
                       {statusData?.error_details?.category && (
-                        <span className="text-[10px] font-mono font-bold uppercase px-2 py-0.5 rounded bg-rose-900/60 text-rose-200 border border-rose-700/50">
+                        <span className="text-[10px] font-mono font-bold uppercase px-2 py-0.5 rounded bg-bad/60 text-bad border border-bad/50">
                           {statusData.error_details.category}
                         </span>
                       )}
                       {statusData?.error_details?.stage_id && (
-                        <span className="text-[10px] font-mono text-zinc-400">
+                        <span className="text-[10px] font-mono text-fg-dim">
                           Stage: {statusData.error_details.stage_id.toUpperCase()}
                         </span>
                       )}
                     </div>
-                    <p className="text-rose-200 font-mono text-xs break-words">
+                    <p className="text-bad font-mono text-xs break-words">
                       {statusData?.error || statusData?.error_details?.message}
                     </p>
                   </div>
@@ -317,15 +317,15 @@ export const AutoPilotModal: React.FC<AutoPilotModalProps> = ({
 
               {/* Troubleshooting Guidance */}
               {statusData?.error_details?.troubleshooting && statusData.error_details.troubleshooting.length > 0 && (
-                <div className="p-3 bg-zinc-950/80 border border-zinc-800/80 rounded-lg space-y-2">
-                  <span className="text-[11px] font-bold text-zinc-300 flex items-center gap-1.5 uppercase tracking-wider">
-                    <Icons.AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+                <div className="p-3 bg-ink/80 border border-edge/80 rounded-lg space-y-2">
+                  <span className="text-[11px] font-bold text-fg-dim flex items-center gap-1.5 uppercase tracking-wider">
+                    <Icons.AlertTriangle className="w-3.5 h-3.5 text-warn" />
                     Recommended Troubleshooting Actions
                   </span>
                   <ul className="space-y-1.5 pl-1">
                     {statusData.error_details.troubleshooting.map((tip, idx) => (
-                      <li key={idx} className="text-xs text-zinc-300 flex items-start gap-2">
-                        <span className="text-amber-400 font-bold shrink-0 mt-0.5">•</span>
+                      <li key={idx} className="text-xs text-fg-dim flex items-start gap-2">
+                        <span className="text-warn font-bold shrink-0 mt-0.5">•</span>
                         <span>{tip}</span>
                       </li>
                     ))}
@@ -343,7 +343,7 @@ export const AutoPilotModal: React.FC<AutoPilotModalProps> = ({
                     handleStartRun();
                   }}
                   disabled={running || loading}
-                  className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center gap-1.5"
+                  className="bg-accent hover:bg-accent text-white font-bold text-xs flex items-center gap-1.5"
                 >
                   <Icons.Rotate className="w-3.5 h-3.5" />
                   <span>Resume Pipeline (Skip Finished)</span>
@@ -353,7 +353,7 @@ export const AutoPilotModal: React.FC<AutoPilotModalProps> = ({
                     variant="secondary"
                     size="sm"
                     onClick={() => onOpenStage(statusData.error_details!.stage_id!)}
-                    className="text-xs flex items-center gap-1.5 border-rose-700 text-rose-200"
+                    className="text-xs flex items-center gap-1.5 border-bad text-bad"
                   >
                     <span>Go to {statusData.error_details.stage_id.toUpperCase()} stage</span>
                   </Button>
@@ -375,9 +375,9 @@ export const AutoPilotModal: React.FC<AutoPilotModalProps> = ({
                     setCopiedDiagnostics(true);
                     setTimeout(() => setCopiedDiagnostics(false), 2500);
                   }}
-                  className="text-xs flex items-center gap-1.5 border-zinc-700"
+                  className="text-xs flex items-center gap-1.5 border-edge"
                 >
-                  <Icons.CheckCircle className={`w-3.5 h-3.5 ${copiedDiagnostics ? "text-emerald-400" : "text-zinc-400"}`} />
+                  <Icons.CheckCircle className={`w-3.5 h-3.5 ${copiedDiagnostics ? "text-ok" : "text-fg-dim"}`} />
                   <span>{copiedDiagnostics ? "Copied Diagnostics!" : "Copy Diagnostics"}</span>
                 </Button>
               </div>
@@ -388,8 +388,8 @@ export const AutoPilotModal: React.FC<AutoPilotModalProps> = ({
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             {/* 9 Stages Checklist (6 cols) */}
             <div className="lg:col-span-6 space-y-2">
-              <h3 className="text-xs font-bold text-zinc-200 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                <Icons.Layers className="w-4 h-4 text-indigo-400" />
+              <h3 className="text-xs font-bold text-fg uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                <Icons.Layers className="w-4 h-4 text-info" />
                 Pipeline Stages Execution
               </h3>
 
@@ -404,45 +404,45 @@ export const AutoPilotModal: React.FC<AutoPilotModalProps> = ({
                       key={stage.id}
                       className={`p-3 rounded-xl border transition-all ${
                         isCurrent
-                          ? "border-indigo-500 bg-indigo-950/20 shadow-md shadow-indigo-600/10"
+                          ? "border-accent bg-accent/20 shadow-md shadow-accent/10"
                           : isDone
-                          ? "border-zinc-800/80 bg-zinc-900/40"
+                          ? "border-edge/80 bg-navy/40"
                           : isStageFailed
-                          ? "border-rose-800 bg-rose-950/20"
-                          : "border-zinc-800/50 bg-zinc-950/40 opacity-70"
+                          ? "border-bad/40 bg-bad/20"
+                          : "border-edge/50 bg-ink/40 opacity-70"
                       }`}
                     >
                       <div className="flex items-center justify-between text-xs mb-1">
                         <div className="flex items-center gap-2">
                           {isDone ? (
-                            <Icons.CheckCircle className="w-4 h-4 text-emerald-400" />
+                            <Icons.CheckCircle className="w-4 h-4 text-ok" />
                           ) : isCurrent ? (
-                            <Icons.Refresh className="w-4 h-4 text-indigo-400 animate-spin" />
+                            <Icons.Refresh className="w-4 h-4 text-info animate-spin" />
                           ) : isStageFailed ? (
-                            <Icons.XCircle className="w-4 h-4 text-rose-400" />
+                            <Icons.XCircle className="w-4 h-4 text-bad" />
                           ) : (
-                            <Icons.Clock className="w-4 h-4 text-zinc-600" />
+                            <Icons.Clock className="w-4 h-4 text-fg-faint" />
                           )}
-                          <span className={`font-semibold ${isCurrent ? "text-white" : isDone ? "text-zinc-200" : "text-zinc-400"}`}>
+                          <span className={`font-semibold ${isCurrent ? "text-white" : isDone ? "text-fg" : "text-fg-dim"}`}>
                             {stage.name}
                           </span>
                         </div>
 
                         <div className="flex items-center gap-2">
                           {stage.duration_sec > 0 && (
-                            <span className="text-[10px] font-mono text-zinc-500">
+                            <span className="text-[10px] font-mono text-fg-faint">
                               {stage.duration_sec.toFixed(1)}s
                             </span>
                           )}
                           <span
                             className={`text-[10px] font-mono font-bold uppercase px-1.5 py-0.5 rounded ${
                               isDone
-                                ? "bg-emerald-950/80 text-emerald-400 border border-emerald-800/60"
+                                ? "bg-ok/80 text-ok border border-ok/60"
                                 : isCurrent
-                                ? "bg-indigo-950/80 text-indigo-300 border border-indigo-700/60 animate-pulse"
+                                ? "bg-accent/80 text-info border border-accent/60 animate-pulse"
                                 : isStageFailed
-                                ? "bg-rose-950 text-rose-400"
-                                : "text-zinc-600"
+                                ? "bg-bad/20 text-bad"
+                                : "text-fg-faint"
                             }`}
                           >
                             {stage.status}
@@ -451,7 +451,7 @@ export const AutoPilotModal: React.FC<AutoPilotModalProps> = ({
                       </div>
 
                       {stage.message && (
-                        <p className="text-[11px] text-zinc-400 pl-6 truncate">
+                        <p className="text-[11px] text-fg-dim pl-6 truncate">
                           {stage.message}
                         </p>
                       )}
@@ -464,32 +464,32 @@ export const AutoPilotModal: React.FC<AutoPilotModalProps> = ({
             {/* Live Terminal / Console Logs (6 cols) */}
             <div className="lg:col-span-6 space-y-2 flex flex-col">
               <div className="flex items-center justify-between text-xs">
-                <span className="font-bold text-zinc-200 uppercase tracking-wider flex items-center gap-1.5">
-                  <Icons.Cpu className="w-4 h-4 text-indigo-400" />
+                <span className="font-bold text-fg uppercase tracking-wider flex items-center gap-1.5">
+                  <Icons.Cpu className="w-4 h-4 text-info" />
                   Live Orchestration Console
                 </span>
-                <span className="text-[10px] font-mono text-zinc-500">
+                <span className="text-[10px] font-mono text-fg-faint">
                   {statusData?.logs.length ?? 0} events
                 </span>
               </div>
 
-              <div className="flex-1 min-h-[380px] max-h-[460px] bg-black border border-zinc-800 rounded-xl p-3 overflow-y-auto font-mono text-[11px] space-y-1 text-zinc-300 shadow-inner">
+              <div className="flex-1 min-h-[380px] max-h-[460px] bg-black border border-edge rounded-xl p-3 overflow-y-auto font-mono text-[11px] space-y-1 text-fg-dim shadow-inner">
                 {statusData?.logs && statusData.logs.length > 0 ? (
                   statusData.logs.map((logLine, lIdx) => (
                     <div key={lIdx} className="leading-tight break-all">
                       {logLine.includes("FAILED") || logLine.includes("error") ? (
-                        <span className="text-rose-400">{logLine}</span>
+                        <span className="text-bad">{logLine}</span>
                       ) : logLine.includes("completed") || logLine.includes("certified") || logLine.includes("Successful") ? (
-                        <span className="text-emerald-400 font-semibold">{logLine}</span>
+                        <span className="text-ok font-semibold">{logLine}</span>
                       ) : logLine.includes("Starting") || logLine.includes("Stage:") ? (
-                        <span className="text-indigo-300">{logLine}</span>
+                        <span className="text-info">{logLine}</span>
                       ) : (
-                        <span className="text-zinc-400">{logLine}</span>
+                        <span className="text-fg-dim">{logLine}</span>
                       )}
                     </div>
                   ))
                 ) : (
-                  <div className="h-full flex items-center justify-center text-zinc-600">
+                  <div className="h-full flex items-center justify-center text-fg-faint">
                     Console idle. Click "Start Auto-Pilot Run" to begin.
                   </div>
                 )}
@@ -500,8 +500,8 @@ export const AutoPilotModal: React.FC<AutoPilotModalProps> = ({
         </div>
 
         {/* Modal Footer */}
-        <div className="px-6 py-4 border-t border-zinc-800/80 bg-zinc-900/60 flex items-center justify-between">
-          <div className="text-xs text-zinc-400">
+        <div className="px-6 py-4 border-t border-edge/80 bg-navy/60 flex items-center justify-between">
+          <div className="text-xs text-fg-dim">
             {running
               ? "Auto-Pilot is executing in the background — you can safely keep this open or close it."
               : isCompleted
@@ -520,7 +520,7 @@ export const AutoPilotModal: React.FC<AutoPilotModalProps> = ({
                 size="sm"
                 onClick={handleCancelRun}
                 disabled={cancelling}
-                className="text-xs text-rose-400 hover:text-rose-300 border-rose-900/60"
+                className="text-xs text-bad hover:text-bad border-bad/60"
               >
                 {cancelling ? "Stopping..." : "Stop Auto-Pilot"}
               </Button>
@@ -530,7 +530,7 @@ export const AutoPilotModal: React.FC<AutoPilotModalProps> = ({
                 size="sm"
                 onClick={handleStartRun}
                 disabled={loading}
-                className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-5 text-xs shadow-md shadow-indigo-600/30 flex items-center gap-1.5"
+                className="bg-accent hover:bg-accent text-white font-bold px-5 text-xs shadow-md shadow-accent/30 flex items-center gap-1.5"
               >
                 <Icons.Zap className="w-4 h-4" />
                 <span>{isCompleted ? "Re-Run Auto-Pilot" : "Start Auto-Pilot Run"}</span>
