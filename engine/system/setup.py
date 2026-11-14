@@ -499,20 +499,31 @@ class ComfyUIManager:
 
             creation_flags = 0
             if sys.platform == "win32":
-                creation_flags = 0x08000000  # CREATE_NO_WINDOW
+                creation_flags = 0x08000000 | 0x00000200  # CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP
 
             cmd = [
                 str(py_exe),
                 str(main_py),
                 "--listen", host,
                 "--port", str(port),
+                "--disable-auto-launch",
                 "--enable-cors-header", "*",
             ]
 
             env = dict(os.environ)
             workflow_dir = root / "workflow"
             if workflow_dir.exists():
-                env.setdefault("PANELFLOW_COMFYUI_WORKFLOW_DIR", str(workflow_dir))
+                env["PANELFLOW_COMFYUI_WORKFLOW_DIR"] = str(workflow_dir)
+                os.environ.setdefault("PANELFLOW_COMFYUI_WORKFLOW_DIR", str(workflow_dir))
+
+            local_app_data = os.environ.get("LOCALAPPDATA")
+            log_dir = Path(local_app_data) / "PanelFlow Studio" / "logs" if local_app_data else Path.home() / ".panelflow" / "logs"
+            try:
+                log_dir.mkdir(parents=True, exist_ok=True)
+                comfy_log = log_dir / "comfyui.log"
+                log_out = open(comfy_log, "a", encoding="utf-8", buffering=1)
+            except Exception:
+                log_out = subprocess.DEVNULL
 
             try:
                 proc = subprocess.Popen(
@@ -520,8 +531,8 @@ class ComfyUIManager:
                     cwd=str(root),
                     creationflags=creation_flags,
                     env=env,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
+                    stdout=log_out,
+                    stderr=log_out,
                 )
                 self._proc = proc
                 logger.info("Launched ComfyUI daemon PID %d at %s", proc.pid, root)
@@ -552,6 +563,8 @@ class ComfyUIManager:
 
         res = self.start(host, port)
         if res.get("status") in ("FAILED", "NOT_FOUND"):
+            return res
+        if timeout_s <= 0:
             return res
 
         import time

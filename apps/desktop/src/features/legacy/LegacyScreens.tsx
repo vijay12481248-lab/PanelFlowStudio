@@ -48,11 +48,14 @@ export const AnimeRoute: React.FC = () => {
 
 export const ChronoFlowRoute: React.FC = () => {
   const { projectId, jobId } = useParams();
+  const [params] = useSearchParams();
   const navigate = useNavigate();
   const project = useProject(projectId);
+  const tab = params.get("tab");
+  const story = params.get("story");
   if (projectId && project.isError) return <ProjectMissing />;
   if (projectId && !project.data) return <Loading />;
-  return <ChronoFlowScreen project={project.data ?? null} jobId={jobId ?? null} onBack={() => navigate(paths.home())} />;
+  return <ChronoFlowScreen project={project.data ?? null} jobId={jobId ?? null} tab={tab} story={story} onBack={() => navigate(paths.home())} />;
 };
 
 export const ImageRoute: React.FC = () => {

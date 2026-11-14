@@ -44,6 +44,7 @@ export const EngineProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [retrying, setRetrying] = React.useState(false);
   const [restarting, setRestarting] = React.useState(false);
   const restartingRef = React.useRef(false);
+  const hasLaunchedComfyRef = React.useRef(false);
   const connection = React.useRef({ connected: false, failures: 0 });
 
   /** Record one health result; a single failure keeps a connected engine connected (see nextConnection). */
@@ -60,6 +61,10 @@ export const EngineProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         record(true);
         setVersion(health.version);
         setStartupGrace(false);
+        if (!hasLaunchedComfyRef.current) {
+          hasLaunchedComfyRef.current = true;
+          api.launchComfyUI(0).catch(() => {});
+        }
       } else {
         record(false);
       }

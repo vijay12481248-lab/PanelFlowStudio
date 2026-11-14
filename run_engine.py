@@ -89,12 +89,30 @@ if not os.environ.get("PANELFLOW_ENGINE_TOKEN"):
             except Exception:
                 pass
 
+# Ensure PANELFLOW_COMFYUI_WORKFLOW_DIR points to ComfyUI workflow directory
+if not os.environ.get("PANELFLOW_COMFYUI_WORKFLOW_DIR"):
+    for cand in [r"E:\VIJAY SEKAR\ComfyUI\workflow", r"D:\ComfyUI\workflow", r"C:\ComfyUI\workflow"]:
+        if os.path.exists(cand):
+            os.environ["PANELFLOW_COMFYUI_WORKFLOW_DIR"] = cand
+            break
+
 import uvicorn
 from engine.config.settings import settings
 from engine.api.app import app
 
 if __name__ == "__main__":
     print(f"Starting {settings.app_name} Engine on http://{settings.api_host}:{settings.api_port}...")
+
+    # Immediately initiate non-blocking background startup for ComfyUI if installed
+    try:
+        from engine.system.setup import comfyui_manager
+        if comfyui_manager.is_installed() and not comfyui_manager.is_running():
+            print(f"[PanelFlow] Auto-launching ComfyUI on port {comfyui_manager.DEFAULT_PORT}...")
+            comfy_res = comfyui_manager.start()
+            print(f"[PanelFlow] ComfyUI background process: status={comfy_res.get('status')} pid={comfy_res.get('pid')}")
+    except Exception as comfy_err:
+        print(f"[PanelFlow] ComfyUI auto-launch notice: {comfy_err}", file=sys.stderr)
+
     server = uvicorn.Server(uvicorn.Config(
         app,
         host=settings.api_host,

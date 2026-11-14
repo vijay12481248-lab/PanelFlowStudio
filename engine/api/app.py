@@ -53,6 +53,19 @@ async def lifespan(app: FastAPI):
     recovery_task = asyncio.create_task(recover_leases_periodically())
     chronoflow_sup = JobSupervisor()
     chronoflow_sup.start_watchdog()
+
+    async def auto_start_comfyui():
+        try:
+            from engine.system.setup import comfyui_manager
+            if comfyui_manager.is_installed() and not comfyui_manager.is_running():
+                logger.info("Auto-launching ComfyUI for PanelFlow Studio on port %s...", comfyui_manager.DEFAULT_PORT)
+                res = comfyui_manager.start()
+                logger.info("ComfyUI auto-launch status: %s (PID %s)", res.get("status"), res.get("pid"))
+        except Exception:
+            logger.exception("Failed to auto-launch ComfyUI on startup")
+
+    comfy_task = asyncio.create_task(auto_start_comfyui())
+
     logger.info("PanelFlow Studio Engine started successfully.")
     try:
         yield
