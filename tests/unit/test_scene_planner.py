@@ -136,3 +136,34 @@ def test_prompt_tells_the_model_not_to_invent_people_or_use_the_word_slug():
     assert p.plan.actors == []
     assert "only include people the brief" in fake.calls[0].lower()
     assert "slug" not in fake.calls[0].lower()
+
+
+def test_prompt_asks_for_species_gender_age_and_visual_tags():
+    fake = FakeProvider(FIGHT_ANSWER)
+    run(propose(fake, "the hero fights the villain"))
+    text = fake.calls[0].lower()
+    assert "species" in text and "gender" in text and "age_group" in text and "visual tags" in text
+
+
+def _solo(brief: str, **actor) -> "ScenePlan":
+    answer = {"actors": [{"id": "hero", "description": "messy hair", "side": "center", "action_state": "grieving", **actor}],
+              "camera": {"angle": "eye_level", "distance": "close"}, "light": {"direction": "left"}}
+    return run(propose(FakeProvider(answer), brief, scene_type="emotion")).plan
+
+
+def test_single_actor_gender_and_age_come_from_the_brief_words():
+    # real-data finding: the model returned gender "neutral" for "a girl", and Qwen drew a boy
+    girl = _solo("a girl who just lost her best friend").actors[0]
+    assert (girl.gender, girl.age_group) == ("female", "teen")
+    old = _solo("an old woman remembering her wedding day").actors[0]
+    assert (old.gender, old.age_group) == ("female", "elder")
+    assert _solo("a man and a woman waiting at a station", action_state="hopeful").actors[0].gender == "neutral"  # both genders named: ambiguous, left alone
+
+
+def test_a_gender_the_model_chose_is_never_overridden():
+    assert _solo("a girl who just lost her best friend", gender="male").actors[0].gender == "male"
+
+
+def test_two_actor_plans_keep_neutral_gender():
+    p = run(propose(FakeProvider(FIGHT_ANSWER), "the hero fights the villain")).plan
+    assert {a.gender for a in p.actors} == {"neutral"}

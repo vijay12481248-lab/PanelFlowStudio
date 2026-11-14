@@ -92,7 +92,29 @@ def _stated(brief: str, playbook: Playbook, plan_out: _PlanOut) -> set[str]:
     return found
 
 
+FEMALE = r"\b(girl|woman|she|her|mother|mom|daughter|sister|wife|grandmother|queen|lady)\b"
+MALE = r"\b(boy|man|he|his|him|father|dad|son|brother|husband|grandfather|king)\b"
+ELDER = r"\b(old|elderly|grandmother|grandfather|grandma|grandpa)\b"
+
+
+def _identity_from_brief(brief: str, actors: list[ActorPlan]) -> list[ActorPlan]:
+    """The model leaves gender 'neutral' even for "a girl", and the picture model then draws a boy. For ONE human actor whose gender the model did not
+    set, the brief's own words decide (when it names exactly one gender); a gender the model chose is never overridden."""
+    text = brief.lower()
+    f, m = bool(re.search(FEMALE, text)), bool(re.search(MALE, text))
+    if len(actors) != 1 or actors[0].species != "human" or actors[0].gender != "neutral" or f == m:
+        return actors
+    a = actors[0].model_copy(update={"gender": "female" if f else "male"})
+    if a.age_group == "adult":
+        if re.search(ELDER, text):
+            a = a.model_copy(update={"age_group": "elder"})
+        elif re.search(r"\b(girl|boy)\b", text):
+            a = a.model_copy(update={"age_group": "child" if re.search(r"\b(little|child|small)\b", text) else "teen"})
+    return [a]
+
+
 def _build(brief: str, scene_type: str, out: _PlanOut, playbook: Playbook) -> ScenePlan:
+    out = out.model_copy(update={"actors": _identity_from_brief(brief, out.actors)})
     stated = _stated(brief, playbook, out)
     d = playbook.defaults
     cam, light = out.camera or _CameraOut(), out.light or _LightOut()
@@ -162,7 +184,8 @@ async def propose(provider, brief: str, scene_type: str | None = None) -> Propos
     playbook = load_playbook(scene_type)  # ValueError for an unknown type
     prompt = (
         f"Brief: \"{brief}\"\nScene type: {scene_type}.\nPlan this single picture. Only include people the brief mentions or clearly implies "
-        f"(a picture of a place alone has no actors). Fill: actors (id = one short lowercase word such as hero or guard, one-line description, side left|center|right, "
+        f"(a picture of a place alone has no actors). Fill: actors (id = one short lowercase word such as hero or guard, description = comma-separated visual tags such as hair, clothes, build, "
+        f"species = human unless it is a creature, gender male|female|neutral, age_group child|teen|adult|elder, side left|center|right, "
         f"depth, action_state, expression), contacts (source, target, body_part, direction as seen on screen), camera (angle eye_level|low|high|dutch, "
         f"distance close|medium|wide), light (direction front|back|left|right|top|below), depth layers, mood, setting. Leave camera or light fields out when "
         f"the brief does not say them.\nAllowed action_state values: {playbook.action_states}.\nStaging rules:\n- " + "\n- ".join(playbook.staging_rules))

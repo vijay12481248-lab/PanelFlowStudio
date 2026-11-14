@@ -17,8 +17,11 @@ Depth = Literal["foreground", "midground", "background"]
 
 
 class ActorPlan(BaseModel):
-    id: str  # slug; matches a Character.id when the actor is a known character
-    description: str  # one line, used when there is no Character
+    id: str  # one short lowercase word; matches a Character.id when the actor is a known character
+    description: str  # comma-separated visual tags (hair, clothes, build): becomes the character's `look`
+    species: str = "human"  # "human" or what it is ("dragon"): a human tag is never put on a creature
+    gender: Literal["male", "female", "neutral"] = "neutral"
+    age_group: Literal["child", "teen", "adult", "elder"] = "adult"
     side: Side
     depth: Depth = "midground"
     action_state: str  # one of the playbook's action_states
