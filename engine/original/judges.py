@@ -7,6 +7,7 @@ way. A judge never raises: an unreachable or rambling judge returns `ok=False`. 
 from __future__ import annotations
 
 import asyncio
+import os
 import re
 import time
 from pathlib import Path
@@ -202,3 +203,13 @@ async def available_judges(provider, client) -> list[Judge]:
     except Exception:
         pass
     return judges
+
+
+def default_judges(provider, client=None) -> list[Judge]:
+    """The judges the Scene Director uses (blocking): both when available (the cross-check passed its gate, see docs/SCENE_DIRECTOR.md), only the first with SCENE_CROSSCHECK=0."""
+    if client is None:
+        from engine.comfyui.client import ComfyUIClient
+
+        client = ComfyUIClient()
+    found = asyncio.run(available_judges(provider, client))
+    return found[:1] if os.environ.get("SCENE_CROSSCHECK") == "0" else found
