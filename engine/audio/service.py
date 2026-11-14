@@ -137,7 +137,10 @@ class AudioService:
         "char_aria": "Aria (The Narrator)",
         "char_leon": "Leon",
     }
-    _TTS_MODELS = {"chatterbox_turbo": "ChatterboxTurboTTS"}
+    _TTS_MODELS = {
+        "qwen3_tts": "Qwen3TTS",
+        "chatterbox_turbo": "ChatterboxTurboTTS",
+    }
 
     def resolve_voice_casting(self, voice_casting: Optional[Dict[str, str]] = None) -> Dict[str, str]:
         """Freeze the complete voice map so recovery does not inherit new defaults."""
@@ -166,8 +169,14 @@ class AudioService:
         if expected_model is None or expected_model != model_name:
             raise RuntimeError(f"Persisted TTS provider/model is unavailable: {provider_id}/{model_name}")
         if require_available and not getattr(self.synthesizer, "adapter_factory", None):
-            python_exe = getattr(self.synthesizer, "python_exe", None)
-            if python_exe is not None and not python_exe.exists():
+            if provider_id == "qwen3_tts":
+                from engine.audio.synthesis import QWEN3_TTS_DIR, QWEN3_TTS_PYTHON, QWEN3_TTS_RUNNER
+
+                available = all(path.exists() for path in (QWEN3_TTS_PYTHON, QWEN3_TTS_RUNNER, QWEN3_TTS_DIR))
+            else:
+                python_exe = getattr(self.synthesizer, "python_exe", None)
+                available = python_exe is None or python_exe.exists()
+            if not available:
                 raise RuntimeError(f"Persisted TTS provider is unavailable: {provider_id}")
 
     def generate_audio_timeline(
