@@ -227,6 +227,7 @@ class SaveAssetToLocationRequest(BaseModel):
 class TimelineExportRequest(BaseModel):
     clips: list[dict[str, Any]] = Field(default_factory=list)
     overlays: list[dict[str, Any]] = Field(default_factory=list)  # V2 still frames: {filename, start, duration}
+    luts: dict[str, str] = Field(default_factory=dict)  # colour grades: {grade id: baked .cube text}; clips name theirs in "lut"
 
 
 class AIDirectorPlanRequest(BaseModel):
@@ -1781,7 +1782,10 @@ def timeline_export(req: TimelineExportRequest) -> dict[str, Any]:
     master_name = f"chronoflow_timeline_master_{export_id}.mp4"
     master_path = STUDIO_OUTPUT_DIR / master_name
 
-    rendered_path = pipeline.render_timeline_edl(req.clips, master_path, req.overlays)
+    try:
+        rendered_path = pipeline.render_timeline_edl(req.clips, master_path, req.overlays, req.luts)
+    except ValueError as exc:   # a malformed colour grade is the client's fault, not a render failure
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     if rendered_path and master_path.exists():
         return {
             "success": True,
@@ -1816,7 +1820,7 @@ def get_gallery() -> dict[str, Any]:
                     "filename": name,
                     "url": f"/chronoflow/outputs/{name}",
                     "job_id": job_id,
-                    "prompt": job_info.get("prompt", "Cinematic master cut"),
+                    "prompt": str(job_info.get("prompt", "Cinematic master cut")).encode("utf-8", errors="replace").decode("utf-8"),
                     "duration": job_info.get("total_duration", 15.6),
                     "resolution": f"{job_info.get('width', 1344)}x{job_info.get('height', 768)}",
                     "size_mb": round(size_bytes / (1024 * 1024), 2),

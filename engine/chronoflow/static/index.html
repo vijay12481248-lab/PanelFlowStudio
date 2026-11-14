@@ -3584,6 +3584,9 @@
 
         <!-- Top Row: 38% Media Pool / Bins | 62% Cinema Program Monitor -->
         <div class="davinci-top-row">
+          <!-- Color Gallery (Left on Color page) -->
+          <div class="color-gallery" id="colorGallery"></div>
+
           <!-- Left 38%: Media Pool / Clip Bins -->
           <div class="davinci-media-pool">
             <div class="pool-header-bar">
@@ -3642,10 +3645,22 @@
             <!-- Program monitor + transport + frame-edit bar (built by static/nle/nle.js) -->
             <div id="nleMonitorBody"></div>
           </div>
+
+          <!-- Color Scopes (Right on Color page) -->
+          <div class="color-scopes" id="colorScopes"></div>
+
+          <!-- Fusion Node Inspector (Right on Fusion page) -->
+          <div class="fusion-inspector" id="fusionInspector"></div>
         </div>
 
         <!-- Multi-track NLE timeline (built by static/nle/nle.js) -->
         <div id="nleTimeline"></div>
+
+        <!-- Color Grading Panel (Bottom on Color page) -->
+        <div class="color-panel" id="colorPanel"></div>
+
+        <!-- Fusion Node Flow Panel (Bottom on Fusion page) -->
+        <div class="fusion-panel" id="fusionPanel"></div>
 
       </div>
     </div>
@@ -11599,6 +11614,9 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
       const btn = document.getElementById('rail' + page.charAt(0).toUpperCase() + page.slice(1));
       if (btn) btn.classList.add('active');
 
+      if (window.NLEColor && page !== 'color') window.NLEColor.close();
+      if (window.NLEFusion && page !== 'fusion') window.NLEFusion.close();
+
       if (page === 'media') {
         switchTab('vault');
       } else if (page === 'cut') {
@@ -11608,15 +11626,21 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
         switchTab('director');
         switchBottomTimelineTab('nle');
       } else if (page === 'fusion') {
-        switchTab('image-studio');
+        switchTab('director');
+        switchBottomTimelineTab('nle');
+        if (window.NLEFusion) window.NLEFusion.open();
       } else if (page === 'color') {
-        switchTab('image-studio');
+        switchTab('director');
+        switchBottomTimelineTab('nle');
+        if (window.NLEColor) window.NLEColor.open();
       } else if (page === 'fairlight') {
         switchTab('director');
         switchBottomTimelineTab('nle');
       } else if (page === 'deliver') {
         exportTimelineCut();
       }
+      // switchTab()/switchBottomTimelineTab() above re-highlight "Edit"; keep the page the user actually chose
+      if (page === 'color' || page === 'fusion') syncResolveRail(page);
     }
 
     function syncResolveRail(page) {
@@ -11630,10 +11654,12 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
     function loadNLEAssets() {
       const v = Date.now();
       const tq = ENGINE_TOKEN ? `token=${encodeURIComponent(ENGINE_TOKEN)}&v=${v}` : `v=${v}`;
-      const css = document.createElement('link');
-      css.rel = 'stylesheet'; css.href = `${STATIC_BASE}/nle/nle.css?${tq}`; document.head.appendChild(css);
+      ['nle.css', 'color.css', 'fusion.css'].forEach(sheet => {
+        const css = document.createElement('link');
+        css.rel = 'stylesheet'; css.href = `${STATIC_BASE}/nle/${sheet}?${tq}`; document.head.appendChild(css);
+      });
       const load = (f) => new Promise((res, rej) => { const s = document.createElement('script'); s.src = `${STATIC_BASE}/nle/${f}?${tq}`; s.onload = res; s.onerror = () => rej(new Error(`could not load ${f}`)); document.head.appendChild(s); });
-      return ['model.js', 'nle.js', 'frame-edit.js'].reduce((p, f) => p.then(() => load(f)), Promise.resolve());
+      return ['model.js', 'nle.js', 'frame-edit.js', 'grade.js', 'color.js', 'fusion-graph.js', 'fusion.js'].reduce((p, f) => p.then(() => load(f)), Promise.resolve());
     }
 
     async function initApp() {
@@ -11645,6 +11671,12 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
           inp: API_BASE === '/api/chronoflow' ? '/chronoflow/inputs' : '/inputs',
           token: ENGINE_TOKEN || '',
         });
+        if (window.NLEColor && typeof NLEColor.mount === 'function') {
+          NLEColor.mount();
+        }
+        if (window.NLEFusion && typeof NLEFusion.mount === 'function') {
+          NLEFusion.mount();
+        }
         NLE.on('load', refreshMediaPool);
         NLE.on('render', refreshMediaPool);
         NLE.on('select', (s) => {

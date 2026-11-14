@@ -1,5 +1,6 @@
 import os
 import json
+import re
 import uuid
 import asyncio
 import subprocess
@@ -760,14 +761,47 @@ class ChronoFlowPipeline:
             raise RuntimeError(f"overlay render failed: {res.stderr[-300:]}")
         tmp.replace(master_path)
 
-    def render_timeline_edl(self, clips, output_master_path, overlays=None):
-        """Renders an NLE timeline Edit Decision List (V1 clips + V2 still overlays) into a final mastered video."""
+    # A grade reaches the renderer as a baked 3D LUT (.cube text) keyed by a hash the client computes; clips name it in "lut".
+    _LUT_ID = re.compile(r"^[0-9a-f]{16}$")
+    _LUT_MAX_BYTES = 4_000_000
+
+    @classmethod
+    def _write_grade_luts(cls, luts, temp_dir):
+        """Write the client's baked LUTs into temp_dir and return {id: filename}. Bad ids or oversized or malformed text are refused."""
+        written = {}
+        for lut_id, text in (luts or {}).items():
+            if not cls._LUT_ID.match(str(lut_id)):
+                raise ValueError(f"invalid grade id {str(lut_id)[:20]!r}")
+            if not isinstance(text, str) or len(text) > cls._LUT_MAX_BYTES or "LUT_3D_SIZE" not in text[:400]:
+                raise ValueError(f"grade {lut_id} is not a usable .cube file")
+            name = f"{lut_id}.cube"
+            (temp_dir / name).write_text(text, encoding="ascii", errors="replace")
+            written[str(lut_id)] = name
+        return written
+
+    @staticmethod
+    def _grade_filter(cube_name):
+        """BT.709 RGB round trip around lut3d, so FFmpeg sees the same RGB the browser shows (our clips carry no colour tags)."""
+        # accurate_rnd + full_chroma_int halve the brightness bias of the YUV round trip (measured on a real 1080p frame: 1.8 -> 1.1 of 255)
+        flags = "accurate_rnd+full_chroma_int"
+        return (f"scale=in_range=tv:in_color_matrix=bt709:flags={flags},format=rgb24,lut3d=file={cube_name}:interp=tetrahedral,"
+                f"scale=out_range=tv:out_color_matrix=bt709:flags={flags},format=yuv420p,")
+
+    def render_timeline_edl(self, clips, output_master_path, overlays=None, luts=None):
+        """Renders an NLE timeline Edit Decision List (V1 clips + V2 still overlays) into a final mastered video.
+        luts: {grade id: .cube text}; a clip with "lut": <id> is colour graded by that LUT before scaling."""
         if not clips:
             return None
 
         import tempfile
         temp_dir = output_master_path.parent / f"timeline_tmp_{uuid.uuid4().hex[:8]}"
         temp_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            grade_files = self._write_grade_luts(luts, temp_dir)
+        except ValueError:
+            import shutil
+            shutil.rmtree(temp_dir, ignore_errors=True)
+            raise
 
         processed_chunks = []
         transitions = []   # parallel to processed_chunks: (kind, seconds) into that clip, or None
@@ -807,9 +841,11 @@ class ChronoFlowPipeline:
 
                 cmd.extend(["-i", str(src_path)])
 
-                # Filter complex for speed and volume
+                # Filter complex for speed, color grade, and fusion VFX
                 pts_factor = 1.0 / max(0.25, min(4.0, speed))
-                v_filter = f"setpts={pts_factor:.4f}*PTS,scale={out_w}:{out_h}:force_original_aspect_ratio=decrease,pad={out_w}:{out_h}:(ow-iw)/2:(oh-ih)/2"
+                grade_f = self._grade_filter(grade_files[str(clip.get("lut"))]) if str(clip.get("lut")) in grade_files else ""
+                fusion_f = (str(clip.get("fusion_filter")).strip().rstrip(",") + ",") if clip.get("fusion_filter") else ""
+                v_filter = f"setpts={pts_factor:.4f}*PTS,{grade_f}{fusion_f}scale={out_w}:{out_h}:force_original_aspect_ratio=decrease,pad={out_w}:{out_h}:(ow-iw)/2:(oh-ih)/2"
                 
                 # Audio tempo
                 atempo = max(0.5, min(2.0, speed))
@@ -827,7 +863,7 @@ class ChronoFlowPipeline:
                     str(out_chunk)
                 ])
 
-                res = subprocess.run(cmd, capture_output=True, text=True)
+                res = subprocess.run(cmd, capture_output=True, text=True, cwd=temp_dir)   # cwd: grade .cube files are named relative to it
                 join = (clip.get("transition"), float(clip.get("trans_dur") or 0.5)) if clip.get("transition") in ("dissolve", "fadeblack") else None
                 if res.returncode == 0 and out_chunk.exists():
                     processed_chunks.append(out_chunk)
@@ -843,7 +879,7 @@ class ChronoFlowPipeline:
                         "-an",
                         str(out_chunk)
                     ]
-                    res_alt = subprocess.run(cmd_no_a, capture_output=True, text=True)
+                    res_alt = subprocess.run(cmd_no_a, capture_output=True, text=True, cwd=temp_dir)
                     if res_alt.returncode == 0 and out_chunk.exists():
                         processed_chunks.append(out_chunk)
                         transitions.append(join)

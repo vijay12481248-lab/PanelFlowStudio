@@ -265,21 +265,38 @@
     return `${p(Math.floor(s / 3600))}:${p(Math.floor((s % 3600) / 60))}:${p(s % 60)}:${p(ff)}`;
   }
 
-  /** Payload for POST /timeline/export (the server's EDL renderer). */
-  function toEdl(tl) {
-    const clips = [];
+  /** Payload for POST /timeline/export (the server's EDL renderer).
+      lutFor(clip) -> {id, cube} | null supplies a colour grade as a baked 3D LUT; clips name it in "lut" and the cube text goes once into "luts".
+      fusionFor(clip) -> ffmpeg filter string | null supplies node VFX filters (blur, vignette, text, transform, shake, etc.). */
+  function toEdl(tl, lutFor, fusionFor) {
+    const clips = [], luts = {};
+    const lutOf = (c) => { const g = lutFor ? lutFor(c) : null; if (!g) return {}; luts[g.id] = g.cube; return { lut: g.id }; };
+    const fusionOf = (c) => {
+      if (fusionFor) {
+        const f = fusionFor(c);
+        if (f) return { fusion_filter: f };
+      }
+      if (typeof window !== 'undefined' && window.NLEFusionGraph && c.fusion && !window.NLEFusionGraph.isIdentity(c.fusion)) {
+        const f = window.NLEFusionGraph.toFfmpegFilter(c.fusion);
+        if (f) return { fusion_filter: f };
+      }
+      return {};
+    };
     tl.clips.forEach((c) => {
+      const lut = lutOf(c);
+      const fx = fusionOf(c);
       if (c.sources && c.sources.length) {
         c.sources.forEach((s) => {
-          clips.push({ filename: s.src, in_point: s.in, out_point: s.out, speed: s.speed || 1, volume: c.volume, transition: 'cut' });
+          clips.push({ filename: s.src, in_point: s.in, out_point: s.out, speed: s.speed || 1, volume: c.volume, transition: 'cut', ...lut, ...fx });
         });
       } else {
-        clips.push({ filename: c.src, in_point: c.in, out_point: c.out, speed: c.speed, volume: c.volume, transition: c.transition || 'cut', trans_dur: c.transDur || DEFAULT_TRANS });
+        clips.push({ filename: c.src, in_point: c.in, out_point: c.out, speed: c.speed, volume: c.volume, transition: c.transition || 'cut', trans_dur: c.transDur || DEFAULT_TRANS, ...lut, ...fx });
       }
     });
     return {
       clips: clips,
       overlays: tl.overlays.map((o) => ({ filename: o.src, start: o.start, duration: o.dur })),
+      luts: luts,
     };
   }
 

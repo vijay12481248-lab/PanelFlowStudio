@@ -1040,9 +1040,15 @@
 
   async function exportCut() {
     if (!tl.clips.length) return;
-    status('Baking master cut with FFmpeg…');
+    const graded = window.NLEColor ? window.NLEColor.gradedCount() : 0;
+    const fxCount = window.NLEFusion ? tl.clips.filter((c) => window.NLEFusion.hasFusion(c)).length : 0;
+    let exportMsg = 'Baking master cut with FFmpeg…';
+    if (graded && fxCount) exportMsg = `Baking master cut with FFmpeg (${graded} graded, ${fxCount} Fusion FX)…`;
+    else if (graded) exportMsg = `Baking master cut with FFmpeg (${graded} graded clip${graded === 1 ? '' : 's'})…`;
+    else if (fxCount) exportMsg = `Baking master cut with FFmpeg (${fxCount} Fusion FX clip${fxCount === 1 ? '' : 's'})…`;
+    status(exportMsg);
     try {
-      const res = await fetch(`${cfg.api}/timeline/export`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(M.toEdl(tl)) });
+      const res = await fetch(`${cfg.api}/timeline/export`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(M.toEdl(tl, window.NLEColor && window.NLEColor.lutFor)) });
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.detail || data.error || res.status);
       const url = q(data.master_video.replace(/^\/outputs\//, `${cfg.out}/`));
@@ -1179,7 +1185,7 @@
 
   const api = {
     mount, loadJob, refreshSource, addShotToTimeline, seek, play, pause, step, captureFrame, select, edit, status, exportCut,
-    markIn, markOut, clearRange, total, fps, mergeSelectedFrames, persist, deleteSelection,
+    markIn, markOut, clearRange, total, fps, mergeSelectedFrames, persist, deleteSelection, checkpoint: () => hist.checkpoint(), decks: () => decks,
     selectedClips: () => tl.clips.filter((c) => ui.selIds && ui.selIds.has(c.id)),
     on: (n, f) => (listeners[n] = listeners[n] || []).push(f),
     get tl() { return tl; }, get ui() { return ui; }, get root() { return root; }, cfg, mediaUrl, apiUrl, q, info, selectedClip: selClip,

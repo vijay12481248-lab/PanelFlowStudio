@@ -1312,7 +1312,10 @@ async def handle_timeline_export(request):
         master_name = f"chronoflow_timeline_master_{export_id}.mp4"
         master_path = STUDIO_OUTPUT_DIR / master_name
 
-        rendered_path = pipeline.render_timeline_edl(clips, master_path, data.get("overlays"))
+        try:
+            rendered_path = pipeline.render_timeline_edl(clips, master_path, data.get("overlays"), data.get("luts"))
+        except ValueError as exc:
+            return web.json_response({"success": False, "error": str(exc)}, status=400)
         if rendered_path and master_path.exists():
             return web.json_response({
                 "success": True,
