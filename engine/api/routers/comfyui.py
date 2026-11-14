@@ -400,27 +400,35 @@ def _asset_dict(asset: AssetRecord) -> dict:
 class GradedImageRequest(BaseModel):
     image_data: str = Field(..., min_length=16, max_length=30_000_000, description="The graded picture as base64 or a data URL")
     source_asset_id: str = Field(..., min_length=1, description="The project picture the grade was made on")
-    grade: dict = Field(default_factory=dict, description="The node stack that was baked in, kept as provenance")
+    grade: dict = Field(default_factory=dict, description="The colour node stack that was baked in, kept as provenance")
+    cut: dict = Field(default_factory=dict, description="The cut (crop, straighten, turns, flips, resize) that was baked in, kept as provenance")
 
     @model_validator(mode="after")
-    def _grade_is_small(self):
-        if len(json.dumps(self.grade)) > 400_000:
-            raise ValueError("grade is too large to keep as provenance")
+    def _says_what_was_done(self):
+        if not self.grade and not self.cut:
+            raise ValueError("give the grade and/or the cut that was baked into the picture")
+        if len(json.dumps(self.grade)) > 400_000 or len(json.dumps(self.cut)) > 20_000:
+            raise ValueError("grade or cut is too large to keep as provenance")
         return self
 
 
 @project_router.post("/{project_id}/assets/graded")
 def save_graded_image(project_id: str, request: GradedImageRequest, db: Session = Depends(get_db)) -> dict:
-    """Keep a colour-graded picture (rendered in the image studio) as a new project asset."""
+    """Keep a picture edited by hand in the image studio (colour grade and/or cut, rendered there) as a new project asset."""
     source = db.query(AssetRecord).filter(AssetRecord.id == request.source_asset_id, AssetRecord.project_id == project_id).first()
     if not db.query(ProjectRecord).filter(ProjectRecord.id == project_id).first():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
     if not source:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Asset not found in this project: {request.source_asset_id}")
     try:
+        graded = bool(request.grade)
         asset = save_project_image(
-            db, project_id, request.image_data, asset_type="GRADED_IMAGE", prefix="graded", what="graded picture",
-            provenance={"role": "color_grade", "source_asset_id": source.id, "source_filename": source.filename, "grade": request.grade},
+            db, project_id, request.image_data, asset_type="GRADED_IMAGE" if graded else "CUT_IMAGE", prefix="graded" if graded else "cut",
+            what="edited picture",
+            provenance={
+                "role": "color_grade" if graded else "cut", "source_asset_id": source.id, "source_filename": source.filename,
+                **({"grade": request.grade} if graded else {}), **({"cut": request.cut} if request.cut else {}),
+            },
         )
     except ComfyImageGenerationError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc

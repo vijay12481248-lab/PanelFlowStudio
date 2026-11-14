@@ -54,10 +54,12 @@ def test_a_graded_picture_becomes_an_asset_that_remembers_its_grade(client):
 
 
 @pytest.mark.parametrize("body,code", [
-    ({"image_data": "not base64 at all!!!!!!", "source_asset_id": "src"}, 400),
-    ({"image_data": _data_url(), "source_asset_id": "someone-elses"}, 400),
+    ({"image_data": "not base64 at all!!!!!!", "source_asset_id": "src", "grade": {"v": 1}}, 400),
+    ({"image_data": _data_url(), "source_asset_id": "someone-elses", "grade": {"v": 1}}, 400),
     ({"image_data": _data_url()}, 422),
     ({"image_data": _data_url(), "source_asset_id": "src", "grade": {"x": "y" * 500_000}}, 422),
+    ({"image_data": _data_url(), "source_asset_id": "src"}, 422),  # says neither a grade nor a cut
+    ({"image_data": _data_url(), "source_asset_id": "src", "cut": {"x": "y" * 30_000}}, 422),
 ])
 def test_bad_graded_requests_are_refused(client, body, code):
     c, _, _ = client
@@ -66,4 +68,24 @@ def test_bad_graded_requests_are_refused(client, body, code):
 
 def test_an_unknown_project_is_a_404(client):
     c, _, _ = client
-    assert c.post("/api/projects/nope/assets/graded", json={"image_data": _data_url(), "source_asset_id": "src"}).status_code == 404
+    assert c.post("/api/projects/nope/assets/graded", json={"image_data": _data_url(), "source_asset_id": "src", "grade": {"v": 1}}).status_code == 404
+
+
+def test_a_cut_only_picture_is_kept_as_a_cut_asset_with_its_cut(client):
+    c, _, tmp_path = client
+    cut = {"turns": 1, "flipH": False, "flipV": False, "angle": 2.5, "crop": {"x": 0.1, "y": 0.1, "w": 0.5, "h": 0.5}, "aspect": "1:1", "longEdge": 1080}
+    res = c.post("/api/projects/p1/assets/graded", json={"image_data": _data_url(32, 32), "source_asset_id": "src", "cut": cut})
+    assert res.status_code == 200
+    body = res.json()
+    assert body["asset_type"] == "CUT_IMAGE" and body["filename"].startswith("cut-")
+    assert body["provenance"]["role"] == "cut" and body["provenance"]["cut"] == cut and "grade" not in body["provenance"]
+    assert (tmp_path / body["relative_path"]).is_file()
+
+
+def test_a_grade_and_a_cut_together_are_both_remembered(client):
+    c, _, _ = client
+    res = c.post("/api/projects/p1/assets/graded", json={
+        "image_data": _data_url(), "source_asset_id": "src", "grade": {"v": 1, "on": True, "nodes": []}, "cut": {"turns": 0, "angle": 1}})
+    body = res.json()
+    assert body["asset_type"] == "GRADED_IMAGE" and body["provenance"]["role"] == "color_grade"
+    assert body["provenance"]["cut"] == {"turns": 0, "angle": 1} and body["provenance"]["grade"]["v"] == 1

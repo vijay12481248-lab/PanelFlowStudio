@@ -14,7 +14,10 @@ import { GradeCanvas } from "./image-studio/color/GradeCanvas";
 import { G, isNeutral, type LutLibrary } from "./image-studio/color/grade";
 import { pushGrade, redoGrade, startHistory, undoGrade } from "./image-studio/color/history";
 import { loadLutLibrary, saveLutLibrary } from "./image-studio/color/lutLibrary";
-import { renderGradedBlob } from "./image-studio/color/gradeRender";
+import { CutInspector } from "./image-studio/cut/CutInspector";
+import { CutStage } from "./image-studio/cut/CutStage";
+import { cutGeometry, isCutIdentity, newCut, type CutState } from "./image-studio/cut/geometry";
+import { renderEditedBlob } from "./image-studio/cut/render";
 import { useImageSource } from "./image-studio/color/useImageSource";
 
 export type ImageEditorTarget =
@@ -91,6 +94,8 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   const [nodeIndex, setNodeIndex] = useState(0);
   const [lutLib, setLutLib] = useState<LutLibrary>(() => loadLutLibrary());
   const [gradeBypass, setGradeBypass] = useState(false);
+  // Cut: crop, straighten, turns, flips, resize. Also a view-level state: shown on the Cut page, applied when you export or save.
+  const [cutHistory, setCutHistory] = useState(() => startHistory(newCut()));
 
   // Tool states
   const [tool, setTool] = useState<ToolMode>("brush");
@@ -181,6 +186,7 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
       setVersions([effectiveTarget.asset]);
     }
     setGradeHistory(startHistory(G.newGrade()));
+    setCutHistory(startHistory(newCut()));
     setNodeIndex(0);
   }, [
     isOpen,
@@ -607,7 +613,9 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
     effectiveTarget.mode === "project"
       ? api.getGeneratedAssetUrl(effectiveTarget.projectId, (currentAsset || effectiveTarget.asset).id)
       : currentImageSrc;
-  const source = useImageSource(cleanUrl, page === "color" || gradeActive);
+  const cut = cutHistory.present;
+  const cutActive = !isCutIdentity(cut);
+  const source = useImageSource(cleanUrl, page === "color" || page === "cut" || gradeActive || cutActive);
   const bakedTable = useMemo(() => (gradeActive ? G.bake(grade, G.LUT_SIZE, lutLib) : null), [grade, lutLib, gradeActive]);
   const shownTable = gradeBypass || isComparing ? null : bakedTable; // comparing and bypass show the picture as it is
   const changeGrade = (next: typeof grade, key: string) => setGradeHistory((h) => pushGrade(h, next, key, Date.now()));
@@ -615,30 +623,43 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
     setLutLib(lib);
     if (!saveLutLibrary(lib)) showToast("The LUT library could not be remembered (browser storage is full)");
   };
-  const gradedForExport = gradeActive && source.bitmap && bakedTable ? { bitmap: source.bitmap, table: bakedTable, size: G.LUT_SIZE } : null;
+  const changeCut = (next: CutState, key: string) => setCutHistory((h) => pushGrade(h, next, key, Date.now()));
+  const sourceW = source.bitmap?.width ?? displayWidth, sourceH = source.bitmap?.height ?? displayHeight;
+  const cutGeo = cutActive ? cutGeometry(cut, sourceW, sourceH) : null;
+  // What Deliver bakes in: the grade first (full size), then the cut.
+  const bakedForExport =
+    (gradeActive || cutActive) && source.bitmap
+      ? { bitmap: source.bitmap, table: gradeActive ? bakedTable : null, size: G.LUT_SIZE, cut: cutActive ? cut : null }
+      : null;
 
-  // Keep the graded picture as a new project asset; the grade is then part of the pixels, so the stack is cleared.
-  const saveGraded = async () => {
-    if (effectiveTarget.mode !== "project" || !gradedForExport) return;
+  // Keep the edited picture (grade and/or cut) as a new project asset; both are then in the pixels, so the stacks are cleared.
+  const saveEdited = async () => {
+    if (effectiveTarget.mode !== "project" || !bakedForExport) return;
     try {
       const was = currentAsset || effectiveTarget.asset;
-      const blob = await renderGradedBlob(gradedForExport.bitmap, gradedForExport.table, gradedForExport.size, "image/png");
+      const blob = await renderEditedBlob(bakedForExport, "image/png");
       const dataUrl = await new Promise<string>((resolve, reject) => {
         const r = new FileReader();
         r.onload = () => resolve(String(r.result));
-        r.onerror = () => reject(new Error("Could not read the graded picture."));
+        r.onerror = () => reject(new Error("Could not read the edited picture."));
         r.readAsDataURL(blob);
       });
-      const saved = await api.saveGradedImage(effectiveTarget.projectId, { image_data: dataUrl, source_asset_id: was.id, grade });
+      const saved = await api.saveGradedImage(effectiveTarget.projectId, {
+        image_data: dataUrl,
+        source_asset_id: was.id,
+        ...(gradeActive ? { grade } : {}),
+        ...(cutActive ? { cut } : {}),
+      });
       setPreviousAsset(was);
       setCurrentAsset(saved);
       setVersions((v) => (v.some((x) => x.id === saved.id) ? v : [...v, saved]));
       if (effectiveTarget.onAssetUpdated) effectiveTarget.onAssetUpdated(saved);
       setGradeHistory(startHistory(G.newGrade()));
+      setCutHistory(startHistory(newCut()));
       setNodeIndex(0);
-      showToast("Graded picture saved as a new asset");
+      showToast("Edited picture saved as a new asset");
     } catch (err: any) {
-      showToast(err?.message || "The graded picture could not be saved");
+      showToast(err?.message || "The edited picture could not be saved");
     }
   };
 
@@ -654,26 +675,26 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
 
   // Keyboard shortcuts
   // The key handler is registered once, so what it needs to know about the page lives in a ref.
-  const live = useRef({ page, undoGrade: () => {}, redoGrade: () => {} });
+  const live = useRef({ page, undo: () => {}, redo: () => {} });
   live.current = {
     page,
-    undoGrade: () => setGradeHistory((h) => undoGrade(h)),
-    redoGrade: () => setGradeHistory((h) => redoGrade(h)),
+    undo: () => (page === "cut" ? setCutHistory((h) => undoGrade(h)) : setGradeHistory((h) => undoGrade(h))),
+    redo: () => (page === "cut" ? setCutHistory((h) => redoGrade(h)) : setGradeHistory((h) => redoGrade(h))),
   };
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-      const onColor = live.current.page === "color";
+      const onColor = live.current.page === "color" || live.current.page === "cut";
 
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") {
         e.preventDefault();
-        if (onColor) (e.shiftKey ? live.current.redoGrade : live.current.undoGrade)();
+        if (onColor) (e.shiftKey ? live.current.redo : live.current.undo)();
         else if (e.shiftKey) handleRedo();
         else handleUndo();
       } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "y") {
         e.preventDefault();
-        if (onColor) live.current.redoGrade();
+        if (onColor) live.current.redo();
         else handleRedo();
       } else if (e.key.toLowerCase() === "b") {
         setPage("ai");
@@ -701,6 +722,7 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
     if (i === 0) return "Original";
     const prov = a.provenance || {};
     if (prov.role === "color_grade") return `v${i} · Grade`;
+    if (prov.role === "cut") return `v${i} · Cut`;
     if (prov.mode === "pose_camera_transfer") return `v${i} · Pose`;
     if (String(prov.workflow_id || "").includes("inpaint")) return `v${i} · Inpaint`;
     return `v${i} · Edit`;
@@ -742,6 +764,14 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
             )}
             {gradeActive && (
               <span className="shrink-0 rounded-full border border-info/50 bg-accent-soft px-2 py-0.5 text-[10px] font-medium text-info">GRADED</span>
+            )}
+            {cutActive && (
+              <span
+                className="shrink-0 rounded-full border border-info/50 bg-accent-soft px-2 py-0.5 text-[10px] font-medium text-info"
+                title="The cut is applied when you export or save from Deliver"
+              >
+                CUT {cutGeo ? `${cutGeo.outW} × ${cutGeo.outH}` : ""}
+              </span>
             )}
             <p className="truncate font-mono text-xs text-fg-dim">
               {displayFilename} · {displaySubtext}
@@ -804,7 +834,7 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
               style={{ backgroundImage: "radial-gradient(circle at 1px 1px, rgba(150,175,255,0.07) 1px, transparent 0)", backgroundSize: "24px 24px" }}
             >
               <div
-                className="relative flex max-h-full max-w-full items-center justify-center transition-transform duration-150 ease-out"
+                className={`relative flex max-h-full max-w-full items-center justify-center transition-transform duration-150 ease-out ${page === "cut" ? "hidden" : ""}`}
                 style={{ transform: `scale(${zoomLevel})`, transformOrigin: "center center" }}
                 onMouseEnter={() => setIsCursorInside(true)}
                 onMouseLeave={() => {
@@ -847,6 +877,11 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                   />
                 )}
               </div>
+              {page === "cut" && (
+                <div style={{ transform: `scale(${zoomLevel})`, transformOrigin: "center center" }} className="transition-transform duration-150 ease-out">
+                  <CutStage bitmap={source.bitmap} table={shownTable} size={G.LUT_SIZE} cut={cut} onChange={changeCut} error={source.error} />
+                </div>
+              )}
               {maskTools && (
                 <div className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full border border-edge/80 bg-navy/90 px-3 py-1 text-[11px] text-fg-dim">
                   {tool === "brush" ? "Paint over the area to replace" : "Erasing the mask"} · B brush · E eraser · [ ] size
@@ -867,8 +902,19 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
             />
           </div>
 
-          <aside className="w-80 shrink-0 border-l border-edge bg-navy/60 md:w-[22rem]" aria-label={page === "deliver" ? "Deliver" : page === "color" ? "Color" : "AI"}>
-            {page === "color" ? (
+          <aside className="w-80 shrink-0 border-l border-edge bg-navy/60 md:w-[22rem]" aria-label={page === "deliver" ? "Deliver" : page === "color" ? "Color" : page === "cut" ? "Cut" : "AI"}>
+            {page === "cut" ? (
+              <CutInspector
+                cut={cut}
+                sourceWidth={sourceW}
+                sourceHeight={sourceH}
+                onChange={changeCut}
+                canUndo={cutHistory.past.length > 0}
+                canRedo={cutHistory.future.length > 0}
+                onUndo={() => setCutHistory((h) => undoGrade(h))}
+                onRedo={() => setCutHistory((h) => redoGrade(h))}
+              />
+            ) : page === "color" ? (
               <ColorInspector
                 grade={grade}
                 nodeIndex={nodeIndex}
@@ -894,8 +940,9 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                 dimensions={`${displayWidth} × ${displayHeight}`}
                 sha256={shownAsset?.sha256}
                 provenance={shownAsset?.provenance}
-                graded={gradedForExport}
-                onSaveGraded={effectiveTarget.mode === "project" ? saveGraded : undefined}
+                baked={bakedForExport}
+                outputSize={cutGeo ? `${cutGeo.outW} × ${cutGeo.outH}` : `${displayWidth} × ${displayHeight}`}
+                onSaveEdited={effectiveTarget.mode === "project" ? saveEdited : undefined}
                 onToast={showToast}
               />
             ) : (

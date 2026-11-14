@@ -19,10 +19,10 @@ const inspector = (over: Partial<AiInspectorProps>): AiInspectorProps => ({
   ...over,
 });
 
-test("the page rail shows every page, with Cut and Fusion still locked", () => {
+test("the page rail shows every page, with only Fusion still locked", () => {
   const html = renderToStaticMarkup(<PageRail page="ai" onPage={noop} />);
   for (const name of ["AI", "Cut", "Fusion", "Color", "Deliver"]) assert.ok(html.includes(`<span>${name}</span>`), name);
-  assert.equal((html.match(/disabled=""/g) || []).length, 2, "Cut and Fusion are disabled");
+  assert.equal((html.match(/disabled=""/g) || []).length, 1, "Fusion is disabled");
   assert.ok(html.includes('aria-current="page"'));
 });
 

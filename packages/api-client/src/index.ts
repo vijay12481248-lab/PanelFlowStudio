@@ -2351,8 +2351,8 @@ export class PanelFlowApiClient {
     });
   }
 
-  /** Keep a colour-graded picture (rendered in the image studio) as a new project asset. */
-  async saveGradedImage(projectId: string, request: { image_data: string; source_asset_id: string; grade: unknown }): Promise<GeneratedAsset> {
+  /** Keep a picture edited by hand in the image studio (colour grade and/or cut, rendered there) as a new project asset. */
+  async saveGradedImage(projectId: string, request: { image_data: string; source_asset_id: string; grade?: unknown; cut?: unknown }): Promise<GeneratedAsset> {
     return this.request<GeneratedAsset>(`/api/projects/${projectId}/assets/graded`, {
       method: "POST",
       body: JSON.stringify(request),

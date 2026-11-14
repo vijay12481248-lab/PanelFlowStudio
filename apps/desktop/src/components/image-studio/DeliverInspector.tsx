@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Check, Copy, Download, Save } from "lucide-react";
-import { renderGradedBlob } from "./color/gradeRender";
+import { renderEditedBlob, type EditedPicture } from "./cut/render";
 
 export type ExportFormat = "png" | "jpg" | "webp";
 
@@ -10,38 +10,33 @@ const FORMATS: { id: ExportFormat; label: string; mime: string }[] = [
   { id: "webp", label: "WebP", mime: "image/webp" },
 ];
 
-/** The grade to bake into the picture: the pixels, the baked 3D LUT and its size. */
-export interface BakedGrade {
-  bitmap: ImageBitmap;
-  table: Float32Array;
-  size: number;
-}
+/** What is baked into an export: the picture's pixels with the colour grade (if any) applied first, then the cut (if any). */
+export type BakedEdit = EditedPicture;
 
-/** Fetch the picture and write it out in the chosen format. PNG that is already PNG is saved byte for byte; a grade is baked in. */
-async function exportPicture(url: string, filename: string, format: ExportFormat, graded: BakedGrade | null): Promise<void> {
+/** Fetch the picture and write it out in the chosen format. A plain PNG is saved byte for byte; a grade and a cut are baked in. */
+async function exportPicture(url: string, filename: string, format: ExportFormat, baked: BakedEdit | null): Promise<void> {
   const target = FORMATS.find((f) => f.id === format)!;
   let out: Blob;
-  if (graded) {
-    out = await renderGradedBlob(graded.bitmap, graded.table, graded.size, target.mime);
+  if (baked) {
+    out = await renderEditedBlob(baked, target.mime);
   } else {
     out = await (await fetch(url)).blob();
-  }
-  if (!graded && out.type !== target.mime) {
-    const blob = out;
-    const bitmap = await createImageBitmap(blob);
-    const canvas = document.createElement("canvas");
-    canvas.width = bitmap.width;
-    canvas.height = bitmap.height;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) throw new Error("This browser cannot re-encode the picture.");
-    if (format === "jpg") {
-      ctx.fillStyle = "white"; // JPG has no transparency
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    if (out.type !== target.mime) {
+      const bitmap = await createImageBitmap(out);
+      const canvas = document.createElement("canvas");
+      canvas.width = bitmap.width;
+      canvas.height = bitmap.height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("This browser cannot re-encode the picture.");
+      if (format === "jpg") {
+        ctx.fillStyle = "white"; // JPG has no transparency
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
+      ctx.drawImage(bitmap, 0, 0);
+      out = await new Promise<Blob>((resolve, reject) =>
+        canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("Could not encode the picture."))), target.mime, 0.92),
+      );
     }
-    ctx.drawImage(bitmap, 0, 0);
-    out = await new Promise<Blob>((resolve, reject) =>
-      canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("Could not encode the picture."))), target.mime, 0.92),
-    );
   }
   const link = document.createElement("a");
   link.href = URL.createObjectURL(out);
@@ -60,7 +55,7 @@ const FIELDS: [string, string][] = [
   ["seed", "Seed"],
   ["pose_asset_id", "Pose picture"],
   ["base_asset_id", "Edited from"],
-  ["source_asset_id", "Graded from"],
+  ["source_asset_id", "Edited from"],
 ];
 
 export const DeliverInspector: React.FC<{
@@ -69,12 +64,14 @@ export const DeliverInspector: React.FC<{
   dimensions: string;
   sha256?: string;
   provenance?: Record<string, any>;
-  /** Set while the picture carries a colour grade that is switched on. */
-  graded: BakedGrade | null;
-  /** Project pictures can keep the graded result as a new asset. */
-  onSaveGraded?: () => Promise<void>;
+  /** Set while the picture carries a colour grade that is switched on, or a cut. */
+  baked: BakedEdit | null;
+  /** The size the export will have (after the cut), as text. */
+  outputSize: string;
+  /** Project pictures can keep the edited result as a new asset. */
+  onSaveEdited?: () => Promise<void>;
   onToast: (message: string) => void;
-}> = ({ imageUrl, filename, dimensions, sha256, provenance, graded, onSaveGraded, onToast }) => {
+}> = ({ imageUrl, filename, dimensions, sha256, provenance, baked, outputSize, onSaveEdited, onToast }) => {
   const [format, setFormat] = useState<ExportFormat>("png");
   const [bake, setBake] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -85,7 +82,7 @@ export const DeliverInspector: React.FC<{
   const run = async () => {
     setBusy(true);
     try {
-      await exportPicture(imageUrl, filename, format, graded && bake ? graded : null);
+      await exportPicture(imageUrl, filename, format, baked && bake ? baked : null);
       onToast(`Exported as ${format.toUpperCase()}`);
     } catch (err: any) {
       onToast(err?.message || "Export failed");
@@ -112,11 +109,11 @@ export const DeliverInspector: React.FC<{
             </button>
           ))}
         </div>
-        <p className="text-[11px] text-fg-faint">Same size as the picture on screen ({dimensions}). JPG and WebP are saved at 92% quality.</p>
-        {graded && (
+        <p className="text-[11px] text-fg-faint">{baked && bake ? `Exported at ${outputSize}.` : `Same size as the picture on screen (${dimensions}).`} JPG and WebP are saved at 92% quality.</p>
+        {baked && (
           <label className="flex items-center gap-2 text-[11px] text-fg-dim">
             <input type="checkbox" checked={bake} onChange={(e) => setBake(e.target.checked)} className="accent-accent" />
-            <span>Bake the colour grade into the export</span>
+            <span>Bake the colour grade and the cut into the export</span>
           </label>
         )}
         <button
@@ -128,14 +125,14 @@ export const DeliverInspector: React.FC<{
           <Download className="h-4 w-4" />
           <span>{busy ? "Exporting…" : "Export picture"}</span>
         </button>
-        {graded && onSaveGraded && (
+        {baked && onSaveEdited && (
           <button
             type="button"
             disabled={saving}
             onClick={async () => {
               setSaving(true);
               try {
-                await onSaveGraded();
+                await onSaveEdited();
               } finally {
                 setSaving(false);
               }
@@ -143,10 +140,10 @@ export const DeliverInspector: React.FC<{
             className="flex w-full items-center justify-center gap-2 rounded-xl border border-edge bg-flat py-2.5 text-xs font-semibold text-fg transition-colors hover:bg-glass-hi disabled:cursor-not-allowed disabled:opacity-60"
           >
             <Save className="h-4 w-4" />
-            <span>{saving ? "Saving…" : "Save graded picture as a new asset"}</span>
+            <span>{saving ? "Saving…" : "Save edited picture as a new asset"}</span>
           </button>
         )}
-        <p className="text-[11px] text-fg-faint">Every AI result is already saved in your project as its own asset. A graded picture is only saved when you ask.</p>
+        <p className="text-[11px] text-fg-faint">Every AI result is already saved in your project as its own asset. A graded or cut picture is only saved when you ask.</p>
       </section>
 
       <section className="flex flex-col gap-2 border-t border-edge/70 pt-3">

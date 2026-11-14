@@ -5,7 +5,7 @@ import type { StudioPage } from "./types";
 // Same rail as ChronoFlow's workspace. Pages that are not built yet are shown, so the whole plan is visible, but cannot be opened.
 const PAGES: { id: StudioPage; label: string; Icon: React.ComponentType<{ className?: string }>; ready: boolean }[] = [
   { id: "ai", label: "AI", Icon: Sparkles, ready: true },
-  { id: "cut", label: "Cut", Icon: Crop, ready: false },
+  { id: "cut", label: "Cut", Icon: Crop, ready: true },
   { id: "fusion", label: "Fusion", Icon: Layers, ready: false },
   { id: "color", label: "Color", Icon: Palette, ready: true },
   { id: "deliver", label: "Deliver", Icon: Share2, ready: true },
