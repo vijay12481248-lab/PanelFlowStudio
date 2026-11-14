@@ -58,3 +58,11 @@ Baseline (the measure of "does it match what I imagined"): `.venv\Scripts\python
 - Emotion checks are coarse (three families of feelings); the 9B model cannot tell grief from guilt.
 - No masked repair inside the scene loop (a located defect is redrawn whole); no desktop UI screen yet.
 - Lessons are generic rule sentences per failure kind; whether a lesson at the end of the prompt actually changes Qwen's picture is not measured.
+
+## Director run on the same 24 briefs (before the owner rates anything)
+
+- `baseline.py --mode director` (auto mode, default budget 3 attempts / 60 s, fixed seeds). 22 of 24 delivered a picture; 2 concept-art briefs failed in the planner (the model wrote contacts between objects such as "neon_signs -> wet_pavement"; contacts to non-actors are now dropped, tested, not re-run).
+- **Time: median 64.8 s, mean 64.1 s, max 111 s per picture, against 7.6 s raw.** Fights 73 s, emotion 66 s, concept art 50 s. Most briefs used all 3 attempts. This is far from "very fast".
+- Checker outcome: 5 accept, 2 accept_low, 15 needs_review (picture delivered with what it misses listed), 0 unverified. Items still unmet after the attempts: camera angle (11x, almost always "low angle"), a pose/state word (11x), placement 1, figure count 1.
+- **The low camera angle is the systematic miss.** 7 of 8 fights ended with "camera looks up from a low angle" unmet. Looking at fight-02 and fight-08: both are well-staged two-person fights (left attacker, right defender) with at most a mild low angle, so the blind read's "level" may be strict, or Qwen may simply not do a strong low angle; redrawing with the same words does not change it (it burns the attempts). That is exactly what the staging-picture escalation is for.
+- **Plan compliance is not the same as the owner liking it.** The raw "a samurai duel at dusk" picture (symmetrical blade clash, wide, full bodies) is arguably as good as the director's (close, left attacker thrusting at the right defender). Only the owner's ratings can say which is better; they have not been collected, so no claim of improvement is made here.

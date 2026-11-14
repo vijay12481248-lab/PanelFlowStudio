@@ -114,7 +114,9 @@ def _identity_from_brief(brief: str, actors: list[ActorPlan]) -> list[ActorPlan]
 
 
 def _build(brief: str, scene_type: str, out: _PlanOut, playbook: Playbook) -> ScenePlan:
-    out = out.model_copy(update={"actors": _identity_from_brief(brief, out.actors)})
+    ids = {a.id for a in out.actors}
+    # contacts are between the listed actors only: the model also writes them between objects ("neon_signs -> wet_pavement"), which nothing can draw or check
+    out = out.model_copy(update={"actors": _identity_from_brief(brief, out.actors), "contacts": [c for c in out.contacts if c.source in ids and c.target in ids]})
     stated = _stated(brief, playbook, out)
     d = playbook.defaults
     cam, light = out.camera or _CameraOut(), out.light or _LightOut()
@@ -190,7 +192,7 @@ async def propose(provider, brief: str, scene_type: str | None = None) -> Propos
         f"Brief: \"{brief}\"\nScene type: {scene_type}.\nPlan this single picture. Only include people the brief mentions or clearly implies "
         f"(a picture of a place alone has no actors). Fill: actors (id = one short lowercase word such as hero or guard, description = comma-separated visual tags such as hair, clothes, build, "
         f"species = human unless it is a creature, gender male|female|neutral, age_group child|teen|adult|elder, side left|center|right, "
-        f"depth, action_state, expression), contacts (source, target, body_part, direction as seen on screen), camera (angle eye_level|low|high|dutch, "
+        f"depth, action_state, expression), contacts only between the actors (source, target, body_part, direction as seen on screen), camera (angle eye_level|low|high|dutch, "
         f"distance close|medium|wide), light (direction front|back|left|right|top|below), depth layers, mood, setting. Leave camera or light fields out when "
         f"the brief does not say them.\nAllowed action_state values: {playbook.action_states}.\nStaging rules:\n- " + "\n- ".join(playbook.staging_rules))
 

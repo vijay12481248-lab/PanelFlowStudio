@@ -194,3 +194,19 @@ def test_a_model_that_runs_past_its_length_limit_is_retried_not_crashed():
 def test_a_model_that_never_answers_ends_as_value_error():
     with pytest.raises(ValueError, match="failed"):
         run(propose(FlakyProvider(99), "the hero fights the villain"))
+
+
+def test_contacts_with_things_that_are_not_actors_are_dropped_not_fatal():
+    # real finding: "a market street in a neon rainy city" -> the model wrote contacts between "neon_signs" and "wet_pavement"; the whole brief failed
+    answer = {**FIGHT_ANSWER, "contacts": [*FIGHT_ANSWER["contacts"], {"source": "hero", "target": "ground", "direction": "down"},
+                                           {"source": "neon_signs", "target": "wet_pavement"}]}
+    fake = FakeProvider(answer)
+    p = run(propose(fake, "the hero fights the villain"))
+    assert len(fake.calls) == 1  # no retry: nothing was wrong enough to ask again
+    assert [(c.source, c.target) for c in p.plan.contacts] == [("hero", "villain")]
+
+
+def test_prompt_says_contacts_are_between_people_only():
+    fake = FakeProvider(FIGHT_ANSWER)
+    run(propose(fake, "the hero fights the villain"))
+    assert "contacts only between the actors" in fake.calls[0].lower()
