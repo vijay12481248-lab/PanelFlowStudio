@@ -28,6 +28,7 @@ episodes and original stories into narrated YouTube videos. Everything runs on t
 - `.claude/skills/shorts-reels-production/SKILL.md` - vertical Shorts/Reels (20-32 s, 9:16): concept formula, `tools/reels/` pipeline (Qwen3-TTS, ACE-Step,
   MiniMax-H3-Image, FastH3, ffmpeg), thumbnails, upload copy, gotchas. Any agent making short-form content reads it first (the file is plain Markdown);
   H3 clip prompting lives in `.claude/skills/minimax-h3-video-production/`.
+- `docs/SCENE_DIRECTOR.md` - brief -> scene plan (who stands where, what each body does, camera, light, depth) -> Qwen -> check against the plan -> correct; `engine/original/scene_*.py`, MCP `panelflow_scene_*`. Measured there: the Qwen workflow ignores negative prompts (state everything positively), the 9B vision model's yes/no check is too agreeable (use a blind classification read), and pictures must not be shrunk before the check.
 - `docs/ONE_SERVER.md` - one engine (port 8765) serves PanelFlow and ChronoFlow (API + studio UI), and one MCP server (`scripts/run_mcp_server.py`, profiles `all`
   / `creative` / `chronoflow`) drives both. The old standalone ChronoFlow server (7860) and its two extra MCP servers are gone; do not bring them back.
 - Code map: `engine/anime/review/` (anime), `engine/original/` (stories), `engine/youtube/` (OAuth + upload), `engine/comfyui/`

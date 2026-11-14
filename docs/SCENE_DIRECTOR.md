@@ -38,3 +38,23 @@ Everything below is a measurement from this PC (RTX 5060 Ti 16 GB, ComfyUI + Oll
 
 - `engine/original/scene_lessons.py` on the existing `MistakeLedger`, one domain per model and scene type (`scene:qwen_image_21:fight`). A failure is keyed by WHAT failed (camera angle, a pose word, side, figure count, contact), never by story words. The failures of the FIRST attempt of each run are recorded (what the plain prompt gets wrong); a failure seen twice becomes a rule added to the next prompts. A single sighting only waits (the 9B judge is noisy). Use a ledger file under the app-data folder, not the repo's vault ledger.
 - **Measured: the Qwen Turbo workflow ignores the negative prompt.** Same seed, empty vs strong vs default negative prompt: mean pixel difference 0.0 (BasicGuider, no CFG). Lessons are therefore written as positive statements and appended to the END of the positive prompt ("Remember: ..."). The long negative list the compiler builds has no effect on Qwen pictures. Where in the prompt a lesson works best (end vs start) is not measured.
+
+## How to use it
+
+Flow: `propose` (brief -> plan + summary + at most 3 questions) -> the owner says go or corrects items (`correct`, dotted paths such as `camera.angle`, `actors.hero.side`) -> `generate` (durable GPU job `SCENE_GENERATION`, needs a `project_id`; up to 3 attempts / 60 s; delivers the best picture with what it still misses in `unmet`; `unverified` means the checker could not judge it) -> `rate` (good / not good + reason).
+
+| What | Where |
+|---|---|
+| HTTP | `POST /api/original/scene/{propose,correct,generate,rate}`, `GET /api/original/scene/ratings/summary` (`engine/api/routers/scene.py`) |
+| MCP | `panelflow_scene_propose`, `panelflow_scene_correct`, `panelflow_scene_generate`, `panelflow_scene_rate` |
+| Outputs | `output/Original_Scenes/<project_id>/panels/<key>.png`, `<key>.json` (plan, review, iterations), every candidate in `panels/_candidates/<key>/` |
+| Lessons / ratings | `<app-data>/config/scene_lessons.json`, `<app-data>/config/scene_ratings.json` |
+
+Baseline (the measure of "does it match what I imagined"): `.venv\Scripts\python.exe tools/scene_director/baseline.py --mode raw|director --out <dir>`, open `contact_sheet.html`, rate, download `ratings.json`. The sheet does not show the plan, so the rating is blind to what the system intended.
+
+## Known weaknesses (not fixed)
+
+- The compiler draws at most two characters; plans with more are checked for all of them but drawn with two.
+- Emotion checks are coarse (three families of feelings); the 9B model cannot tell grief from guilt.
+- No masked repair inside the scene loop (a located defect is redrawn whole); no desktop UI screen yet.
+- Lessons are generic rule sentences per failure kind; whether a lesson at the end of the prompt actually changes Qwen's picture is not measured.

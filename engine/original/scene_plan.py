@@ -93,6 +93,8 @@ def _points_toward(direction: str, source_side: str, target_side: str) -> bool |
 def validate_plan(plan: ScenePlan, playbook: Playbook) -> list[str]:
     """Plain-language problems; an empty list means the plan is valid. A plan with one actor or none is never penalised for missing opponents."""
     problems: list[str] = []
+    ids = [a.id for a in plan.actors]
+    problems += [f"duplicate actor id {i!r}: every person needs a different id" for i in dict.fromkeys(ids) if ids.count(i) > 1]
     actors = {a.id: a for a in plan.actors}
     for a in plan.actors:
         if a.action_state not in playbook.action_states:

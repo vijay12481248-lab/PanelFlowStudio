@@ -15,7 +15,7 @@ from engine.system.resources import resource_manager
 logger = logging.getLogger(__name__)
 
 # Jobs that run on ComfyUI: it keeps model weights resident, so "free VRAM" is not the admission test for them (see SystemResourceManager.can_admit_gpu_job).
-COMFYUI_JOB_TYPES = ("COMFYUI_IMAGE_GENERATION", "COMFYUI_H3_CLIP_GENERATION")
+COMFYUI_JOB_TYPES = ("COMFYUI_IMAGE_GENERATION", "COMFYUI_H3_CLIP_GENERATION", "SCENE_GENERATION")
 
 
 def utc_now():

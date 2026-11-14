@@ -24,6 +24,7 @@ def build_operation(job_type: str, project_id: str, job_input: dict) -> Operatio
         from engine.comfyui import service as _comfyui_service  # noqa: F401
         from engine.anime.review import queue as _anime_queue  # noqa: F401  (registers ANIME_REVIEW)
         from engine.original import queue as _original_queue  # noqa: F401  (registers ORIGINAL_EPISODE)
+        from engine.original import scene_job as _scene_job  # noqa: F401  (registers SCENE_GENERATION)
         from engine import studio_audio as _studio_audio  # noqa: F401  (registers STUDIO_MUSIC_GENERATION, STUDIO_SPEECH_GENERATION)
         _PROVIDER_FACTORIES_READY = True
     factory = _OPERATION_FACTORIES.get(job_type)

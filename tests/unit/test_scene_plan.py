@@ -102,3 +102,10 @@ def test_state_groups_only_name_real_states_and_fight_has_none():
         assert all(s in pb.action_states for g in pb.state_groups for s in g)
     assert load_playbook("fight").state_groups == []  # striking and blocking must never be confused
     assert load_playbook("emotion").state_groups
+
+
+def test_duplicate_actor_ids_rejected():
+    plan = _fight(actors=[ActorPlan(id="hero", description="x", side="left", action_state="striking"),
+                          ActorPlan(id="hero", description="y", side="right", action_state="blocking")])
+    problems = validate_plan(plan, load_playbook("fight"))
+    assert any("duplicate" in p and "hero" in p for p in problems)

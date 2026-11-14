@@ -263,3 +263,48 @@ async def panelflow_original_clip_improve(slug: str, shot: str, attempts: int = 
 )
 async def panelflow_original_clip_history(slug: str, shot: str) -> dict[str, Any]:
     return await bridge.get(f"/api/original/story/{slug}/film/clip/{shot}/history")
+
+
+@registry.tool(
+    name="panelflow_scene_propose",
+    description="Scene Director step 1: turn a vague brief ('the hero fights the villain') into a complete scene plan (who stands where, what each body is doing, camera, light, depth) "
+                "with proposed defaults and at most 3 questions. Show the summary to the user; they say go or correct a few items (panelflow_scene_correct).",
+    input_schema={"type": "object", "properties": {"brief": {"type": "string"}, "scene_type": {"type": "string", "enum": ["fight", "emotion", "concept_art"]}}, "required": ["brief"]},
+    domain="original",
+)
+async def panelflow_scene_propose(brief: str, scene_type: str | None = None) -> dict[str, Any]:
+    return await bridge.post("/api/original/scene/propose", {"brief": brief, **({"scene_type": scene_type} if scene_type else {})}, timeout_s=600.0)
+
+
+@registry.tool(
+    name="panelflow_scene_correct",
+    description="Scene Director step 2: apply the user's corrections to a plan. Keys are dotted paths: camera.angle (eye_level|low|high|dutch), camera.distance, light.direction, "
+                "actors.<id>.action_state, actors.<id>.side, depth.<layer>, mood, setting. A contradiction (both fighters on one side) is refused with the problem.",
+    input_schema={"type": "object", "properties": {"plan": {"type": "object"}, "corrections": {"type": "object", "additionalProperties": {"type": "string"}}}, "required": ["plan", "corrections"]},
+    domain="original",
+)
+async def panelflow_scene_correct(plan: dict, corrections: dict) -> dict[str, Any]:
+    return await bridge.post("/api/original/scene/correct", {"plan": plan, "corrections": corrections})
+
+
+@registry.tool(
+    name="panelflow_scene_generate",
+    description="Scene Director step 3: draw the plan with Qwen, check the picture against the plan, redraw what is wrong (up to 3 attempts / 60 s), deliver the best picture with what it still "
+                "misses listed. Background job: poll the job id. Look at the picture before telling the user it is good; 'unverified' means the checker could not judge it.",
+    input_schema={"type": "object", "properties": {"project_id": {"type": "string"}, "plan": {"type": "object"}, "seed": {"type": "integer"}}, "required": ["project_id", "plan"]},
+    domain="original",
+)
+async def panelflow_scene_generate(project_id: str, plan: dict, seed: int | None = None) -> dict[str, Any]:
+    return await bridge.post("/api/original/scene/generate", {"project_id": project_id, "plan": plan, **({"seed": seed} if seed is not None else {})})
+
+
+@registry.tool(
+    name="panelflow_scene_rate",
+    description="Record the owner's verdict on a delivered scene picture (good / not good, with a reason when not good: emotion, pose, camera, identity, style, other). "
+                "Returns the running summary; the share of 'good' is the measure of whether the Scene Director matches what the owner imagined.",
+    input_schema={"type": "object", "properties": {"brief_id": {"type": "string"}, "good": {"type": "boolean"}, "reason": {"type": "string"}, "mode": {"type": "string", "enum": ["raw", "director"]},
+                                                  "seconds": {"type": "number"}}, "required": ["brief_id", "good"]},
+    domain="original",
+)
+async def panelflow_scene_rate(brief_id: str, good: bool, reason: str = "", mode: str = "director", seconds: float = 0.0) -> dict[str, Any]:
+    return await bridge.post("/api/original/scene/rate", {"brief_id": brief_id, "good": good, "reason": reason, "mode": mode, "seconds": seconds})
