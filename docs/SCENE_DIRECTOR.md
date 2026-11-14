@@ -10,7 +10,7 @@ Everything below is a measurement from this PC (RTX 5060 Ti 16 GB, ComfyUI + Oll
 
 - 24 vague briefs (8 fight, 8 emotion, 8 concept art) in `tools/scene_director/baseline_briefs.json`, 1344x768, fixed seed per brief.
 - Drawing time: median 7.6 s, mean 9.5 s per picture, 0 failures. Slower pictures overlapped with other GPU work.
-- Owner ratings of these 24 pictures: **not yet collected** (open `contact_sheet.html` in the baseline output folder, rate, download `ratings.json`, then `summary()` from `engine/original/scene_ratings.py`). This is the number the Scene Director must beat.
+- Owner ratings of these 24 pictures: **not yet collected** (open `output/Original_Scenes/_baseline/raw/contact_sheet.html` and `.../director/contact_sheet.html`, rate, download `ratings.json`, then `summary()` from `engine/original/scene_ratings.py`). This is the number the Scene Director must beat.
 
 ## Planner
 
