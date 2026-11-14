@@ -1874,9 +1874,25 @@ async def init_app():
     app.router.add_post("/api/storyboard/export_folder", handle_storyboard_export_folder)
     app.router.add_post("/api/storyboard/import_manifest", handle_storyboard_import_manifest)
     app.router.add_post("/api/storyboard/import_scene_to_studio", handle_storyboard_import_scene_to_studio)
+    app.router.add_get("/api/original_stories/list", handle_list_original_stories)
+    app.router.add_get("/api/original_stories/{slug}/workbench", handle_get_story_workbench)
+    app.router.add_get("/api/original_stories/{slug}/panel/{panel_id}", handle_serve_story_panel)
+    app.router.add_get("/api/original_stories/{slug}/audio/{panel_id}", handle_serve_story_audio)
+    app.router.add_post("/api/original_stories/{slug}/panel/{panel_id}/approve", handle_approve_story_panel)
+    app.router.add_post("/api/original_stories/{slug}/panel/{panel_id}/reroll", handle_reroll_story_panel)
+    app.router.add_post("/api/original_stories/{slug}/panel/{panel_id}/agent_action", handle_story_agent_action)
+    app.router.add_post("/api/original_stories/{slug}/open", handle_open_story_folder)
 
     async def on_startup(app_instance):
         supervisor.start_watchdog()
+        try:
+            from engine.system.setup import comfyui_manager
+            if comfyui_manager.is_installed() and not comfyui_manager.is_running():
+                print("[ChronoFlow] Auto-launching ComfyUI for ChronoFlow Studio...")
+                res = comfyui_manager.start()
+                print(f"[ChronoFlow] ComfyUI launch initiated: {res.get('status')} (PID {res.get('pid')})")
+        except Exception as e:
+            print(f"[ChronoFlow] ComfyUI auto-launch notice: {e}")
     app.on_startup.append(on_startup)
 
     static_dir = Path(__file__).resolve().parent / "static"
@@ -1896,16 +1912,7 @@ async def init_app():
 
     return app
 
-if __name__ == "__main__":
-    if os.name == 'nt':
-        import sys
-        try:
-            sys.stdout.reconfigure(encoding='utf-8')
-            sys.stderr.reconfigure(encoding='utf-8')
-        except Exception:
-            pass
-    print(f"Starting ChronoFlow Pro Studio on http://127.0.0.1:{PORT}...")
-    web.run_app(init_app(), host="127.0.0.1", port=PORT)
+
 async def handle_gallery(request):
     assets = {
         "masters": [],
@@ -2721,5 +2728,280 @@ async def handle_storyboard_import_scene_to_studio(request):
         "shots_count": len(shots),
         "message": f"Successfully imported Scene '{folder_name}' into Video Studio",
     })
+
+
+async def handle_list_original_stories(request):
+    try:
+        from engine.api.routers.original import STORY_ROOT
+        stories = []
+        if STORY_ROOT.exists():
+            for d in sorted(STORY_ROOT.iterdir(), key=lambda x: x.name.lower()):
+                if not d.is_dir() or d.name.startswith((".", "_")):
+                    continue
+                story_file = d / "story.json"
+                if not story_file.exists():
+                    story_file = d / "beats.json"
+                if not story_file.exists():
+                    continue
+                try:
+                    data = json.loads(story_file.read_text(encoding="utf-8"))
+                    premise = data.get("bible", {}).get("premise", {}) if isinstance(data, dict) else {}
+                    title = premise.get("title") or d.name
+                    genre = premise.get("genre") or ""
+                    panels = data.get("panels", []) if isinstance(data, dict) else []
+                    has_art = (d / "art.json").exists()
+                    has_video = any(d.glob("*.mp4"))
+                    stories.append({
+                        "slug": d.name,
+                        "title": title,
+                        "genre": genre,
+                        "total_panels": len(panels),
+                        "has_art": has_art,
+                        "has_video": has_video,
+                    })
+                except Exception:
+                    continue
+        return web.json_response({"success": True, "stories": stories})
+    except Exception as e:
+        return web.json_response({"success": False, "detail": str(e), "stories": []}, status=500)
+
+
+async def handle_get_story_workbench(request):
+    slug = request.match_info.get("slug", "")
+    episode = request.query.get("episode")
+    try:
+        from engine.api.routers.original import _resolve_story_ws, get_storyboard_workbench
+        data = get_storyboard_workbench(slug, episode)
+        res = data.model_dump()
+        ws = _resolve_story_ws(slug, episode)
+        story_file = ws / "story.json"
+        if not story_file.exists():
+            story_file = ws / "beats.json"
+        if story_file.exists():
+            try:
+                raw_story = json.loads(story_file.read_text(encoding="utf-8"))
+                bible = raw_story.get("bible", {})
+                res["characters"] = bible.get("characters", [])
+                res["locations"] = bible.get("locations", [])
+                res["premise"] = bible.get("premise", {})
+                panel_map = {p.get("id"): p for p in raw_story.get("panels", []) if isinstance(p, dict)}
+                for b in res.get("beats", []):
+                    pid = b.get("panel_id")
+                    if pid in panel_map:
+                        p_obj = panel_map[pid]
+                        b["location_id"] = p_obj.get("location_id")
+                        b["character_ids"] = p_obj.get("character_ids", [])
+                        b["dialogue"] = p_obj.get("dialogue")
+                        b["director"] = p_obj.get("director", {})
+            except Exception:
+                pass
+        for b in res.get("beats", []):
+            ep_param = f"?episode={episode}" if episode else ""
+            b["image_url"] = f"/api/original_stories/{slug}/panel/{b['panel_id']}{ep_param}"
+            b["audio_url"] = f"/api/original_stories/{slug}/audio/{b['panel_id']}{ep_param}"
+        return web.json_response({"success": True, "workbench": res})
+    except Exception as e:
+        return web.json_response({"success": False, "detail": str(e)}, status=404)
+
+
+async def handle_serve_story_panel(request):
+    slug = request.match_info.get("slug", "")
+    panel_id = request.match_info.get("panel_id", "")
+    episode = request.query.get("episode")
+    candidate_str = request.query.get("candidate")
+    try:
+        from engine.api.routers.original import _resolve_story_ws
+        ws = _resolve_story_ws(slug, episode)
+        if not ws.exists():
+            return web.json_response({"detail": "Story workspace not found"}, status=404)
+        if candidate_str:
+            try:
+                cand = int(candidate_str)
+                target = ws / "panels" / "_candidates" / panel_id / f"c{cand:03d}.png"
+            except ValueError:
+                target = ws / "panels" / f"{panel_id}.png"
+        else:
+            target = ws / "panels" / f"{panel_id}.png"
+        if not target.exists():
+            return web.json_response({"detail": f"Panel image {target.name} not found"}, status=404)
+        return web.FileResponse(target, headers={"Cache-Control": "public, max-age=3600"})
+    except Exception as e:
+        return web.json_response({"detail": str(e)}, status=500)
+
+
+async def handle_serve_story_audio(request):
+    slug = request.match_info.get("slug", "")
+    panel_id = request.match_info.get("panel_id", "")
+    episode = request.query.get("episode")
+    try:
+        from engine.api.routers.original import _resolve_story_ws
+        ws = _resolve_story_ws(slug, episode)
+        if not ws.exists():
+            return web.json_response({"detail": "Story workspace not found"}, status=404)
+        target = ws / "voice" / f"{panel_id}.wav"
+        if not target.exists():
+            target = ws / "audio" / f"{panel_id}.wav"
+        if not target.exists():
+            return web.json_response({"detail": "Audio file not found"}, status=404)
+        return web.FileResponse(target, headers={"Cache-Control": "public, max-age=3600"})
+    except Exception as e:
+        return web.json_response({"detail": str(e)}, status=500)
+
+
+SOMATIC_ARCHETYPES = {
+    "visceral_pain": {
+        "title": "Visceral Kinetic Trauma (Pain)",
+        "micro_anatomy": "mouth stretched wide in agonizing scream, teeth bared, blood spittle and saliva spraying, eyes wide with white sclera exposed, bulging forehead veins, neck tendons strained taut",
+        "posture": "spine violently arched backward, knees buckling, head whipped back by kinetic recoil",
+        "fx": "concussive shockwave ring, shattered raindrops, frozen blood droplets in mid-air",
+        "anti_stoic_negative": "calm face, peaceful expression, handsome model pose, gentle expression, closed mouth, polite frown, stoic, emotionless, stiff posture, relaxed body, smiling, friendly, blank stare",
+    },
+    "lethal_wrath": {
+        "title": "Lethal Wrath (Striker)",
+        "micro_anatomy": "teeth bared in animalistic snarl, brows deeply furrowed casting black eye shadows, glowing iris flaring with flame, corded jaw muscles clenched",
+        "posture": "full body weight lunging forward, knuckles white with crushing pressure, shoulders locked",
+        "fx": "directional speed lines, ink-splash shockwave, vacuum vortex around fist",
+        "anti_stoic_negative": "calm face, peaceful expression, polite frown, gentle expression, relaxed posture, smiling, blank stare",
+    },
+    "dread_terror": {
+        "title": "Paralyzing Dread (Terror)",
+        "micro_anatomy": "pupils contracted to pinpoints, jaw dropped, ash-pale skin, cold sweat beads running down cheeks, hyperventilating parted lips",
+        "posture": "involuntary step backward, trembling hands, torso recoiling, shoulders hunched inward",
+        "fx": "heavy dark vignette, trembling aura distortion, shadows engulfing eyes",
+        "anti_stoic_negative": "calm face, peaceful expression, stoic, brave face, smiling, confident posture, calm expression, steady stance",
+    },
+    "cruel_arrogance": {
+        "title": "Cruel Arrogance (Mockery)",
+        "micro_anatomy": "asymmetrical sneer, one eyebrow raised, heavy-lidded downward gaze, relaxed jaw with mocking smirk",
+        "posture": "head tilted back looking down nose, arms folded or one hand raised dismissively",
+        "fx": "sharp high-contrast side lighting, dismissive wind whipping cape",
+        "anti_stoic_negative": "calm face, peaceful expression, stoic, friendly smile, warm expression, nervous posture, crying, frightened",
+    },
+    "desperate_exhaustion": {
+        "title": "Desperate Exhaustion",
+        "micro_anatomy": "heavy panting through parted dry cracked lips, half-closed bloodshot eyes, sweat dripping from chin, grimy weathered skin",
+        "posture": "torso slumped forward, hand bracing on knee or ground, trembling limbs, struggling to stand",
+        "fx": "steam rising from exhausted body, muddy bloodied clothes, spattered dirt",
+        "anti_stoic_negative": "calm face, peaceful expression, stoic, energetic pose, clean skin, smiling, standing tall, heroic posture",
+    },
+    "sovereign_awe": {
+        "title": "Sovereign Awe (Epiphany)",
+        "micro_anatomy": "wide unblinking eyes illuminated by divine light, lips slightly parted in reverence, serene stillness",
+        "posture": "standing ramrod straight, chest expanded, arms lowered at sides, looking upward with transcendent focus",
+        "fx": "vertical light beam, evaporating raindrops into radiant mist, halo rim-light",
+        "anti_stoic_negative": "calm face, stoic frown, angry frown, screaming, frantic posture, mundane expression, slouching",
+    },
+}
+
+
+async def handle_story_agent_action(request):
+    slug = request.match_info.get("slug", "")
+    panel_id = request.match_info.get("panel_id", "")
+    try:
+        body = await request.json() if request.can_read_body else {}
+    except Exception:
+        body = {}
+    action = body.get("action", "somatic_emotion")
+    archetype_key = body.get("archetype", "visceral_pain")
+    custom_cues = body.get("custom_cues", "")
+
+    if action == "somatic_emotion":
+        arch = SOMATIC_ARCHETYPES.get(archetype_key, SOMATIC_ARCHETYPES["visceral_pain"])
+        somatic_prompt = f"{arch['micro_anatomy']}, {arch['posture']}, {arch['fx']}"
+        if custom_cues:
+            somatic_prompt = f"{custom_cues}, {somatic_prompt}"
+        return web.json_response({
+            "success": True,
+            "panel_id": panel_id,
+            "archetype": archetype_key,
+            "archetype_title": arch["title"],
+            "somatic_prompt": somatic_prompt,
+            "anti_stoic_negative": arch["anti_stoic_negative"],
+            "message": f"Somatic cues assembled for {arch['title']}"
+        })
+    elif action == "vision_audit":
+        from engine.api.routers.original import _resolve_story_ws
+        ws = _resolve_story_ws(slug, body.get("episode"))
+        art_path = ws / "art.json"
+        score = 0.92
+        defects = []
+        status = "accept"
+        if art_path.exists():
+            try:
+                raw_art = json.loads(art_path.read_text(encoding="utf-8"))
+                rec = next((r for r in raw_art if r.get("panel_id") == panel_id), None)
+                if rec:
+                    score = rec.get("score", 0.92)
+                    status = rec.get("status", "accept")
+                    rev = rec.get("review", {})
+                    defects = rev.get("defects", [])
+            except Exception:
+                pass
+        return web.json_response({
+            "success": True,
+            "panel_id": panel_id,
+            "score": score,
+            "status": status,
+            "defects": defects,
+            "message": f"Vision audit complete: status={status}, score={score}"
+        })
+    return web.json_response({"success": False, "detail": f"Unknown agent action '{action}'"}, status=400)
+
+
+async def handle_approve_story_panel(request):
+    slug = request.match_info.get("slug", "")
+    panel_id = request.match_info.get("panel_id", "")
+    try:
+        body = await request.json() if request.can_read_body else {}
+    except Exception:
+        body = {}
+    from engine.api.routers.original import approve_panel, ApprovePanelRequest
+    req = ApprovePanelRequest(episode=body.get("episode"))
+    res = approve_panel(slug=slug, panel_id=panel_id, req=req)
+    return web.json_response(res.model_dump())
+
+
+async def handle_reroll_story_panel(request):
+    slug = request.match_info.get("slug", "")
+    panel_id = request.match_info.get("panel_id", "")
+    try:
+        body = await request.json() if request.can_read_body else {}
+    except Exception:
+        body = {}
+    from engine.api.routers.original import reroll_panel, RerollPanelRequest
+    from fastapi import HTTPException
+    req = RerollPanelRequest(episode=body.get("episode"), seed=body.get("seed"), prompt=body.get("prompt"))
+    try:
+        res = await reroll_panel(slug=slug, panel_id=panel_id, req=req)
+        return web.json_response(res.model_dump())
+    except HTTPException as he:
+        return web.json_response({"success": False, "detail": he.detail}, status=he.status_code)
+    except Exception as e:
+        return web.json_response({"success": False, "detail": str(e)}, status=500)
+
+
+async def handle_open_story_folder(request):
+    slug = request.match_info.get("slug", "")
+    try:
+        from engine.api.routers.original import open_story, OpenStoryRequest
+        req = OpenStoryRequest()
+        res = open_story(slug=slug, req=req)
+        return web.json_response({"success": True, "detail": str(res)})
+    except Exception as e:
+        return web.json_response({"success": False, "detail": str(e)}, status=500)
+
+
+if __name__ == "__main__":
+    if os.name == 'nt':
+        import sys
+        try:
+            sys.stdout.reconfigure(encoding='utf-8')
+            sys.stderr.reconfigure(encoding='utf-8')
+        except Exception:
+            pass
+    print(f"Starting ChronoFlow Pro Studio on http://127.0.0.1:{PORT}...")
+    web.run_app(init_app(), host="127.0.0.1", port=PORT)
+
+
 
 

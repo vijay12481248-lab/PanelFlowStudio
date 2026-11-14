@@ -19,8 +19,8 @@
     "prevention_rule": "Never state the emotion as an adjective; evoke the emotion through autonomic body responses (cold sweat, trembling grip on bow, hollow ache in throat, breath catching).",
     "example_bad": "Arjuna was deeply saddened as he looked at Bhishma.",
     "example_good": "A hot, suffocating knot tightened in Arjuna's throat as his fingers slipped against the taut silk of the Gandiva.",
-    "recurrence_count": 21,
-    "last_detected": "2026-11-12T09:15:15.997109",
+    "recurrence_count": 66,
+    "last_detected": "2026-11-13T14:04:44.148349",
     "severity": "critical"
   },
   {
@@ -297,6 +297,18 @@
     "example_good": "Shot 12: Void fist crushes Meng's chestplate. Shot 13: Meng embedded in wall crater, breastplate caved inward with violet void smoke and purple sparks crackling on the fractured iron.",
     "recurrence_count": 1,
     "last_detected": "2026-11-12T08:48:00.000000",
+    "severity": "critical"
+  },
+  {
+    "mistake_id": "err_art_stoic_mannequin_expression",
+    "domain": "art_engine",
+    "category": "somatic_emotion_and_intensity",
+    "flawed_pattern": "Generating flat, calm, polite, or stoic mannequin expressions (closed mouth, mild frown, handsome model pose) during high-stakes combat trauma, fatal strikes, or mortal terror.",
+    "prevention_rule": "Every intense scene beat must route through SomaticEmotionGuiderAgent, injecting somatic micro-anatomy (open-mouthed screams, teeth bared, crimson blood spittle and saliva spray, bulging veins, whiplash recoil, arched spine) into the positive prompt and mandatory anti-stoic tokens ('calm face, peaceful expression, handsome model pose, gentle expression, closed mouth, polite frown, stoic, emotionless, stiff posture, relaxed body, smiling, friendly, blank stare') into the negative prompt.",
+    "example_bad": "Commander Meng gets punched in the chest by supersonic void strike but maintains a neat hair topknot and a mild closed-mouth scowl.",
+    "example_good": "Commander Meng's head snaps back in violent whiplash, mouth stretched wide in an agonizing scream with blood spittle spraying into the rain, eyes wide in shock, and neck tendons bulging.",
+    "recurrence_count": 1,
+    "last_detected": "2026-11-12T09:20:00.000000",
     "severity": "critical"
   }
 ]

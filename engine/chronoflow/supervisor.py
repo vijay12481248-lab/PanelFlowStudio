@@ -19,6 +19,16 @@ JOBS_FILE = VAULT_DIR / "jobs.json"
 VAULT_DIR.mkdir(parents=True, exist_ok=True)
 STUDIO_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
+def _clean_surrogates(obj):
+    if isinstance(obj, str):
+        return obj.encode("utf-8", errors="replace").decode("utf-8")
+    elif isinstance(obj, dict):
+        return {k: _clean_surrogates(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [_clean_surrogates(item) for item in obj]
+    return obj
+
+
 class JobSupervisor:
     _instance = None
 
@@ -97,8 +107,8 @@ class JobSupervisor:
     def _load_jobs_from_disk(self) -> dict:
         if JOBS_FILE.exists():
             try:
-                with open(JOBS_FILE, "r", encoding="utf-8") as f:
-                    return json.load(f)
+                raw_text = JOBS_FILE.read_text(encoding="utf-8", errors="replace")
+                return json.loads(raw_text)
             except Exception as e:
                 print(f"[SUPERVISOR] Warning: Could not parse jobs.json: {e}")
                 return {}
@@ -135,11 +145,12 @@ class JobSupervisor:
 
     def get_job(self, job_id: str) -> dict:
         self._sync_with_disk_and_storage()
-        return self.active_jobs.get(job_id)
+        job = self.active_jobs.get(job_id)
+        return _clean_surrogates(job) if job else None
 
     def list_jobs(self) -> list:
         self._sync_with_disk_and_storage()
-        return sorted(list(self.active_jobs.values()), key=lambda j: j.get("created_at", 0), reverse=True)
+        return sorted([_clean_surrogates(j) for j in self.active_jobs.values()], key=lambda j: j.get("created_at", 0), reverse=True)
 
     def update_job(self, job_id: str, **kwargs):
         if job_id not in self.active_jobs:

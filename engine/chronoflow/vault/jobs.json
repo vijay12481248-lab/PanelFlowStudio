@@ -2046,5 +2046,1212 @@
     "error": null,
     "created_at": 1794454819.3291922,
     "reviews": {}
+  },
+  "scene_16647def": {
+    "id": "scene_16647def",
+    "prompt": "Cinematic breach",
+    "initial_image": null,
+    "workflow_mode": "storyboard",
+    "width": 1344,
+    "height": 768,
+    "total_duration": 15.600000000000001,
+    "status": "completed_chunks",
+    "status_msg": "Scene 'Scene 1: Infiltration' (3 shots, 2 clips ready)",
+    "current_chunk": 2,
+    "total_chunks": 3,
+    "step_progress": 100,
+    "chunks": [
+      "/outputs/test_chunk_1.mp4",
+      "/outputs/test_chunk_2.mp4"
+    ],
+    "chunk_prompts": [
+      "Cinematic breach",
+      "Cinematic hallway",
+      "Cinematic terminal"
+    ],
+    "scenes": [
+      {
+        "shot_index": 1,
+        "title": "Shot 1: The Breach",
+        "prompt": "Cinematic breach",
+        "duration": 5.2,
+        "rendered_video": "/outputs/test_chunk_1.mp4"
+      },
+      {
+        "shot_index": 2,
+        "title": "Shot 2: Hallway Sweep",
+        "prompt": "Cinematic hallway",
+        "duration": 5.2,
+        "rendered_video": "/outputs/test_chunk_2.mp4"
+      },
+      {
+        "shot_index": 3,
+        "title": "Shot 3: Cyber Terminal",
+        "prompt": "Cinematic terminal",
+        "duration": 5.2,
+        "rendered_video": null
+      }
+    ],
+    "folder_name": "Scene 1: Infiltration",
+    "folder_id": "scene_1",
+    "screenplay_title": "Epic Cyberpunk Odyssey",
+    "master_video": "/outputs/test_chunk_1.mp4",
+    "cancelled": false,
+    "error": null,
+    "created_at": 1794461172.7881286,
+    "reviews": {}
+  },
+  "scene_a3816f4b": {
+    "id": "scene_a3816f4b",
+    "prompt": "Cinematic breach",
+    "initial_image": null,
+    "workflow_mode": "storyboard",
+    "width": 1344,
+    "height": 768,
+    "total_duration": 15.600000000000001,
+    "status": "completed_chunks",
+    "status_msg": "Scene 'Scene 1: Infiltration' (3 shots, 2 clips ready)",
+    "current_chunk": 2,
+    "total_chunks": 3,
+    "step_progress": 100,
+    "chunks": [
+      "/outputs/test_chunk_1.mp4",
+      "/outputs/test_chunk_2.mp4"
+    ],
+    "chunk_prompts": [
+      "Cinematic breach",
+      "Cinematic hallway",
+      "Cinematic terminal"
+    ],
+    "scenes": [
+      {
+        "shot_index": 1,
+        "title": "Shot 1: The Breach",
+        "prompt": "Cinematic breach",
+        "duration": 5.2,
+        "rendered_video": "/outputs/test_chunk_1.mp4"
+      },
+      {
+        "shot_index": 2,
+        "title": "Shot 2: Hallway Sweep",
+        "prompt": "Cinematic hallway",
+        "duration": 5.2,
+        "rendered_video": "/outputs/test_chunk_2.mp4"
+      },
+      {
+        "shot_index": 3,
+        "title": "Shot 3: Cyber Terminal",
+        "prompt": "Cinematic terminal",
+        "duration": 5.2,
+        "rendered_video": null
+      }
+    ],
+    "folder_name": "Scene 1: Infiltration",
+    "folder_id": "scene_1",
+    "screenplay_title": "Epic Cyberpunk Odyssey",
+    "master_video": "/outputs/test_chunk_1.mp4",
+    "cancelled": false,
+    "error": null,
+    "created_at": 1794461523.5076694,
+    "reviews": {}
+  },
+  "scene_cf3b9ae5": {
+    "id": "scene_cf3b9ae5",
+    "prompt": "Cinematic breach",
+    "initial_image": null,
+    "workflow_mode": "storyboard",
+    "width": 1344,
+    "height": 768,
+    "total_duration": 15.600000000000001,
+    "status": "completed_chunks",
+    "status_msg": "Scene 'Scene 1: Infiltration' (3 shots, 2 clips ready)",
+    "current_chunk": 2,
+    "total_chunks": 3,
+    "step_progress": 100,
+    "chunks": [
+      "/outputs/test_chunk_1.mp4",
+      "/outputs/test_chunk_2.mp4"
+    ],
+    "chunk_prompts": [
+      "Cinematic breach",
+      "Cinematic hallway",
+      "Cinematic terminal"
+    ],
+    "scenes": [
+      {
+        "shot_index": 1,
+        "title": "Shot 1: The Breach",
+        "prompt": "Cinematic breach",
+        "duration": 5.2,
+        "rendered_video": "/outputs/test_chunk_1.mp4"
+      },
+      {
+        "shot_index": 2,
+        "title": "Shot 2: Hallway Sweep",
+        "prompt": "Cinematic hallway",
+        "duration": 5.2,
+        "rendered_video": "/outputs/test_chunk_2.mp4"
+      },
+      {
+        "shot_index": 3,
+        "title": "Shot 3: Cyber Terminal",
+        "prompt": "Cinematic terminal",
+        "duration": 5.2,
+        "rendered_video": null
+      }
+    ],
+    "folder_name": "Scene 1: Infiltration",
+    "folder_id": "scene_1",
+    "screenplay_title": "Epic Cyberpunk Odyssey",
+    "master_video": "/outputs/test_chunk_1.mp4",
+    "cancelled": false,
+    "error": null,
+    "created_at": 1794462731.7969406,
+    "reviews": {}
+  },
+  "scene_30f392a1": {
+    "id": "scene_30f392a1",
+    "prompt": "Cinematic breach",
+    "initial_image": null,
+    "workflow_mode": "storyboard",
+    "width": 1344,
+    "height": 768,
+    "total_duration": 15.600000000000001,
+    "status": "completed_chunks",
+    "status_msg": "Scene 'Scene 1: Infiltration' (3 shots, 2 clips ready)",
+    "current_chunk": 2,
+    "total_chunks": 3,
+    "step_progress": 100,
+    "chunks": [
+      "/outputs/test_chunk_1.mp4",
+      "/outputs/test_chunk_2.mp4"
+    ],
+    "chunk_prompts": [
+      "Cinematic breach",
+      "Cinematic hallway",
+      "Cinematic terminal"
+    ],
+    "scenes": [
+      {
+        "shot_index": 1,
+        "title": "Shot 1: The Breach",
+        "prompt": "Cinematic breach",
+        "duration": 5.2,
+        "rendered_video": "/outputs/test_chunk_1.mp4"
+      },
+      {
+        "shot_index": 2,
+        "title": "Shot 2: Hallway Sweep",
+        "prompt": "Cinematic hallway",
+        "duration": 5.2,
+        "rendered_video": "/outputs/test_chunk_2.mp4"
+      },
+      {
+        "shot_index": 3,
+        "title": "Shot 3: Cyber Terminal",
+        "prompt": "Cinematic terminal",
+        "duration": 5.2,
+        "rendered_video": null
+      }
+    ],
+    "folder_name": "Scene 1: Infiltration",
+    "folder_id": "scene_1",
+    "screenplay_title": "Epic Cyberpunk Odyssey",
+    "master_video": "/outputs/test_chunk_1.mp4",
+    "cancelled": false,
+    "error": null,
+    "created_at": 1794463091.4325433,
+    "reviews": {}
+  },
+  "scene_56691b8f": {
+    "id": "scene_56691b8f",
+    "prompt": "Cinematic breach",
+    "initial_image": null,
+    "workflow_mode": "storyboard",
+    "width": 1344,
+    "height": 768,
+    "total_duration": 15.600000000000001,
+    "status": "completed_chunks",
+    "status_msg": "Scene 'Scene 1: Infiltration' (3 shots, 2 clips ready)",
+    "current_chunk": 2,
+    "total_chunks": 3,
+    "step_progress": 100,
+    "chunks": [
+      "/outputs/test_chunk_1.mp4",
+      "/outputs/test_chunk_2.mp4"
+    ],
+    "chunk_prompts": [
+      "Cinematic breach",
+      "Cinematic hallway",
+      "Cinematic terminal"
+    ],
+    "scenes": [
+      {
+        "shot_index": 1,
+        "title": "Shot 1: The Breach",
+        "prompt": "Cinematic breach",
+        "duration": 5.2,
+        "rendered_video": "/outputs/test_chunk_1.mp4"
+      },
+      {
+        "shot_index": 2,
+        "title": "Shot 2: Hallway Sweep",
+        "prompt": "Cinematic hallway",
+        "duration": 5.2,
+        "rendered_video": "/outputs/test_chunk_2.mp4"
+      },
+      {
+        "shot_index": 3,
+        "title": "Shot 3: Cyber Terminal",
+        "prompt": "Cinematic terminal",
+        "duration": 5.2,
+        "rendered_video": null
+      }
+    ],
+    "folder_name": "Scene 1: Infiltration",
+    "folder_id": "scene_1",
+    "screenplay_title": "Epic Cyberpunk Odyssey",
+    "master_video": "/outputs/test_chunk_1.mp4",
+    "cancelled": false,
+    "error": null,
+    "created_at": 1794464199.046311,
+    "reviews": {}
+  },
+  "scene_a47cbc8c": {
+    "id": "scene_a47cbc8c",
+    "prompt": "Cinematic breach",
+    "initial_image": null,
+    "workflow_mode": "storyboard",
+    "width": 1344,
+    "height": 768,
+    "total_duration": 15.600000000000001,
+    "status": "completed_chunks",
+    "status_msg": "Scene 'Scene 1: Infiltration' (3 shots, 2 clips ready)",
+    "current_chunk": 2,
+    "total_chunks": 3,
+    "step_progress": 100,
+    "chunks": [
+      "/outputs/test_chunk_1.mp4",
+      "/outputs/test_chunk_2.mp4"
+    ],
+    "chunk_prompts": [
+      "Cinematic breach",
+      "Cinematic hallway",
+      "Cinematic terminal"
+    ],
+    "scenes": [
+      {
+        "shot_index": 1,
+        "title": "Shot 1: The Breach",
+        "prompt": "Cinematic breach",
+        "duration": 5.2,
+        "rendered_video": "/outputs/test_chunk_1.mp4"
+      },
+      {
+        "shot_index": 2,
+        "title": "Shot 2: Hallway Sweep",
+        "prompt": "Cinematic hallway",
+        "duration": 5.2,
+        "rendered_video": "/outputs/test_chunk_2.mp4"
+      },
+      {
+        "shot_index": 3,
+        "title": "Shot 3: Cyber Terminal",
+        "prompt": "Cinematic terminal",
+        "duration": 5.2,
+        "rendered_video": null
+      }
+    ],
+    "folder_name": "Scene 1: Infiltration",
+    "folder_id": "scene_1",
+    "screenplay_title": "Epic Cyberpunk Odyssey",
+    "master_video": "/outputs/test_chunk_1.mp4",
+    "cancelled": false,
+    "error": null,
+    "created_at": 1794464549.661031,
+    "reviews": {}
+  },
+  "scene_e304dc96": {
+    "id": "scene_e304dc96",
+    "prompt": "Cinematic breach",
+    "initial_image": null,
+    "workflow_mode": "storyboard",
+    "width": 1344,
+    "height": 768,
+    "total_duration": 15.600000000000001,
+    "status": "completed_chunks",
+    "status_msg": "Scene 'Scene 1: Infiltration' (3 shots, 2 clips ready)",
+    "current_chunk": 2,
+    "total_chunks": 3,
+    "step_progress": 100,
+    "chunks": [
+      "/outputs/test_chunk_1.mp4",
+      "/outputs/test_chunk_2.mp4"
+    ],
+    "chunk_prompts": [
+      "Cinematic breach",
+      "Cinematic hallway",
+      "Cinematic terminal"
+    ],
+    "scenes": [
+      {
+        "shot_index": 1,
+        "title": "Shot 1: The Breach",
+        "prompt": "Cinematic breach",
+        "duration": 5.2,
+        "rendered_video": "/outputs/test_chunk_1.mp4"
+      },
+      {
+        "shot_index": 2,
+        "title": "Shot 2: Hallway Sweep",
+        "prompt": "Cinematic hallway",
+        "duration": 5.2,
+        "rendered_video": "/outputs/test_chunk_2.mp4"
+      },
+      {
+        "shot_index": 3,
+        "title": "Shot 3: Cyber Terminal",
+        "prompt": "Cinematic terminal",
+        "duration": 5.2,
+        "rendered_video": null
+      }
+    ],
+    "folder_name": "Scene 1: Infiltration",
+    "folder_id": "scene_1",
+    "screenplay_title": "Epic Cyberpunk Odyssey",
+    "master_video": "/outputs/test_chunk_1.mp4",
+    "cancelled": false,
+    "error": null,
+    "created_at": 1794465478.520577,
+    "reviews": {}
+  },
+  "scene_c1ed3ecd": {
+    "id": "scene_c1ed3ecd",
+    "prompt": "Cinematic breach",
+    "initial_image": null,
+    "workflow_mode": "storyboard",
+    "width": 1344,
+    "height": 768,
+    "total_duration": 15.600000000000001,
+    "status": "completed_chunks",
+    "status_msg": "Scene 'Scene 1: Infiltration' (3 shots, 2 clips ready)",
+    "current_chunk": 2,
+    "total_chunks": 3,
+    "step_progress": 100,
+    "chunks": [
+      "/outputs/test_chunk_1.mp4",
+      "/outputs/test_chunk_2.mp4"
+    ],
+    "chunk_prompts": [
+      "Cinematic breach",
+      "Cinematic hallway",
+      "Cinematic terminal"
+    ],
+    "scenes": [
+      {
+        "shot_index": 1,
+        "title": "Shot 1: The Breach",
+        "prompt": "Cinematic breach",
+        "duration": 5.2,
+        "rendered_video": "/outputs/test_chunk_1.mp4"
+      },
+      {
+        "shot_index": 2,
+        "title": "Shot 2: Hallway Sweep",
+        "prompt": "Cinematic hallway",
+        "duration": 5.2,
+        "rendered_video": "/outputs/test_chunk_2.mp4"
+      },
+      {
+        "shot_index": 3,
+        "title": "Shot 3: Cyber Terminal",
+        "prompt": "Cinematic terminal",
+        "duration": 5.2,
+        "rendered_video": null
+      }
+    ],
+    "folder_name": "Scene 1: Infiltration",
+    "folder_id": "scene_1",
+    "screenplay_title": "Epic Cyberpunk Odyssey",
+    "master_video": "/outputs/test_chunk_1.mp4",
+    "cancelled": false,
+    "error": null,
+    "created_at": 1794465812.3308337,
+    "reviews": {}
+  },
+  "scene_a2394cb0": {
+    "id": "scene_a2394cb0",
+    "prompt": "Cinematic breach",
+    "initial_image": null,
+    "workflow_mode": "storyboard",
+    "width": 1344,
+    "height": 768,
+    "total_duration": 15.600000000000001,
+    "status": "completed_chunks",
+    "status_msg": "Scene 'Scene 1: Infiltration' (3 shots, 2 clips ready)",
+    "current_chunk": 2,
+    "total_chunks": 3,
+    "step_progress": 100,
+    "chunks": [
+      "/outputs/test_chunk_1.mp4",
+      "/outputs/test_chunk_2.mp4"
+    ],
+    "chunk_prompts": [
+      "Cinematic breach",
+      "Cinematic hallway",
+      "Cinematic terminal"
+    ],
+    "scenes": [
+      {
+        "shot_index": 1,
+        "title": "Shot 1: The Breach",
+        "prompt": "Cinematic breach",
+        "duration": 5.2,
+        "rendered_video": "/outputs/test_chunk_1.mp4"
+      },
+      {
+        "shot_index": 2,
+        "title": "Shot 2: Hallway Sweep",
+        "prompt": "Cinematic hallway",
+        "duration": 5.2,
+        "rendered_video": "/outputs/test_chunk_2.mp4"
+      },
+      {
+        "shot_index": 3,
+        "title": "Shot 3: Cyber Terminal",
+        "prompt": "Cinematic terminal",
+        "duration": 5.2,
+        "rendered_video": null
+      }
+    ],
+    "folder_name": "Scene 1: Infiltration",
+    "folder_id": "scene_1",
+    "screenplay_title": "Epic Cyberpunk Odyssey",
+    "master_video": "/outputs/test_chunk_1.mp4",
+    "cancelled": false,
+    "error": null,
+    "created_at": 1794466765.7419002,
+    "reviews": {}
+  },
+  "scene_9d40b799": {
+    "id": "scene_9d40b799",
+    "prompt": "Cinematic breach",
+    "initial_image": null,
+    "workflow_mode": "storyboard",
+    "width": 1344,
+    "height": 768,
+    "total_duration": 15.600000000000001,
+    "status": "completed_chunks",
+    "status_msg": "Scene 'Scene 1: Infiltration' (3 shots, 2 clips ready)",
+    "current_chunk": 2,
+    "total_chunks": 3,
+    "step_progress": 100,
+    "chunks": [
+      "/outputs/test_chunk_1.mp4",
+      "/outputs/test_chunk_2.mp4"
+    ],
+    "chunk_prompts": [
+      "Cinematic breach",
+      "Cinematic hallway",
+      "Cinematic terminal"
+    ],
+    "scenes": [
+      {
+        "shot_index": 1,
+        "title": "Shot 1: The Breach",
+        "prompt": "Cinematic breach",
+        "duration": 5.2,
+        "rendered_video": "/outputs/test_chunk_1.mp4"
+      },
+      {
+        "shot_index": 2,
+        "title": "Shot 2: Hallway Sweep",
+        "prompt": "Cinematic hallway",
+        "duration": 5.2,
+        "rendered_video": "/outputs/test_chunk_2.mp4"
+      },
+      {
+        "shot_index": 3,
+        "title": "Shot 3: Cyber Terminal",
+        "prompt": "Cinematic terminal",
+        "duration": 5.2,
+        "rendered_video": null
+      }
+    ],
+    "folder_name": "Scene 1: Infiltration",
+    "folder_id": "scene_1",
+    "screenplay_title": "Epic Cyberpunk Odyssey",
+    "master_video": "/outputs/test_chunk_1.mp4",
+    "cancelled": false,
+    "error": null,
+    "created_at": 1794471339.6384077,
+    "reviews": {}
+  },
+  "scene_194b50fa": {
+    "id": "scene_194b50fa",
+    "prompt": "Cinematic breach",
+    "initial_image": null,
+    "workflow_mode": "storyboard",
+    "width": 1344,
+    "height": 768,
+    "total_duration": 15.600000000000001,
+    "status": "completed_chunks",
+    "status_msg": "Scene 'Scene 1: Infiltration' (3 shots, 2 clips ready)",
+    "current_chunk": 2,
+    "total_chunks": 3,
+    "step_progress": 100,
+    "chunks": [
+      "/outputs/test_chunk_1.mp4",
+      "/outputs/test_chunk_2.mp4"
+    ],
+    "chunk_prompts": [
+      "Cinematic breach",
+      "Cinematic hallway",
+      "Cinematic terminal"
+    ],
+    "scenes": [
+      {
+        "shot_index": 1,
+        "title": "Shot 1: The Breach",
+        "prompt": "Cinematic breach",
+        "duration": 5.2,
+        "rendered_video": "/outputs/test_chunk_1.mp4"
+      },
+      {
+        "shot_index": 2,
+        "title": "Shot 2: Hallway Sweep",
+        "prompt": "Cinematic hallway",
+        "duration": 5.2,
+        "rendered_video": "/outputs/test_chunk_2.mp4"
+      },
+      {
+        "shot_index": 3,
+        "title": "Shot 3: Cyber Terminal",
+        "prompt": "Cinematic terminal",
+        "duration": 5.2,
+        "rendered_video": null
+      }
+    ],
+    "folder_name": "Scene 1: Infiltration",
+    "folder_id": "scene_1",
+    "screenplay_title": "Epic Cyberpunk Odyssey",
+    "master_video": "/outputs/test_chunk_1.mp4",
+    "cancelled": false,
+    "error": null,
+    "created_at": 1794472169.5852726,
+    "reviews": {}
+  },
+  "scene_4dc1355f": {
+    "id": "scene_4dc1355f",
+    "prompt": "Cinematic breach",
+    "initial_image": null,
+    "workflow_mode": "storyboard",
+    "width": 1344,
+    "height": 768,
+    "total_duration": 15.600000000000001,
+    "status": "completed_chunks",
+    "status_msg": "Scene 'Scene 1: Infiltration' (3 shots, 2 clips ready)",
+    "current_chunk": 2,
+    "total_chunks": 3,
+    "step_progress": 100,
+    "chunks": [
+      "/outputs/test_chunk_1.mp4",
+      "/outputs/test_chunk_2.mp4"
+    ],
+    "chunk_prompts": [
+      "Cinematic breach",
+      "Cinematic hallway",
+      "Cinematic terminal"
+    ],
+    "scenes": [
+      {
+        "shot_index": 1,
+        "title": "Shot 1: The Breach",
+        "prompt": "Cinematic breach",
+        "duration": 5.2,
+        "rendered_video": "/outputs/test_chunk_1.mp4"
+      },
+      {
+        "shot_index": 2,
+        "title": "Shot 2: Hallway Sweep",
+        "prompt": "Cinematic hallway",
+        "duration": 5.2,
+        "rendered_video": "/outputs/test_chunk_2.mp4"
+      },
+      {
+        "shot_index": 3,
+        "title": "Shot 3: Cyber Terminal",
+        "prompt": "Cinematic terminal",
+        "duration": 5.2,
+        "rendered_video": null
+      }
+    ],
+    "folder_name": "Scene 1: Infiltration",
+    "folder_id": "scene_1",
+    "screenplay_title": "Epic Cyberpunk Odyssey",
+    "master_video": "/outputs/test_chunk_1.mp4",
+    "cancelled": false,
+    "error": null,
+    "created_at": 1794472367.2971709,
+    "reviews": {}
+  },
+  "scene_540adca9": {
+    "id": "scene_540adca9",
+    "prompt": "Cinematic breach",
+    "initial_image": null,
+    "workflow_mode": "storyboard",
+    "width": 1344,
+    "height": 768,
+    "total_duration": 15.600000000000001,
+    "status": "completed_chunks",
+    "status_msg": "Scene 'Scene 1: Infiltration' (3 shots, 2 clips ready)",
+    "current_chunk": 2,
+    "total_chunks": 3,
+    "step_progress": 100,
+    "chunks": [
+      "/outputs/test_chunk_1.mp4",
+      "/outputs/test_chunk_2.mp4"
+    ],
+    "chunk_prompts": [
+      "Cinematic breach",
+      "Cinematic hallway",
+      "Cinematic terminal"
+    ],
+    "scenes": [
+      {
+        "shot_index": 1,
+        "title": "Shot 1: The Breach",
+        "prompt": "Cinematic breach",
+        "duration": 5.2,
+        "rendered_video": "/outputs/test_chunk_1.mp4"
+      },
+      {
+        "shot_index": 2,
+        "title": "Shot 2: Hallway Sweep",
+        "prompt": "Cinematic hallway",
+        "duration": 5.2,
+        "rendered_video": "/outputs/test_chunk_2.mp4"
+      },
+      {
+        "shot_index": 3,
+        "title": "Shot 3: Cyber Terminal",
+        "prompt": "Cinematic terminal",
+        "duration": 5.2,
+        "rendered_video": null
+      }
+    ],
+    "folder_name": "Scene 1: Infiltration",
+    "folder_id": "scene_1",
+    "screenplay_title": "Epic Cyberpunk Odyssey",
+    "master_video": "/outputs/test_chunk_1.mp4",
+    "cancelled": false,
+    "error": null,
+    "created_at": 1794530636.4825797,
+    "reviews": {}
+  },
+  "scene_8eef68b9": {
+    "id": "scene_8eef68b9",
+    "prompt": "Cinematic breach",
+    "initial_image": null,
+    "workflow_mode": "storyboard",
+    "width": 1344,
+    "height": 768,
+    "total_duration": 15.600000000000001,
+    "status": "completed_chunks",
+    "status_msg": "Scene 'Scene 1: Infiltration' (3 shots, 2 clips ready)",
+    "current_chunk": 2,
+    "total_chunks": 3,
+    "step_progress": 100,
+    "chunks": [
+      "/outputs/test_chunk_1.mp4",
+      "/outputs/test_chunk_2.mp4"
+    ],
+    "chunk_prompts": [
+      "Cinematic breach",
+      "Cinematic hallway",
+      "Cinematic terminal"
+    ],
+    "scenes": [
+      {
+        "shot_index": 1,
+        "title": "Shot 1: The Breach",
+        "prompt": "Cinematic breach",
+        "duration": 5.2,
+        "rendered_video": "/outputs/test_chunk_1.mp4"
+      },
+      {
+        "shot_index": 2,
+        "title": "Shot 2: Hallway Sweep",
+        "prompt": "Cinematic hallway",
+        "duration": 5.2,
+        "rendered_video": "/outputs/test_chunk_2.mp4"
+      },
+      {
+        "shot_index": 3,
+        "title": "Shot 3: Cyber Terminal",
+        "prompt": "Cinematic terminal",
+        "duration": 5.2,
+        "rendered_video": null
+      }
+    ],
+    "folder_name": "Scene 1: Infiltration",
+    "folder_id": "scene_1",
+    "screenplay_title": "Epic Cyberpunk Odyssey",
+    "master_video": "/outputs/test_chunk_1.mp4",
+    "cancelled": false,
+    "error": null,
+    "created_at": 1794531016.1147285,
+    "reviews": {}
+  },
+  "scene_7d9188a8": {
+    "id": "scene_7d9188a8",
+    "prompt": "Cinematic breach",
+    "initial_image": null,
+    "workflow_mode": "storyboard",
+    "width": 1344,
+    "height": 768,
+    "total_duration": 15.600000000000001,
+    "status": "completed_chunks",
+    "status_msg": "Scene 'Scene 1: Infiltration' (3 shots, 2 clips ready)",
+    "current_chunk": 2,
+    "total_chunks": 3,
+    "step_progress": 100,
+    "chunks": [
+      "/outputs/test_chunk_1.mp4",
+      "/outputs/test_chunk_2.mp4"
+    ],
+    "chunk_prompts": [
+      "Cinematic breach",
+      "Cinematic hallway",
+      "Cinematic terminal"
+    ],
+    "scenes": [
+      {
+        "shot_index": 1,
+        "title": "Shot 1: The Breach",
+        "prompt": "Cinematic breach",
+        "duration": 5.2,
+        "rendered_video": "/outputs/test_chunk_1.mp4"
+      },
+      {
+        "shot_index": 2,
+        "title": "Shot 2: Hallway Sweep",
+        "prompt": "Cinematic hallway",
+        "duration": 5.2,
+        "rendered_video": "/outputs/test_chunk_2.mp4"
+      },
+      {
+        "shot_index": 3,
+        "title": "Shot 3: Cyber Terminal",
+        "prompt": "Cinematic terminal",
+        "duration": 5.2,
+        "rendered_video": null
+      }
+    ],
+    "folder_name": "Scene 1: Infiltration",
+    "folder_id": "scene_1",
+    "screenplay_title": "Epic Cyberpunk Odyssey",
+    "master_video": "/outputs/test_chunk_1.mp4",
+    "cancelled": false,
+    "error": null,
+    "created_at": 1794552318.607745,
+    "reviews": {}
+  },
+  "scene_b3d94c17": {
+    "id": "scene_b3d94c17",
+    "prompt": "Cinematic breach",
+    "initial_image": null,
+    "workflow_mode": "storyboard",
+    "width": 1344,
+    "height": 768,
+    "total_duration": 15.600000000000001,
+    "status": "completed_chunks",
+    "status_msg": "Scene 'Scene 1: Infiltration' (3 shots, 2 clips ready)",
+    "current_chunk": 2,
+    "total_chunks": 3,
+    "step_progress": 100,
+    "chunks": [
+      "/outputs/test_chunk_1.mp4",
+      "/outputs/test_chunk_2.mp4"
+    ],
+    "chunk_prompts": [
+      "Cinematic breach",
+      "Cinematic hallway",
+      "Cinematic terminal"
+    ],
+    "scenes": [
+      {
+        "shot_index": 1,
+        "title": "Shot 1: The Breach",
+        "prompt": "Cinematic breach",
+        "duration": 5.2,
+        "rendered_video": "/outputs/test_chunk_1.mp4"
+      },
+      {
+        "shot_index": 2,
+        "title": "Shot 2: Hallway Sweep",
+        "prompt": "Cinematic hallway",
+        "duration": 5.2,
+        "rendered_video": "/outputs/test_chunk_2.mp4"
+      },
+      {
+        "shot_index": 3,
+        "title": "Shot 3: Cyber Terminal",
+        "prompt": "Cinematic terminal",
+        "duration": 5.2,
+        "rendered_video": null
+      }
+    ],
+    "folder_name": "Scene 1: Infiltration",
+    "folder_id": "scene_1",
+    "screenplay_title": "Epic Cyberpunk Odyssey",
+    "master_video": "/outputs/test_chunk_1.mp4",
+    "cancelled": false,
+    "error": null,
+    "created_at": 1794558578.6476643,
+    "reviews": {}
+  },
+  "7dcd6bbf2f95": {
+    "id": "7dcd6bbf2f95",
+    "prompt": "A concise educational comedy about late-night scrolling, with a useful gentle habit takeaway. Six connected mini-scenes, consistent original stick-figure editorial animation, vertical short, curious opening and satisfying visual loop. No readable in-frame text; narration and captions will be added in post.",
+    "initial_image": null,
+    "workflow_mode": "storyboard",
+    "width": 768,
+    "height": 1344,
+    "total_duration": 31.0,
+    "status": "completed",
+    "status_msg": "Successfully generated continuous 31.2s cinematic film!",
+    "current_chunk": 6,
+    "total_chunks": 6,
+    "step_progress": 100,
+    "chunks": [
+      "/chronoflow/outputs/7dcd6bbf2f95_chunk_1.mp4",
+      "/chronoflow/outputs/7dcd6bbf2f95_chunk_2.mp4",
+      "/chronoflow/outputs/7dcd6bbf2f95_chunk_3.mp4",
+      "/chronoflow/outputs/7dcd6bbf2f95_chunk_4.mp4",
+      "/chronoflow/outputs/7dcd6bbf2f95_chunk_5.mp4",
+      "/chronoflow/outputs/7dcd6bbf2f95_chunk_6.mp4"
+    ],
+    "master_video": "/chronoflow/outputs/chronoflow_master_7dcd6bbf2f95.mp4",
+    "cancelled": false,
+    "error": null,
+    "created_at": 1794585129.3377123
+  },
+  "4d30bcfa922f": {
+    "id": "4d30bcfa922f",
+    "prompt": "Create an 85 to 90 second original educational comedy short: \u00e2\u20ac\u0153Why does one quick scroll become 1:17 a.m.?\u00e2\u20ac\udc9d Explain unpredictable rewards, autoplay, and lack of stopping cues using simple visual metaphors, then offer three practical friction-based sleep-friendly experiments. Original Vox-style 2D stick-figure animation throughout. STRICT: portrait 9:16 in every shot, subject upright, head above torso, gravity down, upright props and phone screens, no camera roll/rotation, no landscape or sideways compositions, no horizontal inset panels. Maintain one recurring teal-hoodie adult stick figure. One simple action per shot, stable flat shapes, minimal backgrounds, no readable text, no logos. Narration/music will be added separately.",
+    "initial_image": null,
+    "workflow_mode": "storyboard",
+    "width": 768,
+    "height": 1344,
+    "total_duration": 88.0,
+    "status": "completed",
+    "status_msg": "Shot 12 successfully regenerated and master film updated!",
+    "current_chunk": 12,
+    "total_chunks": 17,
+    "step_progress": 100,
+    "chunks": [
+      "/chronoflow/outputs/4d30bcfa922f_chunk_1.mp4",
+      "/chronoflow/outputs/4d30bcfa922f_chunk_2.mp4",
+      "/chronoflow/outputs/4d30bcfa922f_chunk_3.mp4",
+      "/chronoflow/outputs/4d30bcfa922f_chunk_4.mp4",
+      "/chronoflow/outputs/4d30bcfa922f_chunk_5.mp4",
+      "/chronoflow/outputs/4d30bcfa922f_chunk_6.mp4",
+      "/chronoflow/outputs/4d30bcfa922f_chunk_7.mp4",
+      "/chronoflow/outputs/4d30bcfa922f_chunk_8.mp4",
+      "/chronoflow/outputs/4d30bcfa922f_chunk_9.mp4",
+      "/chronoflow/outputs/4d30bcfa922f_chunk_10.mp4",
+      "/chronoflow/outputs/4d30bcfa922f_chunk_11.mp4",
+      "/chronoflow/outputs/4d30bcfa922f_chunk_12.mp4"
+    ],
+    "master_video": "/chronoflow/outputs/chronoflow_master_4d30bcfa922f.mp4",
+    "cancelled": true,
+    "error": null,
+    "created_at": 1794587400.569561,
+    "last_updated_at": 1794591166.8904815,
+    "chunk_prompts": [
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "Image-to-video using the supplied first frame as the exact orientation and composition anchor. Keep the tall portrait camera upright and locked for the entire shot: no rotation, roll, tilt, sideways character, or landscape reframing. Preserve the same teal-hoodie stick figure, upright bed, and vertical wall lines. The character stays seated upright, head above torso, and gently sets the smartphone upright on a small bedside shelf, then turns toward the book. One small arm movement only; stable composition, clean 2D Vox-style editorial animation, vertical 9:16, no text or logos.",
+      "Image-to-video using the supplied first frame as the exact composition anchor. Keep portrait 9:16 upright and camera locked throughout: no roll, rotation, tilt, sideways body, landscape framing, or rotated furniture. Preserve the single teal-hoodie stick figure from the anchor; head stays above torso and feet point down. In the same calm bedroom, the character gently turns away from the upright phone on the bedside shelf and opens the paper book beside them. One small natural action, stable clean 2D Vox-style stick-figure animation, simple shapes, no readable text or logos."
+    ]
+  },
+  "scene_3fddc086": {
+    "id": "scene_3fddc086",
+    "prompt": "Cinematic breach",
+    "initial_image": null,
+    "workflow_mode": "storyboard",
+    "width": 1344,
+    "height": 768,
+    "total_duration": 15.600000000000001,
+    "status": "completed_chunks",
+    "status_msg": "Scene 'Scene 1: Infiltration' (3 shots, 2 clips ready)",
+    "current_chunk": 2,
+    "total_chunks": 3,
+    "step_progress": 100,
+    "chunks": [
+      "/outputs/test_chunk_1.mp4",
+      "/outputs/test_chunk_2.mp4"
+    ],
+    "chunk_prompts": [
+      "Cinematic breach",
+      "Cinematic hallway",
+      "Cinematic terminal"
+    ],
+    "scenes": [
+      {
+        "shot_index": 1,
+        "title": "Shot 1: The Breach",
+        "prompt": "Cinematic breach",
+        "duration": 5.2,
+        "rendered_video": "/outputs/test_chunk_1.mp4"
+      },
+      {
+        "shot_index": 2,
+        "title": "Shot 2: Hallway Sweep",
+        "prompt": "Cinematic hallway",
+        "duration": 5.2,
+        "rendered_video": "/outputs/test_chunk_2.mp4"
+      },
+      {
+        "shot_index": 3,
+        "title": "Shot 3: Cyber Terminal",
+        "prompt": "Cinematic terminal",
+        "duration": 5.2,
+        "rendered_video": null
+      }
+    ],
+    "folder_name": "Scene 1: Infiltration",
+    "folder_id": "scene_1",
+    "screenplay_title": "Epic Cyberpunk Odyssey",
+    "master_video": "/outputs/test_chunk_1.mp4",
+    "cancelled": false,
+    "error": null,
+    "created_at": 1794650374.024962,
+    "reviews": {}
+  },
+  "scene_30ccaa3d": {
+    "id": "scene_30ccaa3d",
+    "prompt": "Cinematic breach",
+    "initial_image": null,
+    "workflow_mode": "storyboard",
+    "width": 1344,
+    "height": 768,
+    "total_duration": 15.600000000000001,
+    "status": "completed_chunks",
+    "status_msg": "Scene 'Scene 1: Infiltration' (3 shots, 2 clips ready)",
+    "current_chunk": 2,
+    "total_chunks": 3,
+    "step_progress": 100,
+    "chunks": [
+      "/outputs/test_chunk_1.mp4",
+      "/outputs/test_chunk_2.mp4"
+    ],
+    "chunk_prompts": [
+      "Cinematic breach",
+      "Cinematic hallway",
+      "Cinematic terminal"
+    ],
+    "scenes": [
+      {
+        "shot_index": 1,
+        "title": "Shot 1: The Breach",
+        "prompt": "Cinematic breach",
+        "duration": 5.2,
+        "rendered_video": "/outputs/test_chunk_1.mp4"
+      },
+      {
+        "shot_index": 2,
+        "title": "Shot 2: Hallway Sweep",
+        "prompt": "Cinematic hallway",
+        "duration": 5.2,
+        "rendered_video": "/outputs/test_chunk_2.mp4"
+      },
+      {
+        "shot_index": 3,
+        "title": "Shot 3: Cyber Terminal",
+        "prompt": "Cinematic terminal",
+        "duration": 5.2,
+        "rendered_video": null
+      }
+    ],
+    "folder_name": "Scene 1: Infiltration",
+    "folder_id": "scene_1",
+    "screenplay_title": "Epic Cyberpunk Odyssey",
+    "master_video": "/outputs/test_chunk_1.mp4",
+    "cancelled": false,
+    "error": null,
+    "created_at": 1794650898.9847584,
+    "reviews": {}
+  },
+  "scene_e1b81b37": {
+    "id": "scene_e1b81b37",
+    "prompt": "Cinematic breach",
+    "initial_image": null,
+    "workflow_mode": "storyboard",
+    "width": 1344,
+    "height": 768,
+    "total_duration": 15.600000000000001,
+    "status": "completed_chunks",
+    "status_msg": "Scene 'Scene 1: Infiltration' (3 shots, 2 clips ready)",
+    "current_chunk": 2,
+    "total_chunks": 3,
+    "step_progress": 100,
+    "chunks": [
+      "/outputs/test_chunk_1.mp4",
+      "/outputs/test_chunk_2.mp4"
+    ],
+    "chunk_prompts": [
+      "Cinematic breach",
+      "Cinematic hallway",
+      "Cinematic terminal"
+    ],
+    "scenes": [
+      {
+        "shot_index": 1,
+        "title": "Shot 1: The Breach",
+        "prompt": "Cinematic breach",
+        "duration": 5.2,
+        "rendered_video": "/outputs/test_chunk_1.mp4"
+      },
+      {
+        "shot_index": 2,
+        "title": "Shot 2: Hallway Sweep",
+        "prompt": "Cinematic hallway",
+        "duration": 5.2,
+        "rendered_video": "/outputs/test_chunk_2.mp4"
+      },
+      {
+        "shot_index": 3,
+        "title": "Shot 3: Cyber Terminal",
+        "prompt": "Cinematic terminal",
+        "duration": 5.2,
+        "rendered_video": null
+      }
+    ],
+    "folder_name": "Scene 1: Infiltration",
+    "folder_id": "scene_1",
+    "screenplay_title": "Epic Cyberpunk Odyssey",
+    "master_video": "/outputs/test_chunk_1.mp4",
+    "cancelled": false,
+    "error": null,
+    "created_at": 1794651111.8514073,
+    "reviews": {}
+  },
+  "scene_7a9b1357": {
+    "id": "scene_7a9b1357",
+    "prompt": "Cinematic breach",
+    "initial_image": null,
+    "workflow_mode": "storyboard",
+    "width": 1344,
+    "height": 768,
+    "total_duration": 15.600000000000001,
+    "status": "completed_chunks",
+    "status_msg": "Scene 'Scene 1: Infiltration' (3 shots, 2 clips ready)",
+    "current_chunk": 2,
+    "total_chunks": 3,
+    "step_progress": 100,
+    "chunks": [
+      "/outputs/test_chunk_1.mp4",
+      "/outputs/test_chunk_2.mp4"
+    ],
+    "chunk_prompts": [
+      "Cinematic breach",
+      "Cinematic hallway",
+      "Cinematic terminal"
+    ],
+    "scenes": [
+      {
+        "shot_index": 1,
+        "title": "Shot 1: The Breach",
+        "prompt": "Cinematic breach",
+        "duration": 5.2,
+        "rendered_video": "/outputs/test_chunk_1.mp4"
+      },
+      {
+        "shot_index": 2,
+        "title": "Shot 2: Hallway Sweep",
+        "prompt": "Cinematic hallway",
+        "duration": 5.2,
+        "rendered_video": "/outputs/test_chunk_2.mp4"
+      },
+      {
+        "shot_index": 3,
+        "title": "Shot 3: Cyber Terminal",
+        "prompt": "Cinematic terminal",
+        "duration": 5.2,
+        "rendered_video": null
+      }
+    ],
+    "folder_name": "Scene 1: Infiltration",
+    "folder_id": "scene_1",
+    "screenplay_title": "Epic Cyberpunk Odyssey",
+    "master_video": "/outputs/test_chunk_1.mp4",
+    "cancelled": false,
+    "error": null,
+    "created_at": 1794651186.7446883,
+    "reviews": {}
+  },
+  "scene_6548d169": {
+    "id": "scene_6548d169",
+    "prompt": "Cinematic breach",
+    "initial_image": null,
+    "workflow_mode": "storyboard",
+    "width": 1344,
+    "height": 768,
+    "total_duration": 15.600000000000001,
+    "status": "completed_chunks",
+    "status_msg": "Scene 'Scene 1: Infiltration' (3 shots, 2 clips ready)",
+    "current_chunk": 2,
+    "total_chunks": 3,
+    "step_progress": 100,
+    "chunks": [
+      "/outputs/test_chunk_1.mp4",
+      "/outputs/test_chunk_2.mp4"
+    ],
+    "chunk_prompts": [
+      "Cinematic breach",
+      "Cinematic hallway",
+      "Cinematic terminal"
+    ],
+    "scenes": [
+      {
+        "shot_index": 1,
+        "title": "Shot 1: The Breach",
+        "prompt": "Cinematic breach",
+        "duration": 5.2,
+        "rendered_video": "/outputs/test_chunk_1.mp4"
+      },
+      {
+        "shot_index": 2,
+        "title": "Shot 2: Hallway Sweep",
+        "prompt": "Cinematic hallway",
+        "duration": 5.2,
+        "rendered_video": "/outputs/test_chunk_2.mp4"
+      },
+      {
+        "shot_index": 3,
+        "title": "Shot 3: Cyber Terminal",
+        "prompt": "Cinematic terminal",
+        "duration": 5.2,
+        "rendered_video": null
+      }
+    ],
+    "folder_name": "Scene 1: Infiltration",
+    "folder_id": "scene_1",
+    "screenplay_title": "Epic Cyberpunk Odyssey",
+    "master_video": "/outputs/test_chunk_1.mp4",
+    "cancelled": false,
+    "error": null,
+    "created_at": 1794651549.1215644,
+    "reviews": {}
   }
 }
