@@ -1,0 +1,58 @@
+{
+  "scene_type": "concept_art",
+  "keywords": [
+    "city",
+    "world",
+    "landscape",
+    "environment",
+    "village",
+    "temple",
+    "library",
+    "lighthouse",
+    "market",
+    "street",
+    "ruin",
+    "castle",
+    "desert",
+    "forest",
+    "workshop",
+    "caravan",
+    "concept"
+  ],
+  "action_states": [
+    "standing",
+    "walking",
+    "watching",
+    "working",
+    "resting",
+    "travelling"
+  ],
+  "high_impact": [
+    "camera.angle",
+    "light.direction"
+  ],
+  "defaults": {
+    "camera": {
+      "angle": "low",
+      "distance": "wide"
+    },
+    "light": {
+      "direction": "top",
+      "quality": "atmospheric, with haze"
+    },
+    "depth": {
+      "foreground": "framing elements close to the camera",
+      "midground": "the main subject of the place",
+      "background": "far horizon in haze"
+    }
+  },
+  "questions": {
+    "camera.angle": "From what angle should we see it (low looks powerful, high looks small, eye level is neutral)?",
+    "light.direction": "Where should the main light come from (behind gives a silhouette edge, the side gives drama, front is flat and clear)?"
+  },
+  "staging_rules": [
+    "Three clear depth layers: foreground, midground, background.",
+    "One focal point; the light leads the eye to it.",
+    "People, if any, are small and give scale."
+  ]
+}

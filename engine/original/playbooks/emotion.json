@@ -1,0 +1,70 @@
+{
+  "scene_type": "emotion",
+  "keywords": [
+    "feel",
+    "emotion",
+    "sad",
+    "grief",
+    "lost",
+    "proud",
+    "afraid",
+    "fear",
+    "forgive",
+    "remember",
+    "peace",
+    "joy",
+    "angry",
+    "guilt",
+    "betray",
+    "lonely",
+    "love",
+    "cry",
+    "happy"
+  ],
+  "action_states": [
+    "grieving",
+    "joyful",
+    "proud",
+    "afraid",
+    "angry",
+    "guilty",
+    "hopeful",
+    "lost",
+    "peaceful",
+    "nostalgic",
+    "ashamed",
+    "determined",
+    "tender",
+    "forgiving"
+  ],
+  "high_impact": [
+    "camera.angle",
+    "actors.*.action_state",
+    "light.direction"
+  ],
+  "defaults": {
+    "camera": {
+      "angle": "eye_level",
+      "distance": "close"
+    },
+    "light": {
+      "direction": "left",
+      "quality": "soft, low contrast"
+    },
+    "depth": {
+      "foreground": "nothing or a soft blurred edge",
+      "midground": "the person",
+      "background": "a simple blurred place that fits the mood"
+    }
+  },
+  "questions": {
+    "camera.angle": "From what angle should we see it (low looks powerful, high looks small, eye level is neutral)?",
+    "light.direction": "Where should the main light come from (behind gives a silhouette edge, the side gives drama, front is flat and clear)?",
+    "actors.*.action_state": "Which feeling should the face and body show (grieving, proud, afraid, guilty, peaceful ...)?"
+  },
+  "staging_rules": [
+    "The face and posture carry the feeling; the background stays simple.",
+    "One clear emotion per person.",
+    "Close or medium distance so the expression is readable."
+  ]
+}

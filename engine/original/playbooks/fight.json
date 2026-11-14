@@ -1,0 +1,59 @@
+{
+  "scene_type": "fight",
+  "keywords": [
+    "fight",
+    "duel",
+    "battle",
+    "brawl",
+    "clash",
+    "combat",
+    "attack",
+    "versus",
+    "vs",
+    "swordsman",
+    "sword fight",
+    "slash",
+    "punch",
+    "kick",
+    "war"
+  ],
+  "action_states": [
+    "striking",
+    "blocking",
+    "readying",
+    "struck",
+    "falling",
+    "dodging"
+  ],
+  "high_impact": [
+    "camera.angle",
+    "actors.*.action_state",
+    "light.direction"
+  ],
+  "defaults": {
+    "camera": {
+      "angle": "low",
+      "distance": "medium"
+    },
+    "light": {
+      "direction": "back",
+      "quality": "hard rim light"
+    },
+    "depth": {
+      "foreground": "motion blur or debris",
+      "midground": "the fighters",
+      "background": "the place, slightly out of focus"
+    }
+  },
+  "questions": {
+    "camera.angle": "From what angle should we see it (low looks powerful, high looks small, eye level is neutral)?",
+    "light.direction": "Where should the main light come from (behind gives a silhouette edge, the side gives drama, front is flat and clear)?",
+    "actors.*.action_state": "What is each fighter doing right now (striking, blocking, readying, already hit, falling, dodging)?"
+  },
+  "staging_rules": [
+    "Fighters in contact stand on opposite sides of the frame.",
+    "A strike is aimed on screen toward the person it hits.",
+    "The attacker and the defender have different action states.",
+    "The camera stays fixed unless the brief names a move."
+  ]
+}
