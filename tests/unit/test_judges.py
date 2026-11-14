@@ -159,3 +159,9 @@ def test_available_judges_never_raises_when_comfyui_is_down():
             raise ConnectionError("down")
 
     assert [j.name for j in run(available_judges(FakeProvider(), Down()))] == ["qwen3.5:9b"]
+
+
+def test_a_reply_with_only_an_actions_line_is_usable():
+    # real bake-off finding: the re-look for one person's action answers with ACTIONS + EVIDENCE only, and was thrown away as unusable
+    a = parse_judge_text("ACTIONS: blocking\nEVIDENCE: both arms are raised in front of the chest", "j", STATES)
+    assert a.ok and a.actions == ["blocking"] and a.camera is None and a.people is None

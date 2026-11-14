@@ -82,8 +82,9 @@ def _actions(value: str | None, states: list[str]) -> list[str]:
 def parse_judge_text(text: str, judge: str, states: list[str]) -> JudgeAnswer:
     text = text or ""
     camera, people = _camera(_field(text, "CAMERA")), _people(_field(text, "PEOPLE"))
-    return JudgeAnswer(judge=judge, ok=camera is not None or people is not None, camera=camera, people=people,
-                       actions=_actions(_field(text, "ACTIONS"), states), evidence=_field(text, "EVIDENCE") or "", raw=text[:600])
+    actions = _actions(_field(text, "ACTIONS"), states)
+    return JudgeAnswer(judge=judge, ok=camera is not None or people is not None or bool(actions), camera=camera, people=people,
+                       actions=actions, evidence=_field(text, "EVIDENCE") or "", raw=text[:600])
 
 
 def read_prompt(states: list[str]) -> str:

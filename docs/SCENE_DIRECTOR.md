@@ -88,3 +88,20 @@ Baseline (the measure of "does it match what I imagined"): `.venv\Scripts\python
 
 - Plain compiler wording ("Shot from a low camera angle looking up.") reached a low angle (blind camera read) in **0 of 8** fights on the first attempt. Adding one strong sentence at the end of the prompt ("Remember: Camera placed near the ground looking steeply upward, the subjects tower over the viewer.") gave **3 of 8**, and with the sentence built into the default prompt, 8 fresh-seed runs gave **4 of 8** (4 of 8 accepted on attempt 1). Small samples, one seed per brief and check by the 9B blind read, so a direction, not a rate. `CAMERA_FIX` in `scene_prompt.py`; only the low angle is measured (high and dutch use the same mechanism, unmeasured).
 - Live check through the MCP tools against a real engine (own temp database): `panelflow_scene_propose` -> `correct` (camera.angle low) -> `generate` (job SCENE_GENERATION) -> `rate`. "a samurai duel at dusk": plan "low angle, medium shot, samurai_a on the left striking right, samurai_b on the right blocking, light from behind", accepted on the first attempt in 24 s; looked at the picture: two fighters, left one thrusting a sword at the right one who raises an open palm, low angle, dusk sky.
+
+## Two judges (qwen3.5:9b + Qwen3-VL 8B) and the cross-check
+
+- Judges (`engine/original/judges.py`): `qwen3.5:9b` through Ollama and Qwen3-VL 8B (`qwen3vl_8b_int8_convrot.safetensors`, already on disk) through ComfyUI's `TextGenerate` node; same plain-text question, same parser, neither is told the plan. The ComfyUI judge works only with ComfyUI started with `--disable-dynamic-vram`. Cross-check (`engine/original/crosscheck.py`): blind first round, then only the items they disagree on go back to both judges with the other's claim and evidence; a judge that gives in without new evidence is logged as a suspect flip.
+- **Bake-off** (`tools/scene_director/judge_bakeoff.py`, labels in `labels.json`, result in `judge_bakeoff.json`): 16 director pictures (8 fights, 4 emotion, 4 concept art), 48 items (camera, number of people, each person's action). The labels are the agent's own reading of each picture, NOT the owner's; a few are mild or ambiguous.
+
+| method | answered | wrong | accuracy of answered |
+|---|---|---|---|
+| judge A `qwen3.5:9b` alone | 48/48 | 9 | 0.81 |
+| judge B Qwen3-VL 8B alone | 48/48 | 11 | 0.77 |
+| plain vote (abstain when they differ) | 34/48 | 3 | 0.91 |
+| cross-check (one re-look on disagreements) | 40/48 | 5 | 0.88 |
+
+- Seconds per picture: judge A 1.8, judge B 4.2, re-looks 11.5 (the models are swapped in and out of the GPU between judges): about 17.5 s of judging per picture, on top of drawing.
+- **Gate (fewer wrong answers than each single judge, coverage >= 0.7): PASS (5 < 9 and 5 < 11, coverage 0.83).** The cross-check is on by default.
+- **Honest reading:** most of the gain is that disagreement is a good alarm: when the two judges agree they are right 91% of the time, while each alone is wrong 19-23% of the time. The re-look added 6 answered items to the vote's 34 and 2 of them were wrong, so a "resolved" item (about 67% here) is less reliable than an "agreed" one (0.9); that is why resolved items get confidence 0.7 and agreed 0.9. No suspect flips were seen (0). 48 items and one labeller is a small sample.
+- Real-data bug found by this run and fixed: a re-look about one person's action replies with only an `ACTIONS:` line, which the parser threw away as unusable, so every action dispute stayed disputed.
