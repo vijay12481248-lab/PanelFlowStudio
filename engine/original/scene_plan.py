@@ -11,6 +11,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+MAX_ACTORS = 2  # the prompt compiler draws at most two characters; more would be demanded by the check but never drawn
 PLAYBOOK_DIR = Path(__file__).with_name("playbooks")
 Side = Literal["left", "center", "right"]
 Depth = Literal["foreground", "midground", "background"]
@@ -96,6 +97,13 @@ def validate_plan(plan: ScenePlan, playbook: Playbook) -> list[str]:
     ids = [a.id for a in plan.actors]
     problems += [f"duplicate actor id {i!r}: every person needs a different id" for i in dict.fromkeys(ids) if ids.count(i) > 1]
     actors = {a.id: a for a in plan.actors}
+    if len(plan.actors) > MAX_ACTORS:
+        problems.append(f"{len(plan.actors)} actors: at most two can be drawn for now")
+    if plan.scene_type == "fight":
+        for side in ("left", "center", "right"):
+            same = [a.id for a in plan.actors if a.side == side]
+            if len(same) > 1:
+                problems.append(f"{' and '.join(same)} are both on the {side}; fighters must stand on opposite sides")
     for a in plan.actors:
         if a.action_state not in playbook.action_states:
             problems.append(f"{a.id}: action_state {a.action_state!r} is not one of {playbook.action_states}")
@@ -110,8 +118,6 @@ def validate_plan(plan: ScenePlan, playbook: Playbook) -> list[str]:
         if plan.scene_type != "fight":
             continue
         s, t = actors[c.source], actors[c.target]
-        if s.side == t.side != "center":
-            problems.append(f"{s.id} and {t.id} are both on the {s.side}; fighters in contact must stand on opposite sides")
-        elif _points_toward(c.direction, s.side, t.side) is False:
+        if _points_toward(c.direction, s.side, t.side) is False:
             problems.append(f"contact {s.id} -> {t.id}: direction {c.direction!r} points away from {t.id} (on the {t.side})")
     return problems

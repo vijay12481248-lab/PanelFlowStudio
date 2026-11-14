@@ -127,3 +127,40 @@ def test_ledger_learns_from_first_attempts_and_feeds_later_runs(tmp_path, monkey
     assert "fully extended" not in prompts[0] and "fully extended" not in prompts[1]  # one sighting is not a lesson yet
     assert "fully extended" in prompts[2]  # the second sighting made it one
     assert led.load_mistakes("scene:qwen_image_21:fight")[0].recurrence_count == 3
+
+
+def test_a_draw_failure_after_a_candidate_delivers_the_best_one(tmp_path, monkeypatch):
+    # review finding: ComfyUI failing on attempt 2 threw away the reviewed attempt-1 picture and failed the whole job
+    script(monkeypatch, review("regenerate", 0.3, [STRIKE]))
+    eng = FakeEngine()
+    real = eng.generate
+
+    def flaky(*a, **k):
+        if len(eng.calls) >= 1:
+            raise RuntimeError("ComfyUI execution failed: out of memory")
+        return real(*a, **k)
+
+    eng.generate = flaky
+    r = generate_scene(eng, None, fight_plan(), ws=tmp_path, key="k10", seed=7)
+    assert any(u.startswith("draw failed") for u in r.unmet) and r.status == "needs_review" and (tmp_path / r.image_path).exists()
+
+
+def test_a_draw_failure_on_the_first_attempt_still_raises(tmp_path, monkeypatch):
+    script(monkeypatch)
+    eng = FakeEngine()
+
+    def offline(*a, **k):
+        raise RuntimeError("ComfyUI is offline")
+
+    eng.generate = offline
+    with pytest.raises(RuntimeError, match="offline"):
+        generate_scene(eng, None, fight_plan(), ws=tmp_path, key="k11", seed=7)
+
+
+def test_an_unverified_first_review_teaches_nothing(tmp_path, monkeypatch):
+    from engine.creative.mistakes import MistakeLedger
+    led = MistakeLedger(file_path=tmp_path / "l.json")
+    for n in range(2):
+        script(monkeypatch, review("accept_low", 0.5, [STRIKE], confidence=0.0, reasons=["unverified: the reviewer could not judge any item"]))
+        generate_scene(FakeEngine(), None, fight_plan(), ws=tmp_path / f"w{n}", key="k", seed=7, ledger=led)
+    assert led.load_mistakes("scene:qwen_image_21:fight") == []

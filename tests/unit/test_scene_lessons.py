@@ -94,3 +94,33 @@ def test_only_the_given_ledger_file_is_touched(tmp_path):
     record_outcome(led, MODEL, "fight", rev(item(STRIKE_A, "pose")))
     assert (repo_default.stat().st_mtime_ns if repo_default.exists() else None) == before
     assert (tmp_path / "scene_lessons.json").exists()
+
+
+def test_unjudged_items_are_not_recorded(tmp_path):
+    # review finding: a reviewer that judged nothing marked every item "partial"; that must never become ledger entries
+    led = ledger(tmp_path)
+    unjudged = ItemVerdict(item=STRIKE_A, critical=True, verdict="partial", confidence=0.6, vision="partly", description_says=False, kind="pose")
+    assert record_outcome(led, MODEL, "fight", rev(unjudged)) == 0
+    marked = Review(items=[item(STRIKE_A, "pose")], score=0.0, confidence=0.0, decision="accept_low", reasons=["unverified: the reviewer could not judge any item"])
+    assert record_outcome(led, MODEL, "fight", marked) == 0
+
+
+def test_one_review_is_one_sighting_per_pattern(tmp_path):
+    led = ledger(tmp_path)
+    two_sides = rev(item("an adult man with a is on the left of the picture", "placement"), item("an adult man with b is on the right of the picture", "placement"))
+    assert record_outcome(led, MODEL, "fight", two_sides) == 1
+    assert lessons_for(led, MODEL, "fight") == ""  # one run can never promote a lesson on its own
+
+
+def test_lessons_only_apply_to_plans_they_fit(tmp_path):
+    # review finding: a low-angle lesson was added to a plan that asks for a HIGH angle
+    from scene_fixtures import fight_plan
+    from engine.original.scene_plan import CameraPlan
+    led = ledger(tmp_path)
+    for _ in range(2):
+        record_outcome(led, MODEL, "fight", rev(item("the camera looks up at the scene from a low angle", "camera"), item(STRIKE_A, "pose")))
+    low = fight_plan()
+    assert "steeply upward" in lessons_for(led, MODEL, "fight", plan=low) and "fully extended" in lessons_for(led, MODEL, "fight", plan=low)
+    high_readying = fight_plan(camera=CameraPlan(angle="high", distance="medium"))
+    high_readying.actors[0].action_state = "readying"
+    assert lessons_for(led, MODEL, "fight", plan=high_readying) == ""

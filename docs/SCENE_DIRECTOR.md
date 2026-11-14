@@ -54,7 +54,7 @@ Baseline (the measure of "does it match what I imagined"): `.venv\Scripts\python
 
 ## Known weaknesses (not fixed)
 
-- The compiler draws at most two characters; plans with more are checked for all of them but drawn with two.
+- The compiler draws at most two characters, so a plan with more than two actors is rejected at propose and generate ("at most two can be drawn for now").
 - Emotion checks are coarse (three families of feelings); the 9B model cannot tell grief from guilt.
 - No masked repair inside the scene loop (a located defect is redrawn whole); no desktop UI screen yet.
 - Lessons are generic rule sentences per failure kind; whether a lesson at the end of the prompt actually changes Qwen's picture is not measured.

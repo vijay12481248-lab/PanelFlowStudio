@@ -52,7 +52,7 @@ def generate_scene(art_engine, provider, plan: ScenePlan, *, ws: Path, key: str,
     """Blocking: callers in async code run it in a thread. RuntimeError("cancelled") only when nothing was drawn yet.
     With a `ledger`, lessons seen twice are added to the prompt and the failures of the FIRST attempt (what the plain prompt gets wrong) are recorded."""
     t0 = time.monotonic()
-    lessons = " ".join(x for x in (lessons, lessons_for(ledger, ART_WORKFLOW_ID, plan.scene_type) if ledger else "") if x)
+    lessons = " ".join(x for x in (lessons, lessons_for(ledger, ART_WORKFLOW_ID, plan.scene_type, plan=plan) if ledger else "") if x)
     base_seed = seed if seed is not None else random.randint(1, 2**31 - 1)
     iters: list[dict] = []
     reviews: dict[str, Review] = {}  # by picture hash, so a stopped run can still report the review of its best candidate
@@ -77,10 +77,11 @@ def generate_scene(art_engine, provider, plan: ScenePlan, *, ws: Path, key: str,
                            budget=Budget(max_attempts=budget.max_attempts), is_cancelled=is_cancelled)
         png, review, status, history = res.png, res.review, res.status, res.iterations
     except (_OutOfTime, RuntimeError) as exc:
-        reason = "time budget used" if isinstance(exc, _OutOfTime) else "cancelled" if is_cancelled() else None
         best = best_iteration(iters)
-        if reason is None or best is None:
-            raise
+        if best is None:
+            raise  # nothing was drawn yet: there is nothing to deliver
+        # a ComfyUI failure after a reviewed candidate exists must not throw that candidate away
+        reason = "time budget used" if isinstance(exc, _OutOfTime) else "cancelled" if is_cancelled() else f"draw failed: {type(exc).__name__}: {exc}"[:160]
         png, review, status, history = (ws / best["file"]).read_bytes(), reviews.get(best["sha256"]), "needs_review", iters
         extra.append(reason)
 

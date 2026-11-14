@@ -111,11 +111,13 @@ def test_unreachable_reviewer_is_unverified_never_a_pass(tmp_path):
     assert not any(i.passed for i in review.items)
 
 
-def test_unverifiable_items_are_listed_not_failed(tmp_path):
-    vision = FakeVision(status=lambda t: "not_verifiable" if "camera looks up" in t else "correct")
+def test_not_verifiable_answers_are_never_dropped_into_an_accept(tmp_path):
+    # review finding: every plan claim is visible by construction, so "not_verifiable" on camera, poses and contact means the picture was NOT judged
+    vision = FakeVision(status=lambda t: "not_verifiable" if ("camera looks up" in t or t.endswith(("is striking", "is blocking")) or " reaches " in t) else "correct")
     review = run(check_scene(vision, picture(tmp_path), fight_plan()))
-    assert any("camera looks up" in u for u in review.unverifiable)
-    assert not any("camera looks up" in i.item for i in review.items)
+    assert review.decision != "accept"
+    assert any("camera looks up" in i.item and not i.passed for i in review.items)
+    assert review.unverifiable == []
 
 
 def test_spatial_failure_true_for_pose_false_for_style_only():
@@ -168,11 +170,13 @@ def test_blind_figures_are_matched_left_to_right(tmp_path):
 def test_blind_figure_count_mismatch_skips_the_state_witness(tmp_path):
     review = run(check_scene(FakeVision(blind={"camera": "looks_up", "figures": ["striking"]}), picture(tmp_path), fight_plan()))
     assert all(i.passed for i in review.items) and review.confidence < 0.8  # no second witness for the states, no false failure
+    assert review.decision == "accept_low" and any("second witness" in r for r in review.reasons)
 
 
 def test_blind_read_failure_falls_back_to_one_witness(tmp_path):
     review = run(check_scene(FakeVision(blind_error=True), picture(tmp_path), fight_plan()))
-    assert review.decision == "accept" and review.confidence < 0.8
+    assert review.decision == "accept_low" and review.confidence < 0.8  # camera and poses rest on the agreeable yes/no witness alone: never a plain accept
+    assert any("second witness" in r for r in review.reasons) and all(i.passed for i in review.items)
 
 
 def test_blind_prompt_never_states_the_plan(tmp_path):

@@ -88,6 +88,8 @@ async def check_scene(provider, image: Path | bytes, plan: ScenePlan, *, full: b
     except Exception as exc:  # reviewer unreachable: nothing is judged, and nothing is passed
         grounded = [_Grounded(n=i + 1, status="uncertain", evidence=f"reviewer unavailable: {type(exc).__name__}") for i in range(len(claims))]
 
+    # every claim here comes from the plan, so it is visible by construction: "not_verifiable" means the picture was NOT judged, never "nothing to check"
+    grounded = [g.model_copy(update={"status": "uncertain", "evidence": f"not judged: {g.evidence}"[:200]}) if g.status == "not_verifiable" else g for g in grounded]
     witnessed = [False] * len(claims)  # a second witness (code, or the blind read) agrees with the vision answer
     ordered = sorted(plan.actors, key=lambda a: SIDE_ORDER[a.side])
     playbook = load_playbook(plan.scene_type)
@@ -118,13 +120,14 @@ async def check_scene(provider, image: Path | bytes, plan: ScenePlan, *, full: b
             elif side_ok:
                 witnessed[k] = g.status == "correct"
 
-    keep = [k for k, g in enumerate(grounded) if g.status != "not_verifiable"]
-    checked, kept = [claims[k] for k in keep], [grounded[k] for k in keep]
-    qa = [_QA(n=n + 1, answer=STATUS_TO_ANSWER[g.status], evidence=g.evidence) for n, g in enumerate(kept)]
-    review = combine(checked, qa, [witnessed[k] for k in keep])
-    _annotate(review, checked, kept)
-    review.unverifiable = [c.text for k, c in enumerate(claims) if k not in set(keep)]
-    review.reasons += [f"not visually verifiable (for a human): {t}" for t in review.unverifiable]
+    review = combine(claims, [_QA(n=n + 1, answer=STATUS_TO_ANSWER[g.status], evidence=g.evidence) for n, g in enumerate(grounded)], witnessed)
+    _annotate(review, claims, grounded)
+    # camera and action states rest on the agreeable yes/no witness alone when the blind read is missing or unusable: flagged, never a plain accept
+    lacking = [c.text for k, c in enumerate(claims) if (c.kind == "camera" or c.text in state_claim) and not witnessed[k] and grounded[k].status == "correct"]
+    if lacking and review.decision == "accept":
+        review.decision = "accept_low"
+        review.reasons.append("no second witness for: " + "; ".join(lacking))
+    checked, kept = claims, grounded
     if checked and all(g.status == "uncertain" for g in kept):
         review.decision, review.confidence = "accept_low", 0.0
         review.reasons.append("unverified: the reviewer could not judge any item")

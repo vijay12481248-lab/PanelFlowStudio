@@ -109,3 +109,19 @@ def test_duplicate_actor_ids_rejected():
                           ActorPlan(id="hero", description="y", side="right", action_state="blocking")])
     problems = validate_plan(plan, load_playbook("fight"))
     assert any("duplicate" in p and "hero" in p for p in problems)
+
+
+def test_two_fighters_on_one_side_are_rejected_even_without_a_contact():
+    # review finding: {"actors.villain.side": "left"} was accepted when the plan had no contact
+    same = _fight(actors=[ActorPlan(id="hero", description="x", side="left", action_state="striking"),
+                          ActorPlan(id="villain", description="y", side="left", action_state="blocking")], contacts=[])
+    assert any("opposite sides" in p for p in validate_plan(same, load_playbook("fight")))
+    both_centre = _fight(actors=[ActorPlan(id="hero", description="x", side="center", action_state="striking"),
+                                 ActorPlan(id="villain", description="y", side="center", action_state="blocking")], contacts=[])
+    assert any("opposite sides" in p for p in validate_plan(both_centre, load_playbook("fight")))
+
+
+def test_more_than_two_actors_are_rejected_until_the_compiler_can_draw_them():
+    # review finding: a 3-actor plan compiled to 2 figures but demanded "exactly three", burning every attempt
+    three = _fight(actors=[ActorPlan(id=i, description="x", side=sd, action_state="readying") for i, sd in (("a", "left"), ("b", "center"), ("c", "right"))], contacts=[])
+    assert any("at most two" in p for p in validate_plan(three, load_playbook("fight")))

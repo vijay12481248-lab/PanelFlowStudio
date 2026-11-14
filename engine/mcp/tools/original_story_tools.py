@@ -279,7 +279,7 @@ async def panelflow_scene_propose(brief: str, scene_type: str | None = None) -> 
 @registry.tool(
     name="panelflow_scene_correct",
     description="Scene Director step 2: apply the user's corrections to a plan. Keys are dotted paths: camera.angle (eye_level|low|high|dutch), camera.distance, light.direction, "
-                "actors.<id>.action_state, actors.<id>.side, depth.<layer>, mood, setting. A contradiction (both fighters on one side) is refused with the problem.",
+                "actors.<id>.action_state, actors.<id>.side, contacts.<actor id>.direction, depth.<layer>, mood, setting. A contradiction (both fighters on one side, a strike aimed away from its target) is refused with the problem, so swapping sides needs contacts.<actor id>.direction swapped in the same call.",
     input_schema={"type": "object", "properties": {"plan": {"type": "object"}, "corrections": {"type": "object", "additionalProperties": {"type": "string"}}}, "required": ["plan", "corrections"]},
     domain="original",
 )

@@ -210,3 +210,24 @@ def test_prompt_says_contacts_are_between_people_only():
     fake = FakeProvider(FIGHT_ANSWER)
     run(propose(fake, "the hero fights the villain"))
     assert "contacts only between the actors" in fake.calls[0].lower()
+
+
+def test_old_as_a_word_does_not_make_a_child_an_elder():
+    # review finding: "a girl holding an old teddy bear" and "a five-year-old girl" came back as elders
+    assert _solo("a girl holding an old teddy bear").actors[0].age_group != "elder"
+    assert _solo("a five-year-old girl crying").actors[0].age_group != "elder"
+    assert _solo("a boy in the old town").actors[0].age_group != "elder"
+    assert _solo("an old woman remembering her wedding day").actors[0].age_group == "elder"
+    assert _solo("an elderly man at a bench").actors[0].age_group == "elder"
+
+
+def test_swapping_sides_can_be_corrected_together_with_the_strike_direction():
+    # review finding: after a swap the direction was stale and could not be corrected, so the owner could not swap sides at all
+    p = run(propose(FakeProvider(FIGHT_ANSWER), "the hero fights the villain")).plan
+    pb = load_playbook("fight")
+    with pytest.raises(ValueError, match="direction"):
+        apply_corrections(p, pb, {"actors.hero.side": "right", "actors.villain.side": "left"})
+    out = apply_corrections(p, pb, {"actors.hero.side": "right", "actors.villain.side": "left", "contacts.hero.direction": "down-left"})
+    assert [a.side for a in out.actors] == ["right", "left"] and out.contacts[0].direction == "down-left"
+    with pytest.raises(ValueError):
+        apply_corrections(p, pb, {"contacts.ghost.direction": "left"})

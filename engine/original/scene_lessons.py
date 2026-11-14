@@ -50,23 +50,35 @@ def _classify(item) -> tuple[str, str, str] | None:
 
 
 def record_outcome(ledger: MistakeLedger, model: str, scene_type: str, review: Review, fixed_by: str = "") -> int:
-    """One ledger entry (or one more sighting of a known one) per failed, classifiable item. Returns how many were written."""
-    n = 0
+    """One sighting per failure pattern per review. Only items the reviewer actually judged wrong ("missing" or "incorrect") count: a reviewer that judged
+    nothing, or marked its own review unverified, teaches nothing. Returns how many patterns were written."""
+    if any("unverified" in r for r in review.reasons):
+        return 0
+    seen: set[str] = set()
     for it in review.items:
-        if it.passed:
+        if it.passed or it.status not in ("missing", "incorrect"):
             continue
         found = _classify(it)
-        if found is None:
+        if found is None or found[0] in seen:
             continue
+        seen.add(found[0])
         flawed, rule, category = found
         ledger.record_or_escalate_mistake(domain=lesson_domain(model, scene_type), flawed_pattern=flawed, prevention_rule=rule,
                                           example_good=fixed_by, category=category, severity=MistakeSeverity.HIGH)
-        n += 1
-    return n
+    return len(seen)
 
 
-def lessons_for(ledger: MistakeLedger, model: str, scene_type: str, min_recurrence: int = 2) -> str:
-    """The rules of failures seen at least `min_recurrence` times, most frequent first; "" when there are none."""
-    rows = sorted((r for r in ledger.load_mistakes(lesson_domain(model, scene_type)) if r.recurrence_count >= min_recurrence),
+def _fits(record, plan) -> bool:
+    """A camera or pose rule only applies to a plan that asks for that very angle or state; count, placement and contact rules apply to every plan."""
+    if record.category == "camera":
+        return f"'{plan.camera.angle}'" in record.flawed_pattern
+    if record.category == "pose":
+        return any(f"'{a.action_state}'" in record.flawed_pattern for a in plan.actors)
+    return True
+
+
+def lessons_for(ledger: MistakeLedger, model: str, scene_type: str, min_recurrence: int = 2, plan=None) -> str:
+    """The rules of failures seen at least `min_recurrence` times, most frequent first; with a `plan`, only those that fit it. "" when there are none."""
+    rows = sorted((r for r in ledger.load_mistakes(lesson_domain(model, scene_type)) if r.recurrence_count >= min_recurrence and (plan is None or _fits(r, plan))),
                   key=lambda r: -r.recurrence_count)
     return " ".join(r.prevention_rule for r in rows)

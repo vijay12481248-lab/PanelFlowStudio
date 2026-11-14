@@ -94,7 +94,7 @@ def _stated(brief: str, playbook: Playbook, plan_out: _PlanOut) -> set[str]:
 
 FEMALE = r"\b(girl|woman|she|her|mother|mom|daughter|sister|wife|grandmother|queen|lady)\b"
 MALE = r"\b(boy|man|he|his|him|father|dad|son|brother|husband|grandfather|king)\b"
-ELDER = r"\b(old|elderly|grandmother|grandfather|grandma|grandpa)\b"
+ELDER = r"\b(old (man|woman|lady|gentleman|person)|elderly|grandmother|grandfather|grandma|grandpa)\b"
 
 
 def _identity_from_brief(brief: str, actors: list[ActorPlan]) -> list[ActorPlan]:
@@ -232,6 +232,10 @@ def apply_corrections(plan: ScenePlan, playbook: Playbook, corrections: dict[str
             d[parts[0]][parts[1]] = value
         elif parts[0] == "depth" and len(parts) == 2:
             d["depth"][parts[1]] = value
+        elif parts[0] == "contacts" and len(parts) == 3 and any(c["source"] == parts[1] and parts[2] in c for c in d["contacts"]):
+            for c in d["contacts"]:  # "contacts.<source>.<field>": every contact that actor starts
+                if c["source"] == parts[1]:
+                    c[parts[2]] = value
         elif parts[0] == "actors" and len(parts) == 3 and any(a["id"] == parts[1] and parts[2] in a for a in d["actors"]):
             next(a for a in d["actors"] if a["id"] == parts[1])[parts[2]] = value
         else:
