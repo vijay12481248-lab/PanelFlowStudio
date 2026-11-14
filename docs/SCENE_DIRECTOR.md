@@ -105,3 +105,9 @@ Baseline (the measure of "does it match what I imagined"): `.venv\Scripts\python
 - **Gate (fewer wrong answers than each single judge, coverage >= 0.7): PASS (5 < 9 and 5 < 11, coverage 0.83).** The cross-check is on by default.
 - **Honest reading:** most of the gain is that disagreement is a good alarm: when the two judges agree they are right 91% of the time, while each alone is wrong 19-23% of the time. The re-look added 6 answered items to the vote's 34 and 2 of them were wrong, so a "resolved" item (about 67% here) is less reliable than an "agreed" one (0.9); that is why resolved items get confidence 0.7 and agreed 0.9. No suspect flips were seen (0). 48 items and one labeller is a small sample.
 - Real-data bug found by this run and fixed: a re-look about one person's action replies with only an `ACTIONS:` line, which the parser threw away as unusable, so every action dispute stayed disputed.
+
+## Real run: generate -> stored run + two-judge analysis (isolated engine, MCP tools)
+
+- Two scenes through `panelflow_scene_propose` and `panelflow_scene_generate` against a live engine (own temp database). Both jobs succeeded in about 115 s each (draw + the system's own check, up to 3 attempts, + the two judges: 6.7 s and 18.3 s) and each left a pending run (`GET /runs?unreviewed=true` total 2) with the analysis stored.
+- "a samurai duel at dusk": all four items agreed (camera looks_up, 2 people, striking, blocking), matching the picture.
+- "a girl who just lost her best friend": people and action agreed (1, "lost"; the plan said "grieving", same family); camera was disputed in round 1 (qwen3.5:9b level, Qwen3-VL looks_up) and resolved to "level" after the re-look; looking at the picture, a level close view is right. The system's own check said accept_low (it did not see "grieving"), the judges and the picture look fine.
