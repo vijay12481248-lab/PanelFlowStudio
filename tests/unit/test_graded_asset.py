@@ -58,7 +58,8 @@ def test_a_graded_picture_becomes_an_asset_that_remembers_its_grade(client):
     ({"image_data": _data_url(), "source_asset_id": "someone-elses", "grade": {"v": 1}}, 400),
     ({"image_data": _data_url()}, 422),
     ({"image_data": _data_url(), "source_asset_id": "src", "grade": {"x": "y" * 500_000}}, 422),
-    ({"image_data": _data_url(), "source_asset_id": "src"}, 422),  # says neither a grade nor a cut
+    ({"image_data": _data_url(), "source_asset_id": "src"}, 422),  # says neither a grade, a cut nor effects
+    ({"image_data": _data_url(), "source_asset_id": "src", "fusion": {"x": "y" * 120_000}}, 422),
     ({"image_data": _data_url(), "source_asset_id": "src", "cut": {"x": "y" * 30_000}}, 422),
 ])
 def test_bad_graded_requests_are_refused(client, body, code):
@@ -89,3 +90,25 @@ def test_a_grade_and_a_cut_together_are_both_remembered(client):
     body = res.json()
     assert body["asset_type"] == "GRADED_IMAGE" and body["provenance"]["role"] == "color_grade"
     assert body["provenance"]["cut"] == {"turns": 0, "angle": 1} and body["provenance"]["grade"]["v"] == 1
+
+
+def test_fusion_effects_alone_are_kept_as_a_fusion_asset(client):
+    c, _, tmp_path = client
+    fusion = {"effects": [{"id": "fx1", "type": "vignette", "enabled": True, "params": {"radius": 0.8, "opacity": 0.7}}]}
+    res = c.post("/api/projects/p1/assets/graded", json={"image_data": _data_url(), "source_asset_id": "src", "fusion": fusion})
+    assert res.status_code == 200
+    body = res.json()
+    assert body["asset_type"] == "FUSION_IMAGE" and body["filename"].startswith("fusion-")
+    assert body["provenance"]["role"] == "fusion" and body["provenance"]["fusion"] == fusion
+    assert "grade" not in body["provenance"] and "cut" not in body["provenance"]
+    assert (tmp_path / body["relative_path"]).is_file()
+
+
+def test_the_asset_is_named_after_the_first_edit_and_keeps_all_of_them(client):
+    c, _, _ = client
+    both = c.post("/api/projects/p1/assets/graded", json={
+        "image_data": _data_url(), "source_asset_id": "src", "cut": {"turns": 1}, "fusion": {"effects": []}}).json()
+    assert both["asset_type"] == "CUT_IMAGE" and both["provenance"]["cut"] == {"turns": 1} and both["provenance"]["fusion"] == {"effects": []}
+    allthree = c.post("/api/projects/p1/assets/graded", json={
+        "image_data": _data_url(), "source_asset_id": "src", "grade": {"v": 1}, "cut": {"turns": 1}, "fusion": {"effects": []}}).json()
+    assert allthree["asset_type"] == "GRADED_IMAGE" and set(allthree["provenance"]) >= {"grade", "cut", "fusion", "role"}

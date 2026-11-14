@@ -402,32 +402,41 @@ class GradedImageRequest(BaseModel):
     source_asset_id: str = Field(..., min_length=1, description="The project picture the grade was made on")
     grade: dict = Field(default_factory=dict, description="The colour node stack that was baked in, kept as provenance")
     cut: dict = Field(default_factory=dict, description="The cut (crop, straighten, turns, flips, resize) that was baked in, kept as provenance")
+    fusion: dict = Field(default_factory=dict, description="The Fusion effect stack (glow, vignette, grain, blur, text) that was baked in, kept as provenance")
 
     @model_validator(mode="after")
     def _says_what_was_done(self):
-        if not self.grade and not self.cut:
-            raise ValueError("give the grade and/or the cut that was baked into the picture")
-        if len(json.dumps(self.grade)) > 400_000 or len(json.dumps(self.cut)) > 20_000:
-            raise ValueError("grade or cut is too large to keep as provenance")
+        if not self.grade and not self.cut and not self.fusion:
+            raise ValueError("give the grade, the cut and/or the Fusion effects that were baked into the picture")
+        if len(json.dumps(self.grade)) > 400_000 or len(json.dumps(self.cut)) > 20_000 or len(json.dumps(self.fusion)) > 100_000:
+            raise ValueError("grade, cut or fusion is too large to keep as provenance")
         return self
 
 
 @project_router.post("/{project_id}/assets/graded")
 def save_graded_image(project_id: str, request: GradedImageRequest, db: Session = Depends(get_db)) -> dict:
-    """Keep a picture edited by hand in the image studio (colour grade and/or cut, rendered there) as a new project asset."""
+    """Keep a picture edited by hand in the image studio (colour grade, cut and/or Fusion effects, rendered there) as a new project asset."""
     source = db.query(AssetRecord).filter(AssetRecord.id == request.source_asset_id, AssetRecord.project_id == project_id).first()
     if not db.query(ProjectRecord).filter(ProjectRecord.id == project_id).first():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
     if not source:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Asset not found in this project: {request.source_asset_id}")
     try:
-        graded = bool(request.grade)
+        # what the asset is called follows the first thing in it: grade, then cut, then effects
+        role, asset_type, prefix = next(
+            (r for r, on in (
+                (("color_grade", "GRADED_IMAGE", "graded"), bool(request.grade)),
+                (("cut", "CUT_IMAGE", "cut"), bool(request.cut)),
+                (("fusion", "FUSION_IMAGE", "fusion"), bool(request.fusion)),
+            ) if on),
+        )
         asset = save_project_image(
-            db, project_id, request.image_data, asset_type="GRADED_IMAGE" if graded else "CUT_IMAGE", prefix="graded" if graded else "cut",
-            what="edited picture",
+            db, project_id, request.image_data, asset_type=asset_type, prefix=prefix, what="edited picture",
             provenance={
-                "role": "color_grade" if graded else "cut", "source_asset_id": source.id, "source_filename": source.filename,
-                **({"grade": request.grade} if graded else {}), **({"cut": request.cut} if request.cut else {}),
+                "role": role, "source_asset_id": source.id, "source_filename": source.filename,
+                **({"grade": request.grade} if request.grade else {}),
+                **({"cut": request.cut} if request.cut else {}),
+                **({"fusion": request.fusion} if request.fusion else {}),
             },
         )
     except ComfyImageGenerationError as exc:

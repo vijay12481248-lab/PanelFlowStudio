@@ -70,23 +70,45 @@ and the cut together; "Save edited picture as a new asset" sends the rendered PN
 for a cut alone, with the source asset and the exact settings as provenance (versions are labelled "Grade" and "Cut"); both stacks are
 cleared afterwards because they are in the pixels. Opening another picture starts with no cut.
 
-## Next phase (the rail shows it, disabled)
-4. **Fusion** - an effect stack (glow, vignette, grain, text).
+## Phase 4: Fusion (built)
+The **Fusion** page is an effect stack applied last, to the finished picture (after the grade and the cut), so a vignette centres on the
+final frame and text is placed in it. Glow, vignette, blur and text are ChronoFlow's own renderers (`fusion-graph.js`, `processNode`,
+imported unchanged by `image-studio/fusion/fusionGraph.ts`), so they look as they do on the video Fusion page; **film grain is the
+studio's own** (`effects.ts`, `grainPixels`) because ChronoFlow's ignores its size setting.
+
+| Piece | What it does |
+|---|---|
+| **Effects** | Glow (size, intensity), Vignette (radius, softness, opacity, colour), Film grain (amount, size, a fixed pattern you can re-roll), Blur (radius), Text (text, size, colour, outline, glow, alignment, background box, line spacing). Add any number, in any order; each has a switch, move up/down and delete, and a "(no effect)" note when it would change nothing. |
+| **Text placement** | While a text effect is selected, click or drag on the picture to place it. |
+| **Live view** | `FusionStage` renders the whole pipeline (grade, cut, effects) at screen size. Header chip `FX n` while effects are set. Undo/redo (Ctrl+Z on this page, a drag is one step). |
+| **Deliver** | Bakes grade, then cut, then effects (`renderEdited`) into PNG/JPG/WebP, or saves it as an asset. The endpoint now also takes `fusion`; the asset is named after the first thing in it (`GRADED_IMAGE`, then `CUT_IMAGE`, then `FUSION_IMAGE`) and keeps all three records as provenance. |
+
+**Size independence.** Pixel sizes are written for a frame 720 pixels high (like ChronoFlow) and scaled by the picture's real height
+(`refScale`, `scaledNode`), so a still looks the same at any resolution. Limits: ChronoFlow's blur and glow clamp at 80 and 60 px, so
+on pictures taller than about 3,500 px the slider maxima give a relatively weaker effect. Grain is seeded, so the preview and the
+export are the same picture. Not built from ChronoFlow's Fusion page: the node graph itself, masks, chroma key, camera shake, transform.
+
+All four pages of the rail are now open; the page-rail test asserts none is locked.
 
 ## Checked
-Type check, `npm run test:ui` (714), the Python tests for the endpoint, a production `vite build`, and in a real browser against the
-running Vite server with stubbed engine calls.
+Type check, `npm run test:ui` (724), the Python tests for the endpoint (65 related), a production `vite build`, and in a real browser
+against the running Vite server with stubbed engine calls.
 - Phase 1: all three AI modes, a real mouse stroke painting a mask, the pose flow (the request carries the artwork id, the uploaded
   picture as a data URL and the note), Versions growing and switching, the Deliver page and its provenance, story mode.
 - Phase 2: the WebGL picture matches ChronoFlow's CPU maths at full resolution (mean difference 0.44 out of 255, max 1; with a LUT 0.47),
   orientation right, `getError()` 0 and redraws on every change; five slider moves undo as one step; all four scopes draw; a real `.cube`
-  (swap red and blue) imports, applies and survives a reload; Auto balance and a look add nodes; a real mouse drag bends a curve; the baked
-  PNG export matches the CPU grade (0.47); the save request carries the PNG, the source asset, the grade and the LUT id.
+  imports, applies and survives a reload; Auto balance and a look add nodes; a real mouse drag bends a curve; the baked PNG export
+  matches the CPU grade (0.47); the save request carries the PNG, the source asset, the grade and the LUT id.
 - Phase 3: 9:16 gives exactly 0.5625; a real mouse drag moves the frame and a corner drag shrinks it keeping the ratio with the opposite
-  corner fixed; the exported PNG of a turned picture is **pixel-identical** (mean 0, max 0) to an independent 90-degree rotation, and of
-  a flipped-both-ways picture likewise; a straightened 8-degree auto-crop matches an independently computed bilinear rotation to 0.28 out
-  of 255 and its size matches the readout; at 8, -23 and 40 degrees the export has zero transparent or half-transparent pixels; grade +
-  16:9 + 512 long edge exports 512 x 288 and the save request carries the PNG, the grade (2 nodes) and the cut, after which both clear.
+  corner fixed; the exported PNG of a turned picture is pixel-identical (mean 0, max 0) to an independent 90-degree rotation, and of a
+  flipped-both-ways picture likewise; a straightened 8-degree auto-crop matches an independently computed bilinear rotation to 0.28 of
+  255; at 8, -23 and 40 degrees the export has zero transparent or half-transparent pixels.
+- Phase 4: a vignette darkens the corner to 0.30 to 0.33 of the original (opacity 0.7) and leaves the centre untouched; a real mouse
+  click places the text where it was clicked; with vignette, text, glow and grain the live preview and the exported PNG are
+  **pixel-identical** (mean 0, max 0) and a second export is identical to the first; text covers the same share of the frame at 1100
+  and 2200 px (width 0.126 against 0.126, height 0.048 against 0.049); reorder, undo and redo behave; grade + cut + effects save in
+  one request (PNG, grade, cut, the effect types) and all three stacks clear afterwards.
 
 **Not checked:** a real engine round trip from this UI (the endpoint is covered by unit tests), the JPG/WebP exports, very large
-pictures on the CPU fallback, the Tauri window, other window sizes, touch input on the crop handles.
+pictures on the CPU fallback, pictures taller than about 3,500 px with strong blur or glow, the Tauri window, other window sizes,
+touch input on the crop handles and the text placement.

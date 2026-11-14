@@ -18,6 +18,9 @@ import { CutInspector } from "./image-studio/cut/CutInspector";
 import { CutStage } from "./image-studio/cut/CutStage";
 import { cutGeometry, isCutIdentity, newCut, type CutState } from "./image-studio/cut/geometry";
 import { renderEditedBlob } from "./image-studio/cut/render";
+import { isFusionActive, newFusion, type FusionState } from "./image-studio/fusion/effects";
+import { FusionInspector } from "./image-studio/fusion/FusionInspector";
+import { FusionStage } from "./image-studio/fusion/FusionStage";
 import { useImageSource } from "./image-studio/color/useImageSource";
 
 export type ImageEditorTarget =
@@ -96,6 +99,9 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   const [gradeBypass, setGradeBypass] = useState(false);
   // Cut: crop, straighten, turns, flips, resize. Also a view-level state: shown on the Cut page, applied when you export or save.
   const [cutHistory, setCutHistory] = useState(() => startHistory(newCut()));
+  // Fusion: an effect stack (glow, vignette, grain, blur, text), applied last, to the cut picture.
+  const [fusionHistory, setFusionHistory] = useState(() => startHistory(newFusion()));
+  const [selectedEffectId, setSelectedEffectId] = useState<string | null>(null);
 
   // Tool states
   const [tool, setTool] = useState<ToolMode>("brush");
@@ -187,6 +193,8 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
     }
     setGradeHistory(startHistory(G.newGrade()));
     setCutHistory(startHistory(newCut()));
+    setFusionHistory(startHistory(newFusion()));
+    setSelectedEffectId(null);
     setNodeIndex(0);
   }, [
     isOpen,
@@ -615,7 +623,9 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
       : currentImageSrc;
   const cut = cutHistory.present;
   const cutActive = !isCutIdentity(cut);
-  const source = useImageSource(cleanUrl, page === "color" || page === "cut" || gradeActive || cutActive);
+  const fusion = fusionHistory.present;
+  const fusionActive = isFusionActive(fusion);
+  const source = useImageSource(cleanUrl, page === "color" || page === "cut" || page === "fusion" || gradeActive || cutActive || fusionActive);
   const bakedTable = useMemo(() => (gradeActive ? G.bake(grade, G.LUT_SIZE, lutLib) : null), [grade, lutLib, gradeActive]);
   const shownTable = gradeBypass || isComparing ? null : bakedTable; // comparing and bypass show the picture as it is
   const changeGrade = (next: typeof grade, key: string) => setGradeHistory((h) => pushGrade(h, next, key, Date.now()));
@@ -624,15 +634,17 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
     if (!saveLutLibrary(lib)) showToast("The LUT library could not be remembered (browser storage is full)");
   };
   const changeCut = (next: CutState, key: string) => setCutHistory((h) => pushGrade(h, next, key, Date.now()));
+  const changeFusion = (next: FusionState, key: string) => setFusionHistory((h) => pushGrade(h, next, key, Date.now()));
+  const selectedText = fusion.effects.find((e) => e.id === selectedEffectId && e.type === "text" && e.enabled) ?? null;
   const sourceW = source.bitmap?.width ?? displayWidth, sourceH = source.bitmap?.height ?? displayHeight;
   const cutGeo = cutActive ? cutGeometry(cut, sourceW, sourceH) : null;
-  // What Deliver bakes in: the grade first (full size), then the cut.
+  // What Deliver bakes in: the grade first (full size), then the cut, then the Fusion effects.
   const bakedForExport =
-    (gradeActive || cutActive) && source.bitmap
-      ? { bitmap: source.bitmap, table: gradeActive ? bakedTable : null, size: G.LUT_SIZE, cut: cutActive ? cut : null }
+    (gradeActive || cutActive || fusionActive) && source.bitmap
+      ? { bitmap: source.bitmap, table: gradeActive ? bakedTable : null, size: G.LUT_SIZE, cut: cutActive ? cut : null, effects: fusionActive ? fusion.effects : null }
       : null;
 
-  // Keep the edited picture (grade and/or cut) as a new project asset; both are then in the pixels, so the stacks are cleared.
+  // Keep the edited picture (grade, cut and/or effects) as a new project asset; they are then in the pixels, so the stacks are cleared.
   const saveEdited = async () => {
     if (effectiveTarget.mode !== "project" || !bakedForExport) return;
     try {
@@ -649,6 +661,7 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
         source_asset_id: was.id,
         ...(gradeActive ? { grade } : {}),
         ...(cutActive ? { cut } : {}),
+        ...(fusionActive ? { fusion } : {}),
       });
       setPreviousAsset(was);
       setCurrentAsset(saved);
@@ -656,6 +669,8 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
       if (effectiveTarget.onAssetUpdated) effectiveTarget.onAssetUpdated(saved);
       setGradeHistory(startHistory(G.newGrade()));
       setCutHistory(startHistory(newCut()));
+      setFusionHistory(startHistory(newFusion()));
+      setSelectedEffectId(null);
       setNodeIndex(0);
       showToast("Edited picture saved as a new asset");
     } catch (err: any) {
@@ -678,14 +693,14 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   const live = useRef({ page, undo: () => {}, redo: () => {} });
   live.current = {
     page,
-    undo: () => (page === "cut" ? setCutHistory((h) => undoGrade(h)) : setGradeHistory((h) => undoGrade(h))),
-    redo: () => (page === "cut" ? setCutHistory((h) => redoGrade(h)) : setGradeHistory((h) => redoGrade(h))),
+    undo: () => (page === "cut" ? setCutHistory((h) => undoGrade(h)) : page === "fusion" ? setFusionHistory((h) => undoGrade(h)) : setGradeHistory((h) => undoGrade(h))),
+    redo: () => (page === "cut" ? setCutHistory((h) => redoGrade(h)) : page === "fusion" ? setFusionHistory((h) => redoGrade(h)) : setGradeHistory((h) => redoGrade(h))),
   };
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-      const onColor = live.current.page === "color" || live.current.page === "cut";
+      const onColor = live.current.page === "color" || live.current.page === "cut" || live.current.page === "fusion";
 
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") {
         e.preventDefault();
@@ -723,6 +738,7 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
     const prov = a.provenance || {};
     if (prov.role === "color_grade") return `v${i} · Grade`;
     if (prov.role === "cut") return `v${i} · Cut`;
+    if (prov.role === "fusion") return `v${i} · Fusion`;
     if (prov.mode === "pose_camera_transfer") return `v${i} · Pose`;
     if (String(prov.workflow_id || "").includes("inpaint")) return `v${i} · Inpaint`;
     return `v${i} · Edit`;
@@ -764,6 +780,11 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
             )}
             {gradeActive && (
               <span className="shrink-0 rounded-full border border-info/50 bg-accent-soft px-2 py-0.5 text-[10px] font-medium text-info">GRADED</span>
+            )}
+            {fusionActive && (
+              <span className="shrink-0 rounded-full border border-info/50 bg-accent-soft px-2 py-0.5 text-[10px] font-medium text-info" title="The effects are applied when you export or save from Deliver">
+                FX {fusion.effects.filter((e) => e.enabled).length}
+              </span>
             )}
             {cutActive && (
               <span
@@ -834,7 +855,7 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
               style={{ backgroundImage: "radial-gradient(circle at 1px 1px, rgba(150,175,255,0.07) 1px, transparent 0)", backgroundSize: "24px 24px" }}
             >
               <div
-                className={`relative flex max-h-full max-w-full items-center justify-center transition-transform duration-150 ease-out ${page === "cut" ? "hidden" : ""}`}
+                className={`relative flex max-h-full max-w-full items-center justify-center transition-transform duration-150 ease-out ${page === "cut" || page === "fusion" ? "hidden" : ""}`}
                 style={{ transform: `scale(${zoomLevel})`, transformOrigin: "center center" }}
                 onMouseEnter={() => setIsCursorInside(true)}
                 onMouseLeave={() => {
@@ -882,6 +903,22 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                   <CutStage bitmap={source.bitmap} table={shownTable} size={G.LUT_SIZE} cut={cut} onChange={changeCut} error={source.error} />
                 </div>
               )}
+              {page === "fusion" && (
+                <div style={{ transform: `scale(${zoomLevel})`, transformOrigin: "center center" }} className="transition-transform duration-150 ease-out">
+                  <FusionStage
+                    bitmap={source.bitmap}
+                    table={shownTable}
+                    size={G.LUT_SIZE}
+                    cut={cutActive ? cut : null}
+                    effects={fusion.effects}
+                    text={selectedText}
+                    onMoveText={(id, x, y) =>
+                      changeFusion({ effects: fusion.effects.map((e) => (e.id === id ? { ...e, params: { ...e.params, posX: x, posY: y } } : e)) }, "pos")
+                    }
+                    error={source.error}
+                  />
+                </div>
+              )}
               {maskTools && (
                 <div className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full border border-edge/80 bg-navy/90 px-3 py-1 text-[11px] text-fg-dim">
                   {tool === "brush" ? "Paint over the area to replace" : "Erasing the mask"} · B brush · E eraser · [ ] size
@@ -902,8 +939,19 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
             />
           </div>
 
-          <aside className="w-80 shrink-0 border-l border-edge bg-navy/60 md:w-[22rem]" aria-label={page === "deliver" ? "Deliver" : page === "color" ? "Color" : page === "cut" ? "Cut" : "AI"}>
-            {page === "cut" ? (
+          <aside className="w-80 shrink-0 border-l border-edge bg-navy/60 md:w-[22rem]" aria-label={page === "deliver" ? "Deliver" : page === "color" ? "Color" : page === "cut" ? "Cut" : page === "fusion" ? "Fusion" : "AI"}>
+            {page === "fusion" ? (
+              <FusionInspector
+                fusion={fusion}
+                selectedId={selectedEffectId}
+                onSelect={setSelectedEffectId}
+                onChange={changeFusion}
+                canUndo={fusionHistory.past.length > 0}
+                canRedo={fusionHistory.future.length > 0}
+                onUndo={() => setFusionHistory((h) => undoGrade(h))}
+                onRedo={() => setFusionHistory((h) => redoGrade(h))}
+              />
+            ) : page === "cut" ? (
               <CutInspector
                 cut={cut}
                 sourceWidth={sourceW}

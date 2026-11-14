@@ -1,4 +1,5 @@
 import { drawGraded } from "../color/gradeRender";
+import { applyFusion, isFusionActive, type Effect } from "../fusion/effects";
 import { cutGeometry, isCutIdentity, type CutState } from "./geometry";
 
 export type Source = ImageBitmap | HTMLCanvasElement;
@@ -41,9 +42,11 @@ export interface EditedPicture {
   size: number;
   /** The cut, or null when there is none. */
   cut: CutState | null;
+  /** The Fusion effect stack (applied last, to the cut picture), or null when there is none. */
+  effects?: Effect[] | null;
 }
 
-/** The picture with the grade applied first (at full size), then cut: what Deliver exports and saves. */
+/** The picture with the grade applied first (at full size), then the cut, then the Fusion effects: what Deliver exports and saves. */
 export function renderEdited(p: EditedPicture): HTMLCanvasElement {
   let src: Source = p.bitmap;
   if (p.table) {
@@ -51,13 +54,28 @@ export function renderEdited(p: EditedPicture): HTMLCanvasElement {
     drawGraded(graded, p.bitmap, p.table, p.size, Number.MAX_SAFE_INTEGER);
     src = graded;
   }
-  if (p.cut && !isCutIdentity(p.cut)) return drawCut(src, p.cut);
-  if (src instanceof HTMLCanvasElement) return src;
-  const plain = document.createElement("canvas");
-  plain.width = p.bitmap.width;
-  plain.height = p.bitmap.height;
-  plain.getContext("2d")!.drawImage(p.bitmap, 0, 0);
-  return plain;
+  let out: HTMLCanvasElement;
+  if (p.cut && !isCutIdentity(p.cut)) out = drawCut(src, p.cut);
+  else if (src instanceof HTMLCanvasElement) out = src;
+  else {
+    out = document.createElement("canvas");
+    out.width = p.bitmap.width;
+    out.height = p.bitmap.height;
+    out.getContext("2d")!.drawImage(p.bitmap, 0, 0);
+  }
+  return p.effects && isFusionActive({ effects: p.effects }) ? applyFusion(out, p.effects) : out;
+}
+
+/** The same pipeline at screen size, for the Fusion page's preview (parameters scale with the height, so it matches the export). */
+export function renderPreview(p: EditedPicture, maxLongEdge: number): HTMLCanvasElement {
+  let src: Source = p.bitmap;
+  if (p.table) {
+    const graded = document.createElement("canvas");
+    drawGraded(graded, p.bitmap, p.table, p.size, maxLongEdge);
+    src = graded;
+  }
+  const out = drawCut(src, p.cut ?? { turns: 0, flipH: false, flipV: false, angle: 0, crop: null, aspect: "free", longEdge: null }, { maxLongEdge });
+  return p.effects && isFusionActive({ effects: p.effects }) ? applyFusion(out, p.effects) : out;
 }
 
 export async function renderEditedBlob(p: EditedPicture, mime: string, quality = 0.92): Promise<Blob> {

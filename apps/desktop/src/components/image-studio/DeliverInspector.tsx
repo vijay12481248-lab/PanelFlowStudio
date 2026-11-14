@@ -113,7 +113,7 @@ export const DeliverInspector: React.FC<{
         {baked && (
           <label className="flex items-center gap-2 text-[11px] text-fg-dim">
             <input type="checkbox" checked={bake} onChange={(e) => setBake(e.target.checked)} className="accent-accent" />
-            <span>Bake the colour grade and the cut into the export</span>
+            <span>Bake the colour grade, the cut and the effects into the export</span>
           </label>
         )}
         <button
@@ -143,7 +143,7 @@ export const DeliverInspector: React.FC<{
             <span>{saving ? "Saving…" : "Save edited picture as a new asset"}</span>
           </button>
         )}
-        <p className="text-[11px] text-fg-faint">Every AI result is already saved in your project as its own asset. A graded or cut picture is only saved when you ask.</p>
+        <p className="text-[11px] text-fg-faint">Every AI result is already saved in your project as its own asset. A graded, cut or effect-laden picture is only saved when you ask.</p>
       </section>
 
       <section className="flex flex-col gap-2 border-t border-edge/70 pt-3">
