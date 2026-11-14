@@ -82,3 +82,33 @@ def lessons_for(ledger: MistakeLedger, model: str, scene_type: str, min_recurren
     rows = sorted((r for r in ledger.load_mistakes(lesson_domain(model, scene_type)) if r.recurrence_count >= min_recurrence and (plan is None or _fits(r, plan))),
                   key=lambda r: -r.recurrence_count)
     return " ".join(r.prevention_rule for r in rows)
+
+
+def lessons_from_feedback(db, scene_type: str, plan, min_reviews: int = 2) -> str:
+    """Rules for THIS plan from what the owner actually said: when at least `min_reviews` reviewed pictures of this scene type with the same camera angle (or
+    the same action state) carry the owner's wrong-tag `camera` (resp. `pose`) and were liked under 60%, the matching rule is returned. A complaint the owner
+    still liked (60% or more) never counts. The system's own failures are learned separately (`record_outcome`); this is the owner's word."""
+    from engine.database.models import SceneFeedbackRecord, SceneRunRecord
+    from engine.original.scene_prompt import CAMERA_FIX
+
+    rows = (db.query(SceneRunRecord.plan, SceneFeedbackRecord.liked, SceneFeedbackRecord.wrong_tags)
+            .join(SceneFeedbackRecord, SceneFeedbackRecord.run_id == SceneRunRecord.id)
+            .filter(SceneRunRecord.scene_type == scene_type, SceneFeedbackRecord.liked < 60).all())
+    camera_hits: dict[str, int] = {}
+    pose_hits: dict[str, int] = {}
+    for stored, _liked, wrong in rows:
+        angle = ((stored or {}).get("camera") or {}).get("angle")
+        if "camera" in (wrong or []) and angle:
+            camera_hits[angle] = camera_hits.get(angle, 0) + 1
+        if "pose" in (wrong or []):
+            for state in {a.get("action_state") for a in (stored or {}).get("actors", []) if a.get("action_state")}:
+                pose_hits[state] = pose_hits.get(state, 0) + 1
+    rules: list[str] = []
+    if camera_hits.get(plan.camera.angle, 0) >= min_reviews:
+        rules.append(CAMERA_FIX[plan.camera.angle])
+    for a in plan.actors:
+        if pose_hits.get(a.action_state, 0) >= min_reviews:
+            rule = POSE_FIX.get(a.action_state, f"Show the '{a.action_state}' state unmistakably in the whole body and face.")
+            if rule not in rules:
+                rules.append(rule)
+    return " ".join(rules)

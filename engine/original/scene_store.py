@@ -135,12 +135,35 @@ def _share(flags: list[bool]) -> float | None:
     return sum(flags) / len(flags) if flags else None
 
 
+def _judge_shares(analyses: dict[str, SceneAnalysisRecord]) -> dict:
+    per: dict[str, dict] = {}
+    for a in analyses.values():
+        for it in (a.crosscheck or {}).get("items", []):
+            for judge in (it.get("answers") or {}):
+                t = per.setdefault(judge, {"items": 0, "disputed": 0, "flips": 0})
+                t["items"] += 1
+                t["disputed"] += it.get("status") == "disputed"
+                t["flips"] += judge in it.get("suspect_flips", [])
+    return {j: {"items": t["items"], "disputed_share": t["disputed"] / t["items"], "suspect_flip_share": t["flips"] / t["items"]} for j, t in per.items()}
+
+
+def _latest_analyses(db) -> dict[str, SceneAnalysisRecord]:
+    latest: dict[str, SceneAnalysisRecord] = {}
+    for a in db.query(SceneAnalysisRecord).order_by(SceneAnalysisRecord.created_at).all():
+        latest[a.run_id] = a  # the latest analysis of a run wins
+    return latest
+
+
+def judge_report(db) -> dict:
+    """How the vision judges fare: per judge how many items it answered, the share that ended disputed and the share where it gave in without a new reason;
+    and how often the owner agreed with the AI review (overall, when the judges disputed, when only one judge looked)."""
+    return {"judges": _judge_shares(_latest_analyses(db)), "owner_agreement": stats(db)["ai_agreement"]}
+
+
 def stats(db) -> dict:
     runs = db.query(SceneRunRecord).all()
     feedback = {f.run_id: f for f in db.query(SceneFeedbackRecord).all()}
-    analyses = {}
-    for a in db.query(SceneAnalysisRecord).order_by(SceneAnalysisRecord.created_at).all():
-        analyses[a.run_id] = a  # the latest analysis of a run wins
+    analyses = _latest_analyses(db)
     by_type: dict[str, dict] = {}
     for r in runs:
         t = by_type.setdefault(r.scene_type or "unknown", {"n": 0, "reviewed": 0, "_liked": []})
@@ -162,4 +185,5 @@ def stats(db) -> dict:
         "runs": len(runs), "reviewed": sum(1 for r in runs if r.review_state == "reviewed"), "mean_liked": sum(liked_all) / len(liked_all) if liked_all else None,
         "by_scene_type": by_type, "wrong_tags": dict(tags),
         "ai_agreement": {"overall": _share([f.agrees_with_ai for f in feedback.values()]), "when_disputed": agree(disputed), "single_judge": agree(lambda a: a.single_judge)},
+        "judges": _judge_shares(analyses),
     }

@@ -14,6 +14,7 @@ from engine.llm.registry import llm_registry
 from engine.original import scene_store
 from engine.original.crosscheck import cross_check
 from engine.original.judges import default_judges
+from engine.original.scene_lessons import lessons_from_feedback
 from engine.original.scene_plan import ScenePlan, load_playbook
 from engine.original.scene_run import generate_scene
 
@@ -50,7 +51,11 @@ def build_scene_operation(project_id: str, payload: dict):
             raise RuntimeError("Ollama is not reachable")
         key, ws = uuid.uuid4().hex[:8], SCENE_ROOT / project_id
         progress(0.05, "drawing and checking the scene")
-        result = generate_scene(ArtEngine(), provider, plan, ws=ws, key=key, seed=seed, ledger=MistakeLedger(file_path=lessons_path()), is_cancelled=is_cancelled)
+        try:  # what the owner said about earlier pictures of this kind; never a reason to lose this one
+            owner_lessons = lessons_from_feedback(db, plan.scene_type, plan)
+        except Exception:
+            owner_lessons = ""
+        result = generate_scene(ArtEngine(), provider, plan, ws=ws, key=key, seed=seed, lessons=owner_lessons, ledger=MistakeLedger(file_path=lessons_path()), is_cancelled=is_cancelled)
         out = result.model_dump(mode="json")
         out["image_file"] = str(ws / out["image_path"])
         try:  # saving the run must never lose the picture

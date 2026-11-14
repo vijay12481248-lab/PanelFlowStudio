@@ -137,3 +137,30 @@ def test_default_judges_can_be_switched_to_the_single_judge(monkeypatch):
     assert [j.name for j in judges.default_judges(object(), client=object())] == ["A"]
     monkeypatch.delenv("SCENE_CROSSCHECK")
     assert [j.name for j in judges.default_judges(object(), client=object())] == ["A", "B"]
+
+
+def test_job_passes_the_owners_complaints_to_the_next_picture_as_lessons(env, monkeypatch):
+    db, pid = env
+    for _ in range(2):  # two pictures of this scene type the owner marked "camera" wrong, liked under 60%
+        r = scene_store.create_run(db, project_id=pid, job_id=None, brief="b", plan=fight_plan().model_dump(mode="json"), image_path="panels/a.png",
+                                   result={"status": "accept", "iterations": [], "seconds": 1})
+        scene_store.submit_feedback(db, r["id"], liked=20, agrees_with_ai=False, good_tags=[], wrong_tags=["camera"])
+    seen = {}
+
+    def spy(art, provider, plan, *, ws, key, **kw):
+        seen.update(kw)
+        return FakeResult(ws, key)
+
+    monkeypatch.setattr(scene_job, "generate_scene", spy)
+    run_job(db, pid)
+    assert "steeply upward" in seen["lessons"]
+
+
+def test_lessons_lookup_failing_never_stops_the_picture(env, monkeypatch):
+    db, pid = env
+
+    def boom(*a, **k):
+        raise RuntimeError("db gone")
+
+    monkeypatch.setattr(scene_job, "lessons_from_feedback", boom)
+    assert run_job(db, pid)["status"] == "accept"
