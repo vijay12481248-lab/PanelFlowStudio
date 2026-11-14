@@ -61,10 +61,11 @@ def plan_to_shotspec(plan: ScenePlan, genre: str = DEFAULT_GENRE) -> tuple[Origi
 def compile_scene_prompt(plan: ScenePlan, *, emphasis: list[str] | None = None, lessons: str = "",
                          target: str = "qwen_image_21") -> tuple[str, str, tuple[int, int]]:
     """(positive, negative, (width, height)). `emphasis` is what the last attempt failed to show: stated first, like the refine loop does.
-    `lessons` is guidance learned from past failures: it only ever goes to the negative side."""
+    `lessons` is guidance learned from past failures, written as positive statements and added to the END of the positive prompt: measured on this PC the
+    Qwen Turbo workflow ignores the negative prompt completely (same seed, empty vs strong negative: pixel difference 0.0)."""
     story, spec, loc = plan_to_shotspec(plan)
-    compiled = PromptCompiler.compile_image_prompt(story, spec, loc, target=target, extra_negative=lessons)
-    positive = compiled.positive
+    compiled = PromptCompiler.compile_image_prompt(story, spec, loc, target=target)
+    positive = f"{compiled.positive} Remember: {lessons.strip()}" if lessons.strip() else compiled.positive
     if emphasis:
         positive = f"Most important: {'; '.join(e.rstrip('. ') for e in emphasis)}. {positive}"
     return positive, compiled.negative, tuple(compiled.dimensions)

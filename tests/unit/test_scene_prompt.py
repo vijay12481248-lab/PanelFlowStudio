@@ -29,9 +29,10 @@ def test_emphasis_is_stated_first():
     assert positive.startswith("Most important: the sword touches the black armour.")
 
 
-def test_lessons_go_to_negative_only():
-    positive, negative, _ = compile_scene_prompt(fight_plan(), lessons="both fighters on one side")
-    assert "both fighters on one side" in negative and "both fighters on one side" not in positive
+def test_lessons_are_stated_positively_because_qwen_ignores_the_negative_prompt():
+    # measured: same seed, empty vs strong vs default negative prompt = pixel difference 0.0 on the Qwen Turbo workflow (BasicGuider, no CFG)
+    positive, negative, _ = compile_scene_prompt(fight_plan(), lessons="Camera placed near the ground looking steeply upward.")
+    assert "steeply upward" in positive and "steeply upward" not in negative
 
 
 def test_no_actor_plan_compiles():

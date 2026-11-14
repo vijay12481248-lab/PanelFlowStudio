@@ -108,8 +108,22 @@ def test_time_budget_stops_the_loop_and_says_so(tmp_path, monkeypatch):
     assert len(eng.calls) == 1 and "time budget used" in r.unmet and r.status == "needs_review"
 
 
-def test_lessons_reach_the_negative_prompt(tmp_path, monkeypatch):
+def test_lessons_reach_the_positive_prompt(tmp_path, monkeypatch):
     script(monkeypatch, review("accept", 1.0))
     eng = FakeEngine()
-    generate_scene(eng, None, fight_plan(), ws=tmp_path, key="k9", seed=7, lessons="both fighters on one side")
-    assert "both fighters on one side" in eng.calls[0]["negative"]
+    generate_scene(eng, None, fight_plan(), ws=tmp_path, key="k9", seed=7, lessons="Both fighters stand on opposite sides.")
+    assert "Both fighters stand on opposite sides." in eng.calls[0]["prompt"]
+
+
+def test_ledger_learns_from_first_attempts_and_feeds_later_runs(tmp_path, monkeypatch):
+    from engine.creative.mistakes import MistakeLedger
+    led = MistakeLedger(file_path=tmp_path / "lessons.json")
+    prompts = []
+    for run_no in range(3):
+        script(monkeypatch, review("regenerate", 0.3, [STRIKE]), review("accept", 1.0))  # the first attempt always misses the strike
+        eng = FakeEngine()
+        generate_scene(eng, None, fight_plan(), ws=tmp_path / f"r{run_no}", key="k", seed=7, ledger=led)
+        prompts.append(eng.calls[0]["prompt"])
+    assert "fully extended" not in prompts[0] and "fully extended" not in prompts[1]  # one sighting is not a lesson yet
+    assert "fully extended" in prompts[2]  # the second sighting made it one
+    assert led.load_mistakes("scene:qwen_image_21:fight")[0].recurrence_count == 3

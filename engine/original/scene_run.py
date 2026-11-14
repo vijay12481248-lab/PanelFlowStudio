@@ -17,7 +17,10 @@ from pydantic import BaseModel, Field
 from engine.original.models import Review
 from engine.original.planner import Budget, CorrectionPlan, best_iteration
 from engine.original.refine import record_candidate, refine_image, sha256_hex
+from engine.comfyui.art import ART_WORKFLOW_ID
+from engine.creative.mistakes import MistakeLedger
 from engine.original.scene_check import check_scene
+from engine.original.scene_lessons import lessons_for, record_outcome
 from engine.original.scene_plan import ScenePlan
 from engine.original.scene_prompt import compile_scene_prompt
 
@@ -44,9 +47,12 @@ class _OutOfTime(Exception):
 
 
 def generate_scene(art_engine, provider, plan: ScenePlan, *, ws: Path, key: str, seed: int | None = None, budget: SceneBudget = SceneBudget(),
-                   lessons: str = "", is_cancelled: Callable[[], bool] = lambda: False, timeout: float = 300.0) -> SceneResult:
-    """Blocking: callers in async code run it in a thread. RuntimeError("cancelled") only when nothing was drawn yet."""
+                   lessons: str = "", ledger: MistakeLedger | None = None, is_cancelled: Callable[[], bool] = lambda: False,
+                   timeout: float = 300.0) -> SceneResult:
+    """Blocking: callers in async code run it in a thread. RuntimeError("cancelled") only when nothing was drawn yet.
+    With a `ledger`, lessons seen twice are added to the prompt and the failures of the FIRST attempt (what the plain prompt gets wrong) are recorded."""
     t0 = time.monotonic()
+    lessons = " ".join(x for x in (lessons, lessons_for(ledger, ART_WORKFLOW_ID, plan.scene_type) if ledger else "") if x)
     base_seed = seed if seed is not None else random.randint(1, 2**31 - 1)
     iters: list[dict] = []
     reviews: dict[str, Review] = {}  # by picture hash, so a stopped run can still report the review of its best candidate
@@ -77,6 +83,10 @@ def generate_scene(art_engine, provider, plan: ScenePlan, *, ws: Path, key: str,
             raise
         png, review, status, history = (ws / best["file"]).read_bytes(), reviews.get(best["sha256"]), "needs_review", iters
         extra.append(reason)
+
+    first = reviews.get(iters[0]["sha256"]) if iters else None
+    if ledger and first:
+        record_outcome(ledger, ART_WORKFLOW_ID, plan.scene_type, first)
 
     out = ws / "panels" / f"{key}.png"
     out.parent.mkdir(parents=True, exist_ok=True)
