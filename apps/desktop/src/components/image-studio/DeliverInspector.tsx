@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { Check, Copy, Download } from "lucide-react";
+import { Check, Copy, Download, Save } from "lucide-react";
+import { renderGradedBlob } from "./color/gradeRender";
 
 export type ExportFormat = "png" | "jpg" | "webp";
 
@@ -9,12 +10,24 @@ const FORMATS: { id: ExportFormat; label: string; mime: string }[] = [
   { id: "webp", label: "WebP", mime: "image/webp" },
 ];
 
-/** Fetch the picture and write it out in the chosen format. PNG that is already PNG is saved byte for byte. */
-async function exportPicture(url: string, filename: string, format: ExportFormat): Promise<void> {
-  const blob = await (await fetch(url)).blob();
+/** The grade to bake into the picture: the pixels, the baked 3D LUT and its size. */
+export interface BakedGrade {
+  bitmap: ImageBitmap;
+  table: Float32Array;
+  size: number;
+}
+
+/** Fetch the picture and write it out in the chosen format. PNG that is already PNG is saved byte for byte; a grade is baked in. */
+async function exportPicture(url: string, filename: string, format: ExportFormat, graded: BakedGrade | null): Promise<void> {
   const target = FORMATS.find((f) => f.id === format)!;
-  let out = blob;
-  if (blob.type !== target.mime) {
+  let out: Blob;
+  if (graded) {
+    out = await renderGradedBlob(graded.bitmap, graded.table, graded.size, target.mime);
+  } else {
+    out = await (await fetch(url)).blob();
+  }
+  if (!graded && out.type !== target.mime) {
+    const blob = out;
     const bitmap = await createImageBitmap(blob);
     const canvas = document.createElement("canvas");
     canvas.width = bitmap.width;
@@ -47,6 +60,7 @@ const FIELDS: [string, string][] = [
   ["seed", "Seed"],
   ["pose_asset_id", "Pose picture"],
   ["base_asset_id", "Edited from"],
+  ["source_asset_id", "Graded from"],
 ];
 
 export const DeliverInspector: React.FC<{
@@ -55,9 +69,15 @@ export const DeliverInspector: React.FC<{
   dimensions: string;
   sha256?: string;
   provenance?: Record<string, any>;
+  /** Set while the picture carries a colour grade that is switched on. */
+  graded: BakedGrade | null;
+  /** Project pictures can keep the graded result as a new asset. */
+  onSaveGraded?: () => Promise<void>;
   onToast: (message: string) => void;
-}> = ({ imageUrl, filename, dimensions, sha256, provenance, onToast }) => {
+}> = ({ imageUrl, filename, dimensions, sha256, provenance, graded, onSaveGraded, onToast }) => {
   const [format, setFormat] = useState<ExportFormat>("png");
+  const [bake, setBake] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
   const rows = FIELDS.filter(([key]) => provenance && provenance[key] != null && provenance[key] !== "");
@@ -65,7 +85,7 @@ export const DeliverInspector: React.FC<{
   const run = async () => {
     setBusy(true);
     try {
-      await exportPicture(imageUrl, filename, format);
+      await exportPicture(imageUrl, filename, format, graded && bake ? graded : null);
       onToast(`Exported as ${format.toUpperCase()}`);
     } catch (err: any) {
       onToast(err?.message || "Export failed");
@@ -93,6 +113,12 @@ export const DeliverInspector: React.FC<{
           ))}
         </div>
         <p className="text-[11px] text-fg-faint">Same size as the picture on screen ({dimensions}). JPG and WebP are saved at 92% quality.</p>
+        {graded && (
+          <label className="flex items-center gap-2 text-[11px] text-fg-dim">
+            <input type="checkbox" checked={bake} onChange={(e) => setBake(e.target.checked)} className="accent-accent" />
+            <span>Bake the colour grade into the export</span>
+          </label>
+        )}
         <button
           type="button"
           onClick={run}
@@ -102,7 +128,25 @@ export const DeliverInspector: React.FC<{
           <Download className="h-4 w-4" />
           <span>{busy ? "Exporting…" : "Export picture"}</span>
         </button>
-        <p className="text-[11px] text-fg-faint">Every AI result is already saved in your project as its own asset.</p>
+        {graded && onSaveGraded && (
+          <button
+            type="button"
+            disabled={saving}
+            onClick={async () => {
+              setSaving(true);
+              try {
+                await onSaveGraded();
+              } finally {
+                setSaving(false);
+              }
+            }}
+            className="flex w-full items-center justify-center gap-2 rounded-xl border border-edge bg-flat py-2.5 text-xs font-semibold text-fg transition-colors hover:bg-glass-hi disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <Save className="h-4 w-4" />
+            <span>{saving ? "Saving…" : "Save graded picture as a new asset"}</span>
+          </button>
+        )}
+        <p className="text-[11px] text-fg-faint">Every AI result is already saved in your project as its own asset. A graded picture is only saved when you ask.</p>
       </section>
 
       <section className="flex flex-col gap-2 border-t border-edge/70 pt-3">

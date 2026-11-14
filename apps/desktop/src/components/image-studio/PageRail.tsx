@@ -7,7 +7,7 @@ const PAGES: { id: StudioPage; label: string; Icon: React.ComponentType<{ classN
   { id: "ai", label: "AI", Icon: Sparkles, ready: true },
   { id: "cut", label: "Cut", Icon: Crop, ready: false },
   { id: "fusion", label: "Fusion", Icon: Layers, ready: false },
-  { id: "color", label: "Color", Icon: Palette, ready: false },
+  { id: "color", label: "Color", Icon: Palette, ready: true },
   { id: "deliver", label: "Deliver", Icon: Share2, ready: true },
 ];
 

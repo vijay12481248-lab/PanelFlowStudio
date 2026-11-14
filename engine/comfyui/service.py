@@ -246,8 +246,11 @@ def h3_edit_size(width: int, height: int) -> tuple[int, int]:
 POSE_REFERENCE_MAX_BYTES = 20 * 1024 * 1024
 
 
-def save_pose_reference(db: Session, project_id: str, image_data: str) -> str:
-    """Store an uploaded pose picture (base64 or a data URL) as a project asset and return its id."""
+def save_project_image(
+    db: Session, project_id: str, image_data: str, *, asset_type: str, prefix: str, provenance: dict[str, Any],
+    what: str = "picture", check_edit_size: bool = False,
+) -> AssetRecord:
+    """Store an uploaded picture (base64 or a data URL) as a PNG project asset."""
     project = db.query(ProjectRecord).filter(ProjectRecord.id == project_id).first()
     if not project:
         raise ComfyImageGenerationError("Project not found")
@@ -258,25 +261,36 @@ def save_pose_reference(db: Session, project_id: str, image_data: str) -> str:
         with Image.open(io.BytesIO(raw)) as picture:
             picture = picture.convert("RGB")
             width, height = picture.size
-            h3_edit_size(width, height)  # refuses a shape the model cannot work at, before any GPU time is spent
+            if check_edit_size:
+                h3_edit_size(width, height)  # refuses a shape the model cannot work at, before any GPU time is spent
             out = io.BytesIO()
             picture.save(out, format="PNG")
     except ComfyImageGenerationError:
         raise
     except Exception as exc:
-        raise ComfyImageGenerationError(f"The pose picture is not a usable image: {exc}") from exc
+        raise ComfyImageGenerationError(f"The {what} is not a usable image: {exc}") from exc
     png = out.getvalue()
     asset_id = str(uuid.uuid4())
-    filename = f"pose-{asset_id}.png"
-    target = _write_project_image(Path(str(project.workspace_path)), Path("generated") / "comfyui" / filename, png)
-    db.add(AssetRecord(
-        id=asset_id, project_id=project_id, asset_type="POSE_REFERENCE", filename=filename,
-        relative_path=target.relative_to(Path(str(project.workspace_path))).as_posix(), content_type="image/png",
+    filename = f"{prefix}-{asset_id}.png"
+    workspace = Path(str(project.workspace_path))
+    target = _write_project_image(workspace, Path("generated") / "comfyui" / filename, png)
+    asset = AssetRecord(
+        id=asset_id, project_id=project_id, asset_type=asset_type, filename=filename,
+        relative_path=target.relative_to(workspace).as_posix(), content_type="image/png",
         width=width, height=height, byte_size=len(png), sha256=hashlib.sha256(png).hexdigest(), status="READY",
-        provenance={"role": "pose_camera_reference"},
-    ))
+        provenance=provenance,
+    )
+    db.add(asset)
     db.commit()
-    return asset_id
+    return asset
+
+
+def save_pose_reference(db: Session, project_id: str, image_data: str) -> str:
+    """Store an uploaded pose picture as a project asset and return its id."""
+    return save_project_image(
+        db, project_id, image_data, asset_type="POSE_REFERENCE", prefix="pose", provenance={"role": "pose_camera_reference"},
+        what="pose picture", check_edit_size=True,
+    ).id
 
 
 def edit_image_operation(

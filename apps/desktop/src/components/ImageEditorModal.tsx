@@ -9,6 +9,13 @@ import { PageRail } from "./image-studio/PageRail";
 import { ToolRail } from "./image-studio/ToolRail";
 import type { AiMode, StudioPage, StudioVersion, ToolMode } from "./image-studio/types";
 import { VersionsStrip } from "./image-studio/VersionsStrip";
+import { ColorInspector } from "./image-studio/color/ColorInspector";
+import { GradeCanvas } from "./image-studio/color/GradeCanvas";
+import { G, isNeutral, type LutLibrary } from "./image-studio/color/grade";
+import { pushGrade, redoGrade, startHistory, undoGrade } from "./image-studio/color/history";
+import { loadLutLibrary, saveLutLibrary } from "./image-studio/color/lutLibrary";
+import { renderGradedBlob } from "./image-studio/color/gradeRender";
+import { useImageSource } from "./image-studio/color/useImageSource";
 
 export type ImageEditorTarget =
   | { mode: 'project'; projectId: string; asset: GeneratedAsset; onAssetUpdated?: (newAsset: GeneratedAsset) => void }
@@ -78,6 +85,12 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   const [page, setPage] = useState<StudioPage>("ai");
   const [aiMode, setAiMode] = useState<AiMode>(effectiveTarget.mode === "project" ? "edit" : "inpaint");
   const [versions, setVersions] = useState<GeneratedAsset[]>(effectiveTarget.mode === "project" ? [effectiveTarget.asset] : []);
+
+  // Colour grade: a non-destructive node stack on the view. AI always runs on the clean pixels; the grade follows onto the new result.
+  const [gradeHistory, setGradeHistory] = useState(() => startHistory(G.newGrade()));
+  const [nodeIndex, setNodeIndex] = useState(0);
+  const [lutLib, setLutLib] = useState<LutLibrary>(() => loadLutLibrary());
+  const [gradeBypass, setGradeBypass] = useState(false);
 
   // Tool states
   const [tool, setTool] = useState<ToolMode>("brush");
@@ -167,6 +180,8 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
       setPreviousAsset(null);
       setVersions([effectiveTarget.asset]);
     }
+    setGradeHistory(startHistory(G.newGrade()));
+    setNodeIndex(0);
   }, [
     isOpen,
     effectiveTarget?.mode,
@@ -586,6 +601,47 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
     : `Panel ${effectiveTarget.panelId}`;
   const hasInpainted = effectiveTarget.mode === 'project' ? !!previousAsset : !!previousImageSrc;
 
+  const grade = gradeHistory.present;
+  const gradeActive = grade.on && !isNeutral(grade);
+  const cleanUrl =
+    effectiveTarget.mode === "project"
+      ? api.getGeneratedAssetUrl(effectiveTarget.projectId, (currentAsset || effectiveTarget.asset).id)
+      : currentImageSrc;
+  const source = useImageSource(cleanUrl, page === "color" || gradeActive);
+  const bakedTable = useMemo(() => (gradeActive ? G.bake(grade, G.LUT_SIZE, lutLib) : null), [grade, lutLib, gradeActive]);
+  const shownTable = gradeBypass || isComparing ? null : bakedTable; // comparing and bypass show the picture as it is
+  const changeGrade = (next: typeof grade, key: string) => setGradeHistory((h) => pushGrade(h, next, key, Date.now()));
+  const changeLib = (lib: LutLibrary) => {
+    setLutLib(lib);
+    if (!saveLutLibrary(lib)) showToast("The LUT library could not be remembered (browser storage is full)");
+  };
+  const gradedForExport = gradeActive && source.bitmap && bakedTable ? { bitmap: source.bitmap, table: bakedTable, size: G.LUT_SIZE } : null;
+
+  // Keep the graded picture as a new project asset; the grade is then part of the pixels, so the stack is cleared.
+  const saveGraded = async () => {
+    if (effectiveTarget.mode !== "project" || !gradedForExport) return;
+    try {
+      const was = currentAsset || effectiveTarget.asset;
+      const blob = await renderGradedBlob(gradedForExport.bitmap, gradedForExport.table, gradedForExport.size, "image/png");
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve(String(r.result));
+        r.onerror = () => reject(new Error("Could not read the graded picture."));
+        r.readAsDataURL(blob);
+      });
+      const saved = await api.saveGradedImage(effectiveTarget.projectId, { image_data: dataUrl, source_asset_id: was.id, grade });
+      setPreviousAsset(was);
+      setCurrentAsset(saved);
+      setVersions((v) => (v.some((x) => x.id === saved.id) ? v : [...v, saved]));
+      if (effectiveTarget.onAssetUpdated) effectiveTarget.onAssetUpdated(saved);
+      setGradeHistory(startHistory(G.newGrade()));
+      setNodeIndex(0);
+      showToast("Graded picture saved as a new asset");
+    } catch (err: any) {
+      showToast(err?.message || "The graded picture could not be saved");
+    }
+  };
+
   const handleDownload = () => {
     const link = document.createElement("a");
     link.href = imageUrl;
@@ -597,17 +653,28 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   };
 
   // Keyboard shortcuts
+  // The key handler is registered once, so what it needs to know about the page lives in a ref.
+  const live = useRef({ page, undoGrade: () => {}, redoGrade: () => {} });
+  live.current = {
+    page,
+    undoGrade: () => setGradeHistory((h) => undoGrade(h)),
+    redoGrade: () => setGradeHistory((h) => redoGrade(h)),
+  };
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      const onColor = live.current.page === "color";
 
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") {
         e.preventDefault();
-        if (e.shiftKey) handleRedo();
+        if (onColor) (e.shiftKey ? live.current.redoGrade : live.current.undoGrade)();
+        else if (e.shiftKey) handleRedo();
         else handleUndo();
       } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "y") {
         e.preventDefault();
-        handleRedo();
+        if (onColor) live.current.redoGrade();
+        else handleRedo();
       } else if (e.key.toLowerCase() === "b") {
         setPage("ai");
         setAiMode("inpaint");
@@ -633,6 +700,7 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   const versionLabel = (a: GeneratedAsset, i: number) => {
     if (i === 0) return "Original";
     const prov = a.provenance || {};
+    if (prov.role === "color_grade") return `v${i} · Grade`;
     if (prov.mode === "pose_camera_transfer") return `v${i} · Pose`;
     if (String(prov.workflow_id || "").includes("inpaint")) return `v${i} · Inpaint`;
     return `v${i} · Edit`;
@@ -671,6 +739,9 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
             </span>
             {hasInpainted && (
               <span className="shrink-0 rounded-full border border-ok/50 bg-ok/10 px-2 py-0.5 text-[10px] font-medium text-ok">EDITED</span>
+            )}
+            {gradeActive && (
+              <span className="shrink-0 rounded-full border border-info/50 bg-accent-soft px-2 py-0.5 text-[10px] font-medium text-info">GRADED</span>
             )}
             <p className="truncate font-mono text-xs text-fg-dim">
               {displayFilename} · {displaySubtext}
@@ -749,6 +820,7 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                   className="pointer-events-none max-h-[68vh] max-w-[62vw] rounded-lg border border-edge/80 object-contain shadow-2xl"
                   style={{ imageRendering: "auto" }}
                 />
+                <GradeCanvas bitmap={source.bitmap} table={shownTable} size={G.LUT_SIZE} onError={showToast} />
                 <canvas
                   ref={maskCanvasRef}
                   onPointerDown={handlePointerDown}
@@ -795,14 +867,35 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
             />
           </div>
 
-          <aside className="w-80 shrink-0 border-l border-edge bg-navy/60 md:w-[22rem]" aria-label={page === "deliver" ? "Deliver" : "AI"}>
-            {page === "deliver" ? (
+          <aside className="w-80 shrink-0 border-l border-edge bg-navy/60 md:w-[22rem]" aria-label={page === "deliver" ? "Deliver" : page === "color" ? "Color" : "AI"}>
+            {page === "color" ? (
+              <ColorInspector
+                grade={grade}
+                nodeIndex={nodeIndex}
+                onNodeIndex={setNodeIndex}
+                onChange={changeGrade}
+                canUndo={gradeHistory.past.length > 0}
+                canRedo={gradeHistory.future.length > 0}
+                onUndo={() => setGradeHistory((h) => undoGrade(h))}
+                onRedo={() => setGradeHistory((h) => redoGrade(h))}
+                lib={lutLib}
+                onLib={changeLib}
+                bypass={gradeBypass}
+                onBypass={setGradeBypass}
+                probe={source.probe}
+                sourceError={source.error}
+                table={bakedTable}
+                onToast={showToast}
+              />
+            ) : page === "deliver" ? (
               <DeliverInspector
                 imageUrl={imageUrl}
                 filename={displayFilename}
                 dimensions={`${displayWidth} × ${displayHeight}`}
                 sha256={shownAsset?.sha256}
                 provenance={shownAsset?.provenance}
+                graded={gradedForExport}
+                onSaveGraded={effectiveTarget.mode === "project" ? saveGraded : undefined}
                 onToast={showToast}
               />
             ) : (

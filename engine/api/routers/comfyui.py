@@ -1,5 +1,6 @@
 """ComfyUI discovery and PanelFlow-owned image job endpoints."""
 
+import json
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -10,7 +11,7 @@ from engine.comfyui import ComfyUIClient, ComfyUIError, ComfyWorkflowRegistry, W
 from engine.comfyui.art import ART_WORKFLOW_ID, EDIT_WORKFLOW_ID, IMAGE_WORKFLOW_IDS, ComfyImageGenerationError
 from engine.comfyui.service import (
     H3_CLIP_JOB_TYPE, INPAINT_WORKFLOW_ID, edit_image_operation, generate_clip_operation, generate_image_operation,
-    inpaint_image_operation, save_pose_reference,
+    inpaint_image_operation, save_pose_reference, save_project_image,
 )
 from engine.database.models import AssetRecord, ProjectRecord
 from engine.database.session import get_db
@@ -376,25 +377,54 @@ def list_project_assets(project_id: str, db: Session = Depends(get_db)) -> dict:
         .order_by(AssetRecord.created_at.desc())
         .all()
     )
+    return {"assets": [_asset_dict(asset) for asset in assets]}
+
+
+def _asset_dict(asset: AssetRecord) -> dict:
     return {
-        "assets": [
-            {
-                "id": asset.id,
-                "asset_type": asset.asset_type,
-                "filename": asset.filename,
-                "relative_path": asset.relative_path,
-                "content_type": asset.content_type,
-                "width": asset.width,
-                "height": asset.height,
-                "byte_size": asset.byte_size,
-                "sha256": asset.sha256,
-                "status": asset.status,
-                "provenance": asset.provenance or {},
-                "created_at": asset.created_at.isoformat() if asset.created_at else None,
-            }
-            for asset in assets
-        ]
+        "id": asset.id,
+        "asset_type": asset.asset_type,
+        "filename": asset.filename,
+        "relative_path": asset.relative_path,
+        "content_type": asset.content_type,
+        "width": asset.width,
+        "height": asset.height,
+        "byte_size": asset.byte_size,
+        "sha256": asset.sha256,
+        "status": asset.status,
+        "provenance": asset.provenance or {},
+        "created_at": asset.created_at.isoformat() if asset.created_at else None,
     }
+
+
+class GradedImageRequest(BaseModel):
+    image_data: str = Field(..., min_length=16, max_length=30_000_000, description="The graded picture as base64 or a data URL")
+    source_asset_id: str = Field(..., min_length=1, description="The project picture the grade was made on")
+    grade: dict = Field(default_factory=dict, description="The node stack that was baked in, kept as provenance")
+
+    @model_validator(mode="after")
+    def _grade_is_small(self):
+        if len(json.dumps(self.grade)) > 400_000:
+            raise ValueError("grade is too large to keep as provenance")
+        return self
+
+
+@project_router.post("/{project_id}/assets/graded")
+def save_graded_image(project_id: str, request: GradedImageRequest, db: Session = Depends(get_db)) -> dict:
+    """Keep a colour-graded picture (rendered in the image studio) as a new project asset."""
+    source = db.query(AssetRecord).filter(AssetRecord.id == request.source_asset_id, AssetRecord.project_id == project_id).first()
+    if not db.query(ProjectRecord).filter(ProjectRecord.id == project_id).first():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+    if not source:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Asset not found in this project: {request.source_asset_id}")
+    try:
+        asset = save_project_image(
+            db, project_id, request.image_data, asset_type="GRADED_IMAGE", prefix="graded", what="graded picture",
+            provenance={"role": "color_grade", "source_asset_id": source.id, "source_filename": source.filename, "grade": request.grade},
+        )
+    except ComfyImageGenerationError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return _asset_dict(asset)
 
 
 @project_router.get("/{project_id}/assets/{asset_id}/file")

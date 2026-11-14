@@ -2351,6 +2351,14 @@ export class PanelFlowApiClient {
     });
   }
 
+  /** Keep a colour-graded picture (rendered in the image studio) as a new project asset. */
+  async saveGradedImage(projectId: string, request: { image_data: string; source_asset_id: string; grade: unknown }): Promise<GeneratedAsset> {
+    return this.request<GeneratedAsset>(`/api/projects/${projectId}/assets/graded`, {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
+  }
+
   // ChronoFlow art generation (Qwen Image 2.1 with character-locked ref2image)
   async listChronoFlowCharacters(): Promise<{ characters: Array<{ id: string; name: string; role: string; image: string; description: string }> }> {
     return this.request<{ characters: Array<{ id: string; name: string; role: string; image: string; description: string }> }>("/api/chronoflow/characters");
