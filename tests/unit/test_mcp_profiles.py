@@ -1,17 +1,18 @@
-"""Unit tests for PanelFlow Dedicated Creative Agents MCP Server."""
+"""The one MCP server and its profiles: the creative agents, ChronoFlow, and everything."""
 
 import json
 import pytest
-from engine.mcp.creative_mcp_server import CreativeMCPServer
+import engine.mcp.tools  # noqa: F401  (registers every tool)
+from engine.mcp.server import MCPServer
 
 
 @pytest.fixture
 def mcp_server():
-    return CreativeMCPServer(filter_creative_only=True)
+    return MCPServer(profile="creative")
 
 
 @pytest.mark.asyncio
-async def test_mcp_initialize(mcp_server: CreativeMCPServer):
+async def test_mcp_initialize(mcp_server: MCPServer):
     req = {
         "jsonrpc": "2.0",
         "id": 1,
@@ -25,12 +26,12 @@ async def test_mcp_initialize(mcp_server: CreativeMCPServer):
     resp = await mcp_server.handle_request(req)
     assert resp is not None
     assert resp["id"] == 1
-    assert resp["result"]["serverInfo"]["name"] == "panelflow-creative-agents"
+    assert resp["result"]["serverInfo"]["name"] == "panelflow-studio-mcp"
     assert "tools" in resp["result"]["capabilities"]
 
 
 @pytest.mark.asyncio
-async def test_mcp_ping(mcp_server: CreativeMCPServer):
+async def test_mcp_ping(mcp_server: MCPServer):
     req = {"jsonrpc": "2.0", "id": 2, "method": "ping"}
     resp = await mcp_server.handle_request(req)
     assert resp is not None
@@ -39,14 +40,14 @@ async def test_mcp_ping(mcp_server: CreativeMCPServer):
 
 
 @pytest.mark.asyncio
-async def test_mcp_notifications_ack(mcp_server: CreativeMCPServer):
+async def test_mcp_notifications_ack(mcp_server: MCPServer):
     req = {"jsonrpc": "2.0", "method": "notifications/initialized"}
     resp = await mcp_server.handle_request(req)
     assert resp is None
 
 
 @pytest.mark.asyncio
-async def test_mcp_tools_list(mcp_server: CreativeMCPServer):
+async def test_mcp_tools_list(mcp_server: MCPServer):
     req = {"jsonrpc": "2.0", "id": 3, "method": "tools/list"}
     resp = await mcp_server.handle_request(req)
     assert resp is not None
@@ -77,7 +78,7 @@ async def test_mcp_tools_list(mcp_server: CreativeMCPServer):
 
 
 @pytest.mark.asyncio
-async def test_mcp_call_knowledge_query(mcp_server: CreativeMCPServer):
+async def test_mcp_call_knowledge_query(mcp_server: MCPServer):
     req = {
         "jsonrpc": "2.0",
         "id": 4,
@@ -96,7 +97,7 @@ async def test_mcp_call_knowledge_query(mcp_server: CreativeMCPServer):
 
 
 @pytest.mark.asyncio
-async def test_mcp_call_knowledge_add(mcp_server: CreativeMCPServer):
+async def test_mcp_call_knowledge_add(mcp_server: MCPServer):
     req = {
         "jsonrpc": "2.0",
         "id": 5,
@@ -119,7 +120,7 @@ async def test_mcp_call_knowledge_add(mcp_server: CreativeMCPServer):
 
 
 @pytest.mark.asyncio
-async def test_mcp_call_analyze_manhua(mcp_server: CreativeMCPServer):
+async def test_mcp_call_analyze_manhua(mcp_server: MCPServer):
     req = {
         "jsonrpc": "2.0",
         "id": 6,
@@ -145,7 +146,7 @@ async def test_mcp_call_analyze_manhua(mcp_server: CreativeMCPServer):
 
 
 @pytest.mark.asyncio
-async def test_mcp_call_manhua_direct_episode(mcp_server: CreativeMCPServer):
+async def test_mcp_call_manhua_direct_episode(mcp_server: MCPServer):
     req = {
         "jsonrpc": "2.0",
         "id": 7,
@@ -173,7 +174,7 @@ async def test_mcp_call_manhua_direct_episode(mcp_server: CreativeMCPServer):
 
 
 @pytest.mark.asyncio
-async def test_mcp_call_compiler_build_prompts(mcp_server: CreativeMCPServer):
+async def test_mcp_call_compiler_build_prompts(mcp_server: MCPServer):
     req = {
         "jsonrpc": "2.0",
         "id": 8,
@@ -217,7 +218,7 @@ async def test_mcp_call_compiler_build_prompts(mcp_server: CreativeMCPServer):
 
 
 @pytest.mark.asyncio
-async def test_mcp_call_self_improve_audit(mcp_server: CreativeMCPServer):
+async def test_mcp_call_self_improve_audit(mcp_server: MCPServer):
     req = {
         "jsonrpc": "2.0",
         "id": 9,
@@ -240,7 +241,7 @@ async def test_mcp_call_self_improve_audit(mcp_server: CreativeMCPServer):
 
 
 @pytest.mark.asyncio
-async def test_mcp_call_knowledge_delete(mcp_server: CreativeMCPServer):
+async def test_mcp_call_knowledge_delete(mcp_server: MCPServer):
     # First add an entry
     add_req = {
         "jsonrpc": "2.0",
@@ -275,7 +276,7 @@ async def test_mcp_call_knowledge_delete(mcp_server: CreativeMCPServer):
 
 
 @pytest.mark.asyncio
-async def test_mcp_call_forge_and_delete_agent(mcp_server: CreativeMCPServer):
+async def test_mcp_call_forge_and_delete_agent(mcp_server: MCPServer):
     # Forge
     forge_req = {
         "jsonrpc": "2.0",
@@ -310,7 +311,7 @@ async def test_mcp_call_forge_and_delete_agent(mcp_server: CreativeMCPServer):
 
 
 @pytest.mark.asyncio
-async def test_mcp_call_configure_and_reset_freellmapi(mcp_server: CreativeMCPServer):
+async def test_mcp_call_configure_and_reset_freellmapi(mcp_server: MCPServer):
     # Configure Free LLM API
     cfg_req = {
         "jsonrpc": "2.0",
@@ -358,7 +359,7 @@ async def test_mcp_call_configure_and_reset_freellmapi(mcp_server: CreativeMCPSe
 
 
 @pytest.mark.asyncio
-async def test_mcp_error_handling(mcp_server: CreativeMCPServer):
+async def test_mcp_error_handling(mcp_server: MCPServer):
     # Method not found
     resp = await mcp_server.handle_request({"jsonrpc": "2.0", "id": 10, "method": "invalid/method"})
     assert resp["error"]["code"] == -32601
@@ -367,7 +368,7 @@ async def test_mcp_error_handling(mcp_server: CreativeMCPServer):
     resp = await mcp_server.handle_request({"jsonrpc": "2.0", "id": 11, "method": "tools/call", "params": {}})
     assert resp["error"]["code"] == -32602
 
-    # Reject non-creative tool on dedicated creative server
+    # Reject a tool outside the creative profile
     resp = await mcp_server.handle_request({
         "jsonrpc": "2.0",
         "id": 12,
@@ -375,3 +376,47 @@ async def test_mcp_error_handling(mcp_server: CreativeMCPServer):
         "params": {"name": "panelflow_system_health", "arguments": {}},
     })
     assert resp["error"]["code"] == -32601
+
+
+@pytest.mark.asyncio
+async def test_the_creative_profile_is_exactly_the_old_creative_server():
+    tools = {t["name"] for t in MCPServer(profile="creative").exposed_tools()}
+    assert len(tools) == 20
+    assert all(n.startswith("panelflow_creative_") or n in {"panelflow_configure_freellmapi", "panelflow_get_llm_status", "panelflow_reset_to_local_llm"} for n in tools)
+
+
+@pytest.mark.asyncio
+async def test_the_chronoflow_profile_has_the_video_studio_and_nothing_else():
+    server = MCPServer(profile="chronoflow")
+    names = {t["name"] for t in server.exposed_tools()}
+    assert names and all(n.startswith("panelflow_chronoflow_") for n in names)
+    # everything the old standalone ChronoFlow MCP offered is here, and cancel reaches the ChronoFlow supervisor
+    for needed in ("status", "list_characters", "save_character", "ai_director_plan", "generate_video", "get_job", "generate_image", "cancel_job"):
+        assert f"panelflow_chronoflow_{needed}" in names, needed
+    resp = await server.handle_request({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "panelflow_list_projects", "arguments": {}}})
+    assert resp["error"]["code"] == -32601 and "chronoflow" in resp["error"]["message"]
+
+
+@pytest.mark.asyncio
+async def test_the_default_profile_exposes_every_tool_and_the_profiles_are_slices_of_it():
+    everything = {t["name"] for t in MCPServer().exposed_tools()}
+    assert len(everything) > 90
+    for profile in ("creative", "chronoflow"):
+        assert {t["name"] for t in MCPServer(profile=profile).exposed_tools()} < everything
+    with pytest.raises(ValueError):
+        MCPServer(profile="nonsense")
+
+
+@pytest.mark.asyncio
+async def test_chronoflow_cancel_calls_the_chronoflow_endpoint(monkeypatch):
+    from engine.mcp.tools import chronoflow_tools
+
+    seen = {}
+
+    async def fake_post(endpoint, payload=None, **kw):
+        seen["endpoint"], seen["payload"] = endpoint, payload
+        return {"success": True}
+
+    monkeypatch.setattr(chronoflow_tools.bridge, "post", fake_post)
+    out = await chronoflow_tools.panelflow_chronoflow_cancel_job("job-7")
+    assert out == {"success": True} and seen == {"endpoint": "/api/chronoflow/cancel", "payload": {"job_id": "job-7"}}

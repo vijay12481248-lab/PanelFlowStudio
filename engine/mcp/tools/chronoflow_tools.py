@@ -185,6 +185,23 @@ async def panelflow_chronoflow_get_job(job_id: str) -> dict[str, Any]:
 
 
 @registry.tool(
+    name="panelflow_chronoflow_cancel_job",
+    description=(
+        "Cancel a running ChronoFlow video or image job (the job_id returned by panelflow_chronoflow_generate_video). "
+        "ChronoFlow jobs run in their own supervisor, so panelflow_cancel_job does not reach them."
+    ),
+    input_schema={
+        "type": "object",
+        "properties": {"job_id": {"type": "string", "description": "The ChronoFlow job ID to cancel"}},
+        "required": ["job_id"],
+    },
+    domain="chronoflow",
+)
+async def panelflow_chronoflow_cancel_job(job_id: str) -> dict[str, Any]:
+    return await bridge.post("/api/chronoflow/cancel", {"job_id": job_id})
+
+
+@registry.tool(
     name="panelflow_chronoflow_regenerate_shot",
     description="Trigger micro-regeneration of a specific shot using director critique notes, custom anchor image, or adjusted duration.",
     input_schema={
