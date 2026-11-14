@@ -308,3 +308,35 @@ async def panelflow_scene_generate(project_id: str, plan: dict, seed: int | None
 )
 async def panelflow_scene_rate(brief_id: str, good: bool, reason: str = "", mode: str = "director", seconds: float = 0.0) -> dict[str, Any]:
     return await bridge.post("/api/original/scene/rate", {"brief_id": brief_id, "good": good, "reason": reason, "mode": mode, "seconds": seconds})
+
+
+@registry.tool(
+    name="panelflow_scene_runs",
+    description="List Scene Director pictures with their two-judge analysis and the owner's feedback (liked %, whether they agreed with the AI, tags, note). unreviewed=true lists only the "
+                "pictures still waiting for the owner. Use it to see what the owner thought of past pictures.",
+    input_schema={"type": "object", "properties": {"unreviewed": {"type": "boolean"}, "limit": {"type": "integer"}, "offset": {"type": "integer"}}},
+    domain="original",
+)
+async def panelflow_scene_runs(unreviewed: bool = False, limit: int = 20, offset: int = 0) -> dict[str, Any]:
+    return await bridge.get(f"/api/original/scene/runs{_query(unreviewed=str(unreviewed).lower(), limit=limit, offset=offset)}")
+
+
+@registry.tool(
+    name="panelflow_scene_knowledge_stats",
+    description="The Scene Director knowledge base in numbers: pictures made and reviewed, mean liked %, results by scene type, which things the owner marked wrong most often "
+                "(camera, pose, style ...), and how often the owner agreed with the two vision judges (overall, when they disputed, with a single judge).",
+    input_schema={"type": "object", "properties": {}},
+    domain="original",
+)
+async def panelflow_scene_knowledge_stats() -> dict[str, Any]:
+    return await bridge.get("/api/original/scene/knowledge/stats")
+
+
+@registry.tool(
+    name="panelflow_scene_knowledge_search",
+    description="Full-text search over past Scene Director briefs and the owner's notes and tags (e.g. 'horizon', 'too cartoonish'). Returns the matching pictures.",
+    input_schema={"type": "object", "properties": {"q": {"type": "string"}, "limit": {"type": "integer"}}, "required": ["q"]},
+    domain="original",
+)
+async def panelflow_scene_knowledge_search(q: str, limit: int = 20) -> dict[str, Any]:
+    return await bridge.get(f"/api/original/scene/knowledge/search{_query(q=q, limit=limit)}")
