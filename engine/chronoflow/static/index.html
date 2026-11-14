@@ -3585,6 +3585,7 @@
         <!-- Top Row: 38% Media Pool / Bins | 62% Cinema Program Monitor -->
         <div class="davinci-top-row">
           <!-- Color Gallery (Left on Color page) -->
+          <div class="deliver-settings" id="deliverSettings"></div>
           <div class="color-gallery" id="colorGallery"></div>
 
           <!-- Left 38%: Media Pool / Clip Bins -->
@@ -3648,6 +3649,7 @@
 
           <!-- Color Scopes (Right on Color page) -->
           <div class="color-scopes" id="colorScopes"></div>
+          <div class="deliver-queue" id="deliverQueue"></div>
 
           <!-- Fusion Node Inspector (Right on Fusion page) -->
           <div class="fusion-inspector" id="fusionInspector"></div>
@@ -11616,6 +11618,7 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
 
       if (window.NLEColor && page !== 'color') window.NLEColor.close();
       if (window.NLEFusion && page !== 'fusion') window.NLEFusion.close();
+      if (window.NLEDeliver && page !== 'deliver') window.NLEDeliver.close();
 
       if (page === 'media') {
         switchTab('vault');
@@ -11637,10 +11640,12 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
         switchTab('director');
         switchBottomTimelineTab('nle');
       } else if (page === 'deliver') {
-        exportTimelineCut();
+        switchTab('director');
+        switchBottomTimelineTab('nle');
+        if (window.NLEDeliver) window.NLEDeliver.open();    // the page has its own settings and render queue; "Bake Master Cut" stays as the quick export
       }
       // switchTab()/switchBottomTimelineTab() above re-highlight "Edit"; keep the page the user actually chose
-      if (page === 'color' || page === 'fusion') syncResolveRail(page);
+      if (page === 'color' || page === 'fusion' || page === 'deliver') syncResolveRail(page);
     }
 
     function syncResolveRail(page) {
@@ -11654,12 +11659,12 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
     function loadNLEAssets() {
       const v = Date.now();
       const tq = ENGINE_TOKEN ? `token=${encodeURIComponent(ENGINE_TOKEN)}&v=${v}` : `v=${v}`;
-      ['nle.css', 'color.css', 'fusion.css'].forEach(sheet => {
+      ['nle.css', 'color.css', 'fusion.css', 'deliver.css'].forEach(sheet => {
         const css = document.createElement('link');
         css.rel = 'stylesheet'; css.href = `${STATIC_BASE}/nle/${sheet}?${tq}`; document.head.appendChild(css);
       });
       const load = (f) => new Promise((res, rej) => { const s = document.createElement('script'); s.src = `${STATIC_BASE}/nle/${f}?${tq}`; s.onload = res; s.onerror = () => rej(new Error(`could not load ${f}`)); document.head.appendChild(s); });
-      return ['model.js', 'nle.js', 'frame-edit.js', 'grade.js', 'color.js', 'fusion-graph.js', 'fusion.js'].reduce((p, f) => p.then(() => load(f)), Promise.resolve());
+      return ['model.js', 'nle.js', 'frame-edit.js', 'grade.js', 'color.js', 'fusion-graph.js', 'fusion.js', 'deliver.js'].reduce((p, f) => p.then(() => load(f)), Promise.resolve());
     }
 
     async function initApp() {
@@ -11673,6 +11678,9 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
         });
         if (window.NLEColor && typeof NLEColor.mount === 'function') {
           NLEColor.mount();
+        }
+        if (window.NLEDeliver && typeof NLEDeliver.mount === 'function') {
+          NLEDeliver.mount();
         }
         if (window.NLEFusion && typeof NLEFusion.mount === 'function') {
           NLEFusion.mount();

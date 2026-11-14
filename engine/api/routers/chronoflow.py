@@ -12,6 +12,7 @@ import json
 import logging
 import os
 import shutil
+import threading
 import time
 import uuid
 from pathlib import Path
@@ -29,6 +30,7 @@ from engine.chronoflow.pipeline import (
     STUDIO_OUTPUT_DIR,
     ChronoFlowPipeline,
 )
+from engine.chronoflow import deliver as deliver_mod
 from engine.chronoflow import media_tools
 from engine.chronoflow.folder_dialog import pick_native_folder
 from engine.chronoflow.reviewer import analyze_video_chunk
@@ -1793,6 +1795,66 @@ def timeline_export(req: TimelineExportRequest) -> dict[str, Any]:
             "filename": master_name,
         }
     raise HTTPException(status_code=500, detail="Timeline render failed")
+
+
+# ---- Deliver page: render queue + final encode (engine/chronoflow/deliver.py) ----
+_deliver_queue: deliver_mod.DeliverQueue | None = None
+_deliver_lock = threading.Lock()
+
+
+def get_deliver_queue() -> deliver_mod.DeliverQueue:
+    global _deliver_queue
+    with _deliver_lock:
+        if _deliver_queue is None:
+            _deliver_queue = deliver_mod.DeliverQueue(STUDIO_OUTPUT_DIR, pipeline.render_timeline_edl)
+        return _deliver_queue
+
+
+class DeliverRenderRequest(BaseModel):
+    clips: list[dict[str, Any]] = Field(default_factory=list)
+    overlays: list[dict[str, Any]] = Field(default_factory=list)
+    luts: dict[str, str] = Field(default_factory=dict)
+    settings: dict[str, Any] = Field(default_factory=dict)
+
+
+@router.get("/deliver/presets")
+def deliver_presets() -> dict[str, Any]:
+    return {"presets": deliver_mod.PRESETS, "loudness_targets": list(deliver_mod.LOUDNESS_TARGETS), "fps": list(deliver_mod.FPS_CHOICES), "nvenc": deliver_mod.nvenc_available()}
+
+
+@router.post("/deliver/render")
+def deliver_render(req: DeliverRenderRequest) -> dict[str, Any]:
+    try:
+        return get_deliver_queue().submit({"clips": req.clips, "overlays": req.overlays, "luts": req.luts}, req.settings)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/deliver/renders")
+def deliver_renders() -> dict[str, Any]:
+    return {"renders": get_deliver_queue().list()}
+
+
+@router.get("/deliver/render/{render_id}")
+def deliver_render_status(render_id: str) -> dict[str, Any]:
+    rec = get_deliver_queue().get(render_id)
+    if not rec:
+        raise HTTPException(status_code=404, detail="Render not found")
+    return rec
+
+
+@router.post("/deliver/render/{render_id}/cancel")
+def deliver_render_cancel(render_id: str) -> dict[str, Any]:
+    if not get_deliver_queue().cancel(render_id):
+        raise HTTPException(status_code=404, detail="Render not found or already finished")
+    return {"success": True}
+
+
+@router.delete("/deliver/render/{render_id}")
+def deliver_render_delete(render_id: str) -> dict[str, Any]:
+    if not get_deliver_queue().delete(render_id):
+        raise HTTPException(status_code=409, detail="Render not found, or still queued or running (cancel it first)")
+    return {"success": True}
 
 
 @router.get("/gallery")
