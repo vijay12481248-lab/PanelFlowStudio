@@ -2,29 +2,13 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { api } from "@panelflow/api-client";
 import type { ComfyEditRequest, GeneratedAsset } from "@panelflow/api-client";
 import type { Job } from "@panelflow/shared-types";
-import {
-  Paintbrush,
-  Eraser,
-  Undo2,
-  Redo2,
-  Trash2,
-  Eye,
-  EyeOff,
-  ZoomIn,
-  ZoomOut,
-  Maximize2,
-  Download,
-  Copy,
-  Check,
-  Sparkles,
-  Wand2,
-  X,
-  Sliders,
-  RefreshCw,
-  Layers,
-  CheckCircle2,
-  AlertCircle,
-} from "lucide-react";
+import { Check, Copy, Download, Layers, Sparkles, X } from "lucide-react";
+import { AiInspector } from "./image-studio/AiInspector";
+import { DeliverInspector } from "./image-studio/DeliverInspector";
+import { PageRail } from "./image-studio/PageRail";
+import { ToolRail } from "./image-studio/ToolRail";
+import type { AiMode, StudioPage, StudioVersion, ToolMode } from "./image-studio/types";
+import { VersionsStrip } from "./image-studio/VersionsStrip";
 
 export type ImageEditorTarget =
   | { mode: 'project'; projectId: string; asset: GeneratedAsset; onAssetUpdated?: (newAsset: GeneratedAsset) => void }
@@ -38,8 +22,6 @@ export interface ImageEditorModalProps {
   asset?: GeneratedAsset | null;
   onAssetUpdated?: (newAsset: GeneratedAsset) => void;
 }
-
-type ToolMode = "brush" | "eraser";
 
 interface InpaintPreset {
   label: string;
@@ -91,6 +73,11 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   const [previousImageSrc, setPreviousImageSrc] = useState<string | null>(null);
   const [isComparing, setIsComparing] = useState(false);
   const [imageNaturalSize, setImageNaturalSize] = useState<{ width: number; height: number }>({ width: 1024, height: 1024 });
+
+  // Studio layout: the page on the bottom rail, the AI mode, and the pictures made in this session
+  const [page, setPage] = useState<StudioPage>("ai");
+  const [aiMode, setAiMode] = useState<AiMode>(effectiveTarget.mode === "project" ? "edit" : "inpaint");
+  const [versions, setVersions] = useState<GeneratedAsset[]>(effectiveTarget.mode === "project" ? [effectiveTarget.asset] : []);
 
   // Tool states
   const [tool, setTool] = useState<ToolMode>("brush");
@@ -178,6 +165,7 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
     } else {
       setCurrentAsset(effectiveTarget.asset);
       setPreviousAsset(null);
+      setVersions([effectiveTarget.asset]);
     }
   }, [
     isOpen,
@@ -439,6 +427,7 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
           const newest = assetList.assets[0];
           setPreviousAsset(currentAsset || effectiveTarget.asset);
           setCurrentAsset(newest);
+          setVersions((v) => (v.some((x) => x.id === newest.id) ? v : [...v, newest]));
           if (effectiveTarget.onAssetUpdated) effectiveTarget.onAssetUpdated(newest);
           showToast("✨ Inpainting complete! New asset created.");
         }
@@ -555,6 +544,7 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
         const newest = assetList.assets[0];
         setPreviousAsset(currentAsset || effectiveTarget.asset);
         setCurrentAsset(newest);
+        setVersions((v) => (v.some((x) => x.id === newest.id) ? v : [...v, newest]));
         if (effectiveTarget.onAssetUpdated) effectiveTarget.onAssetUpdated(newest);
         showToast(`✨ ${doneToast}`);
       }
@@ -619,8 +609,12 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
         e.preventDefault();
         handleRedo();
       } else if (e.key.toLowerCase() === "b") {
+        setPage("ai");
+        setAiMode("inpaint");
         setTool("brush");
       } else if (e.key.toLowerCase() === "e") {
+        setPage("ai");
+        setAiMode("inpaint");
         setTool("eraser");
       } else if (e.key === "[") {
         setBrushSize((s) => Math.max(8, s - 6));
@@ -634,41 +628,54 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
+  const maskTools = page === "ai" && aiMode === "inpaint";
+  const projectIdForUrls = effectiveTarget.mode === "project" ? effectiveTarget.projectId : "";
+  const versionLabel = (a: GeneratedAsset, i: number) => {
+    if (i === 0) return "Original";
+    const prov = a.provenance || {};
+    if (prov.mode === "pose_camera_transfer") return `v${i} · Pose`;
+    if (String(prov.workflow_id || "").includes("inpaint")) return `v${i} · Inpaint`;
+    return `v${i} · Edit`;
+  };
+  const versionItems: StudioVersion[] =
+    effectiveTarget.mode === "project"
+      ? versions.map((a, i) => ({ key: a.id, label: versionLabel(a, i), src: api.getGeneratedAssetUrl(projectIdForUrls, a.id) }))
+      : [
+          ...(previousImageSrc ? [{ key: "prev", label: "Before", src: previousImageSrc }] : []),
+          { key: "cur", label: previousImageSrc ? "Current" : "Original", src: currentImageSrc },
+        ];
+  const activeVersionKey = effectiveTarget.mode === "project" ? (currentAsset || effectiveTarget.asset).id : "cur";
+  const selectVersion = (key: string) => {
+    const i = versions.findIndex((a) => a.id === key);
+    if (i < 0) return;
+    setCurrentAsset(versions[i]);
+    setPreviousAsset(i > 0 ? versions[i - 1] : null);
+  };
+  const shownAsset = effectiveTarget.mode === "project" ? currentAsset || effectiveTarget.asset : null;
+
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-3 md:p-6 animate-in fade-in duration-200 select-none"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-3 backdrop-blur-md select-none animate-in fade-in duration-200 md:p-5"
       role="dialog"
       aria-modal="true"
       aria-label="Image Editor & Inpainter"
     >
-      <div className="bg-ink border border-edge rounded-2xl w-full max-w-[96vw] h-[94vh] flex flex-col shadow-2xl overflow-hidden">
-        {/* Top Header Bar */}
-        <div className="px-5 py-3 border-b border-edge/90 bg-navy/70 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-accent via-accent to-accent flex items-center justify-center text-white shadow-lg shadow-accent/30">
-              <Sparkles className="w-5 h-5 animate-pulse" />
-            </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <h2 className="text-sm font-bold text-fg truncate">
-                  Visual Asset Editor & Inpaint Studio
-                </h2>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-accent/20 border border-accent/60 text-info">
-                  {displayWidth} × {displayHeight}
-                </span>
-                {hasInpainted && (
-                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-ok/20 border border-ok/60 text-ok">
-                    INPAINTED
-                  </span>
-                )}
-              </div>
-              <p className="text-xs text-fg-dim truncate font-mono">
-                {displayFilename} · {displaySubtext}
-              </p>
-            </div>
+      <div className="flex h-[95vh] w-full max-w-[98vw] flex-col overflow-hidden rounded-2xl border border-edge bg-ink shadow-2xl">
+        {/* Header: what is open, and the actions that apply to every page */}
+        <header className="flex items-center justify-between gap-4 border-b border-edge bg-navy px-4 py-2.5">
+          <div className="flex min-w-0 items-center gap-3">
+            <Sparkles className="h-5 w-5 shrink-0 text-info" />
+            <h2 className="shrink-0 text-sm font-semibold text-fg">Image Studio</h2>
+            <span className="shrink-0 rounded-full bg-accent-soft px-2 py-0.5 font-mono text-[10px] text-info">
+              {displayWidth} × {displayHeight}
+            </span>
+            {hasInpainted && (
+              <span className="shrink-0 rounded-full border border-ok/50 bg-ok/10 px-2 py-0.5 text-[10px] font-medium text-ok">EDITED</span>
+            )}
+            <p className="truncate font-mono text-xs text-fg-dim">
+              {displayFilename} · {displaySubtext}
+            </p>
           </div>
-
-          {/* Quick Header Actions */}
           <div className="flex items-center gap-2">
             {hasInpainted && (
               <button
@@ -676,562 +683,172 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                 onMouseDown={() => setIsComparing(true)}
                 onMouseUp={() => setIsComparing(false)}
                 onMouseLeave={() => setIsComparing(false)}
-                className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-flat hover:bg-glass-hi text-fg border border-edge active:scale-95 transition-all flex items-center gap-1.5"
-                title="Hold to see original image before inpainting"
+                className="flex items-center gap-1.5 rounded-lg border border-edge bg-flat px-3 py-1.5 text-xs font-medium text-fg transition-colors hover:bg-glass-hi"
+                title="Hold to see the version before this one"
               >
-                <Layers className="w-3.5 h-3.5 text-info" />
+                <Layers className="h-3.5 w-3.5 text-info" />
                 <span>{isComparing ? "Showing Original" : "Hold to Compare"}</span>
               </button>
             )}
-
-            <button
-              type="button"
-              onClick={handleDownload}
-              className="p-2 rounded-lg text-fg-dim hover:text-white bg-flat/80 hover:bg-glass-hi border border-edge/60 active:scale-95 transition-all"
-              title="Download full resolution image"
-            >
-              <Download className="w-4 h-4" />
+            <button type="button" onClick={handleDownload} className="rounded-lg border border-edge/60 bg-flat/80 p-2 text-fg-dim transition-colors hover:bg-glass-hi hover:text-fg" title="Download full resolution image">
+              <Download className="h-4 w-4" />
             </button>
-
-            <button
-              type="button"
-              onClick={copyShaToClipboard}
-              className="p-2 rounded-lg text-fg-dim hover:text-white bg-flat/80 hover:bg-glass-hi border border-edge/60 active:scale-95 transition-all"
-              title="Copy SHA-256 hash"
-            >
-              {copiedSha ? <Check className="w-4 h-4 text-ok" /> : <Copy className="w-4 h-4" />}
+            <button type="button" onClick={copyShaToClipboard} className="rounded-lg border border-edge/60 bg-flat/80 p-2 text-fg-dim transition-colors hover:bg-glass-hi hover:text-fg" title="Copy SHA-256 hash">
+              {copiedSha ? <Check className="h-4 w-4 text-ok" /> : <Copy className="h-4 w-4" />}
             </button>
-
-            <button
-              type="button"
-              onClick={onClose}
-              className="w-8 h-8 rounded-lg flex items-center justify-center text-fg-dim hover:text-white hover:bg-flat active:scale-95 transition-all"
-              aria-label="Close modal"
-            >
-              <X className="w-5 h-5" />
+            <button type="button" onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-lg text-fg-dim transition-colors hover:bg-flat hover:text-fg" aria-label="Close modal">
+              <X className="h-5 w-5" />
             </button>
           </div>
-        </div>
+        </header>
 
-        {/* Main Workspace: Left Canvas + Right Grouped Inspector */}
-        <div className="flex-1 flex overflow-hidden">
-          {/* Left Canvas Viewport */}
-          <div
-            ref={canvasContainerRef}
-            className="flex-1 bg-ink/90 relative overflow-hidden flex flex-col items-center justify-center p-4"
-            style={{
-              backgroundImage:
-                "radial-gradient(circle at 1px 1px, rgba(255,255,255,0.05) 1px, transparent 0)",
-              backgroundSize: "24px 24px",
+        {/* Workspace: tool rail, canvas with the versions strip, and the inspector of the open page */}
+        <div className="flex min-h-0 flex-1">
+          <ToolRail
+            maskTools={maskTools}
+            tool={tool}
+            onTool={setTool}
+            canUndo={historyStepRef.current > 0}
+            canRedo={historyStepRef.current < historyRef.current.length - 1}
+            hasMask={hasMaskContent}
+            showMask={showMask}
+            onUndo={handleUndo}
+            onRedo={handleRedo}
+            onClearMask={handleClearMask}
+            onToggleMask={() => setShowMask((prev) => !prev)}
+            zoom={zoomLevel}
+            fitMode={fitMode}
+            onZoomOut={() => setZoomLevel((z) => Math.max(0.4, Number((z - 0.2).toFixed(1))))}
+            onZoomIn={() => setZoomLevel((z) => Math.min(3, Number((z + 0.2).toFixed(1))))}
+            onFit={() => {
+              setZoomLevel(1);
+              setFitMode((m) => (m === "contain" ? "actual" : "contain"));
             }}
-          >
-            {/* Floating Top Canvas Toolbar */}
-            <div className="absolute top-4 left-4 z-20 flex items-center gap-1.5 p-1.5 rounded-xl bg-navy/90 backdrop-blur-md border border-edge shadow-xl">
-              <button
-                type="button"
-                onClick={handleUndo}
-                disabled={historyStepRef.current <= 0}
-                className="p-2 rounded-lg text-fg-dim hover:text-white hover:bg-flat disabled:opacity-30 disabled:pointer-events-none active:scale-95 transition-all"
-                title="Undo (Ctrl+Z)"
-              >
-                <Undo2 className="w-4 h-4" />
-              </button>
-              <button
-                type="button"
-                onClick={handleRedo}
-                disabled={historyStepRef.current >= historyRef.current.length - 1}
-                className="p-2 rounded-lg text-fg-dim hover:text-white hover:bg-flat disabled:opacity-30 disabled:pointer-events-none active:scale-95 transition-all"
-                title="Redo (Ctrl+Y)"
-              >
-                <Redo2 className="w-4 h-4" />
-              </button>
-              <div className="w-px h-5 bg-flat mx-1" />
-              <button
-                type="button"
-                onClick={handleClearMask}
-                disabled={!hasMaskContent}
-                className="p-2 rounded-lg text-fg-dim hover:text-bad hover:bg-flat disabled:opacity-30 disabled:pointer-events-none active:scale-95 transition-all"
-                title="Clear mask"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowMask((prev) => !prev)}
-                className={`p-2 rounded-lg text-fg-dim hover:text-white hover:bg-flat active:scale-95 transition-all ${
-                  !showMask ? "text-warn bg-warn/40" : ""
-                }`}
-                title={showMask ? "Hide mask overlay" : "Show mask overlay"}
-              >
-                {showMask ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
-              </button>
-              <div className="w-px h-5 bg-flat mx-1" />
-              <button
-                type="button"
-                onClick={() => setZoomLevel((z) => Math.max(0.4, Number((z - 0.2).toFixed(1))))}
-                className="p-2 rounded-lg text-fg-dim hover:text-white hover:bg-flat active:scale-95 transition-all"
-                title="Zoom Out"
-              >
-                <ZoomOut className="w-4 h-4" />
-              </button>
-              <span className="text-xs font-mono text-fg-dim px-1 font-medium min-w-10 text-center">
-                {Math.round(zoomLevel * 100)}%
-              </span>
-              <button
-                type="button"
-                onClick={() => setZoomLevel((z) => Math.min(3, Number((z + 0.2).toFixed(1))))}
-                className="p-2 rounded-lg text-fg-dim hover:text-white hover:bg-flat active:scale-95 transition-all"
-                title="Zoom In"
-              >
-                <ZoomIn className="w-4 h-4" />
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setZoomLevel(1);
-                  setFitMode((m) => (m === "contain" ? "actual" : "contain"));
-                }}
-                className={`px-2 py-1 rounded-lg text-xs font-medium border transition-all ${
-                  fitMode === "actual"
-                    ? "bg-accent border-accent text-white"
-                    : "bg-flat border-edge text-fg-dim hover:bg-glass-hi"
-                }`}
-                title="Toggle 100% size or Fit to screen"
-              >
-                {fitMode === "actual" ? "100%" : "Fit"}
-              </button>
-            </div>
+          />
 
-            {/* Canvas Stage */}
+          <div className="flex min-w-0 flex-1 flex-col">
             <div
-              className="relative max-w-full max-h-full flex items-center justify-center transition-transform duration-150 ease-out"
-              style={{
-                transform: `scale(${zoomLevel})`,
-                transformOrigin: "center center",
-              }}
-              onMouseEnter={() => setIsCursorInside(true)}
-              onMouseLeave={() => {
-                setIsCursorInside(false);
-                setCursorPos(null);
-              }}
+              ref={canvasContainerRef}
+              className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-ink p-4"
+              style={{ backgroundImage: "radial-gradient(circle at 1px 1px, rgba(150,175,255,0.07) 1px, transparent 0)", backgroundSize: "24px 24px" }}
             >
-              {/* Underlying Original / Inpainted Art Image */}
-              <img
-                ref={imageRef}
-                src={imageUrl}
-                alt="Asset preview for inpainting"
-                onLoad={initCanvas}
-                className="max-h-[80vh] max-w-[80vw] object-contain rounded-lg border border-edge/80 shadow-2xl pointer-events-none transition-opacity duration-300"
-                style={{ imageRendering: "auto" }}
-              />
-
-              {/* Foreground Mask Drawing Canvas */}
-              <canvas
-                ref={maskCanvasRef}
-                onPointerDown={handlePointerDown}
-                onPointerMove={handlePointerMove}
-                onPointerUp={handlePointerUp}
-                onPointerCancel={handlePointerUp}
-                className={`absolute inset-0 w-full h-full rounded-lg touch-none ${
-                  showMask ? "opacity-100" : "opacity-0 pointer-events-none"
-                }`}
-                style={{ cursor: "none" }}
-              />
-
-              {/* Dynamic Animated Brush / Eraser Circular Cursor Tracker */}
-              {isCursorInside && cursorPos && (
-                <div
-                  className="pointer-events-none absolute rounded-full border-2 transition-transform duration-75 ease-out"
-                  style={{
-                    left: `${cursorPos.x}px`,
-                    top: `${cursorPos.y}px`,
-                    width: `${brushSize * (maskCanvasRef.current ? maskCanvasRef.current.clientWidth / maskCanvasRef.current.width : 1)}px`,
-                    height: `${brushSize * (maskCanvasRef.current ? maskCanvasRef.current.clientHeight / maskCanvasRef.current.height : 1)}px`,
-                    transform: "translate(-50%, -50%)",
-                    borderColor:
-                      tool === "eraser"
-                        ? "#7aa2ff"
-                        : MASK_COLORS[maskColorIndex].hex,
-                    backgroundColor:
-                      tool === "eraser"
-                        ? "rgba(122,162,255, 0.2)"
-                        : MASK_COLORS[maskColorIndex].color.replace("0.6", "0.25"),
-                    boxShadow:
-                      tool === "eraser"
-                        ? "0 0 12px rgba(122,162,255, 0.5)"
-                        : `0 0 14px ${MASK_COLORS[maskColorIndex].hex}88`,
-                  }}
-                />
-              )}
-            </div>
-
-            {/* Quick helper tip badge at bottom of canvas */}
-            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 px-3 py-1.5 rounded-full bg-navy/90 backdrop-blur-md border border-edge/80 text-[11px] text-fg-dim shadow-lg">
-              <span className="w-2 h-2 rounded-full bg-accent animate-ping" />
-              <span>
-                {tool === "brush"
-                  ? "Paint over any area you want to replace or edit"
-                  : "Erasing mask from canvas"}
-              </span>
-              <span className="text-fg-faint">|</span>
-              <span className="font-mono text-fg-faint">Shortcuts: B (Brush), E (Eraser), [ ] (Size)</span>
-            </div>
-          </div>
-
-          {/* Right Sidebar: Grouped Tools & Settings */}
-          <div className="w-80 md:w-96 border-l border-edge bg-navy/60 overflow-y-auto p-5 space-y-6 flex flex-col">
-            {/* GROUP 1: Drawing & Masking Tools */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold uppercase tracking-wider text-info flex items-center gap-1.5">
-                  <Paintbrush className="w-3.5 h-3.5" />
-                  1. Drawing Tool
-                </span>
-                <span className="text-[11px] text-fg-faint font-mono">
-                  {hasMaskContent ? "Mask active" : "No mask"}
-                </span>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setTool("brush")}
-                  className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl border font-semibold text-xs transition-all active:scale-95 ${
-                    tool === "brush"
-                      ? "bg-accent border-accent text-white shadow-lg shadow-accent/30"
-                      : "bg-ink border-edge text-fg-dim hover:bg-flat"
-                  }`}
-                >
-                  <Paintbrush className="w-4 h-4" />
-                  <span>Brush Tool [B]</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setTool("eraser")}
-                  className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl border font-semibold text-xs transition-all active:scale-95 ${
-                    tool === "eraser"
-                      ? "bg-info border-info text-white shadow-lg shadow-info/30"
-                      : "bg-ink border-edge text-fg-dim hover:bg-flat"
-                  }`}
-                >
-                  <Eraser className="w-4 h-4" />
-                  <span>Eraser Tool [E]</span>
-                </button>
-              </div>
-
-              {/* Mask Tint Color Selector */}
-              <div className="flex items-center justify-between pt-1">
-                <span className="text-[11px] text-fg-dim">Mask Overlay Tint:</span>
-                <div className="flex items-center gap-1.5">
-                  {MASK_COLORS.map((mc, idx) => (
-                    <button
-                      key={mc.id}
-                      type="button"
-                      onClick={() => setMaskColorIndex(idx)}
-                      className={`w-5 h-5 rounded-full border-2 transition-transform ${
-                        maskColorIndex === idx ? "scale-125 border-white shadow-md" : "border-transparent opacity-60 hover:opacity-100"
-                      }`}
-                      style={{ backgroundColor: mc.hex }}
-                      title={mc.label}
-                    />
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* GROUP 2: Brush Settings */}
-            <div className="space-y-3 p-4 rounded-xl bg-ink/70 border border-edge/80">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold uppercase tracking-wider text-fg-dim flex items-center gap-1.5">
-                  <Sliders className="w-3.5 h-3.5 text-info" />
-                  2. Brush Settings
-                </span>
-                <span className="text-xs font-mono font-bold text-info bg-accent/60 px-2 py-0.5 rounded border border-accent/50">
-                  {brushSize}px
-                </span>
-              </div>
-
-              {/* Dynamic Brush Size Slider + Live Ring Preview */}
-              <div className="space-y-1.5">
-                <div className="flex items-center gap-3">
-                  <input
-                    type="range"
-                    min={8}
-                    max={180}
-                    value={brushSize}
-                    onChange={(e) => setBrushSize(Number(e.target.value))}
-                    className="w-full h-1.5 bg-flat rounded-lg appearance-none cursor-pointer accent-accent"
-                  />
-                  {/* Miniature animated circle preview */}
-                  <div className="w-8 h-8 rounded-lg bg-navy border border-edge flex items-center justify-center shrink-0">
-                    <div
-                      className="rounded-full bg-accent transition-all duration-100"
-                      style={{
-                        width: `${Math.max(4, Math.min(24, (brushSize / 180) * 24))}px`,
-                        height: `${Math.max(4, Math.min(24, (brushSize / 180) * 24))}px`,
-                      }}
-                    />
-                  </div>
-                </div>
-
-                {/* Quick Size Preset Chips */}
-                <div className="flex gap-1.5 pt-1">
-                  {[
-                    { label: "Fine", size: 16 },
-                    { label: "Med", size: 40 },
-                    { label: "Wide", size: 80 },
-                    { label: "Huge", size: 140 },
-                  ].map((preset) => (
-                    <button
-                      key={preset.label}
-                      type="button"
-                      onClick={() => setBrushSize(preset.size)}
-                      className={`flex-1 py-1 rounded text-[11px] font-medium border transition-all active:scale-95 ${
-                        brushSize === preset.size
-                          ? "bg-accent border-accent text-white"
-                          : "bg-navy border-edge text-fg-dim hover:text-fg"
-                      }`}
-                    >
-                      {preset.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Opacity Slider */}
-              <div className="pt-2 border-t border-edge/80 space-y-1">
-                <div className="flex justify-between text-[11px] text-fg-dim">
-                  <span>Mask Opacity</span>
-                  <span className="font-mono">{Math.round(brushOpacity * 100)}%</span>
-                </div>
-                <input
-                  type="range"
-                  min={0.3}
-                  max={1.0}
-                  step={0.05}
-                  value={brushOpacity}
-                  onChange={(e) => setBrushOpacity(Number(e.target.value))}
-                  className="w-full h-1.5 bg-flat rounded-lg appearance-none cursor-pointer accent-accent"
-                />
-              </div>
-            </div>
-
-            {/* GROUP 3: Inpaint Parameters & Action */}
-            <div className="space-y-3 p-4 rounded-xl bg-ink/70 border border-edge/80">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold uppercase tracking-wider text-info flex items-center gap-1.5">
-                  <Wand2 className="w-3.5 h-3.5" />
-                  3. Inpaint &amp; Edit Options
-                </span>
-                <span className="text-[10px] text-fg-faint">qwen_image_21_inpaint / minimax_h3_image_edit</span>
-              </div>
-
-              {/* Prompt Textarea */}
-              <div>
-                <label className="block text-xs font-medium text-fg-dim mb-1">
-                  Prompt (inpaint: what to draw in the mask. edit: what the picture should become)
-                </label>
-                <textarea
-                  value={prompt}
-                  onChange={(e) => setPrompt(e.target.value)}
-                  rows={3}
-                  placeholder="e.g. a stormy sky over the street, golden sparks around the sword"
-                  className="w-full rounded-lg border border-edge bg-navy px-3 py-2 text-xs text-fg focus:border-accent focus:outline-none placeholder:text-fg-faint transition-colors"
-                  disabled={isInpainting}
-                />
-              </div>
-
-              {/* Quick Preset Prompt Chips */}
-              <div className="space-y-1.5">
-                <span className="text-[11px] text-fg-dim font-medium">Quick Inpaint Presets:</span>
-                <div className="flex flex-wrap gap-1.5">
-                  {INPAINT_PRESETS.map((p) => (
-                    <button
-                      key={p.label}
-                      type="button"
-                      onClick={() => setPrompt(p.prompt)}
-                      className="px-2 py-1 rounded-md text-[11px] bg-navy border border-edge text-fg-dim hover:text-white hover:bg-flat hover:border-accent/50 hover:-translate-y-0.5 active:scale-95 transition-all flex items-center gap-1"
-                    >
-                      <span>{p.icon}</span>
-                      <span>{p.label}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Negative Prompt (Collapsible / Compact) */}
-              <div>
-                <label className="block text-[11px] text-fg-dim mb-1">Negative Prompt</label>
-                <input
-                  type="text"
-                  value={negativePrompt}
-                  onChange={(e) => setNegativePrompt(e.target.value)}
-                  className="w-full rounded-lg border border-edge bg-navy px-2.5 py-1.5 text-xs text-fg-dim focus:border-accent focus:outline-none"
-                  disabled={isInpainting}
-                />
-              </div>
-
-              {/* Seed with Randomizer */}
-              <div className="flex items-center gap-2">
-                <div className="flex-1">
-                  <label className="block text-[11px] text-fg-dim mb-0.5">Seed</label>
-                  <input
-                    type="number"
-                    value={seed}
-                    onChange={(e) => setSeed(Number(e.target.value))}
-                    className="w-full rounded-lg border border-edge bg-navy px-2.5 py-1 text-xs text-fg font-mono"
-                    disabled={isInpainting}
-                  />
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setSeed(Math.floor(Math.random() * 900000000) + 100000000)}
-                  disabled={isInpainting}
-                  className="mt-4 p-2 rounded-lg bg-navy hover:bg-flat border border-edge text-fg-dim hover:text-info active:scale-95 transition-all"
-                  title="Randomize seed"
-                >
-                  <RefreshCw className="w-3.5 h-3.5" />
-                </button>
-              </div>
-
-              {/* Error Alert */}
-              {inpaintError && (
-                <div className="p-2.5 rounded-lg bg-bad/40 border border-bad/80 text-bad text-xs flex items-start gap-2 animate-in fade-in">
-                  <AlertCircle className="w-4 h-4 shrink-0 text-bad mt-0.5" />
-                  <span className="break-words">{inpaintError}</span>
-                </div>
-              )}
-
-              {/* Progress Feedback during Inpainting */}
-              {isInpainting && (
-                <div className="space-y-2 p-3 rounded-xl bg-accent/40 border border-accent/60 animate-in fade-in">
-                  <div className="flex items-center justify-between text-xs text-info font-medium">
-                    <span className="flex items-center gap-1.5">
-                      <Sparkles className="w-3.5 h-3.5 text-info animate-spin" />
-                      {inpaintStatusText || "Inpainting with ComfyUI..."}
-                    </span>
-                    <span className="font-mono font-bold">{Math.round(inpaintProgress * 100)}%</span>
-                  </div>
-                  <div className="w-full h-1.5 bg-navy rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-gradient-to-r from-accent via-accent to-accent rounded-full transition-all duration-300"
-                      style={{ width: `${Math.max(10, inpaintProgress * 100)}%` }}
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* Inpaint Action Button */}
-              <button
-                type="button"
-                onClick={handleInpaintSubmit}
-                disabled={isInpainting || !prompt.trim() || !hasMaskContent}
-                className={`w-full py-3 px-4 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all duration-200 ${
-                  isInpainting
-                    ? "bg-flat text-fg-faint border border-edge cursor-not-allowed"
-                    : !hasMaskContent
-                    ? "bg-navy text-fg-faint border border-edge cursor-not-allowed"
-                    : "bg-gradient-to-r from-accent via-accent to-accent hover:from-accent hover:via-accent hover:to-accent text-white shadow-lg shadow-accent/30 hover:shadow-accent/50 active:scale-[0.98] border border-accent/30"
-                }`}
+              <div
+                className="relative flex max-h-full max-w-full items-center justify-center transition-transform duration-150 ease-out"
+                style={{ transform: `scale(${zoomLevel})`, transformOrigin: "center center" }}
+                onMouseEnter={() => setIsCursorInside(true)}
+                onMouseLeave={() => {
+                  setIsCursorInside(false);
+                  setCursorPos(null);
+                }}
               >
-                <Sparkles className={`w-4 h-4 ${isInpainting ? "animate-spin" : ""}`} />
-                <span>
-                  {isInpainting
-                    ? "Inpainting..."
-                    : !hasMaskContent
-                    ? "Paint a mask on image to inpaint"
-                    : "Inpaint Masked Area with ComfyUI"}
-                </span>
-              </button>
-
-              {/* Edit with words (MiniMax-H3-Image): no mask needed, the instruction says what to change */}
-              {effectiveTarget.mode === 'project' && (
-                <button
-                  type="button"
-                  onClick={handleEditSubmit}
-                  disabled={isInpainting || !prompt.trim()}
-                  className={`w-full py-3 px-4 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all duration-200 ${
-                    isInpainting
-                      ? "bg-flat text-fg-faint border border-edge cursor-not-allowed"
-                      : !prompt.trim()
-                      ? "bg-navy text-fg-faint border border-edge cursor-not-allowed"
-                      : "bg-gradient-to-r from-ok via-info to-info hover:from-ok hover:via-info hover:to-info text-white shadow-lg shadow-info/30 hover:shadow-info/50 active:scale-[0.98] border border-ok/30"
-                  }`}
-                >
-                  <Wand2 className={`w-4 h-4 ${isInpainting ? "animate-spin" : ""}`} />
-                  <span>
-                    {isInpainting
-                      ? "Editing..."
-                      : "Edit Whole Picture from Instructions (H3 Image)"}
-                  </span>
-                </button>
+                <img
+                  ref={imageRef}
+                  src={imageUrl}
+                  alt="Asset preview for inpainting"
+                  onLoad={initCanvas}
+                  className="pointer-events-none max-h-[68vh] max-w-[62vw] rounded-lg border border-edge/80 object-contain shadow-2xl"
+                  style={{ imageRendering: "auto" }}
+                />
+                <canvas
+                  ref={maskCanvasRef}
+                  onPointerDown={handlePointerDown}
+                  onPointerMove={handlePointerMove}
+                  onPointerUp={handlePointerUp}
+                  onPointerCancel={handlePointerUp}
+                  className={`absolute inset-0 h-full w-full touch-none rounded-lg ${
+                    showMask && maskTools ? "opacity-100" : "opacity-0"
+                  } ${maskTools ? "" : "pointer-events-none"}`}
+                  style={{ cursor: maskTools ? "none" : "default" }}
+                />
+                {maskTools && isCursorInside && cursorPos && (
+                  <div
+                    className="pointer-events-none absolute rounded-full border-2 transition-transform duration-75 ease-out"
+                    style={{
+                      left: `${cursorPos.x}px`,
+                      top: `${cursorPos.y}px`,
+                      width: `${brushSize * (maskCanvasRef.current ? maskCanvasRef.current.clientWidth / maskCanvasRef.current.width : 1)}px`,
+                      height: `${brushSize * (maskCanvasRef.current ? maskCanvasRef.current.clientHeight / maskCanvasRef.current.height : 1)}px`,
+                      transform: "translate(-50%, -50%)",
+                      borderColor: tool === "eraser" ? "#7aa2ff" : MASK_COLORS[maskColorIndex].hex,
+                      backgroundColor: tool === "eraser" ? "rgba(122,162,255, 0.2)" : MASK_COLORS[maskColorIndex].color.replace("0.6", "0.25"),
+                    }}
+                  />
+                )}
+              </div>
+              {maskTools && (
+                <div className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full border border-edge/80 bg-navy/90 px-3 py-1 text-[11px] text-fg-dim">
+                  {tool === "brush" ? "Paint over the area to replace" : "Erasing the mask"} · B brush · E eraser · [ ] size
+                </div>
+              )}
+              {toastMessage && (
+                <div className="absolute right-3 top-3 flex items-center gap-2 rounded-lg border border-ok/50 bg-navy/95 px-3 py-2 text-xs text-ok animate-in fade-in duration-150">
+                  <Check className="h-4 w-4" />
+                  <span>{toastMessage}</span>
+                </div>
               )}
             </div>
-
-            {/* GROUP 4: Pose & camera transfer (MiniMax-H3-Image): this picture keeps its characters and style, the chosen picture gives the poses and camera */}
-            {effectiveTarget.mode === 'project' && (
-              <div className="space-y-3 p-4 rounded-xl bg-ink/70 border border-edge/80">
-                <span className="text-xs font-bold uppercase tracking-wider text-info flex items-center gap-1.5">
-                  <Layers className="w-3.5 h-3.5" />
-                  4. Transfer Pose &amp; Camera
-                </span>
-                <p className="text-[11px] text-fg-dim leading-snug">
-                  This picture keeps its characters, scene and art style. The picture you choose (a photo works) gives the
-                  body poses, the camera angle and the framing. The result has the shape of the chosen picture.
-                </p>
-                <label className="block">
-                  <span className="block text-xs font-medium text-fg-dim mb-1">Pose &amp; camera picture</span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    disabled={isInpainting}
-                    onChange={(e) => handlePoseFile(e.target.files?.[0])}
-                    className="block w-full text-[11px] text-fg-dim file:mr-2 file:rounded-md file:border-0 file:bg-navy file:px-2.5 file:py-1 file:text-xs file:text-fg"
-                  />
-                </label>
-                {poseImageData && (
-                  <div className="flex items-center gap-3">
-                    <img src={poseImageData} alt="Pose and camera reference" className="h-20 rounded-md border border-edge object-cover" />
-                    <span className="text-[11px] text-fg-dim truncate">{poseFileName}</span>
-                  </div>
-                )}
-                <div>
-                  <label className="block text-xs font-medium text-fg-dim mb-1">Who plays whom (optional)</label>
-                  <input
-                    type="text"
-                    value={transferNote}
-                    onChange={(e) => setTransferNote(e.target.value)}
-                    placeholder="e.g. the man in black is the one leaping; the armoured man is the one crouching"
-                    disabled={isInpainting}
-                    className="w-full rounded-lg border border-edge bg-navy px-3 py-2 text-xs text-fg focus:border-accent focus:outline-none placeholder:text-fg-faint transition-colors"
-                  />
-                </div>
-                <button
-                  type="button"
-                  onClick={handleTransferSubmit}
-                  disabled={isInpainting || !poseImageData}
-                  className={`w-full py-3 px-4 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all duration-200 ${
-                    isInpainting || !poseImageData
-                      ? "bg-navy text-fg-faint border border-edge cursor-not-allowed"
-                      : "bg-gradient-to-r from-ok via-info to-info text-white shadow-lg shadow-info/30 hover:shadow-info/50 active:scale-[0.98] border border-ok/30"
-                  }`}
-                >
-                  <Wand2 className={`w-4 h-4 ${isInpainting ? "animate-spin" : ""}`} />
-                  <span>{isInpainting ? "Working..." : "Transfer Pose & Camera (H3 Image)"}</span>
-                </button>
-              </div>
-            )}
-
-            {/* Toast Feedback */}
-            {toastMessage && (
-              <div className="p-2.5 rounded-lg bg-ok/80 border border-ok/80 text-ok text-xs flex items-center gap-2 animate-in fade-in duration-150">
-                <CheckCircle2 className="w-4 h-4 text-ok shrink-0" />
-                <span>{toastMessage}</span>
-              </div>
-            )}
+            <VersionsStrip
+              versions={versionItems}
+              activeKey={activeVersionKey}
+              onSelect={effectiveTarget.mode === "project" ? selectVersion : undefined}
+              busy={isInpainting}
+            />
           </div>
+
+          <aside className="w-80 shrink-0 border-l border-edge bg-navy/60 md:w-[22rem]" aria-label={page === "deliver" ? "Deliver" : "AI"}>
+            {page === "deliver" ? (
+              <DeliverInspector
+                imageUrl={imageUrl}
+                filename={displayFilename}
+                dimensions={`${displayWidth} × ${displayHeight}`}
+                sha256={shownAsset?.sha256}
+                provenance={shownAsset?.provenance}
+                onToast={showToast}
+              />
+            ) : (
+              <AiInspector
+                mode={aiMode}
+                onMode={setAiMode}
+                isProject={effectiveTarget.mode === "project"}
+                busy={isInpainting}
+                progress={inpaintProgress}
+                statusText={inpaintStatusText}
+                error={inpaintError}
+                prompt={prompt}
+                onPrompt={setPrompt}
+                seed={seed}
+                onSeed={setSeed}
+                onEdit={handleEditSubmit}
+                pose={{
+                  imageData: poseImageData,
+                  fileName: poseFileName,
+                  note: transferNote,
+                  onNote: setTransferNote,
+                  onFile: handlePoseFile,
+                  onSubmit: handleTransferSubmit,
+                }}
+                inpaint={{
+                  tool,
+                  onTool: setTool,
+                  brushSize,
+                  onBrushSize: setBrushSize,
+                  brushOpacity,
+                  onBrushOpacity: setBrushOpacity,
+                  maskColors: MASK_COLORS,
+                  maskColorIndex,
+                  onMaskColor: setMaskColorIndex,
+                  presets: INPAINT_PRESETS,
+                  negativePrompt,
+                  onNegativePrompt: setNegativePrompt,
+                  hasMask: hasMaskContent,
+                  onSubmit: handleInpaintSubmit,
+                }}
+              />
+            )}
+          </aside>
         </div>
+
+        <PageRail page={page} onPage={setPage} />
       </div>
     </div>
   );

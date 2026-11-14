@@ -93,7 +93,7 @@ test("ImageEditorModal: Legacy project mode (ComfyImageScreen props)", () => {
       asset={mockAsset}
     />
   );
-  assert.ok(html.includes("Visual Asset Editor &amp; Inpaint Studio"), "Renders modal header");
+  assert.ok(html.includes("Image Studio"), "Renders modal header");
   assert.ok(html.includes("test_hero.png"), "Renders asset filename");
   assert.ok(html.includes("200.0 KB"), "Renders formatted byte size");
   assert.ok(html.includes("1344"), "Renders asset width");
@@ -114,7 +114,7 @@ test("ImageEditorModal: Story mode via discriminated union ImageEditorTarget", (
       }}
     />
   );
-  assert.ok(html.includes("Visual Asset Editor &amp; Inpaint Studio"), "Renders modal header");
+  assert.ok(html.includes("Image Studio"), "Renders modal header");
   assert.ok(html.includes("story-panel-p005.png"), "Renders story panel filename");
   assert.ok(html.includes("Panel p005"), "Renders panel subtext");
   assert.ok(html.includes("qwen_image_21_inpaint"), "References Qwen inpaint workflow");
