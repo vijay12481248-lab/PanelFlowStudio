@@ -2,8 +2,9 @@
 
     .venv\\Scripts\\python.exe tools/scene_director/baseline.py --mode raw --out <dir>
 
-mode raw: the brief goes straight to ArtEngine (what a lazy user gets today). Mode director is added with the scene run loop (plan Task 6).
-ComfyUI must be running (see AGENTS.md).
+mode raw: the brief goes straight to ArtEngine (what a lazy user gets today).
+mode director: the Scene Director plans the brief (auto mode, no questions), draws it, checks it against the plan and corrects (engine/original/scene_run.py).
+ComfyUI and Ollama must be running (see AGENTS.md).
 """
 from __future__ import annotations
 
@@ -24,20 +25,34 @@ def seed_for(brief_id: str) -> int:
     return 1000 + sum(ord(c) * (i + 1) for i, c in enumerate(brief_id))  # stable across runs and modes
 
 
-def run(briefs: list[dict], mode: str, out: Path, art_engine) -> list[dict]:
+def _draw_director(b: dict, out: Path, art_engine, provider, row: dict) -> None:
+    import asyncio
+
+    from engine.original.scene_planner import propose
+    from engine.original.scene_run import generate_scene
+
+    proposal = asyncio.run(propose(provider, b["text"]))
+    res = generate_scene(art_engine, provider, proposal.plan, ws=out, key=b["id"], seed=seed_for(b["id"]))
+    row.update(file=res.image_path, plan=proposal.summary, status=res.status, unmet=res.unmet, unverified=res.unverified, attempts=len([i for i in res.iterations if i["kind"] == "generate"]))
+
+
+def run(briefs: list[dict], mode: str, out: Path, art_engine, provider=None) -> list[dict]:
     """One picture per brief. A failing brief is recorded with `error` and the batch carries on."""
     out.mkdir(parents=True, exist_ok=True)
-    if mode != "raw":
+    if mode not in ("raw", "director"):
         raise ValueError(f"unknown mode {mode!r}")
     results: list[dict] = []
     for b in briefs:
         row = {"id": b["id"], "scene_type": b["scene_type"], "text": b["text"], "mode": mode, "file": "", "seconds": 0.0, "error": ""}
         t0 = time.time()
         try:
-            img = art_engine.generate(b["text"], "", SIZE[0], SIZE[1], seed_for(b["id"]), prefix=f"scene_baseline_{mode}")
-            name = f"{b['id']}.png"
-            (out / name).write_bytes(img.png)
-            row["file"] = name
+            if mode == "director":
+                _draw_director(b, out, art_engine, provider, row)
+            else:
+                img = art_engine.generate(b["text"], "", SIZE[0], SIZE[1], seed_for(b["id"]), prefix=f"scene_baseline_{mode}")
+                name = f"{b['id']}.png"
+                (out / name).write_bytes(img.png)
+                row["file"] = name
         except Exception as exc:  # noqa: BLE001 - recorded, not hidden; the batch must finish
             row["error"] = f"{type(exc).__name__}: {exc}"[:300]
         row["seconds"] = round(time.time() - t0, 1)
@@ -90,7 +105,12 @@ def main() -> None:
     briefs = json.loads(BRIEFS.read_text(encoding="utf-8"))
     if a.limit:
         briefs = briefs[: a.limit]
-    run(briefs, a.mode, Path(a.out), ArtEngine())
+    provider = None
+    if a.mode == "director":
+        from engine.llm.registry import llm_registry
+
+        provider = llm_registry.get_ollama_provider()
+    run(briefs, a.mode, Path(a.out), ArtEngine(), provider)
 
 
 if __name__ == "__main__":
