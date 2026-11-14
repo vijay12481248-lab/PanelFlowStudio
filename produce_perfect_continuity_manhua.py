@@ -69,7 +69,8 @@ SHOT_SEQUENCE: List[CinematicShotSpec] = [
         shot_type="Medium Close-Up (MCU)",
         screen_axis="Protagonist facing three-quarters screen-right",
         subject_entity="chen_ye",
-        subject_action="intense focus on his face, piercing amethyst-purple eyes flaring with inner fire, jagged scar over left brow, wet black hair with white streaks",
+        subject_action="intense focus on his face, piercing amethyst-purple eyes flaring with inner fire, jagged scar over left brow, wet black hair with white streaks, hands lowered and completely out of frame",
+        forbidden_props="hands in frame, fists raised, holding chains, chained fists, looking at camera",
         camera_movement="scale=3840:2160:force_original_aspect_ratio=increase,crop=3840:2160,zoompan=z='min(zoom+0.0008,1.14)':d={frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=3840x2160:fps=30,scale=1920:1080:flags=bicubic",
         narration_line="Beneath the jagged scar crossing his brow, his amethyst eyes flared with the silent fury of the void furnace.",
         emotion_tone="tension",
@@ -234,7 +235,8 @@ SHOT_SEQUENCE: List[CinematicShotSpec] = [
         shot_type="Master Hero Climax (Low-Angle Heroic)",
         screen_axis="Chen Ye centered, looking up toward the heavens",
         subject_entity="chen_ye",
-        subject_action="Chen Ye standing tall inside the celestial violet beam of light, rain evaporating into steam around him, amethyst eyes glowing with boundless sovereign power",
+        subject_action="Chen Ye standing tall inside the celestial violet beam of light looking up toward the shattered heavens, arms naturally at his sides with broken wrist cuffs and no chains, rain evaporating into steam around him, amethyst eyes glowing with boundless sovereign power",
+        forbidden_props="fists raised, holding chains, chained hands, long chains, looking down, looking at camera",
         camera_movement="scale=3840:2160:force_original_aspect_ratio=increase,crop=3840:2160,zoompan=z='min(zoom+0.0008,1.15)':d={frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=3840x2160:fps=30,scale=1920:1080:flags=bicubic",
         narration_line="Standing in the pillar of radiant light, Chen Ye looked up at the shattered heavens, knowing his sovereign path had finally begun.",
         emotion_tone="triumph_awe",
@@ -260,15 +262,18 @@ async def run_production():
     # Step 2: Render All 16 Character & Environment-Locked Panels on ComfyUI
     print("\n--- Step 2: Rendering 16 Character- & Environment-Locked Panels (ComfyUI) ---")
     panel_images: List[Path] = []
+    force_regenerate = os.getenv("FORCE_REGENERATE", "1") == "1"
+
     for idx, shot in enumerate(SHOT_SEQUENCE, 1):
         panel_path = OUTPUT_DIR / f"panel_{idx:03d}.png"
-        if panel_path.exists():
+        if panel_path.exists() and not force_regenerate:
             print(f"Panel {idx:02d} already rendered: {panel_path.name}")
             panel_images.append(panel_path)
             continue
 
-        prompt, neg_prompt, ref_image = director.compile_shot_prompt(shot)
-        print(f"Rendering Panel {idx:02d} [{shot.subject_entity}] (ref={ref_image.name if ref_image else 'None'})...")
+        prompt, neg_prompt, ref_images = director.compile_shot_prompt(shot)
+        ref_names = [p.name for p in ref_images] if ref_images else ["None"]
+        print(f"Rendering Panel {idx:02d} [{shot.subject_entity}] (refs={ref_names})...")
         t_img = time.time()
         art_img = art.generate(
             prompt=prompt,
@@ -277,7 +282,7 @@ async def run_production():
             height=768,
             seed=99000 + idx * 111,
             prefix=f"cont_p{idx:03d}",
-            reference_image=ref_image,
+            reference_images=ref_images,
         )
         with open(panel_path, "wb") as f:
             f.write(art_img.png)
@@ -296,7 +301,7 @@ async def run_production():
         total_frames = int(exact_duration * 30)
         vf_filter = shot_spec.camera_movement.replace("{frames}", str(total_frames))
 
-        if not shot_video_path.exists():
+        if not shot_video_path.exists() or force_regenerate:
             cmd = [
                 "ffmpeg", "-y",
                 "-loop", "1", "-i", str(img_path),

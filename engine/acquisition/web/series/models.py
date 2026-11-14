@@ -56,8 +56,8 @@ class BatchVideoConfig(BaseModel):
     chapter_urls: Optional[List[str]] = None
     max_chapters: Optional[int] = None
     video_profile: str = "standard_1080p"
-    tts_voice: str = "am_michael"
-    tts_provider: str = "kokoro_82m"
+    tts_voice: str = "marcus_male"
+    tts_provider: str = "qwen3_tts"
     output_dir: Optional[str] = None
     subtitles: bool = True
     speed_factor: float = 1.0

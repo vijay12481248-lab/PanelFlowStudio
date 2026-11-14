@@ -63,7 +63,7 @@ def _pre_synthesize_episode_audio_async(
             from engine.narration.runtime import audio as rt
             from engine.original import video
 
-            tts = rt.KokoroTts()
+            tts = rt.get_default_tts()
             narrator = (channel.voice, channel.voice_rate) if channel else None
             narrator_tuple, chars = video.voices_for(story, narrator)
             (ws / "voice").mkdir(parents=True, exist_ok=True)

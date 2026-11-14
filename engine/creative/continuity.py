@@ -19,6 +19,8 @@ from typing import Any, Dict, List, Optional
 
 import edge_tts
 
+from engine.creative.emotion_guider import SomaticEmotionGuiderAgent
+
 logger = logging.getLogger("panelflow.creative.continuity")
 
 ANCHORS_CHAR_DIR = Path("output/series_1000/character_anchors")
@@ -87,6 +89,7 @@ class SceneContinuityDirector:
             lighting_sources="flickering warm amber torchlight from rusted iron braziers on stone ledges, volumetric rain haze",
         )
         self.env_anchor = ANCHORS_ENV_DIR / "abyssal_quarry_anchor.png"
+        self.emotion_guider = SomaticEmotionGuiderAgent()
 
         # 2. Register Locked Entity Profiles
         self.entities: Dict[str, CharacterVisualProfile] = {
@@ -143,9 +146,23 @@ class SceneContinuityDirector:
                 anchor_image_path=ANCHORS_CHAR_DIR / "li_ming_anchor.png",
                 default_screen_side="left",
             ),
+            "overseer_gu": CharacterVisualProfile(
+                id="overseer_gu",
+                name="High Overseer Lord Gu",
+                role="supreme_antagonist",
+                visual_tags=(
+                    "towering ruthless imperial overseer, ruthless sneering noble face with cruel dark eyes, "
+                    "ornamental black-and-gold spiked heavy magistrate plate armor, flowing torn crimson silk cape, "
+                    "spiked gold draconic pauldron, long black hair tied in an imperial high crown pin, "
+                    "wielding a five-foot serrated crimson blood-glaive crackling with red lightning"
+                ),
+                negative_tags="friendly, soft face, smiling, modern clothes, peasant rags, weak, unarmed, clean white robes",
+                anchor_image_path=ANCHORS_CHAR_DIR / "overseer_gu_anchor.png",
+                default_screen_side="right",
+            ),
         }
 
-    def compile_shot_prompt(self, shot: CinematicShotSpec) -> tuple[str, str, Optional[Path]]:
+    def compile_shot_prompt(self, shot: CinematicShotSpec) -> tuple[str, str, Optional[List[Path]]]:
         """Compiles an ArtEngine prompt preserving environmental landmarks, character profile, and camera optics."""
         env_tokens = self.active_environment.compile_background_tokens()
         subject_id = shot.subject_entity.lower()
@@ -158,8 +175,8 @@ class SceneContinuityDirector:
                 f"Atmospheric depth, volumetric rain lighting, hyper-detailed digital matte painting, 8k key visual."
             )
             neg_prompt = "people, human, face, hands, body, character, crowd, modern structures, blurry, low quality"
-            ref_image = self.env_anchor if self.env_anchor.exists() else None
-            return prompt, neg_prompt, ref_image
+            ref_images = [self.env_anchor] if self.env_anchor.exists() else None
+            return prompt, neg_prompt, ref_images
 
         # Case B: Prop / Weapon Macro Insert
         if subject_id == "prop":
@@ -171,9 +188,9 @@ class SceneContinuityDirector:
             neg_prompt = "full body, face, character, people, blurry, low quality, cartoon"
             return prompt, neg_prompt, None
 
-        # Case C: Character-Focused Shots (Chen Ye, Enforcer, Commander, Li Ming)
+        # Case C: Single Character-Focused Shots (No Opponent)
         entity = self.entities.get(subject_id)
-        if entity:
+        if entity and not shot.opponent_entity and subject_id != "action_clash":
             # Enforce 180-degree screen axis framing
             facing_dir = "facing screen-right" if entity.default_screen_side == "left" else "facing screen-left"
             weapon_clause = f", wielding {shot.weapon_in_hand}" if shot.weapon_in_hand else ""
@@ -190,28 +207,61 @@ class SceneContinuityDirector:
             if shot.damage_state:
                 extra_neg += ", clean undamaged armor, smooth pristine chestplate"
             neg_prompt = f"{entity.negative_tags}, blurry, distorted limbs, bad anatomy, inconsistent armor{extra_neg}"
-            ref_image = entity.anchor_image_path if (entity.anchor_image_path and entity.anchor_image_path.exists()) else None
-            return prompt, neg_prompt, ref_image
+            
+            # Apply Somatic Emotion Guidance
+            is_victim = bool(shot.damage_state and any(k in shot.damage_state.lower() for k in ["caved", "slumped", "cracked", "pain", "reeling", "trauma", "shock", "blood"]))
+            is_striker = bool(any(k in shot.emotion_tone.lower() for k in ["strike", "wrath", "battle", "clash"]))
+            prompt, neg_prompt = self.emotion_guider.guide_prompt(
+                base_prompt=prompt,
+                base_negative_prompt=neg_prompt,
+                emotion_tone=shot.emotion_tone,
+                is_victim_receiving_strike=is_victim,
+                is_striker_attacking=is_striker,
+            )
+            ref_images = [entity.anchor_image_path] if (entity.anchor_image_path and entity.anchor_image_path.exists()) else None
+            return prompt, neg_prompt, ref_images
 
-        # Case D: Multi-character or Action Clash
+        # Case D: Multi-character or Action Clash (Both Striker and Opponent in Frame)
         opponent_id = (shot.opponent_entity or "commander_meng").lower()
         opponent = self.entities.get(opponent_id, self.entities["commander_meng"])
         chen = self.entities["chen_ye"]
 
         opponent_weapon = f", wielding {shot.weapon_in_hand}" if shot.weapon_in_hand else ""
-        opponent_damage = f", {shot.damage_state}" if shot.damage_state else ""
+        
+        # Build nuanced somatic trauma for opponent when receiving strike
+        if shot.damage_state:
+            opponent_reaction = (
+                f", reeling in excruciating visceral agony: {shot.damage_state}, "
+                f"mouth stretched wide in trauma scream, blood spittle spraying, head snapped back in whiplash, spine arched"
+            )
+        else:
+            opponent_reaction = ""
 
         prompt = (
-            f"Cinematic manhua action illustration, {shot.shot_type}, {shot.subject_action}. "
-            f"Protagonist Chen Ye on screen-left [CHARACTER: {chen.name}: {chen.visual_tags}] "
-            f"clashing against {opponent.name} on screen-right [CHARACTER: {opponent.name}: {opponent.visual_tags}{opponent_weapon}{opponent_damage}]. "
+            f"Masterpiece cinematic manhua dynamic combat action, {shot.shot_type}. "
+            f"On SCREEN-LEFT: Protagonist Chen Ye [CHARACTER: {chen.name}: {chen.visual_tags}], "
+            f"lunging with lethal warrior wrath, teeth bared, flaring purple iris aura, {shot.subject_action}. "
+            f"On SCREEN-RIGHT: {opponent.name} [CHARACTER: {opponent.name}: {opponent.visual_tags}{opponent_weapon}{opponent_reaction}]. "
             f"Background: {env_tokens}. "
-            f"Volumetric sparks, dynamic ink splash effects, high contrast lighting, masterpiece, 8k."
+            f"Volumetric sparks, concussive air distortion rings, dynamic ink splash effects, high contrast lighting, masterpiece, 8k."
         )
         extra_neg = f", {shot.forbidden_props}" if shot.forbidden_props else ""
-        neg_prompt = f"blurry, low quality, distorted anatomy, modern clothes, text artifacts{extra_neg}"
-        ref_image = chen.anchor_image_path
-        return prompt, neg_prompt, ref_image
+        base_neg = f"blurry, low quality, distorted anatomy, modern clothes, text artifacts{extra_neg}"
+        
+        # Apply anti-stoic negative constraints and striker fury
+        prompt, neg_prompt = self.emotion_guider.guide_prompt(
+            base_prompt=prompt,
+            base_negative_prompt=base_neg,
+            emotion_tone="lethal_wrath",
+            is_victim_receiving_strike=False,
+            is_striker_attacking=True,
+        )
+        ref_images = []
+        if chen.anchor_image_path and chen.anchor_image_path.exists():
+            ref_images.append(chen.anchor_image_path)
+        if opponent.anchor_image_path and opponent.anchor_image_path.exists():
+            ref_images.append(opponent.anchor_image_path)
+        return prompt, neg_prompt, ref_images or None
 
     async def synthesize_continuous_storyteller_audio(
         self,

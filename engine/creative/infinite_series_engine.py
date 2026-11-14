@@ -560,6 +560,16 @@ class InfiniteSeriesProductionEngine:
                     )
                     neg_prompt = "blurry, low quality, distorted anatomy, deformed limbs, text artifacts"
 
+                # Somatic Emotion & Kinetic Intensity Guidance
+                if not is_env_or_prop:
+                    curated_prompt, neg_prompt = self.continuity.emotion_guider.guide_prompt(
+                        base_prompt=curated_prompt,
+                        base_negative_prompt=neg_prompt,
+                        emotion_tone="battle_explosive" if is_commander else "tension",
+                        is_victim_receiving_strike=is_commander and any(k in full_text for k in ["strike", "hit", "crash", "smash", "punch", "agony"]),
+                        is_striker_attacking=is_chen_subject and any(k in full_text for k in ["strike", "punch", "attack", "lunge", "kill"]),
+                    )
+
                 art_img = self.art_engine.generate(
                     prompt=curated_prompt,
                     negative_prompt=neg_prompt,
