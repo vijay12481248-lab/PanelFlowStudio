@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@panelflow/api-client";
-import type { GeneratedAsset } from "@panelflow/api-client";
+import type { ComfyEditRequest, GeneratedAsset } from "@panelflow/api-client";
 import type { Job } from "@panelflow/shared-types";
 import {
   Paintbrush,
@@ -114,6 +114,11 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   const [inpaintProgress, setInpaintProgress] = useState<number>(0);
   const [inpaintStatusText, setInpaintStatusText] = useState<string>("");
   const [inpaintError, setInpaintError] = useState<string | null>(null);
+
+  // Pose & camera transfer: the picture the poses and the camera angle are taken from (a data URL read from disk)
+  const [poseImageData, setPoseImageData] = useState<string | null>(null);
+  const [poseFileName, setPoseFileName] = useState<string>("");
+  const [transferNote, setTransferNote] = useState<string>("");
 
   // Micro-feedback state
   const [copiedSha, setCopiedSha] = useState<boolean>(false);
@@ -472,11 +477,46 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
     }
   };
 
-  const handleEditSubmit = async () => {
+  const handlePoseFile = (file?: File) => {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setInpaintError("Choose an image file for the pose picture.");
+      return;
+    }
+    if (file.size > 20 * 1024 * 1024) {
+      setInpaintError("The pose picture is larger than 20 MB.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setPoseImageData(String(reader.result));
+      setPoseFileName(file.name);
+      setInpaintError(null);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleEditSubmit = () => {
     if (!prompt.trim()) {
       setInpaintError("Please enter an instruction describing what the picture should become.");
       return;
     }
+    return runEdit({ prompt: prompt.trim() }, "Editing with MiniMax H3 Image...", "Edit complete! New asset created.");
+  };
+
+  const handleTransferSubmit = () => {
+    if (!poseImageData) {
+      setInpaintError("Choose the picture whose poses and camera angle should be used.");
+      return;
+    }
+    return runEdit(
+      { pose_image_data: poseImageData, prompt: transferNote.trim() },
+      "Transferring the poses and camera angle with MiniMax H3 Image...",
+      "Pose and camera transferred! New asset created.",
+    );
+  };
+
+  const runEdit = async (request: Partial<ComfyEditRequest>, runningText: string, doneToast: string) => {
     if (effectiveTarget.mode !== 'project') {
       setInpaintError("Editing with words needs a project picture.");
       return;
@@ -487,16 +527,16 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
     setInpaintProgress(0.05);
 
     try {
-      setInpaintStatusText("Sending the picture and the instruction to ComfyUI...");
+      setInpaintStatusText("Sending the pictures and the instruction to ComfyUI...");
       const activeAsset = currentAsset || effectiveTarget.asset;
       const queued = await api.editComfyImage(effectiveTarget.projectId, {
         asset_id: activeAsset.id,
-        prompt: prompt.trim(),
+        ...request,
         seed,
         timeout_s: 1800,
       });
 
-      setInpaintStatusText("Editing with MiniMax H3 Image...");
+      setInpaintStatusText(runningText);
 
       const completedJob = await api.waitForWorkflowJob(queued.job_id, (job: Job) => {
         if (job.progress != null) setInpaintProgress(job.progress);
@@ -516,7 +556,7 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
         setPreviousAsset(currentAsset || effectiveTarget.asset);
         setCurrentAsset(newest);
         if (effectiveTarget.onAssetUpdated) effectiveTarget.onAssetUpdated(newest);
-        showToast("✨ Edit complete! New asset created.");
+        showToast(`✨ ${doneToast}`);
       }
     } catch (err: any) {
       setInpaintError(err.message || "Failed to execute the edit.");
@@ -1128,6 +1168,60 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                 </button>
               )}
             </div>
+
+            {/* GROUP 4: Pose & camera transfer (MiniMax-H3-Image): this picture keeps its characters and style, the chosen picture gives the poses and camera */}
+            {effectiveTarget.mode === 'project' && (
+              <div className="space-y-3 p-4 rounded-xl bg-ink/70 border border-edge/80">
+                <span className="text-xs font-bold uppercase tracking-wider text-info flex items-center gap-1.5">
+                  <Layers className="w-3.5 h-3.5" />
+                  4. Transfer Pose &amp; Camera
+                </span>
+                <p className="text-[11px] text-fg-dim leading-snug">
+                  This picture keeps its characters, scene and art style. The picture you choose (a photo works) gives the
+                  body poses, the camera angle and the framing. The result has the shape of the chosen picture.
+                </p>
+                <label className="block">
+                  <span className="block text-xs font-medium text-fg-dim mb-1">Pose &amp; camera picture</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    disabled={isInpainting}
+                    onChange={(e) => handlePoseFile(e.target.files?.[0])}
+                    className="block w-full text-[11px] text-fg-dim file:mr-2 file:rounded-md file:border-0 file:bg-navy file:px-2.5 file:py-1 file:text-xs file:text-fg"
+                  />
+                </label>
+                {poseImageData && (
+                  <div className="flex items-center gap-3">
+                    <img src={poseImageData} alt="Pose and camera reference" className="h-20 rounded-md border border-edge object-cover" />
+                    <span className="text-[11px] text-fg-dim truncate">{poseFileName}</span>
+                  </div>
+                )}
+                <div>
+                  <label className="block text-xs font-medium text-fg-dim mb-1">Who plays whom (optional)</label>
+                  <input
+                    type="text"
+                    value={transferNote}
+                    onChange={(e) => setTransferNote(e.target.value)}
+                    placeholder="e.g. the man in black is the one leaping; the armoured man is the one crouching"
+                    disabled={isInpainting}
+                    className="w-full rounded-lg border border-edge bg-navy px-3 py-2 text-xs text-fg focus:border-accent focus:outline-none placeholder:text-fg-faint transition-colors"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={handleTransferSubmit}
+                  disabled={isInpainting || !poseImageData}
+                  className={`w-full py-3 px-4 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all duration-200 ${
+                    isInpainting || !poseImageData
+                      ? "bg-navy text-fg-faint border border-edge cursor-not-allowed"
+                      : "bg-gradient-to-r from-ok via-info to-info text-white shadow-lg shadow-info/30 hover:shadow-info/50 active:scale-[0.98] border border-ok/30"
+                  }`}
+                >
+                  <Wand2 className={`w-4 h-4 ${isInpainting ? "animate-spin" : ""}`} />
+                  <span>{isInpainting ? "Working..." : "Transfer Pose & Camera (H3 Image)"}</span>
+                </button>
+              </div>
+            )}
 
             {/* Toast Feedback */}
             {toastMessage && (

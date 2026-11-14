@@ -24,7 +24,7 @@ from engine.comfyui.art import (  # noqa: F401  (re-exported: callers and tests 
     _patch_workflow,
     _validate_output_dimensions,
 )
-from engine.comfyui.edit_prompt import compose_edit_prompt, release_local_model
+from engine.comfyui.edit_prompt import compose_edit_prompt, compose_transfer_prompt, release_local_model
 from engine.database.models import AssetRecord, ProjectRecord
 from engine.jobs.workflow import register_operation_factory
 from engine.security.paths import open_contained_output, resolve_contained_path
@@ -243,6 +243,42 @@ def h3_edit_size(width: int, height: int) -> tuple[int, int]:
     return target_w, target_h
 
 
+POSE_REFERENCE_MAX_BYTES = 20 * 1024 * 1024
+
+
+def save_pose_reference(db: Session, project_id: str, image_data: str) -> str:
+    """Store an uploaded pose picture (base64 or a data URL) as a project asset and return its id."""
+    project = db.query(ProjectRecord).filter(ProjectRecord.id == project_id).first()
+    if not project:
+        raise ComfyImageGenerationError("Project not found")
+    try:
+        raw = base64.b64decode(image_data.split(",", 1)[1] if "," in image_data else image_data, validate=True)
+        if len(raw) > POSE_REFERENCE_MAX_BYTES:
+            raise ValueError(f"larger than {POSE_REFERENCE_MAX_BYTES // (1024 * 1024)} MB")
+        with Image.open(io.BytesIO(raw)) as picture:
+            picture = picture.convert("RGB")
+            width, height = picture.size
+            h3_edit_size(width, height)  # refuses a shape the model cannot work at, before any GPU time is spent
+            out = io.BytesIO()
+            picture.save(out, format="PNG")
+    except ComfyImageGenerationError:
+        raise
+    except Exception as exc:
+        raise ComfyImageGenerationError(f"The pose picture is not a usable image: {exc}") from exc
+    png = out.getvalue()
+    asset_id = str(uuid.uuid4())
+    filename = f"pose-{asset_id}.png"
+    target = _write_project_image(Path(str(project.workspace_path)), Path("generated") / "comfyui" / filename, png)
+    db.add(AssetRecord(
+        id=asset_id, project_id=project_id, asset_type="POSE_REFERENCE", filename=filename,
+        relative_path=target.relative_to(Path(str(project.workspace_path))).as_posix(), content_type="image/png",
+        width=width, height=height, byte_size=len(png), sha256=hashlib.sha256(png).hexdigest(), status="READY",
+        provenance={"role": "pose_camera_reference"},
+    ))
+    db.commit()
+    return asset_id
+
+
 def edit_image_operation(
     db: Session,
     progress,
@@ -252,6 +288,7 @@ def edit_image_operation(
     base_asset_id: str,
     prompt: str,
     reference_asset_ids: list[str] | None = None,
+    pose_asset_id: str | None = None,
     seed: int = 20261019,
     timeout_s: float = 1800.0,
 ) -> dict[str, Any]:
@@ -259,6 +296,11 @@ def edit_image_operation(
 
     The picture being edited is `base_asset_id`; any extra assets are references the
     instruction may refer to. The result is persisted as a new project asset.
+
+    With `pose_asset_id` it is a pose and camera transfer: `base_asset_id` is the artwork whose
+    characters, scene and style are kept (<Picture 1>), the pose picture (often a photograph) gives
+    the poses, camera angle and framing (<Picture 2>), and `prompt` is an optional note on who plays whom.
+    The result has the pose picture's shape.
     """
     project = db.query(ProjectRecord).filter(ProjectRecord.id == project_id).first()
     if not project:
@@ -271,7 +313,16 @@ def edit_image_operation(
         raise ComfyImageGenerationError(f"Base asset {base_asset_id} not found in project")
     base_bytes = resolve_contained_path(workspace, base.relative_path).read_bytes()
 
-    references = [base_bytes]
+    # The picture that sets the canvas: the one being edited, or in a transfer the pose picture.
+    canvas_bytes = base_bytes
+    if pose_asset_id:
+        pose = db.query(AssetRecord).filter(
+            AssetRecord.id == pose_asset_id, AssetRecord.project_id == project_id).first()
+        if not pose:
+            raise ComfyImageGenerationError(f"Pose asset {pose_asset_id} not found in project")
+        canvas_bytes = resolve_contained_path(workspace, pose.relative_path).read_bytes()
+
+    references = [canvas_bytes]
     for ref_id in reference_asset_ids or []:
         asset = db.query(AssetRecord).filter(
             AssetRecord.id == ref_id, AssetRecord.project_id == project_id).first()
@@ -279,10 +330,10 @@ def edit_image_operation(
             raise ComfyImageGenerationError(f"Reference asset {ref_id} not found in project")
         references.append(resolve_contained_path(workspace, asset.relative_path).read_bytes())
 
-    # The edit is made at the model's working size, so the picture being edited is scaled to it
+    # The edit is made at the model's working size, so the picture that sets the canvas is scaled to it
     # first: the reference the model sees then carries the same detail as the result.
     try:
-        with Image.open(io.BytesIO(base_bytes)) as picture:
+        with Image.open(io.BytesIO(canvas_bytes)) as picture:
             picture = picture.convert("RGB")
             source_width, source_height = picture.size
             width, height = h3_edit_size(source_width, source_height)
@@ -295,6 +346,16 @@ def edit_image_operation(
         raise
     except Exception as exc:
         raise ComfyImageGenerationError(f"Base asset is not a readable image: {exc}") from exc
+
+    if pose_asset_id:
+        # <Picture 1> is the artwork (kept at its own size: ComfyUI scales it), <Picture 2> the scaled pose picture.
+        try:
+            with Image.open(io.BytesIO(base_bytes)) as artwork:
+                flat = io.BytesIO()
+                artwork.convert("RGB").save(flat, format="PNG")
+        except Exception as exc:
+            raise ComfyImageGenerationError(f"Base asset is not a readable image: {exc}") from exc
+        references.insert(0, flat.getvalue())
 
     client = ComfyUIClient()
     reg = ComfyWorkflowRegistry(client)
@@ -311,7 +372,10 @@ def edit_image_operation(
 
     # The checkpoint wants a caption of the finished picture, not a one-line instruction.
     # The local model writes it; the instruction is used as it is when the model is away.
-    caption = compose_edit_prompt(prompt, references[0])
+    if pose_asset_id:
+        caption = compose_transfer_prompt(references[0], references[1], prompt)
+    else:
+        caption = compose_edit_prompt(prompt, references[0])
     if caption != prompt.strip():
         progress(0.1, "Writing the caption for the edited picture")
     # The local model and the H3 checkpoint do not fit in the VRAM together.
@@ -352,6 +416,9 @@ def edit_image_operation(
     }
     if reference_asset_ids:
         provenance["reference_asset_ids"] = list(reference_asset_ids)
+    if pose_asset_id:
+        provenance["mode"] = "pose_camera_transfer"
+        provenance["pose_asset_id"] = pose_asset_id
     asset = AssetRecord(
         id=asset_id,
         project_id=project_id,
@@ -525,6 +592,19 @@ def build_comfy_image_operation(project_id: str, payload: dict[str, Any]):
             negative_prompt=payload.get("negative_prompt"),
             seed=payload.get("seed", 20261019),
             timeout_s=payload.get("timeout_s", 900.0),
+        )
+    if "workflow_id" not in payload and "asset_id" in payload:  # an edit job: its input is the edit request itself
+        return lambda db, progress, is_cancelled: edit_image_operation(
+            db,
+            progress,
+            is_cancelled,
+            project_id=project_id,
+            base_asset_id=payload["asset_id"],
+            prompt=payload.get("prompt", ""),
+            reference_asset_ids=payload.get("reference_asset_ids") or None,
+            pose_asset_id=payload.get("pose_asset_id"),
+            seed=payload.get("seed", 20261019),
+            timeout_s=payload.get("timeout_s", 1800.0),
         )
     return lambda db, progress, is_cancelled: generate_image_operation(
         db,

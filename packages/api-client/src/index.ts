@@ -128,9 +128,11 @@ export interface ComfyInpaintRequest {
 
 /** Edit a picture from a written instruction (MiniMax-H3-Image). */
 export interface ComfyEditRequest {
-  asset_id: string; // the picture to edit
-  prompt: string; // what the picture should become
+  asset_id: string; // the picture to edit (pose transfer: the artwork whose characters and style are kept)
+  prompt?: string; // what the picture should become (pose transfer: optional note on who plays whom)
   reference_asset_ids?: string[]; // other assets the instruction may refer to
+  pose_asset_id?: string; // pose and camera transfer: a project picture to take poses, camera angle and framing from
+  pose_image_data?: string; // pose and camera transfer: the pose picture uploaded as a data URL (stored as a project asset)
   seed?: number;
   timeout_s?: number;
 }
@@ -2342,8 +2344,8 @@ export class PanelFlowApiClient {
   }
 
   /** Edit a picture from a written instruction, with the MiniMax-H3-Image workflow. */
-  async editComfyImage(projectId: string, request: ComfyEditRequest): Promise<{ job_id: string; status: string; workflow_id: string }> {
-    return this.request<{ job_id: string; status: string; workflow_id: string }>(`/api/projects/${projectId}/comfyui/edit`, {
+  async editComfyImage(projectId: string, request: ComfyEditRequest): Promise<{ job_id: string; status: string; workflow_id: string; pose_asset_id?: string | null }> {
+    return this.request<{ job_id: string; status: string; workflow_id: string; pose_asset_id?: string | null }>(`/api/projects/${projectId}/comfyui/edit`, {
       method: "POST",
       body: JSON.stringify(request),
     });

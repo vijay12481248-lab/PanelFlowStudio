@@ -108,6 +108,71 @@ def compose_edit_prompt(instruction: str, reference_picture: bytes, *, timeout_s
     return text or instruction
 
 
+_TRANSFER_SYSTEM_PROMPT = """You write the instruction for an image model that redraws <Picture 1> \
+so its characters take the pose and camera of <Picture 2>.
+
+<Picture 1> is the artwork to keep: its characters, its scene, its lighting and its rendering style.
+<Picture 2> is only a pose and camera reference (often a photograph). Its people, faces, beards, \
+hair, clothes and background must NOT appear in the result.
+
+Write ONE paragraph of plain text, no headings, no bullet points, no notes. It must:
+1. Start with: "Redraw <Picture 1> in exactly its own rendering, line work, shading, textures and colour \
+palette, but change the composition so it follows <Picture 2>: the same camera angle, framing and \
+placement of the figures, the same body poses."
+2. Count the people in <Picture 2> and pair each with one character of <Picture 1>, by role and position \
+(for example "On the left, in mid-air, <character from Picture 1> leaps ... exactly like the leaping man of \
+<Picture 2>"). Describe each character's face, hair, outfit and weapon as they look in <Picture 1>, and \
+describe the body pose as it is in <Picture 2>.
+3. For every character, name in a few words the traits of its <Picture 2> partner that must not carry over \
+(for example "clean-shaven, nothing of the bearded man's face").
+4. End by saying there are exactly that many characters, nothing photographic remains, and the scene, \
+lighting, glow and style of <Picture 1> are kept."""
+
+
+def compose_transfer_prompt(
+    character_picture: bytes, pose_picture: bytes, hint: str = "", *, timeout_s: float = 300.0,
+) -> str:
+    """The caption for a pose and camera transfer: `character_picture` is <Picture 1>, `pose_picture` is <Picture 2>.
+
+    The local model looks at both pictures. When it is not reachable a plain instruction
+    is returned (no character descriptions), which still follows the same wording.
+    """
+    hint = (hint or "").strip()
+    plain = (
+        "Redraw <Picture 1> in exactly its own rendering, line work, shading, textures and colour palette, but change the "
+        "composition so it follows <Picture 2>: the same camera angle, framing and placement of the figures, the same body "
+        "poses, each figure of <Picture 2> played by one character of <Picture 1>. Nothing photographic remains: no faces, "
+        "beards, clothes or background of <Picture 2>. The scene, lighting, glow and style of <Picture 1> are kept."
+    )
+    if hint:
+        plain += f" {hint}"
+    try:
+        import httpx
+
+        payload = {
+            "model": OLLAMA_MODEL,
+            "system": _TRANSFER_SYSTEM_PROMPT,
+            "prompt": "The first picture is <Picture 1>, the second is <Picture 2>."
+                      + (f"\nWho plays whom, from the user: {hint}" if hint else ""),
+            "images": [base64.b64encode(_vision_bytes(p)).decode("ascii") for p in (character_picture, pose_picture)],
+            "stream": False,
+            "think": False,
+            "thinking": False,
+            "options": {"temperature": 0.2, "num_predict": 900, "num_ctx": 8192},
+        }
+        with httpx.Client(timeout=timeout_s) as client:
+            response = client.post(f"{OLLAMA_ENDPOINT}/api/generate", json=payload)
+            response.raise_for_status()
+            text = str(response.json().get("response") or "").strip()
+    except Exception as exc:
+        logger.info("Transfer prompt expansion skipped (%s); the plain instruction is sent", exc)
+        return plain
+    # The model must name both pictures; otherwise its paragraph cannot steer the edit.
+    if len(text) < 80 or "<Picture 1>" not in text or "<Picture 2>" not in text:
+        return plain
+    return text.strip("`\n ")
+
+
 def release_local_model() -> None:
     """Unload the local model so ComfyUI has the VRAM: they do not fit together.
 

@@ -3,14 +3,14 @@
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy.orm import Session
 
 from engine.comfyui import ComfyUIClient, ComfyUIError, ComfyWorkflowRegistry, WorkflowRegistryError
-from engine.comfyui.art import ART_WORKFLOW_ID, EDIT_WORKFLOW_ID, IMAGE_WORKFLOW_IDS
+from engine.comfyui.art import ART_WORKFLOW_ID, EDIT_WORKFLOW_ID, IMAGE_WORKFLOW_IDS, ComfyImageGenerationError
 from engine.comfyui.service import (
     H3_CLIP_JOB_TYPE, INPAINT_WORKFLOW_ID, edit_image_operation, generate_clip_operation, generate_image_operation,
-    inpaint_image_operation,
+    inpaint_image_operation, save_pose_reference,
 )
 from engine.database.models import AssetRecord, ProjectRecord
 from engine.database.session import get_db
@@ -53,11 +53,21 @@ class ComfyInpaintRequest(BaseModel):
 
 
 class ComfyEditRequest(BaseModel):
-    asset_id: str = Field(..., min_length=1, description="The picture to edit")
-    prompt: str = Field(..., min_length=3, max_length=12000, description="What the picture should become, in plain words")
+    asset_id: str = Field(..., min_length=1, description="The picture to edit (in a pose transfer: the artwork whose characters and style are kept)")
+    prompt: str = Field(default="", max_length=12000, description="What the picture should become, in plain words (in a pose transfer: an optional note on who plays whom)")
     reference_asset_ids: list[str] = Field(default_factory=list, max_length=3, description="Other project assets the instruction may refer to")
+    pose_asset_id: str | None = Field(default=None, description="Pose and camera transfer: a project picture whose poses, camera angle and framing the artwork should take")
+    pose_image_data: str | None = Field(default=None, max_length=30_000_000, description="Pose and camera transfer: the pose picture uploaded as base64 or a data URL (stored as a project asset)")
     seed: int = Field(default=20261019, ge=0, le=2**63 - 1)
     timeout_s: float = Field(default=1800.0, ge=30.0, le=3600.0)
+
+    @model_validator(mode="after")
+    def _needs_an_instruction_or_a_pose(self):
+        if self.pose_asset_id and self.pose_image_data:
+            raise ValueError("Give the pose picture as pose_asset_id or pose_image_data, not both")
+        if not (self.pose_asset_id or self.pose_image_data) and len(self.prompt.strip()) < 3:
+            raise ValueError("prompt must say what the picture should become (at least 3 characters)")
+        return self
 
 
 @router.get("/capabilities")
@@ -222,11 +232,18 @@ def submit_comfyui_edit_job(project_id: str, request: ComfyEditRequest, db: Sess
     project = db.query(ProjectRecord).filter(ProjectRecord.id == project_id).first()
     if not project:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
-    wanted = [request.asset_id, *request.reference_asset_ids]
+    wanted = [request.asset_id, *request.reference_asset_ids, *([request.pose_asset_id] if request.pose_asset_id else [])]
     found = {a.id for a in db.query(AssetRecord.id).filter(AssetRecord.project_id == project_id, AssetRecord.id.in_(wanted))}
     missing = [i for i in wanted if i not in found]
     if missing:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Assets not found in this project: {', '.join(missing)}")
+
+    pose_asset_id = request.pose_asset_id
+    if request.pose_image_data:  # an uploaded picture becomes a project asset, so the job input stays small
+        try:
+            pose_asset_id = save_pose_reference(db, project_id, request.pose_image_data)
+        except ComfyImageGenerationError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
     try:
         registry = ComfyWorkflowRegistry()
@@ -261,6 +278,7 @@ def submit_comfyui_edit_job(project_id: str, request: ComfyEditRequest, db: Sess
             base_asset_id=request.asset_id,
             prompt=request.prompt,
             reference_asset_ids=request.reference_asset_ids,
+            pose_asset_id=pose_asset_id,
             seed=request.seed,
             timeout_s=request.timeout_s,
         )
@@ -273,9 +291,9 @@ def submit_comfyui_edit_job(project_id: str, request: ComfyEditRequest, db: Sess
         requires_gpu=bool(metadata.get("requires_gpu", True)),
         gpu_vram_mb=int(metadata.get("gpu_vram_mb", 0) or 0),
         max_retries=1,
-        job_input=request.model_dump(),
+        job_input={**request.model_dump(exclude={"pose_image_data"}), "pose_asset_id": pose_asset_id},
     )
-    return {"job_id": job_id, "status": "QUEUED", "workflow_id": EDIT_WORKFLOW_ID}
+    return {"job_id": job_id, "status": "QUEUED", "workflow_id": EDIT_WORKFLOW_ID, "pose_asset_id": pose_asset_id}
 
 
 @project_router.post("/{project_id}/comfyui/inpaint")

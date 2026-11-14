@@ -94,6 +94,42 @@ glowing window, the second a van with a scalloped awning. The scene around it wa
 Not measured: other seeds, an edit where a face has to stay the same, the second reference picture
 (the instruction refers to another picture).
 
+## Pose and camera transfer
+
+Take the poses, the camera angle and the framing of one picture (often a photograph) and put them on the
+characters of an artwork, keeping the artwork's characters, scene and style. The same graph and `ArtEngine.edit`
+run it: no second workflow, no new model, no download. `POST /api/projects/{id}/comfyui/edit` with `pose_asset_id`
+(a project picture) or `pose_image_data` (an uploaded picture, stored as a `POSE_REFERENCE` asset so the job row stays
+small); `prompt` becomes an optional "who plays whom" note. From the desktop: the image editor's **4. Transfer Pose &
+Camera** section.
+
+- **The order matters.** `<Picture 1>` is the artwork (kept at its own size, ComfyUI scales it) and `<Picture 2>` is the pose
+  picture, scaled to the working size; the result has the pose picture's shape. Tried the other way round (photo as
+  `<Picture 1>`) the model drifted to a cleaner anime look and lost the scene; with the artwork first the scene and the
+  glow come through, but the photo's beard leaked onto a character until the caption said so.
+- **The caption is the whole trick.** `compose_transfer_prompt` (`edit_prompt.py`) has the local vision model look at both
+  pictures and write one paragraph that (1) says to keep `<Picture 1>`'s own rendering, (2) pairs each person of
+  `<Picture 2>` with one character by role and position, (3) names the traits of the photo person that must not carry over,
+  (4) says how many characters there are and that nothing photographic remains. "Replace the men with the characters"
+  wording failed: one man stayed photographic and a third figure appeared. Without the model the caption is a plain
+  version of the same wording.
+- **What is not built:** a switch to use the pose picture as `<Picture 1>`; a project-asset picker for the pose picture
+  in the UI (upload from disk only; the API takes an asset id).
+- **A second restyle pass makes it worse** (oversharpened, muddy): do not add one.
+
+Measured (2026-11-14, ComfyUI 0.45.0, RTX 5060 Ti 16 GB): the owner's pair, a manhua frame of two fighters in a frozen cave
+(1344x768) and a 502x664 stock photograph of a leaping swordsman over a crouching bearded man. Through
+`edit_image_operation` with the real local model writing the caption: 1792x2368 results in 91 s for the first run
+(caption included; later runs 42-76 s for the edit), peak VRAM 15,734 MiB with the two references, no out-of-memory.
+Both seeds gave exactly two manhua characters, no photographic person, the black-coat man leaping with his raised blade
+like the swordsman, the cave's bone arch, pillars and glow kept, and the armoured man without the bearded man's face.
+Not matched: the crouching man's pose is only approximate (he kneels with the sword forward and faces the viewer where
+the photograph has him crouching and looking up at the leaper), the rendering is a little smoother and cleaner than the
+original's gritty paint, and on one seed the leaper is cut by the left edge.
+
+Not measured: other pairs, three or more people, a reference with a different number of people than characters, fast
+action, two reference photographs, a portrait artwork on a landscape pose picture.
+
 ## Text to image
 
 `POST /api/projects/{id}/comfyui/image` with `"workflow_id": "minimax_h3_image_edit"` runs the same
