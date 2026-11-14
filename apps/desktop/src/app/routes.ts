@@ -62,6 +62,7 @@ export const paths = {
   create: (kind?: CreateKind) => (kind ? `/create/${kind}` : "/create"),
   chronoflow: ({ projectId, jobId }: { projectId?: string; jobId?: string }) =>
     jobId ? `/create/chronoflow/job/${id(jobId)}` : projectId ? `/create/chronoflow/${id(projectId)}` : "/create/chronoflow",
+  scene: (runId?: string) => (runId ? `/create/scene?run=${id(runId)}` : "/create/scene"),
   jobs: () => "/jobs",
   library: (kind?: "audio" | "media" | "voices" | "images") => (kind ? `/library/${kind}` : "/library"),
   settings: (section: SettingsSection = "engine") => `/settings/${section}`,

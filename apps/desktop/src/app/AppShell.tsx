@@ -5,6 +5,7 @@ import { Activity, BookOpen, FolderKanban, Home, Search, SlidersHorizontal, Spar
 import { api } from "@panelflow/api-client";
 import { Button, Dock, EngineStatus, ErrorState, IconButton, type DockItem } from "@panelflow/ui-v2";
 import { ErrorAlertBanner, ErrorDetailsModal, ErrorNotificationBell } from "../components/error";
+import { ReviewBadge, ReviewRequestBanner } from "../features/scene/ReviewRequestBanner";
 import { useError } from "../context/ErrorContext";
 import { CommandPalette } from "./CommandPalette";
 import { buildCommands } from "./commands";
@@ -87,6 +88,7 @@ export const AppShell: React.FC = () => {
           <Button variant="ghost" size="sm" disabled={!engine.connected || engine.restarting || engine.retrying} loading={engine.restarting} onClick={() => void engine.restart()}>
             {engine.restarting ? "Restarting" : "Restart engine"}
           </Button>
+          <ReviewBadge />
           <ErrorNotificationBell />
           <IconButton label="Open command palette (Ctrl K)" onClick={() => setPaletteOpen(true)}><Search size={16} /></IconButton>
         </header>
@@ -94,6 +96,8 @@ export const AppShell: React.FC = () => {
 
       {/* The editor and ChronoFlow stay mounted when the engine drops: they hold unsaved work and have their own offline handling. */}
       <main className="min-h-0 flex-1 overflow-y-auto">{engine.connected || immersive ? <Outlet /> : <EngineGate />}</main>
+
+      {!immersive && <ReviewRequestBanner />}
 
       {!immersive && (
         <div className="px-4 pb-4 pt-2">

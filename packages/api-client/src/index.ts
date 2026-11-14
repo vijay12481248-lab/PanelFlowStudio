@@ -297,6 +297,83 @@ export interface ChronoFlowJobSummary {
   created_at?: number;
 }
 
+// ---- Scene Director: pictures waiting for the owner's review, the two-judge analysis and the owner's feedback (docs/SCENE_DIRECTOR.md) ----
+export type SceneItemStatus = "agreed" | "resolved" | "disputed" | "single" | "unjudged";
+
+export interface SceneJudgeItem {
+  key: string; // "camera" | "people" | "action:<i>"
+  status: SceneItemStatus;
+  value: string | null;
+  confidence: number;
+  answers: Record<string, { round1: string | null; round2: string | null; evidence: string }>;
+  suspect_flips: string[];
+}
+
+export interface SceneCrossCheck {
+  judges: string[];
+  items: SceneJudgeItem[];
+  single_judge: boolean;
+  seconds: number;
+}
+
+export interface SceneAnalysis {
+  id: string;
+  crosscheck: SceneCrossCheck | Record<string, never>;
+  judges: string[];
+  single_judge: boolean;
+  seconds: number;
+  error: string | null;
+  created_at: string | null;
+}
+
+export interface SceneFeedback {
+  liked: number;
+  agrees_with_ai: boolean;
+  good_tags: string[];
+  wrong_tags: string[];
+  note: string;
+  created_at: string | null;
+}
+
+export type ScenePlanData = Record<string, any>;
+
+export interface SceneRun {
+  id: string;
+  project_id: string;
+  job_id: string | null;
+  brief: string;
+  scene_type: string;
+  plan: ScenePlanData;
+  image_path: string;
+  status: string;
+  system_review: { unmet?: string[]; unverified?: boolean; review?: unknown };
+  attempts: number;
+  seconds: number;
+  review_state: "pending" | "reviewed" | "dismissed";
+  created_at: string | null;
+  analysis?: SceneAnalysis | null;
+  feedback?: SceneFeedback | null;
+}
+
+export interface SceneRunList {
+  items: SceneRun[];
+  total_unreviewed: number;
+}
+
+export interface SceneProposal {
+  plan: ScenePlanData;
+  summary: string;
+  questions: { field: string; text: string; default: string }[];
+}
+
+export interface SceneFeedbackInput {
+  liked: number;
+  agrees_with_ai: boolean;
+  good_tags: string[];
+  wrong_tags: string[];
+  note: string;
+}
+
 export interface OriginalSeries {
   id: string;
   name: string;
@@ -2617,6 +2694,47 @@ export class PanelFlowApiClient {
 
   async listOriginalJobs(): Promise<Job[]> {
     return this.request<Job[]>("/api/original/jobs");
+  }
+
+  async listSceneRuns(opts: { unreviewed?: boolean; limit?: number; offset?: number } = {}): Promise<SceneRunList> {
+    const params = new URLSearchParams();
+    if (opts.unreviewed) params.set("unreviewed", "true");
+    if (opts.limit !== undefined) params.set("limit", String(opts.limit));
+    if (opts.offset !== undefined) params.set("offset", String(opts.offset));
+    const qs = params.toString() ? `?${params.toString()}` : "";
+    return this.request<SceneRunList>(`/api/original/scene/runs${qs}`);
+  }
+
+  async getSceneRun(runId: string): Promise<SceneRun> {
+    return this.request<SceneRun>(`/api/original/scene/runs/${encodeURIComponent(runId)}`);
+  }
+
+  sceneRunImageUrl(runId: string): string {
+    return `${this.baseUrl}/api/original/scene/runs/${encodeURIComponent(runId)}/image`;
+  }
+
+  async submitSceneFeedback(runId: string, body: SceneFeedbackInput): Promise<SceneRun> {
+    return this.request<SceneRun>(`/api/original/scene/runs/${encodeURIComponent(runId)}/feedback`, { method: "POST", body: JSON.stringify(body) });
+  }
+
+  async dismissSceneRun(runId: string): Promise<SceneRun> {
+    return this.request<SceneRun>(`/api/original/scene/runs/${encodeURIComponent(runId)}/dismiss`, { method: "POST" });
+  }
+
+  async sceneProposal(brief: string, sceneType?: string): Promise<SceneProposal> {
+    return this.request<SceneProposal>("/api/original/scene/propose", { method: "POST", body: JSON.stringify({ brief, ...(sceneType ? { scene_type: sceneType } : {}) }) });
+  }
+
+  async sceneCorrect(plan: ScenePlanData, corrections: Record<string, string>): Promise<{ plan: ScenePlanData; summary: string }> {
+    return this.request("/api/original/scene/correct", { method: "POST", body: JSON.stringify({ plan, corrections }) });
+  }
+
+  async sceneGenerate(projectId: string, plan: ScenePlanData, seed?: number): Promise<{ job_id: string; status: string }> {
+    return this.request("/api/original/scene/generate", { method: "POST", body: JSON.stringify({ project_id: projectId, plan, ...(seed !== undefined ? { seed } : {}) }) });
+  }
+
+  async sceneKnowledgeStats(): Promise<Record<string, unknown>> {
+    return this.request<Record<string, unknown>>("/api/original/scene/knowledge/stats");
   }
 
   getOriginalPanelImageUrl(slug: string, panelId: string, episode?: string, candidate?: number): string {
