@@ -66,3 +66,25 @@ Baseline (the measure of "does it match what I imagined"): `.venv\Scripts\python
 - Checker outcome: 5 accept, 2 accept_low, 15 needs_review (picture delivered with what it misses listed), 0 unverified. Items still unmet after the attempts: camera angle (11x, almost always "low angle"), a pose/state word (11x), placement 1, figure count 1.
 - **The low camera angle is the systematic miss.** 7 of 8 fights ended with "camera looks up from a low angle" unmet. Looking at fight-02 and fight-08: both are well-staged two-person fights (left attacker, right defender) with at most a mild low angle, so the blind read's "level" may be strict, or Qwen may simply not do a strong low angle; redrawing with the same words does not change it (it burns the attempts). That is exactly what the staging-picture escalation is for.
 - **Plan compliance is not the same as the owner liking it.** The raw "a samurai duel at dusk" picture (symmetrical blade clash, wide, full bodies) is arguably as good as the director's (close, left attacker thrusting at the right defender). Only the owner's ratings can say which is better; they have not been collected, so no claim of improvement is made here.
+
+## Staging picture + transfer (spike, gate FAILED: not wired in)
+
+`tools/scene_director/staging_spike.py` (throwaway) draws a mannequin picture from the plan (blue left, red right, strike arrow, horizon height from the camera angle) and edits the raw baseline picture with it through `compose_transfer_prompt` + `ArtEngine.edit` (character picture = Picture 1, staging = Picture 2), 6 fight briefs, one seed.
+
+| brief | edit s | checker score before -> after | camera "low angle" after |
+|---|---|---|---|
+| fight-01 | 66.6 | 0.29 -> 0.43 (one figure became two, planned pose followed) | still unmet |
+| fight-02 | 69.7 | 0.71 -> 0.71 | still unmet |
+| fight-03 | 68.3 | 0.71 -> 0.86 | still unmet |
+| fight-04 | 67.6 | 0.86 -> 0.86 | still unmet |
+| fight-05 | 67.5 | 0.86 -> 0.29 (two people standing, not fighting; a gun and a face mask appeared) | still unmet |
+| fight-06 | 68.8 | 0.50 -> 0.63 | still unmet |
+
+- Gate was "clearly better in at least 4 of 6": 3 better, 2 unchanged, 1 much worse. **Not met, so escalation is not wired in** (no `scene_staging.py`; `generate_scene` has no escalate hook). The camera angle was never fixed by the transfer, and one edit costs about as much as the whole 3-attempt fast path (~68 s).
+- Where it helped, it helped on placement/count/pose (fight-01 had one figure, the staged edit had two with the planned pose). Mannequin pictures are a lever for those, not for the camera.
+- Not tried: a better mannequin (real poses), another seed, two-pass use only after the fast path stalls on placement/count.
+
+## The camera angle: what worked instead
+
+- Plain compiler wording ("Shot from a low camera angle looking up.") reached a low angle (blind camera read) in **0 of 8** fights on the first attempt. Adding one strong sentence at the end of the prompt ("Remember: Camera placed near the ground looking steeply upward, the subjects tower over the viewer.") gave **3 of 8**, and with the sentence built into the default prompt, 8 fresh-seed runs gave **4 of 8** (4 of 8 accepted on attempt 1). Small samples, one seed per brief and check by the 9B blind read, so a direction, not a rate. `CAMERA_FIX` in `scene_prompt.py`; only the low angle is measured (high and dutch use the same mechanism, unmeasured).
+- Live check through the MCP tools against a real engine (own temp database): `panelflow_scene_propose` -> `correct` (camera.angle low) -> `generate` (job SCENE_GENERATION) -> `rate`. "a samurai duel at dusk": plan "low angle, medium shot, samurai_a on the left striking right, samurai_b on the right blocking, light from behind", accepted on the first attempt in 24 s; looked at the picture: two fighters, left one thrusting a sword at the right one who raises an open palm, low angle, dusk sky.
