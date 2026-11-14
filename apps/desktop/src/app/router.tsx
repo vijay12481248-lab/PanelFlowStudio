@@ -27,6 +27,7 @@ export const appRoutes: RouteObject[] = [
       { path: "create/stories", ...legacy("StoriesRoute") },
       { path: "create/anime", ...legacy("AnimeRoute") },
       { path: "create/image", ...legacy("ImageRoute") },
+      { path: "create/scene", ...screen(() => import("../features/scene/ScenePage"), "ScenePage") },
       { path: "create/chronoflow", ...legacy("ChronoFlowRoute") },
       { path: "create/chronoflow/job/:jobId", ...legacy("ChronoFlowRoute") },
       { path: "create/chronoflow/:projectId", ...legacy("ChronoFlowRoute") },

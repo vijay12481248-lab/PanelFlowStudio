@@ -9,6 +9,7 @@ const STUDIOS: Array<{ kind: CreateKind; title: string; subtitle: string; initia
   { kind: "anime", title: "Anime review", subtitle: "Review an episode with narration", initials: "AR", imageUrl: "/assets/studios/anime_review.webp" },
   { kind: "chronoflow", title: "ChronoFlow", subtitle: "Chain H3 clips into a long video", initials: "CF", imageUrl: "/assets/studios/chronoflow.webp" },
   { kind: "image", title: "Create an image", subtitle: "Generate art for a project", initials: "GI", imageUrl: "/assets/studios/create_image.webp" },
+  { kind: "scene", title: "Scene Director", subtitle: "Plan a scene, see the AI judges, review it", initials: "SD", imageUrl: "/assets/studios/scene_director.webp" },
 ];
 
 export const CreateIndex: React.FC = () => {
@@ -18,7 +19,7 @@ export const CreateIndex: React.FC = () => {
   return (
     <div className="mx-auto grid w-full max-w-5xl gap-6 p-6 md:p-8 grid-cols-1">
       <PageHeader title="Create" meta={<span>What do you want to make?</span>} />
-      <div className="grid grid-cols-2 gap-5 md:grid-cols-3 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-5 md:grid-cols-3 lg:grid-cols-6">
         {STUDIOS.map((studio) => (
           <Tile
             key={studio.kind}
