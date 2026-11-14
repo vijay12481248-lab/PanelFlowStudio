@@ -397,6 +397,12 @@ ollama_pull_manager = OllamaModelPullManager()
 # 5. ComfyUI Process & Dependency Auto-Launcher
 # ---------------------------------------------------------------------------
 
+def comfyui_launch_command(py_exe: Path, main_py: Path, host: str, port: int) -> List[str]:
+    """How the app starts ComfyUI. `--disable-dynamic-vram` is needed by the second vision judge (Qwen3-VL 8B through the TextGenerate node fails inside ComfyUI
+    with dynamic VRAM on; measured 2026-11-14) and does not slow Qwen drawing (6 s per 1344x768 picture)."""
+    return [str(py_exe), str(main_py), "--listen", host, "--port", str(port), "--disable-auto-launch", "--enable-cors-header", "*", "--disable-dynamic-vram"]
+
+
 class ComfyUIManager:
     """
     Manages discovery, status probing, and automated background lifecycle
@@ -501,14 +507,7 @@ class ComfyUIManager:
             if sys.platform == "win32":
                 creation_flags = 0x08000000 | 0x00000200  # CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP
 
-            cmd = [
-                str(py_exe),
-                str(main_py),
-                "--listen", host,
-                "--port", str(port),
-                "--disable-auto-launch",
-                "--enable-cors-header", "*",
-            ]
+            cmd = comfyui_launch_command(py_exe, main_py, host, port)
 
             env = dict(os.environ)
             workflow_dir = root / "workflow"
