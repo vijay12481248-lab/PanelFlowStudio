@@ -66,5 +66,27 @@
     "The face and posture carry the feeling; the background stays simple.",
     "One clear emotion per person.",
     "Close or medium distance so the expression is readable."
+  ],
+  "state_groups": [
+    [
+      "grieving",
+      "lost",
+      "guilty",
+      "ashamed"
+    ],
+    [
+      "joyful",
+      "proud",
+      "hopeful",
+      "tender",
+      "peaceful",
+      "nostalgic",
+      "forgiving"
+    ],
+    [
+      "afraid",
+      "angry",
+      "determined"
+    ]
   ]
 }

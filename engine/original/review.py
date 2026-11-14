@@ -900,6 +900,7 @@ async def _grounded_check(provider, image: Path, claims: list[Claim]) -> list[_G
 def _annotate(review: Review, claims: list[Claim], grounded: list[_Grounded]) -> None:
     """Attach status, severity, the model's box and 'repairable locally' to the items that came from the prompt requirements."""
     for item, claim, g in zip(review.items, claims, grounded):
+        item.kind = claim.kind
         if item.verdict == "shown":
             item.status = "correct"
         elif item.verdict == "partial":
@@ -954,9 +955,11 @@ async def _has_living_subject(provider, image: Path) -> bool | None:
     return False if answer.startswith("n") else True if answer.startswith("y") else None
 
 
-async def evaluate_prompt_image(provider, image: Path, prompt: str, audit_gates: bool = True, locate_defects: bool = True) -> Review:
-    """Review one image against the prompt that made it. Raises nothing for an unusable model answer: those items come back 'uncertain'."""
-    claims = await extract_prompt_requirements(provider, prompt)
+async def evaluate_prompt_image(provider, image: Path, prompt: str, audit_gates: bool = True, locate_defects: bool = True,
+                                claims: list[Claim] | None = None) -> Review:
+    """Review one image against the prompt that made it. Raises nothing for an unusable model answer: those items come back 'uncertain'.
+    `claims` (a checklist the caller already has, e.g. from a scene plan) replaces the model-written one extracted from the prompt."""
+    claims = claims if claims is not None else await extract_prompt_requirements(provider, prompt)
     description = await _describe(provider, image)
     grounded = await _grounded_check(provider, image, claims) if claims else []
     miscounted: set[int] = set()

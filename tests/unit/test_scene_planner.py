@@ -167,3 +167,30 @@ def test_a_gender_the_model_chose_is_never_overridden():
 def test_two_actor_plans_keep_neutral_gender():
     p = run(propose(FakeProvider(FIGHT_ANSWER), "the hero fights the villain")).plan
     assert {a.gender for a in p.actors} == {"neutral"}
+
+
+class FlakyProvider(FakeProvider):
+    """Raises like the real Ollama provider does when the model runs past its length budget, then answers."""
+
+    def __init__(self, failures: int, *answers):
+        super().__init__(*answers)
+        self.failures = failures
+
+    async def generate_structured(self, text, model, **kw):
+        if self.failures:
+            self.failures -= 1
+            self.calls.append(text)
+            raise RuntimeError("Model output reached its length limit (generated=1500, budget=1500)")
+        return await super().generate_structured(text, model, **kw)
+
+
+def test_a_model_that_runs_past_its_length_limit_is_retried_not_crashed():
+    # real finding: GenerationLimitError escaped propose() and would have been an HTTP 500
+    fake = FlakyProvider(1, FIGHT_ANSWER)
+    p = run(propose(fake, "the hero fights the villain"))
+    assert len(fake.calls) == 2 and "too long" in fake.calls[1].lower() and p.plan.actors
+
+
+def test_a_model_that_never_answers_ends_as_value_error():
+    with pytest.raises(ValueError, match="failed"):
+        run(propose(FlakyProvider(99), "the hero fights the villain"))

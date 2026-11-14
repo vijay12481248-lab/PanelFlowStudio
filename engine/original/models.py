@@ -107,6 +107,7 @@ class ItemVerdict(BaseModel):
     status: str = ""  # correct | missing | incorrect | uncertain | not_verifiable (derived from verdict when the reviewer did not set it)
     severity: str = ""  # critical | minor, only for items that did not pass
     repairable_locally: bool = False  # a located, existing-but-wrong thing: a masked edit can fix it without redrawing the picture
+    kind: str = ""  # the requirement kind this item came from (subject | placement | pose | camera | ...), set for prompt/plan requirements
 
     def model_post_init(self, __context) -> None:
         if self.verdict != "shown" or not self.passed:

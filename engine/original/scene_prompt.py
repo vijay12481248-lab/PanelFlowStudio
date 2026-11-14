@@ -22,7 +22,7 @@ def _tags(text: str, n: int = 3) -> str:
     return ", ".join([t.strip() for t in text.split(",") if t.strip()][:n])
 
 
-def _who(a) -> str:
+def describe_actor(a) -> str:
     """How a viewer would describe the actor (never the name): used in the checklist."""
     noun = NATURAL_PERSON.get((a.age_group, a.gender), "a person") if a.species == "human" else f"a {a.species}"
     return f"{noun} with {_tags(a.description)}"
@@ -73,7 +73,7 @@ def compile_scene_prompt(plan: ScenePlan, *, emphasis: list[str] | None = None, 
 def plan_requirements(plan: ScenePlan) -> list[Claim]:
     """What a viewer must be able to SEE. Actor count, each actor's side and action state, contacts and camera angle are critical; framing,
     light and depth layers are not. Mood is a feeling, not a visible fact, so it is never a requirement."""
-    who = {a.id: _who(a) for a in plan.actors}
+    who = {a.id: describe_actor(a) for a in plan.actors}
     n = len(plan.actors)
     count = "there are no people in the picture" if n == 0 else "exactly one figure is in the picture" if n == 1 else \
         f"exactly {_NUMBER.get(n, n)} figures are in the picture"

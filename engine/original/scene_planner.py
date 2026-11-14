@@ -141,7 +141,11 @@ async def _ask_plan(provider, prompt: str, check, attempts: int = 4):
     feedback: list[str] = []
     for _ in range(attempts):
         text = prompt + ("\n\nYour last answer had these problems, fix them all:\n- " + "\n- ".join(feedback[:8]) if feedback else "")
-        raw = await provider.generate_structured(text, _PlanOut, system_prompt=SYSTEM, temperature=0.4, max_tokens=1500, num_ctx=8192)
+        try:
+            raw = await provider.generate_structured(text, _PlanOut, system_prompt=SYSTEM, temperature=0.4, max_tokens=1500, num_ctx=8192)
+        except Exception as exc:  # e.g. the provider's length-limit error: the model rambled; ask again, shorter
+            feedback = [f"the answer was too long or unusable ({type(exc).__name__}): reply with the JSON only, as short as you can"]
+            continue
         try:
             out = raw if isinstance(raw, _PlanOut) else _PlanOut(**raw)
         except ValueError as exc:

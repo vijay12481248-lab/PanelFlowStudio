@@ -68,6 +68,7 @@ class Playbook(BaseModel):
     defaults: dict
     questions: dict[str, str]  # one per high_impact path
     staging_rules: list[str]
+    state_groups: list[list[str]] = Field(default_factory=list)  # states a 9B vision model cannot tell apart; the check treats a group as one state
 
 
 def scene_types() -> list[str]:
@@ -83,10 +84,10 @@ def load_playbook(scene_type: str) -> Playbook:
 
 def _points_toward(direction: str, source_side: str, target_side: str) -> bool | None:
     """Does a screen-relative direction go from source toward target? None when it cannot be decided (centre, vertical-only, empty)."""
-    horizontal = {"left", "right"} & set(direction.lower().replace("-", " ").split())
-    if not horizontal or "center" in (source_side, target_side) or source_side == target_side:
+    words = [w for w in direction.lower().replace("-", " ").split() if w in ("left", "right")]
+    if not words or "center" in (source_side, target_side) or source_side == target_side:
         return None
-    return horizontal == {target_side}
+    return words[-1] == target_side  # "left to right" heads right: the last horizontal word is where it goes
 
 
 def validate_plan(plan: ScenePlan, playbook: Playbook) -> list[str]:

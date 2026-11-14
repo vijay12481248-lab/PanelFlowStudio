@@ -81,3 +81,24 @@ def test_every_shipped_playbook_loads():
         pb = load_playbook(t)
         assert pb.scene_type == t and pb.keywords and pb.high_impact and pb.questions
         assert all(k in pb.questions for k in pb.high_impact)
+
+
+@pytest.mark.parametrize("direction,attacker_side,ok", [
+    ("left to right", "left", True), ("from left to right", "left", True), ("right to left", "right", True),
+    ("left to right", "right", False), ("down-right", "left", True), ("down-left", "left", False),
+])
+def test_direction_phrases_with_both_words_use_the_destination(direction, attacker_side, ok):
+    # real planner output: "left to right" was rejected as pointing away from the target on the right
+    target_side = "right" if attacker_side == "left" else "left"
+    plan = _fight(actors=[ActorPlan(id="hero", description="x", side=attacker_side, action_state="striking"),
+                          ActorPlan(id="villain", description="y", side=target_side, action_state="blocking")],
+                  contacts=[ContactPlan(source="hero", target="villain", direction=direction)])
+    assert (validate_plan(plan, load_playbook("fight")) == []) is ok
+
+
+def test_state_groups_only_name_real_states_and_fight_has_none():
+    for t in scene_types():
+        pb = load_playbook(t)
+        assert all(s in pb.action_states for g in pb.state_groups for s in g)
+    assert load_playbook("fight").state_groups == []  # striking and blocking must never be confused
+    assert load_playbook("emotion").state_groups
