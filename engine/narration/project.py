@@ -11,7 +11,9 @@ from engine.audio.bgm_defaults import default_bgm_tracks
 from engine.database.models import AudioTimelineRecord, ProjectRecord, ScriptSegmentRecord, VideoScriptRecord
 from engine.motion.models.input_contract import AudioInterval, MasterAudioTimeline
 from engine.security.paths import write_contained_json
-from engine.narration.artifacts import BeatSheet, LockedTimeline, PerformancePlan, ScriptIR, VoiceTake
+from engine.narration.artifacts import BeatSheet, LockedTimeline, NARRATOR_ID, PerformancePlan, ScriptIR, VoiceTake
+from engine.narration.qa import QaReport
+from engine.narration.readiness import readiness
 
 # Legacy autopilot builds these inline (engine/pipeline/autopilot.py), so there is nothing to import.
 _BACKGROUND = {"enabled": True, "preset": "duplicate_blur", "blur_sigma": 36.0, "brightness": -0.30,
@@ -38,8 +40,25 @@ def _next_version(db, project_id: str) -> str:
     return f"{top + 1}.0"
 
 
+def _bible_speaker_names(project: ProjectRecord, sheet: BeatSheet) -> dict[str, str]:
+    """Character id -> display name, read from the series bible the chapter was written against."""
+    from engine.narration.bible.store import BibleStore, series_key_for
+
+    key = series_key_for(project.title or "", project.source_metadata)
+    if not key:
+        return {}
+    try:
+        bible = BibleStore().load(key)
+    except (OSError, ValueError):
+        return {}
+    return {c.id: c.name for c in bible.characters}
+
+
 def apply_to_project(db, project_id: str, tl: LockedTimeline, script: ScriptIR, sheet: BeatSheet,
-                     takes: list[VoiceTake], workspace: Path, plan: PerformancePlan) -> str:
+                     takes: list[VoiceTake], workspace: Path, plan: PerformancePlan,
+                     speaker_names: dict[str, str] | None = None,
+                     qa: dict[str, QaReport] | None = None,
+                     outdated: list[str] | None = None) -> str:
     project = db.get(ProjectRecord, project_id)
     settings = dict(project.settings or {})
     state = dict(settings.get("story_editor_state") or {})
@@ -47,6 +66,8 @@ def apply_to_project(db, project_id: str, tl: LockedTimeline, script: ScriptIR, 
     take = {t.line_id: t for t in takes}
     marks = {m.line_id: m for m in plan.lines}
     line = {ln.line_id: ln for ln in script.lines}
+    if speaker_names is None:
+        speaker_names = _bible_speaker_names(project, sheet)
 
     scenes = []
     for sc in sheet.scenes:
@@ -82,9 +103,13 @@ def apply_to_project(db, project_id: str, tl: LockedTimeline, script: ScriptIR, 
         _copy_atomic(take[c.line_id].audio_path, dest)
         emotion = marks[c.line_id].emotion.upper()
         sid = panel_scene[c.panel_id]
+        speaker_id = line[c.line_id].speaker_id
+        is_narrator = speaker_id == NARRATOR_ID
+        speaker_name = "Narrator" if is_narrator else speaker_names.get(speaker_id, speaker_id)
         clips.append({
             "id": "narr_" + c.line_id, "scene_id": sid, "text": line[c.line_id].text,
-            "speaker": "Narrator", "voice": "Narrator", "emotion": emotion, "intensity": 0.5,
+            "speaker": speaker_name, "voice": "Narrator" if is_narrator else speaker_name, "emotion": emotion,
+            "intensity": 0.5,
             "speed": take[c.line_id].rate, "start_time_sec": c.start, "duration_sec": c.end - c.start,
             "scene_offset_sec": c.start - scene_start[sid], "volume": 1.0,
             "status": "APPROVED", "review_status": "APPROVED",
@@ -97,15 +122,28 @@ def apply_to_project(db, project_id: str, tl: LockedTimeline, script: ScriptIR, 
             is_speech=True, audio_file_uri=str(dest)))  # legacy stores the absolute path too (audio/service.py)
         db.add(ScriptSegmentRecord(
             id=seg_ids[c.line_id], script_id=script_id, project_id=project_id, scene_id=sid, sequence=i,
-            type="NARRATOR", text=line[c.line_id].text, emotion=emotion, estimated_start=c.start,
-            estimated_end=c.end, estimated_duration=c.end - c.start, source_evidence={"panel_ids": [c.panel_id]}))
+            type="NARRATOR" if is_narrator else "CHARACTER_DIALOGUE",
+            speaker_character_id=None if is_narrator else speaker_id,
+            text=line[c.line_id].text, emotion=emotion, estimated_start=c.start,
+            estimated_end=c.end, estimated_duration=c.end - c.start,
+            production_intent=marks[c.line_id].intent,
+            source_evidence={"panel_ids": [c.panel_id]}))
     state.update(scenes=scenes, narration_clips=clips)
     state["bgm_tracks"] = default_bgm_tracks(state.get("bgm_tracks"))
     mat = MasterAudioTimeline(project_id=project_id, total_duration_sec=tl.duration, intervals=intervals,
                               sample_rate=48000, channels=2).model_dump()
     write_contained_json(workspace, Path("audio") / "master_audio_timeline.json", mat)
+    # the cast of the chapter: the voice each speaker reads with, by the name shown on the clip
+    casting = {"Narrator": takes[0].voice_id} if takes else {}
+    for c in tl.clips:
+        speaker_id = line[c.line_id].speaker_id
+        if speaker_id != NARRATOR_ID:
+            casting[speaker_names.get(speaker_id, speaker_id)] = take[c.line_id].voice_id
     db.add(AudioTimelineRecord(project_id=project_id, status="DRAFT", total_duration=tl.duration, timeline_json=mat,
-                               voice_casting={"Narrator": takes[0].voice_id}))
+                               voice_casting=casting))
+    # the readiness report: what is still open before the project renders
+    report = readiness(script, takes, qa, None, outdated, music_tracks=len(state["bgm_tracks"]))
+    write_contained_json(workspace, Path("audio") / "readiness.json", report.model_dump(mode="json"))
     project.current_stage = PipelineStage.VOICE_GENERATED.value
     settings["story_editor_state"] = state
     project.settings = settings

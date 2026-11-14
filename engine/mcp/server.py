@@ -1,15 +1,25 @@
 #!/usr/bin/env python3
-"""PanelFlow Studio — Universal Model Context Protocol (MCP) Server.
+"""PanelFlow Studio — the one Model Context Protocol (MCP) server (JSON-RPC 2.0 over stdio).
 
-Exposes every creative, kinematics, neural generation, and production capability
-of PanelFlow Studio through the standard Model Context Protocol (JSON-RPC 2.0 stdio).
+Exposes every capability of PanelFlow Studio, ChronoFlow video studio included, as tools. All tools are thin wrappers over
+the engine's HTTP API (default http://127.0.0.1:8765), so there is exactly one server to attach.
+
+A client that only wants a slice can ask for a profile:
+
+    python scripts/run_mcp_server.py                      # every tool (default)
+    python scripts/run_mcp_server.py --profile creative   # the creative agents and the LLM settings only
+    python scripts/run_mcp_server.py --profile chronoflow # the ChronoFlow video studio only
+
+or set PANELFLOW_MCP_PROFILE. A tool outside the profile is neither listed nor callable.
 """
 
 from __future__ import annotations
 
+import argparse
 import asyncio
 import json
 import logging
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -35,13 +45,40 @@ logging.basicConfig(level=logging.INFO, stream=sys.stderr)
 logger = logging.getLogger("panelflow.mcp.server")
 
 SERVER_NAME = "panelflow-studio-mcp"
-SERVER_VERSION = "1.0.0"
+SERVER_VERSION = "1.1.0"
 PROTOCOL_VERSION = "2024-11-05"
+
+# LLM settings the creative agents need alongside their own tools.
+_CREATIVE_EXTRA = {"panelflow_configure_freellmapi", "panelflow_get_llm_status", "panelflow_reset_to_local_llm"}
+PROFILES = ("all", "creative", "chronoflow")
+
+
+def tool_in_profile(name: str, domain: str, profile: str) -> bool:
+    """Is the tool part of `profile`? ("all" is everything.)"""
+    if profile == "creative":
+        return name.startswith("panelflow_creative_") or name in _CREATIVE_EXTRA
+    if profile == "chronoflow":
+        return domain == "chronoflow"
+    return True
 
 
 class MCPServer:
-    def __init__(self):
+    def __init__(self, profile: str = "all"):
+        if profile not in PROFILES:
+            raise ValueError(f"Unknown MCP profile {profile!r}; choose one of {', '.join(PROFILES)}")
         self.registry = registry
+        self.profile = profile
+
+    def exposed_tools(self) -> list[dict[str, Any]]:
+        """The tools this server lists and accepts, after the profile."""
+        tools = self.registry.list_tools()
+        if self.profile == "all":
+            return tools
+        return [t for t in tools if tool_in_profile(t["name"], self.registry.get_tool(t["name"]).domain, self.profile)]
+
+    def _allows(self, name: str) -> bool:
+        tool = self.registry.get_tool(name)
+        return tool is not None and tool_in_profile(name, tool.domain, self.profile)
 
     async def handle_request(self, request: dict[str, Any]) -> dict[str, Any] | None:
         req_id = request.get("id")
@@ -88,7 +125,7 @@ class MCPServer:
 
         # 4. Tools List
         if method == "tools/list":
-            tools = self.registry.list_tools()
+            tools = self.exposed_tools()
             return {
                 "jsonrpc": "2.0",
                 "id": req_id,
@@ -107,6 +144,13 @@ class MCPServer:
                     "jsonrpc": "2.0",
                     "id": req_id,
                     "error": {"code": -32602, "message": "Missing tool name"},
+                }
+
+            if self.profile != "all" and not self._allows(tool_name):
+                return {
+                    "jsonrpc": "2.0",
+                    "id": req_id,
+                    "error": {"code": -32601, "message": f"Tool '{tool_name}' is not exposed by the '{self.profile}' profile of this server."},
                 }
 
             try:
@@ -149,7 +193,7 @@ class MCPServer:
         }
 
     async def run_stdio(self) -> None:
-        logger.info("PanelFlow Studio MCP Server running on stdio (%d tools available)...", len(self.registry._tools))
+        logger.info("PanelFlow Studio MCP Server running on stdio (profile %s, %d tools available)...", self.profile, len(self.exposed_tools()))
 
         while True:
             line = await asyncio.to_thread(sys.stdin.readline)
@@ -177,8 +221,12 @@ class MCPServer:
                 sys.stdout.flush()
 
 
-def main():
-    server = MCPServer()
+def main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(description="PanelFlow Studio MCP server (stdio)")
+    parser.add_argument("--profile", choices=PROFILES, default=os.environ.get("PANELFLOW_MCP_PROFILE", "all"),
+                        help="which tools to expose (default: all, or PANELFLOW_MCP_PROFILE)")
+    args = parser.parse_args(argv)
+    server = MCPServer(profile=args.profile)
     try:
         asyncio.run(server.run_stdio())
     except (KeyboardInterrupt, SystemExit):

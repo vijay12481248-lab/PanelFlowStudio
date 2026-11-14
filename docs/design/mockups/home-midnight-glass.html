@@ -1,0 +1,141 @@
+<title>PanelFlow Midnight Glass</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap">
+<style>
+/* Midnight Glass: deep navy world, translucent panels, one royal-blue accent, art-forward. */
+:root{
+  --ink:#070b1c; --navy:#0c1433; --glow:#1b2f7a;
+  --glass:rgba(22,32,72,.55); --glass-hi:rgba(34,48,98,.62); --edge:rgba(150,175,255,.14);
+  --text:#eef1ff; --dim:#9aa6d0; --faint:#6a76a3;
+  --accent:#3b6bf5; --accent-soft:rgba(59,107,245,.22); --ok:#46d6a3; --warn:#f0b35a; --bad:#f2667a;
+  --r-card:22px; --r-ctl:14px;
+  --display:'Sora',system-ui,sans-serif; --body:'Geist',system-ui,sans-serif; --mono:'Geist Mono',ui-monospace,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(1200px 700px at 18% -10%,var(--glow),transparent 60%),radial-gradient(900px 600px at 100% 100%,#102a6b66,transparent 60%),var(--ink);color:var(--text);font:14px/1.5 var(--body);padding:28px max(16px,env(safe-area-inset-left,0px)) 48px}
+.frame{max-width:1060px;margin:0 auto;border-radius:30px;padding:10px;background:linear-gradient(160deg,#2a3a7a55,#0a1030 40%);border:1px solid var(--edge);box-shadow:0 40px 90px #02051499}
+.screen{border-radius:22px;background:linear-gradient(180deg,#0d173a,#080d24);padding:20px 24px 16px;min-height:640px;display:grid;grid-template-rows:auto 1fr auto;gap:18px;overflow:hidden;position:relative}
+.top{display:flex;align-items:center;gap:14px;font-size:13px;color:var(--dim)}
+.me{display:flex;align-items:center;gap:10px;color:var(--text)}
+.av{width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#7aa2ff,#3b6bf5)}
+.top .sp{flex:1}
+.chip{display:inline-flex;align-items:center;gap:7px;padding:5px 11px;border-radius:99px;background:var(--glass);border:1px solid var(--edge);font:500 12px var(--mono);color:var(--dim);backdrop-filter:blur(10px)}
+.chip i{width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 8px var(--ok)}
+.kbd{font:500 12px var(--mono);padding:5px 10px;border-radius:10px;border:1px solid var(--edge);background:var(--glass);color:var(--dim)}
+.main{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:22px}
+.left{display:grid;gap:20px;align-content:start;min-width:0}
+.hero{position:relative;min-height:268px;border-radius:var(--r-card);overflow:hidden;border:1px solid var(--edge);background:linear-gradient(110deg,#0f1c4a 0%,#0b1438 55%,transparent 100%)}
+.hero .art{position:absolute;right:-6px;top:0;bottom:0;width:58%;
+  background:
+   radial-gradient(120px 150px at 60% 34%,#c9d4ff 0%,#8fa3ee 38%,transparent 70%),
+   radial-gradient(180px 200px at 62% 78%,#3b4fa8 0%,transparent 72%),
+   linear-gradient(200deg,#5a73d6,#1a2760 70%);
+  -webkit-mask-image:linear-gradient(90deg,transparent 0,#000 38%);mask-image:linear-gradient(90deg,transparent 0,#000 38%)}
+.hero .art::after{content:"Key art from the project cover";position:absolute;right:16px;bottom:12px;font:500 11px var(--mono);color:#d7defaaa}
+.hero .copy{position:relative;padding:24px 26px;max-width:62%}
+.hero h1{font:700 30px/1.1 var(--display);margin:0 0 10px;letter-spacing:-.01em;text-wrap:balance}
+.meta{display:inline-flex;gap:0;border-radius:8px;background:var(--accent-soft);border:1px solid #3b6bf566;font:500 11.5px var(--mono);color:#c5d3ff;margin-bottom:12px}
+.meta span{padding:3px 9px}.meta span+span{border-left:1px solid #3b6bf566}
+.hero p{margin:0 0 18px;color:var(--dim);font-size:13px}
+.cta{display:flex;gap:10px;align-items:center}
+.btn{font:600 13px var(--body);color:#fff;background:var(--accent);border:0;border-radius:99px;padding:9px 12px 9px 18px;display:inline-flex;align-items:center;gap:10px;box-shadow:0 8px 24px #3b6bf555}
+.btn b{width:24px;height:24px;border-radius:50%;background:#fff;display:grid;place-items:center}
+.btn svg{width:11px;height:11px;fill:var(--accent)}
+.ghost{width:36px;height:36px;border-radius:50%;border:1px solid var(--edge);background:var(--glass);display:grid;place-items:center}
+.ghost svg{width:16px;height:16px;stroke:var(--dim);fill:none;stroke-width:1.8}
+h2{font:600 13px var(--display);margin:0 0 12px;color:var(--text);letter-spacing:.01em}
+.tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.tile .cv{aspect-ratio:1/1;border-radius:18px;border:1px solid var(--edge);position:relative;overflow:hidden}
+.tile .cv span{position:absolute;left:10px;bottom:8px;font:700 13px var(--display);color:#ffffffcc}
+.tile p{margin:8px 0 0;font-size:12.5px;line-height:1.3}
+.tile small{color:var(--faint);font-size:11.5px}
+.right{display:grid;gap:18px;align-content:start;min-width:0}
+.list{display:grid;gap:8px}
+.it{display:grid;grid-template-columns:34px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 10px 8px 8px;border-radius:var(--r-ctl);background:transparent;border:1px solid transparent}
+.it .ic{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:var(--glass-hi);border:1px solid var(--edge)}
+.it .ic i{width:9px;height:9px;border-radius:50%;background:var(--c)}
+.it p{margin:0;font-size:13.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.it small{display:block;color:var(--faint);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.go{width:30px;height:30px;border-radius:50%;background:var(--glass-hi);border:1px solid var(--edge);display:grid;place-items:center}
+.go svg{width:11px;height:11px;fill:var(--dim)}
+.it.sel{background:var(--accent);box-shadow:0 12px 30px #3b6bf544}
+.it.sel small{color:#dbe4ff}.it.sel .ic{background:#ffffff26;border-color:#ffffff30}
+.it.sel .go{background:#fff;border-color:#fff}.it.sel .go svg{fill:var(--accent)}
+.run{border-radius:var(--r-card);padding:14px;background:var(--glass);border:1px solid var(--edge);backdrop-filter:blur(14px);display:grid;grid-template-columns:64px minmax(0,1fr);gap:14px;align-items:center}
+.run .th{width:64px;height:64px;border-radius:14px;background:linear-gradient(150deg,#6d8cff,#16235d)}
+.run p{margin:0;font-weight:600;font-size:14px}.run small{color:var(--dim);font-size:12px}
+.prog{height:5px;border-radius:3px;background:#ffffff1c;margin:10px 0 6px;overflow:hidden}
+.prog i{display:block;height:100%;width:62%;background:linear-gradient(90deg,#7aa2ff,var(--accent));border-radius:3px}
+.row2{display:flex;justify-content:space-between;font:500 11.5px var(--mono);color:var(--faint)}
+.dock{justify-self:center;display:flex;gap:6px;padding:8px;border-radius:22px;background:var(--glass);border:1px solid var(--edge);backdrop-filter:blur(16px)}
+.dock a{display:flex;flex-direction:column;align-items:center;gap:3px;min-width:68px;padding:8px 10px;border-radius:15px;color:var(--faint);font:500 11px var(--body);text-decoration:none}
+.dock a svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.dock a.on{background:var(--accent-soft);color:#fff;box-shadow:inset 0 0 0 1px #3b6bf588,0 0 24px #3b6bf533}
+.note{max-width:1060px;margin:22px auto 0;color:var(--dim);font-size:13.5px}
+.note b{color:var(--text);font-weight:600}
+@media (max-width:820px){.main{grid-template-columns:1fr}.hero .copy{max-width:100%}.hero .art{opacity:.45;width:80%}.tiles{grid-template-columns:repeat(2,minmax(0,1fr))}.dock a{min-width:52px}}
+</style>
+
+<div class="frame"><div class="screen">
+
+<div class="top">
+<div class="me"><span class="av"></span>Hi, Vijay</div>
+<span class="sp"></span>
+<span class="chip"><i></i>Engine ready</span>
+<span class="chip">GPU 13.1 / 16 GB</span>
+<span class="kbd">Ctrl K</span>
+</div>
+
+<div class="main">
+<div class="left">
+<div class="hero">
+<div class="art"></div>
+<div class="copy">
+<div class="meta"><span>Anime review</span><span>Episode 4 of 6</span><span>6:10</span></div>
+<h1>Dawn Gate</h1>
+<p>Script is approved and the voice is generated. The render is 62 percent done.</p>
+<div class="cta"><button class="btn">Continue<b><svg viewBox="0 0 10 10"><path d="M2 1l7 4-7 4z"/></svg></b></button><span class="ghost"><svg viewBox="0 0 24 24"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.5A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg></span></div>
+</div></div>
+
+<div>
+<h2>Recent projects</h2>
+<div class="tiles">
+<div class="tile"><div class="cv" style="background:linear-gradient(150deg,#79a0ff,#1b2a6e)"><span>RS</span></div><p>Regressed Son of a Duke</p><small>OCR, 41 of 44 approved</small></div>
+<div class="tile"><div class="cv" style="background:linear-gradient(150deg,#b08bff,#2a1b6e)"><span>ME</span></div><p>Magic Emperor</p><small>Story analysed</small></div>
+<div class="tile"><div class="cv" style="background:linear-gradient(150deg,#58d4d0,#124a63)"><span>WC</span></div><p>Why We Cry</p><small>Stills video built</small></div>
+<div class="tile"><div class="cv" style="background:linear-gradient(150deg,#ff9fb0,#6e1b3c)"><span>MT</span></div><p>Moon Tales</p><small>Series, 3 episodes</small></div>
+</div></div>
+</div>
+
+<div class="right">
+<div>
+<h2>Needs you</h2>
+<div class="list">
+<div class="it sel"><span class="ic"><i style="--c:#fff"></i></span><div><p>OCR review, chapter 52</p><small>3 flagged crops</small></div><span class="go"><svg viewBox="0 0 10 10"><path d="M2 1l7 4-7 4z"/></svg></span></div>
+<div class="it"><span class="ic"><i style="--c:#7aa2ff"></i></span><div><p>Approve script, Dawn Gate ep. 4</p><small>Rewritten after story check</small></div><span class="go"><svg viewBox="0 0 10 10"><path d="M2 1l7 4-7 4z"/></svg></span></div>
+<div class="it"><span class="ic"><i style="--c:#f0b35a"></i></span><div><p>Rights decision, Magic Emperor</p><small>Source unknown, render held</small></div><span class="go"><svg viewBox="0 0 10 10"><path d="M2 1l7 4-7 4z"/></svg></span></div>
+<div class="it"><span class="ic"><i style="--c:#f2667a"></i></span><div><p>H3 clip 4 of 7 failed</p><small>Out of GPU memory</small></div><span class="go"><svg viewBox="0 0 10 10"><path d="M2 1l7 4-7 4z"/></svg></span></div>
+<div class="it"><span class="ic"><i style="--c:#46d6a3"></i></span><div><p>Upload kit, 2 videos</p><small>Private, nothing scheduled</small></div><span class="go"><svg viewBox="0 0 10 10"><path d="M2 1l7 4-7 4z"/></svg></span></div>
+</div></div>
+<div class="run">
+<div class="th"></div>
+<div><p>Rendering Dawn Gate</p><small>Scene 9 of 14, H3 clip</small>
+<div class="prog"><i></i></div>
+<div class="row2"><span>3:52</span><span>about 6 min left</span></div></div>
+</div>
+</div>
+</div>
+
+<nav class="dock" aria-label="Main">
+<a class="on" href="#"><svg viewBox="0 0 24 24"><path d="M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>Home</a>
+<a href="#"><svg viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7" height="7" rx="2"/><rect x="13.5" y="3.5" width="7" height="7" rx="2"/><rect x="3.5" y="13.5" width="7" height="7" rx="2"/><rect x="13.5" y="13.5" width="7" height="7" rx="2"/></svg>Projects</a>
+<a href="#"><svg viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/></svg>Create</a>
+<a href="#"><svg viewBox="0 0 24 24"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>Jobs</a>
+<a href="#"><svg viewBox="0 0 24 24"><path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M5 17a3 3 0 0 1 3-3h11"/></svg>Library</a>
+<a href="#"><svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg>Settings</a>
+</nav>
+
+</div></div>
+
+<p class="note"><b>Static mockup.</b> Cover art here is stand-in gradients. In the app, the hero and tiles use your project covers, panels and generated art. The six dock items are the whole top-level navigation, and each project's pipeline stages become a stepper inside the project.</p>

@@ -208,7 +208,7 @@ export const AIMusicStudio: React.FC<AIMusicStudioProps> = ({
       const y = (height - barHeight) / 2;
 
       const isPlayed = i / count <= progressFrac;
-      ctx.fillStyle = isPlayed ? "#818cf8" : "#3f3f46";
+      ctx.fillStyle = isPlayed ? "#7aa2ff" : "#26346a";
       ctx.fillRect(x + 1, y, Math.max(1, barWidth - 2), barHeight);
     }
   }, [currentTake, playbackTime, audioDuration]);
@@ -340,8 +340,8 @@ export const AIMusicStudio: React.FC<AIMusicStudioProps> = ({
 
   if (loadingPlan) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center p-12 text-zinc-400 gap-3">
-        <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+      <div className="flex-1 flex flex-col items-center justify-center p-12 text-fg-dim gap-3">
+        <div className="w-8 h-8 border-2 border-accent border-t-transparent rounded-full animate-spin" />
         <span className="text-sm">Analyzing manga storyline and composing soundtrack plan...</span>
       </div>
     );
@@ -349,12 +349,12 @@ export const AIMusicStudio: React.FC<AIMusicStudioProps> = ({
 
   if (planError || !plan) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center p-12 text-rose-400 gap-3">
+      <div className="flex-1 flex flex-col items-center justify-center p-12 text-bad gap-3">
         <span className="text-2xl">⚠️</span>
         <span className="text-sm font-semibold">{planError || "Failed to load music plan"}</span>
         <button
           onClick={() => window.location.reload()}
-          className="px-3 py-1.5 rounded bg-zinc-800 text-zinc-200 text-xs hover:bg-zinc-700"
+          className="px-3 py-1.5 rounded bg-flat text-fg text-xs hover:bg-glass-hi"
         >
           Retry
         </button>
@@ -363,39 +363,39 @@ export const AIMusicStudio: React.FC<AIMusicStudioProps> = ({
   }
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 bg-zinc-950 text-zinc-100 overflow-hidden">
+    <div className="flex-1 flex flex-col min-h-0 bg-ink text-fg overflow-hidden">
       {/* Top Banner: Story Soundtrack Concept & Architectural Headroom */}
-      <div className="px-6 py-3 border-b border-zinc-800 bg-zinc-900/60 flex flex-wrap items-center justify-between gap-4">
+      <div className="px-6 py-3 border-b border-edge bg-navy/60 flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="px-2.5 py-1 rounded bg-indigo-500/20 border border-indigo-500/40 text-indigo-300 text-xs font-mono font-semibold">
+          <div className="px-2.5 py-1 rounded bg-accent/20 border border-accent/40 text-info text-xs font-mono font-semibold">
             🎵 {plan.harmonic_key}
           </div>
           <div>
-            <div className="text-xs font-semibold text-zinc-200">{plan.overall_musical_theme}</div>
-            <div className="text-[11px] text-zinc-400">
-              Total Score: <span className="font-mono text-zinc-200">{plan.total_score_duration_sec}s</span> | Cues:{" "}
-              <span className="font-mono text-zinc-200">{plan.cues.length}</span> movements
+            <div className="text-xs font-semibold text-fg">{plan.overall_musical_theme}</div>
+            <div className="text-[11px] text-fg-dim">
+              Total Score: <span className="font-mono text-fg">{plan.total_score_duration_sec}s</span> | Cues:{" "}
+              <span className="font-mono text-fg">{plan.cues.length}</span> movements
             </div>
           </div>
         </div>
 
         {/* Headroom & Local Model Health Badge */}
         <div className="flex items-center gap-3 text-xs">
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-emerald-950/60 border border-emerald-800/60 text-emerald-300">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-ok/60 border border-ok/60 text-ok">
+            <span className="w-2 h-2 rounded-full bg-ok animate-pulse" />
             <span>ACE-Step 1.5 Turbo</span>
           </div>
-          <div className="text-[11px] text-zinc-400 border border-zinc-800 px-2 py-1 rounded bg-zinc-900">
-            Headroom: <span className="text-zinc-300">2-5 kHz reserved for dialogue</span>
+          <div className="text-[11px] text-fg-dim border border-edge px-2 py-1 rounded bg-navy">
+            Headroom: <span className="text-fg-dim">2-5 kHz reserved for dialogue</span>
           </div>
         </div>
       </div>
 
       {/* Main Studio Body: 3 Panes */}
-      <div className="flex-1 flex min-h-0 divide-x divide-zinc-800 overflow-hidden">
+      <div className="flex-1 flex min-h-0 divide-x divide-edge overflow-hidden">
         {/* Pane 1: Story Cues & Scene Continuity (Left) */}
-        <div className="w-72 flex-shrink-0 flex flex-col bg-zinc-900/30 overflow-y-auto">
-          <div className="p-3 border-b border-zinc-800/80 text-[11px] font-semibold text-zinc-400 uppercase tracking-wider">
+        <div className="w-72 flex-shrink-0 flex flex-col bg-navy/30 overflow-y-auto">
+          <div className="p-3 border-b border-edge/80 text-[11px] font-semibold text-fg-dim uppercase tracking-wider">
             Musical Movements & Cues
           </div>
           <div className="p-2 space-y-1.5">
@@ -408,26 +408,26 @@ export const AIMusicStudio: React.FC<AIMusicStudioProps> = ({
                   onClick={() => handleSelectCue(cue)}
                   className={`w-full text-left p-3 rounded-lg border transition-all ${
                     isSelected
-                      ? "bg-indigo-950/60 border-indigo-500/60 text-white shadow-sm"
-                      : "bg-zinc-900/50 border-zinc-800/60 text-zinc-300 hover:bg-zinc-800/60 hover:text-white"
+                      ? "bg-accent/60 border-accent/60 text-white shadow-sm"
+                      : "bg-navy/50 border-edge/60 text-fg-dim hover:bg-flat/60 hover:text-white"
                   }`}
                 >
                   <div className="flex items-center justify-between text-xs font-semibold mb-1">
                     <span className="truncate">
                       {idx + 1}. {cue.title}
                     </span>
-                    <span className="font-mono text-[10px] text-indigo-400">{cue.duration_sec}s</span>
+                    <span className="font-mono text-[10px] text-info">{cue.duration_sec}s</span>
                   </div>
-                  <div className="text-[11px] text-zinc-400 line-clamp-1 mb-2">
+                  <div className="text-[11px] text-fg-dim line-clamp-1 mb-2">
                     {cue.narrative_function.replace("_", " ")}
                   </div>
-                  <div className="flex items-center justify-between text-[10px] text-zinc-400">
+                  <div className="flex items-center justify-between text-[10px] text-fg-dim">
                     <span>Scenes: {cue.scene_ids.join(", ") || "All"}</span>
                     <span
                       className={`px-1.5 py-0.5 rounded text-[9px] font-mono ${
                         hasTakes
-                          ? "bg-emerald-950 text-emerald-300 border border-emerald-800"
-                          : "bg-zinc-800 text-zinc-400"
+                          ? "bg-ok/20 text-ok border border-ok/40"
+                          : "bg-flat text-fg-dim"
                       }`}
                     >
                       {hasTakes ? `${cue.takes.length} takes` : "No takes"}
@@ -440,14 +440,14 @@ export const AIMusicStudio: React.FC<AIMusicStudioProps> = ({
 
           {/* Honest SFX Capability Callout */}
           {sfxReport && (
-            <div className="mt-auto p-3 m-2 rounded-lg bg-zinc-900 border border-zinc-800 text-[11px] text-zinc-400">
-              <div className="font-semibold text-zinc-300 mb-1 flex items-center gap-1.5">
+            <div className="mt-auto p-3 m-2 rounded-lg bg-navy border border-edge text-[11px] text-fg-dim">
+              <div className="font-semibold text-fg-dim mb-1 flex items-center gap-1.5">
                 <span>🔔 Sound Effects Library</span>
               </div>
-              <div className="text-[10px] leading-relaxed text-zinc-400 mb-2">
+              <div className="text-[10px] leading-relaxed text-fg-dim mb-2">
                 High-fidelity curated sound library enabled for footsteps, sword impacts, and magic activation.
               </div>
-              <span className="inline-block px-1.5 py-0.5 bg-zinc-800 rounded font-mono text-[9px] text-zinc-300">
+              <span className="inline-block px-1.5 py-0.5 bg-flat rounded font-mono text-[9px] text-fg-dim">
                 Curated SFX Active
               </span>
             </div>
@@ -461,40 +461,40 @@ export const AIMusicStudio: React.FC<AIMusicStudioProps> = ({
               <div>
                 <div className="flex items-center gap-2 mb-1">
                   <h2 className="text-sm font-bold text-white">{selectedCue.title}</h2>
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 uppercase font-mono">
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-accent/20 text-info border border-accent/40 uppercase font-mono">
                     {selectedCue.narrative_function}
                   </span>
                 </div>
-                <p className="text-xs text-zinc-400">{selectedCue.emotional_direction}</p>
+                <p className="text-xs text-fg-dim">{selectedCue.emotional_direction}</p>
               </div>
 
               {/* Story Musical Parameters */}
-              <div className="grid grid-cols-3 gap-3 p-3 rounded-lg bg-zinc-900 border border-zinc-800 text-xs">
+              <div className="grid grid-cols-3 gap-3 p-3 rounded-lg bg-navy border border-edge text-xs">
                 <div>
-                  <span className="text-[10px] text-zinc-400 block uppercase font-mono">Tonal Key</span>
-                  <span className="font-semibold text-zinc-200">{keyScale}</span>
+                  <span className="text-[10px] text-fg-dim block uppercase font-mono">Tonal Key</span>
+                  <span className="font-semibold text-fg">{keyScale}</span>
                 </div>
                 <div>
-                  <span className="text-[10px] text-zinc-400 block uppercase font-mono">Tempo (BPM)</span>
-                  <span className="font-semibold text-zinc-200">{bpm} BPM</span>
+                  <span className="text-[10px] text-fg-dim block uppercase font-mono">Tempo (BPM)</span>
+                  <span className="font-semibold text-fg">{bpm} BPM</span>
                 </div>
                 <div>
-                  <span className="text-[10px] text-zinc-400 block uppercase font-mono">Duration</span>
-                  <span className="font-semibold text-zinc-200">{durationSec}s</span>
+                  <span className="text-[10px] text-fg-dim block uppercase font-mono">Duration</span>
+                  <span className="font-semibold text-fg">{durationSec}s</span>
                 </div>
               </div>
 
               {/* Editable Prompt */}
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-xs font-semibold text-zinc-300">Story-Aware Generation Prompt</label>
-                  <span className="text-[10px] text-zinc-400">User editable prior to synthesis</span>
+                  <label className="text-xs font-semibold text-fg-dim">Story-Aware Generation Prompt</label>
+                  <span className="text-[10px] text-fg-dim">User editable prior to synthesis</span>
                 </div>
                 <textarea
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
                   rows={4}
-                  className="w-full text-xs p-3 rounded-lg bg-zinc-900 border border-zinc-700 text-zinc-100 focus:outline-none focus:border-indigo-500 font-sans leading-relaxed resize-none"
+                  className="w-full text-xs p-3 rounded-lg bg-navy border border-edge text-fg focus:outline-none focus:border-accent font-sans leading-relaxed resize-none"
                   placeholder="Enter detailed music prompt..."
                 />
               </div>
@@ -504,62 +504,62 @@ export const AIMusicStudio: React.FC<AIMusicStudioProps> = ({
                 <button
                   type="button"
                   onClick={() => setShowAdvanced(!showAdvanced)}
-                  className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1 font-semibold"
+                  className="text-xs text-info hover:text-info flex items-center gap-1 font-semibold"
                 >
                   <span>{showAdvanced ? "▾ Hide Advanced Settings" : "▸ Show Advanced Settings"}</span>
                 </button>
 
                 {showAdvanced && (
-                  <div className="mt-3 p-3 rounded-lg bg-zinc-900 border border-zinc-800 space-y-3 text-xs">
+                  <div className="mt-3 p-3 rounded-lg bg-navy border border-edge space-y-3 text-xs">
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className="text-[10px] text-zinc-400 block mb-1">Target Duration (Seconds)</label>
+                        <label className="text-[10px] text-fg-dim block mb-1">Target Duration (Seconds)</label>
                         <input
                           type="number"
                           min={5}
                           max={180}
                           value={durationSec}
                           onChange={(e) => setDurationSec(Number(e.target.value))}
-                          className="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs"
+                          className="w-full bg-flat border border-edge rounded px-2 py-1 text-xs"
                         />
                       </div>
                       <div>
-                        <label className="text-[10px] text-zinc-400 block mb-1">Tempo (BPM)</label>
+                        <label className="text-[10px] text-fg-dim block mb-1">Tempo (BPM)</label>
                         <input
                           type="number"
                           min={40}
                           max={220}
                           value={bpm}
                           onChange={(e) => setBpm(Number(e.target.value))}
-                          className="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs"
+                          className="w-full bg-flat border border-edge rounded px-2 py-1 text-xs"
                         />
                       </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-3 items-center">
                       <div>
-                        <label className="text-[10px] text-zinc-400 block mb-1">Random Seed</label>
+                        <label className="text-[10px] text-fg-dim block mb-1">Random Seed</label>
                         <div className="flex items-center gap-2">
                           <input
                             type="checkbox"
                             checked={useRandomSeed}
                             onChange={(e) => setUseRandomSeed(e.target.checked)}
                             id="random-seed-chk"
-                            className="rounded bg-zinc-800 border-zinc-700"
+                            className="rounded bg-flat border-edge"
                           />
-                          <label htmlFor="random-seed-chk" className="text-xs text-zinc-300">
+                          <label htmlFor="random-seed-chk" className="text-xs text-fg-dim">
                             Auto Random
                           </label>
                         </div>
                       </div>
                       {!useRandomSeed && (
                         <div>
-                          <label className="text-[10px] text-zinc-400 block mb-1">Manual Seed</label>
+                          <label className="text-[10px] text-fg-dim block mb-1">Manual Seed</label>
                           <input
                             type="number"
                             value={seed}
                             onChange={(e) => setSeed(Number(e.target.value))}
-                            className="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs font-mono"
+                            className="w-full bg-flat border border-edge rounded px-2 py-1 text-xs font-mono"
                           />
                         </div>
                       )}
@@ -574,7 +574,7 @@ export const AIMusicStudio: React.FC<AIMusicStudioProps> = ({
                   type="button"
                   onClick={handleGenerate}
                   disabled={isGenerating}
-                  className="w-full py-2.5 px-4 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-semibold text-xs transition-colors flex items-center justify-center gap-2 shadow-sm"
+                  className="w-full py-2.5 px-4 rounded-lg bg-accent hover:bg-accent disabled:opacity-50 text-white font-semibold text-xs transition-colors flex items-center justify-center gap-2 shadow-sm"
                 >
                   {isGenerating ? (
                     <>
@@ -590,13 +590,13 @@ export const AIMusicStudio: React.FC<AIMusicStudioProps> = ({
 
                 {isGenerating && (
                   <div className="mt-3 space-y-1.5">
-                    <div className="flex items-center justify-between text-[11px] text-zinc-400">
+                    <div className="flex items-center justify-between text-[11px] text-fg-dim">
                       <span>{generationStatusText}</span>
-                      <span className="font-mono text-zinc-200">{Math.round(generationProgress * 100)}%</span>
+                      <span className="font-mono text-fg">{Math.round(generationProgress * 100)}%</span>
                     </div>
-                    <div className="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                    <div className="w-full h-1.5 bg-flat rounded-full overflow-hidden">
                       <div
-                        className="h-full bg-indigo-500 transition-all duration-300"
+                        className="h-full bg-accent transition-all duration-300"
                         style={{ width: `${generationProgress * 100}%` }}
                       />
                     </div>
@@ -604,29 +604,29 @@ export const AIMusicStudio: React.FC<AIMusicStudioProps> = ({
                 )}
 
                 {generationError && (
-                  <div className="mt-3 p-3 rounded bg-rose-950/50 border border-rose-800/80 text-rose-300 text-xs">
+                  <div className="mt-3 p-3 rounded bg-bad/50 border border-bad/80 text-bad text-xs">
                     {generationError}
                   </div>
                 )}
               </div>
             </div>
           ) : (
-            <div className="flex-1 flex items-center justify-center text-zinc-500 text-xs">
+            <div className="flex-1 flex items-center justify-center text-fg-faint text-xs">
               Select a musical movement from the left to configure soundtrack direction.
             </div>
           )}
         </div>
 
         {/* Pane 3: Candidate Takes Audition & Timeline Placement (Right) */}
-        <div className="w-80 flex-shrink-0 flex flex-col p-4 bg-zinc-900/40 overflow-y-auto">
-          <div className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider mb-3">
+        <div className="w-80 flex-shrink-0 flex flex-col p-4 bg-navy/40 overflow-y-auto">
+          <div className="text-[11px] font-semibold text-fg-dim uppercase tracking-wider mb-3">
             Candidate Takes & Audition
           </div>
 
           {selectedCue && selectedCue.takes.length > 0 ? (
             <div className="space-y-4">
               {/* Takes Selector Tabs */}
-              <div className="flex gap-1.5 p-1 bg-zinc-900 rounded-lg border border-zinc-800 overflow-x-auto">
+              <div className="flex gap-1.5 p-1 bg-navy rounded-lg border border-edge overflow-x-auto">
                 {selectedCue.takes.map((take) => {
                   const isSelected = take.take_id === selectedTakeId;
                   return (
@@ -635,8 +635,8 @@ export const AIMusicStudio: React.FC<AIMusicStudioProps> = ({
                       onClick={() => handleSelectTake(take)}
                       className={`px-3 py-1.5 rounded text-xs font-semibold whitespace-nowrap transition-colors ${
                         isSelected
-                          ? "bg-indigo-600 text-white"
-                          : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
+                          ? "bg-accent text-white"
+                          : "text-fg-dim hover:text-fg hover:bg-flat"
                       }`}
                     >
                       Take {take.take_index}
@@ -648,12 +648,12 @@ export const AIMusicStudio: React.FC<AIMusicStudioProps> = ({
               {currentTake && (
                 <div className="space-y-3">
                   {/* Waveform Player */}
-                  <div className="p-3 rounded-lg bg-zinc-900 border border-zinc-800 space-y-2">
+                  <div className="p-3 rounded-lg bg-navy border border-edge space-y-2">
                     <canvas
                       ref={canvasRef}
                       width={280}
                       height={50}
-                      className="w-full h-12 rounded bg-zinc-950 cursor-pointer"
+                      className="w-full h-12 rounded bg-ink cursor-pointer"
                       onClick={(e) => {
                         const rect = e.currentTarget.getBoundingClientRect();
                         const clickX = e.clientX - rect.left;
@@ -669,37 +669,37 @@ export const AIMusicStudio: React.FC<AIMusicStudioProps> = ({
                       <button
                         type="button"
                         onClick={togglePlay}
-                        className="px-3 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-100 font-semibold flex items-center gap-1.5"
+                        className="px-3 py-1 rounded bg-flat hover:bg-glass-hi text-fg font-semibold flex items-center gap-1.5"
                       >
                         <span>{isPlaying ? "⏸ Pause" : "▶ Play"}</span>
                       </button>
-                      <span className="font-mono text-zinc-400 text-[11px]">
+                      <span className="font-mono text-fg-dim text-[11px]">
                         {playbackTime.toFixed(1)}s / {currentTake.duration_sec}s
                       </span>
                     </div>
                   </div>
 
                   {/* Audio Master Specifications */}
-                  <div className="p-3 rounded-lg bg-zinc-900/60 border border-zinc-800 text-[11px] space-y-1.5">
+                  <div className="p-3 rounded-lg bg-navy/60 border border-edge text-[11px] space-y-1.5">
                     <div className="flex justify-between">
-                      <span className="text-zinc-400">Sample Rate:</span>
-                      <span className="font-mono text-zinc-200">48,000 Hz Stereo</span>
+                      <span className="text-fg-dim">Sample Rate:</span>
+                      <span className="font-mono text-fg">48,000 Hz Stereo</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-zinc-400">Format:</span>
-                      <span className="font-mono text-zinc-200">16-bit PCM WAV</span>
+                      <span className="text-fg-dim">Format:</span>
+                      <span className="font-mono text-fg">16-bit PCM WAV</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-zinc-400">True Peak:</span>
-                      <span className="font-mono text-zinc-200">{currentTake.measured_peak_dbfs} dBFS</span>
+                      <span className="text-fg-dim">True Peak:</span>
+                      <span className="font-mono text-fg">{currentTake.measured_peak_dbfs} dBFS</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-zinc-400">RMS Level:</span>
-                      <span className="font-mono text-zinc-200">{currentTake.measured_rms_dbfs} dBFS</span>
+                      <span className="text-fg-dim">RMS Level:</span>
+                      <span className="font-mono text-fg">{currentTake.measured_rms_dbfs} dBFS</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-zinc-400">Seed:</span>
-                      <span className="font-mono text-zinc-200">{currentTake.seed}</span>
+                      <span className="text-fg-dim">Seed:</span>
+                      <span className="font-mono text-fg">{currentTake.seed}</span>
                     </div>
                   </div>
 
@@ -708,7 +708,7 @@ export const AIMusicStudio: React.FC<AIMusicStudioProps> = ({
                     <button
                       type="button"
                       onClick={handleSendToTimeline}
-                      className="w-full py-2.5 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs transition-colors flex items-center justify-center gap-2 shadow-sm"
+                      className="w-full py-2.5 px-3 rounded-lg bg-ok hover:bg-ok text-white font-semibold text-xs transition-colors flex items-center justify-center gap-2 shadow-sm"
                     >
                       <span>📥 Add Take to Timeline (BGM Track)</span>
                     </button>
@@ -716,7 +716,7 @@ export const AIMusicStudio: React.FC<AIMusicStudioProps> = ({
                     <button
                       type="button"
                       onClick={handleSaveToLibrary}
-                      className="w-full py-2 px-3 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-semibold text-xs transition-colors flex items-center justify-center gap-1.5"
+                      className="w-full py-2 px-3 rounded-lg bg-flat hover:bg-glass-hi text-fg font-semibold text-xs transition-colors flex items-center justify-center gap-1.5"
                     >
                       <span>💾 Save to Library Catalog</span>
                     </button>
@@ -725,7 +725,7 @@ export const AIMusicStudio: React.FC<AIMusicStudioProps> = ({
               )}
             </div>
           ) : (
-            <div className="flex-1 flex flex-col items-center justify-center text-center p-6 text-zinc-500 text-xs border border-dashed border-zinc-800 rounded-lg">
+            <div className="flex-1 flex flex-col items-center justify-center text-center p-6 text-fg-faint text-xs border border-dashed border-edge rounded-lg">
               <span className="text-xl mb-1">🎼</span>
               <span>No generated takes yet for this cue. Click "Generate Real Take" to synthesize one locally.</span>
             </div>

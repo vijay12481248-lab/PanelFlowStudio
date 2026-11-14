@@ -19,6 +19,16 @@ JOBS_FILE = VAULT_DIR / "jobs.json"
 VAULT_DIR.mkdir(parents=True, exist_ok=True)
 STUDIO_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
+def _clean_surrogates(obj):
+    if isinstance(obj, str):
+        return obj.encode("utf-8", errors="replace").decode("utf-8")
+    elif isinstance(obj, dict):
+        return {k: _clean_surrogates(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [_clean_surrogates(item) for item in obj]
+    return obj
+
+
 class JobSupervisor:
     _instance = None
 
@@ -38,16 +48,67 @@ class JobSupervisor:
         self.state_version = 1
         self._tasks: dict[str, asyncio.Task] = {}
         self._lock = asyncio.Lock()
+        self._last_disk_mtime = JOBS_FILE.stat().st_mtime if JOBS_FILE.exists() else 0
         self.active_jobs = self._load_jobs_from_disk()
         self._clean_orphaned_jobs_on_boot()
         self._watchdog_task = None
         self._initialized = True
 
+    def _sync_with_disk_and_storage(self):
+        """Reloads jobs.json if modified on disk, and reconciles STUDIO_OUTPUT_DIR to ensure all on-disk chunks are included."""
+        try:
+            mtime = JOBS_FILE.stat().st_mtime if JOBS_FILE.exists() else 0
+            if getattr(self, "_last_disk_mtime", 0) < mtime:
+                disk_jobs = self._load_jobs_from_disk()
+                for jid, j in disk_jobs.items():
+                    if jid not in self.active_jobs or self.active_jobs[jid].get("status") not in ("starting", "regenerating"):
+                        self.active_jobs[jid] = j
+                    else:
+                        if len(j.get("chunks", [])) > len(self.active_jobs[jid].get("chunks", [])):
+                            self.active_jobs[jid]["chunks"] = j["chunks"]
+                        if len(j.get("chunk_prompts", [])) > len(self.active_jobs[jid].get("chunk_prompts", [])):
+                            self.active_jobs[jid]["chunk_prompts"] = j["chunk_prompts"]
+                self._last_disk_mtime = mtime
+                self.state_version += 1
+        except Exception:
+            pass
+
+        changed = False
+        try:
+            for jid, job in list(self.active_jobs.items()):
+                pattern = f"{jid}_chunk_*.mp4"
+                found_files = sorted(
+                    list(STUDIO_OUTPUT_DIR.glob(pattern)),
+                    key=lambda p: int(p.stem.split("_chunk_")[-1]) if p.stem.split("_chunk_")[-1].isdigit() else 999
+                )
+                tombstones = set(job.get("deleted_chunks", []))
+                existing_chunks = job.get("chunks", [])
+                filtered_chunks = [c for c in existing_chunks if Path(c).name not in tombstones]
+                existing_basenames = {Path(c).name for c in filtered_chunks}
+                new_chunks = list(filtered_chunks)
+                for f in found_files:
+                    if f.name in tombstones:
+                        continue
+                    if f.name not in existing_basenames:
+                        new_chunks.append(f"/outputs/{f.name}")
+                        existing_basenames.add(f.name)
+                if len(new_chunks) != len(existing_chunks) or new_chunks != existing_chunks:
+                    job["chunks"] = new_chunks
+                    job["total_chunks"] = max(job.get("total_chunks", 0), len(new_chunks))
+                    job["current_chunk"] = len(new_chunks)
+                    changed = True
+        except Exception:
+            pass
+
+        if changed:
+            self.state_version += 1
+            self._save_jobs_to_disk()
+
     def _load_jobs_from_disk(self) -> dict:
         if JOBS_FILE.exists():
             try:
-                with open(JOBS_FILE, "r", encoding="utf-8") as f:
-                    return json.load(f)
+                raw_text = JOBS_FILE.read_text(encoding="utf-8", errors="replace")
+                return json.loads(raw_text)
             except Exception as e:
                 print(f"[SUPERVISOR] Warning: Could not parse jobs.json: {e}")
                 return {}
@@ -83,10 +144,13 @@ class JobSupervisor:
         self.state_version += 1
 
     def get_job(self, job_id: str) -> dict:
-        return self.active_jobs.get(job_id)
+        self._sync_with_disk_and_storage()
+        job = self.active_jobs.get(job_id)
+        return _clean_surrogates(job) if job else None
 
     def list_jobs(self) -> list:
-        return sorted(list(self.active_jobs.values()), key=lambda j: j.get("created_at", 0), reverse=True)
+        self._sync_with_disk_and_storage()
+        return sorted([_clean_surrogates(j) for j in self.active_jobs.values()], key=lambda j: j.get("created_at", 0), reverse=True)
 
     def update_job(self, job_id: str, **kwargs):
         if job_id not in self.active_jobs:
@@ -232,12 +296,14 @@ class JobSupervisor:
 
         jobs_list = self.list_jobs()
 
-        # Find actively running job if any
+        # Find actively running job if any (must have a live active task)
         running_job = None
         for j in jobs_list:
             if j.get("status") in ("starting", "regenerating"):
-                running_job = j
-                break
+                task = self._tasks.get(j.get("id"))
+                if task is not None and not (task.done() if hasattr(task, "done") else False):
+                    running_job = j
+                    break
 
         # Resolve active job
         active_job = None
@@ -246,7 +312,9 @@ class JobSupervisor:
         elif running_job:
             active_job = running_job
         elif jobs_list:
-            active_job = jobs_list[0]
+            # Prefer the latest job that actually has rendered clips/video
+            with_clips = [j for j in jobs_list if j.get("chunks") or j.get("master_video")]
+            active_job = with_clips[0] if with_clips else jobs_list[0]
 
         # Fast response if version matches and job/queue is idle
         is_dynamic = False

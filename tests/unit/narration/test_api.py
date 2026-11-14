@@ -80,7 +80,7 @@ def test_inspector_payload_shape(env):
     body = client.get(f"/api/narration/runs/proj-test/{res.run_id}").json()
     assert body["run"]["run_id"] == res.run_id
     l2 = next(ln for ln in body["lines"] if ln["line_id"] == "L002")
-    assert set(l2) == {"line_id", "panel_id", "text", "status", "kind", "checks", "facts", "take"}
+    assert set(l2) == {"line_id", "panel_id", "text", "status", "kind", "speaker_id", "speaker_name", "checks", "facts", "take", "outdated", "qa"}
     assert l2["take"] is None and "action:" in l2["facts"]
     assert l2["checks"]
     assert set(l2["checks"][0]) == {"rule", "passed", "severity", "reason"}
@@ -90,7 +90,99 @@ def test_inspector_payload_shape(env):
     (res.run_dir / "takes.json").write_text(json.dumps([{"line_id": "L002", "wer": 0.4, "flagged": True,
                                                          "stt_text": "heard"}]), encoding="utf-8")
     l2 = next(ln for ln in client.get(f"/api/narration/runs/proj-test/{res.run_id}").json()["lines"] if ln["line_id"] == "L002")
-    assert l2["take"] == {"wer": 0.4, "flagged": True, "stt_text": "heard"}
+    assert l2["take"] == {"wer": 0.4, "flagged": True, "stt_text": "heard",
+                          "voice_profile_id": "", "script_revision": 0, "direction_revision": 0, "provider": ""}
+
+
+def test_the_inspector_names_the_speaker_of_each_line(env):
+    """The Audio Studio can show who reads a line and who the reader is called."""
+    client, res, _, _ = env
+    body = client.get(f"/api/narration/runs/proj-test/{res.run_id}").json()
+    assert all(ln["speaker_id"] == "narrator" for ln in body["lines"])
+    assert all(ln["speaker_name"] == "Narrator" for ln in body["lines"])
+
+
+def test_the_inspector_marks_a_take_that_no_longer_matches_the_line(env):
+    """A take made before the line was edited is flagged as outdated."""
+    client, res, _, _ = env
+    script = json.loads((res.run_dir / "script.json").read_text(encoding="utf-8"))
+    (res.run_dir / "takes.json").write_text(json.dumps([
+        {"line_id": "L002", "audio_path": "L002.wav", "duration": 1.0, "words": [], "lead_ms": 80, "tail_ms": 80,
+         "wer": 0.1, "flagged": False, "stt_text": "heard", "tts_model": "kokoro-82m", "voice_id": "am_michael",
+         "rate": 1.0, "attempt": 1,
+         "script_revision": 0, "direction_revision": 0, "voice_profile_id": "narrator", "provider": "kokoro-82m"},
+    ]), encoding="utf-8")
+    lines = client.get(f"/api/narration/runs/proj-test/{res.run_id}").json()["lines"]
+    l2 = next(ln for ln in lines if ln["line_id"] == "L002")
+    assert script["revision"] > 0  # the repair loop moved the script on from the take
+    assert l2["outdated"] is True
+
+
+def test_the_inspector_leaves_a_current_take_alone(env):
+    client, res, _, _ = env
+    script = json.loads((res.run_dir / "script.json").read_text(encoding="utf-8"))
+    (res.run_dir / "takes.json").write_text(json.dumps([
+        {"line_id": "L002", "audio_path": "L002.wav", "duration": 1.0, "words": [], "lead_ms": 80, "tail_ms": 80,
+         "wer": 0.1, "flagged": False, "stt_text": "heard", "tts_model": "kokoro-82m", "voice_id": "am_michael",
+         "rate": 1.0, "attempt": 1,
+         "script_revision": script["revision"], "direction_revision": script["revision"],
+         "voice_profile_id": "narrator", "provider": "kokoro-82m"},
+    ]), encoding="utf-8")
+    lines = client.get(f"/api/narration/runs/proj-test/{res.run_id}").json()["lines"]
+    l2 = next(ln for ln in lines if ln["line_id"] == "L002")
+    assert l2["outdated"] is False
+
+
+def test_the_inspector_shows_the_audio_qa_and_its_repairs(env):
+    """The reviewer sees what is wrong with a take and what to do about it."""
+    client, res, _, _ = env
+    (res.run_dir / "qa.json").write_text(json.dumps({
+        "L002": {"line_id": "L002", "passed": False,
+                 "checks": [{"rule": "intelligibility", "passed": False, "severity": "block",
+                             "reason": "word error rate 80%",
+                             "repair": "regenerate the line with a slower pace"}]},
+    }), encoding="utf-8")
+    lines = client.get(f"/api/narration/runs/proj-test/{res.run_id}").json()["lines"]
+    l2 = next(ln for ln in lines if ln["line_id"] == "L002")
+    assert l2["qa"]["passed"] is False
+    assert l2["qa"]["repairs"] == ["regenerate the line with a slower pace"]
+    assert l2["qa"]["checks"][0]["rule"] == "intelligibility"
+
+
+def test_the_inspector_shows_the_readiness_report(env):
+    """The owner sees what is still open before the project renders."""
+    client, res, _, _ = env
+    (res.run_dir / "readiness.json").write_text(json.dumps({
+        "ready": False,
+        "issues": [{"kind": "line", "severity": "block", "detail": "1 lines are still waiting for review",
+                    "line_ids": ["L002"], "character_ids": []}],
+        "lines_awaiting_review": ["L002"], "characters_without_a_voice": [], "failed_qa_lines": [],
+        "outdated_take_lines": [], "music_tracks": 2,
+    }), encoding="utf-8")
+    body = client.get(f"/api/narration/runs/proj-test/{res.run_id}").json()
+    assert body["readiness"]["ready"] is False
+    assert body["readiness"]["lines_awaiting_review"] == ["L002"]
+    assert body["readiness"]["issues"][0]["kind"] == "line"
+
+
+def test_a_stop_point_is_listed_and_answered(env):
+    """The workflow pauses for a decision, and the owner's answer settles it."""
+    client, res, _, _ = env
+    (res.run_dir / "stop_points.json").write_text(json.dumps([
+        {"kind": "brief", "detail": "the speaker of P4 is unclear", "severity": "block",
+         "line_ids": ["P4"], "character_ids": [], "options": ["accept as read"], "resolution": ""},
+    ]), encoding="utf-8")
+    body = client.get(f"/api/narration/runs/proj-test/{res.run_id}").json()
+    assert [p["kind"] for p in body["stop_points"]] == ["brief"]
+
+    listed = client.get(f"/api/narration/runs/proj-test/{res.run_id}/stop-points").json()
+    assert listed["stop_points"][0]["detail"] == "the speaker of P4 is unclear"
+
+    answered = client.post(f"/api/narration/runs/proj-test/{res.run_id}/stop-points",
+                           json={"kind": "brief", "choice": "accept as read"}).json()
+    assert answered["stop_points"] == []  # the only one is settled
+    kept = json.loads((res.run_dir / "stop_points.json").read_text(encoding="utf-8"))
+    assert kept[0]["resolution"] == "accept as read"
 
 
 def test_edit_rejected_by_rules_is_400_and_unchanged(env):
@@ -141,7 +233,7 @@ def test_action_returns_inspector_shape_with_fresh_checks(env):
     client, res, *_ = env
     base = f"/api/narration/runs/proj-test/{res.run_id}"
     out = client.post(f"{base}/lines/L002", json={"action": "edit", "text": "He walks through the quiet hall slowly"}).json()
-    assert set(out) == {"line_id", "panel_id", "text", "status", "kind", "checks", "facts", "take"}
+    assert set(out) == {"line_id", "panel_id", "text", "status", "kind", "speaker_id", "speaker_name", "checks", "facts", "take", "outdated", "qa"}
     assert out["checks"] and "action:" in out["facts"]
     insp = next(ln for ln in client.get(base).json()["lines"] if ln["line_id"] == "L002")
     assert insp == out

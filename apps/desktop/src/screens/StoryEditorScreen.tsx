@@ -910,16 +910,16 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
   };
 
   return (
-    <div className="pf-motion-editor h-screen w-screen flex flex-col text-zinc-100 overflow-hidden font-sans">
+    <div className="pf-motion-editor h-screen w-screen flex flex-col text-fg overflow-hidden font-sans">
       {/* Panel Sync Alert */}
       {panelSyncAlert.show && (
         <div className="absolute top-16 left-1/2 transform -translate-x-1/2 z-50 w-full max-w-2xl px-4">
-          <div className="bg-amber-950/90 border border-amber-600/50 rounded-lg p-3 flex items-center gap-3 shadow-xl backdrop-blur">
-            <span className="text-amber-400 text-lg">⚠️</span>
-            <div className="flex-1 text-sm text-amber-100">
+          <div className="bg-warn/90 border border-warn/50 rounded-lg p-3 flex items-center gap-3 shadow-xl backdrop-blur">
+            <span className="text-warn text-lg">⚠️</span>
+            <div className="flex-1 text-sm text-warn">
               {panelSyncAlert.message}
             </div>
-            <button className="px-3 py-2 rounded bg-amber-700 text-white text-sm" onClick={async () => {
+            <button className="px-3 py-2 rounded bg-warn text-white text-sm" onClick={async () => {
               if (!window.confirm("Align single-panel scenes with Panel Review? This adds new panels, removes deleted-panel scenes, and follows panel order. Surviving scene edits are kept. Custom multi-layer scenes need manual review.")) return;
               try {
                 const response = await api.saveStoryEditorState(project.id, editorState, true);
@@ -931,7 +931,7 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
             }}>Align panel scenes</button>
             <button
               onClick={() => setPanelSyncAlert({ show: false, message: "" })}
-              className="text-amber-300 hover:text-amber-100 text-lg leading-none"
+              className="text-warn hover:text-warn text-lg leading-none"
             >
               ×
             </button>
@@ -956,24 +956,24 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
       />
 
       {saveError && (
-        <div role="alert" className="shrink-0 flex items-center justify-between gap-3 border-b border-red-800 bg-red-950 px-4 py-2 text-sm text-red-100">
+        <div role="alert" className="shrink-0 flex items-center justify-between gap-3 border-b border-bad/40 bg-bad/20 px-4 py-2 text-sm text-bad">
           <span>{saveError}</span>
           <button
             type="button"
             onClick={() => { void saveQueueRef.current?.flush(); }}
             disabled={saveStatus === "saving"}
-            className="shrink-0 rounded border border-red-400 px-3 py-1 font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-300 disabled:opacity-50"
+            className="shrink-0 rounded border border-bad px-3 py-1 font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-bad disabled:opacity-50"
           >
             Retry save
           </button>
         </div>
       )}
 
-      {(projectHistory?.conflicted || projectHistory?.recoveryRequired) && <div role="alert" className="shrink-0 flex flex-wrap items-center gap-3 border-b border-amber-800 bg-amber-950 px-4 py-2 text-sm text-amber-100">
+      {(projectHistory?.conflicted || projectHistory?.recoveryRequired) && <div role="alert" className="shrink-0 flex flex-wrap items-center gap-3 border-b border-warn/40 bg-warn/20 px-4 py-2 text-sm text-warn">
         <span>Saved history cannot safely restore this project because it changed outside the journal. Reload the saved project before starting fresh history.</span>
-        <button type="button" disabled={historyBusy} className="rounded border border-amber-400 px-3 py-1 disabled:opacity-50" onClick={() => void startFreshHistory()}>Reload and start fresh history</button>
+        <button type="button" disabled={historyBusy} className="rounded border border-warn px-3 py-1 disabled:opacity-50" onClick={() => void startFreshHistory()}>Reload and start fresh history</button>
       </div>}
-      {historyBusy && <div role="status" className="shrink-0 px-4 py-1 text-xs text-indigo-200">Restoring saved project history…</div>}
+      {historyBusy && <div role="status" className="shrink-0 px-4 py-1 text-xs text-info">Restoring saved project history…</div>}
 
       {/* 2. Middle Main Workspace (Left Rail + Central Player + Right Panels) */}
       <div className="pf-editor-main flex-1 min-h-0 flex overflow-hidden">
@@ -988,12 +988,12 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
 
         {/* Center: 16:9 Composition Canvas */}
         <div className="flex flex-col flex-1 min-w-0 min-h-0">
-          <div role="group" aria-label="Canvas mode" className="flex items-center gap-2 px-2 py-1 border-b border-zinc-800 bg-zinc-950 shrink-0">
+          <div role="group" aria-label="Canvas mode" className="flex items-center gap-2 px-2 py-1 border-b border-edge bg-ink shrink-0">
             <button type="button" aria-pressed={canvasMode === "setup"} disabled={!pages.length}
               onClick={() => { setCanvasMode("setup"); updateEditorState(s => ({ ...s, is_playing: false })); }}
-              className={`px-3 py-1 rounded text-xs ${canvasMode === "setup" ? "bg-indigo-600 text-white" : "text-zinc-400"}`}>Setup</button>
+              className={`px-3 py-1 rounded text-xs ${canvasMode === "setup" ? "bg-accent text-white" : "text-fg-dim"}`}>Setup</button>
             <button type="button" aria-pressed={canvasMode === "player"} onClick={() => setCanvasMode("player")}
-              className={`px-3 py-1 rounded text-xs ${canvasMode === "player" ? "bg-indigo-600 text-white" : "text-zinc-400"}`}>Player</button>
+              className={`px-3 py-1 rounded text-xs ${canvasMode === "player" ? "bg-accent text-white" : "text-fg-dim"}`}>Player</button>
             {canvasMode === "setup" && <div className="ml-auto flex items-center gap-2">
               <button type="button" className="pf-setup-control" aria-expanded={setupSourcesOpen} onClick={() => setSetupSourcesOpen(open => !open)}>{setupSourcesOpen ? "Hide sources" : "Show sources"}</button>
               <button type="button" className="pf-setup-control" aria-expanded={setupTimelineOpen} onClick={() => setSetupTimelineOpen(open => !open)}>{setupTimelineOpen ? "Hide timeline" : "Show timeline"}</button>
@@ -1051,7 +1051,7 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
         <div hidden={canvasMode === "setup" && !setupSourcesOpen} data-setup={canvasMode === "setup"} className="pf-editor-sidebar shrink-0 min-h-0 flex flex-col h-full overflow-hidden">
           {/* Top Tab Bar: Source Pages | Inspector */}
           {canvasMode !== "setup" && (
-            <div className="flex items-center gap-1 p-1 bg-zinc-950/80 border-b border-zinc-800 shrink-0 rounded-t-xl select-none" role="tablist" aria-label="Sidebar Sections">
+            <div className="flex items-center gap-1 p-1 bg-ink/80 border-b border-edge shrink-0 rounded-t-xl select-none" role="tablist" aria-label="Sidebar Sections">
               <button
                 type="button"
                 role="tab"
@@ -1059,8 +1059,8 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
                 onClick={() => setRightSidebarTab("source")}
                 className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
                   rightSidebarTab === "source"
-                    ? "bg-violet-600 text-white shadow-sm shadow-violet-600/30 ring-1 ring-violet-400/40"
-                    : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900"
+                    ? "bg-accent text-white shadow-sm shadow-accent/30 ring-1 ring-accent/40"
+                    : "text-fg-dim hover:text-fg hover:bg-navy"
                 }`}
               >
                 <Icons.Layers className="w-3.5 h-3.5" />
@@ -1073,8 +1073,8 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
                 onClick={() => setRightSidebarTab("inspector")}
                 className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
                   rightSidebarTab === "inspector"
-                    ? "bg-violet-600 text-white shadow-sm shadow-violet-600/30 ring-1 ring-violet-400/40"
-                    : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900"
+                    ? "bg-accent text-white shadow-sm shadow-accent/30 ring-1 ring-accent/40"
+                    : "text-fg-dim hover:text-fg hover:bg-navy"
                 }`}
               >
                 <Icons.Sliders className="w-3.5 h-3.5" />
@@ -1210,7 +1210,7 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
 
       {/* 5. Full-Screen Narration Studio Workspace Overlay */}
       {showNarrationStudio && (
-        <div className="fixed inset-0 z-50 bg-zinc-950 flex flex-col">
+        <div className="fixed inset-0 z-50 bg-ink flex flex-col">
           <NarrationStudio
             initialChapter={
               editorState.narration_chapter ||
@@ -1328,7 +1328,7 @@ export const StoryEditorScreen: React.FC<StoryEditorScreenProps> = ({
 
       {/* 6. Full-Screen Audio Library Workspace Overlay */}
       {showAudioLibrary && (
-        <div className="fixed inset-0 z-50 bg-zinc-950 flex flex-col">
+        <div className="fixed inset-0 z-50 bg-ink flex flex-col">
           <AudioLibrary
             projectId={project?.id}
             initialType={audioLibraryInitialType}

@@ -328,3 +328,304 @@ def test_refine_is_off_by_default_and_when_asked_stores_the_selected_image_with_
             assert seen["ws"] == tmp_path / "generated" / "comfyui_candidates"
     finally:
         engine.dispose()
+
+
+def test_submit_comfyui_inpaint_job(tmp_path, monkeypatch):
+    from engine.api.routers.comfyui import submit_comfyui_inpaint_job, ComfyInpaintRequest
+    from engine.comfyui.service import INPAINT_WORKFLOW_ID
+    from engine.database.models import Base
+    from engine.database.session import engine as db_engine, SessionLocal
+
+    Base.metadata.create_all(bind=db_engine)
+    with SessionLocal() as db:
+        db.add(ProjectRecord(id='proj1', title='test', source_type='LOCAL_FOLDER', workspace_path=str(tmp_path)))
+        db.commit()
+
+        class FakeRegistry:
+            def metadata(self, wf_id):
+                return {'requires_gpu': True, 'gpu_vram_mb': 10000}
+            def load(self, wf_id):
+                return ({}, 'a' * 64)
+            def preflight(self, wf_id):
+                return {'ready': True, 'missing_nodes': [], 'missing_models': []}
+
+        monkeypatch.setattr('engine.api.routers.comfyui.ComfyWorkflowRegistry', lambda *a, **k: FakeRegistry())
+
+        req = ComfyInpaintRequest(
+            asset_id='asset1',
+            mask_data='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+            prompt='test inpaint prompt',
+        )
+        result = submit_comfyui_inpaint_job('proj1', req, db=db)
+        assert result['status'] == 'QUEUED'
+        assert result['workflow_id'] == INPAINT_WORKFLOW_ID
+        assert 'job_id' in result
+
+
+def _png(colour="red"):
+    buf = io.BytesIO()
+    Image.new("RGB", (64, 64), colour).save(buf, "PNG")
+    return buf.getvalue()
+
+
+def _reference_fixture(tmp_path):
+    """A project with one stored asset on disk that can serve as a character reference."""
+    (tmp_path / "generated" / "comfyui").mkdir(parents=True)
+    (tmp_path / "generated" / "comfyui" / "hero.png").write_bytes(_png("teal"))
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    Base.metadata.create_all(engine)
+    db = Session(engine)
+    db.add(ProjectRecord(id="project", title="t", source_type="LOCAL_FOLDER", workspace_path=str(tmp_path)))
+    db.add(ProjectRecord(id="other", title="o", source_type="LOCAL_FOLDER", workspace_path=str(tmp_path / "other")))
+    db.add(AssetRecord(id="hero", project_id="project", asset_type="COMFYUI_GENERATED_IMAGE", filename="hero.png",
+                       relative_path="generated/comfyui/hero.png", content_type="image/png", width=64, height=64,
+                       byte_size=1, sha256="0" * 64, status="READY", provenance={}))
+    db.commit()
+    return engine, db
+
+
+def test_reference_assets_reach_the_art_engine_and_are_recorded(tmp_path, monkeypatch):
+    import types
+
+    from engine.comfyui.art import ArtImage
+
+    seen = {}
+
+    class FakeArt:
+        def __init__(self, *a, **k):
+            pass
+
+        def generate(self, *a, **k):
+            seen.update(k)
+            return ArtImage(png=_png(), width=64, height=64, prompt_id="p1", workflow_id=service.ART_WORKFLOW_ID,
+                            workflow_sha256="a" * 64, model_files=["m"],
+                            source_output={"filename": "k.png", "subfolder": "", "type": "output"}, seed=1)
+
+    monkeypatch.setattr(service, "ArtEngine", FakeArt)
+    monkeypatch.setattr(service, "ComfyUIClient", lambda: types.SimpleNamespace(base_url="http://x/"))
+    monkeypatch.setattr(service, "ComfyWorkflowRegistry", lambda *a, **k: None)
+    engine, db = _reference_fixture(tmp_path)
+    try:
+        service.generate_image_operation(db, lambda *_: None, lambda: False, project_id="project", workflow_id=service.ART_WORKFLOW_ID,
+                                         prompt="same hero, running", negative_prompt="", width=64, height=64, seed=1,
+                                         reference_asset_ids=["hero"])
+        assert seen["reference_images"] == [tmp_path / "generated" / "comfyui" / "hero.png"]
+        new = db.query(AssetRecord).filter(AssetRecord.id != "hero").one()
+        assert new.provenance["reference_asset_ids"] == ["hero"]
+
+        seen.clear()  # no references: the engine call must not change for existing callers
+        service.generate_image_operation(db, lambda *_: None, lambda: False, project_id="project", workflow_id=service.ART_WORKFLOW_ID,
+                                         prompt="a lamp", negative_prompt="", width=64, height=64, seed=2)
+        assert seen["reference_images"] is None
+    finally:
+        db.close()
+        engine.dispose()
+
+
+def test_an_h3_image_job_draws_at_the_working_size_and_stores_the_size_that_was_asked_for(tmp_path, monkeypatch):
+    import types
+
+    from engine.comfyui.art import ArtImage
+
+    seen, released = {}, []
+
+    class FakeArt:
+        def __init__(self, *a, **k):
+            pass
+
+        def generate(self, prompt, negative, width, height, *a, **k):
+            seen.update(k, size=(width, height))
+            buf = io.BytesIO()
+            Image.new("RGB", (width, height), "red").save(buf, "PNG")
+            return ArtImage(png=buf.getvalue(), width=width, height=height, prompt_id="p1", workflow_id=k["workflow_id"],
+                            workflow_sha256="a" * 64, model_files=["m"],
+                            source_output={"filename": "k.png", "subfolder": "", "type": "output"}, seed=1)
+
+    monkeypatch.setattr(service, "ArtEngine", FakeArt)
+    monkeypatch.setattr(service, "release_local_model", lambda: released.append(True))
+    monkeypatch.setattr(service, "ComfyUIClient", lambda: types.SimpleNamespace(base_url="http://x/"))
+    monkeypatch.setattr(service, "ComfyWorkflowRegistry", lambda *a, **k: None)
+    engine, db = _reference_fixture(tmp_path)
+    kw = dict(project_id="project", workflow_id=service.EDIT_WORKFLOW_ID, prompt="a lamp on a table", negative_prompt="", seed=1)
+    try:
+        out = service.generate_image_operation(db, lambda *_: None, lambda: False, width=1344, height=768, **kw)
+        assert seen["size"] == service.h3_edit_size(1344, 768) == (2720, 1536) and seen["workflow_id"] == service.EDIT_WORKFLOW_ID
+        assert released == [True]  # the local model leaves the VRAM first
+        new = db.query(AssetRecord).filter(AssetRecord.id == out["asset_id"]).one()
+        with Image.open(tmp_path / new.relative_path) as stored:
+            assert stored.size == (new.width, new.height) == (out["width"], out["height"]) == (1344, 768)
+        assert (new.provenance["drawn_width"], new.provenance["drawn_height"]) == (2720, 1536)
+        assert new.provenance["workflow_id"] == service.EDIT_WORKFLOW_ID
+        with pytest.raises(service.ComfyImageGenerationError, match="refine only runs"):
+            service.generate_image_operation(db, lambda *_: None, lambda: False, width=1344, height=768, refine=True, **kw)
+        with pytest.raises(service.ComfyImageGenerationError, match="Image workflows"):
+            service.generate_image_operation(db, lambda *_: None, lambda: False, width=1344, height=768, **{**kw, "workflow_id": "anime_sdxl"})
+    finally:
+        db.close()
+        engine.dispose()
+
+
+def test_bad_references_fail_before_any_gpu_work(tmp_path, monkeypatch):
+    monkeypatch.setattr(service, "ArtEngine", lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not generate")))
+    engine, db = _reference_fixture(tmp_path)
+    kw = dict(project_id="project", workflow_id=service.ART_WORKFLOW_ID, prompt="a lamp", negative_prompt="", width=64, height=64, seed=1)
+    try:
+        with pytest.raises(service.ComfyImageGenerationError, match="not found in this project"):
+            service.generate_image_operation(db, lambda *_: None, lambda: False, reference_asset_ids=["nope"], **kw)
+        with pytest.raises(service.ComfyImageGenerationError, match="refine does not support"):
+            service.generate_image_operation(db, lambda *_: None, lambda: False, reference_asset_ids=["hero"], refine=True, **kw)
+        (tmp_path / "generated" / "comfyui" / "hero.png").unlink()
+        with pytest.raises(service.ComfyImageGenerationError, match="no file on disk"):
+            service.generate_image_operation(db, lambda *_: None, lambda: False, reference_asset_ids=["hero"], **kw)
+    finally:
+        db.close()
+        engine.dispose()
+
+
+def test_route_rejects_unknown_or_foreign_references_and_refine_combination(tmp_path):
+    from fastapi import HTTPException
+
+    from engine.api.routers.comfyui import ComfyImageRequest, submit_comfyui_image_job
+
+    engine, db = _reference_fixture(tmp_path)
+    try:
+        with pytest.raises(HTTPException) as e:
+            submit_comfyui_image_job("other", ComfyImageRequest(prompt="same hero, running", reference_asset_ids=["hero"]), db=db)
+        assert e.value.status_code == 400 and "not found in this project" in e.value.detail  # an asset of another project
+        with pytest.raises(HTTPException) as e:
+            submit_comfyui_image_job("project", ComfyImageRequest(prompt="same hero, running", reference_asset_ids=["hero"], refine=True), db=db)
+        assert e.value.status_code == 400 and "refine" in e.value.detail
+        with pytest.raises(ValueError):
+            ComfyImageRequest(prompt="same hero, running", reference_asset_ids=["a", "b", "c", "d", "e"])  # the workflow has four slots
+    finally:
+        db.close()
+        engine.dispose()
+
+
+def test_recovered_job_keeps_its_references(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(service, "generate_image_operation", lambda *a, **k: captured.update(k))
+    payload = {"workflow_id": service.ART_WORKFLOW_ID, "prompt": "p" * 12, "width": 64, "height": 64, "seed": 1,
+               "reference_asset_ids": ["hero"]}
+    service.build_comfy_image_operation("project", payload)(None, None, None)
+    assert captured["reference_asset_ids"] == ["hero"]
+    captured.clear()
+    service.build_comfy_image_operation("project", {k: v for k, v in payload.items() if k != "reference_asset_ids"})(None, None, None)
+    assert captured["reference_asset_ids"] is None  # jobs queued before this change still rehydrate
+
+
+def _mp4(tmp_path, frames=6, size=(64, 48)):
+    import cv2
+    import numpy as np
+
+    path = tmp_path / "fake_clip.mp4"
+    writer = cv2.VideoWriter(str(path), cv2.VideoWriter_fourcc(*"mp4v"), 24.0, size)
+    for i in range(frames):
+        writer.write(np.full((size[1], size[0], 3), i * 30, dtype=np.uint8))
+    writer.release()
+    return path.read_bytes()
+
+
+def _clip_fixture(tmp_path, monkeypatch, video=None):
+    """A project with a stored picture, the GPU render faked (it records how it was called), everything else real."""
+    import types
+
+    from engine.original import animate, h3_modes
+
+    calls = {}
+
+    def fake_make_clip(mode, prompt, **kw):
+        calls.update(mode=mode, prompt=prompt, **kw)
+        return video if video is not None else _mp4(tmp_path)
+
+    monkeypatch.setattr(h3_modes, "make_clip", fake_make_clip)
+    monkeypatch.setattr(animate, "release_ollama", lambda: calls.update(ollama_released=True))
+    monkeypatch.setattr(service, "ComfyUIClient", lambda: types.SimpleNamespace(base_url="http://x/"))
+    monkeypatch.setattr(service, "ComfyWorkflowRegistry", lambda *a, **k: types.SimpleNamespace(load=lambda wid: ({}, "b" * 64)))
+    engine, db = _reference_fixture(tmp_path)
+    return calls, engine, db
+
+
+def _run_clip(db, **kw):
+    args = dict(project_id="project", action="The hero runs in place", seconds=2.3, seed=7, first_asset_id="hero")
+    return service.generate_clip_operation(db, lambda *_: None, kw.pop("is_cancelled", lambda: False), **{**args, **kw})
+
+
+def test_one_picture_makes_an_image_to_video_clip_that_is_stored_as_an_asset(tmp_path, monkeypatch):
+    calls, engine, db = _clip_fixture(tmp_path, monkeypatch)
+    try:
+        out = _run_clip(db)
+        assert calls["mode"] == "i2va" and calls["first"] == tmp_path / "generated" / "comfyui" / "hero.png" and calls["last"] is None
+        assert "<Picture 1>" in calls["prompt"] and "The hero runs in place" in calls["prompt"] and calls["ollama_released"]
+        asset = db.query(AssetRecord).filter(AssetRecord.id == out["asset_id"]).one()
+        assert asset.asset_type == "COMFYUI_GENERATED_VIDEO" and asset.content_type == "video/mp4"
+        assert (asset.width, asset.height, out["frames"]) == (64, 48, 6)
+        assert (tmp_path / asset.relative_path).stat().st_size == asset.byte_size == out["byte_size"]
+        assert asset.provenance["workflow_id"] == "fastvideo_h3_film_free" and asset.provenance["workflow_sha256"] == "b" * 64
+        assert asset.provenance["seed"] == 7 and asset.provenance["first_asset_id"] == "hero"
+    finally:
+        db.close()
+        engine.dispose()
+
+
+def test_the_same_picture_as_first_and_last_frame_makes_a_loop(tmp_path, monkeypatch):
+    calls, engine, db = _clip_fixture(tmp_path, monkeypatch)
+    try:
+        out = _run_clip(db, last_asset_id="hero")
+        hero = tmp_path / "generated" / "comfyui" / "hero.png"
+        assert calls["mode"] == "fl2va" and calls["first"] == hero and calls["last"] == hero and out["mode"] == "fl2va"
+        assert "2.33-second mark" in calls["prompt"]  # the alignment line uses the length H3 really renders, not the 2.3 asked for
+    finally:
+        db.close()
+        engine.dispose()
+
+
+def test_clip_failures_leave_no_asset_and_no_file(tmp_path, monkeypatch):
+    calls, engine, db = _clip_fixture(tmp_path, monkeypatch, video=b"this is not a video")
+    try:
+        with pytest.raises(service.H3ClipGenerationError, match="cannot be decoded"):
+            _run_clip(db)
+        assert db.query(AssetRecord).filter(AssetRecord.asset_type == "COMFYUI_GENERATED_VIDEO").count() == 0
+        assert [p.name for p in (tmp_path / "generated" / "comfyui").iterdir()] == ["hero.png"]  # the unreadable file was removed
+        calls.clear()
+        with pytest.raises(service.H3ClipGenerationError, match="not found in this project"):
+            _run_clip(db, first_asset_id="nope")
+        with pytest.raises(service.H3ClipGenerationError, match="Last-frame asset"):
+            _run_clip(db, last_asset_id="nope")
+        with pytest.raises(service.H3ClipGenerationError, match="cancelled"):
+            _run_clip(db, is_cancelled=lambda: True)
+        assert "mode" not in calls  # none of those reached the GPU
+    finally:
+        db.close()
+        engine.dispose()
+
+
+def test_clip_route_refuses_assets_of_another_project(tmp_path):
+    from fastapi import HTTPException
+
+    from engine.api.routers.comfyui import ComfyClipRequest, submit_comfyui_clip_job
+
+    engine, db = _reference_fixture(tmp_path)
+    try:
+        for kw in ({}, {"last_asset_id": "hero"}):  # "hero" belongs to "project", not "other"
+            with pytest.raises(HTTPException) as e:
+                submit_comfyui_clip_job("other", ComfyClipRequest(action="The hero runs in place", first_asset_id="hero", **kw), db=db)
+            assert e.value.status_code == 400 and "not found in this project" in e.value.detail
+        with pytest.raises(HTTPException) as e:
+            submit_comfyui_clip_job("missing", ComfyClipRequest(action="The hero runs in place", first_asset_id="hero"), db=db)
+        assert e.value.status_code == 404
+    finally:
+        db.close()
+        engine.dispose()
+
+
+def test_clip_job_survives_a_restart_and_is_gated_as_a_comfyui_job(monkeypatch):
+    from engine.jobs.manager import COMFYUI_JOB_TYPES
+
+    assert service.H3_CLIP_JOB_TYPE in COMFYUI_JOB_TYPES  # else the GPU gate would refuse it whenever ComfyUI holds its weights
+    captured = {}
+    monkeypatch.setattr(service, "generate_clip_operation", lambda *a, **k: captured.update(k))
+    payload = {"action": "The hero runs in place", "first_asset_id": "hero", "last_asset_id": "hero", "seconds": 2.3, "seed": 7, "timeout_s": 900.0}
+    service.build_h3_clip_operation("project", payload)(None, None, None)
+    assert captured == {"project_id": "project", "action": "The hero runs in place", "seconds": 2.3, "seed": 7, "first_asset_id": "hero",
+                        "last_asset_id": "hero", "timeout_s": 900.0}

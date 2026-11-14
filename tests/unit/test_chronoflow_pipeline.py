@@ -39,7 +39,7 @@ def test_build_h3_prompt_sliding_window():
 
     assert "1" in graph
     assert graph["1"]["class_type"] == "UNETLoader"
-    assert graph["1"]["inputs"]["unet_name"] == "minimax_h3_fl2va_pruned_int8_convrot.safetensors"
+    assert graph["1"]["inputs"]["unet_name"].startswith("fastvideo_fasth3_8step")
 
     assert "7" in graph
     assert graph["7"]["class_type"] == "MiniMaxH3ImageToVideo"
@@ -107,7 +107,7 @@ def test_generate_art_image_uses_the_central_art_engine_and_saves_into_the_input
     seen = []
 
     class FakeArt:
-        def generate(self, prompt, negative, width, height, seed, prefix):
+        def generate(self, prompt, negative, width, height, seed, prefix, **kwargs):
             seen.append((prompt, negative, width, height, seed, prefix))
             return type("Img", (), {"png": b"png-bytes"})()
 
@@ -154,3 +154,14 @@ def test_extract_tail_frame(mock_run, tmp_path):
     success = pipeline.extract_tail_frame(video_file, out_img)
     assert success is True
     assert out_img.exists()
+
+
+def test_build_h3_prompt_uses_fasth3_with_sparse_attention_except_for_reference_mode():
+    pipeline = ChronoFlowPipeline()
+    kw = dict(prompt="p", width=768, height=1344, length=124, steps=4, lora_name="turbo.safetensors", seed=1)
+    graph = pipeline.build_h3_prompt(workflow_mode="sliding_window", first_frame_filename="a.png", **kw)
+    assert graph["1"]["inputs"]["unet_name"].startswith("fastvideo_fasth3_8step")
+    assert graph["2"]["class_type"] == "BlockSparseAttention" and graph["8"]["inputs"]["model"] == ["2", 0]
+    assert graph["10"]["inputs"]["steps"] == 8 and not any(n["class_type"] == "LoraLoaderModelOnly" for n in graph.values())
+    old = pipeline.build_h3_prompt(workflow_mode="reference", ref_images=["r.png"], **kw)
+    assert old["1"]["inputs"]["unet_name"].startswith("minimax_h3_fl2va") and old["2"]["class_type"] == "LoraLoaderModelOnly" and old["10"]["inputs"]["steps"] == 4

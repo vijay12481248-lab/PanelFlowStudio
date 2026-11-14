@@ -107,3 +107,31 @@ def test_character_description_is_the_same_words_every_time():
     assert ss.describe_character(elder).startswith("an old man with a wrinkled face with ")
     fox = elder.model_copy(update={"species": "fox cub"})
     assert ss.describe_character(fox).startswith("a fox cub with ")
+
+
+def test_shot_dimensions_preview_table_is_valid_and_multiples_of_16():
+    for shot, (w, h) in ss.SHOT_DIMENSIONS_PREVIEW.items():
+        assert w % 16 == 0, f"{shot} width {w} must be multiple of 16"
+        assert h % 16 == 0, f"{shot} height {h} must be multiple of 16"
+        mp = (w * h) / 1_000_000
+        assert 0.20 <= mp <= 0.35, f"{shot} megapixels {mp} should be around 0.25 MP"
+
+
+def test_resolve_dimensions_preview_mode():
+    w, h = ss.resolve_dimensions("wide", preview=True)
+    assert (w, h) == ss.SHOT_DIMENSIONS_PREVIEW["wide"]
+    assert (w, h) == (672, 384)
+
+    w_std, h_std = ss.resolve_dimensions("wide", preview=False)
+    assert (w_std, h_std) == (1344, 768)
+
+    w_close, h_close = ss.resolve_dimensions("close", preview=True)
+    assert (w_close, h_close) == ss.SHOT_DIMENSIONS_PREVIEW["close"]
+    assert (w_close, h_close) == (512, 512)
+
+    w_full, h_full = ss.resolve_dimensions("full", num_characters=1, preview=True)
+    assert (w_full, h_full) == (416, 608)
+
+    w_char2, h_char2 = ss.resolve_dimensions("full", num_characters=2, preview=True)
+    assert (w_char2, h_char2) == (672, 384)
+

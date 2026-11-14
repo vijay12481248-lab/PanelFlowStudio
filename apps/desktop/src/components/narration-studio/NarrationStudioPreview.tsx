@@ -44,15 +44,15 @@ export const NarrationStudioPreview: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-zinc-950 overflow-hidden">
+    <div className="flex flex-col h-screen w-screen bg-ink overflow-hidden">
       {/* Top Testing Banner */}
-      <div className="h-8 bg-zinc-900 border-b border-zinc-800 px-3 flex items-center justify-between text-xs select-none shrink-0 z-50">
+      <div className="h-8 bg-navy border-b border-edge px-3 flex items-center justify-between text-xs select-none shrink-0 z-50">
         <div className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-          <span className="font-bold text-zinc-200">
+          <span className="w-2 h-2 rounded-full bg-ok animate-pulse" />
+          <span className="font-bold text-fg">
             Narration Studio Independent Preview Harness
           </span>
-          <span className="text-[10px] text-zinc-500 font-mono hidden sm:inline">
+          <span className="text-[10px] text-fg-faint font-mono hidden sm:inline">
             (Isolated from Timeline & App.tsx)
           </span>
         </div>
@@ -60,10 +60,10 @@ export const NarrationStudioPreview: React.FC = () => {
         <div className="flex items-center gap-2">
           {/* Preset Scenarios */}
           <div className="flex items-center gap-1 text-[11px]">
-            <span className="text-zinc-500">Scenario:</span>
+            <span className="text-fg-faint">Scenario:</span>
             <select
               onChange={(e) => handleScenarioChange(e.target.value as any)}
-              className="bg-zinc-950 border border-zinc-800 rounded px-1.5 py-0.5 text-zinc-300 focus:outline-none focus:border-indigo-500 cursor-pointer text-xs"
+              className="bg-ink border border-edge rounded px-1.5 py-0.5 text-fg-dim focus:outline-none focus:border-accent cursor-pointer text-xs"
             >
               <option value="default">Standard Chapter (8 Segments)</option>
               <option value="drafts">Unreviewed Drafts (Stress Test)</option>
@@ -74,7 +74,7 @@ export const NarrationStudioPreview: React.FC = () => {
           <button
             type="button"
             onClick={handleReset}
-            className="text-[11px] font-semibold text-zinc-400 hover:text-white px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 transition-colors"
+            className="text-[11px] font-semibold text-fg-dim hover:text-white px-2 py-0.5 rounded bg-flat hover:bg-glass-hi transition-colors"
           >
             Reset Chapter
           </button>
@@ -82,10 +82,10 @@ export const NarrationStudioPreview: React.FC = () => {
           <button
             type="button"
             onClick={() => setShowLogDrawer((v) => !v)}
-            className="text-[11px] font-semibold text-indigo-400 hover:text-indigo-300 px-2 py-0.5 rounded bg-indigo-950/80 border border-indigo-800 transition-colors flex items-center gap-1"
+            className="text-[11px] font-semibold text-info hover:text-info px-2 py-0.5 rounded bg-accent/80 border border-accent/40 transition-colors flex items-center gap-1"
           >
             <span>Activity Log</span>
-            <span className="font-mono text-[9px] bg-indigo-900 px-1 rounded">
+            <span className="font-mono text-[9px] bg-accent/20 px-1 rounded">
               {eventLogs.length}
             </span>
           </button>
@@ -111,15 +111,15 @@ export const NarrationStudioPreview: React.FC = () => {
 
         {/* Activity Log Drawer */}
         {showLogDrawer && (
-          <div className="absolute top-0 right-0 w-80 h-full bg-zinc-900/95 border-l border-zinc-800 p-3 shadow-2xl z-50 flex flex-col text-xs select-none">
-            <div className="flex items-center justify-between border-b border-zinc-800 pb-2 mb-2">
-              <span className="font-bold text-zinc-200 uppercase tracking-wider text-[11px]">
+          <div className="absolute top-0 right-0 w-80 h-full bg-navy/95 border-l border-edge p-3 shadow-2xl z-50 flex flex-col text-xs select-none">
+            <div className="flex items-center justify-between border-b border-edge pb-2 mb-2">
+              <span className="font-bold text-fg uppercase tracking-wider text-[11px]">
                 Preview Activity Log
               </span>
               <button
                 type="button"
                 onClick={() => setShowLogDrawer(false)}
-                className="text-zinc-400 hover:text-zinc-200 p-0.5 rounded hover:bg-zinc-800 transition-colors"
+                className="text-fg-dim hover:text-fg p-0.5 rounded hover:bg-flat transition-colors"
                 title="Close Log"
               >
                 <Icons.X className="w-3.5 h-3.5" />
@@ -129,12 +129,12 @@ export const NarrationStudioPreview: React.FC = () => {
 
             <div className="flex-1 overflow-y-auto space-y-1 font-mono text-[10px]">
               {eventLogs.length === 0 ? (
-                <div className="text-zinc-500 italic p-4 text-center">
+                <div className="text-fg-faint italic p-4 text-center">
                   No interactions recorded yet. Edit a script or approve a segment to see events.
                 </div>
               ) : (
                 eventLogs.map((log, idx) => (
-                  <div key={idx} className="p-1 rounded bg-zinc-950/80 text-zinc-300 border border-zinc-800/60 leading-normal">
+                  <div key={idx} className="p-1 rounded bg-ink/80 text-fg-dim border border-edge/60 leading-normal">
                     {log}
                   </div>
                 ))
@@ -142,8 +142,8 @@ export const NarrationStudioPreview: React.FC = () => {
             </div>
 
             {lastExportedContract && (
-              <div className="pt-2 border-t border-zinc-800 text-[10px] text-zinc-400">
-                <span className="font-semibold text-emerald-400">Contract Ready:</span>{" "}
+              <div className="pt-2 border-t border-edge text-[10px] text-fg-dim">
+                <span className="font-semibold text-ok">Contract Ready:</span>{" "}
                 {lastExportedContract.clips.length} clips in payload.
               </div>
             )}

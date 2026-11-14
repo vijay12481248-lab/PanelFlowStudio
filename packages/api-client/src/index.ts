@@ -72,6 +72,15 @@ import type {
   NarrationLine,
   NarrationLineActionRequest,
   NarrationApproveResponse,
+  NarrationCast,
+  NarrationCastAssignment,
+  NarrationVoiceProfile,
+  NarrationProjectCast,
+  NarrationQa,
+  NarrationQaCheck,
+  NarrationReadiness,
+  NarrationOpenIssue,
+  NarrationStopPoint,
 } from "@panelflow/shared-types";
 
 export type {
@@ -103,6 +112,27 @@ export interface ComfyImageRequest {
   negative_prompt?: string;
   width?: number;
   height?: number;
+  seed?: number;
+  timeout_s?: number;
+}
+
+export interface ComfyInpaintRequest {
+  asset_id?: string;
+  image_data?: string;
+  mask_data: string;
+  prompt: string;
+  negative_prompt?: string;
+  seed?: number;
+  timeout_s?: number;
+}
+
+/** Edit a picture from a written instruction (MiniMax-H3-Image). */
+export interface ComfyEditRequest {
+  asset_id: string; // the picture to edit (pose transfer: the artwork whose characters and style are kept)
+  prompt?: string; // what the picture should become (pose transfer: optional note on who plays whom)
+  reference_asset_ids?: string[]; // other assets the instruction may refer to
+  pose_asset_id?: string; // pose and camera transfer: a project picture to take poses, camera angle and framing from
+  pose_image_data?: string; // pose and camera transfer: the pose picture uploaded as a data URL (stored as a project asset)
   seed?: number;
   timeout_s?: number;
 }
@@ -221,11 +251,31 @@ export interface OriginalEpisode {
   youtube_privacy: string | null;
 }
 
+export interface YouTubeChannelProfile {
+  id: string;
+  name: string;
+  is_active: boolean;
+  connected: boolean;
+  configured: boolean;
+  created_at?: string;
+}
+
+export interface YouTubeAgentSettings {
+  enabled: boolean;
+  default_privacy: "private" | "unlisted" | "public";
+  publish_time?: string;
+  lead_time_min?: number;
+}
+
 export interface YouTubeStatus {
   configured: boolean;
   connected: boolean;
   pending: boolean;
   error: string | null;
+  active_channel_id?: string;
+  channels?: YouTubeChannelProfile[];
+  agent_settings?: YouTubeAgentSettings;
+  masked_client_id?: string;
 }
 
 export interface OriginalStorySummary {
@@ -254,6 +304,124 @@ export interface OriginalSeries {
   channel_id: string;
   bible: { premise: { title: string; logline: string }; characters: { name: string; role: string }[] };
   episodes: OriginalEpisode[];
+}
+
+export interface OriginalPanelInpaintRequest {
+  mask_png_base64?: string;
+  mask?: string;
+  prompt?: string;
+  negative_prompt?: string;
+  seed?: number;
+  episode?: string;
+}
+
+export interface OriginalPanelInpaintResponse {
+  panel_id: string;
+  candidate_file: string;
+  candidate_n: number;
+  seed: number;
+  sha256: string;
+  image?: string;
+  candidate?: Record<string, any>;
+  selected?: number;
+  prompt?: string;
+  iterations?: Array<Record<string, any>>;
+}
+
+export interface CandidateIteration {
+  n: number;
+  file: string;
+  sha256?: string;
+  kind?: "generate" | "repair" | "inpaint" | "imported" | "scale_2x" | string;
+  seed?: number;
+  score?: number | null;
+  match_score?: number | null;
+  prompt?: string;
+  negative?: string;
+  mask?: string;
+  bbox?: number[];
+  parent?: number | null;
+  created_at?: string;
+}
+
+export interface StoryboardBeatCard {
+  panel_id: string;
+  order: number;
+  shot: string;
+  angle: string;
+  action: string;
+  caption: string;
+  status: "accept" | "accept_low" | "needs_review" | "repaired" | "unverified" | string;
+  score: number | null;
+  audio_duration: number;
+  image_url: string;
+  candidate_count: number;
+  selected_candidate: number;
+  iterations: CandidateIteration[];
+  defects?: string[];
+  reasons?: string[];
+}
+
+export interface StoryboardWorkbenchData {
+  slug: string;
+  episode?: string;
+  title: string;
+  genre: string;
+  total_panels: number;
+  beats: StoryboardBeatCard[];
+}
+
+export interface OriginalPanelApproveRequest {
+  episode?: string;
+  reason?: string;
+}
+
+export interface OriginalPanelApproveResponse {
+  panel_id: string;
+  status: string;
+  message: string;
+}
+
+export interface OriginalPanelRerollRequest {
+  episode?: string;
+  seed?: number;
+  prompt?: string;
+}
+
+export interface OriginalPanelRerollResponse {
+  panel_id: string;
+  status: string;
+  seed: number;
+  candidate_file: string;
+  candidate_n: number;
+  iterations: CandidateIteration[];
+}
+
+export interface OriginalPanelScaleRequest {
+  episode?: string;
+  sigma?: number;
+  steps?: number;
+}
+
+export interface OriginalPanelScaleResponse {
+  panel_id: string;
+  status: string;
+  width: number;
+  height: number;
+  scale_info: Record<string, any>;
+}
+
+export interface OriginalStoryScaleRequest {
+  episode?: string;
+  sigma?: number;
+  steps?: number;
+}
+
+export interface OriginalStoryScaleResponse {
+  slug: string;
+  episode?: string;
+  scaled_panels: number;
+  results: OriginalPanelScaleResponse[];
 }
 
 export class PanelFlowApiClient {
@@ -582,6 +750,10 @@ export class PanelFlowApiClient {
 
   getPageImageUrl(projectId: string, pageId: string): string {
     return this.resourceUrl(`/api/projects/${projectId}/pages/${pageId}/file`);
+  }
+
+  getProjectCoverUrl(projectId: string): string {
+    return this.resourceUrl(`/api/projects/${projectId}/cover`);
   }
 
   getNormalizedPageImageUrl(projectId: string, pageId: string): string {
@@ -1390,6 +1562,53 @@ export class PanelFlowApiClient {
     );
   }
 
+  async getNarrationCast(projectId: string): Promise<NarrationProjectCast> {
+    return this.request<NarrationProjectCast>(
+      `/api/narration/projects/${encodeURIComponent(projectId)}/cast`
+    );
+  }
+
+  async setNarrationCast(
+    projectId: string,
+    characterId: string,
+    profileId: string
+  ): Promise<{ series_key: string; assigned: Record<string, string> }> {
+    return this.request<{ series_key: string; assigned: Record<string, string> }>(
+      `/api/narration/projects/${encodeURIComponent(projectId)}/cast`,
+      { method: "POST", body: JSON.stringify({ character_id: characterId, profile_id: profileId }) }
+    );
+  }
+
+  async acceptNarrationCast(
+    projectId: string
+  ): Promise<{ series_key: string; assigned: Record<string, string> }> {
+    return this.request<{ series_key: string; assigned: Record<string, string> }>(
+      `/api/narration/projects/${encodeURIComponent(projectId)}/cast/accept`,
+      { method: "POST" }
+    );
+  }
+
+  async listNarrationStopPoints(
+    projectId: string,
+    runId: string
+  ): Promise<{ stop_points: NarrationStopPoint[] }> {
+    return this.request<{ stop_points: NarrationStopPoint[] }>(
+      `/api/narration/runs/${encodeURIComponent(projectId)}/${encodeURIComponent(runId)}/stop-points`
+    );
+  }
+
+  async answerNarrationStopPoint(
+    projectId: string,
+    runId: string,
+    kind: string,
+    choice: string
+  ): Promise<{ stop_points: NarrationStopPoint[] }> {
+    return this.request<{ stop_points: NarrationStopPoint[] }>(
+      `/api/narration/runs/${encodeURIComponent(projectId)}/${encodeURIComponent(runId)}/stop-points`,
+      { method: "POST", body: JSON.stringify({ kind, choice }) }
+    );
+  }
+
   async approveNarrationRun(projectId: string, runId: string): Promise<NarrationApproveResponse> {
     return this.request<NarrationApproveResponse>(
       `/api/narration/runs/${encodeURIComponent(projectId)}/${encodeURIComponent(runId)}/approve`,
@@ -1877,6 +2096,26 @@ export class PanelFlowApiClient {
     });
   }
 
+  async getDependenciesStatus(): Promise<{
+    comfyui: { running: boolean; installed: boolean; root: string | null; endpoint: string; can_launch: boolean };
+    ollama: { running: boolean; endpoint: string; model: string };
+    ffmpeg: { installed: boolean; version: string | null; path: string | null };
+  }> {
+    return this.request("/api/system/dependencies/status");
+  }
+
+  async launchComfyUI(waitSeconds: number = 0): Promise<{
+    status: string;
+    running: boolean;
+    message?: string;
+    endpoint?: string;
+    pid?: number;
+  }> {
+    return this.request(`/api/system/dependencies/launch_comfyui?wait_seconds=${waitSeconds}`, {
+      method: "POST",
+    });
+  }
+
   // ---------------------------------------------------------------------------
   // Ollama Configuration & Capabilities
   // ---------------------------------------------------------------------------
@@ -2097,6 +2336,70 @@ export class PanelFlowApiClient {
     });
   }
 
+  async inpaintComfyImage(projectId: string, request: ComfyInpaintRequest): Promise<{ job_id: string; status: string; workflow_id: string }> {
+    return this.request<{ job_id: string; status: string; workflow_id: string }>(`/api/projects/${projectId}/comfyui/inpaint`, {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
+  }
+
+  /** Edit a picture from a written instruction, with the MiniMax-H3-Image workflow. */
+  async editComfyImage(projectId: string, request: ComfyEditRequest): Promise<{ job_id: string; status: string; workflow_id: string; pose_asset_id?: string | null }> {
+    return this.request<{ job_id: string; status: string; workflow_id: string; pose_asset_id?: string | null }>(`/api/projects/${projectId}/comfyui/edit`, {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
+  }
+
+  /** Keep a picture edited by hand in the image studio (colour grade, cut and/or Fusion effects, rendered there) as a new project asset. */
+  async saveGradedImage(projectId: string, request: { image_data: string; source_asset_id: string; grade?: unknown; cut?: unknown; fusion?: unknown }): Promise<GeneratedAsset> {
+    return this.request<GeneratedAsset>(`/api/projects/${projectId}/assets/graded`, {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
+  }
+
+  // ChronoFlow art generation (Qwen Image 2.1 with character-locked ref2image)
+  async listChronoFlowCharacters(): Promise<{ characters: Array<{ id: string; name: string; role: string; image: string; description: string }> }> {
+    return this.request<{ characters: Array<{ id: string; name: string; role: string; image: string; description: string }> }>("/api/chronoflow/characters");
+  }
+
+  async generateChronoFlowImage(request: {
+    prompt: string;
+    negative_prompt?: string;
+    width?: number;
+    height?: number;
+    seed?: number;
+    refine?: boolean;
+    ref_images?: string[];
+    character_ids?: string[];
+  }): Promise<{
+    success: boolean;
+    filename: string;
+    url: string;
+    character_lock?: { ref_images: string[]; characters: Array<{ id: string; name: string; image: string }> };
+    refine?: { status: string; generations: number; repaired?: boolean };
+  }> {
+    return this.request<{
+      success: boolean;
+      filename: string;
+      url: string;
+      character_lock?: { ref_images: string[]; characters: Array<{ id: string; name: string; image: string }> };
+      refine?: { status: string; generations: number; repaired?: boolean };
+    }>("/api/chronoflow/generate_image", {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
+  }
+
+  async uploadChronoFlowReferenceImage(bytes: ArrayBuffer, filename: string): Promise<{ success: boolean; filename: string; url: string }> {
+    return this.request<{ success: boolean; filename: string; url: string }>("/api/chronoflow/upload_image", {
+      method: "POST",
+      headers: { "Content-Type": "application/octet-stream", "x-filename": filename },
+      body: bytes as unknown as string,
+    });
+  }
+
   async listGeneratedAssets(projectId: string): Promise<{ assets: GeneratedAsset[] }> {
     return this.request<{ assets: GeneratedAsset[] }>(`/api/projects/${projectId}/assets`);
   }
@@ -2295,7 +2598,7 @@ export class PanelFlowApiClient {
     return this.request<OriginalSeries>("/api/original/series", { method: "POST", body: JSON.stringify(req) });
   }
 
-  async queueOriginalEpisodes(seriesId: string, req: { count: number; start_date?: string; scenes?: number; refine?: boolean; animate?: boolean }): Promise<{ episode: number; job_id: string }[]> {
+  async queueOriginalEpisodes(seriesId: string, req: { count: number; start_date?: string; scenes?: number; refine?: boolean; animate?: boolean; preview?: boolean }): Promise<{ episode: number; job_id: string }[]> {
     return this.request(`/api/original/series/${encodeURIComponent(seriesId)}/episodes`, { method: "POST", body: JSON.stringify(req) });
   }
 
@@ -2316,21 +2619,137 @@ export class PanelFlowApiClient {
     return this.request<Job[]>("/api/original/jobs");
   }
 
+  getOriginalPanelImageUrl(slug: string, panelId: string, episode?: string, candidate?: number): string {
+    const params = new URLSearchParams();
+    if (episode) params.set("episode", episode);
+    if (candidate !== undefined) params.set("candidate", String(candidate));
+    const qs = params.toString() ? `?${params.toString()}` : "";
+    return `${this.baseUrl}/api/original/story/${encodeURIComponent(slug)}/panel/${encodeURIComponent(panelId)}/file${qs}`;
+  }
+
+  async getOriginalStoryWorkbench(slug: string, episode?: string): Promise<StoryboardWorkbenchData> {
+    const q = episode ? `?episode=${encodeURIComponent(episode)}` : "";
+    return this.request<StoryboardWorkbenchData>(`/api/original/story/${encodeURIComponent(slug)}/workbench${q}`);
+  }
+
+  async approveOriginalPanel(slug: string, panelId: string, req?: OriginalPanelApproveRequest): Promise<OriginalPanelApproveResponse> {
+    return this.request<OriginalPanelApproveResponse>(
+      `/api/original/story/${encodeURIComponent(slug)}/panel/${encodeURIComponent(panelId)}/approve`,
+      {
+        method: "POST",
+        body: JSON.stringify(req ?? {}),
+      },
+    );
+  }
+
+  async rerollOriginalPanel(slug: string, panelId: string, req?: OriginalPanelRerollRequest): Promise<OriginalPanelRerollResponse> {
+    return this.request<OriginalPanelRerollResponse>(
+      `/api/original/story/${encodeURIComponent(slug)}/panel/${encodeURIComponent(panelId)}/reroll`,
+      {
+        method: "POST",
+        body: JSON.stringify(req ?? {}),
+      },
+    );
+  }
+
+  async scaleOriginalPanel(slug: string, panelId: string, req?: OriginalPanelScaleRequest): Promise<OriginalPanelScaleResponse> {
+    return this.request<OriginalPanelScaleResponse>(
+      `/api/original/story/${encodeURIComponent(slug)}/panel/${encodeURIComponent(panelId)}/scale`,
+      {
+        method: "POST",
+        body: JSON.stringify(req ?? {}),
+      },
+    );
+  }
+
+  async scaleOriginalStory(slug: string, req?: OriginalStoryScaleRequest): Promise<OriginalStoryScaleResponse> {
+    return this.request<OriginalStoryScaleResponse>(
+      `/api/original/story/${encodeURIComponent(slug)}/scale`,
+      {
+        method: "POST",
+        body: JSON.stringify(req ?? {}),
+      },
+    );
+  }
+
+  async inpaintOriginalPanel(
+    storySlug: string,
+    panelId: string,
+    req: OriginalPanelInpaintRequest,
+  ): Promise<OriginalPanelInpaintResponse> {
+    return this.request<OriginalPanelInpaintResponse>(
+      `/api/original/story/${encodeURIComponent(storySlug)}/panel/${encodeURIComponent(panelId)}/inpaint`,
+      {
+        method: "POST",
+        body: JSON.stringify(req),
+      },
+    );
+  }
+
   // YouTube connection and upload
-  async youtubeStatus(): Promise<YouTubeStatus> {
-    return this.request<YouTubeStatus>("/api/youtube/status");
+  async youtubeStatus(channelId?: string): Promise<YouTubeStatus> {
+    const q = channelId ? `?channel_id=${encodeURIComponent(channelId)}` : "";
+    return this.request<YouTubeStatus>(`/api/youtube/status${q}`);
   }
 
-  async saveYoutubeClient(client_id: string, client_secret: string): Promise<YouTubeStatus> {
-    return this.request<YouTubeStatus>("/api/youtube/client", { method: "PUT", body: JSON.stringify({ client_id, client_secret }) });
+  async saveYoutubeClient(client_id: string, client_secret: string, channelId?: string): Promise<YouTubeStatus> {
+    return this.request<YouTubeStatus>("/api/youtube/client", {
+      method: "PUT",
+      body: JSON.stringify({ client_id, client_secret, channel_id: channelId }),
+    });
   }
 
-  async youtubeConnect(): Promise<{ auth_url: string }> {
-    return this.request<{ auth_url: string }>("/api/youtube/connect", { method: "POST" });
+  async uploadYoutubeClientFile(content: string | Record<string, any>, channelId?: string): Promise<YouTubeStatus> {
+    return this.request<YouTubeStatus>("/api/youtube/client/file", {
+      method: "POST",
+      body: JSON.stringify({ content, channel_id: channelId }),
+    });
   }
 
-  async youtubeDisconnect(): Promise<YouTubeStatus> {
-    return this.request<YouTubeStatus>("/api/youtube/disconnect", { method: "POST" });
+  async youtubeConnect(channelId?: string): Promise<{ auth_url: string }> {
+    const q = channelId ? `?channel_id=${encodeURIComponent(channelId)}` : "";
+    return this.request<{ auth_url: string }>(`/api/youtube/connect${q}`, { method: "POST" });
+  }
+
+  async youtubeDisconnect(channelId?: string): Promise<YouTubeStatus> {
+    return this.request<YouTubeStatus>("/api/youtube/disconnect", {
+      method: "POST",
+      body: JSON.stringify({ channel_id: channelId }),
+    });
+  }
+
+  async listYoutubeChannels(): Promise<{ channels: YouTubeChannelProfile[]; active_channel_id: string }> {
+    return this.request<{ channels: YouTubeChannelProfile[]; active_channel_id: string }>("/api/youtube/channels");
+  }
+
+  async createYoutubeChannel(name: string, channelId?: string): Promise<{ created: YouTubeChannelProfile; status: YouTubeStatus }> {
+    return this.request<{ created: YouTubeChannelProfile; status: YouTubeStatus }>("/api/youtube/channels", {
+      method: "POST",
+      body: JSON.stringify({ name, channel_id: channelId }),
+    });
+  }
+
+  async activateYoutubeChannel(channelId: string): Promise<YouTubeStatus> {
+    return this.request<YouTubeStatus>(`/api/youtube/channels/${encodeURIComponent(channelId)}/activate`, {
+      method: "POST",
+    });
+  }
+
+  async deleteYoutubeChannel(channelId: string): Promise<YouTubeStatus> {
+    return this.request<YouTubeStatus>(`/api/youtube/channels/${encodeURIComponent(channelId)}`, {
+      method: "DELETE",
+    });
+  }
+
+  async getYoutubeAgentSettings(): Promise<YouTubeAgentSettings> {
+    return this.request<YouTubeAgentSettings>("/api/youtube/agent-settings");
+  }
+
+  async updateYoutubeAgentSettings(settings: YouTubeAgentSettings): Promise<YouTubeAgentSettings> {
+    return this.request<YouTubeAgentSettings>("/api/youtube/agent-settings", {
+      method: "PUT",
+      body: JSON.stringify(settings),
+    });
   }
 
   async uploadOriginalEpisode(

@@ -14,7 +14,9 @@ episodes and original stories into narrated YouTube videos. Everything runs on t
 - **One art workflow: `qwen_image_21` (Qwen Image 2.1 Turbo), run only by `engine/comfyui/art.py` (`ArtEngine`).** Original Stories,
   ChronoFlow, the Comfy image screen, YouTube thumbnails and autopilot all call it; do not add a second text-to-image workflow or a
   private submit/poll loop - extend `ArtEngine`. `tests/unit/test_art_engine.py` fails if the registry gains another `text_to_image`
-  workflow. The SDXL entries (`purpose: sdxl_conditioning`, `inpaint`, `matting`) are the legacy substrate of the ControlNet / IP-Adapter /
+  workflow. The owner's one exception (2026-11-13): an image job may name `minimax_h3_image_edit` as its `workflow_id`; that same registered
+  H3-Image graph with no picture bound is text to image (`IMAGE_WORKFLOW_IDS` in `art.py`). Qwen stays the default everywhere; only the AI Game
+  Studio's image model picker selects H3-Image. The SDXL entries (`purpose: sdxl_conditioning`, `inpaint`, `matting`) are the legacy substrate of the ControlNet / IP-Adapter /
   inpaint / matting tools, not art workflows. `PANELFLOW_IMAGE_ENGINE` is `qwen` (default) or `sdxl` (for those tools' tests).
 - ComfyUI and Ollama together use ~13 GB of VRAM; the job manager holds GPU jobs back when memory is not free (by design).
 
@@ -23,6 +25,12 @@ episodes and original stories into narrated YouTube videos. Everything runs on t
 - `docs/H3_LONG_VIDEO.md` - videos longer than one H3 clip: `engine/original/chain.py` chains clips between storyboard pictures (measured results and limits).
 - `docs/ORIGINAL_STORY_STUDIO.md` - original stories: story engine, shot director, prompt composer, ComfyUI art, image reviewer,
   voiced video, comic pages, series + daily queue, YouTube upload, with the measured results and the known weaknesses of each step.
+- `.claude/skills/shorts-reels-production/SKILL.md` - vertical Shorts/Reels (20-32 s, 9:16): concept formula, `tools/reels/` pipeline (Qwen3-TTS, ACE-Step,
+  MiniMax-H3-Image, FastH3, ffmpeg), thumbnails, upload copy, gotchas. Any agent making short-form content reads it first (the file is plain Markdown);
+  H3 clip prompting lives in `.claude/skills/minimax-h3-video-production/`.
+- `docs/SCENE_DIRECTOR.md` - brief -> scene plan (who stands where, what each body does, camera, light, depth) -> Qwen -> check against the plan -> correct; `engine/original/scene_*.py`, MCP `panelflow_scene_*`. Measured there: the Qwen workflow ignores negative prompts (state everything positively), the 9B vision model's yes/no check is too agreeable (use a blind classification read), and pictures must not be shrunk before the check.
+- `docs/ONE_SERVER.md` - one engine (port 8765) serves PanelFlow and ChronoFlow (API + studio UI), and one MCP server (`scripts/run_mcp_server.py`, profiles `all`
+  / `creative` / `chronoflow`) drives both. The old standalone ChronoFlow server (7860) and its two extra MCP servers are gone; do not bring them back.
 - Code map: `engine/anime/review/` (anime), `engine/original/` (stories), `engine/youtube/` (OAuth + upload), `engine/comfyui/`
   (approved workflows, bundled in `engine/comfyui/workflows/`), `engine/api/routers/{anime_review,original,youtube}.py`,
   desktop screens `AnimeReviewScreen.tsx` and `OriginalStoriesScreen.tsx`. Long jobs run through the durable `JobManager`

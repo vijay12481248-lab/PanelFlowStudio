@@ -91,3 +91,15 @@ def test_to_16k_resamples_wav(tmp_path):
     write_wav_atomic(p, np.ones(24000, dtype=np.float32) * 0.5)
     out = to_16k(p)
     assert out.dtype == np.float32 and abs(out.size - 16000) <= 1 and abs(float(out.mean()) - 0.5) < 1e-3
+
+
+def test_qwen3_tts_adapter_and_default_routing(monkeypatch):
+    from engine.narration.runtime.audio import KokoroTts, Qwen3Tts, get_default_tts
+    from engine.narration.runtime.roles import TtsConfig
+
+    monkeypatch.setattr("engine.narration.runtime.roles.load_tts_config", lambda: TtsConfig(model="kokoro-82m", voice="am_michael"))
+    assert isinstance(get_default_tts(), KokoroTts)
+
+    monkeypatch.setattr("engine.narration.runtime.roles.load_tts_config", lambda: TtsConfig(model="qwen3-tts-1.7b", voice="marcus_male"))
+    adapter = get_default_tts()
+    assert isinstance(adapter, Qwen3Tts)

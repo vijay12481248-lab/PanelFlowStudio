@@ -41,11 +41,42 @@ def _validated_ollama_url(
     return endpoint_url.rstrip("/")
 
 
+VRAM_CONCURRENT_THRESHOLD_MB: float = 24000.0
+
+
 class SystemResourceManager:
     """
     Manages hardware resource detection, memory telemetry, and admission
     for GPU-intensive inference and rendering tasks.
     """
+    VRAM_CONCURRENT_THRESHOLD_MB: float = VRAM_CONCURRENT_THRESHOLD_MB
+
+    def supports_concurrent_gpu(self) -> bool:
+        """Checks if physical GPU capacity satisfies the >= 24 GB requirement."""
+        gpu = self.get_gpu_memory()
+        if not gpu.get("available"):
+            return False
+        return float(gpu.get("total_mb", 0.0) or 0.0) >= self.VRAM_CONCURRENT_THRESHOLD_MB
+
+    def is_concurrent_pipeline_enabled(self) -> bool:
+        """
+        Evaluates whether concurrent GPU residency is enabled.
+        Strict invariant: If physical VRAM is < 24,000 MB, this method MUST return False
+        even if PANELFLOW_CONCURRENT_GPU_PIPELINE=1 is set, falling back to time-sliced eviction.
+        """
+        flag_val = os.environ.get("PANELFLOW_CONCURRENT_GPU_PIPELINE", "0").strip().lower()
+        if flag_val not in ("1", "true", "yes"):
+            return False
+        if self.supports_concurrent_gpu():
+            return True
+        gpu = self.get_gpu_memory()
+        total_mb = float(gpu.get("total_mb", 0.0) or 0.0)
+        logger.warning(
+            f"PANELFLOW_CONCURRENT_GPU_PIPELINE=1 requested, but physical GPU VRAM ({total_mb:.0f} MB) < "
+            f"{self.VRAM_CONCURRENT_THRESHOLD_MB:.0f} MB. Falling back to time-sliced active eviction."
+        )
+        return False
+
 
     def __init__(self):
         self._concurrency_mode: str = "MANUAL"  # "AUTO" or "MANUAL"
@@ -251,19 +282,27 @@ class SystemResourceManager:
             },
         }
 
-    def can_admit_gpu_job(self, required_vram_mb: float = 0.0) -> Tuple[bool, str]:
+    def can_admit_gpu_job(self, required_vram_mb: float = 0.0, is_comfyui: bool = False) -> Tuple[bool, str]:
         """
         Determines whether a GPU-bound job (VLM, LLM, TTS, or GPU render) can be admitted.
         Returns (True, 'Admitted') or (False, 'Reason').
         """
-        effective_limit = self._max_gpu_concurrency
-        if self._concurrency_mode == "AUTO":
+        if self.is_concurrent_pipeline_enabled():
+            effective_limit = max(2, self._max_gpu_concurrency)
+        elif self._concurrency_mode == "AUTO":
             gpu = self.get_gpu_memory()
             ram = self.get_system_memory()
-            if gpu.get("available") and gpu.get("free_mb", 0) >= 8000 and ram.get("available_gb", 0) >= 8.0:
+            if (
+                gpu.get("available")
+                and gpu.get("total_mb", 0) >= self.VRAM_CONCURRENT_THRESHOLD_MB
+                and gpu.get("free_mb", 0) >= 8000
+                and ram.get("available_gb", 0) >= 8.0
+            ):
                 effective_limit = 2
             else:
                 effective_limit = 1
+        else:
+            effective_limit = self._max_gpu_concurrency
 
         if len(self._active_gpu_jobs) >= effective_limit:
             return False, f"GPU inference queue busy ({len(self._active_gpu_jobs)}/{effective_limit} active slots)."
@@ -271,15 +310,99 @@ class SystemResourceManager:
         # Check VRAM headroom if specified and GPU is available
         if required_vram_mb > 0:
             gpu = self.get_gpu_memory()
-            if gpu.get("available") and gpu.get("free_mb", 0) < required_vram_mb:
-                return False, f"Insufficient GPU VRAM: {gpu.get('free_mb', 0):.0f}MB free, required {required_vram_mb:.0f}MB."
+            if gpu.get("available"):
+                if is_comfyui:
+                    # ComfyUI retains model weights in its CUDA allocator across runs to accelerate
+                    # subsequent generations, so nvidia-smi free_mb reflects ComfyUI's resident memory
+                    # rather than external starvation. Verify physical GPU total capacity supports it.
+                    if gpu.get("total_mb", 0) < required_vram_mb:
+                        return False, f"GPU total VRAM {gpu.get('total_mb', 0):.0f}MB is below required {required_vram_mb:.0f}MB."
+                elif gpu.get("free_mb", 0) < required_vram_mb:
+                    return False, f"Insufficient GPU VRAM: {gpu.get('free_mb', 0):.0f}MB free, required {required_vram_mb:.0f}MB."
 
         return True, "Admitted"
 
-    async def acquire_gpu_slot(self, job_id: str, required_vram_mb: float = 0.0) -> bool:
+    async def _try_free_comfyui_cache(self) -> None:
+        """Asks ComfyUI to release model weights and free CUDA memory pool if running."""
+        try:
+            async with httpx.AsyncClient(timeout=3.0) as client:
+                await client.post("http://127.0.0.1:8188/free", json={"unload_models": True, "free_memory": True})
+        except Exception:
+            pass
+
+    async def _try_evict_ollama(
+        self,
+        endpoint_url: str = "http://127.0.0.1:11434",
+        models: list[str] | None = None,
+        authorization: OllamaEndpointAuthorization | None = None,
+    ) -> bool:
+        """Issues an immediate eviction request (keep_alive: 0) to release Ollama VRAM."""
+        try:
+            clean_url = _validated_ollama_url(endpoint_url, authorization)
+            targets: list[str] = list(models) if models else []
+            if not targets:
+                targets = ["qwen3.5:9b"]
+            elif "qwen3.5:9b" not in targets:
+                targets.append("qwen3.5:9b")
+
+            async with httpx.AsyncClient(timeout=5.0, follow_redirects=False) as client:
+                for m in targets:
+                    logger.info(f"Evicting Ollama model '{m}' via keep_alive: 0")
+                    await client.post(
+                        f"{clean_url}/api/generate",
+                        json={"model": m, "keep_alive": 0},
+                    )
+            return True
+        except Exception as exc:
+            logger.debug(f"Failed to evict Ollama model(s): {exc}")
+            return False
+
+    async def acquire_gpu_slot(self, job_id: str, required_vram_mb: float = 0.0, is_comfyui: bool = False) -> bool:
         """Atomically claims a GPU inference execution slot."""
         async with self._lock:
-            admitted, reason = self.can_admit_gpu_job(required_vram_mb)
+            if is_comfyui and required_vram_mb > 0:
+                try:
+                    ollama_state = await self.get_ollama_runtime()
+                    ollama_vram = float(ollama_state.get("total_ollama_vram_mb", 0.0) or 0.0)
+                    gpu = self.get_gpu_memory()
+                    if gpu.get("available") and ollama_vram > 0:
+                        concurrent_allowed = self.is_concurrent_pipeline_enabled()
+                        available_for_comfy = gpu.get("total_mb", 0.0) - ollama_vram - 4000.0
+
+                        if not concurrent_allowed or available_for_comfy < required_vram_mb:
+                            logger.info(
+                                f"Ollama is using {ollama_vram:.0f}MB VRAM (concurrent_allowed={concurrent_allowed}, "
+                                f"available={available_for_comfy:.0f}MB < required={required_vram_mb:.0f}MB). "
+                                "Triggering active Ollama eviction."
+                            )
+                            loaded_models = [
+                                m.get("name") or m.get("model")
+                                for m in ollama_state.get("models", [])
+                                if (m.get("name") or m.get("model"))
+                            ]
+                            await self._try_evict_ollama(models=loaded_models or ["qwen3.5:9b"])
+
+                            # Low-latency verification loop: up to 3 checks (50ms, 100ms, 150ms)
+                            for attempt in range(3):
+                                await asyncio.sleep(0.05 * (attempt + 1))
+                                ollama_state = await self.get_ollama_runtime()
+                                ollama_vram = float(ollama_state.get("total_ollama_vram_mb", 0.0) or 0.0)
+                                if ollama_vram == 0:
+                                    break
+
+                            gpu = self.get_gpu_memory()
+                            available_for_comfy = gpu.get("total_mb", 0.0) - ollama_vram - 4000.0
+                            if available_for_comfy < required_vram_mb:
+                                logger.info(f"Holding ComfyUI job: Ollama still using {ollama_vram:.0f}MB VRAM after eviction")
+                                return False
+                except Exception as exc:
+                    logger.debug(f"Error during Ollama VRAM eviction check: {exc}")
+
+            admitted, reason = self.can_admit_gpu_job(required_vram_mb, is_comfyui=is_comfyui)
+            if not admitted and not is_comfyui and required_vram_mb > 0:
+                await self._try_free_comfyui_cache()
+                admitted, reason = self.can_admit_gpu_job(required_vram_mb, is_comfyui=is_comfyui)
+
             if admitted:
                 self._active_gpu_jobs.add(job_id)
                 logger.info(f"GPU slot acquired for job {job_id} ({len(self._active_gpu_jobs)} active)")

@@ -48,6 +48,22 @@ scratch/tts_benchmark/
 scratch_*.py
 scratch_*.txt
 
+# One-off story output written next to the repo by the creative engine
+Episodes/
+manhua_episodes/
+episode_*.json
+story_bible_*.json
+IDEA.md
+test_ssml.mp3
+
+# Suites for the external reverse-engineering skill; they target a different
+# project (an installed skill under the user's home directory) and one of them
+# breaks collection for the whole tests tree.
+tests/adversarial/
+tests/audit/
+tests/e2e/
+tests/skills/
+
 # Build artifacts
 dist_engine/
 build_engine/
@@ -83,3 +99,7 @@ model_backups/
 
 apps/desktop/src-tauri/tauri.nobundle.conf.json
 .agents/
+
+# Playwright
+apps/desktop/test-results/
+apps/desktop/playwright-report/

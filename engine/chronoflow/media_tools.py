@@ -100,3 +100,105 @@ def waveform(path: Path, bins: int) -> list[float]:
             peaks.append(round(max(abs(v) for v in chunk) / 32768.0, 3) if chunk else 0.0)
     out.write_text(json.dumps(peaks), encoding="utf-8")
     return peaks
+
+
+def extract_frame(path: Path, timestamp: float, output_path: Path) -> Path:
+    """Extract a single visual frame from a media file at timestamp."""
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    ts = max(0.0, float(timestamp))
+    subprocess.run(
+        [_FFMPEG, "-v", "error", "-y", "-ss", f"{ts:.3f}", "-i", str(path), "-frames:v", "1", "-q:v", "2", str(output_path)],
+        capture_output=True, timeout=_TIMEOUT, check=True
+    )
+    return output_path
+
+
+def splice_timeline_range(base_video: Path, replacement_clip: Path, t_start: float, t_end: float, output_path: Path) -> Path:
+    """
+    Splice replacement_clip into base_video for interval [t_start, t_end].
+    Non-destructive: untouched sections are preserved with exact timestamps.
+    """
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    base_info = probe(base_video)
+    rep_info = probe(replacement_clip)
+    base_dur = base_info.get("duration", 0.0)
+    rep_dur = rep_info.get("duration", 0.0)
+
+    t0 = max(0.0, min(float(t_start), float(t_end)))
+    t1 = max(t0, max(float(t_start), float(t_end)))
+    if t1 <= t0:
+        t1 = t0 + rep_dur
+
+    has_audio = base_info.get("has_audio", False) and rep_info.get("has_audio", False)
+
+    # Edge case 1: replacement covers entire video (or almost entire)
+    if t0 <= 0.05 and t1 >= (base_dur - 0.05):
+        shutil.copy2(replacement_clip, output_path)
+        return output_path
+
+    # Build filter complex
+    if t0 <= 0.05:
+        # Replacement at start, followed by tail of base
+        if has_audio:
+            filter_str = (
+                f"[1:v]setpts=PTS-STARTPTS[v0];[1:a]asetpts=PTS-STARTPTS[a0];"
+                f"[0:v]trim=start={t1:.3f},setpts=PTS-STARTPTS[v1];[0:a]atrim=start={t1:.3f},asetpts=PTS-STARTPTS[a1];"
+                f"[v0][a0][v1][a1]concat=n=2:v=1:a=1[outv][outa]"
+            )
+            cmd = [_FFMPEG, "-v", "error", "-y", "-i", str(base_video), "-i", str(replacement_clip),
+                   "-filter_complex", filter_str, "-map", "[outv]", "-map", "[outa]",
+                   "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", str(output_path)]
+        else:
+            filter_str = (
+                f"[1:v]setpts=PTS-STARTPTS[v0];"
+                f"[0:v]trim=start={t1:.3f},setpts=PTS-STARTPTS[v1];"
+                f"[v0][v1]concat=n=2:v=1:a=0[outv]"
+            )
+            cmd = [_FFMPEG, "-v", "error", "-y", "-i", str(base_video), "-i", str(replacement_clip),
+                   "-filter_complex", filter_str, "-map", "[outv]",
+                   "-c:v", "libx264", "-pix_fmt", "yuv420p", str(output_path)]
+    elif t1 >= (base_dur - 0.05):
+        # Head of base, followed by replacement at end
+        if has_audio:
+            filter_str = (
+                f"[0:v]trim=end={t0:.3f},setpts=PTS-STARTPTS[v0];[0:a]atrim=end={t0:.3f},asetpts=PTS-STARTPTS[a0];"
+                f"[1:v]setpts=PTS-STARTPTS[v1];[1:a]asetpts=PTS-STARTPTS[a1];"
+                f"[v0][a0][v1][a1]concat=n=2:v=1:a=1[outv][outa]"
+            )
+            cmd = [_FFMPEG, "-v", "error", "-y", "-i", str(base_video), "-i", str(replacement_clip),
+                   "-filter_complex", filter_str, "-map", "[outv]", "-map", "[outa]",
+                   "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", str(output_path)]
+        else:
+            filter_str = (
+                f"[0:v]trim=end={t0:.3f},setpts=PTS-STARTPTS[v0];"
+                f"[1:v]setpts=PTS-STARTPTS[v1];"
+                f"[v0][v1]concat=n=2:v=1:a=0[outv]"
+            )
+            cmd = [_FFMPEG, "-v", "error", "-y", "-i", str(base_video), "-i", str(replacement_clip),
+                   "-filter_complex", filter_str, "-map", "[outv]",
+                   "-c:v", "libx264", "-pix_fmt", "yuv420p", str(output_path)]
+    else:
+        # Three segments: head + replacement + tail
+        if has_audio:
+            filter_str = (
+                f"[0:v]trim=start=0:end={t0:.3f},setpts=PTS-STARTPTS[v0];[0:a]atrim=start=0:end={t0:.3f},asetpts=PTS-STARTPTS[a0];"
+                f"[1:v]setpts=PTS-STARTPTS[v1];[1:a]asetpts=PTS-STARTPTS[a1];"
+                f"[0:v]trim=start={t1:.3f},setpts=PTS-STARTPTS[v2];[0:a]atrim=start={t1:.3f},asetpts=PTS-STARTPTS[a2];"
+                f"[v0][a0][v1][a1][v2][a2]concat=n=3:v=1:a=1[outv][outa]"
+            )
+            cmd = [_FFMPEG, "-v", "error", "-y", "-i", str(base_video), "-i", str(replacement_clip),
+                   "-filter_complex", filter_str, "-map", "[outv]", "-map", "[outa]",
+                   "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", str(output_path)]
+        else:
+            filter_str = (
+                f"[0:v]trim=start=0:end={t0:.3f},setpts=PTS-STARTPTS[v0];"
+                f"[1:v]setpts=PTS-STARTPTS[v1];"
+                f"[0:v]trim=start={t1:.3f},setpts=PTS-STARTPTS[v2];"
+                f"[v0][v1][v2]concat=n=3:v=1:a=0[outv]"
+            )
+            cmd = [_FFMPEG, "-v", "error", "-y", "-i", str(base_video), "-i", str(replacement_clip),
+                   "-filter_complex", filter_str, "-map", "[outv]",
+                   "-c:v", "libx264", "-pix_fmt", "yuv420p", str(output_path)]
+
+    subprocess.run(cmd, capture_output=True, timeout=_TIMEOUT * 3, check=True)
+    return output_path

@@ -136,7 +136,7 @@ def voice_shot(story: OriginalStory, ws: Path, panel: Panel, tts=None, voices=No
     ln = panel.dialogue[0]
     voices = voices or film_voices(story, ws)
     voice, rate = voices.get(ln.speaker_id, ("af_bella", 1.0))
-    tts = tts or rt.KokoroTts()
+    tts = tts or rt.get_default_tts()
     audio, _, _ = rt.normalize_silence(tts.synth(ln.text, voice, line_rate(ln.text, rate)))
     peak = float(np.max(np.abs(audio))) if audio.size else 0.0
     if peak > 0:
@@ -309,7 +309,7 @@ def make_clips(story: OriginalStory, ws: Path, ids: list[str] | None = None, see
     engine = ArtEngine(client, registry)
     log_path = fd / "clips.json"
     log = json.loads(log_path.read_text(encoding="utf-8")) if log_path.exists() else {}
-    tts, voices = (None, {}) if native_voice else (rt.KokoroTts(), film_voices(story, ws))  # native: H3 speaks, Kokoro is never loaded
+    tts, voices = (None, {}) if native_voice else (rt.get_default_tts(), film_voices(story, ws))  # native: H3 speaks, tts is never loaded
     todo = [p for p in story.panels if (not ids or p.id in ids) and (fd / "frames" / f"{p.id}.png").exists()]
     if free_llm_memory:
         release_ollama()

@@ -11,7 +11,7 @@
   const cfg = { api: '/api/chronoflow', out: '/chronoflow/outputs', inp: '/chronoflow/inputs', token: '' };
   const tl = M.create(24);
   const hist = M.createHistory(tl);
-  const ui = { pps: 45, t: 0, playing: false, rate: 1, sel: null, tool: 'select', snap: true, loop: false, jobId: null, sig: '', muted: false };
+  const ui = { pps: 45, t: 0, playing: false, rate: 1, sel: null, selIds: new Set(), tool: 'select', snap: true, loop: false, jobId: null, sig: '', muted: false };
   const meta = {};            // src -> {fps,width,height,duration,has_audio,peaks,best:{count,url}}
   let root = {}, decks = [], active = 0, seekTok = 0, raf = 0, clockT0 = 0, clockBase = 0, lastBoundaryCheck = 0;
   let audio = null;           // {ctx, master, nodes:[{gain}], anL, anR}
@@ -42,10 +42,10 @@
       const raw = ui.jobId && localStorage.getItem(key());
       if (!raw) return false;
       const saved = JSON.parse(raw);
-      const live = new Set(sig.split('|'));
-      if (!saved.clips.length || saved.clips.some((c) => c.shot != null && !live.has(c.src))) return false; // chunks changed under the saved edit
+      if (!saved.clips || !saved.clips.length) return false;
       Object.keys(tl).forEach((k) => delete tl[k]);
       Object.assign(tl, saved);
+      if (!Array.isArray(tl.dismissedSrcs)) tl.dismissedSrcs = [];
       return true;
     } catch (e) { return false; }
   }
@@ -64,26 +64,122 @@
     if (!files.length && job && job.master_video) files.push(job.master_video.split('/').pop().split('?')[0]);
     const sig = files.join('|');
     const jobId = job ? job.id : null;
-    if (jobId === ui.jobId && sig === ui.sig) return;
+    const isCovered = (f) =>
+      (tl.clips && tl.clips.some((c) => c.src === f || (Array.isArray(c.sources) && c.sources.some((s) => s.src === f)))) ||
+      (Array.isArray(tl.dismissedSrcs) && tl.dismissedSrcs.includes(f));
+    const allFilesCovered = tl.clips && tl.clips.length && files.every(isCovered);
+    if (jobId === ui.jobId && sig === ui.sig && allFilesCovered) return;
     ui.jobId = jobId; ui.sig = sig;
-    ui.sel = null; ui.t = 0; pause(); hist.reset();      // undo must never cross into another job's timeline
+    ui.job = job;
+    ui.sel = null; if (ui.selIds) ui.selIds.clear(); ui.t = 0; pause(); hist.reset();      // undo must never cross into another job's timeline
     const empty = $('.nle-empty', root.screen);
     if (!files.length) {
       Object.keys(tl).forEach((k) => delete tl[k]); Object.assign(tl, M.create(24));
-      empty.style.display = 'flex'; empty.querySelector('.msg').textContent = job ? 'This job has no rendered clips yet' : 'No job selected';
+      empty.style.display = 'flex';
+      const sceneCount = (job && job.scenes && job.scenes.length) || (job && job.total_chunks) || 0;
+      if (sceneCount > 0) {
+        const scTitle = (job && (job.folder_name || job.screenplay_title || 'Imported Scene')) || 'Imported Scene';
+        empty.querySelector('.msg').innerHTML = `<span style="font-weight: 700; color: #a9c1ff;">Scene "${scTitle}" Loaded (${sceneCount} Shots)</span><br><span style="font-size: 0.74rem; color: #9aa6d0; margin-top: 4px; display: block;">Select a shot card in the Media Pool below or the Prompts tab to render clips onto the timeline.</span>`;
+      } else {
+        empty.querySelector('.msg').textContent = job ? 'This job has no rendered clips yet' : 'No job selected';
+      }
       renderAll(); emit('load', tl); return;
     }
     empty.style.display = 'none';
     const infos = await Promise.all(files.map(info));
-    if (restore(sig)) { /* keep the user's edit */ } else {
+
+    const getClipPrompt = (idx) => {
+      if (!job) return '';
+      if (job.chunk_prompts && job.chunk_prompts[idx]) return job.chunk_prompts[idx];
+      if (job.scenes && job.scenes[idx] && job.scenes[idx].prompt) return job.scenes[idx].prompt;
+      if (job.plan && job.plan.shots && job.plan.shots[idx] && job.plan.shots[idx].prompt) return job.plan.shots[idx].prompt;
+      if (job.prompt) return idx === 0 ? job.prompt : `${job.prompt} [continuation sequence ${idx + 1}, fluid motion]`;
+      return '';
+    };
+
+    if (restore(sig)) {
+      /* Auto-prune any rogue duplicate clips that were mistakenly appended while already subsumed in a merged clip */
+      const mergedSources = new Set();
+      tl.clips.forEach((c) => {
+        if (Array.isArray(c.sources)) {
+          c.sources.forEach((s) => { if (s && s.src) mergedSources.add(s.src); });
+        }
+      });
+      if (mergedSources.size > 0) {
+        const pruneIndices = [];
+        tl.clips.forEach((c, idx) => {
+          if (mergedSources.has(c.src) && (!Array.isArray(c.sources) || c.sources.length <= 1)) {
+            pruneIndices.push(idx);
+          }
+        });
+        for (let p = pruneIndices.length - 1; p >= 0; p--) {
+          const pruned = tl.clips.splice(pruneIndices[p], 1)[0];
+          if (pruned && pruned.src && !tl.dismissedSrcs.includes(pruned.src)) {
+            tl.dismissedSrcs.push(pruned.src);
+          }
+        }
+      }
+
+      /* keep the user's edit, but ensure prompts exist on clips */
+      tl.clips.forEach((c, i) => {
+        const shotIdx = c.shot != null ? c.shot : i;
+        const p = getClipPrompt(shotIdx);
+        if (!c.originalPrompt) c.originalPrompt = p;
+        if (!c.prompt) c.prompt = p;
+      });
+
+      // Append any newly generated shots from files that are not yet in the timeline and not dismissed
+      const existingSrcs = new Set();
+      tl.clips.forEach((c) => {
+        if (c.src) existingSrcs.add(c.src);
+        if (Array.isArray(c.sources)) {
+          c.sources.forEach((s) => { if (s && s.src) existingSrcs.add(s.src); });
+        }
+      });
+      if (Array.isArray(tl.dismissedSrcs)) {
+        tl.dismissedSrcs.forEach((s) => existingSrcs.add(s));
+      }
+
+      let addedAny = false;
+      tl.nextId = Math.max(tl.nextId || 1, tl.clips.length + 1);
+      files.forEach((f, i) => {
+        if (!existingSrcs.has(f)) {
+          const p = getClipPrompt(i);
+          const dur = (infos[i] && infos[i].duration) || 5.17;
+          const c = M.addClip(tl, {
+            src: f,
+            label: `Shot ${i + 1}`,
+            srcDur: dur,
+            shot: i,
+            prompt: p,
+            originalPrompt: p,
+          });
+          c.prompt = p;
+          c.originalPrompt = p;
+          existingSrcs.add(f);
+          addedAny = true;
+        }
+      });
+      if (addedAny) {
+        persist();
+      }
+    } else {
       Object.keys(tl).forEach((k) => delete tl[k]); Object.assign(tl, M.create(infos[0].fps || 24));
-      files.forEach((f, i) => M.addClip(tl, { src: f, label: `Shot ${i + 1}`, srcDur: infos[i].duration, shot: i }));
+      files.forEach((f, i) => {
+        const p = getClipPrompt(i);
+        const c = M.addClip(tl, { src: f, label: `Shot ${i + 1}`, srcDur: infos[i].duration, shot: i, prompt: p, originalPrompt: p });
+        c.prompt = p;
+        c.originalPrompt = p;
+      });
     }
     tl.fps = infos[0].fps || tl.fps;
     zoomFit(true);
     renderAll();
     await seek(0);
     emit('load', tl);
+    if (window.NLEFrameEdit && typeof window.NLEFrameEdit.syncClipPrompt === 'function') {
+      window.NLEFrameEdit.syncClipPrompt(true);
+    }
   }
 
   /** A clip file was regenerated on disk: bump its version so caches and decks reload it. */
@@ -91,6 +187,42 @@
     tl.clips.filter((c) => c.src === src).forEach((c) => { c.version = (c.version || 0) + 1; });
     delete meta[src]; decks.forEach((d) => { if (d.src === src) d.url = null; });
     info(src).then(() => { renderAll(); refreshAt(); });
+  }
+
+  /** Add or append an explicit shot to the timeline at a given index (from Media Pool chunks or Prompts tab). */
+  function addShotToTimeline(spec, index) {
+    if (!tl) return null;
+    if (!tl.clips) Object.assign(tl, M.create(24));
+    const empty = root.screen ? $('.nle-empty', root.screen) : null;
+    if (empty) empty.style.display = 'none';
+    if (Array.isArray(tl.dismissedSrcs) && spec && spec.src) {
+      tl.dismissedSrcs = tl.dismissedSrcs.filter((s) => s !== spec.src);
+    }
+
+    const dur = spec.srcDur || (meta[spec.src] && meta[spec.src].duration) || 5.17;
+    tl.nextId = Math.max(tl.nextId || 1, (tl.clips ? tl.clips.length : 0) + 1);
+    const clipIdx = (index != null && index >= 0 && index <= (tl.clips ? tl.clips.length : 0)) ? index : (tl.clips ? tl.clips.length : 0);
+    const shotNum = spec.shot != null ? spec.shot : clipIdx;
+    const c = M.addClip(tl, {
+      src: spec.src,
+      label: spec.label || `Shot ${shotNum + 1}`,
+      srcDur: dur,
+      shot: shotNum,
+      prompt: spec.prompt || null,
+      originalPrompt: spec.prompt || null,
+    }, clipIdx);
+    c.prompt = spec.prompt || null;
+    c.originalPrompt = spec.prompt || null;
+    persist();
+    zoomFit(true);
+    renderAll();
+    refreshAt();
+    emit('load', tl);
+    if (window.NLEFrameEdit && typeof window.NLEFrameEdit.syncClipPrompt === 'function') {
+      window.NLEFrameEdit.syncClipPrompt(true);
+    }
+    status(`Added ${c.label} to timeline (${dur.toFixed(1)}s)`);
+    return c;
   }
 
   // ---------- audio graph ----------
@@ -306,9 +438,16 @@
 
   function renderInOut() {
     const b = root.inout;
-    if (tl.inPoint == null && tl.outPoint == null) { b.style.display = 'none'; return; }
-    const a = tl.inPoint == null ? 0 : tl.inPoint, z = tl.outPoint == null ? total() : tl.outPoint;
-    Object.assign(b.style, { display: 'block', left: `${tToX(a)}px`, width: `${tToX(Math.max(0, z - a))}px` });
+    if (tl.inPoint == null && tl.outPoint == null) {
+      if (b) b.style.display = 'none';
+    } else {
+      const a = tl.inPoint == null ? 0 : tl.inPoint, z = tl.outPoint == null ? total() : tl.outPoint;
+      if (b) Object.assign(b.style, { display: 'block', left: `${tToX(a)}px`, width: `${tToX(Math.max(0, z - a))}px` });
+    }
+    if (window.NLEFrameEdit && typeof window.NLEFrameEdit.updateRangeDisplay === 'function') {
+      window.NLEFrameEdit.updateRangeDisplay();
+    }
+    emit('inout', { inPoint: tl.inPoint, outPoint: tl.outPoint });
   }
 
   function desiredCount(c) {
@@ -350,7 +489,7 @@
     const w = canvas.width = Math.max(2, Math.min(6000, Math.round(canvas.parentNode.clientWidth))), h = canvas.height = H.a1 - 6;
     const g = canvas.getContext('2d'); g.clearRect(0, 0, w, h);
     if (!peaks.length) return;
-    g.fillStyle = '#34d399';
+    g.fillStyle = '#46d6a3';
     const a = (c.in / c.srcDur) * peaks.length, z = (c.out / c.srcDur) * peaks.length;
     for (let x = 0; x < w; x++) {
       const i = Math.floor(a + (x / w) * (z - a)); const p = Math.min(1, (peaks[i] || 0) * c.volume * 1.4), bh = Math.max(1, p * h);
@@ -386,6 +525,7 @@
       }
       d.dataset.src = clip.src;
       d.classList.toggle('sel', !!ui.sel && ui.sel.id === clip.id);
+      d.classList.toggle('multi-sel', !!(ui.selIds && ui.selIds.has(clip.id)));
       Object.assign(d.style, { left: `${tToX(start)}px`, width: `${Math.max(4, tToX(end - start))}px` });
       d.querySelector('.lbl').textContent = `${clip.label} · ${(end - start).toFixed(2)}s`;
       d.querySelector('.spd').textContent = clip.speed !== 1 ? `${clip.speed}×` : '';
@@ -400,7 +540,9 @@
     // ----- V2 overlays
     root.v2.innerHTML = '';
     tl.overlays.forEach((o) => {
-      const d = el('div', 'nle-clip ovl' + (ui.sel && ui.sel.id === o.id ? ' sel' : ''), `<div class="lbl">${o.label}</div><div class="nle-handle l" data-edge="l"></div><div class="nle-handle r" data-edge="r"></div>`);
+      const isSel = ui.sel && ui.sel.id === o.id;
+      const isMulti = ui.selIds && ui.selIds.has(o.id);
+      const d = el('div', 'nle-clip ovl' + (isSel ? ' sel' : '') + (isMulti ? ' multi-sel' : ''), `<div class="lbl">${o.label}</div><div class="nle-handle l" data-edge="l"></div><div class="nle-handle r" data-edge="r"></div>`);
       Object.assign(d.style, { left: `${tToX(o.start)}px`, width: `${Math.max(6, tToX(o.dur))}px`, backgroundImage: `url("${mediaUrl({ src: o.src, kind: 'image' })}")` });
       d.dataset.id = o.id; root.v2.appendChild(d);
     });
@@ -410,6 +552,11 @@
     root.tl.classList.toggle('blade', ui.tool === 'blade');
     root.toolSel.classList.toggle('on', ui.tool === 'select'); root.toolBlade.classList.toggle('on', ui.tool === 'blade');
     root.snapBtn.classList.toggle('on', ui.snap); root.loopBtn.classList.toggle('on', ui.loop);
+    const canMerge = (ui.selIds && ui.selIds.size >= 2) || (tl.inPoint != null && tl.outPoint != null && tl.outPoint > tl.inPoint);
+    if (root.mergeBtn) {
+      root.mergeBtn.classList.toggle('can-merge', canMerge);
+      root.mergeBtn.title = canMerge ? 'Merge selected frames / clips (Ctrl+M)' : 'Select 2+ adjacent clips or mark In/Out range to merge';
+    }
     emit('render');
   }
 
@@ -418,6 +565,7 @@
     if (!c && !o) { i.innerHTML = `<span>Select a clip · <b>${tl.clips.length}</b> clips · ${M.toTimecode(total(), fps())} · ${fps()} fps</span>`; return; }
     if (o) { i.innerHTML = `<span>Edited-frame overlay <b>${o.label}</b> · start ${M.toTimecode(o.start, fps())} · ${o.dur.toFixed(2)} s</span><button class="nle-btn" id="inspDel">🗑 Remove overlay</button>`; $('#inspDel', i).onclick = () => edit(() => { M.removeOverlay(tl, o.id); ui.sel = null; }); return; }
     const dur = M.clipDur(c);
+    const pText = c.prompt ? c.prompt.replace(/</g, '&lt;').replace(/>/g, '&gt;') : 'No prompt recorded';
     i.innerHTML = `<span>Inspector: <b>${c.label}</b> · ${dur.toFixed(2)}s · src ${M.toTimecode(c.in, fps()).slice(3)}–${M.toTimecode(c.out, fps()).slice(3)}</span>
       <label>Speed <input type="number" id="inspSpeed" min="0.25" max="4" step="0.05" value="${c.speed}">×</label>
       <label>Volume <input type="range" id="inspVol" min="0" max="2" step="0.05" value="${c.volume}"> <span id="inspVolL">${Math.round(c.volume * 100)}%</span></label>
@@ -425,7 +573,8 @@
         <select id="inspTrans" ${tl.clips[0] === c ? 'disabled' : ''}><option value="cut">Cut</option><option value="dissolve">Cross dissolve</option><option value="fadeblack">Dip to black</option></select>
         <input type="number" id="inspTD" min="0.1" max="3" step="0.1" value="${c.transDur || M.DEFAULT_TRANS}" ${c.transition && c.transition !== 'cut' ? '' : 'disabled'}> s</label>
       <span class="grow" style="flex:1"></span>
-      <button class="nle-btn" id="inspRegen">🔄 Regenerate shot</button>`;
+      <button class="nle-btn" id="inspRegen">🔄 Regenerate shot</button>
+      <div style="flex-basis:100%;margin-top:4px;padding:4px 8px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:4px;font-size:0.75rem;color:#d5dcf5;line-height:1.4;max-height:48px;overflow-y:auto;white-space:pre-wrap;"><b style="color:#7aa2ff;">Clip Prompt:</b> ${pText}</div>`;
     $('#inspSpeed', i).onchange = (e) => edit(() => M.setSpeed(tl, c.id, e.target.value));
     $('#inspTrans', i).value = c.transition || 'cut';
     $('#inspTrans', i).onchange = (e) => edit(() => M.setTransition(tl, c.id, e.target.value, c.transDur));
@@ -438,7 +587,22 @@
   }
 
   // ---------- selection / zoom ----------
-  function select(s) { ui.sel = s; renderAll(); if (s && s.type === 'clip') { const l = M.layout(tl).find((x) => x.clip.id === s.id); if (l && (ui.t < l.start || ui.t > l.end)) seek(l.start); } }
+  function select(s, keepMulti) {
+    ui.sel = s;
+    if (!keepMulti && ui.selIds) {
+      ui.selIds.clear();
+      if (s) ui.selIds.add(s.id);
+    }
+    renderAll();
+    if (s && s.type === 'clip') {
+      const l = M.layout(tl).find((x) => x.clip.id === s.id);
+      if (l && (ui.t < l.start || ui.t > l.end)) seek(l.start);
+    }
+    emit('select', s);
+    if (window.NLEFrameEdit && typeof window.NLEFrameEdit.syncClipPrompt === 'function') {
+      window.NLEFrameEdit.syncClipPrompt(true);
+    }
+  }
   function setZoom(pps, anchorX) {
     const sc = root.scroll, ax = anchorX == null ? sc.clientWidth / 2 : anchorX;
     const tAnchor = xToT(sc.scrollLeft + ax);
@@ -469,12 +633,58 @@
 
     // V1 clips: select / reorder / trim / blade
     root.v1.addEventListener('pointerdown', (e) => {
-      const node = e.target.closest('.nle-clip'); if (!node) { select(null); return; }
-      const id = node.dataset.id, clip = M.byId(tl, id); if (!clip) return;
-      if (ui.tool === 'blade') { const t = M.frame(timeAtEvent(e), fps()); edit(() => { M.splitAt(tl, t); }); return; }
+      const node = e.target.closest('.nle-clip');
+      if (!node) {
+        if (!e.ctrlKey && !e.metaKey && !e.shiftKey) select(null);
+        return;
+      }
+      const id = node.dataset.id, clip = M.byId(tl, id);
+      if (!clip) return;
+      if (ui.tool === 'blade') {
+        const t = M.frame(timeAtEvent(e), fps());
+        edit(() => { M.splitAt(tl, t); });
+        return;
+      }
       const edge = e.target.dataset.edge;
-      e.preventDefault(); ui.sel = { type: 'clip', id };
-      if (edge) return startTrim(e, clip, edge);
+      if (edge) {
+        e.preventDefault();
+        select({ type: 'clip', id });
+        return startTrim(e, clip, edge);
+      }
+
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        if (ui.selIds.has(id)) {
+          ui.selIds.delete(id);
+          const next = ui.selIds.values().next().value;
+          ui.sel = next ? { type: 'clip', id: next } : null;
+        } else {
+          ui.selIds.add(id);
+          ui.sel = { type: 'clip', id };
+        }
+        renderAll();
+        return;
+      }
+
+      if (e.shiftKey && ui.sel && ui.sel.type === 'clip') {
+        e.preventDefault();
+        const prevIdx = tl.clips.findIndex((c) => c.id === ui.sel.id);
+        const curIdx = tl.clips.findIndex((c) => c.id === id);
+        if (prevIdx !== -1 && curIdx !== -1) {
+          const [start, end] = prevIdx < curIdx ? [prevIdx, curIdx] : [curIdx, prevIdx];
+          for (let i = start; i <= end; i++) {
+            ui.selIds.add(tl.clips[i].id);
+          }
+          ui.sel = { type: 'clip', id };
+          renderAll();
+          return;
+        }
+      }
+
+      e.preventDefault();
+      ui.selIds.clear();
+      ui.selIds.add(id);
+      ui.sel = { type: 'clip', id };
       startReorder(e, node, clip);
     });
     root.v1.addEventListener('pointermove', (e) => { if (ui.tool !== 'blade') { root.blade.style.display = 'none'; return; } root.blade.style.display = 'block'; root.blade.style.left = `${tToX(timeAtEvent(e))}px`; });
@@ -482,17 +692,128 @@
 
     // V2 overlays: move / resize
     root.v2.addEventListener('pointerdown', (e) => {
-      const node = e.target.closest('.nle-clip'); if (!node) { select(null); return; }
-      const o = tl.overlays.find((x) => x.id === node.dataset.id); if (!o) return;
-      e.preventDefault(); ui.sel = { type: 'ovl', id: o.id }; renderAll(); hist.checkpoint();
-      const edge = e.target.dataset.edge, t0 = timeAtEvent(e), s0 = o.start, d0 = o.dur;
+      const node = e.target.closest('.nle-clip');
+      if (!node) {
+        if (!e.ctrlKey && !e.metaKey && !e.shiftKey) select(null);
+        return;
+      }
+      const o = tl.overlays.find((x) => x.id === node.dataset.id);
+      if (!o) return;
+
+      const edge = e.target.dataset.edge;
+      if (edge) {
+        e.preventDefault();
+        ui.sel = { type: 'ovl', id: o.id };
+        renderAll();
+        hist.checkpoint();
+        const t0 = timeAtEvent(e), s0 = o.start, d0 = o.dur;
+        drag(e, (ev) => {
+          const dt = timeAtEvent(ev) - t0;
+          if (edge === 'r') M.updateOverlay(tl, o.id, { dur: snapT(s0 + d0 + dt, [s0 + d0]) - s0 });
+          else if (edge === 'l') { const ns = clamp(snapT(s0 + dt, [s0]), 0, s0 + d0 - M.minDur(tl)); M.updateOverlay(tl, o.id, { start: ns, dur: s0 + d0 - ns }); }
+          renderAll(); updateOverlayImg(ui.t);
+        }, () => { persist(); });
+        return;
+      }
+
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        if (ui.selIds.has(o.id)) {
+          ui.selIds.delete(o.id);
+          const next = ui.selIds.values().next().value;
+          ui.sel = next ? { type: 'ovl', id: next } : null;
+        } else {
+          ui.selIds.add(o.id);
+          ui.sel = { type: 'ovl', id: o.id };
+        }
+        renderAll();
+        return;
+      }
+
+      if (e.shiftKey && ui.sel && ui.sel.type === 'ovl') {
+        e.preventDefault();
+        const prevIdx = tl.overlays.findIndex((x) => x.id === ui.sel.id);
+        const curIdx = tl.overlays.findIndex((x) => x.id === o.id);
+        if (prevIdx !== -1 && curIdx !== -1) {
+          const [start, end] = prevIdx < curIdx ? [prevIdx, curIdx] : [curIdx, prevIdx];
+          for (let i = start; i <= end; i++) {
+            ui.selIds.add(tl.overlays[i].id);
+          }
+          ui.sel = { type: 'ovl', id: o.id };
+          renderAll();
+          return;
+        }
+      }
+
+      e.preventDefault();
+      ui.selIds.clear();
+      ui.selIds.add(o.id);
+      ui.sel = { type: 'ovl', id: o.id };
+      renderAll();
+      hist.checkpoint();
+      const t0 = timeAtEvent(e), s0 = o.start;
       drag(e, (ev) => {
         const dt = timeAtEvent(ev) - t0;
-        if (edge === 'r') M.updateOverlay(tl, o.id, { dur: snapT(s0 + d0 + dt, [s0 + d0]) - s0 });
-        else if (edge === 'l') { const ns = clamp(snapT(s0 + dt, [s0]), 0, s0 + d0 - M.minDur(tl)); M.updateOverlay(tl, o.id, { start: ns, dur: s0 + d0 - ns }); }
-        else M.updateOverlay(tl, o.id, { start: snapT(s0 + dt, [s0]) });
+        M.updateOverlay(tl, o.id, { start: snapT(s0 + dt, [s0]) });
         renderAll(); updateOverlayImg(ui.t);
       }, () => { persist(); });
+    });
+
+    // Marquee drag-to-select on timeline
+    let marqueeEl = null;
+    root.content.addEventListener('pointerdown', (e) => {
+      if (ui.tool !== 'select') return;
+      if (e.target.closest('.nle-clip') || e.target.closest('.nle-ruler') || e.target.closest('.nle-play')) return;
+      if (e.button !== 0) return;
+      
+      const startX = e.clientX - root.content.getBoundingClientRect().left;
+      if (!e.ctrlKey && !e.metaKey && !e.shiftKey) {
+        ui.selIds.clear();
+        ui.sel = null;
+        renderAll();
+      }
+      
+      if (!marqueeEl) {
+        marqueeEl = document.createElement('div');
+        marqueeEl.className = 'nle-marquee';
+        root.content.appendChild(marqueeEl);
+      }
+      marqueeEl.style.display = 'block';
+      marqueeEl.style.left = `${startX}px`;
+      marqueeEl.style.width = '0px';
+
+      drag(e, (ev) => {
+        const curX = ev.clientX - root.content.getBoundingClientRect().left;
+        const left = Math.min(startX, curX);
+        const width = Math.abs(curX - startX);
+        marqueeEl.style.left = `${left}px`;
+        marqueeEl.style.width = `${width}px`;
+        
+        const mStartT = xToT(left);
+        const mEndT = xToT(left + width);
+
+        // Check intersection with V1 clips
+        const layouts = M.layout(tl);
+        layouts.forEach((l) => {
+          if (l.start < mEndT && l.end > mStartT) {
+            ui.selIds.add(l.clip.id);
+            if (!ui.sel) ui.sel = { type: 'clip', id: l.clip.id };
+          }
+        });
+
+        // Check intersection with V2 overlays
+        tl.overlays.forEach((o) => {
+          if (o.start < mEndT && (o.start + o.dur) > mStartT) {
+            ui.selIds.add(o.id);
+            if (!ui.sel) ui.sel = { type: 'ovl', id: o.id };
+          }
+        });
+        renderAll();
+      }, () => {
+        if (marqueeEl) {
+          marqueeEl.style.display = 'none';
+        }
+      });
     });
 
     // wheel: ctrl/alt = zoom at pointer, otherwise horizontal scroll
@@ -500,6 +821,53 @@
       if (e.ctrlKey || e.altKey || e.metaKey) { e.preventDefault(); setZoom(ui.pps * (e.deltaY < 0 ? 1.18 : 1 / 1.18), e.clientX - root.scroll.getBoundingClientRect().left); }
       else if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) { e.preventDefault(); root.scroll.scrollLeft += e.deltaY; }
     }, { passive: false });
+
+    // Drag-and-drop external clips (from Media Pool chunks or Prompts cards) onto timeline
+    const onTimelineDragOver = (e) => {
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+      const t = Math.max(0, timeAtEvent(e));
+      const others = M.layout(tl);
+      const targetIdx = others.filter((l) => (l.start + l.end) / 2 < t).length;
+      const edgeT = targetIdx === 0 ? 0 : (others[targetIdx - 1] ? others[targetIdx - 1].end : 0);
+      root.drop.style.display = 'block';
+      root.drop.style.left = `${tToX(edgeT) - 1}px`;
+    };
+
+    const onTimelineDrop = (e) => {
+      e.preventDefault();
+      root.drop.style.display = 'none';
+      let payload = null;
+      try {
+        const raw = e.dataTransfer.getData('application/json') || e.dataTransfer.getData('text/plain');
+        if (raw) payload = JSON.parse(raw);
+      } catch (err) {
+        console.warn('Failed to parse dropped clip data:', err);
+      }
+      if (!payload || !payload.src) return;
+
+      const t = Math.max(0, timeAtEvent(e));
+      const others = M.layout(tl);
+      const targetIdx = others.filter((l) => (l.start + l.end) / 2 < t).length;
+
+      addShotToTimeline(payload, targetIdx);
+    };
+
+    root.content.addEventListener('dragover', onTimelineDragOver);
+    root.content.addEventListener('dragleave', (e) => {
+      if (!root.content.contains(e.relatedTarget)) {
+        root.drop.style.display = 'none';
+      }
+    });
+    root.content.addEventListener('drop', onTimelineDrop);
+
+    root.scroll.addEventListener('dragover', onTimelineDragOver);
+    root.scroll.addEventListener('dragleave', (e) => {
+      if (!root.scroll.contains(e.relatedTarget)) {
+        root.drop.style.display = 'none';
+      }
+    });
+    root.scroll.addEventListener('drop', onTimelineDrop);
   }
 
   function startTrim(e, clip, edge) {
@@ -528,23 +896,130 @@
     }, () => {
       root.drop.style.display = 'none';
       if (moved) { M.moveClip(tl, clip.id, targetIdx); persist(); renderAll(); refreshAt(); }
-      else { renderAll(); select({ type: 'clip', id: clip.id }); }
+      else { renderAll(); select({ type: 'clip', id: clip.id }, true); }
     });
   }
 
   // ---------- actions ----------
   function splitAtPlayhead() { const t = M.frame(ui.t, fps()); const clip = (M.locate(tl, t) || {}).clip; if (!clip) return; edit(() => M.splitAt(tl, t)); }
   function deleteSelection() {
+    if (ui.selIds && ui.selIds.size > 1) {
+      edit(() => {
+        const delClips = tl.clips.filter((c) => ui.selIds.has(c.id));
+        const delOvls = tl.overlays.filter((o) => ui.selIds.has(o.id));
+        if (delClips.length >= tl.clips.length) {
+          status('At least one clip must remain on V1.');
+          return;
+        }
+        delClips.forEach((c) => M.removeClip(tl, c.id));
+        delOvls.forEach((o) => M.removeOverlay(tl, o.id));
+        ui.selIds.clear();
+        ui.sel = null;
+      });
+      status('Deleted selected items');
+      return;
+    }
     const c = selClip(), o = selOvl();
-    if (c) { if (tl.clips.length <= 1) return status('At least one clip must remain on V1.'); edit(() => { M.removeClip(tl, c.id); ui.sel = null; }); }
-    else if (o) edit(() => { M.removeOverlay(tl, o.id); ui.sel = null; });
+    if (c) {
+      if (tl.clips.length <= 1) return status('At least one clip must remain on V1.');
+      const shotIndex = c.shot != null ? c.shot : (typeof c.label === 'string' && c.label.startsWith('Shot ') ? parseInt(c.label.replace('Shot ', ''), 10) - 1 : null);
+      edit(() => { M.removeClip(tl, c.id); ui.sel = null; if (ui.selIds) ui.selIds.delete(c.id); });
+      if (ui.jobId && shotIndex != null && !isNaN(shotIndex) && shotIndex >= 0) {
+        fetch(apiUrl(`/delete_shot/${ui.jobId}/${shotIndex}`), { method: 'POST' }).catch(() => {});
+      }
+    } else if (o) {
+      edit(() => { M.removeOverlay(tl, o.id); ui.sel = null; if (ui.selIds) ui.selIds.delete(o.id); });
+    }
   }
+
   function toggleDissolve() {
     const c = selClip();
     if (!c || tl.clips[0] === c) return status('Select a clip after the first one to add a dissolve at its start.');
     edit(() => M.setTransition(tl, c.id, c.transition === 'dissolve' ? 'cut' : 'dissolve', c.transDur || M.DEFAULT_TRANS));
   }
-  const duplicateSel = () => { const c = selClip(); if (c) edit(() => { ui.sel = { type: 'clip', id: M.duplicateClip(tl, c.id).id }; }); };
+
+  function duplicateSel() {
+    if (ui.selIds && ui.selIds.size > 1) {
+      edit(() => {
+        const toDup = tl.clips.filter((c) => ui.selIds.has(c.id));
+        ui.selIds.clear();
+        toDup.forEach((c) => {
+          const dup = M.duplicateClip(tl, c.id);
+          ui.selIds.add(dup.id);
+          ui.sel = { type: 'clip', id: dup.id };
+        });
+      });
+      status('Duplicated selected clips');
+      return;
+    }
+    const c = selClip();
+    if (c) edit(() => {
+      const dup = M.duplicateClip(tl, c.id);
+      ui.sel = { type: 'clip', id: dup.id };
+      if (ui.selIds) { ui.selIds.clear(); ui.selIds.add(dup.id); }
+    });
+  }
+
+  function mergeSelectedFrames() {
+    // 1. Multiple V1 clips selected
+    const selectedV1 = tl.clips.filter((c) => ui.selIds && ui.selIds.has(c.id));
+    if (selectedV1.length >= 2) {
+      const firstIdx = tl.clips.indexOf(selectedV1[0]);
+      const lastIdx = tl.clips.indexOf(selectedV1[selectedV1.length - 1]);
+      if (lastIdx - firstIdx + 1 === selectedV1.length) {
+        edit(() => {
+          const merged = M.mergeClips(tl, selectedV1.map((c) => c.id));
+          if (merged) {
+            ui.selIds.clear();
+            ui.selIds.add(merged.id);
+            ui.sel = { type: 'clip', id: merged.id };
+            status(`Merged ${selectedV1.length} clips into "${merged.label}"`);
+          }
+        });
+        return;
+      } else {
+        status('Selected clips must be adjacent to merge.');
+        return;
+      }
+    }
+
+    // 2. Multiple V2 overlays selected
+    const selectedV2 = tl.overlays.filter((o) => ui.selIds && ui.selIds.has(o.id));
+    if (selectedV2.length >= 2) {
+      edit(() => {
+        const merged = M.mergeOverlays(tl, selectedV2.map((o) => o.id));
+        if (merged) {
+          ui.selIds.clear();
+          ui.selIds.add(merged.id);
+          ui.sel = { type: 'ovl', id: merged.id };
+          status(`Merged ${selectedV2.length} frame overlays`);
+        }
+      });
+      return;
+    }
+
+    // 3. Fallback: In/Out range marked across clips
+    if (tl.inPoint != null && tl.outPoint != null && tl.outPoint > tl.inPoint) {
+      const layouts = M.layout(tl);
+      const clipsInRange = layouts
+        .filter((l) => l.start < tl.outPoint && l.end > tl.inPoint)
+        .map((l) => l.clip);
+      if (clipsInRange.length >= 2) {
+        edit(() => {
+          const merged = M.mergeClips(tl, clipsInRange.map((c) => c.id));
+          if (merged) {
+            ui.selIds.clear();
+            ui.selIds.add(merged.id);
+            ui.sel = { type: 'clip', id: merged.id };
+            status(`Merged ${clipsInRange.length} clips within In/Out range`);
+          }
+        });
+        return;
+      }
+    }
+
+    status('Select 2 or more adjacent clips / frame overlays, or mark an In/Out range [I/O] to merge.');
+  }
   const setTool = (t) => { ui.tool = t; renderAll(); };
   function markIn() { edit(() => { tl.inPoint = M.frame(ui.t, fps()); if (tl.outPoint != null && tl.outPoint <= tl.inPoint) tl.outPoint = null; }); syncLoopRange(); }
   function markOut() { edit(() => { tl.outPoint = M.frame(ui.t, fps()); if (tl.inPoint != null && tl.inPoint >= tl.outPoint) tl.inPoint = null; }); syncLoopRange(); }
@@ -565,9 +1040,15 @@
 
   async function exportCut() {
     if (!tl.clips.length) return;
-    status('Baking master cut with FFmpeg…');
+    const graded = window.NLEColor ? window.NLEColor.gradedCount() : 0;
+    const fxCount = window.NLEFusion ? tl.clips.filter((c) => window.NLEFusion.hasFusion(c)).length : 0;
+    let exportMsg = 'Baking master cut with FFmpeg…';
+    if (graded && fxCount) exportMsg = `Baking master cut with FFmpeg (${graded} graded, ${fxCount} Fusion FX)…`;
+    else if (graded) exportMsg = `Baking master cut with FFmpeg (${graded} graded clip${graded === 1 ? '' : 's'})…`;
+    else if (fxCount) exportMsg = `Baking master cut with FFmpeg (${fxCount} Fusion FX clip${fxCount === 1 ? '' : 's'})…`;
+    status(exportMsg);
     try {
-      const res = await fetch(`${cfg.api}/timeline/export`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(M.toEdl(tl)) });
+      const res = await fetch(`${cfg.api}/timeline/export`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(M.toEdl(tl, window.NLEColor && window.NLEColor.lutFor)) });
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.detail || data.error || res.status);
       const url = q(data.master_video.replace(/^\/outputs\//, `${cfg.out}/`));
@@ -586,7 +1067,7 @@
       ' ': () => togglePlay(), k: () => pause(), j: () => shuttle(-1), l: () => (ctrl ? (ui.loop = !ui.loop, renderAll()) : shuttle(1)),
       ArrowLeft: () => (e.shiftKey ? seek(ui.t - 1) : step(-1)), ArrowRight: () => (e.shiftKey ? seek(ui.t + 1) : step(1)),
       ArrowUp: () => seek(M.neighbour(tl, ui.t, -1)), ArrowDown: () => seek(M.neighbour(tl, ui.t, 1)),
-      Home: () => seek(0), End: () => seek(total()), i: markIn, o: markOut, m: addMarker, v: () => setTool('select'), b: () => (ctrl ? splitAtPlayhead() : setTool('blade')),
+      Home: () => seek(0), End: () => seek(total()), i: markIn, o: markOut, m: () => (ctrl ? mergeSelectedFrames() : addMarker()), v: () => setTool('select'), b: () => (ctrl ? splitAtPlayhead() : setTool('blade')),
       s: splitAtPlayhead, n: () => { ui.snap = !ui.snap; renderAll(); }, Delete: deleteSelection, Backspace: deleteSelection,
       d: () => ctrl && duplicateSel(), t: () => ctrl && toggleDissolve(), z: () => (ctrl ? (e.shiftKey ? redo() : undo()) : e.shiftKey && zoomFit()), y: () => ctrl && redo(),
       '=': () => setZoom(ui.pps * 1.4), '+': () => setZoom(ui.pps * 1.4), '-': () => setZoom(ui.pps / 1.4), x: () => e.altKey && clearRange(),
@@ -637,6 +1118,7 @@
         <button class="nle-btn" data-t="blade" title="Blade (B) · split at playhead: S or Ctrl+B">✂ Blade</button>
         <button class="nle-btn" data-t="split" title="Split at playhead (S)">⎍ Split</button>
         <button class="nle-btn" data-t="dup" title="Duplicate (Ctrl+D)">⧉ Duplicate</button>
+        <button class="nle-btn" data-t="merge" title="Merge selected frames / clips (Ctrl+M)">🔗 Merge Frames</button>
         <button class="nle-btn" data-t="dissolve" title="Add / remove a cross dissolve at the start of the selected clip (Ctrl+T)">⧖ Dissolve</button>
         <button class="nle-btn" data-t="del" title="Ripple delete (Del)">🗑 Delete</button>
         <span class="nle-sep"></span>
@@ -660,7 +1142,7 @@
           <div class="nle-head" style="height:26px"></div>
           <div class="nle-head" style="height:${H.v2}px"><i class="strip" style="background:#a855f7"></i><b>V2</b> Frames</div>
           <div class="nle-head" style="height:${H.v1}px"><i class="strip" style="background:#3b82f6"></i><b>V1</b> Video</div>
-          <div class="nle-head" style="height:${H.a1}px"><i class="strip" style="background:#10b981"></i><b>A1</b> Voice<span class="tb"><button data-t="amute" title="Mute audio">M</button></span></div>
+          <div class="nle-head" style="height:${H.a1}px"><i class="strip" style="background:#46d6a3"></i><b>A1</b> Voice<span class="tb"><button data-t="amute" title="Mute audio">M</button></span></div>
         </div>
         <div class="nle-scroll"><div class="nle-content">
           <div class="nle-ruler"></div>
@@ -680,6 +1162,7 @@
       v2: $('[data-lane=v2]', tlMount), v1: $('[data-lane=v1]', tlMount), a1: $('[data-lane=a1]', tlMount), inout: $('.nle-inout', tlMount),
       drop: $('.nle-drop', tlMount), blade: $('.nle-blade', tlMount), zoom: $('.nle-zoom', tlMount),
       undo: $('[data-t=undo]', tlMount), redo: $('[data-t=redo]', tlMount), toolSel: $('[data-t=select]', tlMount), toolBlade: $('[data-t=blade]', tlMount),
+      mergeBtn: $('[data-t=merge]', tlMount),
       snapBtn: $('[data-t=snap]', tlMount), loopBtn: $('[data-a=loop]', body) };
     decks = [...scr.querySelectorAll('video')].map((v) => ({ el: v, clipId: null, url: null, src: null }));
     decks[0].el.classList.add('on');
@@ -688,7 +1171,7 @@
       loop: () => { ui.loop = !ui.loop; renderAll(); },
       mute: (b) => { ui.muted = !ui.muted; if (audio) audio.master.gain.value = ui.muted ? 0 : 1; b.textContent = ui.muted ? '🔇' : '🔊'; $('[data-t=amute]', tlMount).classList.toggle('on', ui.muted); } };
     body.addEventListener('click', (e) => { const b = e.target.closest('[data-a]'); if (b && act[b.dataset.a]) act[b.dataset.a](b); });
-    const tools = { select: () => setTool('select'), blade: () => setTool('blade'), split: splitAtPlayhead, dup: duplicateSel, dissolve: toggleDissolve, del: deleteSelection, undo, redo, in: markIn, out: markOut, clr: clearRange, mk: addMarker,
+    const tools = { select: () => setTool('select'), blade: () => setTool('blade'), split: splitAtPlayhead, dup: duplicateSel, merge: mergeSelectedFrames, dissolve: toggleDissolve, del: deleteSelection, undo, redo, in: markIn, out: markOut, clr: clearRange, mk: addMarker,
       snap: () => { ui.snap = !ui.snap; renderAll(); }, zin: () => setZoom(ui.pps * 1.4), zout: () => setZoom(ui.pps / 1.4), fit: () => zoomFit(), frames: () => setZoom(fps() * 40),
       export: exportCut, amute: () => act.mute($('[data-a=mute]', body)) };
     tlMount.addEventListener('click', (e) => { const b = e.target.closest('[data-t]'); if (b && tools[b.dataset.t]) tools[b.dataset.t](); });
@@ -701,7 +1184,9 @@
   }
 
   const api = {
-    mount, loadJob, refreshSource, seek, play, pause, step, captureFrame, select, edit, status, exportCut,
+    mount, loadJob, refreshSource, addShotToTimeline, seek, play, pause, step, captureFrame, select, edit, status, exportCut,
+    markIn, markOut, clearRange, total, fps, mergeSelectedFrames, persist, deleteSelection, checkpoint: () => hist.checkpoint(), decks: () => decks,
+    selectedClips: () => tl.clips.filter((c) => ui.selIds && ui.selIds.has(c.id)),
     on: (n, f) => (listeners[n] = listeners[n] || []).push(f),
     get tl() { return tl; }, get ui() { return ui; }, get root() { return root; }, cfg, mediaUrl, apiUrl, q, info, selectedClip: selClip,
     clipAtPlayhead: () => M.locate(tl, ui.t), poolItems: () => tl.clips.map((c, i) => ({ clip: c, index: i })), renderAll, refreshAt,

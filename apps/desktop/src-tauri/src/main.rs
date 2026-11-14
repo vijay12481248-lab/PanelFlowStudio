@@ -93,6 +93,65 @@ impl EngineManager {
             }
         }
 
+        // Prioritize local virtual environments in the workspace / repository
+        let mut venv_dirs = vec![
+            PathBuf::from("."),
+            PathBuf::from(".."),
+            PathBuf::from("../.."),
+            PathBuf::from("../../.."),
+        ];
+        if let Some(script) = self.find_script() {
+            if let Some(parent) = script.parent() {
+                venv_dirs.push(parent.to_path_buf());
+            }
+        }
+        if let Ok(exe) = std::env::current_exe() {
+            let mut curr = exe.parent();
+            while let Some(parent) = curr {
+                venv_dirs.push(parent.to_path_buf());
+                curr = parent.parent();
+            }
+        }
+
+        for base in &venv_dirs {
+            for venv_name in &[".venv", "venv", "env"] {
+                #[cfg(windows)]
+                let py_exe = base.join(venv_name).join("Scripts").join("python.exe");
+                #[cfg(not(windows))]
+                let py_exe = base.join(venv_name).join("bin").join("python");
+
+                if py_exe.exists() {
+                    if let Ok(canon) = py_exe.canonicalize() {
+                        return (canon.to_string_lossy().to_string(), vec![]);
+                    }
+                    return (py_exe.to_string_lossy().to_string(), vec![]);
+                }
+            }
+        }
+
+        // Standard Windows user/system paths
+        #[cfg(windows)]
+        {
+            if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
+                for ver in &["Python314", "Python313", "Python312", "Python311", "Python310"] {
+                    let candidate = PathBuf::from(&local_app_data)
+                        .join("Programs")
+                        .join("Python")
+                        .join(ver)
+                        .join("python.exe");
+                    if candidate.exists() {
+                        return (candidate.to_string_lossy().to_string(), vec![]);
+                    }
+                }
+            }
+            for ver in &["Python314", "Python313", "Python312", "Python311", "Python310"] {
+                let candidate = PathBuf::from(r"C:\Program Files").join(ver).join("python.exe");
+                if candidate.exists() {
+                    return (candidate.to_string_lossy().to_string(), vec![]);
+                }
+            }
+        }
+
         // Test if "python" works
         let mut test_py = Command::new("python");
         test_py.arg("--version");
@@ -118,29 +177,6 @@ impl EngineManager {
         if let Ok(out) = test_launcher.output() {
             if out.status.success() {
                 return ("py".to_string(), vec!["-3".to_string()]);
-            }
-        }
-
-        // Standard Windows user/system paths
-        #[cfg(windows)]
-        {
-            if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
-                for ver in &["Python312", "Python311", "Python310"] {
-                    let candidate = PathBuf::from(&local_app_data)
-                        .join("Programs")
-                        .join("Python")
-                        .join(ver)
-                        .join("python.exe");
-                    if candidate.exists() {
-                        return (candidate.to_string_lossy().to_string(), vec![]);
-                    }
-                }
-            }
-            for ver in &["Python312", "Python311", "Python310"] {
-                let candidate = PathBuf::from(r"C:\Program Files").join(ver).join("python.exe");
-                if candidate.exists() {
-                    return (candidate.to_string_lossy().to_string(), vec![]);
-                }
             }
         }
 

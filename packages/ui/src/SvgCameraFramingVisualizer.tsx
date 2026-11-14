@@ -106,7 +106,7 @@ export const SvgCameraFramingVisualizer: React.FC<SvgCameraFramingVisualizerProp
   const markerId = `cam-arrow-${uniqueId}`;
 
   return (
-    <div className={`relative w-44 h-32 rounded-lg overflow-hidden bg-zinc-950 border border-zinc-800 shadow-md group flex-shrink-0 select-none ${className}`}>
+    <div className={`relative w-44 h-32 rounded-lg overflow-hidden bg-ink border border-edge shadow-md group flex-shrink-0 select-none ${className}`}>
       {/* Background Panel Image */}
       {imageUrl ? (
         <img
@@ -118,7 +118,7 @@ export const SvgCameraFramingVisualizer: React.FC<SvgCameraFramingVisualizerProp
           }}
         />
       ) : (
-        <div className="w-full h-full flex items-center justify-center bg-zinc-900 text-zinc-600 text-[10px] font-mono">
+        <div className="w-full h-full flex items-center justify-center bg-navy text-fg-faint text-[10px] font-mono">
           [Panel Preview]
         </div>
       )}
@@ -139,7 +139,7 @@ export const SvgCameraFramingVisualizer: React.FC<SvgCameraFramingVisualizerProp
             markerHeight="4"
             orient="auto-start-reverse"
           >
-            <path d="M 0 1 L 8 5 L 0 9 z" fill="#38bdf8" />
+            <path d="M 0 1 L 8 5 L 0 9 z" fill="#7aa2ff" />
           </marker>
         </defs>
 
@@ -150,7 +150,7 @@ export const SvgCameraFramingVisualizer: React.FC<SvgCameraFramingVisualizerProp
             y1={start.cy * 100}
             x2={end.cx * 100}
             y2={end.cy * 100}
-            stroke="#38bdf8"
+            stroke="#7aa2ff"
             strokeWidth="1.5"
             strokeDasharray="2 1.5"
             markerEnd={`url(#${markerId})`}
@@ -167,10 +167,10 @@ export const SvgCameraFramingVisualizer: React.FC<SvgCameraFramingVisualizerProp
               width={start.w * 100}
               height={start.h * 100}
               rx="1.5"
-              stroke="#06b6d4"
+              stroke="#7aa2ff"
               strokeWidth="1.2"
               strokeDasharray="3 1.5"
-              fill="rgba(6, 182, 212, 0.12)"
+              fill="rgba(122,162,255, 0.12)"
             />
             <rect
               x={start.x * 100}
@@ -178,12 +178,12 @@ export const SvgCameraFramingVisualizer: React.FC<SvgCameraFramingVisualizerProp
               width="14"
               height="5.5"
               rx="1"
-              fill="#06b6d4"
+              fill="#7aa2ff"
             />
             <text
               x={start.x * 100 + 7}
               y={Math.max(0, start.y * 100 - 2)}
-              fill="#082f49"
+              fill="#101a3d"
               fontSize="3.5"
               fontWeight="bold"
               textAnchor="middle"
@@ -203,9 +203,9 @@ export const SvgCameraFramingVisualizer: React.FC<SvgCameraFramingVisualizerProp
               width={end.w * 100}
               height={end.h * 100}
               rx="1.5"
-              stroke="#818cf8"
+              stroke="#7aa2ff"
               strokeWidth="1.4"
-              fill="rgba(129, 140, 248, 0.18)"
+              fill="rgba(122,162,255, 0.18)"
             />
             <rect
               x={end.x * 100 + end.w * 100 - 16}
@@ -213,7 +213,7 @@ export const SvgCameraFramingVisualizer: React.FC<SvgCameraFramingVisualizerProp
               width="16"
               height="5.5"
               rx="1"
-              fill="#6366f1"
+              fill="#3b6bf5"
             />
             <text
               x={end.x * 100 + end.w * 100 - 8}
@@ -238,18 +238,18 @@ export const SvgCameraFramingVisualizer: React.FC<SvgCameraFramingVisualizerProp
               width={currW * 100}
               height={currH * 100}
               rx="2"
-              stroke="#fbbf24"
+              stroke="#f0b35a"
               strokeWidth="2"
-              fill="rgba(251, 191, 36, 0.22)"
+              fill="rgba(240,179,90, 0.22)"
             />
-            <circle cx={currX * 100 + currW * 50} cy={currY * 100 + currH * 50} r="2" fill="#fbbf24" />
+            <circle cx={currX * 100 + currW * 50} cy={currY * 100 + currH * 50} r="2" fill="#f0b35a" />
           </g>
         )}
       </svg>
 
       {/* Floating Badges & Action Trigger */}
       <div className="absolute top-1.5 left-1.5 flex items-center gap-1">
-        <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-black/75 backdrop-blur-sm text-cyan-300 border border-cyan-800/60 shadow">
+        <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-black/75 backdrop-blur-sm text-info border border-info/60 shadow">
           {motionType}
         </span>
       </div>
@@ -261,7 +261,7 @@ export const SvgCameraFramingVisualizer: React.FC<SvgCameraFramingVisualizerProp
             e.stopPropagation();
             setIsPlaying(true);
           }}
-          className="absolute bottom-1.5 right-1.5 px-2 py-0.5 rounded bg-black/85 hover:bg-indigo-600 border border-zinc-700 hover:border-indigo-400 text-zinc-200 hover:text-white text-[10px] font-bold transition-all shadow-md flex items-center gap-1 opacity-80 group-hover:opacity-100"
+          className="absolute bottom-1.5 right-1.5 px-2 py-0.5 rounded bg-black/85 hover:bg-accent border border-edge hover:border-accent text-fg hover:text-white text-[10px] font-bold transition-all shadow-md flex items-center gap-1 opacity-80 group-hover:opacity-100"
           title="Simulate Camera Panning & Zoom Framing"
         >
           <span>{isPlaying ? "Seeking..." : "▶ Preview"}</span>

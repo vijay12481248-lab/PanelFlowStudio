@@ -437,9 +437,9 @@
     "id": "qwen_image_21",
     "purpose": "text_to_image",
     "filename": "qwen_image_21.api.json",
-    "sha256": "edeeec1eb7df0154004f441c83e1a0adcc33a05f540ccb2406ce9a1587b76193",
+    "sha256": "fe6ed091d252a15e98caa5f7035f6b78e1cbced8700300a06eb06a7bb7803a54",
     "requires_gpu": true,
-    "gpu_vram_mb": 12000,
+    "gpu_vram_mb": 10000,
     "model_files": [
       "qwen_image_2.1_turbo_int8_convrot.safetensors",
       "qwen3vl_8b_int8_convrot.safetensors",
@@ -457,7 +457,8 @@
       "SamplerCustomAdvanced",
       "VAEDecode",
       "SaveImage",
-      "EmptySD3LatentImage"
+      "EmptySD3LatentImage",
+      "LoadImage"
     ],
     "patch_slots": {
       "prompt": {
@@ -489,6 +490,26 @@
         "node_id": "11",
         "input": "filename_prefix",
         "class_type": "SaveImage"
+      },
+      "reference_image": {
+        "node_id": "4",
+        "input": "images.image_1",
+        "class_type": "TextEncodeQwenImage21"
+      },
+      "reference_image_b": {
+        "node_id": "4",
+        "input": "images.image_2",
+        "class_type": "TextEncodeQwenImage21"
+      },
+      "reference_image_c": {
+        "node_id": "4",
+        "input": "images.image_3",
+        "class_type": "TextEncodeQwenImage21"
+      },
+      "reference_image_d": {
+        "node_id": "4",
+        "input": "images.image_4",
+        "class_type": "TextEncodeQwenImage21"
       }
     },
     "dimension_policy": {
@@ -703,7 +724,7 @@
     "filename": "qwen_image_21_inpaint.api.json",
     "sha256": "554b2c0e16238318fa84ca386c9f9ba961ab60b05630f8ebd7234cbd256fb797",
     "requires_gpu": true,
-    "gpu_vram_mb": 12000,
+    "gpu_vram_mb": 10000,
     "model_files": [
       "qwen_image_2.1_turbo_int8_convrot.safetensors",
       "qwen3vl_8b_int8_convrot.safetensors",
@@ -1365,6 +1386,78 @@
     }
   },
   {
+    "id": "wan21_14b_i2v",
+    "purpose": "image_to_video",
+    "filename": "wan21_14b_i2v.api.json",
+    "sha256": "ed361731f3d21fc09d3ff481d08a3a5d737e2a6bd58f1f3feffc2dc5189fc1e6",
+    "requires_gpu": true,
+    "gpu_vram_mb": 14000,
+    "model_files": [
+      "wan2.1_i2v_480p_14B_fp8_scaled.safetensors",
+      "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+      "wan_2.1_vae.safetensors",
+      "CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors"
+    ],
+    "required_nodes": [
+      "CLIPLoader",
+      "CLIPTextEncode",
+      "CLIPVisionEncode",
+      "CLIPVisionLoader",
+      "CreateVideo",
+      "KSampler",
+      "LoadImage",
+      "ModelSamplingSD3",
+      "SaveVideo",
+      "UNETLoader",
+      "VAEDecode",
+      "VAELoader",
+      "WanImageToVideo"
+    ],
+    "patch_slots": {
+      "reference_image": {
+        "node_id": "6",
+        "input": "image",
+        "class_type": "LoadImage"
+      },
+      "prompt": {
+        "node_id": "8",
+        "input": "text",
+        "class_type": "CLIPTextEncode"
+      },
+      "negative_prompt": {
+        "node_id": "9",
+        "input": "text",
+        "class_type": "CLIPTextEncode"
+      },
+      "seed": {
+        "node_id": "11",
+        "input": "seed",
+        "class_type": "KSampler"
+      },
+      "filename_prefix": {
+        "node_id": "14",
+        "input": "filename_prefix",
+        "class_type": "SaveVideo"
+      },
+      "width": {
+        "node_id": "10",
+        "input": "width",
+        "class_type": "WanImageToVideo"
+      },
+      "height": {
+        "node_id": "10",
+        "input": "height",
+        "class_type": "WanImageToVideo"
+      }
+    },
+    "dimension_policy": {
+      "mode": "exact",
+      "min": 256,
+      "max": 2048,
+      "multiple_of": 16
+    }
+  },
+  {
     "id": "herrgott_h3_chain_start",
     "purpose": "image_to_video",
     "filename": "herrgott_h3_chain_start.api.json",
@@ -1598,6 +1691,82 @@
       "mode": "exact",
       "min": 256,
       "max": 2048,
+      "multiple_of": 32
+    }
+  },
+  {
+    "id": "minimax_h3_image_edit",
+    "purpose": "image_edit",
+    "filename": "minimax_h3_image_edit.api.json",
+    "sha256": "cb23927552dbfeacc7c945a47afea1097a4a4696207318bf6417224cd428b160",
+    "requires_gpu": true,
+    "gpu_vram_mb": 14000,
+    "model_files": [
+      "minimax_h3_image_pruned_int8_convrot.safetensors",
+      "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+      "minimax_h3_image_vae_fp16.safetensors"
+    ],
+    "required_nodes": [
+      "CLIPLoader",
+      "ConditioningZeroOut",
+      "KSampler",
+      "MiniMaxH3ImageConditioning",
+      "SaveImage",
+      "UNETLoader",
+      "VAEDecode",
+      "VAELoader"
+    ],
+    "patch_slots": {
+      "prompt": {
+        "node_id": "4",
+        "input": "prompt",
+        "class_type": "MiniMaxH3ImageConditioning"
+      },
+      "seed": {
+        "node_id": "6",
+        "input": "seed",
+        "class_type": "KSampler"
+      },
+      "filename_prefix": {
+        "node_id": "8",
+        "input": "filename_prefix",
+        "class_type": "SaveImage"
+      },
+      "width": {
+        "node_id": "4",
+        "input": "width",
+        "class_type": "MiniMaxH3ImageConditioning"
+      },
+      "height": {
+        "node_id": "4",
+        "input": "height",
+        "class_type": "MiniMaxH3ImageConditioning"
+      },
+      "reference_image": {
+        "node_id": "4",
+        "input": "images.image_1",
+        "class_type": "MiniMaxH3ImageConditioning"
+      },
+      "reference_image_b": {
+        "node_id": "4",
+        "input": "images.image_2",
+        "class_type": "MiniMaxH3ImageConditioning"
+      },
+      "reference_image_c": {
+        "node_id": "4",
+        "input": "images.image_3",
+        "class_type": "MiniMaxH3ImageConditioning"
+      },
+      "reference_image_d": {
+        "node_id": "4",
+        "input": "images.image_4",
+        "class_type": "MiniMaxH3ImageConditioning"
+      }
+    },
+    "dimension_policy": {
+      "mode": "exact",
+      "min": 256,
+      "max": 4096,
       "multiple_of": 32
     }
   }

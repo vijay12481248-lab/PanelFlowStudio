@@ -30,9 +30,6 @@ _DEFAULT_DESKTOP_ORIGINS = frozenset(
         "http://localhost:8765",
         "http://127.0.0.1:8765",
         "http://[::1]:8765",
-        "http://localhost:7860",
-        "http://127.0.0.1:7860",
-        "http://[::1]:7860",
         "null",
     }
 )
@@ -147,7 +144,7 @@ class LocalApiSecurityMiddleware(BaseHTTPMiddleware):
     @staticmethod
     def _is_resource_path(path: str) -> bool:
         return (
-            path.endswith(("/file", "/normalized-file", "/output", "/contact-sheet"))
+            path.endswith(("/file", "/normalized-file", "/output", "/contact-sheet", "/cover", "/text-blur-preview"))
             or "/samples/" in path
             or "/chronoflow/" in path
             or path.startswith(("/outputs/", "/inputs/"))

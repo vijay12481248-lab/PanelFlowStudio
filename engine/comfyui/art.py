@@ -12,18 +12,30 @@ nor `service.py` has to import the other.
 from __future__ import annotations
 
 import io
+import logging
 import random
 import time
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Any, Callable
+from pathlib import Path
+from typing import Any, Callable, Sequence
 
 from PIL import Image
 
 from engine.comfyui import ComfyUIClient, ComfyWorkflowRegistry
 
 ART_WORKFLOW_ID = "qwen_image_21"
+EDIT_WORKFLOW_ID = "minimax_h3_image_edit"  # MiniMax-H3-Image: edit an existing picture from a written instruction
+# What an image job may run. Qwen is the default everywhere; the H3-Image graph with no picture bound is text to image
+# (the same registered graph as the edit, not a second text_to_image entry), chosen per job by its caller.
+IMAGE_WORKFLOW_IDS = (ART_WORKFLOW_ID, EDIT_WORKFLOW_ID)
+logger = logging.getLogger(__name__)
 POLL_SECONDS = 1.5
+
+# The conditioning nodes that take their reference pictures through autogrow
+# "images.image_<n>" slots. A picture is bound by injecting a LoadImage node, and
+# a slot that is left unsupplied is removed from the graph rather than sent empty.
+_AUTOGROW_REFERENCE_NODES = frozenset({"TextEncodeQwenImage21", "MiniMaxH3ImageConditioning"})
 
 
 class ComfyImageGenerationError(RuntimeError):
@@ -45,6 +57,7 @@ def _patch_workflow(
     prefix: str,
     reference_image: str | None = None,
     reference_image_b: str | None = None,
+    reference_images: list[str] | None = None,
     reference_weight: float | None = None,
     mask_image: str | None = None,
     denoise: float | None = None,
@@ -72,6 +85,15 @@ def _patch_workflow(
         values["reference_image"] = reference_image
     if reference_image_b is not None:
         values["reference_image_b"] = reference_image_b
+    if reference_images is not None:
+        # character lock: bind up to four approved reference slots (images.image_1..4 autogrow)
+        ref_slots = [name for name in ("reference_image", "reference_image_b", "reference_image_c", "reference_image_d")
+                     if name in patch_slots]
+        if len(reference_images) > len(ref_slots):
+            raise ComfyImageGenerationError(
+                f"Approved workflow declares {len(ref_slots)} reference slots; got {len(reference_images)} reference images")
+        for slot_name, value in zip(ref_slots, reference_images):
+            values[slot_name] = value
     if reference_weight is not None and "reference_weight" in patch_slots:
         values["reference_weight"] = reference_weight
     if mask_image is not None:
@@ -88,6 +110,16 @@ def _patch_workflow(
         values["depth_weight"] = depth_weight
 
     optional_unsupplied = set()
+    ref_slot = patch_slots.get("reference_image", {})
+    if "reference_image" not in values and ref_slot.get("class_type") in _AUTOGROW_REFERENCE_NODES:
+        optional_unsupplied.add("reference_image")
+    for extra_ref_slot in ("reference_image_b", "reference_image_c", "reference_image_d"):
+        # Only the conditioning nodes that bind references through autogrow slots let a slot go
+        # unbound; every other approved workflow (e.g. anime_sdxl_ipa2) declares its reference
+        # slots as mandatory, so omitting one must still refuse to run.
+        if (extra_ref_slot in patch_slots and extra_ref_slot not in values
+                and patch_slots[extra_ref_slot].get("class_type") in _AUTOGROW_REFERENCE_NODES):
+            optional_unsupplied.add(extra_ref_slot)
     if duration is None and "duration" in patch_slots:
         optional_unsupplied.add("duration")
     if reference_weight is None and "reference_weight" in patch_slots:
@@ -117,7 +149,32 @@ def _patch_workflow(
         inputs = node.get("inputs")
         if not isinstance(input_name, str) or not isinstance(inputs, dict) or input_name not in inputs:
             raise ComfyImageGenerationError(f"Approved {slot_name} patch slot input is unavailable")
-        inputs[input_name] = value
+
+        # The autogrow reference slots: bind the picture by injecting a LoadImage node.
+        if slot.get("class_type") in _AUTOGROW_REFERENCE_NODES and input_name.startswith("images.image_"):
+            if isinstance(value, (list, tuple)):
+                inputs[input_name] = list(value)
+            else:
+                load_id = "13"
+                while load_id in patched:
+                    load_id = str(int(load_id) + 1)
+                patched[load_id] = {
+                    "class_type": "LoadImage",
+                    "inputs": {"image": str(value)},
+                }
+                inputs[input_name] = [load_id, 0]
+        else:
+            inputs[input_name] = value
+
+    # Unsupplied reference slots: clean their null placeholders from the conditioning node.
+    for unsupplied_slot in [n for n in ("reference_image", "reference_image_b", "reference_image_c", "reference_image_d")
+                            if n in patch_slots and n not in values]:
+        slot_meta = patch_slots[unsupplied_slot]
+        if slot_meta.get("class_type") in _AUTOGROW_REFERENCE_NODES:
+            ref_node = patched.get(str(slot_meta.get("node_id")))
+            if isinstance(ref_node, dict) and isinstance(ref_node.get("inputs"), dict):
+                ref_node["inputs"].pop(slot_meta.get("input"), None)
+
     return patched
 
 
@@ -160,6 +217,67 @@ def _history_images(history: dict[str, Any], prompt_id: str) -> list[dict[str, s
     return images
 
 
+def _extract_history_error(history_entry: dict | None) -> str | None:
+    """Inspect ComfyUI history record or status entry for execution failure or interruption.
+    Returns extracted error description if status is error, else None.
+    """
+    if not isinstance(history_entry, dict):
+        return None
+    status = history_entry.get("status")
+    if status is None and "status_str" in history_entry:
+        status = history_entry
+    elif status is None:
+        for val in history_entry.values():
+            if isinstance(val, dict) and "status" in val:
+                status = val.get("status")
+                break
+    if not isinstance(status, dict):
+        return None
+    if status.get("status_str") != "error":
+        messages = status.get("messages")
+        if not (isinstance(messages, list) and any(isinstance(m, (list, tuple)) and m and m[0] in ("execution_error", "execution_interrupted") for m in messages)):
+            return None
+
+    messages = status.get("messages")
+    if isinstance(messages, list):
+        for msg in messages:
+            if isinstance(msg, (list, tuple)) and len(msg) >= 2:
+                event, payload = msg[0], msg[1]
+                if event == "execution_error" and isinstance(payload, dict):
+                    exc_msg = payload.get("exception_message")
+                    exc_type = payload.get("exception_type")
+                    node_type = payload.get("node_type")
+                    node_id = payload.get("node_id")
+                    parts: list[str] = []
+                    if exc_msg:
+                        parts.append(str(exc_msg).strip())
+                    elif exc_type:
+                        parts.append(str(exc_type).strip())
+                    if node_type or node_id:
+                        node_str = f"node {node_id or '?'}: {node_type or '?'}"
+                        if parts:
+                            return f"{parts[0]} ({node_str})"
+                        return f"Error in {node_str}"
+                    if parts:
+                        return parts[0]
+                elif event == "execution_interrupted":
+                    payload = payload if isinstance(payload, dict) else {}
+                    node_type = payload.get("node_type")
+                    node_id = payload.get("node_id")
+                    if node_type or node_id:
+                        return f"Execution interrupted at node {node_id or '?'}: {node_type or '?'}"
+                    return "Execution interrupted"
+            elif isinstance(msg, dict):
+                exc_msg = msg.get("exception_message") or msg.get("message")
+                if exc_msg:
+                    return str(exc_msg).strip()
+            elif isinstance(msg, str) and msg.strip():
+                return msg.strip()
+
+    return "ComfyUI execution failed"
+
+
+
 @dataclass(frozen=True)
 class ArtImage:
     png: bytes
@@ -183,17 +301,34 @@ class ArtEngine:
     def __init__(self, client: ComfyUIClient | None = None, registry: ComfyWorkflowRegistry | None = None):
         self.client = client or ComfyUIClient()
         self.registry = registry or ComfyWorkflowRegistry(self.client)
-        self._ready = False
+        self._ready: set[str] = set()
 
-    def require_ready(self) -> None:
-        if self._ready:
+    def require_ready(self, workflow_id: str = ART_WORKFLOW_ID) -> None:
+        if workflow_id in self._ready:
             return
-        preflight = self.registry.preflight(ART_WORKFLOW_ID)
+        preflight = self.registry.preflight(workflow_id)
         if not preflight["ready"]:
+            if not preflight.get("comfy_online", True):
+                # Try auto-launching ComfyUI if available on the local machine
+                try:
+                    from engine.system.setup import comfyui_manager
+                    if comfyui_manager.is_installed():
+                        logger.info("ComfyUI is offline. Attempting automated startup...")
+                        res = comfyui_manager.ensure_running(timeout_s=15.0)
+                        if res.get("running"):
+                            preflight = self.registry.preflight(workflow_id)
+                            if preflight["ready"]:
+                                self._ready.add(workflow_id)
+                                return
+                except Exception as e:
+                    logger.warning("Could not auto-launch ComfyUI: %s", e)
+                raise ComfyImageGenerationError(
+                    f"ComfyUI is offline or unreachable at {self.client.base_url}. Please launch ComfyUI to generate images."
+                )
             raise ComfyImageGenerationError(
                 f"ComfyUI workflow preflight failed: missing nodes={preflight['missing_nodes']}, missing models={preflight['missing_models']}"
             )
-        self._ready = True
+        self._ready.add(workflow_id)
 
     def run(
         self,
@@ -215,7 +350,12 @@ class ArtEngine:
         while time.monotonic() < deadline:
             if is_cancelled():
                 raise ComfyImageGenerationError("Image generation cancelled; ComfyUI execution may still finish")
-            images = (collect or _history_images)(self.client.history(prompt_id), prompt_id)
+            history_data = self.client.history(prompt_id)
+            record = history_data.get(prompt_id, history_data) if isinstance(history_data, dict) else None
+            err = _extract_history_error(record)
+            if err:
+                raise ComfyImageGenerationError(f"ComfyUI execution failed: {err}")
+            images = (collect or _history_images)(history_data, prompt_id)
             if images:
                 ref = images[0]
                 return self.client.download_output(ref["filename"], ref["subfolder"], ref["type"]), prompt_id, ref
@@ -223,6 +363,21 @@ class ArtEngine:
                 progress(min(0.9, 0.12 + (time.monotonic() - started) / timeout * 0.75), "Waiting for ComfyUI output")
             time.sleep(POLL_SECONDS)
         raise ArtTimeoutError(f"ComfyUI did not produce an image within {timeout:.0f}s")
+
+    def _resolve_reference(self, item: Path | str | bytes) -> str:
+        """One reference image into a ComfyUI-loadable name. Bytes and existing paths are uploaded into ComfyUI's input
+        folder (name derived from content, so reruns reuse the upload); a bare filename is passed through unchanged —
+        it must already live in ComfyUI's input folder (e.g. a Character Vault sheet)."""
+        if isinstance(item, bytes):
+            return self.client.upload_image_bytes(item)
+        if isinstance(item, Path):
+            return self.client.upload_image(item)
+        if isinstance(item, str):
+            p = Path(item)
+            if p.is_file():
+                return self.client.upload_image(p)
+            return item
+        raise ValueError(f"Unsupported reference_image type: {type(item)}")
 
     def generate(
         self,
@@ -232,23 +387,48 @@ class ArtEngine:
         height: int = 768,
         seed: int | None = None,
         prefix: str = "panelflow_art",
+        reference_image: Path | str | bytes | None = None,
         *,
+        reference_images: list[Path | str | bytes] | None = None,
         timeout: float = 300.0,
         is_cancelled: Callable[[], bool] = _never,
         progress: Callable[[float, str], None] | None = None,
         client_id: str | None = None,
+        workflow_id: str = ART_WORKFLOW_ID,
     ) -> ArtImage:
-        self.require_ready()
-        workflow, workflow_sha256 = self.registry.load(ART_WORKFLOW_ID)
-        metadata = self.registry.metadata(ART_WORKFLOW_ID)
+        if workflow_id not in IMAGE_WORKFLOW_IDS:
+            raise ComfyImageGenerationError(f"Image workflows are {IMAGE_WORKFLOW_IDS}; got {workflow_id!r}")
+        self.require_ready(workflow_id)
+        workflow, workflow_sha256 = self.registry.load(workflow_id)
+        metadata = self.registry.metadata(workflow_id)
         policy = metadata["dimension_policy"]
         _validate_output_dimensions(actual_width=width, actual_height=height, requested_width=width, requested_height=height,
                                     dimension_policy=policy)  # rejects a request the workflow cannot honour before any GPU time is spent
         if seed is None:
             seed = random.randint(1, 2**31 - 1)
-        patched = _patch_workflow(workflow, metadata["patch_slots"], prompt, negative_prompt, width, height, seed, prefix)
+
+        ref_image_name: str | None = None
+        if reference_image is not None:
+            ref_image_name = self._resolve_reference(reference_image)
+
+        ref_image_names: list[str] | None = None
+        if reference_images is not None:
+            ref_image_names = [self._resolve_reference(item) for item in reference_images]
+
+        patched = _patch_workflow(
+            workflow,
+            metadata["patch_slots"],
+            prompt,
+            negative_prompt,
+            width,
+            height,
+            seed,
+            prefix,
+            reference_image=ref_image_name,
+            reference_images=ref_image_names,
+        )
         if progress:
-            progress(0.05, f"Verified workflow {ART_WORKFLOW_ID}")
+            progress(0.05, f"Verified workflow {workflow_id}")
         raw, prompt_id, ref = self.run(patched, timeout=timeout, is_cancelled=is_cancelled, progress=progress, client_id=client_id)
         try:
             with Image.open(io.BytesIO(raw)) as image:
@@ -259,5 +439,61 @@ class ArtEngine:
             raise ComfyImageGenerationError("ComfyUI returned an invalid image artifact") from exc
         _validate_output_dimensions(actual_width=actual_width, actual_height=actual_height, requested_width=width, requested_height=height,
                                     dimension_policy=policy)
-        return ArtImage(png=raw, width=actual_width, height=actual_height, prompt_id=prompt_id, workflow_id=ART_WORKFLOW_ID,
+        return ArtImage(png=raw, width=actual_width, height=actual_height, prompt_id=prompt_id, workflow_id=workflow_id,
+                        workflow_sha256=workflow_sha256, model_files=list(metadata.get("model_files", [])), source_output=ref, seed=seed)
+
+    def edit(
+        self,
+        prompt: str,
+        reference_images: Sequence[Path | str | bytes],
+        *,
+        width: int = 2048,
+        height: int = 2048,
+        seed: int | None = None,
+        prefix: str = "panelflow_art",
+        timeout: float = 1800.0,
+        is_cancelled: Callable[[], bool] = _never,
+        progress: Callable[[float, str], None] | None = None,
+        client_id: str | None = None,
+    ) -> ArtImage:
+        """Edit a picture with a written instruction, through the approved MiniMax-H3-Image workflow.
+
+        One checkpoint does both jobs: the picture in `reference_images` is the one being edited
+        (the first one), and any others are references the instruction may refer to. The prompt is
+        what the picture should become; the model does the rest.
+        """
+        if not reference_images:
+            raise ComfyImageGenerationError("Editing needs at least one picture to edit")
+        workflow, workflow_sha256 = self.registry.load(EDIT_WORKFLOW_ID)
+        metadata = self.registry.metadata(EDIT_WORKFLOW_ID)
+        policy = metadata["dimension_policy"]
+        _validate_output_dimensions(actual_width=width, actual_height=height, requested_width=width, requested_height=height,
+                                    dimension_policy=policy)  # rejects a request the workflow cannot honour
+        if seed is None:
+            seed = random.randint(1, 2**31 - 1)
+        names = [self._resolve_reference(item) for item in reference_images]
+        patched = _patch_workflow(
+            workflow,
+            metadata["patch_slots"],
+            prompt,
+            None,  # the checkpoint is distilled: no negative prompt, no CFG
+            width,
+            height,
+            seed,
+            prefix,
+            reference_images=names,  # the first picture is the one being edited
+        )
+        if progress:
+            progress(0.05, f"Verified workflow {EDIT_WORKFLOW_ID}")
+        raw, prompt_id, ref = self.run(patched, timeout=timeout, is_cancelled=is_cancelled, progress=progress, client_id=client_id)
+        try:
+            with Image.open(io.BytesIO(raw)) as image:
+                image.verify()
+            with Image.open(io.BytesIO(raw)) as image:
+                actual_width, actual_height = image.size
+        except Exception as exc:
+            raise ComfyImageGenerationError("ComfyUI returned an invalid image artifact") from exc
+        _validate_output_dimensions(actual_width=actual_width, actual_height=actual_height, requested_width=width, requested_height=height,
+                                    dimension_policy=policy)
+        return ArtImage(png=raw, width=actual_width, height=actual_height, prompt_id=prompt_id, workflow_id=EDIT_WORKFLOW_ID,
                         workflow_sha256=workflow_sha256, model_files=list(metadata.get("model_files", [])), source_output=ref, seed=seed)

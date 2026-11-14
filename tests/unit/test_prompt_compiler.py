@@ -663,3 +663,123 @@ def test_build_directorial_prompt_dispatch(story: OriginalStory):
     )
     assert res_fallback.positive == "sitting quietly in the attic"
     assert res_fallback.negative == ""
+
+
+# ==============================================================================
+# 16. Directorial Visual Style Profiles Verification (WP-1.4)
+# ==============================================================================
+
+def test_directorial_visual_style_profiles_registration():
+    """Verify all 4 directorial visual style profiles are registered with 4-tier anchors."""
+    from engine.original.prompt import DIRECTORIAL_STYLE_PROFILES
+
+    required_profiles = [
+        "shonen_manga_screentone",
+        "dark_fantasy_graphic",
+        "modern_webtoon_color",
+        "cyberpunk_neon_noir",
+    ]
+    for profile in required_profiles:
+        assert profile in DIRECTORIAL_STYLE_PROFILES, f"{profile} missing from DIRECTORIAL_STYLE_PROFILES"
+        assert profile in GENRE_STYLE_PRESETS, f"{profile} missing from GENRE_STYLE_PRESETS"
+
+        anchor = DIRECTORIAL_STYLE_PROFILES[profile]
+        assert anchor.medium, f"Medium missing for {profile}"
+        assert anchor.line_geometry, f"Line geometry missing for {profile}"
+        assert anchor.palette, f"Palette missing for {profile}"
+        assert anchor.lighting_physics, f"Lighting physics missing for {profile}"
+        assert anchor.negative_prompt, f"Negative prompt missing for {profile}"
+        assert anchor.review_witness_rule, f"Review witness rule missing for {profile}"
+
+        prose = anchor.to_natural_prose()
+        assert len(prose) > 50
+        tags = anchor.to_tags()
+        assert len(tags) > 0
+
+
+def test_directorial_visual_style_profiles_compilation(story):
+    """Verify each directorial visual style profile compiles deterministic positive and negative prompts."""
+    from engine.original import shotspec as ss
+
+    spec = ss.ShotSpec(
+        shot="medium",
+        characters=[ss.CharPose(id="mira", action="examines an ancient talisman")],
+        key_visuals=["glowing runes"],
+    )
+
+    # 1. shonen_manga_screentone
+    c_shonen = compile_image_prompt(
+        story, spec, "attic", style_profile="shonen_manga_screentone"
+    )
+    assert "screentone dot textures" in c_shonen.positive
+    assert "G-pen ink" in c_shonen.positive
+    assert "color" in c_shonen.negative
+
+    # 2. dark_fantasy_graphic
+    c_dark = compile_image_prompt(
+        story, spec, "attic", style_profile="dark_fantasy_graphic"
+    )
+    assert "Dark fantasy graphic novel" in c_dark.positive
+    assert "Heavy traditional crosshatching" in c_dark.positive
+    assert "bright" in c_dark.negative
+
+    # 3. modern_webtoon_color
+    c_webtoon = compile_image_prompt(
+        story, spec, "attic", style_profile="modern_webtoon_color"
+    )
+    assert "webtoon manhwa" in c_webtoon.positive
+    assert "luminous digital airbrush" in c_webtoon.positive
+    assert "monochrome" in c_webtoon.negative
+
+    # 4. cyberpunk_neon_noir
+    c_cyber = compile_image_prompt(
+        story, spec, "attic", style_profile="cyberpunk_neon_noir"
+    )
+    assert "cyberpunk neon noir" in c_cyber.positive
+    assert "volumetric neon lighting" in c_cyber.positive
+    assert "daylight" in c_cyber.negative
+
+
+def test_directorial_style_profile_override_on_different_genre(story):
+    """Verify style_profile override takes precedence over story.bible.premise.genre."""
+    from engine.original import shotspec as ss
+
+    # Story genre is bedtime
+    assert story.bible.premise.genre == "bedtime"
+
+    spec = ss.ShotSpec(
+        shot="close",
+        characters=[ss.CharPose(id="mira", expression="smiling")],
+    )
+
+    # Compile with cyberpunk override
+    c_cyber = compile_image_prompt(
+        story, spec, "attic", style_profile="cyberpunk_neon_noir"
+    )
+    assert "cyberpunk neon noir" in c_cyber.positive
+    assert "gentle storybook" not in c_cyber.positive
+
+    # Compile default (without override): should follow bedtime
+    c_default = compile_image_prompt(story, spec, "attic")
+    assert "gentle storybook" in c_default.positive
+
+
+def test_compile_sdxl_tag_prompt_handles_directorial_styles_safely(story):
+    """Verify compile_sdxl_tag_prompt does not raise KeyError when genre is a directorial style."""
+    from engine.original import shotspec as ss
+
+    # Mutate premise genre to a directorial style not present in GENRES
+    story.bible.premise.genre = "shonen_manga_screentone"
+
+    spec = ss.ShotSpec(
+        shot="medium",
+        characters=[ss.CharPose(id="mira", action="ready to battle")],
+    )
+
+    c_tag = compile_sdxl_tag_prompt(story, spec, "attic")
+    assert c_tag.target_model == TargetModel.SDXL
+    assert len(c_tag.positive) > 0
+    # Restore
+    story.bible.premise.genre = "bedtime"
+
+

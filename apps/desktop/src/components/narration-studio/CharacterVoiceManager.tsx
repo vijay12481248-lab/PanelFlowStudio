@@ -41,7 +41,7 @@ export const CharacterVoiceManager: React.FC<CharacterVoiceManagerProps> = ({
   const [showOverridePrompt, setShowOverridePrompt] = useState<boolean>(false);
   const [newCharName, setNewCharName] = useState("");
   const [newCharRole, setNewCharRole] = useState<CharacterProfile["role"]>("SUPPORTING");
-  const [newCharColor, setNewCharColor] = useState("#8b5cf6");
+  const [newCharColor, setNewCharColor] = useState("#3b6bf5");
   const [newCharVoice, setNewCharVoice] = useState(voiceProfiles[0]?.id || "");
   const [copiedMessage, setCopiedMessage] = useState<string | null>(null);
 
@@ -100,18 +100,18 @@ export const CharacterVoiceManager: React.FC<CharacterVoiceManagerProps> = ({
   };
 
   return (
-    <div className={`flex flex-col bg-zinc-950 border border-zinc-800 rounded-xl overflow-hidden select-none shadow-2xl ${className}`}>
+    <div className={`flex flex-col bg-ink border border-edge rounded-xl overflow-hidden select-none shadow-2xl ${className}`}>
       {/* Header */}
-      <div className="p-3.5 border-b border-zinc-800 bg-zinc-900/60 flex items-center justify-between shrink-0">
+      <div className="p-3.5 border-b border-edge bg-navy/60 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2">
-          <span className="w-6 h-6 rounded-lg bg-indigo-600/90 text-white flex items-center justify-center font-bold text-xs shadow-sm">
+          <span className="w-6 h-6 rounded-lg bg-accent/90 text-white flex items-center justify-center font-bold text-xs shadow-sm">
             👥
           </span>
           <div>
-            <h3 className="text-xs font-bold text-zinc-100 uppercase tracking-wider">
+            <h3 className="text-xs font-bold text-fg uppercase tracking-wider">
               Character Voice Manager
             </h3>
-            <p className="text-[10px] text-zinc-400">
+            <p className="text-[10px] text-fg-dim">
               Manage character casting & assign consistent voice profiles
             </p>
           </div>
@@ -121,7 +121,7 @@ export const CharacterVoiceManager: React.FC<CharacterVoiceManagerProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
+            className="p-1 rounded text-fg-dim hover:text-fg hover:bg-flat"
             title="Close Character Manager"
             aria-label="Close Character Voice Manager"
           >
@@ -133,14 +133,14 @@ export const CharacterVoiceManager: React.FC<CharacterVoiceManagerProps> = ({
       {/* Main Split: Left Characters List, Right Voice Details */}
       <div className="grid grid-cols-1 md:grid-cols-3 flex-1 min-h-[380px] overflow-hidden">
         {/* Left: Character List */}
-        <div className="border-r border-zinc-800/80 bg-zinc-950/60 p-2 space-y-1.5 overflow-y-auto">
-          <div className="flex items-center justify-between px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-zinc-500">
+        <div className="border-r border-edge/80 bg-ink/60 p-2 space-y-1.5 overflow-y-auto">
+          <div className="flex items-center justify-between px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-fg-faint">
             <span>Story Characters ({characters.length})</span>
             {onAddCharacter && (
               <button
                 type="button"
                 onClick={() => setShowAddModal(true)}
-                className="text-indigo-400 hover:text-indigo-300 font-bold"
+                className="text-info hover:text-info font-bold"
               >
                 + Add
               </button>
@@ -159,8 +159,8 @@ export const CharacterVoiceManager: React.FC<CharacterVoiceManagerProps> = ({
                 onClick={() => setActiveCharId(char.id)}
                 className={`w-full p-2 rounded-lg text-left transition-all border flex items-center justify-between gap-2 ${
                   isSelected
-                    ? "bg-zinc-900 border-indigo-500 shadow-sm"
-                    : "bg-zinc-900/40 border-zinc-800/80 hover:bg-zinc-900 hover:border-zinc-700"
+                    ? "bg-navy border-accent shadow-sm"
+                    : "bg-navy/40 border-edge/80 hover:bg-navy hover:border-edge"
                 }`}
               >
                 <div className="flex items-center gap-2 min-w-0">
@@ -171,20 +171,20 @@ export const CharacterVoiceManager: React.FC<CharacterVoiceManagerProps> = ({
                     {char.avatar_initials}
                   </div>
                   <div className="min-w-0">
-                    <span className="text-xs font-bold text-zinc-100 block truncate">
+                    <span className="text-xs font-bold text-fg block truncate">
                       {char.name}
                     </span>
-                    <span className="text-[10px] text-zinc-400 block truncate">
+                    <span className="text-[10px] text-fg-dim block truncate">
                       {assignedVoice?.name.split("—")[0].trim() || "No Voice"}
                     </span>
                   </div>
                 </div>
 
                 <div className="flex flex-col items-end shrink-0">
-                  <span className="text-[9px] uppercase font-bold text-zinc-500">
+                  <span className="text-[9px] uppercase font-bold text-fg-faint">
                     {char.role}
                   </span>
-                  <span className="text-[10px] font-mono text-zinc-400">
+                  <span className="text-[10px] font-mono text-fg-dim">
                     {segCount} lines
                   </span>
                 </div>
@@ -195,9 +195,9 @@ export const CharacterVoiceManager: React.FC<CharacterVoiceManagerProps> = ({
 
         {/* Right: Character & Voice Profile Settings */}
         {activeCharacter ? (
-          <div className="md:col-span-2 p-4 space-y-4 overflow-y-auto bg-zinc-950">
+          <div className="md:col-span-2 p-4 space-y-4 overflow-y-auto bg-ink">
             {/* Active Character Header */}
-            <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
+            <div className="flex items-center justify-between pb-3 border-b border-edge">
               <div className="flex items-center gap-2.5">
                 <div
                   className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm text-white font-mono shadow-md"
@@ -207,22 +207,22 @@ export const CharacterVoiceManager: React.FC<CharacterVoiceManagerProps> = ({
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <h4 className="text-sm font-bold text-zinc-100">
+                    <h4 className="text-sm font-bold text-fg">
                       {activeCharacter.name}
                     </h4>
-                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-300 border border-zinc-700">
+                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-flat text-fg-dim border border-edge">
                       {activeCharacter.role}
                     </span>
                   </div>
-                  <p className="text-[11px] text-zinc-400">
+                  <p className="text-[11px] text-fg-dim">
                     {activeCharacter.notes || "Story Character"}
                   </p>
                 </div>
               </div>
 
               {/* Character Color Picker */}
-              <div className="flex items-center gap-1.5 bg-zinc-900 border border-zinc-800 rounded px-2 py-1 text-xs">
-                <span className="text-[10px] text-zinc-400">Color:</span>
+              <div className="flex items-center gap-1.5 bg-navy border border-edge rounded px-2 py-1 text-xs">
+                <span className="text-[10px] text-fg-dim">Color:</span>
                 <input
                   type="color"
                   value={activeCharacter.color_accent}
@@ -237,10 +237,10 @@ export const CharacterVoiceManager: React.FC<CharacterVoiceManagerProps> = ({
             {/* Voice Profile Selector */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold uppercase tracking-wider text-zinc-300">
+                <span className="text-xs font-bold uppercase tracking-wider text-fg-dim">
                   Assigned Voice Profile
                 </span>
-                <span className="text-[10px] font-mono text-indigo-400">
+                <span className="text-[10px] font-mono text-info">
                   ID: {activeCharacter.default_voice_profile_id}
                 </span>
               </div>
@@ -252,7 +252,7 @@ export const CharacterVoiceManager: React.FC<CharacterVoiceManagerProps> = ({
                     default_voice_profile_id: e.target.value,
                   })
                 }
-                className="w-full p-2 rounded-lg bg-zinc-900 border border-zinc-700 text-xs text-zinc-100 focus:outline-none focus:border-indigo-500 font-semibold cursor-pointer"
+                className="w-full p-2 rounded-lg bg-navy border border-edge text-xs text-fg focus:outline-none focus:border-accent font-semibold cursor-pointer"
               >
                 {voiceProfiles.map((v) => (
                   <option key={v.id} value={v.id}>
@@ -264,34 +264,34 @@ export const CharacterVoiceManager: React.FC<CharacterVoiceManagerProps> = ({
 
             {/* Selected Voice Card Details */}
             {activeVoiceProfile && (
-              <div className="p-3.5 rounded-xl bg-zinc-900/60 border border-zinc-800 space-y-2.5 text-xs">
+              <div className="p-3.5 rounded-xl bg-navy/60 border border-edge space-y-2.5 text-xs">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <span className="font-bold text-zinc-100 text-sm">
+                    <span className="font-bold text-fg text-sm">
                       {activeVoiceProfile.name}
                     </span>
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 font-mono">
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-flat text-fg-dim font-mono">
                       {activeVoiceProfile.model_family}
                     </span>
                   </div>
-                  <span className="text-[10px] uppercase font-bold text-emerald-400 bg-emerald-950/70 border border-emerald-800 px-2 py-0.5 rounded-full">
+                  <span className="text-[10px] uppercase font-bold text-ok bg-ok/70 border border-ok/40 px-2 py-0.5 rounded-full">
                     Mock Profile
                   </span>
                 </div>
 
-                <p className="text-[11px] text-zinc-300 leading-relaxed italic">
+                <p className="text-[11px] text-fg-dim leading-relaxed italic">
                   &ldquo;{activeVoiceProfile.sample_quote}&rdquo;
                 </p>
 
-                <div className="p-2 rounded bg-zinc-950/80 border border-zinc-800 text-[11px] space-y-1">
-                  <div className="text-zinc-400">
-                    <strong className="text-zinc-300">Timbre & Cadence:</strong> {activeVoiceProfile.timbre}
+                <div className="p-2 rounded bg-ink/80 border border-edge text-[11px] space-y-1">
+                  <div className="text-fg-dim">
+                    <strong className="text-fg-dim">Timbre & Cadence:</strong> {activeVoiceProfile.timbre}
                   </div>
-                  <div className="text-zinc-400 flex items-center gap-1.5 pt-0.5">
-                    <strong className="text-zinc-300">Recommended for:</strong>
+                  <div className="text-fg-dim flex items-center gap-1.5 pt-0.5">
+                    <strong className="text-fg-dim">Recommended for:</strong>
                     <div className="flex items-center gap-1">
                       {activeVoiceProfile.recommended_emotions.map((emo) => (
-                        <span key={emo} className="px-1.5 py-0.2 rounded bg-zinc-800 text-zinc-300 text-[10px]">
+                        <span key={emo} className="px-1.5 py-0.2 rounded bg-flat text-fg-dim text-[10px]">
                           {emo}
                         </span>
                       ))}
@@ -302,19 +302,19 @@ export const CharacterVoiceManager: React.FC<CharacterVoiceManagerProps> = ({
             )}
 
             {/* 1-Click Sync Across All Lines */}
-            <div className="p-3 rounded-lg bg-indigo-950/30 border border-indigo-800/60 flex items-center justify-between text-xs">
+            <div className="p-3 rounded-lg bg-accent/30 border border-accent/60 flex items-center justify-between text-xs">
               <div>
-                <p className="font-bold text-zinc-200">
+                <p className="font-bold text-fg">
                   Propagate Voice to All Lines
                 </p>
-                <p className="text-[11px] text-zinc-400">
+                <p className="text-[11px] text-fg-dim">
                   Update {characterSegments.length} narration segment(s) assigned to {activeCharacter.name}.
                 </p>
               </div>
 
               <div className="flex items-center gap-2">
                 {copiedMessage && (
-                  <span className="text-xs font-bold text-emerald-400 animate-pulse">
+                  <span className="text-xs font-bold text-ok animate-pulse">
                     {copiedMessage}
                   </span>
                 )}
@@ -322,7 +322,7 @@ export const CharacterVoiceManager: React.FC<CharacterVoiceManagerProps> = ({
                   variant="primary"
                   size="sm"
                   onClick={handleApplyVoice}
-                  className="text-xs h-8 bg-indigo-600 hover:bg-indigo-500 font-semibold"
+                  className="text-xs h-8 bg-accent hover:bg-accent font-semibold"
                 >
                   Apply to All ({characterSegments.length})
                 </Button>
@@ -331,20 +331,20 @@ export const CharacterVoiceManager: React.FC<CharacterVoiceManagerProps> = ({
 
             {/* Custom Override Confirmation Prompt */}
             {showOverridePrompt && (
-              <div className="p-3 rounded-xl bg-amber-950/60 border border-amber-700/80 text-amber-200 text-xs space-y-2.5 shadow-lg">
+              <div className="p-3 rounded-xl bg-warn/60 border border-warn/80 text-warn text-xs space-y-2.5 shadow-lg">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5 font-bold text-amber-300 text-xs">
+                  <div className="flex items-center gap-1.5 font-bold text-warn text-xs">
                     <span>⚠️</span>
                     <span>Custom Voice Overrides Detected</span>
                   </div>
-                  <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-amber-900/60 text-amber-300 border border-amber-700">
+                  <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-warn/60 text-warn border border-warn">
                     {overriddenSegments.length} Protected
                   </span>
                 </div>
-                <p className="text-[11px] text-amber-200/90 leading-relaxed">
+                <p className="text-[11px] text-warn/90 leading-relaxed">
                   <strong>{overriddenSegments.length}</strong> segment(s) assigned to <strong>{activeCharacter.name}</strong> have manual voice overrides:
                   {" "}
-                  <span className="font-mono text-[10px] text-amber-300">
+                  <span className="font-mono text-[10px] text-warn">
                     {overriddenSegments.map((s) => `#${s.sequence}`).join(", ")}
                   </span>.
                   Choose whether to preserve individual customization or update all lines:
@@ -354,7 +354,7 @@ export const CharacterVoiceManager: React.FC<CharacterVoiceManagerProps> = ({
                     variant="secondary"
                     size="sm"
                     onClick={() => handleConfirmApply(false)}
-                    className="text-xs h-7 border border-amber-600/70 text-amber-200 hover:bg-amber-900/50"
+                    className="text-xs h-7 border border-warn/70 text-warn hover:bg-warn/50"
                   >
                     Skip Customized Lines ({characterSegments.length - overriddenSegments.length})
                   </Button>
@@ -362,14 +362,14 @@ export const CharacterVoiceManager: React.FC<CharacterVoiceManagerProps> = ({
                     variant="primary"
                     size="sm"
                     onClick={() => handleConfirmApply(true)}
-                    className="text-xs h-7 bg-amber-600 hover:bg-amber-500 text-white font-bold"
+                    className="text-xs h-7 bg-warn hover:bg-warn text-white font-bold"
                   >
                     Overwrite All Lines ({characterSegments.length})
                   </Button>
                   <button
                     type="button"
                     onClick={() => setShowOverridePrompt(false)}
-                    className="text-[11px] text-zinc-400 hover:text-zinc-200 ml-1 underline"
+                    className="text-[11px] text-fg-dim hover:text-fg ml-1 underline"
                   >
                     Cancel
                   </button>
@@ -379,28 +379,28 @@ export const CharacterVoiceManager: React.FC<CharacterVoiceManagerProps> = ({
 
             {/* Lines Voiced by this Character */}
             <div className="space-y-1.5 pt-1">
-              <span className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider">
+              <span className="text-[10px] uppercase font-bold text-fg-faint tracking-wider">
                 Lines in this Chapter ({characterSegments.length})
               </span>
               <div className="space-y-1 max-h-36 overflow-y-auto">
                 {characterSegments.map((seg) => (
                   <div
                     key={seg.id}
-                    className="p-2 rounded bg-zinc-900 border border-zinc-800 text-[11px] flex items-center justify-between gap-2"
+                    className="p-2 rounded bg-navy border border-edge text-[11px] flex items-center justify-between gap-2"
                   >
                     <div className="flex items-center gap-2 truncate">
-                      <span className="font-mono text-[10px] text-indigo-400 font-bold shrink-0">
+                      <span className="font-mono text-[10px] text-info font-bold shrink-0">
                         #{seg.sequence}
                       </span>
-                      <span className="text-zinc-200 truncate">{seg.narration_text}</span>
+                      <span className="text-fg truncate">{seg.narration_text}</span>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
                       {seg.has_custom_voice_override && (
-                        <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-950/80 border border-amber-800 text-amber-400 font-mono">
+                        <span className="text-[9px] px-1.5 py-0.2 rounded bg-warn/80 border border-warn/40 text-warn font-mono">
                           Custom
                         </span>
                       )}
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-950 text-zinc-400 font-medium">
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-ink text-fg-dim font-medium">
                         {seg.delivery.emotion}
                       </span>
                     </div>
@@ -410,7 +410,7 @@ export const CharacterVoiceManager: React.FC<CharacterVoiceManagerProps> = ({
             </div>
           </div>
         ) : (
-          <div className="md:col-span-2 p-8 text-center text-zinc-500 text-xs">
+          <div className="md:col-span-2 p-8 text-center text-fg-faint text-xs">
             Select a character to view settings
           </div>
         )}
@@ -419,13 +419,13 @@ export const CharacterVoiceManager: React.FC<CharacterVoiceManagerProps> = ({
       {/* Add Character Modal */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl max-w-sm w-full p-5 space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
-              <h4 className="text-sm font-bold text-zinc-100">Add Story Character</h4>
+          <div className="bg-navy border border-edge rounded-xl max-w-sm w-full p-5 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-edge pb-2">
+              <h4 className="text-sm font-bold text-fg">Add Story Character</h4>
               <button
                 type="button"
                 onClick={() => setShowAddModal(false)}
-                className="text-zinc-400 hover:text-zinc-200"
+                className="text-fg-dim hover:text-fg"
               >
                 ✕
               </button>
@@ -433,7 +433,7 @@ export const CharacterVoiceManager: React.FC<CharacterVoiceManagerProps> = ({
 
             <div className="space-y-3 text-xs">
               <div>
-                <label className="block text-[11px] font-semibold text-zinc-400 mb-1">
+                <label className="block text-[11px] font-semibold text-fg-dim mb-1">
                   Character Name
                 </label>
                 <input
@@ -441,18 +441,18 @@ export const CharacterVoiceManager: React.FC<CharacterVoiceManagerProps> = ({
                   placeholder="e.g. Master Vance"
                   value={newCharName}
                   onChange={(e) => setNewCharName(e.target.value)}
-                  className="w-full p-2 rounded bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none focus:border-indigo-500"
+                  className="w-full p-2 rounded bg-ink border border-edge text-xs text-fg focus:outline-none focus:border-accent"
                 />
               </div>
 
               <div>
-                <label className="block text-[11px] font-semibold text-zinc-400 mb-1">
+                <label className="block text-[11px] font-semibold text-fg-dim mb-1">
                   Dramatic Role
                 </label>
                 <select
                   value={newCharRole}
                   onChange={(e) => setNewCharRole(e.target.value as any)}
-                  className="w-full p-2 rounded bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none focus:border-indigo-500"
+                  className="w-full p-2 rounded bg-ink border border-edge text-xs text-fg focus:outline-none focus:border-accent"
                 >
                   <option value="PROTAGONIST">Protagonist</option>
                   <option value="ANTAGONIST">Antagonist</option>
@@ -463,13 +463,13 @@ export const CharacterVoiceManager: React.FC<CharacterVoiceManagerProps> = ({
               </div>
 
               <div>
-                <label className="block text-[11px] font-semibold text-zinc-400 mb-1">
+                <label className="block text-[11px] font-semibold text-fg-dim mb-1">
                   Initial Voice Profile
                 </label>
                 <select
                   value={newCharVoice}
                   onChange={(e) => setNewCharVoice(e.target.value)}
-                  className="w-full p-2 rounded bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none focus:border-indigo-500"
+                  className="w-full p-2 rounded bg-ink border border-edge text-xs text-fg focus:outline-none focus:border-accent"
                 >
                   {voiceProfiles.map((v) => (
                     <option key={v.id} value={v.id}>
@@ -480,7 +480,7 @@ export const CharacterVoiceManager: React.FC<CharacterVoiceManagerProps> = ({
               </div>
 
               <div>
-                <label className="block text-[11px] font-semibold text-zinc-400 mb-1">
+                <label className="block text-[11px] font-semibold text-fg-dim mb-1">
                   Theme Color Accent
                 </label>
                 <div className="flex items-center gap-2">
@@ -490,12 +490,12 @@ export const CharacterVoiceManager: React.FC<CharacterVoiceManagerProps> = ({
                     onChange={(e) => setNewCharColor(e.target.value)}
                     className="w-8 h-8 rounded cursor-pointer bg-transparent border-0"
                   />
-                  <span className="text-zinc-400 font-mono text-xs">{newCharColor}</span>
+                  <span className="text-fg-dim font-mono text-xs">{newCharColor}</span>
                 </div>
               </div>
             </div>
 
-            <div className="flex justify-end gap-2 pt-2 border-t border-zinc-800">
+            <div className="flex justify-end gap-2 pt-2 border-t border-edge">
               <Button
                 variant="secondary"
                 size="sm"
@@ -509,7 +509,7 @@ export const CharacterVoiceManager: React.FC<CharacterVoiceManagerProps> = ({
                 size="sm"
                 onClick={handleCreateNewCharacter}
                 disabled={!newCharName.trim()}
-                className="text-xs h-8 bg-indigo-600 hover:bg-indigo-500"
+                className="text-xs h-8 bg-accent hover:bg-accent"
               >
                 Create Character
               </Button>

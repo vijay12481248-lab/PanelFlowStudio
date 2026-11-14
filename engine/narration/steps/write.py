@@ -6,7 +6,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from engine.narration.artifacts import (
-    BeatSheet, PanelFacts, ScriptIR, ScriptLine, SeriesBible, check_script_ids,
+    BeatSheet, NARRATOR_ID, PanelFacts, ScriptIR, ScriptLine, SeriesBible, check_script_ids,
 )
 from engine.narration.cache import ArtifactCache
 from engine.narration.learning import user_fewshot
@@ -16,10 +16,11 @@ from engine.narration.runtime.scheduler import ModelScheduler
 from engine.narration.steps._cached import cached_call
 from engine.narration.steps.factview import (
     FACT_REF, cast_line, char_names, cues_of, load_fewshot, normalize_facts, panel_line, present_ids,
+    resolvable_speakers, resolve_speaker, speaker_choices,
 )
 from engine.narration.steps.understand import NeedsReview
 
-WRITE_PROMPT_VERSION = "v2"
+WRITE_PROMPT_VERSION = "v3"
 FEWSHOT_PACK = "recap_v2"  # story-telling lines; recap_v1 taught picture captions
 SCENE_STEP = "write_scene"
 CANDIDATE_STEP = "write_candidates"
@@ -31,6 +32,7 @@ class LineDraft(BaseModel):
     text: str
     facts_used: list[str] = Field(default_factory=list)
     kind: Literal["narration", "paraphrase", "transition"] = "narration"
+    speaker: str = NARRATOR_ID  # the model names a speaker id; an unknown one falls back to the narrator
 
 
 class SceneLinesDraft(BaseModel):
@@ -91,7 +93,7 @@ async def write_chapter(
     sprompt = load_prompt(SCENE_STEP, WRITE_PROMPT_VERSION)
 
     async def write_chunk(item: tuple[str, int, set[str]]) -> SceneLinesDraft:
-        text, n, beat_ids = item
+        text, n, beat_ids = item[0], item[1], item[2]
         draft = _normalised(await cached(SCENE_STEP, sprompt.sha256, text, SceneLinesDraft))
         problems = _problems(draft, n, beat_ids)
         if problems:  # the re-ask embeds its feedback, so it has its own cache key
@@ -109,6 +111,7 @@ async def write_chapter(
     text_of: dict[int, str] = {}  # story position -> written line
     kinds: dict[int, str] = {}
     used: dict[int, list[str]] = {}
+    speakers: dict[int, str] = {}
     for rnd in range(max(len(c) for c in chunks)):  # round r writes chunk r of every scene; it needs chunk r-1
         todo = [c[rnd] for c in chunks if rnd < len(c)]
         prompts = []
@@ -120,23 +123,32 @@ async def write_chapter(
                 if local:
                     beats.append(f"beat:{b.beat_id} P{min(local)}-P{max(local)}: {b.what_happens}")
             prev = [text_of[i] for i in range(idx[0] - 3, idx[0]) if i in text_of] if rnd else []
+            present = present_ids(story[i] for i in idx)
+            speakable = resolvable_speakers(present, bible, sheet.character_resolutions)
             prompts.append((sprompt.render(
                 n=str(len(idx)), summary=sheet.chapter_summary, goal=s.goal, turn=s.turn,
-                cast=cast_line(present_ids(story[i] for i in idx), names, bible),
+                cast=cast_line(present, names, bible),
+                speakers=speaker_choices(present, names, speakable),
                 beats="\n".join(beats) or "(none)",
                 previous="\n".join(prev) or "(none)",
                 panels="\n".join(panel_line(k, story[i], names) for k, i in enumerate(idx, start=1)),
-                **common), len(idx), {b.beat_id for b in s.beats}))
-        for (s, idx), draft in zip(todo, await scheduler.map("writer", prompts, write_chunk)):
+                **common), len(idx), {b.beat_id for b in s.beats}, set(speakable.values())))
+        for (s, idx), draft, allowed in zip(todo, await scheduler.map("writer", prompts, write_chunk),
+                                            (p[3] for p in prompts)):
             for d in draft.lines:
                 i = idx[d.panel - 1]
                 if i in text_of:
                     raise ValueError(f"scenes overlap at story panel {story[i].panel_id}")
                 text_of[i], kinds[i] = " ".join(d.text.split()), d.kind
                 used[i] = list(dict.fromkeys(d.facts_used))
+                # only a line that quotes a character may be read in that character's voice; anything else
+                # stays the narrator's, so the recap never invents a voice for a line.
+                speakers[i] = (resolve_speaker(d.speaker, allowed)
+                               if "dialogue" in used[i] else NARRATOR_ID)
 
     lines = [ScriptLine(line_id=f"L{i + 1:03d}", panel_id=f.panel_id, text=text_of[i], facts_used=used[i],
-                        kind="hook" if i == 0 else "cliffhanger" if i == len(story) - 1 else kinds[i])
+                        kind="hook" if i == 0 else "cliffhanger" if i == len(story) - 1 else kinds[i],
+                        speaker_id=speakers[i])
              for i, f in enumerate(story) if i in text_of]
     script = ScriptIR(project_id=project_id, lines=lines)
     if problems := check_script_ids(script, [f.panel_id for f in story]):

@@ -148,7 +148,7 @@ export const NarrationJobQueue: React.FC<NarrationJobQueueProps> = ({
     onUpdateSegment({
       generation_status: "FAILED",
       generation_progress: 0,
-      generation_error: "Simulated Error: VRAM allocation threshold reached (Error #408).",
+      generation_error: "Simulated Error: VRAM allocation threshold reached (Error #26346a).",
       updated_at: new Date().toISOString(),
     });
   };
@@ -221,16 +221,16 @@ export const NarrationJobQueue: React.FC<NarrationJobQueueProps> = ({
       case "PROCESSING":
         return (
           <div className="space-y-1.5">
-            <div className="flex items-center justify-between text-[11px] font-semibold text-indigo-400">
+            <div className="flex items-center justify-between text-[11px] font-semibold text-info">
               <span className="flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-indigo-500 animate-ping" />
+                <span className="w-2 h-2 rounded-full bg-accent animate-ping" />
                 Synthesizing speech with voice profile...
               </span>
               <span>{segment.generation_progress || 45}%</span>
             </div>
-            <div className="w-full bg-zinc-800 rounded-full h-1.5 overflow-hidden">
+            <div className="w-full bg-flat rounded-full h-1.5 overflow-hidden">
               <div
-                className="bg-indigo-500 h-1.5 rounded-full transition-all duration-300"
+                className="bg-accent h-1.5 rounded-full transition-all duration-300"
                 style={{ width: `${segment.generation_progress || 45}%` }}
               />
             </div>
@@ -239,37 +239,37 @@ export const NarrationJobQueue: React.FC<NarrationJobQueueProps> = ({
 
       case "QUEUED":
         return (
-          <div className="flex items-center justify-between text-xs p-2 rounded bg-zinc-950 border border-zinc-800 text-zinc-300">
+          <div className="flex items-center justify-between text-xs p-2 rounded bg-ink border border-edge text-fg-dim">
             <span className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-indigo-400" />
+              <span className="w-2 h-2 rounded-full bg-accent" />
               Queued in local background scheduler
             </span>
-            <span className="text-[10px] font-mono text-zinc-500">Position #1</span>
+            <span className="text-[10px] font-mono text-fg-faint">Position #1</span>
           </div>
         );
 
       case "READY":
         return (
-          <div className="flex items-center justify-between text-xs p-2 rounded bg-emerald-950/40 border border-emerald-800/60 text-emerald-300">
+          <div className="flex items-center justify-between text-xs p-2 rounded bg-ok/40 border border-ok/60 text-ok">
             <span className="flex items-center gap-1.5">
-              <Icons.Check className="w-3.5 h-3.5 text-emerald-400" />
+              <Icons.Check className="w-3.5 h-3.5 text-ok" />
               Generated audio ready for preview
             </span>
-            <span className="text-[10px] font-mono text-emerald-400 font-bold">100%</span>
+            <span className="text-[10px] font-mono text-ok font-bold">100%</span>
           </div>
         );
 
       case "OUTDATED":
         return (
-          <div className="space-y-1 p-2 rounded bg-amber-950/40 border border-amber-800/60 text-amber-300 text-xs">
+          <div className="space-y-1 p-2 rounded bg-warn/40 border border-warn/60 text-warn text-xs">
             <div className="flex items-center justify-between font-bold text-[11px]">
               <span className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                <span className="w-2 h-2 rounded-full bg-warn animate-pulse" />
                 Audio is Outdated
               </span>
               <span className="text-[10px] uppercase font-mono">Regen Needed</span>
             </div>
-            <p className="text-[10px] text-amber-200/80 leading-normal">
+            <p className="text-[10px] text-warn/80 leading-normal">
               {segment.generation_error || "Script text was modified after generation. Regenerate to align speech with current text."}
             </p>
           </div>
@@ -277,12 +277,12 @@ export const NarrationJobQueue: React.FC<NarrationJobQueueProps> = ({
 
       case "FAILED":
         return (
-          <div className="space-y-1 p-2 rounded bg-rose-950/40 border border-rose-800/60 text-rose-300 text-xs">
+          <div className="space-y-1 p-2 rounded bg-bad/40 border border-bad/60 text-bad text-xs">
             <span className="font-bold text-[11px] flex items-center gap-1">
-              <Icons.XCircle className="w-3.5 h-3.5 text-rose-400" />
+              <Icons.XCircle className="w-3.5 h-3.5 text-bad" />
               Generation Failed (Simulated)
             </span>
-            <p className="text-[10px] text-rose-200/80 font-mono">
+            <p className="text-[10px] text-bad/80 font-mono">
               {segment.generation_error || "Unknown synthesis failure."}
             </p>
           </div>
@@ -291,30 +291,30 @@ export const NarrationJobQueue: React.FC<NarrationJobQueueProps> = ({
       case "UNQUEUED":
       default:
         return (
-          <div className="text-zinc-500 text-xs p-2 rounded bg-zinc-950 border border-zinc-800 flex items-center justify-between">
+          <div className="text-fg-faint text-xs p-2 rounded bg-ink border border-edge flex items-center justify-between">
             <span>No audio generated for this segment yet</span>
-            <span className="text-[10px] uppercase font-mono text-zinc-600">Idle</span>
+            <span className="text-[10px] uppercase font-mono text-fg-faint">Idle</span>
           </div>
         );
     }
   };
 
   return (
-    <div className={`p-3.5 rounded-xl bg-zinc-900/60 border border-zinc-800 space-y-3 select-none text-xs ${className}`}>
+    <div className={`p-3.5 rounded-xl bg-navy/60 border border-edge space-y-3 select-none text-xs ${className}`}>
       {/* Header & Simulation Badge */}
-      <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
+      <div className="flex items-center justify-between border-b border-edge pb-2">
         <div className="flex items-center gap-2">
-          <span className="w-5 h-5 rounded-md bg-indigo-600/80 text-white flex items-center justify-center font-bold text-[10px] shadow-sm">
+          <span className="w-5 h-5 rounded-md bg-accent/80 text-white flex items-center justify-center font-bold text-[10px] shadow-sm">
             <Icons.Cpu className="w-3.5 h-3.5" />
           </span>
-          <span className="font-bold text-zinc-200 uppercase tracking-wider text-[11px]">
+          <span className="font-bold text-fg uppercase tracking-wider text-[11px]">
             Narration Job Engine
           </span>
         </div>
 
 
-        <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-indigo-950/80 text-indigo-400 font-bold border border-indigo-800 flex items-center gap-1">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+        <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-accent/80 text-info font-bold border border-accent/40 flex items-center gap-1">
+          <span className="w-1.5 h-1.5 rounded-full bg-ok animate-pulse" />
           Chatterbox Turbo (CUDA)
         </span>
       </div>
@@ -338,7 +338,7 @@ export const NarrationJobQueue: React.FC<NarrationJobQueueProps> = ({
             variant="primary"
             size="sm"
             onClick={() => startLocalSynthesis(segment.id)}
-            className="text-xs h-7 flex-1 bg-amber-600 hover:bg-amber-500 text-white font-bold"
+            className="text-xs h-7 flex-1 bg-warn hover:bg-warn text-white font-bold"
           >
             Regenerate Audio
           </Button>
@@ -347,7 +347,7 @@ export const NarrationJobQueue: React.FC<NarrationJobQueueProps> = ({
             variant="secondary"
             size="sm"
             onClick={() => startLocalSynthesis(segment.id)}
-            className="text-xs h-7 flex-1 border border-zinc-700"
+            className="text-xs h-7 flex-1 border border-edge"
           >
             Re-synthesize
           </Button>
@@ -356,7 +356,7 @@ export const NarrationJobQueue: React.FC<NarrationJobQueueProps> = ({
             variant="primary"
             size="sm"
             onClick={() => startLocalSynthesis(segment.id)}
-            className="text-xs h-7 flex-1 bg-indigo-600 hover:bg-indigo-500 font-bold"
+            className="text-xs h-7 flex-1 bg-accent hover:bg-accent font-bold"
           >
             Generate Speech
           </Button>
@@ -365,7 +365,7 @@ export const NarrationJobQueue: React.FC<NarrationJobQueueProps> = ({
         <button
           type="button"
           onClick={handleSimulateFailure}
-          className="text-[10px] text-zinc-500 hover:text-rose-400 px-2 py-1 rounded hover:bg-zinc-800"
+          className="text-[10px] text-fg-faint hover:text-bad px-2 py-1 rounded hover:bg-flat"
           title="Simulate error state for UI verification"
         >
           Simulate Error
@@ -373,17 +373,17 @@ export const NarrationJobQueue: React.FC<NarrationJobQueueProps> = ({
       </div>
 
       {/* Chapter Batch Stats Bar */}
-      <div className="pt-2 border-t border-zinc-800/80 flex items-center justify-between text-[11px] text-zinc-400">
+      <div className="pt-2 border-t border-edge/80 flex items-center justify-between text-[11px] text-fg-dim">
         <div className="flex items-center gap-2">
-          <span>Ready: <strong className="text-emerald-400 font-mono">{statusCounts.ready}</strong></span>
+          <span>Ready: <strong className="text-ok font-mono">{statusCounts.ready}</strong></span>
           <span>•</span>
-          <span>Outdated: <strong className="text-amber-400 font-mono">{statusCounts.outdated}</strong></span>
+          <span>Outdated: <strong className="text-warn font-mono">{statusCounts.outdated}</strong></span>
         </div>
 
         <button
           type="button"
           onClick={() => setShowQueueList((v) => !v)}
-          className="text-[10px] text-indigo-400 hover:underline font-semibold"
+          className="text-[10px] text-info hover:underline font-semibold"
         >
           {showQueueList ? "Hide Queue" : `View Chapter Queue (${allSegments.length})`}
         </button>
@@ -391,14 +391,14 @@ export const NarrationJobQueue: React.FC<NarrationJobQueueProps> = ({
 
       {/* Expandable Chapter Queue Overview */}
       {showQueueList && (
-        <div className="p-2 rounded-lg bg-zinc-950 border border-zinc-800 space-y-2 max-h-48 overflow-y-auto">
-          <div className="flex items-center justify-between text-[10px] font-bold uppercase text-zinc-500">
+        <div className="p-2 rounded-lg bg-ink border border-edge space-y-2 max-h-48 overflow-y-auto">
+          <div className="flex items-center justify-between text-[10px] font-bold uppercase text-fg-faint">
             <span>All Segments</span>
             {statusCounts.outdated > 0 && (
               <button
                 type="button"
                 onClick={handleQueueAllOutdated}
-                className="text-indigo-400 hover:text-indigo-300 font-bold underline"
+                className="text-info hover:text-info font-bold underline"
               >
                 Queue Outdated ({statusCounts.outdated})
               </button>
@@ -410,22 +410,22 @@ export const NarrationJobQueue: React.FC<NarrationJobQueueProps> = ({
               <div
                 key={s.id}
                 className={`p-1.5 rounded flex items-center justify-between text-[10px] ${
-                  s.id === segment.id ? "bg-indigo-950/60 border border-indigo-800/80" : "bg-zinc-900"
+                  s.id === segment.id ? "bg-accent/60 border border-accent/80" : "bg-navy"
                 }`}
               >
                 <div className="flex items-center gap-1.5 truncate">
-                  <span className="font-mono text-zinc-500">#{s.sequence}</span>
-                  <span className="text-zinc-200 truncate max-w-[140px]">{s.speaker_name}</span>
+                  <span className="font-mono text-fg-faint">#{s.sequence}</span>
+                  <span className="text-fg truncate max-w-[140px]">{s.speaker_name}</span>
                 </div>
                 <span
                   className={`font-mono text-[9px] font-bold px-1.5 py-0.2 rounded ${
                     s.generation_status === "READY"
-                      ? "bg-emerald-950 text-emerald-400"
+                      ? "bg-ok/20 text-ok"
                       : s.generation_status === "OUTDATED"
-                      ? "bg-amber-950 text-amber-400"
+                      ? "bg-warn/20 text-warn"
                       : s.generation_status === "FAILED"
-                      ? "bg-rose-950 text-rose-400"
-                      : "bg-zinc-800 text-zinc-400"
+                      ? "bg-bad/20 text-bad"
+                      : "bg-flat text-fg-dim"
                   }`}
                 >
                   {s.generation_status}

@@ -16,8 +16,15 @@ from engine.database.models import ProjectRecord
 from engine.database.session import get_db
 from engine.jobs.workflow import enqueue_project_operation, register_operation_factory
 from engine.narration import review
-from engine.narration.artifacts import CritiqueReport, ScriptIR, SeriesBible
-from engine.narration.bible.store import BibleStore
+from engine.narration.artifacts import (
+    CritiqueReport, NARRATOR_ID, PerformancePlan, ScriptIR, SeriesBible, VoiceTake,
+)
+from engine.narration.bible.store import BibleStore, series_key_for
+from engine.narration.casting import apply_recommendations, load_cast, resolve_cast, save_cast
+from engine.narration.ledger import TakeLedger, outdated_lines
+from engine.narration.qa import QaReport, repairs
+from engine.narration.runtime.roles import load_voice_catalog
+from engine.narration.stoppoints import load_stop_points, open_stop_points, resolve_stop_point
 from engine.narration.steps.critique.judges import JUDGES
 from engine.narration.steps.critique.rules import rule_checks
 from engine.narration.steps.factview import char_names, cues_of, panel_line
@@ -84,7 +91,7 @@ def list_runs(project_id: str, db: Session = Depends(get_db)) -> list[dict]:
 
 def _context(run_dir: Path, item) -> dict:
     """Everything a line view needs. Checks are recomputed from the current text; critique.json is the fallback."""
-    ctx = {"sheet": None, "facts": None, "names": None, "takes": {}, "checks": {}}
+    ctx = {"sheet": None, "facts": None, "names": None, "takes": {}, "checks": {}, "qa": {}}
     report = None
     try:
         report = CritiqueReport.model_validate_json((run_dir / "critique.json").read_text(encoding="utf-8"))
@@ -92,8 +99,17 @@ def _context(run_dir: Path, item) -> dict:
     except (ValueError, OSError):
         pass
     try:
-        ctx["takes"] = {t["line_id"]: {"wer": t["wer"], "flagged": t["flagged"], "stt_text": t["stt_text"]}
+        ctx["takes"] = {t["line_id"]: {"wer": t["wer"], "flagged": t["flagged"], "stt_text": t["stt_text"],
+                                       "voice_profile_id": t.get("voice_profile_id", ""),
+                                       "script_revision": t.get("script_revision", 0),
+                                       "direction_revision": t.get("direction_revision", 0),
+                                       "provider": t.get("provider", "")}
                         for t in _json(run_dir / "takes.json")}
+    except (ValueError, KeyError, TypeError, OSError):
+        pass
+    try:
+        ctx["qa"] = {lid: {"passed": r["passed"], "checks": r["checks"], "repairs": repairs(QaReport(**r))}
+                     for lid, r in _json(run_dir / "qa.json").items()}
     except (ValueError, KeyError, TypeError, OSError):
         pass
     try:
@@ -119,9 +135,33 @@ def _context(run_dir: Path, item) -> dict:
                     checks.setdefault(ln.line_id, []).extend(
                         c.model_dump(mode="json") for c in old[ln.line_id].checks if c.rule in JUDGES)
         ctx["checks"] = checks
+        ctx["outdated"] = _outdated_takes(run_dir, script)
     except (ValueError, KeyError, OSError):
         pass
     return ctx
+
+
+def _outdated_takes(run_dir: Path, script: ScriptIR) -> list[str]:
+    """The lines whose take no longer matches the line: the text, the direction or the voice moved on."""
+    try:
+        takes = [VoiceTake.model_validate(t) for t in _json(run_dir / "takes.json")]
+    except (ValueError, KeyError, TypeError, OSError):
+        return []
+    if not takes:
+        return []
+    plan = None
+    try:
+        plan = PerformancePlan.model_validate_json((run_dir / "performance.json").read_text(encoding="utf-8"))
+    except (ValueError, OSError):
+        pass
+    profiles = {}
+    try:
+        profiles = {a["character_id"]: a["profile_id"] for a in (_json(run_dir / "casting.json") or {}).get("assignments", [])}
+    except (ValueError, KeyError, TypeError, OSError):
+        profiles = {}
+    ledger = TakeLedger(script, direction_revision=plan.revision if plan else script.revision,
+                        voice_profile_ids=profiles)
+    return outdated_lines(takes, ledger)
 
 
 def _line_view(ln, ctx: dict) -> dict:
@@ -130,8 +170,15 @@ def _line_view(ln, ctx: dict) -> dict:
         facts = panel_line(1, ctx["facts"][ln.panel_id], ctx["names"])
     except (KeyError, TypeError):
         facts = ""  # panel missing from panel_facts.json
+    speaker_id = getattr(ln, "speaker_id", NARRATOR_ID)
+    take = ctx["takes"].get(ln.line_id)
+    qa = ctx["qa"].get(ln.line_id)
     return {"line_id": ln.line_id, "panel_id": ln.panel_id, "text": ln.text, "status": ln.status, "kind": ln.kind,
-            "checks": ctx["checks"].get(ln.line_id, []), "facts": facts, "take": ctx["takes"].get(ln.line_id)}
+            "speaker_id": speaker_id,
+            "speaker_name": "Narrator" if speaker_id == NARRATOR_ID else ctx["names"].get(speaker_id, speaker_id),
+            "checks": ctx["checks"].get(ln.line_id, []), "facts": facts, "take": take,
+            "outdated": ln.line_id in ctx.get("outdated", []),
+            "qa": qa}
 
 @router.get("/runs/{project_id}/{run_id}")
 def inspect_run(project_id: str, run_id: str, db: Session = Depends(get_db)) -> dict:
@@ -156,8 +203,41 @@ def inspect_run(project_id: str, run_id: str, db: Session = Depends(get_db)) -> 
         beat_sheet = {"hook": sheet.hook, "chapter_summary": sheet.chapter_summary,
                       "scenes": [{"scene_id": s.scene_id, "goal": s.goal, "first_panel_id": s.first_panel_id,
                                   "last_panel_id": s.last_panel_id} for s in sheet.scenes]}
-    return {"run": run, "lines": lines, "beat_sheet": beat_sheet,
+    try:
+        cast = _json(run_dir / "casting.json")
+    except (ValueError, OSError):
+        cast = None  # the run stopped before the voice step
+    try:
+        readiness_report = _json(run_dir / "readiness.json")
+    except (ValueError, OSError):
+        readiness_report = None  # the run stopped before the timeline
+    return {"run": run, "lines": lines, "beat_sheet": beat_sheet, "casting": cast,
+            "readiness": readiness_report,
+            "stop_points": [p.model_dump(mode="json") for p in open_stop_points(run_dir)],
             "review": item.model_dump(mode="json") if item else None}
+
+
+class StopPointRequest(BaseModel):
+    kind: str
+    choice: str
+
+
+@router.get("/runs/{project_id}/{run_id}/stop-points")
+def list_stop_points(project_id: str, run_id: str, db: Session = Depends(get_db)):
+    """The decisions this run is waiting for."""
+    run_dir = _run_dir(db, project_id, run_id)
+    return {"stop_points": [p.model_dump(mode="json") for p in load_stop_points(run_dir)]}
+
+
+@router.post("/runs/{project_id}/{run_id}/stop-points")
+def answer_stop_point(project_id: str, run_id: str, req: StopPointRequest, db: Session = Depends(get_db)):
+    """Answer a stop point: the owner chose, and the run carries on."""
+    run_dir = _run_dir(db, project_id, run_id)
+    try:
+        remaining = resolve_stop_point(run_dir, req.kind, req.choice)
+    except (ValueError, OSError) as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return {"stop_points": [p.model_dump(mode="json") for p in remaining]}
 
 
 @router.get("/runs/{project_id}/{run_id}/takes/{line_id}/audio")
@@ -170,6 +250,73 @@ def take_audio(project_id: str, run_id: str, line_id: str, db: Session = Depends
         return contained_file_response(workspace, p, media_type="audio/wav", filename=p.name)
     except (StopIteration, KeyError, TypeError, ValueError, OSError):
         raise HTTPException(404, "Take audio not found")
+
+
+@router.get("/projects/{project_id}/cast")
+def get_cast(project_id: str, db: Session = Depends(get_db)):
+    """The cast of a project: the voices it uses, the ones it recommends, and the ones it lacks."""
+    project = db.get(ProjectRecord, project_id)
+    if project is None:
+        raise HTTPException(404, "Project not found")
+    key = series_key_for(project.title or "", project.source_metadata)
+    if not key:
+        raise HTTPException(404, "Project has no series")
+    bible = _bibles().load(key)
+    catalog = load_voice_catalog()
+    assigned = load_cast(key)
+    characters = [c.id for c in bible.characters]
+    plan = resolve_cast(key, bible, characters, catalog, assigned)
+    return {
+        "series_key": key,
+        "catalog": [p.model_dump(mode="json") for p in catalog],
+        "assigned": assigned,
+        "cast": [a.model_dump(mode="json") for a in plan.assignments],
+        "recommendations": [r.model_dump(mode="json") for r in plan.recommendations],
+        "uncast": plan.uncast,
+    }
+
+
+class CastRequest(BaseModel):
+    character_id: str
+    profile_id: str
+
+
+@router.post("/projects/{project_id}/cast")
+def set_cast(project_id: str, req: CastRequest, db: Session = Depends(get_db)):
+    """Cast a character to a voice, or clear the casting by sending an empty profile id."""
+    project = db.get(ProjectRecord, project_id)
+    if project is None:
+        raise HTTPException(404, "Project not found")
+    key = series_key_for(project.title or "", project.source_metadata)
+    if not key:
+        raise HTTPException(404, "Project has no series")
+    if req.profile_id:
+        known = {p.id for p in load_voice_catalog()}
+        if req.profile_id not in known:
+            raise HTTPException(400, "That voice is not an approved profile")
+    current = load_cast(key)
+    if req.profile_id:
+        current[req.character_id] = req.profile_id
+    else:
+        current.pop(req.character_id, None)
+    save_cast(key, current)
+    return {"series_key": key, "assigned": current}
+
+
+@router.post("/projects/{project_id}/cast/accept")
+def accept_cast_recommendations(project_id: str, db: Session = Depends(get_db)):
+    """Accept every proposed voice, keeping the assignments already made."""
+    project = db.get(ProjectRecord, project_id)
+    if project is None:
+        raise HTTPException(404, "Project not found")
+    key = series_key_for(project.title or "", project.source_metadata)
+    if not key:
+        raise HTTPException(404, "Project has no series")
+    bible = _bibles().load(key)
+    catalog = load_voice_catalog()
+    plan = resolve_cast(key, bible, [c.id for c in bible.characters], catalog, load_cast(key))
+    assigned = apply_recommendations(plan, key, catalog)
+    return {"series_key": key, "assigned": assigned}
 
 
 # ---- background jobs: the same durable job manager autopilot uses; handlers never wait on models ----

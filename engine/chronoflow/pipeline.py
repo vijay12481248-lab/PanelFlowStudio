@@ -1,5 +1,6 @@
 import os
 import json
+import re
 import uuid
 import asyncio
 import subprocess
@@ -30,6 +31,9 @@ COMFY_INPUT_DIR = BASE_DIR / "input"
 COMFY_OUTPUT_DIR = BASE_DIR / "output" / "video"
 STUDIO_OUTPUT_DIR = Path("E:/VIJAY SEKAR/PanelFlow Studio/output/chronoflow")
 STUDIO_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+FAST_H3_UNET = "fastvideo_fasth3_8step_v2_pruned_int8_convrot.safetensors"
+
 
 class ChronoFlowPipeline:
     def __init__(self, comfy_url=COMFY_URL, ws_url=COMFY_WS_URL):
@@ -118,27 +122,31 @@ class ChronoFlowPipeline:
     def build_h3_prompt(self, prompt, width, height, length, steps, lora_name, 
                         workflow_mode="sliding_window", first_frame_filename=None, 
                         last_frame_filename=None, ref_images=None, seed=None,
-                        face_refine=False, upscale_mode="none"):
+                        face_refine=False, upscale_mode="none", fast_h3=True):
         if seed is None:
             import random
             seed = random.randint(1, 1000000000)
+        # FastH3 (the distilled 8-step checkpoint with sparse attention, as in engine/comfyui/workflows/fastvideo_h3_i2v) replaces the
+        # full model + turbo LoRA. Reference-to-video keeps the full model: FastH3 was not tried with that node.
+        fast_h3 = fast_h3 and workflow_mode != "reference" and (BASE_DIR / "models" / "diffusion_models" / FAST_H3_UNET).exists()
 
+        if fast_h3:
+            steps = 8
+            model_nodes = {
+                "1": {"class_type": "UNETLoader", "inputs": {"unet_name": FAST_H3_UNET, "weight_dtype": "default"}},
+                "shift": {"class_type": "MiniMaxH3SigmaShift", "inputs": {"model": ["1", 0], "shift_video": 10, "shift_audio": 3}},
+                "attn": {"class_type": "ModelAttentionBackend", "inputs": {"model": ["shift", 0], "attention": "comfy kitchen attention"}},
+                "2": {"class_type": "BlockSparseAttention", "inputs": {
+                    "model": ["attn", 0], "selection": "vsa", "selection.keep_percent": 10, "start_percent": 0.2, "end_percent": 1,
+                    "dense_blocks": "", "min_tokens": 12288, "extra_tokens": 256, "sink_conditioning": "exact_kv_and_rows", "verbose": False}},
+            }
+        else:
+            model_nodes = {
+                "1": {"class_type": "UNETLoader", "inputs": {"unet_name": "minimax_h3_fl2va_pruned_int8_convrot.safetensors", "weight_dtype": "default"}},
+                "2": {"class_type": "LoraLoaderModelOnly", "inputs": {"model": ["1", 0], "lora_name": lora_name, "strength_model": 1.0}},
+            }
         graph = {
-            "1": {
-                "class_type": "UNETLoader",
-                "inputs": {
-                    "unet_name": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
-                    "weight_dtype": "default"
-                }
-            },
-            "2": {
-                "class_type": "LoraLoaderModelOnly",
-                "inputs": {
-                    "model": ["1", 0],
-                    "lora_name": lora_name,
-                    "strength_model": 1.0
-                }
-            },
+            **model_nodes,
             "3": {
                 "class_type": "CLIPLoader",
                 "inputs": {
@@ -336,14 +344,19 @@ class ChronoFlowPipeline:
 
         return graph
 
-    async def generate_art_image(self, prompt, negative_prompt, width=1024, height=1024, seed=None, refine: bool = False) -> str:
-        return (await self.generate_art_image_ex(prompt, negative_prompt, width, height, seed, refine))[0]
+    async def generate_art_image(self, prompt, negative_prompt, width=1024, height=1024, seed=None, refine: bool = False,
+                                 ref_images: list | None = None) -> str:
+        return (await self.generate_art_image_ex(prompt, negative_prompt, width, height, seed, refine, ref_images))[0]
 
-    async def generate_art_image_ex(self, prompt, negative_prompt, width=1024, height=1024, seed=None, refine: bool = False) -> tuple[str, dict | None]:
+    async def generate_art_image_ex(self, prompt, negative_prompt, width=1024, height=1024, seed=None, refine: bool = False,
+                                    ref_images: list | None = None) -> tuple[str, dict | None]:
         """One keyframe / reference image from the central ArtEngine, saved into ComfyUI's input/ folder (Character Vault, MiniMax H3).
 
         There is exactly one text-to-image workflow in PanelFlow (see engine/comfyui/art.py); ChronoFlow does not carry its own graphs.
+        `ref_images` is the character lock: each item is a reference image (Character Vault sheet filename, a path, raw bytes, or a
+        base64 data URL) bound to the art workflow's reference conditioning so generated faces follow the approved sheets.
         """
+        resolved_refs = self._resolve_reference_inputs(ref_images) if ref_images else []
         if refine:  # opt-in: review -> plan -> repair/redraw; candidates are kept under output/chronoflow/refine
             from engine.original.refine import refine_art_image
 
@@ -354,10 +367,44 @@ class ChronoFlowPipeline:
             info = summary(refined)
         else:
             info = None
-            art = await asyncio.to_thread(ArtEngine().generate, prompt, negative_prompt, int(width), int(height), seed, "chronoflow_art")
+            art = await asyncio.to_thread(
+                ArtEngine().generate, prompt, negative_prompt, int(width), int(height), seed, "chronoflow_art",
+                reference_images=resolved_refs or None)
         filename = f"art_{uuid.uuid4().hex[:8]}.png"
         (COMFY_INPUT_DIR / filename).write_bytes(art.png)
         return filename, info
+
+    @staticmethod
+    def _resolve_reference_inputs(ref_images: list) -> list:
+        """Normalize user-supplied references into what ArtEngine.generate accepts (bytes, Path, or ComfyUI input name).
+
+        Accepts a Character Vault sheet filename (already in ComfyUI's input folder), an engine media URL such as
+        /chronoflow/inputs/<file> or /inputs/<file>, an absolute or relative path, or a base64 data URL.
+        """
+        resolved: list = []
+        for item in ref_images:
+            if item is None:
+                continue
+            if isinstance(item, bytes):
+                resolved.append(item)
+                continue
+            s = str(item).strip()
+            if s.startswith("data:"):  # base64 data URL -> raw bytes (ArtEngine uploads them)
+                _, _, payload = s.partition(",")
+                import base64 as _b64
+                resolved.append(_b64.b64decode(payload))
+                continue
+            name = s.rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
+            candidate = Path(name)
+            if not candidate.is_file():
+                in_comfy = COMFY_INPUT_DIR / name
+                if in_comfy.is_file():
+                    candidate = in_comfy
+            if candidate.is_file():
+                resolved.append(candidate)  # uploaded by content name; reruns reuse it
+            else:
+                resolved.append(name)  # assume it is already a ComfyUI input name
+        return resolved
 
     def build_inpaint_prompt(self, image_filename, mask_filename, prompt, denoise=0.85, steps=4, seed=None, model="flux"):
         if seed is None:
@@ -714,14 +761,47 @@ class ChronoFlowPipeline:
             raise RuntimeError(f"overlay render failed: {res.stderr[-300:]}")
         tmp.replace(master_path)
 
-    def render_timeline_edl(self, clips, output_master_path, overlays=None):
-        """Renders an NLE timeline Edit Decision List (V1 clips + V2 still overlays) into a final mastered video."""
+    # A grade reaches the renderer as a baked 3D LUT (.cube text) keyed by a hash the client computes; clips name it in "lut".
+    _LUT_ID = re.compile(r"^[0-9a-f]{16}$")
+    _LUT_MAX_BYTES = 4_000_000
+
+    @classmethod
+    def _write_grade_luts(cls, luts, temp_dir):
+        """Write the client's baked LUTs into temp_dir and return {id: filename}. Bad ids or oversized or malformed text are refused."""
+        written = {}
+        for lut_id, text in (luts or {}).items():
+            if not cls._LUT_ID.match(str(lut_id)):
+                raise ValueError(f"invalid grade id {str(lut_id)[:20]!r}")
+            if not isinstance(text, str) or len(text) > cls._LUT_MAX_BYTES or "LUT_3D_SIZE" not in text[:400]:
+                raise ValueError(f"grade {lut_id} is not a usable .cube file")
+            name = f"{lut_id}.cube"
+            (temp_dir / name).write_text(text, encoding="ascii", errors="replace")
+            written[str(lut_id)] = name
+        return written
+
+    @staticmethod
+    def _grade_filter(cube_name):
+        """BT.709 RGB round trip around lut3d, so FFmpeg sees the same RGB the browser shows (our clips carry no colour tags)."""
+        # accurate_rnd + full_chroma_int halve the brightness bias of the YUV round trip (measured on a real 1080p frame: 1.8 -> 1.1 of 255)
+        flags = "accurate_rnd+full_chroma_int"
+        return (f"scale=in_range=tv:in_color_matrix=bt709:flags={flags},format=rgb24,lut3d=file={cube_name}:interp=tetrahedral,"
+                f"scale=out_range=tv:out_color_matrix=bt709:flags={flags},format=yuv420p,")
+
+    def render_timeline_edl(self, clips, output_master_path, overlays=None, luts=None):
+        """Renders an NLE timeline Edit Decision List (V1 clips + V2 still overlays) into a final mastered video.
+        luts: {grade id: .cube text}; a clip with "lut": <id> is colour graded by that LUT before scaling."""
         if not clips:
             return None
 
         import tempfile
         temp_dir = output_master_path.parent / f"timeline_tmp_{uuid.uuid4().hex[:8]}"
         temp_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            grade_files = self._write_grade_luts(luts, temp_dir)
+        except ValueError:
+            import shutil
+            shutil.rmtree(temp_dir, ignore_errors=True)
+            raise
 
         processed_chunks = []
         transitions = []   # parallel to processed_chunks: (kind, seconds) into that clip, or None
@@ -761,9 +841,11 @@ class ChronoFlowPipeline:
 
                 cmd.extend(["-i", str(src_path)])
 
-                # Filter complex for speed and volume
+                # Filter complex for speed, color grade, and fusion VFX
                 pts_factor = 1.0 / max(0.25, min(4.0, speed))
-                v_filter = f"setpts={pts_factor:.4f}*PTS,scale={out_w}:{out_h}:force_original_aspect_ratio=decrease,pad={out_w}:{out_h}:(ow-iw)/2:(oh-ih)/2"
+                grade_f = self._grade_filter(grade_files[str(clip.get("lut"))]) if str(clip.get("lut")) in grade_files else ""
+                fusion_f = (str(clip.get("fusion_filter")).strip().rstrip(",") + ",") if clip.get("fusion_filter") else ""
+                v_filter = f"setpts={pts_factor:.4f}*PTS,{grade_f}{fusion_f}scale={out_w}:{out_h}:force_original_aspect_ratio=decrease,pad={out_w}:{out_h}:(ow-iw)/2:(oh-ih)/2"
                 
                 # Audio tempo
                 atempo = max(0.5, min(2.0, speed))
@@ -781,7 +863,7 @@ class ChronoFlowPipeline:
                     str(out_chunk)
                 ])
 
-                res = subprocess.run(cmd, capture_output=True, text=True)
+                res = subprocess.run(cmd, capture_output=True, text=True, cwd=temp_dir)   # cwd: grade .cube files are named relative to it
                 join = (clip.get("transition"), float(clip.get("trans_dur") or 0.5)) if clip.get("transition") in ("dissolve", "fadeblack") else None
                 if res.returncode == 0 and out_chunk.exists():
                     processed_chunks.append(out_chunk)
@@ -797,7 +879,7 @@ class ChronoFlowPipeline:
                         "-an",
                         str(out_chunk)
                     ]
-                    res_alt = subprocess.run(cmd_no_a, capture_output=True, text=True)
+                    res_alt = subprocess.run(cmd_no_a, capture_output=True, text=True, cwd=temp_dir)
                     if res_alt.returncode == 0 and out_chunk.exists():
                         processed_chunks.append(out_chunk)
                         transitions.append(join)

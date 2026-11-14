@@ -27,10 +27,11 @@ def _draft(is_story=True):
                            emotion="tense", speakers=[], sfx=[], setting="hall", importance=3, confidence=0.9)
 
 
-def _window():
+def _window(confidence=1.0, uncertain=""):
     return WindowDraft(scenes=[WindowSceneDraft(
         first=1, last=3, goal="g", conflict="c", turn="t",
-        beats=[WindowBeatDraft(panels=[1, 2, 3], what_happens="w", function="setup", intensity=0.5)])])
+        beats=[WindowBeatDraft(panels=[1, 2, 3], what_happens="w", function="setup", intensity=0.5,
+                               confidence=confidence, uncertain=uncertain)])])
 
 
 def _merge():
@@ -75,6 +76,22 @@ def test_stop_after_perceive_writes_no_beat_sheet(tmp_path):
     assert result.beat_sheet is None and result.gate == "pass"
     assert not (result.run_dir / "beat_sheet.json").exists()
     assert (result.run_dir / "panel_facts.json").exists()
+
+
+def test_a_brief_the_analyst_is_unsure_about_becomes_a_stop_point(tmp_path):
+    """The workflow pauses for the owner on a beat the analyst could not be sure about."""
+    responses = {"vision": [_draft()] * 3,
+                 "planner": [_window(confidence=0.4, uncertain="the speaker of P2 is not clear"), _merge()]}
+    result = _go(tmp_path, _compiler(tmp_path, responses))
+    points = json.loads((result.run_dir / "stop_points.json").read_text(encoding="utf-8"))
+    assert [p["kind"] for p in points] == ["brief"]
+    assert points[0]["detail"] == "the speaker of P2 is not clear"
+    assert points[0]["options"] == ["accept as read", "edit the beat", "leave for later"]
+
+
+def test_a_sure_brief_records_no_stop_point(tmp_path):
+    result = _go(tmp_path, _compiler(tmp_path, _ok()))
+    assert not (result.run_dir / "stop_points.json").exists()
 
 
 def test_needs_review_sets_review_gate_with_reasons(tmp_path):

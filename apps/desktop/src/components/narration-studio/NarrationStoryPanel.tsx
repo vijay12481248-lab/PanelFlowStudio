@@ -111,8 +111,8 @@ export const NarrationStoryPanel: React.FC<NarrationStoryPanelProps> = ({
   const getStatusBadge = (status: ReviewStatus, genStatus: string) => {
     if (genStatus === "OUTDATED") {
       return (
-        <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-400 bg-amber-950/70 border border-amber-800/80 px-2 py-0.5 rounded-full">
-          <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+        <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-warn bg-warn/70 border border-warn/80 px-2 py-0.5 rounded-full">
+          <span className="w-1.5 h-1.5 rounded-full bg-warn animate-pulse" />
           Outdated
         </span>
       );
@@ -120,23 +120,23 @@ export const NarrationStoryPanel: React.FC<NarrationStoryPanelProps> = ({
     switch (status) {
       case "APPROVED":
         return (
-          <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-400 bg-emerald-950/70 border border-emerald-800/80 px-2 py-0.5 rounded-full">
-            <Icons.Check className="w-2.5 h-2.5 text-emerald-400" />
+          <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-ok bg-ok/70 border border-ok/80 px-2 py-0.5 rounded-full">
+            <Icons.Check className="w-2.5 h-2.5 text-ok" />
             Approved
           </span>
         );
       case "NEEDS_REVIEW":
         return (
-          <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-400 bg-amber-950/70 border border-amber-800/80 px-2 py-0.5 rounded-full">
-            <Icons.AlertTriangle className="w-2.5 h-2.5 text-amber-400" />
+          <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-warn bg-warn/70 border border-warn/80 px-2 py-0.5 rounded-full">
+            <Icons.AlertTriangle className="w-2.5 h-2.5 text-warn" />
             Needs Review
           </span>
         );
       case "DRAFT":
       default:
         return (
-          <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-zinc-400 bg-zinc-800/80 border border-zinc-700/80 px-2 py-0.5 rounded-full">
-            <Icons.Clock className="w-2.5 h-2.5 text-zinc-400" />
+          <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-fg-dim bg-flat/80 border border-edge/80 px-2 py-0.5 rounded-full">
+            <Icons.Clock className="w-2.5 h-2.5 text-fg-dim" />
             Draft
           </span>
         );
@@ -145,50 +145,50 @@ export const NarrationStoryPanel: React.FC<NarrationStoryPanelProps> = ({
 
   return (
     <aside
-      className={`flex flex-col bg-zinc-950 border-r border-zinc-800/90 h-full select-none overflow-hidden ${className}`}
+      className={`flex flex-col bg-ink border-r border-edge/90 h-full select-none overflow-hidden ${className}`}
       aria-label="Story and Source Context"
     >
       {/* Top Section: Chapter Title & Storytelling Statistics */}
-      <div className="p-3.5 border-b border-zinc-800/80 bg-zinc-900/40 shrink-0 space-y-2.5">
+      <div className="p-3.5 border-b border-edge/80 bg-navy/40 shrink-0 space-y-2.5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-400 bg-indigo-950/80 border border-indigo-800/60 px-2 py-0.5 rounded">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-info bg-accent/80 border border-accent/60 px-2 py-0.5 rounded">
               Chapter {chapter.chapter_number}
             </span>
-            <span className="text-xs font-semibold text-zinc-300 truncate max-w-[170px]" title={chapter.chapter_title}>
+            <span className="text-xs font-semibold text-fg-dim truncate max-w-[170px]" title={chapter.chapter_title}>
               {chapter.chapter_title}
             </span>
           </div>
-          <span className="text-[11px] font-mono text-zinc-400 font-semibold">
+          <span className="text-[11px] font-mono text-fg-dim font-semibold">
             {approvedCount}/{chapter.segments.length} Approved
           </span>
         </div>
 
         {/* Storytelling Metric Tiles */}
         <div className="grid grid-cols-3 gap-1.5 text-center text-xs">
-          <div className="p-1.5 rounded-lg bg-zinc-950 border border-zinc-800/80">
-            <span className="text-[9px] uppercase tracking-wider text-zinc-500 font-bold block">
+          <div className="p-1.5 rounded-lg bg-ink border border-edge/80">
+            <span className="text-[9px] uppercase tracking-wider text-fg-faint font-bold block">
               Pages
             </span>
-            <span className="font-mono font-bold text-zinc-200">
+            <span className="font-mono font-bold text-fg">
               {groupedByPage.length}
             </span>
           </div>
 
-          <div className="p-1.5 rounded-lg bg-zinc-950 border border-zinc-800/80">
-            <span className="text-[9px] uppercase tracking-wider text-zinc-500 font-bold block">
+          <div className="p-1.5 rounded-lg bg-ink border border-edge/80">
+            <span className="text-[9px] uppercase tracking-wider text-fg-faint font-bold block">
               Panels
             </span>
-            <span className="font-mono font-bold text-zinc-200">
+            <span className="font-mono font-bold text-fg">
               {chapter.segments.length}
             </span>
           </div>
 
-          <div className="p-1.5 rounded-lg bg-zinc-950 border border-zinc-800/80">
-            <span className="text-[9px] uppercase tracking-wider text-zinc-500 font-bold block">
+          <div className="p-1.5 rounded-lg bg-ink border border-edge/80">
+            <span className="text-[9px] uppercase tracking-wider text-fg-faint font-bold block">
               Est. Audio
             </span>
-            <span className="font-mono font-bold text-indigo-400">
+            <span className="font-mono font-bold text-info">
               {Math.round(totalEstDuration)}s
             </span>
           </div>
@@ -196,22 +196,22 @@ export const NarrationStoryPanel: React.FC<NarrationStoryPanelProps> = ({
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="p-2.5 border-b border-zinc-800/80 bg-zinc-900/20 shrink-0 space-y-2">
+      <div className="p-2.5 border-b border-edge/80 bg-navy/20 shrink-0 space-y-2">
         {/* Search Input */}
         <div className="relative">
-          <Icons.Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
+          <Icons.Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-fg-faint pointer-events-none" />
           <input
             type="text"
             value={filter.search_query}
             onChange={(e) => onFilterChange({ search_query: e.target.value })}
             placeholder="Search dialogue, OCR or notes..."
-            className="w-full pl-8 pr-7 py-1 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-indigo-500 font-sans"
+            className="w-full pl-8 pr-7 py-1 rounded-lg bg-ink border border-edge text-xs text-fg placeholder-fg-faint focus:outline-none focus:border-accent font-sans"
           />
           {filter.search_query && (
             <button
               type="button"
               onClick={() => onFilterChange({ search_query: "" })}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-fg-faint hover:text-fg-dim"
             >
               <Icons.X className="w-3.5 h-3.5" />
             </button>
@@ -219,7 +219,7 @@ export const NarrationStoryPanel: React.FC<NarrationStoryPanelProps> = ({
         </div>
 
         {/* Status Filter Tabs */}
-        <div className="flex items-center bg-zinc-950 p-0.5 rounded-lg border border-zinc-800/80 text-[10px] font-medium text-zinc-400">
+        <div className="flex items-center bg-ink p-0.5 rounded-lg border border-edge/80 text-[10px] font-medium text-fg-dim">
           {(["ALL", "DRAFT", "NEEDS_REVIEW", "APPROVED"] as const).map((st) => (
             <button
               key={st}
@@ -227,8 +227,8 @@ export const NarrationStoryPanel: React.FC<NarrationStoryPanelProps> = ({
               onClick={() => onFilterChange({ selected_status: st })}
               className={`flex-1 py-1 rounded transition-colors text-center ${
                 filter.selected_status === st
-                  ? "bg-indigo-600 text-white font-bold shadow-sm"
-                  : "hover:text-zinc-200"
+                  ? "bg-accent text-white font-bold shadow-sm"
+                  : "hover:text-fg"
               }`}
             >
               {st === "ALL"
@@ -246,11 +246,11 @@ export const NarrationStoryPanel: React.FC<NarrationStoryPanelProps> = ({
       {/* Grouped Page-by-Page Story Segments List */}
       <div className="flex-1 overflow-y-auto p-2 space-y-3 focus:outline-none" tabIndex={0}>
         {groupedByPage.length === 0 ? (
-          <div className="p-8 text-center text-zinc-500 text-xs space-y-2">
-            <div className="w-10 h-10 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-400 mx-auto mb-2 shadow-inner">
+          <div className="p-8 text-center text-fg-faint text-xs space-y-2">
+            <div className="w-10 h-10 rounded-xl bg-navy border border-edge flex items-center justify-center text-fg-dim mx-auto mb-2 shadow-inner">
               <Icons.BookOpen className="w-5 h-5" />
             </div>
-            <p className="font-semibold text-zinc-400">No story segments found</p>
+            <p className="font-semibold text-fg-dim">No story segments found</p>
             <p className="text-[11px]">Try adjusting your search query or status filter.</p>
           </div>
         ) : (
@@ -261,16 +261,16 @@ export const NarrationStoryPanel: React.FC<NarrationStoryPanelProps> = ({
             const pageDuration = pageGroup.segments.reduce((acc, s) => acc + (s.estimated_duration_sec || 0), 0);
 
             return (
-              <div key={pageGroup.pageNumber} className="rounded-xl border border-zinc-800/80 bg-zinc-950/60 overflow-hidden shadow-sm">
+              <div key={pageGroup.pageNumber} className="rounded-xl border border-edge/80 bg-ink/60 overflow-hidden shadow-sm">
                 {/* Page Group Header */}
                 <div
-                  className="p-2.5 bg-zinc-900/60 border-b border-zinc-800/60 flex items-center justify-between cursor-pointer hover:bg-zinc-900 transition-colors"
+                  className="p-2.5 bg-navy/60 border-b border-edge/60 flex items-center justify-between cursor-pointer hover:bg-navy transition-colors"
                   onClick={() => togglePageCollapse(pageGroup.pageNumber)}
                 >
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      className="text-zinc-400 hover:text-zinc-200"
+                      className="text-fg-dim hover:text-fg"
                       title={isCollapsed ? "Expand page" : "Collapse page"}
                     >
                       {isCollapsed ? (
@@ -279,27 +279,27 @@ export const NarrationStoryPanel: React.FC<NarrationStoryPanelProps> = ({
                         <Icons.ChevronDown className="w-3.5 h-3.5" />
                       )}
                     </button>
-                    <span className="text-xs font-bold text-zinc-100">
+                    <span className="text-xs font-bold text-fg">
                       Page {pageGroup.pageNumber}
                     </span>
-                    <span className="text-[10px] text-zinc-500 font-mono">
+                    <span className="text-[10px] text-fg-faint font-mono">
                       ({pageGroup.segments.length} {pageGroup.segments.length === 1 ? "panel" : "panels"})
                     </span>
                   </div>
 
                   <div className="flex items-center gap-2">
                     {hasPageStory ? (
-                      <span className="text-[9px] font-semibold text-amber-300 bg-amber-950/80 border border-amber-800/80 px-1.5 py-0.5 rounded-full flex items-center gap-1" title="5-10 line witty human script generated">
-                        <Icons.Sparkles className="w-2.5 h-2.5 text-amber-400" />
+                      <span className="text-[9px] font-semibold text-warn bg-warn/80 border border-warn/80 px-1.5 py-0.5 rounded-full flex items-center gap-1" title="5-10 line witty human script generated">
+                        <Icons.Sparkles className="w-2.5 h-2.5 text-warn" />
                         <span>Story Ready</span>
                       </span>
                     ) : (
-                      <span className="text-[9px] text-zinc-500 italic">
+                      <span className="text-[9px] text-fg-faint italic">
                         No Page Story
                       </span>
                     )}
 
-                    <span className="text-[10px] text-zinc-400 font-mono">
+                    <span className="text-[10px] text-fg-dim font-mono">
                       ~{Math.round(pageDuration)}s
                     </span>
                   </div>
@@ -311,7 +311,7 @@ export const NarrationStoryPanel: React.FC<NarrationStoryPanelProps> = ({
                     {pageGroup.segments.map((seg, sIdx) => {
                       const isSelected = seg.id === selectedSegmentId;
                       const character = chapter.characters.find((c) => c.id === seg.speaker_id);
-                      const accentColor = character?.color_accent || "#6366f1";
+                      const accentColor = character?.color_accent || "#3b6bf5";
                       const primaryPanelId = seg.source_context.panel_ids?.[0];
                       const primaryPageId = seg.source_context.page_id;
                       const rawUrl = seg.source_context.panel_preview_url || seg.source_context.image_url;
@@ -340,8 +340,8 @@ export const NarrationStoryPanel: React.FC<NarrationStoryPanelProps> = ({
                           }}
                           className={`rounded-lg border p-2 transition-all text-left cursor-pointer ${
                             isSelected
-                              ? "bg-zinc-900 border-indigo-500 ring-1 ring-indigo-500/40 shadow-md shadow-indigo-950/40"
-                              : "bg-zinc-900/40 border-zinc-800/70 hover:border-zinc-700 hover:bg-zinc-900"
+                              ? "bg-navy border-accent ring-1 ring-accent/40 shadow-md shadow-accent/40"
+                              : "bg-navy/40 border-edge/70 hover:border-edge hover:bg-navy"
                           }`}
                         >
                           {/* Header row */}
@@ -349,20 +349,20 @@ export const NarrationStoryPanel: React.FC<NarrationStoryPanelProps> = ({
                             <div className="flex items-center gap-1.5">
                               <span
                                 className={`w-4 h-4 rounded flex items-center justify-center font-mono text-[9px] font-bold ${
-                                  isSelected ? "bg-indigo-600 text-white" : "bg-zinc-800 text-zinc-300"
+                                  isSelected ? "bg-accent text-white" : "bg-flat text-fg-dim"
                                 }`}
                               >
                                 {seg.sequence}
                               </span>
 
-                              <div className="flex items-center gap-1 bg-zinc-950 px-1.5 py-0.5 rounded border border-zinc-800">
+                              <div className="flex items-center gap-1 bg-ink px-1.5 py-0.5 rounded border border-edge">
                                 <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: accentColor }} />
-                                <span className="text-[10px] font-semibold text-zinc-200 truncate max-w-[90px]">
+                                <span className="text-[10px] font-semibold text-fg truncate max-w-[90px]">
                                   {seg.speaker_name}
                                 </span>
                               </div>
 
-                              <span className="text-[9px] text-zinc-500 font-mono">
+                              <span className="text-[9px] text-fg-faint font-mono">
                                 Panel #{sIdx + 1}
                               </span>
                             </div>
@@ -372,7 +372,7 @@ export const NarrationStoryPanel: React.FC<NarrationStoryPanelProps> = ({
 
                           {/* Thumbnail & Dialogue Preview */}
                           <div className="flex items-center gap-2 mb-1.5">
-                            <div className="w-14 h-10 rounded overflow-hidden shrink-0 bg-zinc-900 border border-zinc-800 flex items-center justify-center">
+                            <div className="w-14 h-10 rounded overflow-hidden shrink-0 bg-navy border border-edge flex items-center justify-center">
                               {resolvedUrl ? (
                                 <img
                                   src={resolvedUrl}
@@ -389,29 +389,29 @@ export const NarrationStoryPanel: React.FC<NarrationStoryPanelProps> = ({
                                   }}
                                 />
                               ) : (
-                                <Icons.Image className="w-3.5 h-3.5 text-zinc-600" />
+                                <Icons.Image className="w-3.5 h-3.5 text-fg-faint" />
                               )}
                             </div>
 
-                            <p className="text-[11px] text-zinc-300 line-clamp-2 leading-relaxed flex-1">
+                            <p className="text-[11px] text-fg-dim line-clamp-2 leading-relaxed flex-1">
                               {seg.narration_text}
                             </p>
                           </div>
 
                           {/* Footer: Emotion, words & duration */}
-                          <div className="flex items-center justify-between text-[9px] text-zinc-500 border-t border-zinc-800/40 pt-1">
+                          <div className="flex items-center justify-between text-[9px] text-fg-faint border-t border-edge/40 pt-1">
                             <div className="flex items-center gap-1.5">
-                              <span className="text-zinc-400 font-medium">
+                              <span className="text-fg-dim font-medium">
                                 {seg.delivery.emotion}
                               </span>
                               <span>•</span>
-                              <span className="font-mono text-indigo-400">
+                              <span className="font-mono text-info">
                                 ~{seg.estimated_duration_sec}s ({seg.narration_text.split(" ").filter(Boolean).length}w)
                               </span>
                             </div>
 
                             {seg.audio_asset_uri && (
-                              <span className="text-emerald-400 flex items-center gap-0.5 font-semibold">
+                              <span className="text-ok flex items-center gap-0.5 font-semibold">
                                 <Icons.Volume className="w-2.5 h-2.5" />
                                 Voice
                               </span>
@@ -429,11 +429,11 @@ export const NarrationStoryPanel: React.FC<NarrationStoryPanelProps> = ({
       </div>
 
       {/* Bottom Bar: Add Segment */}
-      <div className="p-2 border-t border-zinc-800/80 bg-zinc-900/30 flex items-center gap-1.5 shrink-0">
+      <div className="p-2 border-t border-edge/80 bg-navy/30 flex items-center gap-1.5 shrink-0">
         <button
           type="button"
           onClick={() => onAddSegment("NARRATOR")}
-          className="flex-1 py-1.5 rounded-lg bg-indigo-600/90 hover:bg-indigo-600 text-white font-semibold text-xs flex items-center justify-center gap-1.5 shadow-sm transition-colors"
+          className="flex-1 py-1.5 rounded-lg bg-accent/90 hover:bg-accent text-white font-semibold text-xs flex items-center justify-center gap-1.5 shadow-sm transition-colors"
         >
           <Icons.Plus className="w-3.5 h-3.5" />
           <span>+ Add Narration</span>
@@ -442,9 +442,9 @@ export const NarrationStoryPanel: React.FC<NarrationStoryPanelProps> = ({
         <button
           type="button"
           onClick={() => onAddSegment("CHARACTER")}
-          className="flex-1 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-semibold text-xs flex items-center justify-center gap-1.5 border border-zinc-700 transition-colors"
+          className="flex-1 py-1.5 rounded-lg bg-flat hover:bg-glass-hi text-fg font-semibold text-xs flex items-center justify-center gap-1.5 border border-edge transition-colors"
         >
-          <Icons.MessageSquare className="w-3.5 h-3.5 text-emerald-400" />
+          <Icons.MessageSquare className="w-3.5 h-3.5 text-ok" />
           <span>+ Add Dialogue</span>
         </button>
       </div>

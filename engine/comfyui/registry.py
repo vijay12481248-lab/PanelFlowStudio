@@ -16,7 +16,7 @@ _WORKFLOW_ID = re.compile(r"^[a-z][a-z0-9_-]{2,63}$")
 _REGISTRY_FILE = Path(__file__).with_name("workflow_registry.json")
 _MAX_WORKFLOW_BYTES = 4 * 1024 * 1024
 _REQUIRED_PATCH_SLOTS = frozenset({"prompt", "seed", "filename_prefix"})
-_OPTIONAL_PATCH_SLOTS = frozenset({"negative_prompt", "duration", "width", "height", "reference_image", "last_image", "reference_image_b", "reference_weight", "mask_image", "denoise", "voice_audio", "pose_image", "depth_image", "pose_weight", "depth_weight", "control_weight",
+_OPTIONAL_PATCH_SLOTS = frozenset({"negative_prompt", "duration", "width", "height", "reference_image", "last_image", "reference_image_b", "reference_image_c", "reference_image_d", "reference_weight", "mask_image", "denoise", "voice_audio", "pose_image", "depth_image", "pose_weight", "depth_weight", "control_weight",
                                    "latent_prefix", "clip_index", "latent_path", "latent_index", "first_clip", "last_clip"})  # the last six: H3 chain latents (engine/original/chain.py)
 _STITCH_PURPOSE = "latent_stitch"  # a finishing graph that decodes saved latents: no prompt or seed, only a filename prefix is required
 
@@ -109,6 +109,8 @@ class ComfyWorkflowRegistry:
         workflow, checksum = self.load(workflow_id)
         entry = self._entries[workflow_id]
         capabilities = self.client.capabilities()
+        comfy_online = bool(capabilities.get("available"))
+
         installed_nodes = set(capabilities.get("node_names", []))
         missing_nodes = sorted(set(entry.get("required_nodes", [])) - installed_nodes)
         installed_models = {
@@ -120,10 +122,15 @@ class ComfyWorkflowRegistry:
         return {
             "workflow_id": workflow_id,
             "workflow_sha256": checksum,
-            "ready": not missing_nodes and not missing_models and bool(capabilities.get("available")),
+            "ready": bool(comfy_online) and not missing_nodes and not missing_models,
+            "comfy_online": comfy_online,
             "missing_nodes": missing_nodes,
             "missing_models": missing_models,
             "node_count": len(workflow),
+            "error": None if comfy_online else (
+                f"ComfyUI is offline or unreachable at {capabilities.get('endpoint', 'http://127.0.0.1:8188')}. "
+                "Please launch ComfyUI."
+            ),
         }
 
     def metadata(self, workflow_id: str) -> dict[str, Any]:

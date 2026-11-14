@@ -85,7 +85,7 @@ def test_bad_wer_retries_slower_then_flags(tmp_path):
     takes, reasons = _run(_script("the hero draws his sword"), _plan(1, 1.0), FakeStt(["nothing like it at all"]), tts, tmp_path)
     assert [c[2] for c in tts.calls] == pytest.approx([1.0, 0.95, 0.9])
     assert takes[0].attempt == 3 and takes[0].flagged
-    assert reasons == ["1 of 1 takes failed the speech check"]
+    assert reasons == ["1 of 1 takes failed the speech check", "1 of 1 takes failed the audio QA"]
 
 
 def test_retry_that_passes_is_kept(tmp_path):
@@ -125,7 +125,7 @@ def test_too_many_flags_reason(tmp_path):
     stt = FakeStt(["line number 0", "line number 1", "zzz", "zzz", "zzz", "line number 3"])
     takes, reasons = _run(script, _plan(4), stt, FakeTts(), tmp_path)
     assert [t.flagged for t in takes] == [False, False, True, False]
-    assert reasons == ["1 of 4 takes failed the speech check"]
+    assert reasons == ["1 of 4 takes failed the speech check", "1 of 4 takes failed the audio QA"]
 
 
 
@@ -148,7 +148,8 @@ def test_silent_output_is_flagged_not_fatal(tmp_path):
     takes, reasons = _run(_script("the hero draws his sword"), _plan(1), FakeStt(["x"]), tts, tmp_path)
     t = takes[0]
     assert len(tts.calls) == 3 and t.flagged and t.words == [] and t.wer == 1.0
-    assert t.duration == pytest.approx(0.16) and reasons == ["1 of 1 takes failed the speech check"]
+    assert t.duration == pytest.approx(0.16) and reasons == ["1 of 1 takes failed the speech check",
+                                                            "1 of 1 takes failed the audio QA"]
 
 
 def test_silent_first_attempt_then_good(tmp_path):

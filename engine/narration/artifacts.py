@@ -99,6 +99,9 @@ class Beat(_Strict):
     what_happens: str
     function: Literal["setup", "escalate", "reveal", "payoff", "cliffhanger"]
     intensity: float = Field(ge=0, le=1)
+    evidence: list[str] = Field(default_factory=list)  # the panels this conclusion draws on
+    confidence: float = Field(default=1.0, ge=0, le=1)
+    uncertain: str = ""  # what the analyst is not sure about, or "" when sure
 
 
 class Scene(_Strict):
@@ -139,6 +142,8 @@ LineKind = Literal["hook", "narration", "paraphrase", "transition", "cliffhanger
 LineStatus = Literal["draft", "passed", "repaired", "fallback", "needs_review"]
 _FACT_REF = r"^(action|emotion|dialogue|characters|setting|sfx|beat:[A-Za-z0-9_-]+)$"
 
+NARRATOR_ID = "narrator"  # the voice that reads the recap; a character id otherwise
+
 
 class ScriptLine(_Strict):
     line_id: str
@@ -148,6 +153,7 @@ class ScriptLine(_Strict):
     kind: LineKind
     target_words: int = 8
     status: LineStatus = "draft"
+    speaker_id: str = NARRATOR_ID  # who reads this line: the narrator, or a bible character id
 
     @field_validator("text")
     @classmethod
@@ -217,6 +223,24 @@ class ReviewItem(_Strict):
     status: Literal["pending", "approved"] = "pending"
 
 
+class StopPoint(_Strict):
+    """A decision the workflow cannot make on its own, and pauses for.
+
+    The workflow pauses for the owner when the story brief is uncertain, when a
+    voice needs approval, or when a proposed casting change would affect an
+    assignment the owner already made. Routine generation and repair continue
+    on their own.
+    """
+
+    kind: Literal["brief", "voice", "casting"]
+    detail: str
+    severity: Literal["block", "warn"] = "block"
+    line_ids: list[str] = Field(default_factory=list)
+    character_ids: list[str] = Field(default_factory=list)
+    options: list[str] = Field(default_factory=list)  # what the owner can choose
+    resolution: str = ""  # what the owner chose, once the stop point is settled
+
+
 def check_script_ids(script: ScriptIR, story_panel_ids: list[str]) -> list[str]:
     got = [ln.panel_id for ln in script.lines]
     problems = []
@@ -237,11 +261,13 @@ class LineMarks(_Strict):
     rate: float = Field(ge=0.9, le=1.1)
     pause_after_ms: int = Field(ge=150, le=800)
     emphasis_words: list[str] = Field(default_factory=list)
+    intent: str = ""  # why this line is said, in one clause ("hold the tension before the reveal")
 
 
 class PerformancePlan(_Strict):
     project_id: str
     script_revision: int
+    revision: int = 0  # the direction as it stands; it moves when the delivery is changed
     lines: list[LineMarks] = Field(min_length=1)
 
     @model_validator(mode="after")
@@ -278,6 +304,11 @@ class VoiceTake(_Strict):
     rate: float
     attempt: int = Field(ge=1, le=3)
     flagged: bool = False
+    # what this take was made from, so an outdated take can be recognised later
+    script_revision: int = 0  # the script revision the spoken text came from
+    direction_revision: int = 0  # the performance plan revision the delivery came from
+    voice_profile_id: str = ""  # the cast profile that read it, not the engine voice id
+    provider: str = ""  # the TTS provider that produced it
 
 
 class TimelinePanel(_Strict):

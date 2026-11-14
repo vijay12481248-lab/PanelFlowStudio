@@ -186,8 +186,6 @@ def test_local_engine_and_iframe_origins_are_allowed():
     for allowed_origin in [
         "http://127.0.0.1:8765",
         "http://localhost:8765",
-        "http://127.0.0.1:7860",
-        "http://localhost:7860",
         "null",
     ]:
         resp = client.get(
