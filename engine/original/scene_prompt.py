@@ -7,6 +7,14 @@ from engine.original.scene_plan import ScenePlan
 from engine.original.shotspec import NATURAL_PERSON, CharPose, ShotSpec
 
 DEFAULT_GENRE = "anime_adventure"  # style anchors come from the genre; a scene has none of its own
+# How to ask Qwen for a camera angle so that it actually does it. Measured: at the end of the prompt this sentence gave a low angle in 3 of 8 fights on the first
+# attempt, the compiler's own "Shot from a low camera angle looking up." alone gave 0 of 8 (blind camera read). Only the low angle is measured.
+CAMERA_FIX = {
+    "low": "Camera placed near the ground looking steeply upward, the subjects tower over the viewer.",
+    "high": "Camera high above looking steeply down at the subjects, the ground visible around them.",
+    "eye_level": "Camera at the subjects' eye height with a perfectly level horizon.",
+    "dutch": "Camera tilted so the horizon is clearly slanted.",
+}
 _LIGHT = {"front": "the front", "back": "behind the subjects", "left": "the left", "right": "the right", "top": "above", "below": "below"}
 _CAMERA = {
     "eye_level": "the view is at eye level",
@@ -65,7 +73,9 @@ def compile_scene_prompt(plan: ScenePlan, *, emphasis: list[str] | None = None, 
     Qwen Turbo workflow ignores the negative prompt completely (same seed, empty vs strong negative: pixel difference 0.0)."""
     story, spec, loc = plan_to_shotspec(plan)
     compiled = PromptCompiler.compile_image_prompt(story, spec, loc, target=target)
-    positive = f"{compiled.positive} Remember: {lessons.strip()}" if lessons.strip() else compiled.positive
+    camera = CAMERA_FIX[plan.camera.angle] if plan.camera.angle != "eye_level" and CAMERA_FIX[plan.camera.angle] not in lessons else ""
+    rules = " ".join(x for x in (camera, lessons.strip()) if x)
+    positive = f"{compiled.positive} Remember: {rules}" if rules else compiled.positive
     if emphasis:
         positive = f"Most important: {'; '.join(e.rstrip('. ') for e in emphasis)}. {positive}"
     return positive, compiled.negative, tuple(compiled.dimensions)

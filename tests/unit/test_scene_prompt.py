@@ -85,3 +85,20 @@ def test_shotspec_maps_camera_distance_and_sides():
     assert spec.shot == "medium" and spec.camera == "low"
     assert [(c.id, c.side) for c in spec.characters] == [("hero", "left"), ("villain", "right")]
     assert loc in {x.id for x in story.bible.locations}
+
+
+def test_low_angle_gets_the_strong_camera_sentence_from_the_start():
+    # measured: with this sentence at the end of the prompt Qwen reached a low angle in 3 of 8 fights on the first attempt; without it, 0 of 8
+    positive, _, _ = compile_scene_prompt(fight_plan())
+    assert "Remember: Camera placed near the ground looking steeply upward" in positive
+
+
+def test_eye_level_gets_no_extra_camera_sentence():
+    positive, _, _ = compile_scene_prompt(fight_plan(camera=CameraPlan(angle="eye_level", distance="medium")))
+    assert "Remember" not in positive
+
+
+def test_the_camera_sentence_is_not_repeated_when_a_lesson_already_says_it():
+    from engine.original.scene_prompt import CAMERA_FIX
+    positive, _, _ = compile_scene_prompt(fight_plan(), lessons=CAMERA_FIX["low"])
+    assert positive.count("steeply upward") == 1

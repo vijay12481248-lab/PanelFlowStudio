@@ -11,13 +11,8 @@ import re
 from engine.creative.mistakes import MistakeLedger
 from engine.creative.schema import MistakeSeverity
 from engine.original.models import Review
+from engine.original.scene_prompt import CAMERA_FIX
 
-CAMERA_FIX = {
-    "low": "Camera placed near the ground looking steeply upward, the subjects tower over the viewer.",
-    "high": "Camera high above looking steeply down at the subjects, the ground visible around them.",
-    "eye_level": "Camera at the subjects' eye height with a perfectly level horizon.",
-    "dutch": "Camera tilted so the horizon is clearly slanted.",
-}
 POSE_FIX = {
     "striking": "The attacker's arm or weapon is fully extended toward the opponent in mid-motion.",
     "blocking": "The defender's arms or weapon are raised in front of the body to stop the strike.",
