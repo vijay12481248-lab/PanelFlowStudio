@@ -17,7 +17,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from specs import NEGATIVE, REELS  # noqa: E402
 
-OUT = ROOT / "output" / "reels"
+import os  # noqa: E402
+
+OUT = ROOT / "output" / os.environ.get("REEL_OUT_DIR", "reels")
+IMG_WF = os.environ.get("REEL_IMG_WORKFLOW", "minimax_h3_image_edit")  # MiniMax-H3-Image; set qwen_image_21 for Qwen
 W, H = 1080, 1920
 LOOK = ("funny hand-drawn cartoon doodle, simple stick-figure style characters with giant round heads, huge dot eyes and extremely exaggerated "
         "facial expression, very thick black marker outlines, ultra saturated flat colors, strong color contrast, bold simple shapes, "
@@ -89,7 +92,7 @@ def stage_art(slugs):
                 continue
             out.parent.mkdir(parents=True, exist_ok=True)
             art = engine.generate(prompt=f"{LOOK}. Scene: {THUMBS[slug][2]}.", negative_prompt=NEGATIVE, width=768, height=1344,
-                                  seed=7000 + 10 * n + k, prefix=f"reels/{slug}_thumb_{tag}")
+                                  seed=7000 + 10 * n + k, prefix=f"reels/{slug}_thumb_{tag}", workflow_id=IMG_WF)
             out.write_bytes(art.png)
             print(f"thumb art {slug} {tag}")
 

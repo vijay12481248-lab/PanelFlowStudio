@@ -26,7 +26,8 @@ import soundfile as sf  # noqa: E402
 
 from specs import NEGATIVE, NO_REF, REELS, STYLE  # noqa: E402
 
-OUT = ROOT / "output" / "reels"
+OUT = ROOT / "output" / os.environ.get("REEL_OUT_DIR", "reels")
+IMG_WF = os.environ.get("REEL_IMG_WORKFLOW", "minimax_h3_image_edit")  # MiniMax-H3-Image (text to image when no picture is bound); set qwen_image_21 for Qwen
 SR = 48000
 W, H = 1080, 1920
 QWEN_PY = Path(os.environ.get("PANELFLOW_QWEN3_TTS_PYTHON", r"D:\Tools\Qwen3-TTS\.venv\Scripts\python.exe"))
@@ -135,7 +136,7 @@ def stage_art(reels):
             t0 = time.monotonic()
             kw = dict(reference_image=anchor) if i > 1 and have(anchor) and i not in NO_REF.get(r['slug'], ()) else {}
             art = engine.generate(prompt=still_prompt(r, s), negative_prompt=NEGATIVE, width=768, height=1344,
-                                  seed=1000 + 10 * ridx(r) + i, prefix=f"reels/{r['slug']}_s{i}", **kw)
+                                  seed=1000 + 10 * ridx(r) + i, prefix=f"reels/{r['slug']}_s{i}", workflow_id=IMG_WF, **kw)
             out.write_bytes(art.png)
             print(f"art {r['slug']} s{i}: {time.monotonic() - t0:.0f}s")
 
