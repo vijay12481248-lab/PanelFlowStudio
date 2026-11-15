@@ -15,7 +15,7 @@ Cue-sheet audio for PanelFlow videos: music, sound effects and a loudness-correc
 | Mix, ducking, stems premix, loudness master | `mix.py` |
 | Export: stems, M&E, cue sheet, credits | `stems.py` |
 | REST | `engine/api/routers/audio_studio.py` (`/api/audio/studio/*`) |
-| MCP | `engine/mcp/tools/audio_studio_tools.py` (`panelflow_audio_studio_*`, profiles `chronoflow`, `all`) |
+| MCP | `engine/mcp/tools/audio_studio_tools.py` (`panelflow_chronoflow_audio_*`, profiles `chronoflow`, `all`) |
 
 Plans live in `<app data>/audio_studio/plans/<plan id>/` (`plan.json`, `takes/`, `renders/`, `exports/v<N>/`). No UI yet (Phase 4).
 

@@ -5,7 +5,7 @@ description: Add music, sound effects and a loudness-correct mix to a finished P
 
 # Audio Studio production (PanelFlow, local)
 
-You drive the Audio Studio through MCP tools named `panelflow_audio_studio_*` (profiles `chronoflow` and `all`) or the REST API under `/api/audio/studio` (OpenAPI at `/docs` on `127.0.0.1:8765`). Everything hangs off one document, the **sound plan** (cue sheet): you read it and write it, the engine sources, places, checks and mixes. Design: `docs/superpowers/specs/2026-11-15-audio-studio-design.md`; facts and limits: `docs/AUDIO_STUDIO.md`.
+You drive the Audio Studio through MCP tools named `panelflow_chronoflow_audio_*` (profiles `chronoflow` and `all`) or the REST API under `/api/audio/studio` (OpenAPI at `/docs` on `127.0.0.1:8765`). Everything hangs off one document, the **sound plan** (cue sheet): you read it and write it, the engine sources, places, checks and mixes. Design: `docs/superpowers/specs/2026-11-15-audio-studio-design.md`; facts and limits: `docs/AUDIO_STUDIO.md`.
 
 ## Rules (the owner's, from AGENTS.md)
 1. **Verify on real data.** Run `qa`, read the numbers, look at the spectrogram or waveform if you can. You cannot hear: say so, give the measurements, and ask the owner to listen before anything is published.
