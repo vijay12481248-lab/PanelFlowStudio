@@ -35,7 +35,7 @@ from engine.security.paths import (
     write_contained_json,
 )
 
-TOOLS_ROOT = Path(os.environ.get("PANELFLOW_LOCAL_TOOLS_ROOT", r"C:\Tools"))
+TOOLS_ROOT = Path(os.environ.get("PANELFLOW_LOCAL_TOOLS_ROOT", r"D:\Tools"))
 VOICE_REF_DIR = get_voice_reference_dir()
 CHATTERBOX_PYTHON = TOOLS_ROOT / "Chatterbox" / ".venv" / "Scripts" / "python.exe"
 QWEN3_TTS_PYTHON = Path(os.environ.get("PANELFLOW_QWEN3_TTS_PYTHON", r"D:\Tools\Qwen3-TTS\.venv\Scripts\python.exe"))

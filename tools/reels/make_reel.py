@@ -75,7 +75,7 @@ def stage_tts(reels):
             sys.exit(f"voice reference missing: {ref}")
         for i, s in enumerate(r["scenes"], 1):
             target = rdir(r, "audio", f"s{i}.wav")
-            if not have(target):
+            if s.get("line") and not have(target):
                 tasks.append(dict(id=f"{r['slug']}_s{i}", text=s["line"], target_path=str(target), ref_audio=str(ref), language="English"))
     if not tasks:
         return print("tts: nothing to do")
@@ -100,10 +100,10 @@ def stage_music(reels):
                 continue
             mdir = rdir(r, "audio", "music")
             mdir.mkdir(parents=True, exist_ok=True)
-            total = 32.0
+            total = float(r.get("music_sec", 32.0))
             print(f"music: {r['slug']} ...")
             rec = prov.generate_music_take("reels", r["slug"], mdir, prompt=r["music"], audio_duration=total, bpm=r["bpm"],
-                                           key_scale="C Major" if r["music"].startswith("soft") else "G Major",
+                                           key_scale=r.get("key") or ("C Major" if r["music"].startswith("soft") else "G Major"),
                                            seed=4000 + ridx(r), use_random_seed=False)
             print(f"  -> {rec.audio_file_path} ({rec.duration_sec}s)")
     finally:  # free the GPU for ComfyUI
@@ -158,7 +158,7 @@ def stage_clips(reels):
     for r in reels:
         for i, s in enumerate(r["scenes"], 1):
             clip, panel = rdir(r, "clips", f"s{i}.mp4"), rdir(r, "panels", f"s{i}.png")
-            if have(clip):
+            if have(clip) or s.get("still"):  # "still" = an insert shot that is only a picture with camera moves (tools/reels/cine.py)
                 continue
             if not have(panel):
                 sys.exit(f"{panel} missing: run the art stage first")
@@ -223,7 +223,7 @@ def stage_assemble(reels):
     for r in reels:
         d = rdir(r)
         final = d / f"{r['slug']}.mp4"
-        if have(final):
+        if have(final) or r.get("cine"):  # cinematic reels are assembled by tools/reels/cine.py
             continue
         n = len(r["scenes"])
         missing = [p for i in range(1, n + 1) for p in (d / "clips" / f"s{i}.mp4", d / "audio" / f"s{i}.wav") if not have(p)]

@@ -10,6 +10,15 @@ Evidence tiers: `[verified]` seen in this tree, `[research]` from web search (mo
 - YouTube Partner Program: 1,000 subscribers + 4,000 watch hours in 12 months, or 10M Shorts views in 90 days; thresholds double for new applicants from 2027-02-01 (vidIQ and press, confirm in YouTube Studio).
 - Sources: vidIQ blog, Submagic, Miraflow, dev.to "Hook Engineering", exchange4media.
 
+## Research update 2026-11-15 (after 4 days and ~11 views per reel) `[research]`, all creator-blog level, no YouTube primary source
+- YouTube shows a new Short to a small test audience and widens or stops by "viewed vs swiped away" and watch-through. A weak first 2 s keeps a Short at its first few views; a low count on day 4 is not a ban (no Shorts shadowban exists), it is a failed test.
+- Self-test: mute the video, watch only the first 2 s; if you would swipe, so will they. The hook must be a picture + a sound + words at once.
+- A visual change every ~1.5-2 s (never under ~1.2 s) and word-by-word captions are the repeated pacing advice; pattern for comedy: hook, medium pace, peak joke around the middle, medium, fast ending.
+- At 60 s a weak middle loses people: the 60 s reels need a mid-point shock and an escalation, not five static scenes. A loop (last frame/sound leads into the first) is advised to lift rewatches.
+- Upload one reel every 1-2 days, not ten at once: each reel is judged on its own small test audience.
+- Check Studio -> Analytics -> "Viewed vs swiped away" per reel and compare your own reels; ignore blog benchmarks.
+- `cine.py` (2026-11-15) is the answer to "plain, no camera, no transitions": camera shots, hit-stop punches, whip/zoom/flash/glitch cuts on the music's beat grid, colour looks, synthesized SFX, word-by-word captions. First reel built with it: r11 mosquito war (`spec_mosquito.py`).
+
 ## The formula `[verified]` that it renders well, `[hypothesis]` that it retains
 1. **Hook (scene 1, on screen 2.6 s in yellow Impact + spoken):** a POV, a universal claim, or a question the video answers. 3-7 words. Do not give away the twist.
 2. **Three escalating beats (scenes 2-4):** each one funnier or more extreme than the last; one action per scene.

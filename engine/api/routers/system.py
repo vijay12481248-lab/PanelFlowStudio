@@ -296,7 +296,7 @@ def get_providers_status():
             ace_path = ace_api_url
             ace_details = "Real-time neural music generation server active on port 8001."
     except Exception:
-        ace_dir = Path(r"C:\Tools\ACE-Step-1.5")
+        ace_dir = Path(r"D:\Tools\ACE-Step-1.5")
         if ace_dir.exists():
             ace_status = "STOPPED"
             ace_version = "Installed (Service Offline, Procedural Synthesizer active)"

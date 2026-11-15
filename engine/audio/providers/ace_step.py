@@ -31,7 +31,7 @@ from engine.security.paths import ensure_contained_directory, write_contained_by
 logger = logging.getLogger("panelflow.audio.ace_step")
 
 DEFAULT_ACE_STEP_URL = os.environ.get("ACESTEP_API_URL", "http://127.0.0.1:8001")
-TOOLS_ROOT = Path(os.environ.get("PANELFLOW_LOCAL_TOOLS_ROOT", r"C:\Tools"))
+TOOLS_ROOT = Path(os.environ.get("PANELFLOW_LOCAL_TOOLS_ROOT", r"D:\Tools"))
 ACE_STEP_DIR = TOOLS_ROOT / "ACE-Step-1.5"
 ACE_STEP_PYTHON = ACE_STEP_DIR / ".venv" / "Scripts" / "python.exe"
 

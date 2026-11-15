@@ -231,5 +231,10 @@ REELS = [
         ]),
 ]
 
+from spec_mosquito import MOSQUITO  # noqa: E402  (cinematic 60 s reel, assembled by tools/reels/cine.py)
+
+REELS.append(MOSQUITO)
+
 # Scenes drawn WITHOUT the scene-1 reference picture, because the setting changes (the reference otherwise drags the old room along).
-NO_REF = {"r06_exam_brain": {2, 3, 4, 5}, "r07_snooze_mafia": {4, 5}, "r09_group_project": {4, 5}, "r10_dad_love": {2, 3, 4, 5}}
+NO_REF = {"r06_exam_brain": {2, 3, 4, 5}, "r07_snooze_mafia": {4, 5}, "r09_group_project": {4, 5}, "r10_dad_love": {2, 3, 4, 5},
+          "r11_mosquito_war": {3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}}

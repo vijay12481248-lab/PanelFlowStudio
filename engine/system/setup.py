@@ -54,7 +54,7 @@ def locate_and_configure_ffmpeg() -> Dict[str, Any]:
     candidate_dirs: List[Path] = []
 
     # 1. Local Tools directory
-    tools_root = Path(os.environ.get("PANELFLOW_LOCAL_TOOLS_ROOT", r"C:\Tools"))
+    tools_root = Path(os.environ.get("PANELFLOW_LOCAL_TOOLS_ROOT", r"D:\Tools"))
     candidate_dirs.extend([
         tools_root / "ffmpeg" / "bin",
         tools_root / "ffmpeg",
