@@ -60,10 +60,11 @@ def test_a_data_url_must_be_a_real_picture_within_the_limit():
         nle.decode_data_url(_data_url(), limit=10)
 
 
-def test_code_fences_frame_lengths_and_the_master_lookup(dirs):
+def test_code_fences_frame_lengths_and_the_master_lookup(dirs, monkeypatch):
     assert nle.strip_code_fence("```text\nhello\n```") == "hello"
     assert nle.strip_code_fence("  plain  ") == "plain"
-    assert [nle.frame_length_for(d) for d in (1.0, 2.0, 3.0, 5.0)] == [22, 56, 73, 124]
+    assert [nle.frame_length_for(d) for d in (0.9, 2.0, 3.0, 5.0)] == [22, 56, 73, 124]
+    assert nle.frame_length_for(1.0) == 56, "a 1 s range gets a clip that covers it, not a 0.9 s one"
     _, outputs = dirs
     assert nle.latest_master(None) is None
     older = outputs / "chronoflow_master_aaa.mp4"; older.write_bytes(b"x")
@@ -72,18 +73,33 @@ def test_code_fences_frame_lengths_and_the_master_lookup(dirs):
     os.utime(older, (time.time() - 100, time.time() - 100))
     assert nle.latest_master(None) == newer, "the newest master when no job is named"
     assert nle.latest_master("aaa") == older, "the job's own master first"
-    assert nle.latest_master("../../etc/passwd") == newer, "a job id is reduced to a bare name"
+    assert nle.latest_master("../../etc/passwd") is None, "a job id is reduced to a bare name, and a job with no video never gets another job's"
+    assert nle.latest_master("zzz") is None
+    monkeypatch.setattr(nle.media_tools, "resolve_media", lambda name: outputs / name if (outputs / name).exists() else None)
+    (outputs / "imp_1_chunk_1.mp4").write_bytes(b"z")
+    assert nle.latest_master("imp_1", {"master_video": "/chronoflow/outputs/imp_1_chunk_1.mp4"}) == outputs / "imp_1_chunk_1.mp4", "an imported job's own video"
 
 
-def test_a_replacement_clip_is_rendered_at_the_size_of_the_video_it_joins(dirs, monkeypatch):
-    _, outputs = dirs
-    assert nle.render_size({"width": 1024, "height": 576}, "j") == (1024, 576), "the job's own size first"
+def test_a_replacement_clip_is_rendered_at_the_shape_of_the_video_it_joins(dirs, monkeypatch):
+    inputs, outputs = dirs
     assert nle.render_size({}, None) == (1344, 768), "nothing known: the default"
+    assert nle.render_size({"width": 1024, "height": 576}, None) == (1344, 768), "the job's declared size is scaled to the one-megapixel budget"
     master = outputs / "chronoflow_master_j2.mp4"; master.write_bytes(b"m")
     monkeypatch.setattr(nle.media_tools, "probe", lambda p: {"width": 768, "height": 1344})
-    assert nle.render_size({}, "j2") == (768, 1344), "a portrait master gets a portrait clip"
+    assert nle.render_size({"width": 1344, "height": 768}, "j2") == (768, 1344), "a portrait master wins over a landscape job record"
     monkeypatch.setattr(nle.media_tools, "probe", lambda p: (_ for _ in ()).throw(RuntimeError("no ffprobe")))
-    assert nle.render_size({}, "j2") == (1344, 768), "an unreadable master falls back to the default"
+    portrait = inputs / "start.png"; portrait.write_bytes(_png_bytes((108, 192)))
+    assert nle.render_size({"width": 1344, "height": 768}, "j2", portrait) == (768, 1344), "an unreadable master: the start frame's shape"
+    assert nle.render_size({}, "j2") == (1344, 768), "no master and no frame: the default"
+
+
+def test_the_start_frame_is_cropped_to_the_clip_shape_never_stretched(dirs):
+    inputs, _ = dirs
+    wide = inputs / "wide.png"; wide.write_bytes(_png_bytes((192, 108)))
+    assert nle.fit_anchor(wide, (192, 108)) == "wide.png", "already the right shape: untouched"
+    name = nle.fit_anchor(wide, (108, 192))
+    with Image.open(inputs / name) as fitted:
+        assert fitted.size == (108, 192)
 
 
 # ---------- upload_ref ----------
@@ -164,19 +180,28 @@ def test_range_auto_prompt_reports_a_missing_local_model_as_a_bad_gateway(client
     assert res.status_code == 502 and "ollama" in res.json()["detail"]
 
 
-def test_range_generate_needs_an_anchor_frame_and_a_prompt(client, dirs):
+def test_range_generate_needs_an_anchor_frame_and_a_prompt(client, dirs, monkeypatch):
     res = client.post("/api/chronoflow/nle/range/generate", json={"prompt": "he runs"})
     assert res.status_code == 400 and "no frame to start from" in res.json()["detail"].lower()
     inputs, _ = dirs
     (inputs / "start.png").write_bytes(_png_bytes())
-    assert client.post("/api/chronoflow/nle/range/generate", json={"reference_image": "start.png", "prompt": ""}).status_code == 400
+
+    async def model_away(*a):
+        raise ConnectionError("ollama is not running")
+
+    monkeypatch.setattr(nle, "_write_prompt", model_away)
+    monkeypatch.setattr("engine.original.animate.release_ollama", lambda: None)
+    res = client.post("/api/chronoflow/nle/range/generate", json={"reference_image": "start.png", "prompt": ""})
+    assert res.status_code == 400 and "no prompt" in res.json()["detail"].lower()
 
 
 def test_range_generate_renders_a_clip_from_the_anchor(client, dirs, monkeypatch):
     inputs, outputs = dirs
-    (inputs / "start.png").write_bytes(_png_bytes())
+    (inputs / "start.png").write_bytes(_png_bytes((192, 108)))
     clip = outputs / "raw.mp4"; clip.write_bytes(b"clip")
     seen = {}
+    released = []
+    monkeypatch.setattr("engine.original.animate.release_ollama", lambda: released.append(True))
 
     class FakePipeline:
         def build_h3_prompt(self, **kw):
@@ -192,8 +217,44 @@ def test_range_generate_renders_a_clip_from_the_anchor(client, dirs, monkeypatch
     assert res.status_code == 200
     body = res.json()
     assert body["success"] and body["clip_filename"].startswith("range_chunk_") and (outputs / body["clip_filename"]).read_bytes() == b"clip"
-    assert seen["first_frame_filename"] == "start.png" and seen["length"] == 56 and seen["prompt"] == full
-    assert (seen["width"], seen["height"]) == (1344, 768), "no job and no master: the default size"
+    assert seen["length"] == 56 and seen["prompt"] == full
+    with Image.open(inputs / seen["first_frame_filename"]) as start:
+        assert start.size == (1344, 768), "the start frame is the chosen picture, fitted to the clip's size"
+    assert (seen["width"], seen["height"]) == (1344, 768), "no job and no master: the start frame's shape"
+    assert released, "the local LLM is unloaded before H3 renders"
+
+
+def test_range_generate_writes_the_prompt_itself_when_the_box_is_empty(client, dirs, monkeypatch):
+    inputs, outputs = dirs
+    (inputs / "start.png").write_bytes(_png_bytes((192, 108)))
+    clip = outputs / "raw.mp4"; clip.write_bytes(b"clip")
+    seen = {}
+
+    class FakePipeline:
+        def build_h3_prompt(self, **kw):
+            seen.update(kw)
+            return {}
+
+        async def execute_prompt(self, graph):
+            return clip
+
+    async def fake_write(system, user, anchor):
+        seen["user"] = user
+        return "summary:\nx\n\ndetailed_description:\nthe hero turns slowly to the window"
+
+    monkeypatch.setattr(nle.cf, "pipeline", FakePipeline())
+    monkeypatch.setattr(nle, "_write_prompt", fake_write)
+    monkeypatch.setattr("engine.original.animate.release_ollama", lambda: None)
+    res = client.post("/api/chronoflow/nle/range/generate", json={"t_start": 0, "t_end": 1.7, "prompt": "", "current_prompt": "the hero sits", "reference_image": "start.png"})
+    assert res.status_code == 200 and "turns slowly" in seen["prompt"] and res.json()["prompt"] == seen["prompt"]
+    assert "the hero sits" in seen["user"], "the shot's original prompt is context for the new one"
+
+
+def test_range_generate_refuses_a_range_longer_than_one_h3_clip(client, dirs):
+    inputs, _ = dirs
+    (inputs / "start.png").write_bytes(_png_bytes())
+    res = client.post("/api/chronoflow/nle/range/generate", json={"t_start": 0, "t_end": 62, "prompt": "x", "reference_image": "start.png"})
+    assert res.status_code == 400 and "5 s" in res.json()["detail"]
 
 
 def test_range_apply_splices_into_the_master_and_keeps_names_safe(client, dirs, monkeypatch):
@@ -290,3 +351,50 @@ def test_approve_reroll_and_open_call_the_original_story_functions(story_client,
     assert c.post("/api/original_stories/tale/open").json() == {"success": True, "detail": "opened tale"}
     assert seen == {"approve": ("tale", "p001", "e1"), "reroll": ("tale", "p001", None, 7, "brighter")}
     assert c.post("/api/original_stories/tale/panel/../approve").status_code in (404, 405)
+
+
+# ---------- the splice, with real ffmpeg ----------
+@pytest.mark.skipif(not __import__("shutil").which("ffmpeg"), reason="ffmpeg is not installed")
+def test_a_clip_of_another_shape_and_length_is_fitted_into_the_master(tmp_path):
+    import subprocess
+    from engine.chronoflow import media_tools
+
+    def make(path, size, seconds):
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", f"testsrc=size={size}:rate=24:duration={seconds}",
+                        "-f", "lavfi", "-i", f"sine=frequency=440:duration={seconds}", "-shortest", "-pix_fmt", "yuv420p", str(path)], check=True)
+
+    base, clip, out = tmp_path / "base.mp4", tmp_path / "clip.mp4", tmp_path / "out.mp4"
+    make(base, "96x160", 6)        # portrait master
+    make(clip, "160x96", 3)        # landscape clip, longer than the 1.5 s range it replaces
+    for t0, t1 in ((0.0, 1.5), (2.0, 3.5), (4.0, 5.5), (2.0, 5.0)):
+        media_tools.splice_timeline_range(base, clip, t0, t1, out)
+        info = media_tools.probe(out)
+        assert (info["width"], info["height"]) == (96, 160), "the master's shape, not the clip's"
+        assert abs(info["duration"] - 6.0) < 0.2, f"[{t0},{t1}]: everything after the range keeps its timestamps"
+    make(clip, "160x96", 1)        # a clip shorter than the range holds its last frame
+    media_tools.splice_timeline_range(base, clip, 2.0, 4.0, out)
+    assert abs(media_tools.probe(out)["duration"] - 6.0) < 0.2
+
+
+def test_a_draft_range_uses_the_four_step_path_at_about_half_the_pixels(client, dirs, monkeypatch):
+    inputs, outputs = dirs
+    (inputs / "start.png").write_bytes(_png_bytes((108, 192)))      # portrait
+    clip = outputs / "raw.mp4"; clip.write_bytes(b"clip")
+    runs = []
+
+    class FakePipeline:
+        def build_h3_prompt(self, **kw):
+            runs.append(kw)
+            return {}
+
+        async def execute_prompt(self, graph):
+            return clip
+
+    monkeypatch.setattr(nle.cf, "pipeline", FakePipeline())
+    monkeypatch.setattr("engine.original.animate.release_ollama", lambda: None)
+    body = {"t_start": 0, "t_end": 1.7, "prompt": "summary:\nx\ndetailed_description:\ny", "reference_image": "start.png"}
+    assert client.post("/api/chronoflow/nle/range/generate", json=body).status_code == 200
+    assert client.post("/api/chronoflow/nle/range/generate", json={**body, "draft": True}).status_code == 200
+    full, draft = runs
+    assert full["fast_h3"] is True and (full["width"], full["height"]) == (768, 1344)
+    assert draft["fast_h3"] is False and (draft["width"], draft["height"]) == (544, 960)

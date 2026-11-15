@@ -131,6 +131,14 @@ def splice_timeline_range(base_video: Path, replacement_clip: Path, t_start: flo
 
     has_audio = base_info.get("has_audio", False) and rep_info.get("has_audio", False)
 
+    # The replacement must match the master's size/fps (concat refuses anything else) and fill exactly [t0, t1]: a longer clip is cut,
+    # a shorter one holds its last frame, so everything after the range keeps its timestamps. A clip of another shape is cropped, not stretched.
+    dur = (t1 - t0) if t1 > t0 else rep_dur
+    bw, bh, bfps = base_info["width"], base_info["height"], base_info["fps"]
+    rv = (f"scale={bw}:{bh}:force_original_aspect_ratio=increase,crop={bw}:{bh},setsar=1,fps={bfps},"
+          f"tpad=stop_mode=clone:stop_duration={dur:.3f},trim=end={dur:.3f},setpts=PTS-STARTPTS")
+    ra = f"aresample=48000,apad=whole_dur={dur:.3f},atrim=end={dur:.3f},asetpts=PTS-STARTPTS"
+
     # Edge case 1: replacement covers entire video (or almost entire)
     if t0 <= 0.05 and t1 >= (base_dur - 0.05):
         shutil.copy2(replacement_clip, output_path)
@@ -141,7 +149,7 @@ def splice_timeline_range(base_video: Path, replacement_clip: Path, t_start: flo
         # Replacement at start, followed by tail of base
         if has_audio:
             filter_str = (
-                f"[1:v]setpts=PTS-STARTPTS[v0];[1:a]asetpts=PTS-STARTPTS[a0];"
+                f"[1:v]{rv}[v0];[1:a]{ra}[a0];"
                 f"[0:v]trim=start={t1:.3f},setpts=PTS-STARTPTS[v1];[0:a]atrim=start={t1:.3f},asetpts=PTS-STARTPTS[a1];"
                 f"[v0][a0][v1][a1]concat=n=2:v=1:a=1[outv][outa]"
             )
@@ -150,7 +158,7 @@ def splice_timeline_range(base_video: Path, replacement_clip: Path, t_start: flo
                    "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", str(output_path)]
         else:
             filter_str = (
-                f"[1:v]setpts=PTS-STARTPTS[v0];"
+                f"[1:v]{rv}[v0];"
                 f"[0:v]trim=start={t1:.3f},setpts=PTS-STARTPTS[v1];"
                 f"[v0][v1]concat=n=2:v=1:a=0[outv]"
             )
@@ -162,7 +170,7 @@ def splice_timeline_range(base_video: Path, replacement_clip: Path, t_start: flo
         if has_audio:
             filter_str = (
                 f"[0:v]trim=end={t0:.3f},setpts=PTS-STARTPTS[v0];[0:a]atrim=end={t0:.3f},asetpts=PTS-STARTPTS[a0];"
-                f"[1:v]setpts=PTS-STARTPTS[v1];[1:a]asetpts=PTS-STARTPTS[a1];"
+                f"[1:v]{rv}[v1];[1:a]{ra}[a1];"
                 f"[v0][a0][v1][a1]concat=n=2:v=1:a=1[outv][outa]"
             )
             cmd = [_FFMPEG, "-v", "error", "-y", "-i", str(base_video), "-i", str(replacement_clip),
@@ -171,7 +179,7 @@ def splice_timeline_range(base_video: Path, replacement_clip: Path, t_start: flo
         else:
             filter_str = (
                 f"[0:v]trim=end={t0:.3f},setpts=PTS-STARTPTS[v0];"
-                f"[1:v]setpts=PTS-STARTPTS[v1];"
+                f"[1:v]{rv}[v1];"
                 f"[v0][v1]concat=n=2:v=1:a=0[outv]"
             )
             cmd = [_FFMPEG, "-v", "error", "-y", "-i", str(base_video), "-i", str(replacement_clip),
@@ -182,7 +190,7 @@ def splice_timeline_range(base_video: Path, replacement_clip: Path, t_start: flo
         if has_audio:
             filter_str = (
                 f"[0:v]trim=start=0:end={t0:.3f},setpts=PTS-STARTPTS[v0];[0:a]atrim=start=0:end={t0:.3f},asetpts=PTS-STARTPTS[a0];"
-                f"[1:v]setpts=PTS-STARTPTS[v1];[1:a]asetpts=PTS-STARTPTS[a1];"
+                f"[1:v]{rv}[v1];[1:a]{ra}[a1];"
                 f"[0:v]trim=start={t1:.3f},setpts=PTS-STARTPTS[v2];[0:a]atrim=start={t1:.3f},asetpts=PTS-STARTPTS[a2];"
                 f"[v0][a0][v1][a1][v2][a2]concat=n=3:v=1:a=1[outv][outa]"
             )
@@ -192,7 +200,7 @@ def splice_timeline_range(base_video: Path, replacement_clip: Path, t_start: flo
         else:
             filter_str = (
                 f"[0:v]trim=start=0:end={t0:.3f},setpts=PTS-STARTPTS[v0];"
-                f"[1:v]setpts=PTS-STARTPTS[v1];"
+                f"[1:v]{rv}[v1];"
                 f"[0:v]trim=start={t1:.3f},setpts=PTS-STARTPTS[v2];"
                 f"[v0][v1][v2]concat=n=3:v=1:a=0[outv]"
             )

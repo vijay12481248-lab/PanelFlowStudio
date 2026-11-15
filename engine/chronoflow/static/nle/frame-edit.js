@@ -56,6 +56,7 @@
           </div>
           <div class="col">
             <button class="nle-btn accent" id="feGo">✨ Regen Frame</button>
+            <label id="feDraftL" style="display:${S.mode === 'range' ? '' : 'none'};font-size:0.68rem;color:#9aa6d0;white-space:nowrap;" title="Quick try: 4-step model at about half the pixels, roughly a third faster. The lighting can drift a little from the shot."><input type="checkbox" id="feDraft"> Draft (4-step, faster)</label>
             <button class="nle-btn" id="feBrushBtn" title="Magic Brush: paint region to inpaint on frame">🖌 Magic Brush</button>
           </div>
         </div>
@@ -145,6 +146,7 @@
       S.mode = 'frame';
       feModeFrame.classList.add('on'); feModeRange.classList.remove('on');
       feGo.textContent = '✨ Regen Frame';
+      $('#feDraftL').style.display = 'none';
       fePrompt.placeholder = 'Describe what this frame should show, action changes, or inpainting prompt… (Ctrl+Enter)';
     };
 
@@ -152,6 +154,7 @@
       S.mode = 'range';
       feModeRange.classList.add('on'); feModeFrame.classList.remove('on');
       feGo.textContent = '🚀 Regen Range (Fast H3)';
+      $('#feDraftL').style.display = '';
       fePrompt.placeholder = 'Describe action, prompt, or changes across timeline range [X to Y]… (Ctrl+Enter)';
       updateRangeDisplay();
     };
@@ -425,9 +428,8 @@
   async function generate() {
     if (S.busy) return;
     const prompt = $('#fePrompt').value.trim();
-    if (!prompt) { say('Write a prompt first.'); return; }
 
-    if (S.mode === 'range') {
+    if (S.mode === 'range') {                     // an empty box is fine here: the engine writes the prompt from the frame at X
       const tl = nle.tl || (nle.timeline ? nle.timeline() : null);
       const inP = (tl && tl.inPoint != null) ? tl.inPoint : 0;
       const outP = (tl && tl.outPoint != null) ? tl.outPoint : (nle.total ? nle.total() : 10);
@@ -438,15 +440,19 @@
       }
       S.busy = true; $('#feGo').disabled = true;
       const cand = addCand({ busy: true, prompt, isRange: true, t0, t1 });
-      say(`Generating Fast H3 replacement video for [${t0.toFixed(1)}s → ${t1.toFixed(1)}s]…`);
+      const sc = typeof nle.selectedClip === 'function' ? nle.selectedClip() : null;
+      say(`Generating Fast H3 replacement video for [${t0.toFixed(1)}s → ${t1.toFixed(1)}s]${prompt ? '' : ' (writing the prompt from the frame first)'}…`);
       try {
         const r = await post('/nle/range/generate', {
           prompt,
+          current_prompt: sc ? (sc.originalPrompt || sc.prompt || '') : '',
+          draft: $('#feDraft').checked,
           t_start: t0,
           t_end: t1,
           reference_image: S.customRef,
           job_id: nle.ui ? nle.ui.jobId : null
         });
+        if (r.prompt) { $('#fePrompt').value = r.prompt; cand.prompt = r.prompt; }   // show what was really rendered
         cand.busy = false;
         cand.clipFilename = r.clip_filename;
         cand.clipUrl = r.clip_url;
@@ -461,6 +467,7 @@
       return;
     }
 
+    if (!prompt) { say('Write a prompt first.'); return; }
     if (!S.brushing && !captureBase()) return;
     if (S.brushing && !S.hasMask) { say('Paint the region to change first.'); return; }
     S.busy = true; $('#feGo').disabled = true;

@@ -28,7 +28,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
-from PIL import Image
+from PIL import Image, ImageOps
 from pydantic import BaseModel, Field
 
 from engine.api.routers import chronoflow as cf
@@ -86,43 +86,70 @@ def strip_code_fence(text: str) -> str:
     return clean
 
 
+MAX_RANGE_SECONDS = 5.1  # the longest Fast H3 clip below (124 frames at 24 fps is 5.17 s); longer needs the chain in docs/H3_LONG_VIDEO.md
+
+
 def frame_length_for(duration: float) -> int:
-    """Fast H3 frame counts that match the clip lengths it was tuned for."""
-    if duration <= 1.5:
+    """Fast H3 frame counts (the clip lengths it was tuned for) - the shortest one that covers the range: 0.9 / 2.3 / 3.0 / 5.1 s."""
+    if duration <= 0.9:
         return 22
-    if duration <= 2.5:
+    if duration <= 2.3:
         return 56
-    if duration <= 3.5:
+    if duration <= 3.0:
         return 73
     return 124
 
 
-def latest_master(job_id: str | None) -> Path | None:
-    """The master video of a job, else the newest master in the studio output folder."""
-    if job_id:
-        candidate = STUDIO_OUTPUT_DIR / f"chronoflow_master_{Path(job_id).name}.mp4"
-        if candidate.exists():
-            return candidate
-    masters = sorted(STUDIO_OUTPUT_DIR.glob("chronoflow_master_*.mp4"), key=lambda p: p.stat().st_mtime, reverse=True)
-    return masters[0] if masters else None
+def latest_master(job_id: str | None, job: dict[str, Any] | None = None) -> Path | None:
+    """The video of a job: its `chronoflow_master_<id>.mp4`, else the file its `master_video` names. With no job at all, the newest master.
 
-
-def render_size(job: dict[str, Any], job_id: str | None) -> tuple[int, int]:
-    """The size to render a replacement clip at: the job's own, else the master video it will be spliced into, else 1344 x 768.
-
-    A clip of another shape cannot be joined to the master (ffmpeg's concat needs equal sizes), so matching the master matters.
+    A named job that has no video gets None - never another job's video (its frames and shape are not this job's).
     """
-    if job.get("width") and job.get("height"):
-        return int(job["width"]), int(job["height"])
-    base = latest_master(job_id)
+    if not job_id:
+        masters = sorted(STUDIO_OUTPUT_DIR.glob("chronoflow_master_*.mp4"), key=lambda p: p.stat().st_mtime, reverse=True)
+        return masters[0] if masters else None
+    candidate = STUDIO_OUTPUT_DIR / f"chronoflow_master_{Path(job_id).name}.mp4"
+    if candidate.exists():
+        return candidate
+    named = Path(str((job or {}).get("master_video") or "")).name
+    return (media_tools.resolve_media(named) or None) if named else None
+
+
+FULL_PIXELS, DRAFT_PIXELS = 1344 * 768, 960 * 544   # draft = the size the repo's own FastH3 chains use
+
+
+def render_size(job: dict[str, Any], job_id: str | None, anchor: Path | None = None, pixels: int = FULL_PIXELS) -> tuple[int, int]:
+    """The size to render a replacement clip at: that of the master it will be spliced into, else the start frame, else the job's own
+    declared size (imported jobs declare 1344 x 768 whatever they hold), else 1344 x 768. About one megapixel, multiples of 32.
+
+    A clip of another shape cannot be joined to the master (ffmpeg's concat needs equal sizes) and a start frame of another shape gets
+    stretched, so the real pictures decide, not the job record.
+    """
+    w = h = 0
+    base = latest_master(job_id, job)
     if base:
         try:
             info = media_tools.probe(base)
-            if info.get("width") and info.get("height"):
-                return int(info["width"]), int(info["height"])
+            w, h = int(info.get("width") or 0), int(info.get("height") or 0)
         except Exception as exc:
             logger.warning("Could not read the master video size: %s", exc)
-    return 1344, 768
+    if not (w and h) and anchor and anchor.exists():
+        with Image.open(anchor) as picture:
+            w, h = picture.size
+    if not (w and h):
+        w, h = int(job.get("width") or 1344), int(job.get("height") or 768)
+    scale = (pixels / (w * h)) ** 0.5
+    return max(256, round(w * scale / 32) * 32), max(256, round(h * scale / 32) * 32)
+
+
+def fit_anchor(anchor: Path, size: tuple[int, int]) -> str:
+    """The start frame cropped (never stretched) to the clip's shape, as a file in ComfyUI's input folder; its name."""
+    with Image.open(anchor) as picture:
+        if picture.size == size:
+            return anchor.name
+        name = f"range_start_{uuid.uuid4().hex[:8]}.png"
+        ImageOps.fit(picture.convert("RGB"), size, Image.LANCZOS).save(COMFY_INPUT_DIR / name)
+    return name
 
 
 def _job(job_id: str | None) -> dict[str, Any]:
@@ -135,7 +162,7 @@ def _anchor(job_id: str | None, t: float, ref_image: str | None, job: dict[str, 
         candidate = COMFY_INPUT_DIR / Path(ref_image).name
         if candidate.exists():
             return candidate, candidate.name
-    base = latest_master(job_id)
+    base = latest_master(job_id, job)
     if base and base.exists():
         name = f"range_anchor_{uuid.uuid4().hex[:8]}.png"
         try:
@@ -163,6 +190,7 @@ class FrameGenerateRequest(BaseModel):
 
 
 class RangeRequest(BaseModel):
+    draft: bool = False  # quick try: the 4-step turbo LoRA at about half the pixels (measured ~35% faster; the look can drift a little)
     job_id: str | None = None
     t_start: float = 0.0
     t_end: float | None = None
@@ -298,23 +326,30 @@ async def range_generate(req: RangeRequest) -> dict[str, Any]:
     anchor, anchor_name = _anchor(req.job_id, t0, req.reference_image, job)
     if not anchor_name:
         raise HTTPException(status_code=400, detail="There is no frame to start from: pick a reference picture, or open a job that has a master video")
+    if duration > MAX_RANGE_SECONDS:
+        raise HTTPException(status_code=400, detail=f"Fast H3 renders up to {MAX_RANGE_SECONDS:.0f} s in one clip: pick a range of {MAX_RANGE_SECONDS:.0f} s or less (now {duration:.1f} s)")
     prompt = req.prompt.strip()
-    if prompt and "detailed_description:" not in prompt.lower():
-        # a short adjustment note: turn it into the full 6-heading prompt first (the director step), keeping the note if the model is away
+    if "detailed_description:" not in prompt.lower():
+        # nothing typed, or a short note: the director step writes the full 6-heading prompt from the frame, keeping the note if the model is away
         try:
             system = _AUTO_PROMPT_SYSTEM.format(t0=t0, t1=t1, dur=duration)
-            user = f"Director Adjustments / Scene Issues: {prompt}\nTimeline Range: [{t0:.1f}s -> {t1:.1f}s] ({duration:.1f}s)\nStory Context: {job.get('prompt', 'Cinematic shot')}"
+            user = (f"Director Adjustments / Scene Issues: {prompt or 'None: continue the shot naturally from this frame.'}\n"
+                    f"Timeline Range: [{t0:.1f}s -> {t1:.1f}s] ({duration:.1f}s)\nStory Context: {job.get('prompt', 'Cinematic shot')}"
+                    + (f"\nCurrent Baseline Prompt:\n{req.current_prompt.strip()}" if req.current_prompt.strip() else ""))
             refined = await _write_prompt(system, user, anchor)
             if len(refined) > 30:
                 prompt = refined
         except Exception as exc:
             logger.info("Range prompt refinement skipped: %s", exc)
     if not prompt:
-        raise HTTPException(status_code=400, detail="A prompt is required")
-    width, height = render_size(job, req.job_id)
+        raise HTTPException(status_code=400, detail="No prompt: type one, or start the local model (Ollama) so it can write one from the frame")
+    width, height = render_size(job, req.job_id, anchor, DRAFT_PIXELS if req.draft else FULL_PIXELS)
+    from engine.original.animate import release_ollama
+
+    await asyncio.to_thread(release_ollama)  # the local LLM and H3 do not fit in VRAM together; H3 crawls if the LLM stays loaded
     graph = cf.pipeline.build_h3_prompt(
         prompt=prompt, width=width, height=height, length=frame_length_for(duration), steps=4,
-        lora_name=LORA_NAME, workflow_mode="sliding_window", first_frame_filename=anchor_name,
+        lora_name=LORA_NAME, workflow_mode="sliding_window", first_frame_filename=fit_anchor(anchor, (width, height)), fast_h3=not req.draft,
     )
     try:
         chunk_output = await cf.pipeline.execute_prompt(graph)
@@ -330,7 +365,7 @@ async def range_generate(req: RangeRequest) -> dict[str, Any]:
 @router.post("/range/apply")
 async def range_apply(req: RangeApplyRequest) -> dict[str, Any]:
     """Splice a generated clip into the master video over [t_start, t_end]."""
-    base = latest_master(req.job_id)
+    base = latest_master(req.job_id, _job(req.job_id))
     if not base or not base.exists():
         raise HTTPException(status_code=404, detail="No base master video found to splice into")
     clip = media_tools.resolve_media(Path(req.clip_filename).name)
