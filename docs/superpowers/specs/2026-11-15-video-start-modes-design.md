@@ -105,3 +105,20 @@ Exact visual design of the wizard and slot widgets (follow the existing `btn-too
 3. Wizard mode = default per card, mixable per card.
 4. Plain action text on cards for the `h3_modes` routes, wrapped by the engine.
 5. 960x544 clips for text and reference, warn + scale at stitch.
+
+## Measured (2026-11-15)
+Checked against an isolated engine (port 8766, temp app-data) with the real local models and the real ComfyUI.
+
+**Worked, seen on screen**
+- Wizard, three steps; a 5 min plan shows "5 min = 58 segments x 5.17 s"; 30 s 9:16 makes 6 cards at 768x1344.
+- AI draft (Ollama `qwen3.5:9b`, 6 batches for 58 shots): 58 unique prompts, about 22 words each, the story carried forward; some repetition near the end ("descends the staircase" twice), so drafts are suggestions to edit.
+- A saved plan reloads with every card field intact (this needed a fix: the screenplay loader used to drop unknown fields; test `test_screenplay_round_trip_keeps_wizard_card_fields`).
+- Card slot "Generate": a real Qwen picture from the shot prompt (a red fox in snow), previewed and accepted; Vault picker listed real pictures; Render is disabled with a readable reason until the card has its prompt and frames.
+- Review gate: Shot 2 locked until Shot 1 is approved; Redo marks chained followers "Redo needed".
+- Server guard rails with real inputs: a missing frame file and a chained card without a previous tail frame both return 400 naming the problem; nothing renders.
+
+**NOT verified**
+- **No clip was rendered in any mode** (text, first+last, last-only, reference, 3-card first-frame chain). Every attempt failed inside ComfyUI at the video model loader with Windows "The paging file is too small for this operation to complete (os error 1455)". The unchanged first-frame path failed the same way, so this is the machine's commit limit, not the new code: the two H3 models need about 38 GB (20.6 GB video model + ~15 GB text encoder) against ~34 GB free commit (page file system-managed, ~40 GB allocated). A larger page file, a restart, or closing memory-heavy programs is needed; then run the clips again and add what was seen here (identity drift, zoom, invented speech, render time, VRAM).
+- 9:16 clips at 544x960; the sizes the engine asks `make_clip` for are untested on real output.
+- Upload button (opens a file dialog) and the "Clip..." picker for "From a video".
+- Mixed sizes at Deliver: read, not run. `pipeline.py` (timeline export) scales every clip to the program size with letterboxing, so a 960x544 clip in a 1344x768 program should be accepted; the old `stitch_chunks` concat needs same-size clips but the wizard flow does not use it.
