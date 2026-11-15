@@ -3,6 +3,9 @@
 (function () {
   const KEY = 'cf.layout.v1', MIN_MONITOR = 360, GUT = 10;
   const VAR = { l: '--cf-l', r: '--cf-r', h: '--cf-tl' };
+  // On the Color page the bottom divider sizes the grade panel (the clip strip there has a fixed height)
+  const hVar = () => (page === 'color' ? '--cf-cp' : '--cf-tl');
+  const hEl = () => document.querySelector(page === 'color' ? '#cfWorkspace .color-panel' : '#nleTimeline');
   const MIN = { l: 200, r: 240, h: 110 };
   let saved = {};
   try { saved = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { saved = {}; }
@@ -20,22 +23,23 @@
     const w = ws().getBoundingClientRect(), c = cols();
     if (k === 'l') return Math.max(MIN.l, w.width - c.r - 2 * GUT - MIN_MONITOR);
     if (k === 'r') return Math.max(MIN.r, w.width - c.l - 2 * GUT - MIN_MONITOR);
-    return Math.max(MIN.h, w.height - 260);
+    return Math.max(MIN.h, w.height - 260 - (page === 'color' ? 110 : 0));
   }
   const clamp = (k, v) => Math.round(Math.min(Math.max(v, MIN[k]), limit(k)));
-  function size(k) { return k === 'h' ? document.getElementById('nleTimeline').getBoundingClientRect().height : cols()[k]; }
+  function size(k) { return k === 'h' ? hEl().getBoundingClientRect().height : cols()[k]; }
+  const cssVar = (k) => (k === 'h' ? hVar() : VAR[k]);
   function set(k, v, remember) {
     v = clamp(k, v);
-    ws().style.setProperty(VAR[k], v + 'px');
+    ws().style.setProperty(cssVar(k), v + 'px');
     if (remember) { (saved[page] = saved[page] || {})[k] = v; persist(); }
     const h = document.querySelector(`[data-split="${k}"]`); if (h) h.setAttribute('aria-valuenow', v);
     window.dispatchEvent(new Event('resize'));   // the timeline and the player re-measure themselves on resize
   }
-  function reset(k) { ws().style.removeProperty(VAR[k]); if (saved[page]) { delete saved[page][k]; persist(); } window.dispatchEvent(new Event('resize')); }
+  function reset(k) { ws().style.removeProperty(cssVar(k)); if (saved[page]) { delete saved[page][k]; persist(); } window.dispatchEvent(new Event('resize')); }
 
   function apply(p) {
     page = p; const w = ws(); if (!w) return;
-    Object.values(VAR).forEach((v) => w.style.removeProperty(v));
+    [...Object.values(VAR), '--cf-cp'].forEach((v) => w.style.removeProperty(v));
     const o = saved[p] || {};
     ['l', 'r', 'h'].forEach((k) => { if (o[k]) set(k, o[k], false); });   // reading the grid forces layout, so no rAF (it never fires in a background tab)
   }
@@ -69,7 +73,7 @@
 
   function init() {
     document.querySelectorAll('#cfWorkspace [data-split]').forEach(bind);
-    let t; window.addEventListener('resize', () => { clearTimeout(t); t = setTimeout(() => { ['l', 'r', 'h'].forEach((k) => { const v = ws() && ws().style.getPropertyValue(VAR[k]); if (v) set(k, parseFloat(v), false); }); }, 150); });
+    let t; window.addEventListener('resize', () => { clearTimeout(t); t = setTimeout(() => { ['l', 'r', 'h'].forEach((k) => { const v = ws() && ws().style.getPropertyValue(cssVar(k)); if (v) set(k, parseFloat(v), false); }); }, 150); });
     apply(document.body.dataset.page || 'edit');
   }
   init();

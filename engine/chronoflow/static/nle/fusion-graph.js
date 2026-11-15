@@ -811,7 +811,7 @@
       processNode(node, srcCanvas, dstCanvas, time);
       return;
     }
-    const w = srcCanvas.width, h = srcCanvas.height;
+    const w = srcCanvas.width, h = srcCanvas.height;   // srcCanvas is always one of evaluate()'s buffers here, never the video
     const effCanvas = createCanvas(w, h);
     processNode(node, srcCanvas, effCanvas, time);
 
@@ -834,11 +834,16 @@
 
   /** Evaluates full graph from source image/canvas to destination canvas */
   function evaluate(graph, sourceCanvas, destCanvas, currentTime = 0, targetViewNodeId = null) {
+    // A <video> (the monitor's source) reports width/height 0 (they are the HTML attributes): use its intrinsic size,
+    // or every buffer is 0x0 and the first drawImage throws (effects then never showed on the monitor).
+    const w = sourceCanvas.videoWidth || sourceCanvas.naturalWidth || sourceCanvas.width;
+    const h = sourceCanvas.videoHeight || sourceCanvas.naturalHeight || sourceCanvas.height;
+    if (!w || !h) return destCanvas;
     if (!graph || graph.enabled === false || isIdentity(graph)) {
       const ctx = destCanvas.getContext('2d');
-      if (destCanvas.width !== sourceCanvas.width || destCanvas.height !== sourceCanvas.height) {
-        destCanvas.width = sourceCanvas.width;
-        destCanvas.height = sourceCanvas.height;
+      if (destCanvas.width !== w || destCanvas.height !== h) {
+        destCanvas.width = w;
+        destCanvas.height = h;
       }
       ctx.clearRect(0, 0, destCanvas.width, destCanvas.height);
       ctx.drawImage(sourceCanvas, 0, 0);
@@ -846,7 +851,6 @@
     }
 
     const sorted = topologicalSort(graph);
-    const w = sourceCanvas.width, h = sourceCanvas.height;
 
     // Ping-pong buffers
     const bufferA = createCanvas(w, h);
@@ -1019,9 +1023,16 @@
     return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`;
   }
 
+  /** Fill every node's params with its type's defaults (nodes written by an agent carry only the params it set). */
+  function normalize(graph) {
+    (graph && graph.nodes || []).forEach((n) => { const d = NODE_DEFS[n.type]; if (d) n.params = Object.assign(d.defaultParams(), n.params || {}); });
+    return graph;
+  }
+
   return {
     NODE_DEFS,
     PRESETS,
+    normalize,
     newGraph,
     cloneGraph,
     isIdentity,

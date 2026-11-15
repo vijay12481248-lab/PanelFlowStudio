@@ -5903,6 +5903,9 @@ The AI Director is modifying the prompt and rendering in ComfyUI.`);
           // 5. Update Production Trigger Button
           this.renderTriggerButton(data.active_job);
 
+          // 6. A timeline edit made by an agent (MCP) or another window: the editor adopts it (grade/effects show at once)
+          if (window.NLE && NLE.syncFromServer && data.timeline_version > NLE.tlVersion) NLE.syncFromServer(data.timeline_version);
+
         } catch (err) {
           if (err.name !== 'AbortError') {
             console.warn("[StudioStore] Sync warning:", err);
@@ -6029,6 +6032,16 @@ The AI Director is modifying the prompt and rendering in ComfyUI.`);
 
       renderActiveJob(job) {
         if (!job) return;
+
+        // A shot regenerated in place keeps its file name, so the browser would keep showing the cached old clip.
+        // When a busy job settles, bump every clip of it: decks, filmstrips and waveforms reload at once.
+        const wasBusy = this._busy && this._busy[job.id];
+        const busyNow = job.status === 'starting' || job.status === 'regenerating';
+        (this._busy = this._busy || {})[job.id] = busyNow;
+        if (wasBusy && !busyNow && window.NLE && NLE.refreshSource) {
+          (job.chunks || []).filter(Boolean).forEach(u => NLE.refreshSource(u.split('/').pop().split('?')[0]));
+          refreshMediaPool();
+        }
 
         const cancelBtn = document.getElementById('btnCancelActiveJob');
         if (cancelBtn) {

@@ -36,7 +36,42 @@
 
   // ---------- persistence (per job, browser-local) ----------
   const key = () => `nle:${ui.jobId}`;
-  function persist() { try { if (ui.jobId) localStorage.setItem(key(), JSON.stringify(tl)); } catch (e) { /* private mode */ } }
+  function persist() { try { if (ui.jobId) localStorage.setItem(key(), JSON.stringify(tl)); } catch (e) { /* private mode */ } ui.lastEdit = Date.now(); pushServer(); }
+
+  // ---------- server mirror: agents (MCP) read and change the same timeline; the studio adopts their versions ----------
+  const TAB = Math.random().toString(36).slice(2, 8);
+  let putT = 0;
+  function pushServer() {
+    if (!ui.jobId) return;
+    const job = ui.jobId;
+    clearTimeout(putT);
+    putT = setTimeout(async () => {
+      ui.putting = true;
+      try {
+        const r = await fetch(apiUrl(`/timeline/${encodeURIComponent(job)}`, {}), { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ timeline: tl, source: `ui:${TAB}` }) });
+        if (r.ok && job === ui.jobId) ui.tlVersion = (await r.json()).version;
+      } catch (e) { /* engine busy: the next edit pushes again */ } finally { ui.putting = false; }
+    }, 400);
+  }
+  async function pullServer(jobId) {
+    try { const r = await fetch(apiUrl(`/timeline/${encodeURIComponent(jobId)}`, {})); if (!r.ok) return null; const rec = await r.json(); return rec && rec.version && rec.timeline && (rec.timeline.clips || []).length ? rec : null; } catch (e) { return null; }
+  }
+  const normalizeFx = () => { if (window.NLEFusionGraph) tl.clips.forEach((c) => { if (c.fusion) window.NLEFusionGraph.normalize(c.fusion); }); };
+  /** The studio's sync loop saw a newer timeline version on the server (an agent, or another window): adopt it, undoably. */
+  async function syncFromServer(v) {
+    if (!ui.jobId || ui.putting || v <= (ui.tlVersion || 0) || Date.now() - (ui.lastEdit || 0) < 1500) return;   // never under an edit in progress
+    const rec = await pullServer(ui.jobId);
+    if (!rec || rec.version <= (ui.tlVersion || 0)) return;
+    ui.tlVersion = rec.version;
+    if (String(rec.source) === `ui:${TAB}`) return;                                          // our own echo
+    hist.checkpoint();
+    Object.keys(tl).forEach((k) => delete tl[k]); Object.assign(tl, rec.timeline);
+    if (!Array.isArray(tl.dismissedSrcs)) tl.dismissedSrcs = [];
+    normalizeFx();
+    try { localStorage.setItem(key(), JSON.stringify(tl)); } catch (e) { /* private mode */ }
+    renderAll(); refreshAt(); emit('load', tl);
+    status(`Timeline updated by ${rec.source === 'agent' ? 'an agent' : 'another window'} (version ${rec.version}). Ctrl+Z undoes it.`);
+  }
   function restore(sig) {
     try {
       const raw = ui.jobId && localStorage.getItem(key());
@@ -97,7 +132,12 @@
       return '';
     };
 
+    const serverRec = await pullServer(jobId);                     // the server copy is the newest (every edit is mirrored there; agents write there)
+    if (jobId !== ui.jobId) return;
+    ui.tlVersion = serverRec ? serverRec.version : 0;
+    if (serverRec) { try { localStorage.setItem(key(), JSON.stringify(serverRec.timeline)); } catch (e) { /* private mode */ } }
     if (restore(sig)) {
+      normalizeFx();
       /* Auto-prune any rogue duplicate clips that were mistakenly appended while already subsumed in a merged clip */
       const mergedSources = new Set();
       tl.clips.forEach((c) => {
@@ -173,6 +213,7 @@
       });
     }
     tl.fps = infos[0].fps || tl.fps;
+    if (!serverRec) pushServer();                                   // first time: put this timeline where agents can see it
     zoomFit(true);
     renderAll();
     await seek(0);
@@ -1183,7 +1224,7 @@
   }
 
   const api = {
-    mount, loadJob, refreshSource, addShotToTimeline, seek, play, pause, step, captureFrame, select, edit, status, exportCut,
+    mount, loadJob, refreshSource, syncFromServer, get tlVersion() { return ui.tlVersion || 0; }, addShotToTimeline, seek, play, pause, step, captureFrame, select, edit, status, exportCut,
     markIn, markOut, clearRange, total, fps, mergeSelectedFrames, persist, deleteSelection, checkpoint: () => hist.checkpoint(), decks: () => decks,
     selectedClips: () => tl.clips.filter((c) => ui.selIds && ui.selIds.has(c.id)),
     on: (n, f) => (listeners[n] = listeners[n] || []).push(f),

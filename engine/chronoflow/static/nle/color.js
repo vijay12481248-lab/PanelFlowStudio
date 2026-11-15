@@ -117,14 +117,17 @@
       const tex = (unit, target) => { const t = gl.createTexture(); gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(target, t); gl.texParameteri(target, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(target, gl.TEXTURE_MAG_FILTER, gl.LINEAR); [gl.TEXTURE_WRAP_S, gl.TEXTURE_WRAP_T, gl.TEXTURE_WRAP_R].forEach((w) => gl.texParameteri(target, w, gl.CLAMP_TO_EDGE)); return t; };
       this.vt = tex(0, gl.TEXTURE_2D); this.lt = tex(1, gl.TEXTURE_3D);
     }
-    hide() { this.cv.style.display = 'none'; this.key = ''; }              // a hidden canvas must redraw when it comes back
+    hide() { this.cv.style.display = 'none'; this.key = ''; this.lastT = null; }              // a hidden canvas must redraw when it comes back
     show(opacity, z) { this.cv.style.display = 'block'; this.cv.style.opacity = opacity; this.cv.style.zIndex = z === 'auto' ? 1 : z; this.cv.style.clipPath = S.wipe < 100 ? `inset(0 ${100 - S.wipe}% 0 0)` : ''; }
-    draw(t, clipId) {
+    /** `src` = the Fusion canvas when the clip has effects (grade goes on top of them), else the video itself. */
+    draw(t, clipId, src, srcKey) {
       const gl = this.gl, v = this.v;
       if (v.readyState < 2 || !v.videoWidth) return;
-      const key = `${clipId}|${v.currentTime}|${t.sig.length}|${t.sig.slice(-24)}|${v.videoWidth}`;
-      if (key === this.key && v.paused) return;                       // nothing changed on a paused frame
-      this.key = key;
+      // The baked table is a new object whenever the grade changes, so comparing it catches every edit
+      // (the old key used only the grade text's length and last 24 chars, so most wheel drags never repainted a paused frame).
+      const key = `${clipId}|${v.currentTime}|${v.videoWidth}|${srcKey || ''}`;
+      if (key === this.key && t === this.lastT && v.paused) return;   // nothing changed on a paused frame
+      this.key = key; this.lastT = t;
       const w = Math.min(v.videoWidth, 1920), hh = Math.round((w / v.videoWidth) * v.videoHeight);
       if (this.cv.width !== w || this.cv.height !== hh) { this.cv.width = w; this.cv.height = hh; }
       gl.viewport(0, 0, w, hh); gl.useProgram(this.prog);
@@ -132,12 +135,13 @@
         const N3 = t.size, rgba = new Float32Array(N3 * N3 * N3 * 4);
         for (let i = 0, j = 0; i < t.table.length; i += 3, j += 4) { rgba[j] = t.table[i]; rgba[j + 1] = t.table[i + 1]; rgba[j + 2] = t.table[i + 2]; rgba[j + 3] = 1; }
         gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_3D, this.lt);
+        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);   // WebGL rejects 3D uploads while FLIP_Y is on (set for the video below): the LUT then never updated
         gl.texImage3D(gl.TEXTURE_3D, 0, gl.RGBA16F, N3, N3, N3, 0, gl.RGBA, gl.FLOAT, rgba);
         gl.uniform1f(this.uN, N3); this.sig = t.sig;
       }
       gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, this.vt);
       gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
-      try { gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, v); } catch (e) { return; }
+      try { gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src || v); } catch (e) { return; }
       gl.drawArrays(gl.TRIANGLES, 0, 3);
     }
   }
@@ -148,11 +152,12 @@
     N.decks().forEach((d, i) => {
       const view = views[i] || (views[i] = new GradeView(d.el));
       const c = d.clipId && N.tl.clips.find((x) => x.id === d.clipId);
+      const fx = window.NLEFusion && NLEFusion.drawDeck ? NLEFusion.drawDeck(i, d) : null;   // effects first (fresh this frame) ...
       const t = c && !S.bypass ? tableFor(c) : null;
-      if (!t || !view.ok) { view.hide(); return; }
       const cs = getComputedStyle(d.el);
-      if (parseFloat(cs.opacity) <= 0.001) { view.hide(); return; }
-      view.show(cs.opacity, cs.zIndex); view.draw(t, c.id);
+      if (!t || !view.ok || parseFloat(cs.opacity) <= 0.001) { view.hide(); if (fx) fx.cv.style.visibility = ''; return; }
+      if (fx) fx.cv.style.visibility = 'hidden';                                              // ... then the grade on top of them
+      view.show(cs.opacity, cs.zIndex); view.draw(t, c.id, fx ? fx.cv : null, fx ? fx.key : '');
     });
     if (S.open) { const now = performance.now(); if (now - lastScope > 110) { lastScope = now; drawScopes(); } }
   }

@@ -149,3 +149,16 @@ body.cf-resizing iframe, body.cf-resizing video { pointer-events: none; }
 .img-pick-card img { width: 100%; aspect-ratio: 16 / 10; object-fit: cover; border-radius: 4px; background: #000; }
 .img-pick-card span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .img-pick-note { text-align: center; font-size: .76rem; color: #9aa6d0; min-height: 1.2em; margin-top: 8px; }
+
+/* ---------- Color page: a compact clip strip (ruler + V1) like Resolve's Color page, and a grade panel that fits without scrolling ---------- */
+#cfWorkspace[data-page="color"] { --cf-tl: 100px; --cf-cp: 345px; }
+#cfWorkspace[data-page="color"] .nle-tl-bar,
+#cfWorkspace[data-page="color"] .nle-insp,
+#cfWorkspace[data-page="color"] .nle-lane[data-lane="v2"],
+#cfWorkspace[data-page="color"] .nle-lane[data-lane="a1"],
+#cfWorkspace[data-page="color"] .nle-heads > .nle-head:nth-child(2),
+#cfWorkspace[data-page="color"] .nle-heads > .nle-head:nth-child(4) { display: none; }
+#cfWorkspace[data-page="color"] #nleTimeline { overflow: hidden; }
+#cfWorkspace[data-page="color"] .color-panel { flex: 0 0 var(--cf-cp); overflow: hidden; }
+#cfWorkspace[data-page="color"] .cf-body { overflow-x: hidden; }
+#cfWorkspace[data-page="deliver"] { --cf-tl: 210px; }   /* the full timeline (with in/out marks) fits without a scrollbar */

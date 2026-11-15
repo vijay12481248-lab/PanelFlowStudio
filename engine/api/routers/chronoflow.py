@@ -32,6 +32,7 @@ from engine.chronoflow.pipeline import (
 )
 from engine.chronoflow import deliver as deliver_mod
 from engine.chronoflow import media_tools
+from engine.chronoflow import timeline_ops
 from engine.chronoflow.folder_dialog import pick_native_folder
 from engine.comfyui.art import ART_WORKFLOW_ID, IMAGE_WORKFLOW_IDS, ArtEngine
 from engine.chronoflow.reviewer import analyze_video_chunk
@@ -728,7 +729,13 @@ async def get_chronoflow_status() -> dict[str, Any]:
 @router.get("/sync")
 async def get_unified_sync(v: int = 0, job_id: str | None = None) -> dict[str, Any]:
     """Returns atomic versioned state for deterministic frontend synchronization."""
-    return await supervisor.get_unified_sync_state(v, job_id)
+    state = await supervisor.get_unified_sync_state(v, job_id)
+    jid = state.get("active_job_id")
+    try:  # the studio adopts timeline edits made by agents (MCP) when this number moves past its own
+        state["timeline_version"] = timeline_ops.version(jid) if jid else 0
+    except timeline_ops.TimelineError:
+        state["timeline_version"] = 0
+    return state
 
 
 @router.get("/jobs")

@@ -59,6 +59,7 @@
 
   function commit(checkpoint = true) {
     if (!N) return;
+    const c0 = clip(); el.sig = c0 && c0.fusion ? JSON.stringify(c0.fusion) : '';   // our own change: the external-change watcher below must not re-render it
     if (checkpoint) N.checkpoint();
     clearTimeout(persistTimer);
     persistTimer = setTimeout(() => N.persist(), 250);
@@ -79,9 +80,10 @@
     draw(graph) {
       const v = this.v;
       if (v.readyState < 2 || !v.videoWidth) return;
-      const key = `${v.currentTime}|${v.videoWidth}|${S.viewedNodeId}|${JSON.stringify(graph)}`;
-      if (key === this.key && v.paused) return;
-      this.key = key;
+      const viewed = S.open ? S.viewedNodeId : null;   // inspecting an intermediate node only makes sense on the Fusion page
+      const key = `${v.currentTime}|${v.videoWidth}|${viewed}|${JSON.stringify(graph)}`;
+      if (key === this.key && (v.paused || performance.now() - this.at < 8)) return;   // same frame, or already drawn this animation frame
+      this.key = key; this.at = performance.now();
 
       const w = Math.min(v.videoWidth, 1920);
       const hgt = Math.round((w / v.videoWidth) * v.videoHeight);
@@ -91,27 +93,32 @@
       }
 
       // Draw active frame through fusion graph (with optional intermediate node inspection)
-      G.evaluate(graph, v, this.cv, v.currentTime, S.viewedNodeId);
+      G.evaluate(graph, v, this.cv, v.currentTime, viewed);
     }
   }
 
   const views = [];
+  /** Draw deck i through its clip's effects. Returns the view (its canvas + key) or null when the clip has no effects.
+      Effects show on EVERY page, like the export; the Color page grades this canvas instead of the raw video. */
+  function drawDeck(i, d) {
+    const view = views[i] || (views[i] = new FusionView(d.el));
+    const c = d.clipId && N.tl.clips.find((x) => x.id === d.clipId);
+    const g = c && c.fusion && !S.bypassAll ? c.fusion : null;
+    if (!g || G.isIdentity(g) || parseFloat(getComputedStyle(d.el).opacity) <= 0.001) { view.hide(); return null; }
+    try { view.draw(g); }
+    catch (err) {   // a broken effect must never blank the monitor: show the clip without effects and say why
+      view.hide();
+      if (!view.warned) { view.warned = true; console.warn('[Fusion] effect failed', err); if (N) N.status(`Fusion effect could not be drawn: ${err.message}`); }
+      return null;
+    }
+    view.warned = false;
+    view.show();
+    return view;
+  }
   function monitorTick() {
     requestAnimationFrame(monitorTick);
     if (!N || !N.root.screen || !N.root.screen.offsetParent) return;
-
-    N.decks().forEach((d, i) => {
-      const view = views[i] || (views[i] = new FusionView(d.el));
-      const c = d.clipId && N.tl.clips.find((x) => x.id === d.clipId);
-      const g = c && c.fusion && !S.bypassAll ? c.fusion : null;
-
-      if (!g || G.isIdentity(g) || !S.open) {
-        view.hide();
-        return;
-      }
-      view.show();
-      view.draw(g);
-    });
+    N.decks().forEach((d, i) => drawDeck(i, d));
   }
 
   // -------------------------------------------------------------
@@ -724,6 +731,8 @@
     });
 
     el.mounted = true;
+    // undo / redo / an agent (MCP) changing the graph: re-read it so the panel never shows a stale graph
+    setInterval(() => { if (!S.open) return; const c = clip(); const sig = c && c.fusion ? JSON.stringify(c.fusion) : ''; if (sig !== el.sig) { el.sig = sig; renderGraph(); renderInspector(); } }, 300);
     requestAnimationFrame(monitorTick);
   }
 
@@ -757,6 +766,7 @@
     close,
     graphFor,
     hasFusion,
+    drawDeck: (i, d) => (N ? drawDeck(i, d) : null),
     get state() { return S; },
   };
 })();

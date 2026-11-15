@@ -263,6 +263,12 @@ async def panelflow_chronoflow_regenerate_shot(
                 "items": {"type": "string"},
                 "description": "Character-lock by vault id (max 4): resolves each Character Vault member to its locked reference sheet (optional)",
             },
+            "workflow_id": {
+                "type": "string",
+                "enum": ["qwen_image_21", "minimax_h3_image_edit"],
+                "description": "Image model: qwen_image_21 (default; ~15 s, photographic, supports character lock and refine) or "
+                               "minimax_h3_image_edit (MiniMax H3-Image; ~50 s, painted/illustrated look, no refine)",
+            },
         },
         "required": ["prompt"],
     },
@@ -276,8 +282,10 @@ async def panelflow_chronoflow_generate_image(
     refine: bool = False,
     ref_images: list[str] | None = None,
     character_ids: list[str] | None = None,
+    workflow_id: str = "qwen_image_21",
 ) -> dict[str, Any]:
     payload = {
+        "workflow_id": workflow_id,
         "prompt": prompt,
         "negative_prompt": negative_prompt,
         "width": width,
@@ -404,3 +412,123 @@ async def panelflow_chronoflow_save_screenplay(
         payload["filename"] = filename
     return await bridge.post("/api/chronoflow/screenplay/save", payload)
 
+
+
+# ---------------------------------------------------------------------------
+# Timeline: colour grading and Fusion effects an agent can apply.
+# The studio mirrors its timeline to the engine; these tools change that copy and the open studio shows the change within ~2 s
+# (undoable with Ctrl+Z there). The export renders exactly the same grade and effects. Clips are 1-based in timeline order.
+# ---------------------------------------------------------------------------
+_CLIP = {"description": "Which clip: 1-based position in the timeline, a clip id, or 'all' (default 'all')",
+         "anyOf": [{"type": "integer"}, {"type": "string"}]}
+
+
+@registry.tool(
+    name="panelflow_chronoflow_color_guide",
+    description=(
+        "READ FIRST before grading. Returns every colour control (range, neutral value, what it does), how the lift/gamma/gain/offset "
+        "wheels take a colour + amount, the named looks, and the Fusion effects with their parameters."
+    ),
+    input_schema={"type": "object", "properties": {}},
+    domain="chronoflow",
+)
+async def panelflow_chronoflow_color_guide() -> dict[str, Any]:
+    return await bridge.get("/api/chronoflow/timeline/describe")
+
+
+@registry.tool(
+    name="panelflow_chronoflow_timeline_get",
+    description=(
+        "The studio timeline of a ChronoFlow job: each clip's position, label, start, duration, current grade (only the controls that "
+        "differ from neutral, per node) and Fusion effects. Use it to see what is there before and after changing it. "
+        "version 0 means the job was never opened in the Video Studio (open it once so its timeline exists)."
+    ),
+    input_schema={"type": "object", "properties": {"job_id": {"type": "string", "description": "ChronoFlow job id"}}, "required": ["job_id"]},
+    domain="chronoflow",
+)
+async def panelflow_chronoflow_timeline_get(job_id: str) -> dict[str, Any]:
+    rec = await bridge.get(f"/api/chronoflow/timeline/{job_id}")
+    return {"version": rec.get("version", 0), "source": rec.get("source"), "clips": rec.get("clips", [])}
+
+
+async def _op(job_id: str, op: str, args: dict[str, Any]) -> dict[str, Any]:
+    return await bridge.post(f"/api/chronoflow/timeline/{job_id}/op", {"op": op, "args": {k: v for k, v in args.items() if v is not None}})
+
+
+@registry.tool(
+    name="panelflow_chronoflow_color_set",
+    description=(
+        "Grade one clip or all clips. Give `controls`, e.g. {\"saturation\": 0.8, \"contrast\": 1.15, \"temp\": 12, "
+        "\"gain\": {\"color\": \"orange\", \"amount\": 0.3}, \"lift\": {\"color\": \"teal\", \"amount\": 0.4, \"master\": -0.02}}, "
+        "and/or a named `look` (Teal & Orange, Warm film, Cold night, Bleach bypass, Faded matte, Vivid pop, Noir). "
+        "`node` picks the serial node (1 = first; number of nodes + 1 adds a new node on top - use that for a look over a correction). "
+        "Out-of-range values are refused with the allowed range. See panelflow_chronoflow_color_guide."
+    ),
+    input_schema={
+        "type": "object",
+        "properties": {
+            "job_id": {"type": "string"},
+            "clip": _CLIP,
+            "controls": {"type": "object", "description": "Colour controls to set (see the guide)"},
+            "look": {"type": "string", "description": "A named look to apply to the node"},
+            "node": {"type": "integer", "description": "1-based node (default 1)"},
+        },
+        "required": ["job_id"],
+    },
+    domain="chronoflow",
+)
+async def panelflow_chronoflow_color_set(job_id: str, clip: int | str | None = None, controls: dict[str, Any] | None = None,
+                                         look: str | None = None, node: int = 1) -> dict[str, Any]:
+    return await _op(job_id, "color_set", {"clip": clip, "controls": controls or {}, "look": look, "node": node})
+
+
+@registry.tool(
+    name="panelflow_chronoflow_color_copy",
+    description="Copy one clip's whole grade (all nodes) to another clip or to every clip - the quick way to make a scene consistent.",
+    input_schema={
+        "type": "object",
+        "properties": {"job_id": {"type": "string"}, "from_clip": _CLIP, "to_clip": _CLIP},
+        "required": ["job_id", "from_clip"],
+    },
+    domain="chronoflow",
+)
+async def panelflow_chronoflow_color_copy(job_id: str, from_clip: int | str, to_clip: int | str | None = None) -> dict[str, Any]:
+    return await _op(job_id, "color_copy", {"from_clip": from_clip, "to_clip": to_clip})
+
+
+@registry.tool(
+    name="panelflow_chronoflow_color_reset",
+    description="Remove the grade from one clip or all clips (back to the original picture).",
+    input_schema={"type": "object", "properties": {"job_id": {"type": "string"}, "clip": _CLIP}, "required": ["job_id"]},
+    domain="chronoflow",
+)
+async def panelflow_chronoflow_color_reset(job_id: str, clip: int | str | None = None) -> dict[str, Any]:
+    return await _op(job_id, "color_reset", {"clip": clip})
+
+
+@registry.tool(
+    name="panelflow_chronoflow_fusion_add",
+    description=(
+        "Add a Fusion effect to one clip or all clips, applied before the grade: vignette, film_grain, glow, blur, text_plus "
+        "(titles, e.g. {\"text\": \"Chapter 1\", \"posY\": 0.85, \"fontSize\": 56}), color_corrector, transform, camera_shake, chroma_keyer. "
+        "Params you leave out use the effect's defaults (see the guide)."
+    ),
+    input_schema={
+        "type": "object",
+        "properties": {"job_id": {"type": "string"}, "effect": {"type": "string"}, "clip": _CLIP, "params": {"type": "object"}},
+        "required": ["job_id", "effect"],
+    },
+    domain="chronoflow",
+)
+async def panelflow_chronoflow_fusion_add(job_id: str, effect: str, clip: int | str | None = None, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    return await _op(job_id, "fusion_add", {"clip": clip, "effect": effect, "params": params or {}})
+
+
+@registry.tool(
+    name="panelflow_chronoflow_fusion_clear",
+    description="Remove every Fusion effect from one clip or all clips.",
+    input_schema={"type": "object", "properties": {"job_id": {"type": "string"}, "clip": _CLIP}, "required": ["job_id"]},
+    domain="chronoflow",
+)
+async def panelflow_chronoflow_fusion_clear(job_id: str, clip: int | str | None = None) -> dict[str, Any]:
+    return await _op(job_id, "fusion_clear", {"clip": clip})
