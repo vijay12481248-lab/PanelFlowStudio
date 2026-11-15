@@ -54,7 +54,7 @@ function generatePanelSvg(title: string, subtitle: string, accentColor: string):
 
 async function run() {
   console.log("Starting Vite dev server...");
-  const viteProcess = spawn("cmd.exe", ["/c", "npx", "vite", "--host", "127.0.0.1", "--port", "5173"], {
+  const viteProcess = spawn("cmd.exe", ["/c", "npx", "vite", "--host", "127.0.0.1", "--port", "5273"], {
     cwd: path.resolve(__dirname, ".."),
     stdio: "pipe",
   });
@@ -222,7 +222,7 @@ async function run() {
   });
 
   console.log("Navigating to Original Stories Screen...");
-  await page.goto("http://127.0.0.1:5173/#/create/stories", { waitUntil: "networkidle" });
+  await page.goto("http://127.0.0.1:5273/#/create/stories", { waitUntil: "networkidle" });
   await page.waitForTimeout(2500);
 
   // Trigger workbench load if button visible

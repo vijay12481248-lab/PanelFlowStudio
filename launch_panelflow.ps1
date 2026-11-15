@@ -336,18 +336,18 @@ if (-not $Dev -and $nativeApp) {
 
     # Reuse a Vite server only if it is ours; a stale one from another folder would serve old code.
     $viteProcess = $null
-    $alreadyListening = Get-NetTCPConnection -LocalPort 5173 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
+    $alreadyListening = Get-NetTCPConnection -LocalPort 5273 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($alreadyListening) {
         $owner = Get-CimInstance Win32_Process -Filter "ProcessId=$($alreadyListening.OwningProcess)" -ErrorAction SilentlyContinue
         if ($owner -and $owner.CommandLine -like "*$rootDir*") {
-            Write-Host "  -> Existing Vite dev server for this project is active on port 5173 (hot reload picks up changes)." -ForegroundColor Green
+            Write-Host "  -> Existing Vite dev server for this project is active on port 5273 (hot reload picks up changes)." -ForegroundColor Green
         } elseif ($owner -and $owner.Name -eq 'node.exe') {
-            Write-Host "  -> Port 5173 is held by a Vite server from another folder; stopping it so this project's code is served." -ForegroundColor Yellow
+            Write-Host "  -> Port 5273 is held by a Vite server from another folder; stopping it so this project's code is served." -ForegroundColor Yellow
             Stop-Process -Id $owner.ProcessId -Force -ErrorAction SilentlyContinue
             Start-Sleep -Seconds 1
             $alreadyListening = $null
         } else {
-            throw "Port 5173 is used by another program ($($owner.Name)); free it and retry."
+            throw "Port 5273 is used by another program ($($owner.Name)); free it and retry."
         }
     }
     if (-not $alreadyListening) {
@@ -359,7 +359,7 @@ if (-not $Dev -and $nativeApp) {
     for ($i = 0; $i -lt 120; $i++) {
         if ($viteProcess -and $viteProcess.HasExited) { throw "Vite exited with code $($viteProcess.ExitCode). Run 'npm --workspace=@panelflow/desktop run dev' to see the error." }
         try {
-            Invoke-WebRequest -Uri 'http://localhost:5173/src/main.tsx' -UseBasicParsing -TimeoutSec 20 | Out-Null
+            Invoke-WebRequest -Uri 'http://localhost:5273/src/main.tsx' -UseBasicParsing -TimeoutSec 20 | Out-Null
             $viteReady = $true; break
         } catch { Start-Sleep -Milliseconds 500 }
     }
@@ -373,7 +373,7 @@ if (-not $Dev -and $nativeApp) {
         "C:\Program Files\Microsoft\Edge\Application\msedge.exe"
     )
     $browserApp = $browserCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
-    $appUrl = if ($env:PANELFLOW_ENGINE_TOKEN) { "http://localhost:5173?token=$($env:PANELFLOW_ENGINE_TOKEN)" } else { "http://localhost:5173" }
+    $appUrl = if ($env:PANELFLOW_ENGINE_TOKEN) { "http://localhost:5273?token=$($env:PANELFLOW_ENGINE_TOKEN)" } else { "http://localhost:5273" }
     $profileDir = Join-Path $env:LOCALAPPDATA 'PanelFlow Studio\desktop_profile'
     New-Item -ItemType Directory -Force -Path $profileDir | Out-Null
 

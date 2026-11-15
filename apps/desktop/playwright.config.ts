@@ -7,7 +7,7 @@ export default defineConfig({
   timeout: 45_000,
   reporter: "list",
   use: {
-    baseURL: "http://127.0.0.1:5173",
+    baseURL: "http://127.0.0.1:5273",
     channel: "chrome",
     headless: true,
     viewport: { width: 1440, height: 900 },
@@ -15,7 +15,7 @@ export default defineConfig({
   },
   webServer: {
     command: "npx vite --host 127.0.0.1",
-    url: "http://127.0.0.1:5173",
+    url: "http://127.0.0.1:5273",
     reuseExistingServer: true,
     timeout: 60_000,
   },

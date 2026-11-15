@@ -373,7 +373,7 @@ impl EngineManager {
             cmd.current_dir(working_dir);
             cmd.env("PANELFLOW_ENGINE_TOKEN", self.token.as_str());
             #[cfg(debug_assertions)]
-            cmd.env("PANELFLOW_ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173");
+            cmd.env("PANELFLOW_ALLOWED_ORIGINS", "http://localhost:5273,http://127.0.0.1:5273");
 
             #[cfg(windows)]
             {
@@ -426,7 +426,7 @@ impl EngineManager {
         cmd.current_dir(working_dir);
         cmd.env("PANELFLOW_ENGINE_TOKEN", self.token.as_str());
         #[cfg(debug_assertions)]
-        cmd.env("PANELFLOW_ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173");
+        cmd.env("PANELFLOW_ALLOWED_ORIGINS", "http://localhost:5273,http://127.0.0.1:5273");
 
         #[cfg(windows)]
         {
