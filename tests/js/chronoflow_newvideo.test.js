@@ -216,3 +216,37 @@ test('Render all runs what can run now and says what waits', () => {
   assert.match(q.waiting[0].reason, /Last frame/);
   assert.match(q.waiting[1].reason, /prompt/i);
 });
+
+// ---- plan upload: auto-fix result view
+const esc = (v) => String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+const okResult = (extra = {}) => ({ ok: true, problems: [], warnings: [], changes: [], fixed_text: null, summary: { title: 'Rainbows', takes: 4, seconds: 20, format: '16:9', pictures: 6, clip_seconds: 5, narration: 'narrator' }, ...extra });
+
+test('a fixed plan lists what was changed, offers Undo and Import', () => {
+  const html = NV.planResultHtml(okResult({ changes: ['t01: length 9 s became 5 s', 'cast id <Mira> became "mira"'], fixed_text: '{}' }), esc, true);
+  assert.match(html, /Auto-fix changed 2 things/);
+  assert.match(html, /t01: length 9 s became 5 s/);
+  assert.match(html, /&lt;Mira&gt;/); // escaped
+  assert.match(html, /data-nv-act="undo"/);
+  assert.match(html, /data-nv-act="import"/);
+});
+
+test('one change reads as one thing, and a plan that needed nothing shows no fix list', () => {
+  assert.match(NV.planResultHtml(okResult({ changes: ['x'], fixed_text: '{}' }), esc, true), /changed 1 thing\b/);
+  const clean = NV.planResultHtml(okResult(), esc, true);
+  assert.doesNotMatch(clean, /Auto-fix changed/);
+  assert.match(clean, /Rainbows/);
+});
+
+test('with auto-fix off, problems offer a manual Auto-fix and the copy button; with it on they do not offer it again', () => {
+  const bad = { ok: false, problems: ['t01: narration has 2 words; <write 9>'], warnings: [], changes: [], fixed_text: null, summary: null };
+  const manual = NV.planResultHtml(bad, esc, false);
+  assert.match(manual, /data-nv-act="fix"/);
+  assert.match(manual, /data-nv-act="copy"/);
+  assert.match(manual, /&lt;write 9&gt;/);
+  assert.doesNotMatch(manual, /data-nv-act="import"/);
+  const auto = NV.planResultHtml({ ...bad, changes: ['t02: x'], fixed_text: '{}' }, esc, true);
+  assert.doesNotMatch(auto, /data-nv-act="fix"/);
+  assert.match(auto, /Auto-fix changed 1 thing/);
+  assert.match(auto, /could not be repaired safely/i);
+  assert.match(auto, /data-nv-act="copy"/);
+});

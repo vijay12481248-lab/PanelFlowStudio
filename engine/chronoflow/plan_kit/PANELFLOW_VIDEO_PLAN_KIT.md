@@ -367,6 +367,7 @@ Save as `check_plan.py`. Standard library only.
 ```python
 #!/usr/bin/env python3
 """Read and check a PanelFlow Plan v2 (film / cards). Usage: python check_plan.py plan.json   (standard library only; prints problems, exit 1 if any)."""
+import ast
 import json
 import math
 import re
@@ -382,6 +383,7 @@ STACK = re.compile(r"\b(on (his|her|their|the) (shoulder|back|head|lap)|in (his|
 SPEECH = re.compile(r"\b(says|said|speaks|speaking|talks|talking|asks|replies|whispers|shouts)\b", re.I)
 CURLY = {0x201C: '"', 0x201D: '"', 0x2018: "'", 0x2019: "'"}  # curly quotes to straight ones (str.translate takes code points)
 TRAIL = re.compile(r",(\s*[}\]])")  # a comma before a closing bracket
+COMMENT = re.compile(r"(?m)^[ \t]*//.*$|(?<=[,{\[])[ \t]*//[^\n]*$")  # a // comment on its own line or after a comma
 CLAUSE = re.compile(r"\s*(?:;|,\s*while\s+|\s+while\s+|,\s*as\s+|\s+as\s+|\.\s+)\s*", re.I)  # how PanelFlow's picture prompt splits a description into clauses
 GENRES = {"bedtime", "horror", "mystery", "fantasy", "anime_adventure", "mythology", "vox", "explainer", "custom"}
 
@@ -396,14 +398,18 @@ def read_plan(text):
         raise ValueError("No JSON object found: the plan must start with { and end with }.")
     body = t[start : end + 1] if end > start else t[start:]
     err = None
-    for fix in (lambda s: s, lambda s: s.translate(CURLY), lambda s: TRAIL.sub(lambda m: m.group(1), s.translate(CURLY))):
+    clean = lambda s: TRAIL.sub(lambda m: m.group(1), COMMENT.sub("", s.translate(CURLY)))  # noqa: E731
+    for fix in (lambda s: s, lambda s: s.translate(CURLY), clean):
         try:
             data = json.loads(fix(body))
             break
         except ValueError as ex:
             err = ex
     else:
-        raise ValueError(f"Not valid JSON: {err}")
+        try:  # a Python-style dictionary: single quotes, True / None
+            data = ast.literal_eval(clean(body))
+        except (ValueError, SyntaxError, MemoryError, RecursionError):
+            raise ValueError(f"Not valid JSON: {err}") from None
     if not isinstance(data, dict):
         raise ValueError("The plan must be one JSON object.")
     return data

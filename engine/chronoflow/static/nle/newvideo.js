@@ -132,6 +132,25 @@
     else s.state = (s.prompt || '').trim() ? 'ready' : 'empty';
   }
 
+  // ---- plan upload: what the owner sees after a check (pure, so it is tested without a page)
+  function planResultHtml(r, e, auto) {
+    const n = (r.changes || []).length;
+    const fixed = n ? `<details class="nv-plan-fixed" open><summary><b>Auto-fix changed ${n} thing${n === 1 ? '' : 's'}</b></summary><ul>${r.changes.map((c) => `<li>${e(c)}</li>`).join('')}</ul>
+      <button type="button" class="btn-tool" data-nv-act="undo">Undo auto-fix</button></details>` : '';
+    if (!r.ok) {
+      const k = r.problems.length;
+      const note = n ? '<div class="nv-note">Auto-fix repaired what it could safely. These could not be repaired safely, so they need the assistant or you.</div>'
+        : (auto ? '<div class="nv-note">Auto-fix found nothing here that it could repair safely.</div>' : '');
+      const manual = auto ? '' : '<button type="button" class="btn-primary" data-nv-act="fix" style="width:auto;padding:5px 14px;font-size:.78rem">Auto-fix</button> ';
+      return `${fixed}<div class="nv-plan-bad"><b>${k} problem${k === 1 ? '' : 's'} in this plan</b><ul>${r.problems.map((m) => `<li>${e(m)}</li>`).join('')}</ul>${note}
+        ${manual}<button type="button" class="btn-tool" data-nv-act="copy">Copy for the assistant</button> <span class="nv-note">Paste this to the assistant and ask for the whole corrected plan.</span></div>`;
+    }
+    const m = r.summary;
+    return `${fixed}<div class="nv-plan-ok"><b>${e(m.title)}</b><div>${m.takes} shots &middot; ${m.seconds} s &middot; ${e(m.format)} &middot; ${m.pictures} pictures to draw &middot; ${m.clip_seconds} s clips${m.narration === 'narrator' ? ' &middot; narrated' : ''}</div>
+      ${(r.warnings || []).map((w) => `<div class="nv-warn">${e(w)}</div>`).join('')}
+      <button type="button" class="btn-primary" data-nv-act="import" style="width:auto;padding:8px 22px;margin-top:8px">Import plan</button></div>`;
+  }
+
   // ---- the wizard popup (markup lives in index.html: ids nvStep1..3 etc.)
   function mount(cfg) {
     ctx = cfg;
@@ -186,26 +205,22 @@
     document.querySelectorAll('[data-nv-start]').forEach((b) => b.addEventListener('click', () => { err(''); showStep(b.dataset.nvStart === 'plan' ? 'plan' : 1); }));
     $('nvKitBtn').addEventListener('click', async () => { try { await cfg.download('/plan/kit', 'PANELFLOW_VIDEO_PLAN_KIT.md'); } catch (x) { err(x.message || String(x)); } });
     $('nvCheckerBtn').addEventListener('click', async () => { try { await cfg.download('/plan/checker', 'check_plan.py'); } catch (x) { err(x.message || String(x)); } });
-    async function planCheck() {
+    let originalText = null; // the text before the last auto-fix, for Undo
+    async function planCheck(forceFix, noFix) {
       const text = $('nvPlanText').value;
       err('');
       if (!text.trim()) return planResult('<div class="nv-warn">Paste the plan, or choose the file, first.</div>');
       planResult('Checking the plan…');
+      const auto = noFix === true ? false : (forceFix === true || $('nvAutoFix').checked);
       try {
-        const r = await cfg.post('/plan/validate', { text });
-        if (!r.ok) {
-          lastProblems = r.problems;
-          return planResult(`<div class="nv-plan-bad"><b>${r.problems.length} problem${r.problems.length === 1 ? '' : 's'} in this plan</b><ul>${r.problems.map((m) => `<li>${e(m)}</li>`).join('')}</ul>
-            <button type="button" class="btn-tool" data-nv-act="copy">Copy for the assistant</button> <span class="nv-note">Paste this to the assistant and ask for the whole corrected plan.</span></div>`);
-        }
-        const m = r.summary;
-        planResult(`<div class="nv-plan-ok"><b>${e(m.title)}</b><div>${m.takes} shots &middot; ${m.seconds} s &middot; ${e(m.format)} &middot; ${m.pictures} pictures to draw &middot; ${m.clip_seconds} s clips${m.narration === 'narrator' ? ' &middot; narrated' : ''}</div>
-          ${r.warnings.map((w) => `<div class="nv-warn">${e(w)}</div>`).join('')}
-          <button type="button" class="btn-primary" data-nv-act="import" style="width:auto;padding:8px 22px;margin-top:8px">Import plan</button></div>`);
+        const r = await cfg.post('/plan/validate', { text, fix: auto });
+        lastProblems = r.problems;
+        if ((r.changes || []).length && r.fixed_text) { originalText = text; $('nvPlanText').value = r.fixed_text; }
+        planResult(planResultHtml(r, e, auto || $('nvAutoFix').checked));
       } catch (x) { planResult(`<div class="nv-error">${e(x.message || String(x))}</div>`); }
     }
-    $('nvPlanCheck').addEventListener('click', planCheck);
-    $('nvPlanText').addEventListener('paste', () => setTimeout(planCheck, 60));
+    $('nvPlanCheck').addEventListener('click', () => planCheck());
+    $('nvPlanText').addEventListener('paste', () => setTimeout(() => planCheck(), 60));
     $('nvPlanFile').addEventListener('change', async () => {
       const f = $('nvPlanFile').files[0];
       if (!f) return;
@@ -217,12 +232,17 @@
     $('nvPlanResult').addEventListener('click', async (ev) => {
       const act = ev.target.closest('[data-nv-act]');
       if (!act) return;
-      if (act.dataset.nvAct === 'copy') {
+      if (act.dataset.nvAct === 'fix') {
+        planCheck(true);
+      } else if (act.dataset.nvAct === 'undo') {
+        if (originalText !== null) { $('nvPlanText').value = originalText; originalText = null; }
+        planCheck(false, true);
+      } else if (act.dataset.nvAct === 'copy') {
         const text = ['Please fix these problems in the plan, then send me the whole corrected JSON again (only the JSON):'].concat(lastProblems.map((m) => '- ' + m)).join(NL);
         try { await navigator.clipboard.writeText(text); act.textContent = 'Copied'; } catch (x) { $('nvPlanText').focus(); err('Could not copy automatically. Select the problems above and copy them.'); }
       } else if (act.dataset.nvAct === 'import') {
         act.disabled = true; err('');
-        try { await cfg.onPlanImported(await cfg.post('/plan/import', { text: $('nvPlanText').value })); } catch (x) { err(x.message || String(x)); act.disabled = false; }
+        try { await cfg.onPlanImported(await cfg.post('/plan/import', { text: $('nvPlanText').value, fix: $('nvAutoFix').checked })); } catch (x) { err(x.message || String(x)); act.disabled = false; }
       }
     });
     return { open() { err(''); showStep(0); refreshLength(); planResult(''); $('nvPlanText').value = ''; } };
@@ -482,6 +502,6 @@
   }
 
   const api = { SEG_SECONDS, MAX_SECONDS, slotsFor, segmentCount, lengthLabel, canRender, prevTail, markRendered, approve, markRedo, mount,
-    applyPictureItems, pictureCounts, renderAllQueue, planDraw, planApprovePictures, planRenderAll, planStop() { plan.stop = true; }, renderPlanBar, getSlot, setSlot, relink, newCard, chainKeyframe, displayState, effectiveMode, missingInputs, sizeWarning, setMode, modeLabel: (s, i) => MODE_LABEL[effectiveMode(s, i)], ...cardApi };
+    applyPictureItems, pictureCounts, renderAllQueue, planResultHtml, planDraw, planApprovePictures, planRenderAll, planStop() { plan.stop = true; }, renderPlanBar, getSlot, setSlot, relink, newCard, chainKeyframe, displayState, effectiveMode, missingInputs, sizeWarning, setMode, modeLabel: (s, i) => MODE_LABEL[effectiveMode(s, i)], ...cardApi };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.NewVideo = api;
 })(typeof window !== 'undefined' ? window : globalThis);

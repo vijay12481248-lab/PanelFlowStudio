@@ -34,7 +34,7 @@ from engine.chronoflow.pipeline import (
 )
 from engine.chronoflow import deliver as deliver_mod
 from engine.chronoflow import media_tools
-from engine.chronoflow import plan_check, plan_import
+from engine.chronoflow import plan_check, plan_fix, plan_import
 from engine.chronoflow import start_modes
 from engine.chronoflow import timeline_ops
 from engine.chronoflow.folder_dialog import pick_native_folder
@@ -1901,6 +1901,7 @@ _PLAN_TASKS: dict[str, Any] = {}
 
 class PlanTextRequest(BaseModel):
     text: str = ""
+    fix: bool = False  # repair what can be repaired safely before checking (engine/chronoflow/plan_fix.py)
 
 
 class PlanSlugRequest(BaseModel):
@@ -1911,13 +1912,17 @@ def _download(text: str, filename: str, media_type: str) -> Response:
     return Response(content=text, media_type=media_type, headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
 
-def _read_and_check_plan(text: str) -> tuple[dict[str, Any] | None, list[str]]:
-    """(plan, []) for a good plan, else (plan or None, the problems in plain words): the chatbot's answer is untrusted text."""
+def _read_and_check_plan(text: str, fix: bool = False) -> tuple[dict[str, Any] | None, list[str], list[str]]:
+    """(plan, problems, changes): the plan (repaired first when `fix`), what is still wrong with it in plain words, and what the repair changed.
+    The chatbot's answer is untrusted text."""
     try:
         plan = plan_check.read_plan(text)
     except ValueError as e:
-        return None, [str(e)]
-    return plan, plan_check.check(plan)
+        return None, [str(e)], []
+    changes: list[str] = []
+    if fix:
+        plan, changes = plan_fix.autofix(plan)
+    return plan, plan_check.check(plan), changes
 
 
 @router.get("/plan/kit")
@@ -1934,19 +1939,20 @@ def plan_checker() -> Response:
 
 @router.post("/plan/validate")
 def plan_validate(req: PlanTextRequest) -> dict[str, Any]:
-    plan, problems = _read_and_check_plan(req.text)
+    plan, problems, changes = _read_and_check_plan(req.text, req.fix)
+    fixed_text = json.dumps(plan, indent=2, ensure_ascii=False) if changes and plan is not None else None  # what the owner's text box should now hold
     if problems:
-        return {"ok": False, "problems": problems, "summary": None, "warnings": []}
+        return {"ok": False, "problems": problems, "summary": None, "warnings": [], "changes": changes, "fixed_text": fixed_text}
     built = plan_import.plan_to_cards(plan)
     meta = built["screenplay"]["anchor_images"]["plan"]
     summary = {"title": plan["title"], "target": plan["target"], "takes": meta["takes"], "pictures": meta["pictures"], "seconds": float(sum(t["seconds"] for t in plan["takes"])),
                "format": plan["format"], "clip_seconds": plan["production"]["clip_seconds"], "narration": plan["production"]["narration"]}
-    return {"ok": True, "problems": [], "summary": summary, "warnings": built["warnings"]}
+    return {"ok": True, "problems": [], "summary": summary, "warnings": built["warnings"], "changes": changes, "fixed_text": fixed_text}
 
 
 @router.post("/plan/import")
 def plan_import_route(req: PlanTextRequest) -> Any:
-    plan, problems = _read_and_check_plan(req.text)
+    plan, problems, changes = _read_and_check_plan(req.text, req.fix)
     if problems:
         return JSONResponse(status_code=400, content={"detail": "The plan has problems.", "problems": problems})
     try:
@@ -1955,7 +1961,7 @@ def plan_import_route(req: PlanTextRequest) -> Any:
     except Exception as e:  # noqa: BLE001
         logger.exception("Plan import failed: %s", e)
         return JSONResponse(status_code=400, content={"detail": "The plan could not be converted.", "problems": [str(e)]})
-    return {"success": True, "slug": plan_import.plan_slug(plan), "screenplay": built["screenplay"], "warnings": built["warnings"]}
+    return {"success": True, "slug": plan_import.plan_slug(plan), "screenplay": built["screenplay"], "warnings": built["warnings"], "changes": changes}
 
 
 def _draw_fn(story: Any, ws: Path):

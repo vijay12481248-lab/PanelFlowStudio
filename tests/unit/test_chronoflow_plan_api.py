@@ -139,3 +139,43 @@ def test_picture_job_guards(client, monkeypatch):
     assert client.post(f"{BASE}/pictures/start", json={"slug": slug}).status_code == 409  # already drawing
     gate["open"] = True
     wait_done(client, slug)
+
+
+# ---- auto-fix
+def damaged():
+    p = copy.deepcopy(EXAMPLE)
+    p["takes"][0]["seconds"] = 9
+    p["production"]["total_seconds"] = 99
+    p["takes"][1]["motion"] = "Mira walks across the meadow while Pip follows slowly behind her."
+    p["cast"][0]["id"] = "Mira Keeper"
+    for t in p["takes"]:
+        t["cast"] = ["Mira Keeper" if c == "mira" else c for c in t["cast"]]
+    return p
+
+
+def test_validate_with_fix_repairs_reports_and_returns_the_fixed_text(client):
+    plain = client.post(f"{BASE}/validate", json={"text": json.dumps(damaged())}).json()
+    assert plain["ok"] is False and plain["changes"] == [] and plain["fixed_text"] is None
+    body = client.post(f"{BASE}/validate", json={"text": json.dumps(damaged()), "fix": True}).json()
+    assert body["ok"] is True and body["problems"] == [] and len(body["changes"]) >= 3 and body["summary"]["takes"] == 4
+    assert pc.check(json.loads(body["fixed_text"])) == []
+
+
+def test_fix_keeps_what_it_cannot_repair_as_problems(client):
+    bad = damaged()
+    bad["takes"][2]["narration"] = "Too short."
+    body = client.post(f"{BASE}/validate", json={"text": json.dumps(bad), "fix": True}).json()
+    assert body["ok"] is False and body["changes"] and any("narration has 2 words" in p for p in body["problems"]) and body["fixed_text"]
+
+
+def test_fix_on_a_valid_plan_changes_nothing_and_garbage_is_still_one_problem(client):
+    body = client.post(f"{BASE}/validate", json={"text": json.dumps(EXAMPLE), "fix": True}).json()
+    assert body["ok"] is True and body["changes"] == [] and body["fixed_text"] is None
+    junk = client.post(f"{BASE}/validate", json={"text": "hello", "fix": True}).json()
+    assert junk["ok"] is False and len(junk["problems"]) == 1 and junk["changes"] == []
+
+
+def test_import_can_fix_first(client, tmp_path):
+    assert client.post(f"{BASE}/import", json={"text": json.dumps(damaged())}).status_code == 400
+    r = client.post(f"{BASE}/import", json={"text": json.dumps(damaged()), "fix": True})
+    assert r.status_code == 200 and len(r.json()["screenplay"]["scenes"]) == 4 and r.json()["changes"]

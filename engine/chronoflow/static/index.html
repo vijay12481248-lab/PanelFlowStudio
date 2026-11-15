@@ -4815,6 +4815,9 @@
     .nv-bar .btn-primary { margin: 0; }
     .nv-plan-bad { border: 1px solid rgba(242,102,122,.5); border-radius: 8px; padding: 8px 12px; font-size: 0.8rem; }
     .nv-plan-bad ul { margin: 6px 0 8px 18px; padding: 0; color: #f6b1bb; }
+    .nv-fixrow { display: block; margin-top: 8px; font-size: 0.8rem; color: #d5dcf5; }
+    .nv-plan-fixed { border: 1px solid rgba(250,204,21,.45); border-radius: 8px; padding: 6px 12px; margin-bottom: 8px; font-size: 0.8rem; }
+    .nv-plan-fixed ul { margin: 6px 0 8px 18px; padding: 0; color: #f3e3a0; }
     .nv-plan-ok { border: 1px solid rgba(70,214,163,.5); border-radius: 8px; padding: 8px 12px; font-size: 0.82rem; }
     .nv-card { display: flex; flex-direction: column; gap: 6px; margin: 6px 0; }
     .nv-card select { font-size: 0.72rem; padding: 2px 6px; max-width: 150px; }
@@ -4860,6 +4863,7 @@
           <span class="nv-label" style="margin-top: 14px;">2. Upload the plan, or paste it</span>
           <div class="nv-row" style="margin-bottom: 6px;"><input type="file" id="nvPlanFile" accept=".json,.txt,application/json,text/plain"></div>
           <textarea id="nvPlanText" rows="6" style="font-size: 0.8rem;" placeholder="...or paste the JSON the assistant gave you here"></textarea>
+          <label class="nv-fixrow" title="Repairs ids, lengths, missing defaults, directions and similar mechanical problems before checking, and lists every change. You can undo it."><input type="checkbox" id="nvAutoFix" checked> Fix problems automatically <span class="nv-note">(ids, lengths, directions, missing defaults... every change is listed, and you can undo it)</span></label>
           <div class="nv-row" style="justify-content: space-between; margin-top: 8px;">
             <button type="button" class="btn-tool" data-nv-back="0">&larr; Back</button>
             <button type="button" class="btn-primary" id="nvPlanCheck" style="width: auto; padding: 8px 22px;">Check the plan</button>
