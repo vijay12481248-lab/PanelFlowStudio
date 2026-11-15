@@ -44,7 +44,7 @@ export default defineConfig({
     entries: ['index.html'],
   },
   server: {
-    port: 5173,
+    port: 5273,
     strictPort: true,
     watch: {
       ignored: ["**/src-tauri/**"],
@@ -55,6 +55,7 @@ export default defineConfig({
       "@panelflow/history": path.resolve(__dirname, "../../packages/history/src/index.ts"),
       "@panelflow/shared-types": path.resolve(__dirname, "../../packages/shared-types/src/index.ts"),
       "@panelflow/api-client": path.resolve(__dirname, "../../packages/api-client/src/index.ts"),
+      "@panelflow/ui-v2": path.resolve(__dirname, "../../packages/ui/src/v2/index.ts"),
       "@panelflow/ui": path.resolve(__dirname, "../../packages/ui/src/index.tsx"),
     },
   },

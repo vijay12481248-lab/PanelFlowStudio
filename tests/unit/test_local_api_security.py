@@ -186,8 +186,6 @@ def test_local_engine_and_iframe_origins_are_allowed():
     for allowed_origin in [
         "http://127.0.0.1:8765",
         "http://localhost:8765",
-        "http://127.0.0.1:7860",
-        "http://localhost:7860",
         "null",
     ]:
         resp = client.get(
@@ -196,3 +194,14 @@ def test_local_engine_and_iframe_origins_are_allowed():
         )
         assert resp.status_code == 200, f"Expected 200 for origin {allowed_origin}, got {resp.status_code}"
 
+
+
+def test_scene_review_pictures_accept_the_resource_token():
+    """The Scene page shows each picture with an <img>, which cannot send a header: /api/original/scene/runs/<id>/image must take the path token.
+    The real handler answers (404 or an error: this test database has no runs); what matters is that security lets the request through."""
+    app = create_app(engine_token=TOKEN, allowed_origins={APPROVED_ORIGIN}, allow_insecure=False)
+    client = TestClient(app, base_url="http://127.0.0.1:8765", raise_server_exceptions=False)
+    headers = {"Origin": APPROVED_ORIGIN}
+    assert client.get(f"/api/original/scene/runs/abc/image;pf-token={TOKEN}", headers=headers).status_code != 401  # past security
+    assert client.get("/api/original/scene/runs/abc/image", headers=headers).status_code == 401  # no token, no picture
+    assert client.get("/api/original/scene/runs/abc/image;pf-token=wrong", headers=headers).status_code == 401

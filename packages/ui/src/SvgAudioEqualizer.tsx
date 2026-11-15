@@ -14,10 +14,10 @@ export const SvgAudioEqualizer: React.FC<SvgAudioEqualizerProps> = ({
   theme = "indigo",
 }) => {
   const themeColors = {
-    indigo: { start: "#818cf8", end: "#4f46e5", glow: "rgba(99, 102, 241, 0.4)" },
-    emerald: { start: "#34d399", end: "#059669", glow: "rgba(16, 185, 129, 0.4)" },
-    cyan: { start: "#22d3ee", end: "#0891b2", glow: "rgba(6, 182, 212, 0.4)" },
-    rose: { start: "#fb7185", end: "#e11d48", glow: "rgba(244, 63, 94, 0.4)" },
+    indigo: { start: "#7aa2ff", end: "#3b6bf5", glow: "rgba(59,107,245, 0.4)" },
+    emerald: { start: "#46d6a3", end: "#46d6a3", glow: "rgba(70,214,163, 0.4)" },
+    cyan: { start: "#7aa2ff", end: "#7aa2ff", glow: "rgba(122,162,255, 0.4)" },
+    rose: { start: "#f2667a", end: "#f2667a", glow: "rgba(242,102,122, 0.4)" },
   }[theme];
 
   const barConfigs = [

@@ -6,7 +6,7 @@ import re
 from pathlib import Path
 from typing import Iterable
 
-from engine.narration.artifacts import BeatSheet, PanelFacts, SeriesBible
+from engine.narration.artifacts import NARRATOR_ID, BeatSheet, PanelFacts, SeriesBible
 
 FEWSHOT_DIR = Path(__file__).resolve().parents[1] / "fewshot"
 
@@ -87,6 +87,40 @@ def cast_line(ids: Iterable[str], names: dict[str, str], bible: SeriesBible) -> 
         extra = ", ".join(x for x in (c.pronouns, c.role) if x)
         parts.append(f"{name} ({extra})" if extra else name)
     return "; ".join(parts) or "(nobody identified)"
+
+
+def speaker_choices(ids: Iterable[str], names: dict[str, str], resolvable: dict[str, str]) -> str:
+    """'narrator - the narrator voice; c_1 - Gu Yifan' for the speaker prompt.
+
+    Only a character the bible knows can be a speaker: an unresolved unknown_<n> label never
+    reaches the model, and the line stays the narrator's.
+    """
+    parts = [f"{NARRATOR_ID} - the narrator voice"]
+    for cid in dict.fromkeys(ids):
+        real = resolvable.get(cid, cid)
+        if real in names:
+            parts.append(f"{real} - {names[real]}")
+    return "\n".join(parts)
+
+
+def resolvable_speakers(ids: Iterable[str], bible: SeriesBible, resolutions: dict[str, str]) -> dict[str, str]:
+    """Speaker label -> the bible id it speaks as: an unknown_<n> label maps through the beat sheet."""
+    known = {c.id for c in bible.characters}
+    out: dict[str, str] = {}
+    for cid in dict.fromkeys(ids):
+        if cid in known:
+            out[cid] = cid
+        elif cid in resolutions and resolutions[cid] in known:
+            out[cid] = resolutions[cid]
+    return out
+
+
+def resolve_speaker(proposed: str | None, allowed: set[str]) -> str:
+    """The speaker a line actually gets: the proposal when it is one of the allowed ids, else the narrator."""
+    if not proposed:
+        return NARRATOR_ID
+    pid = proposed.strip()
+    return pid if pid in allowed else NARRATOR_ID
 
 
 def scene_panels(sheet: BeatSheet, panel_id: str, facts: dict[str, PanelFacts]) -> list[PanelFacts]:

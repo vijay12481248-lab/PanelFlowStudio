@@ -90,3 +90,45 @@ test("resource URLs use a path capability rather than a query string", () => {
   assert.equal(url, "http://127.0.0.1:8765/api/projects/project/pages/page/file;pf-token=resource-token");
   assert.doesNotMatch(url, /\?/);
 });
+
+test("the image edit request names the picture and the instruction", async () => {
+  let capturedUrl = "";
+  let capturedInit: RequestInit | undefined;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+    capturedUrl = String(url);
+    capturedInit = init;
+    return new Response(JSON.stringify({ job_id: "job-9", status: "QUEUED", workflow_id: "minimax_h3_image_edit" }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  }) as typeof fetch;
+
+  try {
+    const client = new PanelFlowApiClient("http://127.0.0.1:8765", "secret-token");
+    const result = await client.editComfyImage("project-1", {
+      asset_id: "asset-7",
+      prompt: "make the sky stormy",
+      reference_asset_ids: ["asset-8"],
+      seed: 42,
+    });
+
+    assert.equal(capturedUrl, "http://127.0.0.1:8765/api/projects/project-1/comfyui/edit");
+    assert.equal(capturedInit?.method, "POST");
+    assert.deepEqual(JSON.parse(String(capturedInit?.body)), {
+      asset_id: "asset-7",
+      prompt: "make the sky stormy",
+      reference_asset_ids: ["asset-8"],
+      seed: 42,
+    });
+    assert.equal(result.workflow_id, "minimax_h3_image_edit");
+    assert.equal(result.job_id, "job-9");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("the Scene review picture URL carries the access token, since an image tag cannot send a header", () => {
+  const client = new PanelFlowApiClient("http://127.0.0.1:8765", "resource-token");
+  assert.equal(client.sceneRunImageUrl("run 1"), "http://127.0.0.1:8765/api/original/scene/runs/run%201/image;pf-token=resource-token");
+});

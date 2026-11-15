@@ -83,26 +83,26 @@ export const NarrationReviewPanel: React.FC<NarrationReviewPanelProps> = ({
   };
 
   return (
-    <div className={`flex flex-col bg-zinc-950 border-t border-zinc-800/80 p-4 space-y-4 select-none ${className}`}>
+    <div className={`flex flex-col bg-ink border-t border-edge/80 p-4 space-y-4 select-none ${className}`}>
       {/* Tab Navigation for Story Quality Review */}
-      <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
+      <div className="flex items-center justify-between border-b border-edge pb-2">
         <div className="flex items-center gap-2">
-          <span className="text-xs font-bold uppercase tracking-wider text-zinc-300">
+          <span className="text-xs font-bold uppercase tracking-wider text-fg-dim">
             Storytelling Quality Matrix
           </span>
-          <span className="text-[10px] text-zinc-500 font-medium hidden sm:inline">
+          <span className="text-[10px] text-fg-faint font-medium hidden sm:inline">
             (4-Layer Manga Comparison)
           </span>
         </div>
 
-        <div className="flex items-center gap-1 bg-zinc-900 p-0.5 rounded-lg border border-zinc-800 text-xs">
+        <div className="flex items-center gap-1 bg-navy p-0.5 rounded-lg border border-edge text-xs">
           <button
             type="button"
             onClick={() => setActiveTab("matrix")}
             className={`px-2.5 py-1 rounded transition-colors ${
               activeTab === "matrix"
-                ? "bg-indigo-600 text-white font-bold shadow-sm"
-                : "text-zinc-400 hover:text-zinc-200"
+                ? "bg-accent text-white font-bold shadow-sm"
+                : "text-fg-dim hover:text-fg"
             }`}
           >
             4-Tier Matrix
@@ -112,13 +112,13 @@ export const NarrationReviewPanel: React.FC<NarrationReviewPanelProps> = ({
             onClick={() => setActiveTab("pronunciation")}
             className={`px-2.5 py-1 rounded transition-colors flex items-center gap-1 ${
               activeTab === "pronunciation"
-                ? "bg-indigo-600 text-white font-bold shadow-sm"
-                : "text-zinc-400 hover:text-zinc-200"
+                ? "bg-accent text-white font-bold shadow-sm"
+                : "text-fg-dim hover:text-fg"
             }`}
           >
             Pronunciation
             {segment.delivery.pronunciation_guide.length > 0 && (
-              <span className="w-4 h-4 rounded-full bg-zinc-800 text-[9px] font-mono flex items-center justify-center text-zinc-300">
+              <span className="w-4 h-4 rounded-full bg-flat text-[9px] font-mono flex items-center justify-center text-fg-dim">
                 {segment.delivery.pronunciation_guide.length}
               </span>
             )}
@@ -128,12 +128,12 @@ export const NarrationReviewPanel: React.FC<NarrationReviewPanelProps> = ({
             onClick={() => setActiveTab("ai_polish")}
             className={`px-2.5 py-1 rounded transition-colors flex items-center gap-1 ${
               activeTab === "ai_polish"
-                ? "bg-indigo-600 text-white font-bold shadow-sm"
-                : "text-zinc-400 hover:text-zinc-200"
+                ? "bg-accent text-white font-bold shadow-sm"
+                : "text-fg-dim hover:text-fg"
             }`}
           >
             <span>Mock AI Polish</span>
-            <span className="text-[9px] uppercase px-1 py-0.2 rounded bg-amber-950 text-amber-400 font-bold border border-amber-800/80">
+            <span className="text-[9px] uppercase px-1 py-0.2 rounded bg-warn/20 text-warn font-bold border border-warn/80">
               Mock
             </span>
           </button>
@@ -144,16 +144,16 @@ export const NarrationReviewPanel: React.FC<NarrationReviewPanelProps> = ({
       {activeTab === "matrix" && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
           {/* Tier 1: Raw OCR Dialogue */}
-          <div className="p-3 rounded-xl bg-zinc-900/60 border border-zinc-800 flex flex-col justify-between space-y-2">
+          <div className="p-3 rounded-xl bg-navy/60 border border-edge flex flex-col justify-between space-y-2">
             <div>
               <div className="flex items-center justify-between mb-1">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-blue-400 flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />
+                <span className="text-[10px] font-bold uppercase tracking-wider text-info flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-accent" />
                   1. Raw OCR Dialogue
                 </span>
-                <span className="text-[10px] text-zinc-500 font-mono">Extracted Source</span>
+                <span className="text-[10px] text-fg-faint font-mono">Extracted Source</span>
               </div>
-              <p className="text-zinc-300 font-mono text-[11px] bg-zinc-950/80 p-2.5 rounded-lg border border-zinc-800/80 min-h-[50px] italic">
+              <p className="text-fg-dim font-mono text-[11px] bg-ink/80 p-2.5 rounded-lg border border-edge/80 min-h-[50px] italic">
                 {segment.source_context.raw_ocr_dialogue || "(No text bubble in source panel)"}
               </p>
             </div>
@@ -163,11 +163,11 @@ export const NarrationReviewPanel: React.FC<NarrationReviewPanelProps> = ({
                 handleCopyTierToScript(segment.source_context.raw_ocr_dialogue, "OCR")
               }
               disabled={!segment.source_context.raw_ocr_dialogue}
-              className="text-[10px] text-zinc-400 hover:text-indigo-400 font-semibold self-start flex items-center gap-1 hover:underline disabled:opacity-30"
+              className="text-[10px] text-fg-dim hover:text-info font-semibold self-start flex items-center gap-1 hover:underline disabled:opacity-30"
             >
               <span>Apply verbatim to script</span>
               {copiedTier === "OCR" && (
-                <span className="text-emerald-400 font-bold flex items-center gap-1">
+                <span className="text-ok font-bold flex items-center gap-1">
                   <Icons.Check className="w-3 h-3" /> Copied
                 </span>
               )}
@@ -175,16 +175,16 @@ export const NarrationReviewPanel: React.FC<NarrationReviewPanelProps> = ({
           </div>
 
           {/* Tier 2: Visual Scene Description */}
-          <div className="p-3 rounded-xl bg-zinc-900/60 border border-zinc-800 flex flex-col justify-between space-y-2">
+          <div className="p-3 rounded-xl bg-navy/60 border border-edge flex flex-col justify-between space-y-2">
             <div>
               <div className="flex items-center justify-between mb-1">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                <span className="text-[10px] font-bold uppercase tracking-wider text-ok flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-ok" />
                   2. Visual Scene Description
                 </span>
-                <span className="text-[10px] text-zinc-500 font-mono">Camera / Art Cue</span>
+                <span className="text-[10px] text-fg-faint font-mono">Camera / Art Cue</span>
               </div>
-              <p className="text-zinc-300 text-[11px] bg-zinc-950/80 p-2.5 rounded-lg border border-zinc-800/80 min-h-[50px] leading-relaxed">
+              <p className="text-fg-dim text-[11px] bg-ink/80 p-2.5 rounded-lg border border-edge/80 min-h-[50px] leading-relaxed">
                 {segment.source_context.visual_description}
               </p>
             </div>
@@ -193,11 +193,11 @@ export const NarrationReviewPanel: React.FC<NarrationReviewPanelProps> = ({
               onClick={() =>
                 handleCopyTierToScript(segment.source_context.visual_description, "Visual")
               }
-              className="text-[10px] text-zinc-400 hover:text-indigo-400 font-semibold self-start flex items-center gap-1 hover:underline"
+              className="text-[10px] text-fg-dim hover:text-info font-semibold self-start flex items-center gap-1 hover:underline"
             >
               <span>Convert visual description to narration</span>
               {copiedTier === "Visual" && (
-                <span className="text-emerald-400 font-bold flex items-center gap-1">
+                <span className="text-ok font-bold flex items-center gap-1">
                   <Icons.Check className="w-3 h-3" /> Copied
                 </span>
               )}
@@ -205,16 +205,16 @@ export const NarrationReviewPanel: React.FC<NarrationReviewPanelProps> = ({
           </div>
 
           {/* Tier 3: Contextual Story Narration / Subtext */}
-          <div className="p-3 rounded-xl bg-zinc-900/60 border border-zinc-800 flex flex-col justify-between space-y-2">
+          <div className="p-3 rounded-xl bg-navy/60 border border-edge flex flex-col justify-between space-y-2">
             <div>
               <div className="flex items-center justify-between mb-1">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-purple-400 flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-purple-400" />
+                <span className="text-[10px] font-bold uppercase tracking-wider text-info flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-accent" />
                   3. Contextual Story Subtext
                 </span>
-                <span className="text-[10px] text-zinc-500 font-mono">Dramatic Intent</span>
+                <span className="text-[10px] text-fg-faint font-mono">Dramatic Intent</span>
               </div>
-              <p className="text-zinc-300 text-[11px] bg-zinc-950/80 p-2.5 rounded-lg border border-zinc-800/80 min-h-[50px] leading-relaxed">
+              <p className="text-fg-dim text-[11px] bg-ink/80 p-2.5 rounded-lg border border-edge/80 min-h-[50px] leading-relaxed">
                 {segment.source_context.story_context}
               </p>
             </div>
@@ -223,11 +223,11 @@ export const NarrationReviewPanel: React.FC<NarrationReviewPanelProps> = ({
               onClick={() =>
                 handleCopyTierToScript(segment.source_context.story_context, "Context")
               }
-              className="text-[10px] text-zinc-400 hover:text-indigo-400 font-semibold self-start flex items-center gap-1 hover:underline"
+              className="text-[10px] text-fg-dim hover:text-info font-semibold self-start flex items-center gap-1 hover:underline"
             >
               <span>Use story context as narration</span>
               {copiedTier === "Context" && (
-                <span className="text-emerald-400 font-bold flex items-center gap-1">
+                <span className="text-ok font-bold flex items-center gap-1">
                   <Icons.Check className="w-3 h-3" /> Copied
                 </span>
               )}
@@ -236,22 +236,22 @@ export const NarrationReviewPanel: React.FC<NarrationReviewPanelProps> = ({
 
 
           {/* Tier 4: Final Spoken Narration Script */}
-          <div className="p-3 rounded-xl bg-indigo-950/30 border border-indigo-800/60 flex flex-col justify-between space-y-2">
+          <div className="p-3 rounded-xl bg-accent/30 border border-accent/60 flex flex-col justify-between space-y-2">
             <div>
               <div className="flex items-center justify-between mb-1">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-400 flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
+                <span className="text-[10px] font-bold uppercase tracking-wider text-info flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-accent" />
                   4. Final Spoken Narration Script
                 </span>
-                <span className="text-[10px] text-emerald-400 font-mono font-semibold">Active TTS Target</span>
+                <span className="text-[10px] text-ok font-mono font-semibold">Active TTS Target</span>
               </div>
-              <p className="text-zinc-100 font-medium text-[11px] bg-zinc-950/90 p-2.5 rounded-lg border border-indigo-700/50 min-h-[50px] leading-relaxed">
+              <p className="text-fg font-medium text-[11px] bg-ink/90 p-2.5 rounded-lg border border-accent/50 min-h-[50px] leading-relaxed">
                 {segment.narration_text}
               </p>
             </div>
-            <div className="flex items-center justify-between text-[10px] text-zinc-400">
-              <span>Delivery: <strong className="text-zinc-200">{segment.delivery.emotion}</strong></span>
-              <span className="font-mono text-indigo-400">Speaker: {segment.speaker_name}</span>
+            <div className="flex items-center justify-between text-[10px] text-fg-dim">
+              <span>Delivery: <strong className="text-fg">{segment.delivery.emotion}</strong></span>
+              <span className="font-mono text-info">Speaker: {segment.speaker_name}</span>
             </div>
           </div>
         </div>
@@ -261,7 +261,7 @@ export const NarrationReviewPanel: React.FC<NarrationReviewPanelProps> = ({
       {activeTab === "pronunciation" && (
         <div className="space-y-3 text-xs">
           <div className="flex items-center justify-between">
-            <p className="text-zinc-400 text-[11px]">
+            <p className="text-fg-dim text-[11px]">
               Provide explicit phonetic pronunciation rules for fantasy names, arcane terms, and places to ensure natural TTS synthesis.
             </p>
           </div>
@@ -269,27 +269,27 @@ export const NarrationReviewPanel: React.FC<NarrationReviewPanelProps> = ({
           {/* Existing Rules */}
           <div className="space-y-1.5">
             {segment.delivery.pronunciation_guide.length === 0 ? (
-              <div className="p-4 rounded-lg bg-zinc-900/40 border border-zinc-800 text-center text-zinc-500 text-xs">
+              <div className="p-4 rounded-lg bg-navy/40 border border-edge text-center text-fg-faint text-xs">
                 No custom pronunciation rules defined for this segment.
               </div>
             ) : (
               segment.delivery.pronunciation_guide.map((rule) => (
                 <div
                   key={rule.id}
-                  className="flex items-center justify-between p-2 rounded-lg bg-zinc-900 border border-zinc-800"
+                  className="flex items-center justify-between p-2 rounded-lg bg-navy border border-edge"
                 >
                   <div className="flex items-center gap-3">
-                    <span className="font-bold text-zinc-200">{rule.word}</span>
-                    <span className="text-zinc-600">→</span>
-                    <span className="font-mono text-indigo-400 bg-zinc-950 px-2 py-0.5 rounded border border-zinc-800">
+                    <span className="font-bold text-fg">{rule.word}</span>
+                    <span className="text-fg-faint">→</span>
+                    <span className="font-mono text-info bg-ink px-2 py-0.5 rounded border border-edge">
                       /{rule.phonetic}/
                     </span>
-                    {rule.notes && <span className="text-zinc-500 text-[10px]">({rule.notes})</span>}
+                    {rule.notes && <span className="text-fg-faint text-[10px]">({rule.notes})</span>}
                   </div>
                   <button
                     type="button"
                     onClick={() => handleRemovePronunciation(rule.id)}
-                    className="text-zinc-500 hover:text-rose-400 p-1"
+                    className="text-fg-faint hover:text-bad p-1"
                     title="Remove Rule"
                   >
                     <Icons.X className="w-3.5 h-3.5" />
@@ -301,20 +301,20 @@ export const NarrationReviewPanel: React.FC<NarrationReviewPanelProps> = ({
           </div>
 
           {/* Add Rule Form */}
-          <div className="flex items-center gap-2 pt-2 border-t border-zinc-800/80">
+          <div className="flex items-center gap-2 pt-2 border-t border-edge/80">
             <input
               type="text"
               placeholder="Word (e.g. Kaelen)"
               value={newWord}
               onChange={(e) => setNewWord(e.target.value)}
-              className="flex-1 px-3 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500"
+              className="flex-1 px-3 py-1.5 rounded-lg bg-navy border border-edge text-xs text-fg focus:outline-none focus:border-accent"
             />
             <input
               type="text"
               placeholder="Phonetic (e.g. KAY-len)"
               value={newPhonetic}
               onChange={(e) => setNewPhonetic(e.target.value)}
-              className="flex-1 px-3 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-zinc-200 font-mono focus:outline-none focus:border-indigo-500"
+              className="flex-1 px-3 py-1.5 rounded-lg bg-navy border border-edge text-xs text-fg font-mono focus:outline-none focus:border-accent"
             />
             <Button
               variant="secondary"
@@ -332,7 +332,7 @@ export const NarrationReviewPanel: React.FC<NarrationReviewPanelProps> = ({
       {/* Tab 3: Mock AI Polish Suggestions */}
       {activeTab === "ai_polish" && (
         <div className="space-y-3 text-xs">
-          <div className="p-2.5 rounded-lg bg-amber-950/30 border border-amber-800/60 text-amber-300 text-[11px] flex items-center justify-between">
+          <div className="p-2.5 rounded-lg bg-warn/30 border border-warn/60 text-warn text-[11px] flex items-center justify-between">
             <span>
               <strong>Simulated AI Storytelling Assistant:</strong> Mock data for review & evaluation only. No external LLMs or network requests are executed.
             </span>
@@ -342,19 +342,19 @@ export const NarrationReviewPanel: React.FC<NarrationReviewPanelProps> = ({
             {mockSuggestions.map((sug) => (
               <div
                 key={sug.id}
-                className="p-3 rounded-xl bg-zinc-900/80 border border-zinc-800 space-y-2 flex flex-col justify-between"
+                className="p-3 rounded-xl bg-navy/80 border border-edge space-y-2 flex flex-col justify-between"
               >
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <span className="font-bold text-zinc-200">{sug.title}</span>
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 font-mono">
+                    <span className="font-bold text-fg">{sug.title}</span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-flat text-fg-dim font-mono">
                       {sug.tag}
                     </span>
                   </div>
-                  <p className="text-[11px] text-zinc-400 mb-2 leading-relaxed">
+                  <p className="text-[11px] text-fg-dim mb-2 leading-relaxed">
                     {sug.description}
                   </p>
-                  <div className="p-2 rounded bg-zinc-950 border border-zinc-800 text-zinc-200 font-serif text-[11px] italic">
+                  <div className="p-2 rounded bg-ink border border-edge text-fg font-serif text-[11px] italic">
                     &ldquo;{sug.proposed_text}&rdquo;
                   </div>
                 </div>
@@ -370,7 +370,7 @@ export const NarrationReviewPanel: React.FC<NarrationReviewPanelProps> = ({
                       updated_at: new Date().toISOString(),
                     })
                   }
-                  className="text-xs h-7 self-start mt-2 bg-indigo-600 hover:bg-indigo-500"
+                  className="text-xs h-7 self-start mt-2 bg-accent hover:bg-accent"
                 >
                   Apply Suggestion
                 </Button>

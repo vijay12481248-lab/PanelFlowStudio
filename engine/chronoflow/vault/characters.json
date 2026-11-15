@@ -38,5 +38,101 @@
     "image": "qwen_gen_fa600e52.png",
     "description": "32-year-old female deep-space operative in matte obsidian tactical armored suit with glowing cyan conduits, amber HUD visor, utility harness, and carbon-fiber pauldrons.",
     "tag": "<Picture 5>"
+  },
+  {
+    "id": "char_95b658",
+    "name": "Lin Xiao",
+    "role": "Protagonist (LX-01, REV2 sheet)",
+    "image": "art_f9d17cb2.png",
+    "description": "10-year-old Chinese slum boy, GODFALL. Messy short black hair, large glossy amber-brown eyes, small bandage on LEFT cheek, soot-smudged hands, thin 5.5-head child frame (132cm). Patched grey hemp tunic with frayed hem, dark trousers, rope belt, cloth-wrapped forearms, straw sandals. From P11: faded red string charm on RIGHT wrist. From P22: crimson glyph grid on left forearm. Never: other eye colors, right-cheek bandage, adult build.",
+    "tag": "<Picture 8>"
+  },
+  {
+    "id": "char_3a9ed6",
+    "name": "Vael, the Fallen God",
+    "role": "Deuteragonist / the System (VN-01, REV2 sheet)",
+    "image": "art_83f6ca37.png",
+    "description": "Fallen God of the Dawn Covenant, GODFALL. Long floating silver hair, torn white silk blindfold with EXACTLY ONE glowing golden eye (right), broken black halo of NINE fragments, deep blue tattered stardust robe, porcelain-cracked skin with golden ember light in the cracks, serene sorrowful expression, bare feet. Halo count = scene continuity (9 at P17, gap from P21).",
+    "tag": "<Picture 8>"
+  },
+  {
+    "id": "char_fcda00",
+    "name": "Lin Nuo",
+    "role": "Lin Xiao's sister (LN-01, REV2 sheet)",
+    "image": "art_6143b688.png",
+    "description": "Frail 6-year-old Chinese girl, GODFALL. Round younger child face, big glossy dark eyes, brave little smile, two short braids with faded red strings, pale clean skin with faint grey-lavender mana-rot veins ONLY on the neck, oversized beige patched coat past the knees, dark trousers, bare feet. Violet glowing eyes ONLY in P26 cliffhanger. Never: veins on limbs, teen face.",
+    "tag": "<Picture 8>"
+  },
+  {
+    "id": "char_284297",
+    "name": "Rou Yue",
+    "role": "Senior adventurer, first ally (RY-01 sheet)",
+    "image": "RY-01-sheet-final.png",
+    "description": "Confident 16-year-old girl adventurer, GODFALL. Chestnut ponytail, thin pale scar cutting through her RIGHT eyebrow, sharp friendly smirk, leather-and-bronze light armor over dark blue tunic, bronze bird guild badge at collar, short spear with red tassel on back, fingerless gloves, tall boots. 163cm, 7-head proportion. Never: no scar, scar on wrong side, missing spear tassel.",
+    "tag": "<Picture 9>"
+  },
+  {
+    "id": "char_0761ba",
+    "name": "Old Man Gu",
+    "role": "Ashen Sparrow Guild hallmaster (OG-01 sheet)",
+    "image": "art_175ba130.png",
+    "description": "Stocky 60-year-old guild hallmaster, GODFALL. Bald with grey topknot and grey beard, deep crow's feet, gruff squint, heavy unlit wooden pipe in mouth, patched brown robe with iron shoulder plate on LEFT shoulder, wooden abacus at belt, boots. 168cm, 6.5-head stocky proportion. Never: lit pipe indoors, plate on right shoulder.",
+    "tag": "<Picture 10>"
+  },
+  {
+    "id": "char_e4bcb9",
+    "name": "Bao Teng",
+    "role": "Rich bully, comic rival (BT-01 sheet)",
+    "image": "art_3b4f409a.png",
+    "description": "Plump arrogant 12-year-old boy, GODFALL. Gelled black side-parted hair, chubby cheeks, smug sneer default, oversized green silk jacket with gold trim, hands tugging own collar when nervous, dark trousers, polished black shoes. 140cm, round 5.5-head proportion. Rage = comic indignant sputter, fear = comic terror. Never: slim build, jacket fitting properly.",
+    "tag": "<Picture 11>"
+  },
+  {
+    "id": "bhishma_pitamaha",
+    "name": "Bhishma Pitamaha",
+    "role": "Mentor figure / tragic hero",
+    "image": "",
+    "description": "Bhishma Pitamaha. weathered face with age lines, matted white beard threaded with gold ash, chest plate of elephant-hide studded with obsidian, ornate crown of lotus flowers, arms bare save for kohl-rimmed eyes, scar tissue along left forearm from past battles. Personality: A warrior whose honor transcends death; deeply philosophical yet resolute, carrying the weight of three generations of royal houses. Shows grace under extreme duress, his silence speaking louder than words ever could.",
+    "tag": "<Picture 12>"
+  },
+  {
+    "id": "arjuna",
+    "name": "Arjuna",
+    "role": "Protagonist / conflicted disciple",
+    "image": "",
+    "description": "Arjuna. golden armor with peacock feathers, quiver of divine arrows strapped to hip, hair tied with sacred thread, face streaked with ash and sweat, eyes brimming with tears of compassion. Personality: The greatest archer burdened by the weight of choice; torn between his loyalty as a warrior and his love for a teacher who raised him. His compassion conflicts with his duty, creating an agonizing internal struggle.",
+    "tag": "<Picture 13>"
+  },
+  {
+    "id": "dhritarashtra",
+    "name": "Dhritarashtra",
+    "role": "King / tragic antagonist",
+    "image": "",
+    "description": "Dhritarashtra. blindfolded golden eyes, frail frame draped in saffron silk embroidered with ancient symbols, staff of crystal tipped with white crystal, crown askew from the weight of eighty years of grief. Personality: A blind king whose heart sees only his sons' glory; compassionate but paralyzed by indecision, watching from his chariot how his family's actions play out like a tragedy he authored decades ago.",
+    "tag": "<Picture 14>"
+  },
+  {
+    "id": "kripa",
+    "name": "Kripa Acharya",
+    "role": "Conflicted antagonist / rival guru",
+    "image": "",
+    "description": "Kripa Acharya. red-and-black armor with gold trim, face painted with ceremonial war markings, matted hair braided with cowrie shells and threads of red wool, staff topped with a severed snake head. Personality: A warrior-scholar who serves as Kaurava ally but respects Bhishma; torn between loyalty to his clan and genuine admiration for his fallen teacher. Hides vulnerability behind a mask of stoic duty.",
+    "tag": "<Picture 15>"
+  },
+  {
+    "id": "bhishma",
+    "name": "Bhishma Pitamaha",
+    "role": "Mentor / Fallen Hero",
+    "image": "",
+    "description": "Bhishma Pitamaha. Ancient warrior, golden armor, massive wooden bed of arrows, white beard, half-closed eyes, serene expression. Personality: Stoic, dutiful, burdened by the weight of his vows, deeply compassionate yet physically broken.",
+    "tag": "<Picture 16>"
+  },
+  {
+    "id": "drona",
+    "name": "Dronacharya",
+    "role": "Companion / Witness",
+    "image": "",
+    "description": "Dronacharya. Elderly teacher, simple grey robes, staff in hand, sorrowful expression. Personality: Devout, grieving his student and friend, acting as the spiritual bridge between Bhishma and Arjuna.",
+    "tag": "<Picture 17>"
   }
 ]

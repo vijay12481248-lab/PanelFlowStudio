@@ -395,8 +395,8 @@ RIGGING_NATURAL_TEMPLATES: dict[str, str] = {
         "arms held away from the torso with relaxed open hands, and feet shoulder-width apart resting on the ground. "
         "Every anatomical joint (shoulders, elbows, wrists, hips, knees, ankles) is distinctly articulated against a "
         "clean unobstructed silhouette with zero overlapping limbs or occluded geometry. "
-        "Flat, even, diffused studio lighting with no dramatic directional shadows. "
-        "Solid, seamless neutral gray studio background with no environment, scenery, or props. "
+        "Flat, even, diffused lighting with zero harsh directional cast shadows. "
+        "Solid, seamless clean pure white background with zero environment, zero scenery, zero shadows, and no props to prevent background attention bleed. "
         "Consistent height markers, costume details, and character proportions across all four views. "
         "Full length illustration completely in frame with generous empty margins. "
         "No text, no captions, no speech bubbles, no watermark."
@@ -407,7 +407,7 @@ RIGGING_NATURAL_TEMPLATES: dict[str, str] = {
         "arms held away from the body with open hands, and feet shoulder-width apart on the ground. "
         "Clear silhouette with visible articulated joints at the shoulders, elbows, hips, and knees, with zero self-occlusion. "
         "Flat, diffused studio lighting with no harsh cast shadows. "
-        "Solid neutral plain background with no props or scenery. "
+        "Solid, seamless clean pure white background with zero props or scenery. "
         "Full body shot completely in frame with generous empty margins. "
         "No text, no captions, no speech bubbles, no watermark."
     ),
@@ -598,9 +598,9 @@ def _create_offline_turnaround_image(
     spec: RiggingSpec,
     dims: tuple[int, int] = (1536, 768),
 ) -> Image.Image:
-    """Create a high-quality offline orthographic turnaround reference image."""
+    """Create a high-quality offline orthographic turnaround reference image on clean white background."""
     w, h = dims
-    img = Image.new("RGB", (w, h), color=(180, 180, 180))
+    img = Image.new("RGB", (w, h), color=(255, 255, 255))
     draw = ImageDraw.Draw(img)
     num_views = len(spec.views) or 4
     slice_w = w // num_views
@@ -611,13 +611,13 @@ def _create_offline_turnaround_image(
         x_right = (i + 1) * slice_w if i < num_views - 1 else w
         view_name = spec.views[i] if i < len(spec.views) else f"view_{i}"
 
-        # Guide borders
-        draw.rectangle([x_left + 8, 8, x_right - 8, h - 8], outline=(150, 150, 150), width=1)
+        # Clean light gray guide borders on white canvas
+        draw.rectangle([x_left + 8, 8, x_right - 8, h - 8], outline=(220, 220, 220), width=1)
         # Head / shoulder / waist / feet alignment lines across the sheet
-        draw.line([0, int(h * 0.15), w, int(h * 0.15)], fill=(160, 160, 160), width=1)
-        draw.line([0, int(h * 0.30), w, int(h * 0.30)], fill=(160, 160, 160), width=1)
-        draw.line([0, int(h * 0.55), w, int(h * 0.55)], fill=(160, 160, 160), width=1)
-        draw.line([0, int(h * 0.90), w, int(h * 0.90)], fill=(160, 160, 160), width=1)
+        draw.line([0, int(h * 0.15), w, int(h * 0.15)], fill=(230, 230, 230), width=1)
+        draw.line([0, int(h * 0.30), w, int(h * 0.30)], fill=(230, 230, 230), width=1)
+        draw.line([0, int(h * 0.55), w, int(h * 0.55)], fill=(230, 230, 230), width=1)
+        draw.line([0, int(h * 0.90), w, int(h * 0.90)], fill=(230, 230, 230), width=1)
 
         # Draw character silhouette with clear limb separation and articulated joints
         cx = (x_left + x_right) // 2
@@ -681,14 +681,20 @@ def generate_turnaround_sheet(
             pos = compile_turnaround_prompt(char, story, spec=spec, style_kind=style_kind)
             neg = RIGGING_NEGATIVE if style_kind != "natural" else ""
             seed = _seed_for(story, f"turnaround_{char.id}_{spec.pose}")
-            png_bytes = runner.generate(
-                pos=pos,
-                neg=neg,
-                seed=seed,
-                width=w,
-                height=h,
-                prefix=f"turnaround_{char.id}",
-            )
+            try:
+                png_bytes = runner.generate(pos, neg, seed, w, h, f"turnaround_{char.id}")
+            except TypeError:
+                try:
+                    png_bytes = runner.generate(pos, neg, w, h, seed, f"turnaround_{char.id}")
+                except TypeError:
+                    png_bytes = runner.generate(
+                        pos=pos,
+                        neg=neg,
+                        seed=seed,
+                        width=w,
+                        height=h,
+                        prefix=f"turnaround_{char.id}",
+                    )
             out_file.write_bytes(png_bytes)
         else:
             img = _create_offline_turnaround_image(char, spec, (w, h))

@@ -19,17 +19,17 @@ const EMOTION_OPTIONS: Array<{
   activeBg: string;
   description: string;
 }> = [
-  { name: "Neutral", icon: Icons.Sliders, color: "text-zinc-300", activeBg: "bg-zinc-700/80 border-zinc-500", description: "Even, balanced, matter-of-fact" },
-  { name: "Happy", icon: Icons.Sparkles, color: "text-amber-300", activeBg: "bg-amber-950/80 border-amber-500", description: "Warm, light, optimistic tone" },
-  { name: "Sad", icon: Icons.ChevronDown, color: "text-blue-300", activeBg: "bg-blue-950/80 border-blue-500", description: "Melancholic, subdued, heavy" },
-  { name: "Angry", icon: Icons.AlertTriangle, color: "text-rose-400", activeBg: "bg-rose-950/80 border-rose-500", description: "Sharp, aggressive, commanding" },
-  { name: "Fearful", icon: Icons.Zap, color: "text-yellow-400", activeBg: "bg-yellow-950/80 border-yellow-500", description: "Trembling, anxious, panicked" },
-  { name: "Suspenseful", icon: Icons.Eye, color: "text-purple-300", activeBg: "bg-purple-950/80 border-purple-500", description: "Tense, hushed, building anticipation" },
-  { name: "Excited", icon: Icons.Sparkles, color: "text-orange-300", activeBg: "bg-orange-950/80 border-orange-500", description: "High energy, breathless, fast" },
-  { name: "Whispering", icon: Icons.Mic, color: "text-teal-300", activeBg: "bg-teal-950/80 border-teal-500", description: "Intimate, breathy, secretive" },
-  { name: "Serious", icon: Icons.ShieldCheck, color: "text-indigo-300", activeBg: "bg-indigo-950/80 border-indigo-500", description: "Grounded, grave, authoritative" },
-  { name: "Mysterious", icon: Icons.Globe, color: "text-violet-400", activeBg: "bg-violet-950/80 border-violet-500", description: "Ethereal, veiled, enigmatic" },
-  { name: "Determined", icon: Icons.CheckCircle, color: "text-emerald-300", activeBg: "bg-emerald-950/80 border-emerald-500", description: "Resolute, steely, unwavering" },
+  { name: "Neutral", icon: Icons.Sliders, color: "text-fg-dim", activeBg: "bg-glass-hi/80 border-fg-faint", description: "Even, balanced, matter-of-fact" },
+  { name: "Happy", icon: Icons.Sparkles, color: "text-warn", activeBg: "bg-warn/80 border-warn", description: "Warm, light, optimistic tone" },
+  { name: "Sad", icon: Icons.ChevronDown, color: "text-info", activeBg: "bg-accent/80 border-accent", description: "Melancholic, subdued, heavy" },
+  { name: "Angry", icon: Icons.AlertTriangle, color: "text-bad", activeBg: "bg-bad/80 border-bad", description: "Sharp, aggressive, commanding" },
+  { name: "Fearful", icon: Icons.Zap, color: "text-warn", activeBg: "bg-warn/80 border-warn", description: "Trembling, anxious, panicked" },
+  { name: "Suspenseful", icon: Icons.Eye, color: "text-info", activeBg: "bg-accent/80 border-accent", description: "Tense, hushed, building anticipation" },
+  { name: "Excited", icon: Icons.Sparkles, color: "text-warn", activeBg: "bg-warn/80 border-warn", description: "High energy, breathless, fast" },
+  { name: "Whispering", icon: Icons.Mic, color: "text-info", activeBg: "bg-info/80 border-info", description: "Intimate, breathy, secretive" },
+  { name: "Serious", icon: Icons.ShieldCheck, color: "text-info", activeBg: "bg-accent/80 border-accent", description: "Grounded, grave, authoritative" },
+  { name: "Mysterious", icon: Icons.Globe, color: "text-info", activeBg: "bg-accent/80 border-accent", description: "Ethereal, veiled, enigmatic" },
+  { name: "Determined", icon: Icons.CheckCircle, color: "text-ok", activeBg: "bg-ok/80 border-ok", description: "Resolute, steely, unwavering" },
 ];
 
 
@@ -95,10 +95,10 @@ export const EmotionDeliveryControls: React.FC<EmotionDeliveryControlsProps> = (
     <div className={`space-y-4 select-none ${className}`}>
       {/* Emotion Selection Title & Active Badge */}
       <div className="flex items-center justify-between">
-        <span className="text-xs font-bold uppercase tracking-wider text-zinc-300">
+        <span className="text-xs font-bold uppercase tracking-wider text-fg-dim">
           Emotional Delivery
         </span>
-        <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-indigo-950 text-indigo-400 border border-indigo-800">
+        <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-accent/20 text-info border border-accent/40">
           {delivery.emotion} ({Math.round(delivery.intensity * 100)}%)
         </span>
       </div>
@@ -116,7 +116,7 @@ export const EmotionDeliveryControls: React.FC<EmotionDeliveryControlsProps> = (
               className={`p-1.5 rounded-lg border text-left flex items-center gap-1.5 transition-all ${
                 isSelected
                   ? `${opt.activeBg} ring-1 ring-white/20 shadow-md scale-[1.02]`
-                  : "bg-zinc-900/60 border-zinc-800 hover:border-zinc-700 hover:bg-zinc-900"
+                  : "bg-navy/60 border-edge hover:border-edge hover:bg-navy"
               }`}
             >
               <opt.icon className={`w-3.5 h-3.5 shrink-0 ${isSelected ? "text-white" : opt.color}`} />
@@ -129,10 +129,10 @@ export const EmotionDeliveryControls: React.FC<EmotionDeliveryControlsProps> = (
       </div>
 
       {/* Delivery Intensity Slider */}
-      <div className="space-y-1.5 bg-zinc-900/40 p-2.5 rounded-lg border border-zinc-800">
+      <div className="space-y-1.5 bg-navy/40 p-2.5 rounded-lg border border-edge">
         <div className="flex items-center justify-between text-xs">
-          <span className="text-zinc-400 font-medium">Delivery Intensity</span>
-          <span className="font-mono font-bold text-zinc-200">
+          <span className="text-fg-dim font-medium">Delivery Intensity</span>
+          <span className="font-mono font-bold text-fg">
             {Math.round(delivery.intensity * 100)}%
           </span>
         </div>
@@ -143,9 +143,9 @@ export const EmotionDeliveryControls: React.FC<EmotionDeliveryControlsProps> = (
           step="0.05"
           value={delivery.intensity}
           onChange={(e) => handleIntensityChange(parseFloat(e.target.value))}
-          className="w-full accent-indigo-500 cursor-pointer h-1.5 bg-zinc-800 rounded-lg appearance-none"
+          className="w-full accent-accent cursor-pointer h-1.5 bg-flat rounded-lg appearance-none"
         />
-        <div className="flex justify-between text-[9px] font-medium text-zinc-500 px-0.5">
+        <div className="flex justify-between text-[9px] font-medium text-fg-faint px-0.5">
           <span>Subtle</span>
           <span>Moderate</span>
           <span>Dramatic</span>
@@ -154,10 +154,10 @@ export const EmotionDeliveryControls: React.FC<EmotionDeliveryControlsProps> = (
       </div>
 
       {/* Speech Speed / Pacing Slider */}
-      <div className="space-y-1.5 bg-zinc-900/40 p-2.5 rounded-lg border border-zinc-800">
+      <div className="space-y-1.5 bg-navy/40 p-2.5 rounded-lg border border-edge">
         <div className="flex items-center justify-between text-xs">
-          <span className="text-zinc-400 font-medium">Speech Speed</span>
-          <span className="font-mono font-bold text-indigo-400">
+          <span className="text-fg-dim font-medium">Speech Speed</span>
+          <span className="font-mono font-bold text-info">
             {delivery.speech_speed.toFixed(2)}x
           </span>
         </div>
@@ -168,27 +168,27 @@ export const EmotionDeliveryControls: React.FC<EmotionDeliveryControlsProps> = (
           step="0.05"
           value={delivery.speech_speed}
           onChange={(e) => handleSpeedChange(parseFloat(e.target.value))}
-          className="w-full accent-indigo-500 cursor-pointer h-1.5 bg-zinc-800 rounded-lg appearance-none"
+          className="w-full accent-accent cursor-pointer h-1.5 bg-flat rounded-lg appearance-none"
         />
-        <div className="flex justify-between text-[9px] font-medium text-zinc-500 px-0.5">
+        <div className="flex justify-between text-[9px] font-medium text-fg-faint px-0.5">
           <button
             type="button"
             onClick={() => handleSpeedChange(0.85)}
-            className="hover:text-zinc-300 underline"
+            className="hover:text-fg-dim underline"
           >
             Deliberate (0.85x)
           </button>
           <button
             type="button"
             onClick={() => handleSpeedChange(1.0)}
-            className="hover:text-zinc-300 underline"
+            className="hover:text-fg-dim underline"
           >
             Natural (1.0x)
           </button>
           <button
             type="button"
             onClick={() => handleSpeedChange(1.25)}
-            className="hover:text-zinc-300 underline"
+            className="hover:text-fg-dim underline"
           >
             Urgent (1.25x)
           </button>
@@ -199,7 +199,7 @@ export const EmotionDeliveryControls: React.FC<EmotionDeliveryControlsProps> = (
       <button
         type="button"
         onClick={() => setShowAdvanced((v) => !v)}
-        className="w-full py-1.5 text-xs text-zinc-400 hover:text-zinc-200 flex items-center justify-center gap-1.5 rounded bg-zinc-900/80 border border-zinc-800 hover:bg-zinc-800 transition-colors"
+        className="w-full py-1.5 text-xs text-fg-dim hover:text-fg flex items-center justify-center gap-1.5 rounded bg-navy/80 border border-edge hover:bg-flat transition-colors"
       >
         <span>{showAdvanced ? "Hide Advanced Directing" : "Show Advanced Directing (Pauses & Subtext)"}</span>
         <span className="text-[10px]">{showAdvanced ? "▲" : "▼"}</span>
@@ -207,10 +207,10 @@ export const EmotionDeliveryControls: React.FC<EmotionDeliveryControlsProps> = (
 
       {/* Advanced Performance & Directing Controls */}
       {showAdvanced && (
-        <div className="space-y-3 pt-2 border-t border-zinc-800 text-xs">
+        <div className="space-y-3 pt-2 border-t border-edge text-xs">
           {/* Pause Presets */}
           <div className="space-y-1.5">
-            <span className="text-zinc-400 font-medium block text-[11px]">
+            <span className="text-fg-dim font-medium block text-[11px]">
               Intentional Dramatic Pause
             </span>
             <div className="grid grid-cols-4 gap-1">
@@ -223,8 +223,8 @@ export const EmotionDeliveryControls: React.FC<EmotionDeliveryControlsProps> = (
                     onClick={() => handlePausePreset(p)}
                     className={`py-1 rounded text-[10px] font-semibold transition-colors capitalize ${
                       isSelected
-                        ? "bg-indigo-600 text-white shadow-sm"
-                        : "bg-zinc-900 text-zinc-400 border border-zinc-800 hover:bg-zinc-800"
+                        ? "bg-accent text-white shadow-sm"
+                        : "bg-navy text-fg-dim border border-edge hover:bg-flat"
                     }`}
                   >
                     {p === "none" ? "None" : `${p} (${pausePresets[p]}ms)`}
@@ -237,13 +237,13 @@ export const EmotionDeliveryControls: React.FC<EmotionDeliveryControlsProps> = (
           {/* Pause Placement */}
           {delivery.pause?.preset !== "none" && (
             <div className="space-y-1.5">
-              <span className="text-zinc-400 font-medium block text-[11px]">
+              <span className="text-fg-dim font-medium block text-[11px]">
                 Pause Placement
               </span>
               <select
                 value={delivery.pause?.placement || "after_first_sentence"}
                 onChange={(e) => handlePausePlacement(e.target.value as any)}
-                className="w-full bg-zinc-900 border border-zinc-800 text-xs text-zinc-200 rounded p-1.5 focus:outline-none focus:border-indigo-500"
+                className="w-full bg-navy border border-edge text-xs text-fg rounded p-1.5 focus:outline-none focus:border-accent"
               >
                 <option value="after_first_sentence">Short pause after the first sentence</option>
                 <option value="before">Pause before beginning speaking</option>
@@ -255,7 +255,7 @@ export const EmotionDeliveryControls: React.FC<EmotionDeliveryControlsProps> = (
 
           {/* Structured Performance Instructions */}
           <div className="space-y-1.5">
-            <span className="text-zinc-400 font-medium block text-[11px]">
+            <span className="text-fg-dim font-medium block text-[11px]">
               Performance & Subtext Instructions
             </span>
             <textarea
@@ -263,13 +263,13 @@ export const EmotionDeliveryControls: React.FC<EmotionDeliveryControlsProps> = (
               onChange={(e) => onChangeDelivery({ performance_notes: e.target.value })}
               rows={2}
               placeholder="e.g., Quiet, tense, gradually increasing suspense..."
-              className="w-full p-2 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-indigo-500 leading-relaxed"
+              className="w-full p-2 rounded bg-navy border border-edge text-xs text-fg placeholder-fg-faint focus:outline-none focus:border-accent leading-relaxed"
             />
           </div>
 
           {/* Engineering / TTS Verification Notice */}
-          <div className="p-2 rounded bg-zinc-950 border border-zinc-800 text-[10px] text-zinc-500 leading-normal">
-            ℹ️ <span className="font-semibold text-zinc-400">Notice:</span> Emotional parameters are structured for future TTS integration. Engine mapping will verify specific model support during Chapter 6 binding.
+          <div className="p-2 rounded bg-ink border border-edge text-[10px] text-fg-faint leading-normal">
+            ℹ️ <span className="font-semibold text-fg-dim">Notice:</span> Emotional parameters are structured for future TTS integration. Engine mapping will verify specific model support during Chapter 6 binding.
           </div>
         </div>
       )}

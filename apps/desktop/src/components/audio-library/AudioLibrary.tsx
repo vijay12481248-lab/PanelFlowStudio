@@ -300,13 +300,13 @@ export const AudioLibrary: React.FC<AudioLibraryProps> = ({
   return (
     <div
       data-testid="audio-library-container"
-      className="flex flex-col h-full w-full bg-zinc-950 text-zinc-100 select-none overflow-hidden font-sans"
+      className="flex flex-col h-full w-full bg-ink text-fg select-none overflow-hidden font-sans"
     >
       {/* Top Application Bar */}
-      <header className="h-12 border-b border-zinc-800 bg-zinc-950 flex items-center justify-between px-4 shrink-0">
+      <header className="h-12 border-b border-edge bg-ink flex items-center justify-between px-4 shrink-0">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-indigo-600/20 text-indigo-400 border border-indigo-500/40 flex items-center justify-center font-bold text-sm shadow-sm">
+            <div className="w-7 h-7 rounded-lg bg-accent/20 text-info border border-accent/40 flex items-center justify-center font-bold text-sm shadow-sm">
               <Icons.Headphones className="w-4 h-4" />
             </div>
             <h1 className="text-sm font-bold tracking-tight text-white flex items-center gap-2">
@@ -315,14 +315,14 @@ export const AudioLibrary: React.FC<AudioLibraryProps> = ({
           </div>
 
           {/* Workspace Tabs: Catalog vs AI Music Studio */}
-          <div className="flex items-center bg-zinc-900 border border-zinc-800 rounded-lg p-0.5">
+          <div className="flex items-center bg-navy border border-edge rounded-lg p-0.5">
             <button
               type="button"
               onClick={() => setActiveWorkspace("catalog")}
               className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors ${
                 activeWorkspace === "catalog"
-                  ? "bg-zinc-800 text-white shadow-sm"
-                  : "text-zinc-400 hover:text-zinc-200"
+                  ? "bg-flat text-white shadow-sm"
+                  : "text-fg-dim hover:text-fg"
               }`}
             >
               Library Catalog
@@ -332,13 +332,13 @@ export const AudioLibrary: React.FC<AudioLibraryProps> = ({
               onClick={() => setActiveWorkspace("ai_generator")}
               className={`px-3 py-1 text-xs font-semibold rounded-md flex items-center gap-1.5 transition-colors ${
                 activeWorkspace === "ai_generator"
-                  ? "bg-indigo-600 text-white shadow-sm"
-                  : "text-zinc-400 hover:text-zinc-200"
+                  ? "bg-accent text-white shadow-sm"
+                  : "text-fg-dim hover:text-fg"
               }`}
             >
               <Icons.Sparkles className="w-3.5 h-3.5" />
               <span>Story-Aware AI Music</span>
-              <span className="text-[9px] font-mono px-1 py-0.5 rounded bg-indigo-950 text-indigo-200 border border-indigo-800">
+              <span className="text-[9px] font-mono px-1 py-0.5 rounded bg-accent/20 text-info border border-accent/40">
                 Ch 9
               </span>
             </button>
@@ -346,15 +346,15 @@ export const AudioLibrary: React.FC<AudioLibraryProps> = ({
         </div>
 
         {/* Header Right: Keyboard hint & Close */}
-        <div className="flex items-center gap-3 text-xs text-zinc-400">
-          <span className="hidden md:inline text-[11px] bg-zinc-900 px-2 py-1 rounded border border-zinc-800 font-mono text-zinc-400">
+        <div className="flex items-center gap-3 text-xs text-fg-dim">
+          <span className="hidden md:inline text-[11px] bg-navy px-2 py-1 rounded border border-edge font-mono text-fg-dim">
             [Space] Play/Pause
           </span>
           {onClose && (
             <button
               type="button"
               onClick={onClose}
-              className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-zinc-100 transition-colors"
+              className="p-1.5 rounded-lg hover:bg-flat text-fg-dim hover:text-fg transition-colors"
               title="Close Audio Library"
             >
               <Icons.X className="w-4 h-4" />

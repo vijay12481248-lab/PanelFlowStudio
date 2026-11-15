@@ -34,10 +34,10 @@ class Settings(BaseSettings):
     api_host: str = "127.0.0.1"
     api_port: int = 8765
     cors_origins: list[str] = [
-        "http://localhost:5173",
+        "http://localhost:5273",
         "http://localhost:5174",
         "http://localhost:8765",
-        "http://127.0.0.1:5173",
+        "http://127.0.0.1:5273",
         "http://127.0.0.1:5174",
         "http://127.0.0.1:8765",
         "tauri://localhost",

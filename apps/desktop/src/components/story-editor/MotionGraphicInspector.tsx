@@ -9,8 +9,8 @@ interface Props {
 }
 
 const inputClass =
-  "w-full min-w-0 rounded border border-zinc-700 bg-zinc-950 px-2.5 py-1.5 text-xs text-zinc-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-400";
-const labelClass = "text-[11px] font-medium uppercase tracking-wider text-zinc-400 mb-1 block";
+  "w-full min-w-0 rounded border border-edge bg-ink px-2.5 py-1.5 text-xs text-fg focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent";
+const labelClass = "text-[11px] font-medium uppercase tracking-wider text-fg-dim mb-1 block";
 
 // ── Adobe After Effects & Animora Bezier Solver for Interactive SVG Graph ────
 
@@ -181,29 +181,29 @@ export const MotionGraphicInspector: React.FC<Props> = ({ scene, onUpdateState }
   const scrubDotY = toPxY(currentCurveVal);
 
   return (
-    <div className="flex flex-col gap-4 p-3 text-xs text-zinc-300">
+    <div className="flex flex-col gap-4 p-3 text-xs text-fg-dim">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
-        <span className="font-semibold text-zinc-100 flex items-center gap-1.5">
-          <span className="h-2 w-2 rounded-full bg-indigo-500 animate-pulse" />
+      <div className="flex items-center justify-between border-b border-edge pb-2">
+        <span className="font-semibold text-fg flex items-center gap-1.5">
+          <span className="h-2 w-2 rounded-full bg-accent animate-pulse" />
           Super Motion Graphics
         </span>
-        <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400">
+        <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-flat text-fg-dim">
           After Effects &bull; 60fps
         </span>
       </div>
 
       {/* Live Preview Display */}
       <div className="flex flex-col gap-1.5">
-        <div className="relative aspect-video w-full overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950 flex items-center justify-center">
+        <div className="relative aspect-video w-full overflow-hidden rounded-lg border border-edge bg-ink flex items-center justify-center">
           {previewImage ? (
             <img src={previewImage} alt="Motion Preview" className="h-full w-full object-contain" />
           ) : (
-            <span className="text-zinc-600 text-[11px]">Loading procedural preview...</span>
+            <span className="text-fg-faint text-[11px]">Loading procedural preview...</span>
           )}
           {loadingPreview && (
-            <div className="absolute top-2 right-2 flex items-center gap-1 rounded bg-black/60 px-1.5 py-0.5 text-[10px] text-zinc-400 backdrop-blur-sm">
-              <span className="h-1.5 w-1.5 rounded-full bg-indigo-400 animate-ping" />
+            <div className="absolute top-2 right-2 flex items-center gap-1 rounded bg-black/60 px-1.5 py-0.5 text-[10px] text-fg-dim backdrop-blur-sm">
+              <span className="h-1.5 w-1.5 rounded-full bg-accent animate-ping" />
               Scrubbing
             </div>
           )}
@@ -218,27 +218,27 @@ export const MotionGraphicInspector: React.FC<Props> = ({ scene, onUpdateState }
             step="0.05"
             value={scrubTime}
             onChange={(e) => setScrubTime(parseFloat(e.target.value))}
-            className="w-full accent-indigo-500 cursor-pointer h-1.5 bg-zinc-800 rounded-lg"
+            className="w-full accent-accent cursor-pointer h-1.5 bg-flat rounded-lg"
           />
-          <span className="font-mono text-[10px] text-zinc-400 min-w-[36px]">
+          <span className="font-mono text-[10px] text-fg-dim min-w-[36px]">
             {scrubTime.toFixed(2)}s
           </span>
         </div>
       </div>
 
       {/* Interactive Bezier & AE Speed Graph Inspector */}
-      <div className="flex flex-col gap-2 rounded-lg border border-zinc-800 bg-zinc-950/70 p-2.5">
+      <div className="flex flex-col gap-2 rounded-lg border border-edge bg-ink/70 p-2.5">
         <div className="flex items-center justify-between">
-          <label className="text-[11px] font-medium uppercase tracking-wider text-indigo-400">
+          <label className="text-[11px] font-medium uppercase tracking-wider text-info">
             AE Velocity & Speed Graph
           </label>
-          <span className="font-mono text-[10px] text-zinc-400">
+          <span className="font-mono text-[10px] text-fg-dim">
             P({activeBezier.x1.toFixed(2)}, {activeBezier.y1.toFixed(2)}, {activeBezier.x2.toFixed(2)}, {activeBezier.y2.toFixed(2)})
           </span>
         </div>
 
         {/* SVG Bezier Curve Visualizer */}
-        <div className="relative overflow-hidden rounded border border-zinc-800/80 bg-zinc-900/60 p-1">
+        <div className="relative overflow-hidden rounded border border-edge/80 bg-navy/60 p-1">
           <svg viewBox={`0 0 ${svgWidth} ${svgHeight}`} className="w-full h-auto select-none">
             {/* Grid Lines */}
             <line
@@ -246,7 +246,7 @@ export const MotionGraphicInspector: React.FC<Props> = ({ scene, onUpdateState }
               y1={toPxY(0.0)}
               x2={padLeft + plotW}
               y2={toPxY(0.0)}
-              stroke="#3f3f46"
+              stroke="#26346a"
               strokeDasharray="2,2"
               strokeWidth="0.8"
             />
@@ -255,7 +255,7 @@ export const MotionGraphicInspector: React.FC<Props> = ({ scene, onUpdateState }
               y1={toPxY(1.0)}
               x2={padLeft + plotW}
               y2={toPxY(1.0)}
-              stroke="#52525b"
+              stroke="#6a76a3"
               strokeDasharray="3,3"
               strokeWidth="1"
             />
@@ -264,22 +264,22 @@ export const MotionGraphicInspector: React.FC<Props> = ({ scene, onUpdateState }
               y1={padTop}
               x2={toPxX(0.5)}
               y2={toPxY(0.0)}
-              stroke="#27272a"
+              stroke="#101a3d"
               strokeDasharray="2,2"
               strokeWidth="0.8"
             />
 
             {/* Axis Labels */}
-            <text x={padLeft - 4} y={toPxY(0.0) + 3} fill="#71717a" fontSize="8" textAnchor="end">
+            <text x={padLeft - 4} y={toPxY(0.0) + 3} fill="#6a76a3" fontSize="8" textAnchor="end">
               0.0
             </text>
-            <text x={padLeft - 4} y={toPxY(1.0) + 3} fill="#a1a1aa" fontSize="8" textAnchor="end">
+            <text x={padLeft - 4} y={toPxY(1.0) + 3} fill="#9aa6d0" fontSize="8" textAnchor="end">
               1.0
             </text>
-            <text x={padLeft} y={svgHeight - 6} fill="#71717a" fontSize="8" textAnchor="middle">
+            <text x={padLeft} y={svgHeight - 6} fill="#6a76a3" fontSize="8" textAnchor="middle">
               0%
             </text>
-            <text x={padLeft + plotW} y={svgHeight - 6} fill="#71717a" fontSize="8" textAnchor="middle">
+            <text x={padLeft + plotW} y={svgHeight - 6} fill="#6a76a3" fontSize="8" textAnchor="middle">
               100%
             </text>
 
@@ -289,7 +289,7 @@ export const MotionGraphicInspector: React.FC<Props> = ({ scene, onUpdateState }
               y1={toPxY(0)}
               x2={toPxX(activeBezier.x1)}
               y2={toPxY(activeBezier.y1)}
-              stroke="#06b6d4"
+              stroke="#7aa2ff"
               strokeWidth="1.2"
               strokeDasharray="2,1"
               opacity="0.8"
@@ -298,7 +298,7 @@ export const MotionGraphicInspector: React.FC<Props> = ({ scene, onUpdateState }
               cx={toPxX(activeBezier.x1)}
               cy={toPxY(activeBezier.y1)}
               r="3.5"
-              fill="#06b6d4"
+              fill="#7aa2ff"
             />
 
             <line
@@ -306,7 +306,7 @@ export const MotionGraphicInspector: React.FC<Props> = ({ scene, onUpdateState }
               y1={toPxY(1)}
               x2={toPxX(activeBezier.x2)}
               y2={toPxY(activeBezier.y2)}
-              stroke="#f59e0b"
+              stroke="#f0b35a"
               strokeWidth="1.2"
               strokeDasharray="2,1"
               opacity="0.8"
@@ -315,27 +315,27 @@ export const MotionGraphicInspector: React.FC<Props> = ({ scene, onUpdateState }
               cx={toPxX(activeBezier.x2)}
               cy={toPxY(activeBezier.y2)}
               r="3.5"
-              fill="#f59e0b"
+              fill="#f0b35a"
             />
 
             {/* Evaluated Easing Curve Path */}
-            <path d={curvePath} fill="none" stroke="#818cf8" strokeWidth="2.2" strokeLinecap="round" />
+            <path d={curvePath} fill="none" stroke="#7aa2ff" strokeWidth="2.2" strokeLinecap="round" />
 
             {/* Real-time Scrub Indicator Dot on Curve */}
             <circle
               cx={scrubDotX}
               cy={scrubDotY}
               r="5"
-              fill="#ec4899"
+              fill="#3b6bf5"
               stroke="#ffffff"
               strokeWidth="1.5"
             />
           </svg>
 
           {/* Realtime readout overlay */}
-          <div className="flex items-center justify-between text-[10px] text-zinc-400 px-1 pt-1 font-mono">
+          <div className="flex items-center justify-between text-[10px] text-fg-dim px-1 pt-1 font-mono">
             <span>Progress: {(scrubProgress * 100).toFixed(0)}%</span>
-            <span className="text-pink-400 font-semibold">Value: {currentCurveVal.toFixed(3)}</span>
+            <span className="text-info font-semibold">Value: {currentCurveVal.toFixed(3)}</span>
           </div>
         </div>
 
@@ -350,12 +350,12 @@ export const MotionGraphicInspector: React.FC<Props> = ({ scene, onUpdateState }
                 onClick={() => updateMotionConfig(motionPresetId, { easing_curve: preset.id })}
                 className={`flex flex-col items-start rounded border px-2 py-1.5 text-left transition-colors ${
                   isSelected
-                    ? "border-indigo-500 bg-indigo-950/60 text-indigo-200"
-                    : "border-zinc-800 bg-zinc-900/40 text-zinc-400 hover:border-zinc-700 hover:bg-zinc-800/60"
+                    ? "border-accent bg-accent/60 text-info"
+                    : "border-edge bg-navy/40 text-fg-dim hover:border-edge hover:bg-flat/60"
                 }`}
               >
-                <span className="font-medium text-zinc-200 text-[10px]">{preset.name}</span>
-                <span className="text-[9px] text-zinc-500 truncate w-full">{preset.desc}</span>
+                <span className="font-medium text-fg text-[10px]">{preset.name}</span>
+                <span className="text-[9px] text-fg-faint truncate w-full">{preset.desc}</span>
               </button>
             );
           })}
@@ -363,8 +363,8 @@ export const MotionGraphicInspector: React.FC<Props> = ({ scene, onUpdateState }
       </div>
 
       {/* After Effects Motion Engine Controls (Range Selectors, Blur, Expressions) */}
-      <div className="flex flex-col gap-2.5 rounded-lg border border-zinc-800 bg-zinc-950/70 p-2.5">
-        <label className="text-[11px] font-medium uppercase tracking-wider text-indigo-400">
+      <div className="flex flex-col gap-2.5 rounded-lg border border-edge bg-ink/70 p-2.5">
+        <label className="text-[11px] font-medium uppercase tracking-wider text-info">
           After Effects Engine Controls
         </label>
 
@@ -381,8 +381,8 @@ export const MotionGraphicInspector: React.FC<Props> = ({ scene, onUpdateState }
                   onClick={() => updateMotionConfig(motionPresetId, { range_shape: shape })}
                   className={`py-1 rounded border text-[10px] uppercase font-mono transition-colors ${
                     active
-                      ? "border-indigo-500 bg-indigo-950/60 text-indigo-300"
-                      : "border-zinc-800 bg-zinc-900 text-zinc-400 hover:border-zinc-700"
+                      ? "border-accent bg-accent/60 text-info"
+                      : "border-edge bg-navy text-fg-dim hover:border-edge"
                   }`}
                 >
                   {shape.replace("_", " ")}
@@ -395,10 +395,10 @@ export const MotionGraphicInspector: React.FC<Props> = ({ scene, onUpdateState }
         {/* 180° Motion Blur Shutter Angle */}
         <div>
           <div className="flex items-center justify-between mb-1">
-            <label className="text-[11px] font-medium uppercase tracking-wider text-zinc-400">
+            <label className="text-[11px] font-medium uppercase tracking-wider text-fg-dim">
               180&deg; Shutter Motion Blur
             </label>
-            <span className="font-mono text-[10px] text-indigo-400">
+            <span className="font-mono text-[10px] text-info">
               {motionProps.shutter_angle !== undefined ? motionProps.shutter_angle : 180}&deg;
             </span>
           </div>
@@ -412,7 +412,7 @@ export const MotionGraphicInspector: React.FC<Props> = ({ scene, onUpdateState }
               shutter_angle: parseInt(e.target.value, 10),
               enable_motion_blur: parseInt(e.target.value, 10) > 0,
             })}
-            className="w-full accent-indigo-500 cursor-pointer h-1.5 bg-zinc-800 rounded-lg"
+            className="w-full accent-accent cursor-pointer h-1.5 bg-flat rounded-lg"
           />
         </div>
 
@@ -425,8 +425,8 @@ export const MotionGraphicInspector: React.FC<Props> = ({ scene, onUpdateState }
             })}
             className={`flex-1 py-1.5 px-2 rounded border text-[10px] font-medium transition-colors flex items-center justify-center gap-1.5 ${
               (motionProps.enable_wiggle ?? true)
-                ? "border-cyan-500 bg-cyan-950/40 text-cyan-300"
-                : "border-zinc-800 bg-zinc-900 text-zinc-500"
+                ? "border-info bg-info/40 text-info"
+                : "border-edge bg-navy text-fg-faint"
             }`}
           >
             <span>&sim;</span>
@@ -440,8 +440,8 @@ export const MotionGraphicInspector: React.FC<Props> = ({ scene, onUpdateState }
             })}
             className={`flex-1 py-1.5 px-2 rounded border text-[10px] font-medium transition-colors flex items-center justify-center gap-1.5 ${
               (motionProps.enable_inertia_bounce ?? true)
-                ? "border-amber-500 bg-amber-950/40 text-amber-300"
-                : "border-zinc-800 bg-zinc-900 text-zinc-500"
+                ? "border-warn bg-warn/40 text-warn"
+                : "border-edge bg-navy text-fg-faint"
             }`}
           >
             <span>&uarr;&darr;</span>
@@ -467,12 +467,12 @@ export const MotionGraphicInspector: React.FC<Props> = ({ scene, onUpdateState }
                   onClick={() => updateMotionConfig(motionPresetId, { typography_mechanic: mech.id })}
                   className={`flex flex-col items-start rounded border px-2 py-1.5 text-left transition-colors ${
                     active
-                      ? "border-cyan-500 bg-cyan-950/60 text-cyan-200"
-                      : "border-zinc-800 bg-zinc-900 text-zinc-400 hover:border-zinc-700 hover:bg-zinc-800/60"
+                      ? "border-info bg-info/60 text-info"
+                      : "border-edge bg-navy text-fg-dim hover:border-edge hover:bg-flat/60"
                   }`}
                 >
-                  <span className="font-medium text-[10px] text-zinc-200">{mech.name}</span>
-                  <span className="text-[9px] text-zinc-500 truncate w-full">{mech.desc}</span>
+                  <span className="font-medium text-[10px] text-fg">{mech.name}</span>
+                  <span className="text-[9px] text-fg-faint truncate w-full">{mech.desc}</span>
                 </button>
               );
             })}
@@ -493,14 +493,14 @@ export const MotionGraphicInspector: React.FC<Props> = ({ scene, onUpdateState }
                 onClick={() => updateMotionConfig(preset.id, preset.default_props)}
                 className={`flex flex-col items-start rounded border p-2 text-left transition-colors ${
                   isSelected
-                    ? "border-indigo-500 bg-indigo-950/40 text-indigo-200"
-                    : "border-zinc-800 bg-zinc-900/60 text-zinc-400 hover:border-zinc-700 hover:bg-zinc-800"
+                    ? "border-accent bg-accent/40 text-info"
+                    : "border-edge bg-navy/60 text-fg-dim hover:border-edge hover:bg-flat"
                 }`}
               >
-                <span className="font-medium text-zinc-200 text-[11px] truncate w-full">
+                <span className="font-medium text-fg text-[11px] truncate w-full">
                   {preset.name}
                 </span>
-                <span className="text-[10px] text-zinc-400 truncate w-full mt-0.5">
+                <span className="text-[10px] text-fg-dim truncate w-full mt-0.5">
                   {preset.category}
                 </span>
               </button>
@@ -510,7 +510,7 @@ export const MotionGraphicInspector: React.FC<Props> = ({ scene, onUpdateState }
       </div>
 
       {/* Configurable Parameters */}
-      <div className="flex flex-col gap-3 pt-2 border-t border-zinc-800">
+      <div className="flex flex-col gap-3 pt-2 border-t border-edge">
         <div>
           <label className={labelClass}>Master Headline</label>
           <input
@@ -553,8 +553,8 @@ export const MotionGraphicInspector: React.FC<Props> = ({ scene, onUpdateState }
               onClick={() => updateMotionConfig(motionPresetId, { aspect_ratio: "16:9" })}
               className={`flex-1 py-1 px-2 rounded border text-[11px] font-medium transition-colors ${
                 (motionProps.aspect_ratio || "16:9") === "16:9"
-                  ? "border-indigo-500 bg-indigo-950/50 text-indigo-300"
-                  : "border-zinc-800 bg-zinc-900 text-zinc-400 hover:border-zinc-700"
+                  ? "border-accent bg-accent/50 text-info"
+                  : "border-edge bg-navy text-fg-dim hover:border-edge"
               }`}
             >
               16:9 Widescreen
@@ -564,8 +564,8 @@ export const MotionGraphicInspector: React.FC<Props> = ({ scene, onUpdateState }
               onClick={() => updateMotionConfig(motionPresetId, { aspect_ratio: "9:16" })}
               className={`flex-1 py-1 px-2 rounded border text-[11px] font-medium transition-colors ${
                 motionProps.aspect_ratio === "9:16"
-                  ? "border-indigo-500 bg-indigo-950/50 text-indigo-300"
-                  : "border-zinc-800 bg-zinc-900 text-zinc-400 hover:border-zinc-700"
+                  ? "border-accent bg-accent/50 text-info"
+                  : "border-edge bg-navy text-fg-dim hover:border-edge"
               }`}
             >
               9:16 Vertical

@@ -120,9 +120,9 @@ class OpenAICompatibleProvider(LLMProvider):
     ) -> T:
         schema_json = json.dumps(response_model.model_json_schema(), indent=2)
         system_instruction = (
-            (system_prompt or "You are a precise narrative structure analysis engine.") +
-            f"\n\nYou MUST respond ONLY with valid JSON conforming to this JSON schema:\n{schema_json}\n"
-            "Do NOT include markdown fences, comments, or preamble. Return raw JSON only."
+            (system_prompt or "You are an expert creative narrative and production engine.") +
+            f"\n\nYou MUST return a JSON data instance populating the fields described in this JSON schema:\n{schema_json}\n"
+            "IMPORTANT: Fill every required field with actual story/content values. Do NOT echo or return schema keywords like '$defs', 'properties', or 'type'. Return raw JSON data only."
         )
 
         current_prompt = prompt
@@ -159,15 +159,29 @@ class OpenAICompatibleProvider(LLMProvider):
 
             try:
                 parsed = json.loads(raw_json)
+                if isinstance(parsed, dict):
+                    if "$defs" in parsed or ("properties" in parsed and "type" in parsed):
+                        raise ValueError("Model echoed JSON schema definition instead of populated data instance.")
+                    if response_model.__name__ in parsed and isinstance(parsed[response_model.__name__], dict):
+                        parsed = parsed[response_model.__name__]
+                    elif len(parsed) == 1:
+                        single_val = next(iter(parsed.values()))
+                        if isinstance(single_val, dict):
+                            model_fields = set(getattr(response_model, "model_fields", {}).keys())
+                            if model_fields and set(single_val.keys()).intersection(model_fields):
+                                parsed = single_val
                 return response_model.model_validate(parsed)
-            except (json.JSONDecodeError, ValidationError) as e:
+            except (json.JSONDecodeError, ValidationError, ValueError) as e:
                 last_error = str(e)
                 logger.warning(f"Structured validation failed on attempt {attempt + 1}: {e}")
                 if attempt < max_repair_retries:
+                    required_fields = list(getattr(response_model, "model_fields", {}).keys())
                     current_prompt = (
-                        f"Previous response was invalid:\n{raw_json}\n\n"
-                        f"Validation error:\n{last_error}\n\n"
-                        f"Please fix the JSON to strictly conform to schema. Original request was:\n{prompt}"
+                        f"Previous response was invalid or echoed the schema definition instead of actual story data.\n"
+                        f"Validation error: {last_error}\n\n"
+                        f"Please generate an actual concrete JSON object populating the following required fields with story content:\n"
+                        f"{required_fields}\n\n"
+                        f"Original task request:\n{prompt}"
                     )
                 else:
                     break

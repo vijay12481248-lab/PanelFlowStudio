@@ -1,8 +1,12 @@
+import shutil
+from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from uuid import uuid4
 from engine.history.service import project_history
 from engine.api.routers.history import respond
+from engine.security.paths import contained_file_response, project_path
+from engine.api.routers.pages import ensure_page_source_file
 
 from engine.database.session import get_db
 from engine.database.models import (
@@ -102,6 +106,53 @@ def get_project(project_id: str, db: Session = Depends(get_db)):
     if not p:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
     return format_project_response(p, db)
+
+
+@router.get("/{project_id}/cover")
+def get_project_cover(project_id: str, db: Session = Depends(get_db)):
+    """Return the thumbnail or cover image for a project."""
+    project = project_service.get_project(db, project_id)
+    if not project:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+
+    ws = Path(project.workspace_path) if project.workspace_path else None
+
+    # 1. Direct cover in workspace
+    if ws and ws.exists():
+        for name in ("cover.png", "cover.jpg", "cover.webp", "thumbnail.png", "thumbnail.jpg"):
+            cand = ws / name
+            if cand.is_file():
+                media_type = "image/png" if cand.suffix == ".png" else "image/jpeg"
+                return contained_file_response(ws, cand, media_type=media_type)
+
+    # 2. Page 1 (for manga / webtoon chapters)
+    page = db.query(PageRecord).filter(PageRecord.project_id == project_id).order_by(PageRecord.sequence).first()
+    if page and ws:
+        ensure_page_source_file(project, page)
+        source_file = ws / "source" / page.filename
+        if source_file.is_file():
+            return contained_file_response(ws, source_file, media_type=page.content_type)
+        norm_file = ws / "normalized" / f"page_{page.sequence:04d}.jpg"
+        if norm_file.is_file():
+            return contained_file_response(ws, norm_file, media_type="image/jpeg")
+        gen_dir = ws / "generated" / "comfyui"
+        if gen_dir.exists():
+            for img in gen_dir.glob("*.png"):
+                return contained_file_response(ws, img, media_type="image/png")
+
+    # 3. ChronoFlow / AI projects
+    if ws and ws.exists():
+        init_img = project.settings.get("initial_image") if project.settings else None
+        if init_img:
+            from engine.chronoflow.pipeline import COMFY_INPUT_DIR, STUDIO_OUTPUT_DIR
+            for d in (COMFY_INPUT_DIR, STUDIO_OUTPUT_DIR):
+                cand = d / init_img
+                if cand.is_file():
+                    dest = ws / "cover.png"
+                    shutil.copy2(cand, dest)
+                    return contained_file_response(ws, dest, media_type="image/png")
+
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cover image not found for project")
 
 
 @router.get("/{project_id}/story-editor")

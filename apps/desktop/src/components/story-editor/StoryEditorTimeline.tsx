@@ -1178,21 +1178,21 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
   };
 
   return (
-    <div className="pf-editor-timeline bg-zinc-950 flex flex-col select-none shrink-0 overflow-hidden font-sans"
+    <div className="pf-editor-timeline bg-ink flex flex-col select-none shrink-0 overflow-hidden font-sans"
       style={{ height: showSfx ? 282 : 246 }}>
       {pendingPanelDrop && <dialog ref={duplicateDialogRef} aria-label="Add duplicate panels?" aria-describedby="duplicate-panel-message"
-        className="fixed inset-0 m-auto w-[min(420px,90vw)] rounded-xl border border-zinc-700 bg-zinc-950 p-5 text-zinc-100 shadow-2xl backdrop:bg-black/70"
+        className="fixed inset-0 m-auto w-[min(420px,90vw)] rounded-xl border border-edge bg-ink p-5 text-fg shadow-2xl backdrop:bg-black/70"
         onCancel={event => { event.preventDefault(); setPendingPanelDrop(null); }}>
         <h2 className="text-base font-semibold mb-3">{pendingPanelDrop.items.length === 1 ? "Add duplicate panel?" : "Add duplicate panels?"}</h2>
-        <p id="duplicate-panel-message" className="text-sm text-zinc-300 mb-5">
+        <p id="duplicate-panel-message" className="text-sm text-fg-dim mb-5">
           {pendingPanelDrop.items.length === 1
             ? "Are you sure you want to add this duplicate panel to the timeline?"
             : "Some selected panels are already on the timeline. Are you sure you want to add the selected panels, including duplicates?"}
         </p>
         <div className="flex justify-end gap-2">
-          <button type="button" autoFocus data-cancel-duplicate-panels className="rounded-md border border-zinc-600 px-3 py-2 text-sm hover:bg-zinc-800"
+          <button type="button" autoFocus data-cancel-duplicate-panels className="rounded-md border border-edge px-3 py-2 text-sm hover:bg-flat"
             onClick={() => setPendingPanelDrop(null)}>Cancel</button>
-          <button type="button" data-confirm-duplicate-panels className="rounded-md bg-indigo-600 px-3 py-2 text-sm text-white hover:bg-indigo-500"
+          <button type="button" data-confirm-duplicate-panels className="rounded-md bg-accent px-3 py-2 text-sm text-white hover:bg-accent"
             onClick={() => {
               const pending = pendingPanelDrop;
               setPendingPanelDrop(null);
@@ -1201,28 +1201,28 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
         </div>
       </dialog>}
       <style>{`
-        .pf-editor-timeline { border: 1px solid #293044; border-radius: 14px; background: #0c1019; }
-        .pf-editor-timeline .pf-timeline-track-header { height: 34px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 12px; border-bottom: 1px solid #222838; font-size: 11px; background: linear-gradient(90deg,#121823,#0d121c); }
+        .pf-editor-timeline { border: 1px solid #162049; border-radius: 14px; background: #0c1433; }
+        .pf-editor-timeline .pf-timeline-track-header { height: 34px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 12px; border-bottom: 1px solid #162049; font-size: 11px; background: linear-gradient(90deg,#0c1433,#0c1433); }
         .pf-editor-timeline .pf-timeline-track-header button { padding: 3px; border-radius: 4px; }
         .pf-editor-timeline button:hover { filter: brightness(1.25); }
-        .pf-editor-timeline button:focus-visible, .pf-editor-timeline input:focus-visible { outline: 2px solid #aa85ff; outline-offset: 2px; }
-        .pf-editor-timeline .pf-timeline-track-header button[aria-pressed=true] { color: #a9b4ff; }
-        .pf-editor-timeline [data-timeline-lane] { height: 34px; border-bottom: 1px solid #222838; }
+        .pf-editor-timeline button:focus-visible, .pf-editor-timeline input:focus-visible { outline: 2px solid #7aa2ff; outline-offset: 2px; }
+        .pf-editor-timeline .pf-timeline-track-header button[aria-pressed=true] { color: #7aa2ff; }
+        .pf-editor-timeline [data-timeline-lane] { height: 34px; border-bottom: 1px solid #162049; }
         .pf-editor-timeline [data-timeline-lane][data-visible=false] > * { visibility: hidden; pointer-events: none; }
         .pf-editor-timeline [data-timeline-lane][data-locked=true] { cursor: not-allowed; }
         .pf-editor-timeline .pf-timeline-waveform { display: flex; align-items: center; gap: 2px; height: 20px; width: 90px; overflow: hidden; opacity: .7; pointer-events: none; }
         .pf-editor-timeline .pf-timeline-waveform > span { flex: 1; min-width: 1px; background: currentColor; border-radius: 1px; }
         .pf-editor-timeline .pf-timeline-audio-bar { display: block; width: 36px; height: 2px; border-radius: 2px; background: currentColor; opacity: .35; pointer-events: none; }
-        .pf-editor-timeline [data-timeline-lane="Narration"] { color: #20ddbd; }
-        .pf-editor-timeline [data-timeline-lane="Visuals"] { color: #5894ff; }
-        .pf-editor-timeline [data-timeline-lane="Layer 2"] { color: #bc74ff; }
-        .pf-editor-timeline [data-timeline-lane="Motion / FX"] { color: #ed75ef; }
-        .pf-editor-timeline [data-timeline-lane="Music"] { color: #ffb73c; }
+        .pf-editor-timeline [data-timeline-lane="Narration"] { color: #46d6a3; }
+        .pf-editor-timeline [data-timeline-lane="Visuals"] { color: #3b6bf5; }
+        .pf-editor-timeline [data-timeline-lane="Layer 2"] { color: #7aa2ff; }
+        .pf-editor-timeline [data-timeline-lane="Motion / FX"] { color: #7aa2ff; }
+        .pf-editor-timeline [data-timeline-lane="Music"] { color: #f0b35a; }
       `}</style>
       {/* 1. Timeline Toolbar */}
-      <div className="h-10 px-4 bg-zinc-900/95 border-b border-zinc-800 flex items-center justify-between shrink-0">
+      <div className="h-10 px-4 bg-navy/95 border-b border-edge flex items-center justify-between shrink-0">
         {/* Left Editing Tools */}
-        <div className="flex items-center gap-1.5 text-zinc-400">
+        <div className="flex items-center gap-1.5 text-fg-dim">
           <button
             type="button"
             onClick={onUndo}
@@ -1244,7 +1244,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
             <Icons.Redo className="w-3.5 h-3.5" />
           </button>
 
-          <div className="h-4 w-px bg-zinc-800 mx-1" />
+          <div className="h-4 w-px bg-flat mx-1" />
 
           {(selectedSceneId || state.selected_object?.type === "layer") && (
             <button
@@ -1264,7 +1264,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                   onDeleteScene(selectedSceneId);
                 }
               }}
-              className="p-1.5 rounded hover:text-rose-400 transition-colors"
+              className="p-1.5 rounded hover:text-bad transition-colors"
               aria-label="Delete Selected Clip (Del)"
               title="Delete Selected Clip / Panel (Del)"
             >
@@ -1276,7 +1276,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
             <button
               type="button"
               onClick={() => onSplitScene(selectedSceneId, state.playhead_sec)}
-              className="p-1.5 rounded hover:text-indigo-400 transition-colors"
+              className="p-1.5 rounded hover:text-info transition-colors"
               aria-label="Split Scene at Playhead (Scissors)"
               title="Split Scene at Playhead (Scissors)"
             >
@@ -1296,14 +1296,14 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
             </button>
           )}
 
-          <div className="h-4 w-px bg-zinc-800 mx-1" />
+          <div className="h-4 w-px bg-flat mx-1" />
 
           {/* Magnetic Snapping Toggle */}
           <button
             type="button"
             onClick={() => onUpdateState((s) => ({ ...s, snapping: s.snapping === false }))}
             className={`p-1.5 rounded transition-colors ${
-              snappingEnabled ? "text-indigo-400 bg-zinc-800" : "hover:text-white"
+              snappingEnabled ? "text-info bg-flat" : "hover:text-white"
             }`}
             aria-label="Toggle Magnetic Snapping"
             title="Toggle Magnetic Snapping"
@@ -1322,8 +1322,8 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
             }
             className={`px-2 py-1 rounded text-[11px] font-semibold flex items-center gap-1 transition-colors ${
               state.ripple_edit !== false
-                ? "bg-indigo-900/60 text-indigo-300 border border-indigo-700/60"
-                : "bg-zinc-800 text-zinc-400 hover:text-white"
+                ? "bg-accent/60 text-info border border-accent/60"
+                : "bg-flat text-fg-dim hover:text-white"
             }`}
             aria-label="Ripple Edit: subsequent scenes automatically slide when trimming or moving clips"
             title={state.ripple_edit === false ? "Ripple OFF: existing scene starts stay fixed. Growth stops at the next scene; inserts and moves use a free gap or append at the end." : "Ripple Edit: subsequent scenes automatically slide when trimming or moving clips"}
@@ -1335,7 +1335,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
           <button
             type="button"
             onClick={onAddBlankScene}
-            className="px-2 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-xs text-zinc-200 font-medium flex items-center gap-1"
+            className="px-2 py-1 rounded bg-flat hover:bg-glass-hi text-xs text-fg font-medium flex items-center gap-1"
             aria-label="Insert new blank scene"
             title="Insert new blank scene"
           >
@@ -1350,7 +1350,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
           <button
             type="button"
             onClick={() => onUpdateState((s) => ({ ...s, playhead_sec: 0 }))}
-            className="p-1 rounded text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+            className="p-1 rounded text-fg-dim hover:text-white hover:bg-flat transition-colors"
             aria-label="Return to Start (00:00)"
             title="Return to Start (00:00)"
           >
@@ -1361,7 +1361,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
           <button
             type="button"
             onClick={() => onUpdateState((s) => ({ ...s, playhead_sec: Math.max(0, s.playhead_sec - 0.1) }))}
-            className="p-1 rounded text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+            className="p-1 rounded text-fg-dim hover:text-white hover:bg-flat transition-colors"
             aria-label="Step Back 0.1s"
             title="Step Back 0.1s"
           >
@@ -1374,8 +1374,8 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
             onClick={() => onUpdateState((s) => ({ ...s, is_playing: !s.is_playing }))}
             className={`px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1.5 shadow-md transition-all active:scale-95 ${
               state.is_playing
-                ? "bg-amber-600 hover:bg-amber-500 text-white ring-2 ring-amber-400/40"
-                : "bg-violet-600 hover:bg-violet-500 text-white ring-2 ring-violet-400/40"
+                ? "bg-warn hover:bg-warn text-white ring-2 ring-warn/40"
+                : "bg-accent hover:bg-accent text-white ring-2 ring-accent/40"
             }`}
             aria-label={state.is_playing ? "Pause video" : "Play video"}
             title={state.is_playing ? "Pause Video (Space)" : "Play Video (Space)"}
@@ -1397,7 +1397,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
           <button
             type="button"
             onClick={() => onUpdateState((s) => ({ ...s, playhead_sec: Math.min(totalDurationSec, s.playhead_sec + 0.1) }))}
-            className="p-1 rounded text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+            className="p-1 rounded text-fg-dim hover:text-white hover:bg-flat transition-colors"
             aria-label="Step Forward 0.1s"
             title="Step Forward 0.1s"
           >
@@ -1405,14 +1405,14 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
           </button>
 
           {/* Timecode Readout */}
-          <div className="font-mono text-xs flex items-center gap-1 bg-zinc-950/80 px-2 py-0.5 rounded border border-zinc-800 shadow-inner">
-            <span className="text-zinc-100 font-bold">{formatRulerTime(state.playhead_sec)}</span>
-            <span className="text-zinc-600">/</span>
-            <span className="text-zinc-400">{formatRulerTime(totalDurationSec)}</span>
+          <div className="font-mono text-xs flex items-center gap-1 bg-ink/80 px-2 py-0.5 rounded border border-edge shadow-inner">
+            <span className="text-fg font-bold">{formatRulerTime(state.playhead_sec)}</span>
+            <span className="text-fg-faint">/</span>
+            <span className="text-fg-dim">{formatRulerTime(totalDurationSec)}</span>
           </div>
 
           {/* Mode Indicator */}
-          <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-zinc-800/80 text-zinc-400 border border-zinc-750 ml-1">
+          <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-flat/80 text-fg-dim border border-edge ml-1">
             {isAdvancedMode ? "Advanced Multitrack" : "Simple Storyline"}
           </span>
         </div>
@@ -1422,7 +1422,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
           <button
             type="button"
             onClick={() => onUpdateState((s) => ({ ...s, zoom_level: Math.max(50, s.zoom_level - 15) }))}
-            className="p-1 text-zinc-400 hover:text-white"
+            className="p-1 text-fg-dim hover:text-white"
             aria-label="Zoom Timeline Out"
             title="Zoom Timeline Out"
           >
@@ -1438,12 +1438,12 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
             onChange={(e) =>
               onUpdateState((s) => ({ ...s, zoom_level: parseInt(e.target.value) || 100 }))
             }
-            className="w-24 accent-indigo-500 h-1 bg-zinc-800 rounded cursor-pointer"
+            className="w-24 accent-accent h-1 bg-flat rounded cursor-pointer"
           />
           <button
             type="button"
             onClick={() => onUpdateState((s) => ({ ...s, zoom_level: Math.min(250, s.zoom_level + 15) }))}
-            className="p-1 text-zinc-400 hover:text-white"
+            className="p-1 text-fg-dim hover:text-white"
             aria-label="Zoom Timeline In"
             title="Zoom Timeline In"
           >
@@ -1455,25 +1455,25 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
       {/* 2. Multi-track Container (Track Headers Left + Track Canvas Right) */}
       <div className="flex-1 flex overflow-hidden">
         {/* Left Track Headers Column */}
-        <div className="w-60 bg-zinc-950 border-r border-zinc-800 flex flex-col shrink-0 text-xs select-none">
+        <div className="w-60 bg-ink border-r border-edge flex flex-col shrink-0 text-xs select-none">
           {/* Header spacer for ruler */}
-          <div className="h-6 border-b border-zinc-800/80 px-3 flex items-center text-[10px] font-mono text-zinc-500">
+          <div className="h-6 border-b border-edge/80 px-3 flex items-center text-[10px] font-mono text-fg-faint">
             TRACKS
           </div>
 
           {[
-            { key: "Narration", label: "Narration", Icon: Icons.MessageSquare, color: "#20ddbd", open: onOpenNarrationStudio ? () => onOpenNarrationStudio() : undefined },
-            { key: "Visuals", label: "Visuals", Icon: Icons.Film, color: "#5894ff" },
-            { key: "Layer 2", label: "Layers", Icon: Icons.Layers, color: "#bc74ff" },
-            { key: "Motion / FX", label: "Motion / FX", Icon: Icons.Sparkles, color: "#ed75ef" },
-            { key: "Music", label: "Music", Icon: Icons.Music, color: "#ffb73c", open: onOpenAudioLibrary ? () => onOpenAudioLibrary("music") : undefined },
-            ...(showSfx ? [{ key: "SFX", label: "SFX", Icon: Icons.Volume, color: "#50d7ee", open: onOpenAudioLibrary ? () => onOpenAudioLibrary("sfx") : undefined }] : []),
+            { key: "Narration", label: "Narration", Icon: Icons.MessageSquare, color: "#46d6a3", open: onOpenNarrationStudio ? () => onOpenNarrationStudio() : undefined },
+            { key: "Visuals", label: "Visuals", Icon: Icons.Film, color: "#3b6bf5" },
+            { key: "Layer 2", label: "Layers", Icon: Icons.Layers, color: "#7aa2ff" },
+            { key: "Motion / FX", label: "Motion / FX", Icon: Icons.Sparkles, color: "#7aa2ff" },
+            { key: "Music", label: "Music", Icon: Icons.Music, color: "#f0b35a", open: onOpenAudioLibrary ? () => onOpenAudioLibrary("music") : undefined },
+            ...(showSfx ? [{ key: "SFX", label: "SFX", Icon: Icons.Volume, color: "#7aa2ff", open: onOpenAudioLibrary ? () => onOpenAudioLibrary("sfx") : undefined }] : []),
           ].map(({ key, label, Icon, color, open }) => {
             const track = getTimelineTrackState(state.track_states, key);
             return (
               <div key={key} className="pf-timeline-track-header" style={{ color }}>
                 <span className="flex items-center gap-2 font-semibold min-w-0"><Icon className="w-4 h-4 shrink-0" />{label}</span>
-                <div className="flex items-center gap-1 text-zinc-400">
+                <div className="flex items-center gap-1 text-fg-dim">
                   {open && <button type="button" onClick={open} aria-label={key === "Narration" ? "Open Narration Studio" : `Add ${label} from Audio Library`} title={key === "Narration" ? "Open Narration Studio" : `Add ${label}`}><Icons.Plus className="w-3 h-3" /></button>}
                   <button type="button" onClick={() => toggleTrack(key, "visible")} aria-label={`Toggle ${label} visibility`} aria-pressed={track.visible} title={`${track.visible ? "Hide" : "Show"} ${label}`}><Icons.Eye className="w-3.5 h-3.5" /></button>
                   <button type="button" onClick={() => toggleTrack(key, "locked")} aria-label={`Toggle ${label} lock`} aria-pressed={track.locked} title={`${track.locked ? "Unlock" : "Lock"} ${label}`}><Icons.Lock className="w-3.5 h-3.5" /></button>
@@ -1563,7 +1563,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
               }
             }
           }}
-          className="flex-1 overflow-x-auto overflow-y-hidden bg-zinc-950 relative select-none"
+          className="flex-1 overflow-x-auto overflow-y-hidden bg-ink relative select-none"
         >
           <div
             ref={rulerRef}
@@ -1572,19 +1572,19 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
             style={{ width: `${totalTimelineWidthPx}px` }}
           >
             {panelInsertIndex !== null && <div aria-label="Panel insertion position"
-              className="absolute top-0 bottom-0 z-50 w-0.5 bg-cyan-400 pointer-events-none"
+              className="absolute top-0 bottom-0 z-50 w-0.5 bg-info pointer-events-none"
               style={{ left: `${(panelInsertIndex > 0 ? timedScenes[panelInsertIndex - 1].start_time_sec + timedScenes[panelInsertIndex - 1].duration_sec : 0) * pxPerSec}px` }}>
-              <span className="absolute top-0 left-1 whitespace-nowrap rounded bg-cyan-950 px-2 text-[10px] text-cyan-200">Insert panels</span>
+              <span className="absolute top-0 left-1 whitespace-nowrap rounded bg-info/20 px-2 text-[10px] text-info">Insert panels</span>
             </div>}
             {/* Top Time Ruler */}
-            <div className="h-6 border-b border-zinc-800/80 relative text-[10px] font-mono text-zinc-500 pointer-events-none select-none">
+            <div className="h-6 border-b border-edge/80 relative text-[10px] font-mono text-fg-faint pointer-events-none select-none">
               {Array.from({ length: ticksCount }).map((_, idx) => {
                 const sec = idx * tickIntervalSec;
                 const leftPx = sec * pxPerSec;
                 return (
                   <div
                     key={sec}
-                    className="absolute top-0 bottom-0 border-l border-zinc-800/80 pl-1 flex items-end pb-0.5"
+                    className="absolute top-0 bottom-0 border-l border-edge/80 pl-1 flex items-end pb-0.5"
                     style={{ left: `${leftPx}px` }}
                   >
                     <span>{formatRulerTime(sec)}</span>
@@ -1604,8 +1604,8 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
               <div
                 className={`w-0.5 h-full ${
                   isScrubbing
-                    ? "bg-cyan-400 shadow-[0_0_12px_rgba(34,211,238,1)]"
-                    : "bg-violet-500 shadow-[0_0_8px_rgba(139,92,246,0.5)]"
+                    ? "bg-info shadow-[0_0_12px_rgba(122,162,255,1)]"
+                    : "bg-accent shadow-[0_0_8px_rgba(59,107,245,0.5)]"
                 }`}
               />
 
@@ -1624,8 +1624,8 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                 <svg
                   className={`w-5 h-6 drop-shadow-md transition-transform ${
                     isScrubbing
-                      ? "scale-115 text-cyan-400 fill-cyan-400 stroke-cyan-200"
-                      : "text-violet-500 fill-violet-500 stroke-violet-300 group-hover:scale-110 group-hover:text-violet-400"
+                      ? "scale-115 text-info fill-info stroke-info"
+                      : "text-accent fill-accent stroke-accent group-hover:scale-110 group-hover:text-info"
                   }`}
                   viewBox="0 0 20 24"
                   fill="currentColor"
@@ -1636,7 +1636,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
 
                 {/* Floating live timecode tooltip badge */}
                 {isScrubbing && (
-                  <div className="absolute -top-7 left-1/2 -translate-x-1/2 bg-zinc-950/95 border border-cyan-400 text-cyan-300 font-mono text-[10px] font-bold px-2 py-0.5 rounded shadow-2xl whitespace-nowrap pointer-events-none ring-1 ring-cyan-400/40 animate-fadeIn">
+                  <div className="absolute -top-7 left-1/2 -translate-x-1/2 bg-ink/95 border border-info text-info font-mono text-[10px] font-bold px-2 py-0.5 rounded shadow-2xl whitespace-nowrap pointer-events-none ring-1 ring-info/40 animate-fadeIn">
                     {formatRulerTime(state.playhead_sec)}
                   </div>
                 )}
@@ -1644,7 +1644,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
             </div>
 
             {/* TRACK 1: Narration Track */}
-            <div data-timeline-lane="Narration" {...laneProps("Narration")} className="h-8 border-b border-zinc-800/30 relative flex items-center bg-zinc-950/40">
+            <div data-timeline-lane="Narration" {...laneProps("Narration")} className="h-8 border-b border-edge/30 relative flex items-center bg-ink/40">
               {state.narration_clips.map((narration) => {
                 const clipLeft = narration.start_time_sec * pxPerSec;
                 const clipWidth = Math.max(48, narration.duration_sec * pxPerSec);
@@ -1708,12 +1708,12 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                     }}
                     className={`absolute h-6 rounded-md px-1.5 flex items-center justify-between text-xs font-mono border transition-all cursor-move select-none ${
                       dragOverNarrationId === narration.id
-                        ? "bg-emerald-700/60 border-cyan-400 ring-2 ring-cyan-400 shadow-lg"
+                        ? "bg-ok/60 border-info ring-2 ring-info shadow-lg"
                         : isSelected
-                        ? "bg-emerald-600/30 border-emerald-400 text-emerald-200 ring-1 ring-emerald-500 shadow-md"
+                        ? "bg-ok/30 border-ok text-ok ring-1 ring-ok shadow-md"
                         : narration.status === "OUTDATED"
-                        ? "bg-amber-950/70 border-amber-600 text-amber-200 hover:bg-amber-900/70"
-                        : "bg-emerald-950/60 border-emerald-800 text-emerald-300 hover:bg-emerald-900/60"
+                        ? "bg-warn/70 border-warn text-warn hover:bg-warn/70"
+                        : "bg-ok/60 border-ok/40 text-ok hover:bg-ok/60"
                     }`}
                     style={{
                       left: `${clipLeft}px`,
@@ -1723,52 +1723,52 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                   >
                     {/* Left: Speaker chip, Emotion tag, & Script text preview */}
                     <div className="flex items-center gap-1.5 min-w-0 flex-1 overflow-hidden mr-1">
-                      <span className="px-1 py-0.2 rounded bg-zinc-900 border border-zinc-700/80 text-[8px] font-bold text-zinc-300 shrink-0" title={`Speaker: ${narration.speaker || "Narrator"}`}>
+                      <span className="px-1 py-0.2 rounded bg-navy border border-edge/80 text-[8px] font-bold text-fg-dim shrink-0" title={`Speaker: ${narration.speaker || "Narrator"}`}>
                         {(narration.speaker || "N").slice(0, 3).toUpperCase()}
                       </span>
                       {narration.emotion && (
-                        <span className="px-1 py-0.2 rounded bg-indigo-950/80 border border-indigo-700/50 text-[8px] font-semibold text-indigo-300 shrink-0 hidden sm:inline-block" title={`Emotion: ${narration.emotion}`}>
+                        <span className="px-1 py-0.2 rounded bg-accent/80 border border-accent/50 text-[8px] font-semibold text-info shrink-0 hidden sm:inline-block" title={`Emotion: ${narration.emotion}`}>
                           {narration.emotion}
                         </span>
                       )}
-                      <span className="truncate text-[10px] font-medium text-emerald-200">
+                      <span className="truncate text-[10px] font-medium text-ok">
                         "{narration.text}"
                       </span>
                     </div>
 
                     {/* Right: Revision tag, Review status, Audio status dot, Link toggle, Waveform */}
                     <div className="flex items-center gap-1 shrink-0 z-10">
-                      <span className="text-[8px] font-mono text-zinc-500 hidden md:inline-block" title={`Text Revision #${narration.text_revision || 1}`}>
+                      <span className="text-[8px] font-mono text-fg-faint hidden md:inline-block" title={`Text Revision #${narration.text_revision || 1}`}>
                         r{narration.text_revision || 1}
                       </span>
                       {/* Review Status Badge */}
                       {narration.review_status === "APPROVED" ? (
-                        <span className="px-1 py-0.5 rounded bg-emerald-950 text-emerald-400 text-[8px] font-bold border border-emerald-700/60 flex items-center justify-center" title="Review: Approved">
+                        <span className="px-1 py-0.5 rounded bg-ok/20 text-ok text-[8px] font-bold border border-ok/60 flex items-center justify-center" title="Review: Approved">
                           <Icons.Check className="w-2.5 h-2.5" />
                         </span>
                       ) : narration.review_status === "NEEDS_REVIEW" ? (
-                        <span className="px-1 py-0.5 rounded bg-amber-950 text-amber-400 text-[8px] font-bold border border-amber-700/60 flex items-center justify-center" title="Review: Needs Review">
+                        <span className="px-1 py-0.5 rounded bg-warn/20 text-warn text-[8px] font-bold border border-warn/60 flex items-center justify-center" title="Review: Needs Review">
                           <Icons.AlertTriangle className="w-2.5 h-2.5" />
                         </span>
                       ) : (
-                        <span className="px-1 py-0.5 rounded bg-zinc-900 text-zinc-400 text-[8px] font-mono border border-zinc-800" title="Review: Draft">
+                        <span className="px-1 py-0.5 rounded bg-navy text-fg-dim text-[8px] font-mono border border-edge" title="Review: Draft">
                           D
                         </span>
                       )}
 
                       {/* Audio Generation Status */}
                       {narration.status === "OUTDATED" ? (
-                        <span className="px-1 py-0.5 rounded bg-amber-900 text-amber-200 font-bold border border-amber-500 text-[8px] animate-pulse flex items-center justify-center" title="Audio Take Outdated">
-                          <Icons.AlertTriangle className="w-2.5 h-2.5 text-amber-300" />
+                        <span className="px-1 py-0.5 rounded bg-warn/20 text-warn font-bold border border-warn text-[8px] animate-pulse flex items-center justify-center" title="Audio Take Outdated">
+                          <Icons.AlertTriangle className="w-2.5 h-2.5 text-warn" />
                         </span>
                       ) : narration.status === "READY" ? (
-                        <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block shadow-[0_0_6px_rgba(52,211,153,0.8)]" title="Audio Take Ready" />
+                        <span className="w-2 h-2 rounded-full bg-ok inline-block shadow-[0_0_6px_rgba(70,214,163,0.8)]" title="Audio Take Ready" />
                       ) : narration.status === "PROCESSING" ? (
-                        <span className="text-blue-400 flex items-center" title="Audio Generating">
+                        <span className="text-info flex items-center" title="Audio Generating">
                           <Icons.Rotate className="w-2.5 h-2.5 animate-spin" />
                         </span>
                       ) : (
-                        <span className="text-purple-400 text-[8px] font-mono" title={narration.status}>
+                        <span className="text-info text-[8px] font-mono" title={narration.status}>
                           Q
                         </span>
                       )}
@@ -1782,16 +1782,16 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                         }}
                         className={`p-1 rounded text-[8px] font-bold border transition-colors flex items-center justify-center ${
                           isLinked
-                            ? "bg-emerald-800/60 border-emerald-600 text-emerald-200"
-                            : "bg-zinc-800 border-zinc-700 text-zinc-400 hover:text-white"
+                            ? "bg-ok/60 border-ok text-ok"
+                            : "bg-flat border-edge text-fg-dim hover:text-white"
                         }`}
                         aria-label={isLinked ? "Linked to scene (shifts with scene)" : "Unlinked (independent time)"}
                         title={isLinked ? "Linked to scene (shifts with scene)" : "Unlinked (independent time)"}
                       >
                         {isLinked ? (
-                          <Icons.Link className="w-2.5 h-2.5 text-emerald-300" />
+                          <Icons.Link className="w-2.5 h-2.5 text-ok" />
                         ) : (
-                          <Icons.Unlink className="w-2.5 h-2.5 text-zinc-400" />
+                          <Icons.Unlink className="w-2.5 h-2.5 text-fg-dim" />
                         )}
                       </button>
 
@@ -1827,7 +1827,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                   } catch (err) {}
                 }
               }}
-              className="h-10 border-b border-zinc-800/30 relative flex items-center bg-zinc-950/40"
+              className="h-10 border-b border-edge/30 relative flex items-center bg-ink/40"
             >
               {(() => {
                 return timedScenes.map((scene, idx) => {
@@ -1909,7 +1909,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                         style={{ left: `${clipLeft}px` }}
                       >
                         {isInsertTargetBefore && (
-                          <div className="pointer-events-none w-1.5 h-8 bg-cyan-400 rounded-full shadow-[0_0_8px_#22d3ee] animate-pulse" />
+                          <div className="pointer-events-none w-1.5 h-8 bg-info rounded-full shadow-[0_0_8px_#22d3ee] animate-pulse" />
                         )}
                       </div>
 
@@ -1921,11 +1921,11 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                             onSelectScene(scene.id);
                             onSelectMotionBadge?.(scene.id);
                           }}
-                          className="absolute -top-2 z-30 px-1.5 py-0.5 rounded-full bg-zinc-950 border border-indigo-500/80 text-[9px] font-bold text-indigo-300 shadow-md flex items-center gap-1 cursor-pointer hover:bg-zinc-800 hover:border-indigo-400"
+                          className="absolute -top-2 z-30 px-1.5 py-0.5 rounded-full bg-ink border border-accent/80 text-[9px] font-bold text-info shadow-md flex items-center gap-1 cursor-pointer hover:bg-flat hover:border-accent"
                           style={{ left: `${clipLeft + 4}px` }}
                           title={`Transition: ${scene.transition_in} (${scene.transition_duration_sec ?? 0.5}s)`}
                         >
-                          <Icons.Sparkles className="w-2.5 h-2.5 text-indigo-400" />
+                          <Icons.Sparkles className="w-2.5 h-2.5 text-info" />
                           <span className="capitalize">{scene.transition_in.replace(/_/g, " ")}</span>
                         </div>
                       )}
@@ -2007,10 +2007,10 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                         }}
                         className={`absolute h-8 rounded-lg overflow-hidden flex items-center border transition-all cursor-pointer shadow-md group ${
                           isDragOverScene
-                            ? "bg-cyan-950/80 border-cyan-400 ring-2 ring-cyan-400/80"
+                            ? "bg-info/80 border-info ring-2 ring-info/80"
                             : isSelected
-                            ? "bg-indigo-950 border-indigo-400 ring-2 ring-indigo-500/50"
-                            : "bg-blue-950/70 border-blue-600 hover:border-blue-400"
+                            ? "bg-accent/20 border-accent ring-2 ring-accent/50"
+                            : "bg-accent/70 border-accent hover:border-accent"
                         }`}
                         style={{
                           left: `${clipLeft}px`,
@@ -2029,7 +2029,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                               initialDuration: scene.duration_sec,
                             });
                           }}
-                          className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-cyan-400/80 z-20 transition-colors"
+                          className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-info/80 z-20 transition-colors"
                           data-timeline-trim
                           title="Drag to trim left boundary"
                         />
@@ -2042,17 +2042,17 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                                 key={ly.id}
                                 src={getLayerImageUrl(ly)}
                                 alt="Scene strip"
-                                className="h-full w-10 object-cover border-r border-zinc-800 shrink-0 rounded-sm mr-1"
+                                className="h-full w-10 object-cover border-r border-edge shrink-0 rounded-sm mr-1"
                               />
                             ))
                           ) : (
-                            <span className="text-[10px] text-zinc-500 px-2 italic">Blank scene</span>
+                            <span className="text-[10px] text-fg-faint px-2 italic">Blank scene</span>
                           )}
-                          <span className="text-[10px] font-bold text-zinc-200 truncate">
+                          <span className="text-[10px] font-bold text-fg truncate">
                             {scene.title}
                           </span>
                           {isDragOverScene && (
-                            <span className="ml-auto text-[9px] bg-cyan-400 text-black px-1.5 py-0.5 rounded font-bold shrink-0 shadow">
+                            <span className="ml-auto text-[9px] bg-info text-black px-1.5 py-0.5 rounded font-bold shrink-0 shadow">
                               Replace Visual
                             </span>
                           )}
@@ -2065,7 +2065,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                             e.stopPropagation();
                             onDeleteScene(scene.id);
                           }}
-                          className={`absolute right-1 top-1/2 -translate-y-1/2 p-1 rounded bg-zinc-950/80 hover:bg-rose-600 text-zinc-400 hover:text-white transition-all z-30 shadow ${
+                          className={`absolute right-1 top-1/2 -translate-y-1/2 p-1 rounded bg-ink/80 hover:bg-bad text-fg-dim hover:text-white transition-all z-30 shadow ${
                             isSelected ? "opacity-90" : "opacity-0 group-hover:opacity-100"
                           }`}
                           title={`Delete ${scene.title} from timeline (Del)`}
@@ -2086,7 +2086,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                               initialDuration: scene.duration_sec,
                             });
                           }}
-                          className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-cyan-400/80 z-20 transition-colors"
+                          className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-info/80 z-20 transition-colors"
                           data-timeline-trim
                           title="Drag to trim right boundary"
                         />
@@ -2141,7 +2141,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                     style={{ left: `${endLeft}px` }}
                   >
                     {isTarget && (
-                      <div className="pointer-events-none w-1.5 h-8 bg-cyan-400 rounded-full shadow-[0_0_8px_#22d3ee] animate-pulse" />
+                      <div className="pointer-events-none w-1.5 h-8 bg-info rounded-full shadow-[0_0_8px_#22d3ee] animate-pulse" />
                     )}
                   </div>
                 );
@@ -2149,7 +2149,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
             </div>
 
             {/* TRACK 3: Layers Track (Independent Layer Blocks + Trim Handles) */}
-            <div data-timeline-lane="Layer 2" {...laneProps("Layer 2")} className="h-8 border-b border-zinc-800/30 relative flex items-center bg-zinc-950/40">
+            <div data-timeline-lane="Layer 2" {...laneProps("Layer 2")} className="h-8 border-b border-edge/30 relative flex items-center bg-ink/40">
               {(() => {
                 return timedScenes.map((scene) => {
                   const clipLeft = scene.start_time_sec * pxPerSec;
@@ -2214,10 +2214,10 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                         }}
                         className={`absolute h-6 rounded-md border px-1.5 flex items-center justify-between cursor-pointer shadow transition-all ${
                           dragOverLayerId === ly.id
-                            ? "bg-purple-800 border-cyan-400 ring-2 ring-cyan-400 shadow-md"
+                            ? "bg-accent/20 border-info ring-2 ring-info shadow-md"
                             : isSelected
-                            ? "bg-purple-900 border-purple-400 ring-2 ring-purple-500/60"
-                            : "bg-purple-950/80 border-purple-800 hover:border-purple-500"
+                            ? "bg-accent/20 border-accent ring-2 ring-accent/60"
+                            : "bg-accent/80 border-accent/40 hover:border-accent"
                         }`}
                         style={{
                           left: `${lLeft}px`,
@@ -2240,7 +2240,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                                 initialStartOffset: startOffset,
                               });
                             }}
-                            className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-cyan-400/80 z-20"
+                            className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-info/80 z-20"
                             data-timeline-trim
                             title="Trim layer start"
                           />
@@ -2248,7 +2248,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
 
                         <div className="flex items-center gap-1 overflow-hidden pointer-events-none">
                           <img src={getLayerImageUrl(ly)} alt="Layer" className="w-3.5 h-3.5 rounded object-cover shrink-0" />
-                          <span className="text-[10px] font-medium text-purple-200 truncate">
+                          <span className="text-[10px] font-medium text-info truncate">
                             {ly.name || "Layer"}
                           </span>
                         </div>
@@ -2260,7 +2260,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                               e.stopPropagation();
                               onDeleteLayer(ly.id, scene.id);
                             }}
-                            className={`p-0.5 rounded bg-zinc-950/70 hover:bg-rose-600 text-zinc-400 hover:text-white transition-all ml-1 shrink-0 z-30 ${
+                            className={`p-0.5 rounded bg-ink/70 hover:bg-bad text-fg-dim hover:text-white transition-all ml-1 shrink-0 z-30 ${
                               isSelected ? "opacity-90" : "opacity-0 group-hover:opacity-100"
                             }`}
                             title={`Delete layer ${ly.name || "Layer"} (Del)`}
@@ -2288,7 +2288,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                               return markers.map((m) => (
                                 <div
                                   key={m.id}
-                                  className="absolute top-1/2 -translate-y-1/2 w-2 h-2 bg-amber-400 border border-amber-100 rotate-45 shadow-sm"
+                                  className="absolute top-1/2 -translate-y-1/2 w-2 h-2 bg-warn border border-warn rotate-45 shadow-sm"
                                   style={{
                                     left: `${Math.min(lWidth - 8, Math.max(2, m.time * pxPerSec))}px`,
                                   }}
@@ -2315,7 +2315,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                                 initialStartOffset: startOffset,
                               });
                             }}
-                            className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-cyan-400/80 z-20"
+                            className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-info/80 z-20"
                             data-timeline-trim
                             title="Trim layer duration"
                           />
@@ -2328,7 +2328,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
             </div>
 
             {/* TRACK 4: Motion / FX Track (Clickable & Draggable Badges + Drop Targets) */}
-            <div data-timeline-lane="Motion / FX" {...laneProps("Motion / FX")} className="h-8 border-b border-zinc-800/30 relative flex items-center bg-zinc-950/40">
+            <div data-timeline-lane="Motion / FX" {...laneProps("Motion / FX")} className="h-8 border-b border-edge/30 relative flex items-center bg-ink/40">
               {(() => {
                 return timedScenes.map((scene) => {
                   const clipLeft = scene.start_time_sec * pxPerSec;
@@ -2366,7 +2366,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                       }}
                       className={`absolute h-7 rounded flex items-center gap-1.5 px-1 transition-all ${
                         isDragOverMotion
-                          ? "bg-fuchsia-950/70 border border-fuchsia-400 ring-2 ring-fuchsia-400/80 z-20"
+                          ? "bg-accent/70 border border-accent ring-2 ring-accent/80 z-20"
                           : "border border-transparent"
                       }`}
                       style={{ left: `${clipLeft}px`, width: `${clipWidth}px` }}
@@ -2393,10 +2393,10 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                             onSelectLayer(motionLayer.id, scene.id);
                             onSelectMotionBadge?.(scene.id, motionLayer.id);
                           }}
-                          className="h-6 rounded-md px-2 flex items-center gap-1 text-[10px] font-bold text-fuchsia-200 bg-fuchsia-950/80 border border-fuchsia-800 shadow-sm hover:border-fuchsia-400 cursor-grab active:cursor-grabbing transition-all select-none"
+                          className="h-6 rounded-md px-2 flex items-center gap-1 text-[10px] font-bold text-info bg-accent/80 border border-accent/40 shadow-sm hover:border-accent cursor-grab active:cursor-grabbing transition-all select-none"
                           title="Click to configure in Inspector; Drag to transfer or swap motion with another scene"
                         >
-                          <Icons.Sparkles className="w-3 h-3 text-fuchsia-400" />
+                          <Icons.Sparkles className="w-3 h-3 text-info" />
                           <span className="truncate max-w-[90px]">
                             {motionLayer.animation_config?.preset === "custom"
                               ? "Keyframes"
@@ -2425,10 +2425,10 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                             onSelectScene(scene.id);
                             onSelectMotionBadge?.(scene.id);
                           }}
-                          className="h-6 rounded-md px-2 flex items-center gap-1 text-[10px] font-bold text-cyan-200 bg-cyan-950/80 border border-cyan-800 shadow-sm hover:border-cyan-400 cursor-grab active:cursor-grabbing transition-all select-none"
+                          className="h-6 rounded-md px-2 flex items-center gap-1 text-[10px] font-bold text-info bg-info/80 border border-info/40 shadow-sm hover:border-info cursor-grab active:cursor-grabbing transition-all select-none"
                           title="Click to configure in Inspector; Drag to transfer or swap camera preset"
                         >
-                          <Icons.Film className="w-3 h-3 text-cyan-400" />
+                          <Icons.Film className="w-3 h-3 text-info" />
                           <span className="truncate max-w-[90px]">
                             Cam: {presetLabels[scene.camera?.preset || ""] || scene.camera?.preset}
                           </span>
@@ -2437,7 +2437,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
 
                       {/* Empty motion slot drop placeholder */}
                       {!motionLayer && !hasCamera && isDragOverMotion && (
-                        <span className="text-[9px] font-mono font-medium text-fuchsia-300 animate-pulse">
+                        <span className="text-[9px] font-mono font-medium text-info animate-pulse">
                           + Drop motion effect
                         </span>
                       )}
@@ -2468,12 +2468,12 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                   }
                 }
               }}
-              className="h-8 border-b border-zinc-800/30 relative flex items-center bg-zinc-950/40 group/track"
+              className="h-8 border-b border-edge/30 relative flex items-center bg-ink/40 group/track"
             >
               {state.bgm_tracks.length === 0 && (
                 <div
                   onClick={() => onOpenAudioLibrary?.("music")}
-                  className="absolute inset-0 flex items-center justify-center text-[10px] text-amber-500/60 hover:text-amber-400 hover:bg-amber-950/20 cursor-pointer border border-dashed border-amber-900/40 rounded transition-colors"
+                  className="absolute inset-0 flex items-center justify-center text-[10px] text-warn/60 hover:text-warn hover:bg-warn/20 cursor-pointer border border-dashed border-warn/40 rounded transition-colors"
                 >
                   + Click to Add Background Music from Library
                 </div>
@@ -2507,8 +2507,8 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                     }}
                     className={`absolute h-6 rounded-md px-1.5 flex items-center justify-between text-xs font-mono border transition-all cursor-move select-none ${
                       isSelected
-                        ? "bg-amber-600/30 border-amber-400 text-amber-200 ring-1 ring-amber-500 shadow-md"
-                        : "bg-amber-950/70 border-amber-800 text-amber-200 hover:bg-amber-900/70 hover:border-amber-600"
+                        ? "bg-warn/30 border-warn text-warn ring-1 ring-warn shadow-md"
+                        : "bg-warn/70 border-warn/40 text-warn hover:bg-warn/70 hover:border-warn"
                     }`}
                     style={{
                       left: `${clipLeft}px`,
@@ -2530,7 +2530,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                             initialStartTimeSec: bgm.start_time_sec,
                           });
                         }}
-                        className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-amber-400 z-20"
+                        className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-warn z-20"
                         data-timeline-trim
                         title="Drag to trim start"
                       />
@@ -2538,15 +2538,15 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
 
                     {/* Clip Body: Title, Loop badge, Volume */}
                     <div className="flex items-center gap-1.5 min-w-0 flex-1 overflow-hidden pointer-events-none">
-                      <span className="text-[10px] font-bold text-amber-100 truncate">
+                      <span className="text-[10px] font-bold text-warn truncate">
                         {bgm.title}
                       </span>
                       {bgm.loop && (
-                        <span className="text-[8px] text-amber-400 bg-amber-900/60 p-0.5 rounded shrink-0 flex items-center" title="Looping">
+                        <span className="text-[8px] text-warn bg-warn/60 p-0.5 rounded shrink-0 flex items-center" title="Looping">
                           <Icons.Rotate className="w-2.5 h-2.5" />
                         </span>
                       )}
-                      <span className="text-[8px] text-amber-400/80 font-mono shrink-0">
+                      <span className="text-[8px] text-warn/80 font-mono shrink-0">
                         {Math.round(bgm.volume * 100)}%
                       </span>
                     </div>
@@ -2563,7 +2563,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                             e.stopPropagation();
                             onUpdateState((prev) => duplicateAudioClip(prev, bgm.id, "bgm"));
                           }}
-                          className="hover:text-white text-amber-400/80 p-0.5"
+                          className="hover:text-white text-warn/80 p-0.5"
                           aria-label="Duplicate BGM Clip"
                           title="Duplicate BGM Clip"
                         >
@@ -2579,7 +2579,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                             e.stopPropagation();
                             onUpdateState((prev) => deleteAudioClip(prev, bgm.id, "bgm"));
                           }}
-                          className="hover:text-rose-300 text-rose-400/80 p-0.5"
+                          className="hover:text-bad text-bad/80 p-0.5"
                           aria-label="Delete BGM Clip"
                           title="Delete BGM Clip"
                         >
@@ -2601,7 +2601,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                             initialDuration: bgm.duration_sec,
                           });
                         }}
-                        className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-amber-400 z-20"
+                        className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-warn z-20"
                         data-timeline-trim
                         title="Drag to trim duration"
                       />
@@ -2632,12 +2632,12 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                   }
                 }
               }}
-              className="h-8 border-b border-zinc-800/30 relative flex items-center bg-zinc-950/40 group/track"
+              className="h-8 border-b border-edge/30 relative flex items-center bg-ink/40 group/track"
             >
               {sfxList.length === 0 && (
                 <div
                   onClick={() => onOpenAudioLibrary?.("sfx")}
-                  className="absolute inset-0 flex items-center justify-center text-[10px] text-cyan-500/60 hover:text-cyan-400 hover:bg-cyan-950/20 cursor-pointer border border-dashed border-cyan-900/40 rounded transition-colors"
+                  className="absolute inset-0 flex items-center justify-center text-[10px] text-info/60 hover:text-info hover:bg-info/20 cursor-pointer border border-dashed border-info/40 rounded transition-colors"
                 >
                   + Click to Add Sound Effects from Library
                 </div>
@@ -2671,8 +2671,8 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                     }}
                     className={`absolute h-6 rounded-md px-1.5 flex items-center justify-between text-xs font-mono border transition-all cursor-move select-none ${
                       isSelected
-                        ? "bg-cyan-600/30 border-cyan-400 text-cyan-200 ring-1 ring-cyan-500 shadow-md"
-                        : "bg-cyan-950/80 border-cyan-800 text-cyan-200 hover:bg-cyan-900/80 hover:border-cyan-600"
+                        ? "bg-info/30 border-info text-info ring-1 ring-info shadow-md"
+                        : "bg-info/80 border-info/40 text-info hover:bg-info/80 hover:border-info"
                     }`}
                     style={{
                       left: `${sLeft}px`,
@@ -2694,21 +2694,21 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                             initialStartTimeSec: sfx.start_time_sec,
                           });
                         }}
-                        className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-cyan-400 z-20"
+                        className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-info z-20"
                         data-timeline-trim
                         title="Drag to trim start"
                       />
                     )}
 
                     <div className="flex items-center gap-1 overflow-hidden pointer-events-none">
-                      <Icons.Volume className="w-3 h-3 text-cyan-400 shrink-0" />
-                      <span className="truncate text-[10px] font-bold text-cyan-100">
+                      <Icons.Volume className="w-3 h-3 text-info shrink-0" />
+                      <span className="truncate text-[10px] font-bold text-info">
                         {sfx.name}
                       </span>
                     </div>
 
                     <div className="flex items-center gap-1 shrink-0 z-10">
-                      <span className="text-[8px] text-cyan-400/80 font-mono pointer-events-none">
+                      <span className="text-[8px] text-info/80 font-mono pointer-events-none">
                         {Math.round(sfx.volume * 100)}%
                       </span>
 
@@ -2719,7 +2719,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                             e.stopPropagation();
                             onUpdateState((prev) => duplicateAudioClip(prev, sfx.id, "sfx"));
                           }}
-                          className="hover:text-white text-cyan-400/80 p-0.5"
+                          className="hover:text-white text-info/80 p-0.5"
                           aria-label="Duplicate SFX Clip"
                           title="Duplicate SFX Clip"
                         >
@@ -2734,7 +2734,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                             e.stopPropagation();
                             onUpdateState((prev) => deleteAudioClip(prev, sfx.id, "sfx"));
                           }}
-                          className="hover:text-rose-300 text-rose-400/80 p-0.5"
+                          className="hover:text-bad text-bad/80 p-0.5"
                           aria-label="Delete SFX Clip"
                           title="Delete SFX Clip"
                         >
@@ -2756,7 +2756,7 @@ export const StoryEditorTimeline: React.FC<StoryEditorTimelineProps> = ({
                             initialDuration: sfx.duration_sec,
                           });
                         }}
-                        className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-cyan-400 z-20"
+                        className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-info z-20"
                         data-timeline-trim
                         title="Drag to trim duration"
                       />

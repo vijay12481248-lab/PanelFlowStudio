@@ -244,7 +244,7 @@ def make_clips(story: OriginalStory, ws: Path, ids: list[str] | None = None, tim
 
     fd = film.film_dir(ws)
     release_ollama()
-    tts, voices = rt.KokoroTts(), film.film_voices(story, ws)
+    tts, voices = rt.get_default_tts(), film.film_voices(story, ws)
     log_path = fd / "clips.json"
     log = json.loads(log_path.read_text(encoding="utf-8")) if log_path.exists() else {}
     made, reused, failed = [], [], []

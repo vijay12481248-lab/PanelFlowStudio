@@ -444,7 +444,7 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
           }}
           onDragLeave={() => setIsCanvasDragOver(false)}
           onDrop={handleCanvasDrop}
-          className={`pf-composition-stage relative bg-black overflow-hidden border shrink-0 ${isCanvasDragOver ? "border-cyan-400 ring-2 ring-cyan-500/30" : "border-white/10"}`}
+          className={`pf-composition-stage relative bg-black overflow-hidden border shrink-0 ${isCanvasDragOver ? "border-info ring-2 ring-info/30" : "border-white/10"}`}
           data-aspect-ratio={state.aspect_ratio}
           style={{ width: viewport.width, height: viewport.height }}
           onClick={() => {
@@ -489,7 +489,7 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
                       key={layer.id}
                       onPointerDown={previewOnly ? undefined : (e) => handleLayerPointerDown(e, layer)}
                       className={`absolute ${previewOnly ? "" : "cursor-move"} select-none transition-shadow ${
-                        previewOnly ? "" : isSelected ? "ring-2 ring-indigo-500 shadow-xl" : "hover:ring-1 hover:ring-white/40"
+                        previewOnly ? "" : isSelected ? "ring-2 ring-accent shadow-xl" : "hover:ring-1 hover:ring-white/40"
                       }`}
                       style={{
                         left: `calc(${background ? background.foreground_x * 100 : 50}% + ${evaluated.x}%)`,
@@ -523,22 +523,22 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
 
                       {/* On-Canvas Draggable Bounding Handles & Precision Studio Controls */}
                       {!previewOnly && isSelected && !state.is_playing && (
-                        <div className="absolute inset-0 pointer-events-none border-2 border-indigo-500/90 shadow-[0_0_20px_rgba(99,102,241,0.25)] ring-1 ring-cyan-400/30">
+                        <div className="absolute inset-0 pointer-events-none border-2 border-accent/90 shadow-[0_0_20px_rgba(59,107,245,0.25)] ring-1 ring-info/30">
                           {/* Live Dimensions, Position & Rotation HUD Pill */}
-                          <div className="absolute -top-7 left-1/2 -translate-x-1/2 bg-zinc-950/90 backdrop-blur-md border border-zinc-700/80 text-zinc-200 font-mono text-[10px] font-semibold px-2.5 py-0.5 rounded-full shadow-2xl whitespace-nowrap pointer-events-none flex items-center gap-1.5 z-30 ring-1 ring-white/10">
-                            <span className="text-indigo-400 font-bold">{Math.round((layer.transform.scale || 1.0) * 100)}%</span>
-                            <span className="text-zinc-600">|</span>
+                          <div className="absolute -top-7 left-1/2 -translate-x-1/2 bg-ink/90 backdrop-blur-md border border-edge/80 text-fg font-mono text-[10px] font-semibold px-2.5 py-0.5 rounded-full shadow-2xl whitespace-nowrap pointer-events-none flex items-center gap-1.5 z-30 ring-1 ring-white/10">
+                            <span className="text-info font-bold">{Math.round((layer.transform.scale || 1.0) * 100)}%</span>
+                            <span className="text-fg-faint">|</span>
                             <span>{layer.transform.x}%, {layer.transform.y}%</span>
                             {(layer.transform.rotation || 0) !== 0 && (
                               <>
-                                <span className="text-zinc-600">|</span>
-                                <span className="text-amber-400 font-bold">{Math.round(layer.transform.rotation || 0)}°</span>
+                                <span className="text-fg-faint">|</span>
+                                <span className="text-warn font-bold">{Math.round(layer.transform.rotation || 0)}°</span>
                               </>
                             )}
                             {layer.crop_type && layer.crop_type !== "rect" && (
                               <>
-                                <span className="text-zinc-600">|</span>
-                                <span className="text-[9px] text-cyan-400 uppercase font-bold tracking-wider bg-cyan-950/70 border border-cyan-800/80 px-1.5 py-0.2 rounded-full">
+                                <span className="text-fg-faint">|</span>
+                                <span className="text-[9px] text-info uppercase font-bold tracking-wider bg-info/70 border border-info/80 px-1.5 py-0.2 rounded-full">
                                   {layer.crop_type}
                                 </span>
                               </>
@@ -549,7 +549,7 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
                           <div
                             className={`absolute ${
                               (layer.transform.y || 0) < -22 ? "top-[calc(100%+14px)]" : "-top-17"
-                            } left-1/2 -translate-x-1/2 bg-zinc-950/90 border border-zinc-700/80 rounded-xl shadow-2xl p-1 flex items-center gap-1 pointer-events-auto backdrop-blur-md z-30 ring-1 ring-white/10`}
+                            } left-1/2 -translate-x-1/2 bg-ink/90 border border-edge/80 rounded-xl shadow-2xl p-1 flex items-center gap-1 pointer-events-auto backdrop-blur-md z-30 ring-1 ring-white/10`}
                           >
                             {/* Box Crop (Rect) */}
                             <button
@@ -557,8 +557,8 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
                               onClick={() => handleApplyCropType(layer.id, "rect", undefined)}
                               className={`px-2 py-1 rounded-lg text-[10px] font-semibold flex items-center gap-1.5 transition-all ${
                                 !layer.crop_type || layer.crop_type === "rect"
-                                  ? "bg-indigo-600 text-white shadow-sm"
-                                  : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/80"
+                                  ? "bg-accent text-white shadow-sm"
+                                  : "text-fg-dim hover:text-fg hover:bg-flat/80"
                               }`}
                               title="Standard Rectangle Box Frame"
                             >
@@ -580,8 +580,8 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
                               }}
                               className={`px-2 py-1 rounded-lg text-[10px] font-semibold flex items-center gap-1.5 transition-all ${
                                 layer.crop_type === "polygon"
-                                  ? "bg-indigo-600 text-white shadow-sm"
-                                  : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/80"
+                                  ? "bg-accent text-white shadow-sm"
+                                  : "text-fg-dim hover:text-fg hover:bg-flat/80"
                               }`}
                               title="Multi-Point Geometric Polygon Crop"
                             >
@@ -603,8 +603,8 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
                               }}
                               className={`px-2 py-1 rounded-lg text-[10px] font-semibold flex items-center gap-1.5 transition-all ${
                                 layer.crop_type === "pen"
-                                  ? "bg-indigo-600 text-white shadow-sm"
-                                  : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/80"
+                                  ? "bg-accent text-white shadow-sm"
+                                  : "text-fg-dim hover:text-fg hover:bg-flat/80"
                               }`}
                               title="Organic Contour Pen Cut"
                             >
@@ -615,13 +615,13 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
                               <span>Pen Cut</span>
                             </button>
 
-                            <div className="w-px h-4 bg-zinc-800 mx-0.5" />
+                            <div className="w-px h-4 bg-flat mx-0.5" />
 
                             {/* Add to Timeline Button */}
                             <button
                               type="button"
                               onClick={() => setCropModalOpen(true)}
-                              className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-emerald-600 hover:bg-emerald-500 text-white flex items-center gap-1 shadow-md shadow-emerald-950 transition-all active:scale-95"
+                              className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-ok hover:bg-ok text-white flex items-center gap-1 shadow-md shadow-ok/20 transition-all active:scale-95"
                               title="Add this cropped layer to the timeline"
                             >
                               <Icons.Plus className="w-3 h-3" />
@@ -630,13 +630,13 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
                           </div>
 
                           {/* Rotate Handle Stalk & Knob */}
-                          <div className="absolute -top-7 left-1/2 -translate-x-1/2 w-0.5 h-7 bg-indigo-500/80 pointer-events-none" />
+                          <div className="absolute -top-7 left-1/2 -translate-x-1/2 w-0.5 h-7 bg-accent/80 pointer-events-none" />
                           <div
                             onPointerDown={(e) => handleHandlePointerDown(e, "rotate", layer)}
-                            className="absolute -top-10 left-1/2 -translate-x-1/2 w-5 h-5 bg-zinc-950 border-2 border-indigo-500 rounded-full shadow-lg flex items-center justify-center cursor-grab active:cursor-grabbing hover:scale-125 transition-transform pointer-events-auto group"
+                            className="absolute -top-10 left-1/2 -translate-x-1/2 w-5 h-5 bg-ink border-2 border-accent rounded-full shadow-lg flex items-center justify-center cursor-grab active:cursor-grabbing hover:scale-125 transition-transform pointer-events-auto group"
                             title="Drag to Rotate (Hold Shift to snap 15°)"
                           >
-                            <svg className="w-3 h-3 text-indigo-400 group-hover:text-indigo-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                            <svg className="w-3 h-3 text-info group-hover:text-info" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                               <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                             </svg>
                           </div>
@@ -644,63 +644,63 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
                           {/* 4 Corner Round Handles (nw, ne, sw, se) */}
                           <div
                             onPointerDown={(e) => handleHandlePointerDown(e, "nw", layer)}
-                            className="absolute -top-2 -left-2 w-4 h-4 bg-white border-2 border-indigo-500 rounded-full shadow-md hover:scale-125 cursor-nwse-resize pointer-events-auto transition-transform flex items-center justify-center"
+                            className="absolute -top-2 -left-2 w-4 h-4 bg-white border-2 border-accent rounded-full shadow-md hover:scale-125 cursor-nwse-resize pointer-events-auto transition-transform flex items-center justify-center"
                             title="Resize Corner (NW)"
                           >
-                            <span className="w-1 h-1 bg-indigo-600 rounded-full" />
+                            <span className="w-1 h-1 bg-accent rounded-full" />
                           </div>
                           <div
                             onPointerDown={(e) => handleHandlePointerDown(e, "ne", layer)}
-                            className="absolute -top-2 -right-2 w-4 h-4 bg-white border-2 border-indigo-500 rounded-full shadow-md hover:scale-125 cursor-nesw-resize pointer-events-auto transition-transform flex items-center justify-center"
+                            className="absolute -top-2 -right-2 w-4 h-4 bg-white border-2 border-accent rounded-full shadow-md hover:scale-125 cursor-nesw-resize pointer-events-auto transition-transform flex items-center justify-center"
                             title="Resize Corner (NE)"
                           >
-                            <span className="w-1 h-1 bg-indigo-600 rounded-full" />
+                            <span className="w-1 h-1 bg-accent rounded-full" />
                           </div>
                           <div
                             onPointerDown={(e) => handleHandlePointerDown(e, "sw", layer)}
-                            className="absolute -bottom-2 -left-2 w-4 h-4 bg-white border-2 border-indigo-500 rounded-full shadow-md hover:scale-125 cursor-nesw-resize pointer-events-auto transition-transform flex items-center justify-center"
+                            className="absolute -bottom-2 -left-2 w-4 h-4 bg-white border-2 border-accent rounded-full shadow-md hover:scale-125 cursor-nesw-resize pointer-events-auto transition-transform flex items-center justify-center"
                             title="Resize Corner (SW)"
                           >
-                            <span className="w-1 h-1 bg-indigo-600 rounded-full" />
+                            <span className="w-1 h-1 bg-accent rounded-full" />
                           </div>
                           <div
                             onPointerDown={(e) => handleHandlePointerDown(e, "se", layer)}
-                            className="absolute -bottom-2 -right-2 w-4 h-4 bg-white border-2 border-indigo-500 rounded-full shadow-md hover:scale-125 cursor-nwse-resize pointer-events-auto transition-transform flex items-center justify-center"
+                            className="absolute -bottom-2 -right-2 w-4 h-4 bg-white border-2 border-accent rounded-full shadow-md hover:scale-125 cursor-nwse-resize pointer-events-auto transition-transform flex items-center justify-center"
                             title="Resize Corner (SE)"
                           >
-                            <span className="w-1 h-1 bg-indigo-600 rounded-full" />
+                            <span className="w-1 h-1 bg-accent rounded-full" />
                           </div>
 
                           {/* 4 Edge Midpoint Pill Handles (n, s, w, e) */}
                           <div
                             onPointerDown={(e) => handleHandlePointerDown(e, "n", layer)}
-                            className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-5 h-2 bg-white border border-indigo-500 rounded-full shadow-sm hover:scale-125 cursor-ns-resize pointer-events-auto transition-transform"
+                            className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-5 h-2 bg-white border border-accent rounded-full shadow-sm hover:scale-125 cursor-ns-resize pointer-events-auto transition-transform"
                             title="Adjust Height (Top)"
                           />
                           <div
                             onPointerDown={(e) => handleHandlePointerDown(e, "s", layer)}
-                            className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-5 h-2 bg-white border border-indigo-500 rounded-full shadow-sm hover:scale-125 cursor-ns-resize pointer-events-auto transition-transform"
+                            className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-5 h-2 bg-white border border-accent rounded-full shadow-sm hover:scale-125 cursor-ns-resize pointer-events-auto transition-transform"
                             title="Adjust Height (Bottom)"
                           />
                           <div
                             onPointerDown={(e) => handleHandlePointerDown(e, "w", layer)}
-                            className="absolute top-1/2 -left-1.5 -translate-y-1/2 w-2 h-5 bg-white border border-indigo-500 rounded-full shadow-sm hover:scale-125 cursor-ew-resize pointer-events-auto transition-transform"
+                            className="absolute top-1/2 -left-1.5 -translate-y-1/2 w-2 h-5 bg-white border border-accent rounded-full shadow-sm hover:scale-125 cursor-ew-resize pointer-events-auto transition-transform"
                             title="Adjust Width (Left)"
                           />
                           <div
                             onPointerDown={(e) => handleHandlePointerDown(e, "e", layer)}
-                            className="absolute top-1/2 -right-1.5 -translate-y-1/2 w-2 h-5 bg-white border border-indigo-500 rounded-full shadow-sm hover:scale-125 cursor-ew-resize pointer-events-auto transition-transform"
+                            className="absolute top-1/2 -right-1.5 -translate-y-1/2 w-2 h-5 bg-white border border-accent rounded-full shadow-sm hover:scale-125 cursor-ew-resize pointer-events-auto transition-transform"
                             title="Adjust Width (Right)"
                           />
 
                           {/* Center Target Handle for Repositioning */}
                           <div
                             onPointerDown={(e) => handleHandlePointerDown(e, "center", layer)}
-                            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-5 h-5 bg-zinc-950 border-2 border-cyan-400 rounded-md shadow-lg hover:scale-115 cursor-move pointer-events-auto transition-transform flex items-center justify-center group"
+                            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-5 h-5 bg-ink border-2 border-info rounded-md shadow-lg hover:scale-115 cursor-move pointer-events-auto transition-transform flex items-center justify-center group"
                             title="Drag to Reposition (Center Anchor)"
                           >
-                            <div className="w-2 h-2 rounded-full border border-cyan-400 flex items-center justify-center">
-                              <span className="w-1 h-1 bg-cyan-400 rounded-full group-hover:bg-cyan-300" />
+                            <div className="w-2 h-2 rounded-full border border-info flex items-center justify-center">
+                              <span className="w-1 h-1 bg-info rounded-full group-hover:bg-info" />
                             </div>
                           </div>
                         </div>
@@ -710,12 +710,12 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
                 })
             ) : activeScene || state.scenes.length === 0 ? (
               /* Empty State */
-              <div className="absolute inset-0 flex flex-col items-center justify-center p-8 text-center text-zinc-500">
-                <div className="w-16 h-16 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center mb-4 text-zinc-400">
+              <div className="absolute inset-0 flex flex-col items-center justify-center p-8 text-center text-fg-faint">
+                <div className="w-16 h-16 rounded-2xl bg-navy border border-edge flex items-center justify-center mb-4 text-fg-dim">
                   <Icons.Film className="w-8 h-8" />
                 </div>
-                <h4 className="text-base font-semibold text-zinc-300">Composition Canvas Empty</h4>
-                <p className="text-xs text-zinc-500 max-w-xs mt-1">
+                <h4 className="text-base font-semibold text-fg-dim">Composition Canvas Empty</h4>
+                <p className="text-xs text-fg-faint max-w-xs mt-1">
                   Select a manga panel from the right panel and click <strong>“Add to Scene”</strong> or drag it here to begin your video.
                 </p>
               </div>
@@ -750,17 +750,17 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
                   <polyline
                     points={svgPoints}
                     fill="none"
-                    stroke="#38bdf8"
+                    stroke="#7aa2ff"
                     strokeWidth="0.6"
                     strokeDasharray="1.5 1"
                     className="opacity-75"
                   />
                   {/* Start Point (Green) */}
-                  <circle cx={50 + startP.x} cy={50 + startP.y} r="1.2" fill="#4ade80" stroke="#166534" strokeWidth="0.3" />
+                  <circle cx={50 + startP.x} cy={50 + startP.y} r="1.2" fill="#46d6a3" stroke="#123d36" strokeWidth="0.3" />
                   {/* End Point (Rose) */}
-                  <circle cx={50 + endP.x} cy={50 + endP.y} r="1.2" fill="#f43f5e" stroke="#9f1239" strokeWidth="0.3" />
+                  <circle cx={50 + endP.x} cy={50 + endP.y} r="1.2" fill="#f2667a" stroke="#3b6bf5" strokeWidth="0.3" />
                   {/* Current Position Marker (Cyan Pulse) */}
-                  <circle cx={50 + currentEvaluated.x} cy={50 + currentEvaluated.y} r="1.5" fill="#22d3ee" stroke="#ffffff" strokeWidth="0.4" />
+                  <circle cx={50 + currentEvaluated.x} cy={50 + currentEvaluated.y} r="1.5" fill="#7aa2ff" stroke="#ffffff" strokeWidth="0.4" />
                 </svg>
               );
             })()}
@@ -768,9 +768,9 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
 
           {/* Canvas Drag-over Dropzone Visual Cue */}
           {isCanvasDragOver && (
-            <div className="absolute inset-0 bg-cyan-950/40 border-2 border-cyan-400 border-dashed rounded-xl z-50 flex items-center justify-center pointer-events-none backdrop-blur-sm animate-pulse">
-              <div className="bg-zinc-900/95 border border-cyan-400/80 px-4 py-2 rounded-lg text-cyan-300 font-semibold text-xs flex items-center gap-2 shadow-2xl">
-                <Icons.Layers className="w-4 h-4 text-cyan-400" />
+            <div className="absolute inset-0 bg-info/40 border-2 border-info border-dashed rounded-xl z-50 flex items-center justify-center pointer-events-none backdrop-blur-sm animate-pulse">
+              <div className="bg-navy/95 border border-info/80 px-4 py-2 rounded-lg text-info font-semibold text-xs flex items-center gap-2 shadow-2xl">
+                <Icons.Layers className="w-4 h-4 text-info" />
                 <span>Drop panel to add as layer at {formatTime(state.playhead_sec)}</span>
               </div>
             </div>
@@ -792,19 +792,19 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
                 <div />
               </div>
               {/* 90% Title Safe Area */}
-              <div className="absolute inset-[5%] border border-cyan-400/25 rounded" />
+              <div className="absolute inset-[5%] border border-info/25 rounded" />
             </div>
           )}
 
           {/* Active Scene Overlay Badge */}
           {activeScene && (
-            <div className="absolute top-3 left-3 bg-black/70 backdrop-blur-md px-2.5 py-1 rounded-md border border-white/10 text-[11px] font-mono text-zinc-300 flex items-center gap-1.5 shadow-md">
-              <span className="w-2 h-2 rounded-full bg-indigo-500" />
+            <div className="absolute top-3 left-3 bg-black/70 backdrop-blur-md px-2.5 py-1 rounded-md border border-white/10 text-[11px] font-mono text-fg-dim flex items-center gap-1.5 shadow-md">
+              <span className="w-2 h-2 rounded-full bg-accent" />
               <span>
                 Scene #{activeScene.sequence}: {activeScene.title}
               </span>
               {activeScene.layers.length > 0 && (
-                <span className="text-zinc-500 ml-1">
+                <span className="text-fg-faint ml-1">
                   ({activeScene.layers.length} {activeScene.layers.length === 1 ? "layer" : "layers"})
                 </span>
               )}
@@ -815,11 +815,11 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
 
       {/* Canvas-only tools. Playback and scrubbing live in the timeline below. */}
       <div className="pf-canvas-view-tools px-3 py-2 shrink-0 select-none flex items-center justify-between gap-3">
-        <span className="text-[10px] text-zinc-500 truncate">{activeScene ? activeScene.title : state.scenes.length ? "Timeline gap" : "Drop a page or panel to begin"}</span>
+        <span className="text-[10px] text-fg-faint truncate">{activeScene ? activeScene.title : state.scenes.length ? "Timeline gap" : "Drop a page or panel to begin"}</span>
         <div className="flex items-center gap-2" aria-label="Canvas view tools">
             {/* Fit dropdown */}
             <select
-              className="bg-zinc-950 border border-zinc-800 text-[11px] font-mono text-zinc-300 rounded px-2 py-1 focus:outline-none"
+              className="bg-ink border border-edge text-[11px] font-mono text-fg-dim rounded px-2 py-1 focus:outline-none"
               aria-label="Canvas view zoom"
               value={viewZoom}
               onChange={(event) => setViewZoom(event.target.value)}
@@ -837,8 +837,8 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
               onClick={() => onUpdateState((s) => ({ ...s, show_motion_paths: !s.show_motion_paths }))}
               className={`p-1.5 rounded transition-colors ${
                 state.show_motion_paths
-                  ? "bg-cyan-600/20 text-cyan-400 border border-cyan-500/30"
-                  : "text-zinc-400 hover:text-white"
+                  ? "bg-info/20 text-info border border-info/30"
+                  : "text-fg-dim hover:text-white"
               }`}
               title="Toggle Motion Paths & Keyframe Trajectory (M)"
               aria-label="Toggle motion paths"
@@ -852,7 +852,7 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
               type="button"
               onClick={() => setShowSafeZones((v) => !v)}
               className={`p-1.5 rounded transition-colors ${
-                showSafeZones ? "bg-indigo-600/20 text-indigo-400 border border-indigo-500/30" : "text-zinc-400 hover:text-white"
+                showSafeZones ? "bg-accent/20 text-info border border-accent/30" : "text-fg-dim hover:text-white"
               }`}
               title="Toggle Safe Frame Guides"
               aria-label="Toggle safe frame guides"
@@ -875,7 +875,7 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
                   setFullscreenError("Fullscreen is not available in this window.");
                 }
               }}
-              className="p-1.5 text-zinc-400 hover:text-white rounded"
+              className="p-1.5 text-fg-dim hover:text-white rounded"
               title="Fullscreen Canvas"
               aria-label="Fullscreen canvas"
             >
@@ -884,21 +884,21 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
           </div>
         </div>
 
-      {fullscreenError && <p role="status" className="px-3 pb-2 text-xs text-amber-300">{fullscreenError}</p>}
+      {fullscreenError && <p role="status" className="px-3 pb-2 text-xs text-warn">{fullscreenError}</p>}
       {/* "May I add this crop to the timeline?" Confirmation Modal */}
       {cropModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn">
-          <div className="bg-zinc-900 border border-zinc-750 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl ring-1 ring-white/10">
-            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+          <div className="bg-navy border border-edge rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl ring-1 ring-white/10">
+            <div className="flex items-center justify-between border-b border-edge pb-3">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-indigo-950/80 border border-indigo-700/60 flex items-center justify-center text-indigo-400 shadow-inner">
-                  <Icons.Scissors className="w-4 h-4 text-indigo-400" />
+                <div className="w-8 h-8 rounded-xl bg-accent/80 border border-accent/60 flex items-center justify-center text-info shadow-inner">
+                  <Icons.Scissors className="w-4 h-4 text-info" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-zinc-100 leading-tight">
+                  <h3 className="text-sm font-bold text-fg leading-tight">
                     Add Crop to Timeline
                   </h3>
-                  <span className="text-[11px] text-zinc-400">
+                  <span className="text-[11px] text-fg-dim">
                     May I add this crop to the timeline?
                   </span>
                 </div>
@@ -906,7 +906,7 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
               <button
                 type="button"
                 onClick={() => setCropModalOpen(false)}
-                className="text-zinc-400 hover:text-zinc-200 p-1 rounded-lg hover:bg-zinc-800 transition-colors"
+                className="text-fg-dim hover:text-fg p-1 rounded-lg hover:bg-flat transition-colors"
                 title="Close (Esc)"
               >
                 <Icons.X className="w-4 h-4" />
@@ -914,7 +914,7 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
 
             </div>
 
-            <p className="text-xs text-zinc-300 leading-relaxed">
+            <p className="text-xs text-fg-dim leading-relaxed">
               Choose how you would like to position this cropped panel element inside your animated video story:
             </p>
 
@@ -925,17 +925,17 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
                   setCropModalOpen(false);
                   handleCreateSceneFromCrop();
                 }}
-                className="w-full text-left p-3.5 rounded-xl bg-zinc-950 hover:bg-indigo-950/50 border border-zinc-800 hover:border-indigo-500/80 transition-all group flex items-start gap-3.5 shadow-sm"
+                className="w-full text-left p-3.5 rounded-xl bg-ink hover:bg-accent/50 border border-edge hover:border-accent/80 transition-all group flex items-start gap-3.5 shadow-sm"
               >
-                <div className="w-9 h-9 rounded-lg bg-indigo-600/20 border border-indigo-500/40 flex items-center justify-center text-indigo-400 shrink-0 mt-0.5 group-hover:scale-110 transition-transform">
-                  <Icons.Film className="w-4 h-4 text-indigo-400" />
+                <div className="w-9 h-9 rounded-lg bg-accent/20 border border-accent/40 flex items-center justify-center text-info shrink-0 mt-0.5 group-hover:scale-110 transition-transform">
+                  <Icons.Film className="w-4 h-4 text-info" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-xs font-bold text-zinc-100 group-hover:text-indigo-300 flex items-center justify-between">
+                  <div className="text-xs font-bold text-fg group-hover:text-info flex items-center justify-between">
                     <span>Create New Scene from Crop</span>
-                    <span className="text-[10px] text-zinc-500 font-mono font-normal">Enter ↵</span>
+                    <span className="text-[10px] text-fg-faint font-mono font-normal">Enter ↵</span>
                   </div>
-                  <div className="text-[11px] text-zinc-400 mt-0.5 leading-normal">
+                  <div className="text-[11px] text-fg-dim mt-0.5 leading-normal">
                     Appends a new scene on the timeline dedicated to this cropped element with smooth cinematic timing.
                   </div>
                 </div>
@@ -946,23 +946,23 @@ export const VideoCompositionCanvas: React.FC<VideoCompositionCanvasProps> = ({
                 onClick={() => {
                   setCropModalOpen(false);
                 }}
-                className="w-full text-left p-3.5 rounded-xl bg-zinc-950 hover:bg-cyan-950/50 border border-zinc-800 hover:border-cyan-500/80 transition-all group flex items-start gap-3.5 shadow-sm"
+                className="w-full text-left p-3.5 rounded-xl bg-ink hover:bg-info/50 border border-edge hover:border-info/80 transition-all group flex items-start gap-3.5 shadow-sm"
               >
-                <div className="w-9 h-9 rounded-lg bg-cyan-600/20 border border-cyan-500/40 flex items-center justify-center text-cyan-400 shrink-0 mt-0.5 group-hover:scale-110 transition-transform">
-                  <Icons.Layers className="w-4 h-4 text-cyan-400" />
+                <div className="w-9 h-9 rounded-lg bg-info/20 border border-info/40 flex items-center justify-center text-info shrink-0 mt-0.5 group-hover:scale-110 transition-transform">
+                  <Icons.Layers className="w-4 h-4 text-info" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-xs font-bold text-zinc-100 group-hover:text-cyan-300">
+                  <div className="text-xs font-bold text-fg group-hover:text-info">
                     Keep on Current Scene Layer
                   </div>
-                  <div className="text-[11px] text-zinc-400 mt-0.5 leading-normal">
+                  <div className="text-[11px] text-fg-dim mt-0.5 leading-normal">
                     Preserves the crop boundary directly on the active scene layer without altering timeline duration.
                   </div>
                 </div>
               </button>
             </div>
 
-            <div className="flex justify-end pt-3 border-t border-zinc-800/80">
+            <div className="flex justify-end pt-3 border-t border-edge/80">
               <Button
                 variant="secondary"
                 size="sm"

@@ -1,0 +1,122 @@
+[
+  {
+    "id": "fight-01",
+    "scene_type": "fight",
+    "text": "the hero fights the villain"
+  },
+  {
+    "id": "fight-02",
+    "scene_type": "fight",
+    "text": "a samurai duel at dusk"
+  },
+  {
+    "id": "fight-03",
+    "scene_type": "fight",
+    "text": "two street fighters brawl in an alley"
+  },
+  {
+    "id": "fight-04",
+    "scene_type": "fight",
+    "text": "a knight battles a dragon"
+  },
+  {
+    "id": "fight-05",
+    "scene_type": "fight",
+    "text": "a masked thief fights a guard on a rooftop"
+  },
+  {
+    "id": "fight-06",
+    "scene_type": "fight",
+    "text": "a mage duels a rival sorcerer"
+  },
+  {
+    "id": "fight-07",
+    "scene_type": "fight",
+    "text": "a girl fights off three bandits"
+  },
+  {
+    "id": "fight-08",
+    "scene_type": "fight",
+    "text": "two rival swordsmen clash in a bamboo forest"
+  },
+  {
+    "id": "emotion-01",
+    "scene_type": "emotion",
+    "text": "a girl who just lost her best friend"
+  },
+  {
+    "id": "emotion-02",
+    "scene_type": "emotion",
+    "text": "a father proud of his son"
+  },
+  {
+    "id": "emotion-03",
+    "scene_type": "emotion",
+    "text": "a soldier afraid before the battle"
+  },
+  {
+    "id": "emotion-04",
+    "scene_type": "emotion",
+    "text": "a boy who finally forgives his brother"
+  },
+  {
+    "id": "emotion-05",
+    "scene_type": "emotion",
+    "text": "an old woman remembering her wedding day"
+  },
+  {
+    "id": "emotion-06",
+    "scene_type": "emotion",
+    "text": "a hero realizing he betrayed someone"
+  },
+  {
+    "id": "emotion-07",
+    "scene_type": "emotion",
+    "text": "a child lost in a crowded market"
+  },
+  {
+    "id": "emotion-08",
+    "scene_type": "emotion",
+    "text": "a swordsman who is at peace"
+  },
+  {
+    "id": "concept_art-01",
+    "scene_type": "concept_art",
+    "text": "a floating city above the clouds"
+  },
+  {
+    "id": "concept_art-02",
+    "scene_type": "concept_art",
+    "text": "an abandoned library overgrown with vines"
+  },
+  {
+    "id": "concept_art-03",
+    "scene_type": "concept_art",
+    "text": "a lone lighthouse in a storm"
+  },
+  {
+    "id": "concept_art-04",
+    "scene_type": "concept_art",
+    "text": "a hidden village in a frozen canyon"
+  },
+  {
+    "id": "concept_art-05",
+    "scene_type": "concept_art",
+    "text": "a clockwork dragon workshop"
+  },
+  {
+    "id": "concept_art-06",
+    "scene_type": "concept_art",
+    "text": "a market street in a neon rainy city"
+  },
+  {
+    "id": "concept_art-07",
+    "scene_type": "concept_art",
+    "text": "a ruined temple with a glowing door"
+  },
+  {
+    "id": "concept_art-08",
+    "scene_type": "concept_art",
+    "text": "a caravan crossing a glass desert"
+  }
+]

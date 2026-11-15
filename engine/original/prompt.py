@@ -98,6 +98,45 @@ class StyleAnchor(BaseModel):
 # 3. Master Genre Visual Style Presets (from Practitioner Guide Section 4)
 # ==============================================================================
 
+DIRECTORIAL_STYLE_PROFILES: dict[str, StyleAnchor] = {
+    "shonen_manga_screentone": StyleAnchor(
+        genre="shonen_manga_screentone",
+        medium="Authentic Japanese shonen manga publication page, traditional black and white manga print, 60-line authentic screentone dot textures, matte paper finish, zero color, zero 3D CGI, zero photographic textures",
+        line_geometry="Dynamic G-pen ink line art, expressive varying stroke weights from hairline to bold contour inking, razor-sharp black ink outlines, clean mechanical hatching, dramatic speedline accents",
+        palette="Strict monochrome grayscale palette, pure dense carbon black ink, paper-white highlights, 60-line halftone gray screentone gradations, high-contrast chiaroscuro, zero color saturation",
+        lighting_physics="Stark graphic chiaroscuro lighting, deep solid black cast shadows, crisp binary highlight edges, dynamic rim illumination, dramatic manga contrast, zero photographic gradients",
+        negative_prompt="color, colored, polychromatic, watercolor, pastel, digital painting, photorealistic, 3d render, cgi, blurry, soft lines, sketchy, messy lineart, gradient fills, lowres, bad anatomy, bad hands, text, speech bubbles, watermark",
+        review_witness_rule="Witness B confirms authentic black-and-white shonen manga screentone aesthetic; strictly rejects color, painterly gradients, 3D CGI, and missing halftone dot textures.",
+    ),
+    "dark_fantasy_graphic": StyleAnchor(
+        genre="dark_fantasy_graphic",
+        medium="Dark fantasy graphic novel illustration, atmospheric dark fantasy aesthetic, gritty fine filmic grain texture, textured cold-press archival paper finish, zero glossy 3D CGI, zero plastic textures",
+        line_geometry="Heavy traditional crosshatching, dense woodcut-inspired ink linework, jagged expressive contour lines, bold dark silhouettes, high-precision architectural draftsmanship",
+        palette="Desaturated grimdark palette, muted antique sepia, tarnished bronze, dried umber, bone white, deep charcoal blacks, blood-crimson subtle accents, low key tonal range",
+        lighting_physics="Ominous low-key directional lighting, deep impenetrable cast shadows, harsh torchlight and flickering candlelight flicker, eerie ambient occlusion, striking edge rim light",
+        negative_prompt="bright, cheerful, vibrant, pastel, colorful, clean anime cel, flat lighting, oversaturated, neon, smooth airbrush, 3d render, cgi, photorealistic skin, lowres, bad anatomy, bad hands, text, watermark",
+        review_witness_rule="Witness B confirms gritty dark fantasy graphic novel aesthetic with dense crosshatching and muted sepia/charcoal tones; rejects bright cheerful colors or clean flat cel shading.",
+    ),
+    "modern_webtoon_color": StyleAnchor(
+        genre="modern_webtoon_color",
+        medium="Modern digital Korean webtoon manhwa illustration, premium vertical scroll webcomic still, pristine polished digital art, luminous digital airbrush finish, zero rough sketching, zero 3D CGI",
+        line_geometry="Ultra-clean continuous digital ink contour lines, refined smooth hairline stroke weight, pristine vector-smooth silhouettes, perfectly closed color boundaries",
+        palette="Vibrant saturated modern digital palette, luminous pastel undertones, rich gradient fills, glossy specular highlights, radiant gem-like tones, cinematic RGB contrast",
+        lighting_physics="Volumetric dramatic digital rim lighting, soft luminous ambient bloom, multi-source color lighting, radiant backlight glow, glossy highlights on hair and eyes",
+        negative_prompt="monochrome, black and white, muted, desaturated, gritty, dirty, film grain, sketchy, rough pencil, uninked lines, muddy colors, 3d render, cgi, photorealistic skin, lowres, bad anatomy, bad hands, text, watermark",
+        review_witness_rule="Witness B confirms polished modern webtoon manhwa aesthetic with luminous digital coloring and pristine linework; rejects monochrome, gritty film grain, or rough sketches.",
+    ),
+    "cyberpunk_neon_noir": StyleAnchor(
+        genre="cyberpunk_neon_noir",
+        medium="High-tech cyberpunk neon noir anime illustration, cinematic sci-fi graphic illustration, rain-slicked matte finish, atmospheric optical bloom, zero generic cartoon flat fill, zero 3D CGI",
+        line_geometry="Sleek hard-edged mechanical outlines, precise technical ink contours, sharp silhouette definition, intricate circuit and architectural linework",
+        palette="High-contrast night palette, deep midnight obsidian and matte dark zinc shadows, electric neon cyan, radioactive magenta, acid yellow, reflective wet pavement chromatic reflections",
+        lighting_physics="High-contrast volumetric neon lighting, multi-point chromatic neon glow, stark rim highlights, diffuse holographic bloom, specular reflections on wet surfaces, deep impenetrable ambient shadows",
+        negative_prompt="daylight, bright sunshine, pastel, earthy tones, muted colors, soft watercolor, vintage sepia, rustic, medieval, historical, flat lighting, 3d render, cgi, photorealistic skin, lowres, bad anatomy, bad hands, text, watermark",
+        review_witness_rule="Witness B confirms cyberpunk neon noir aesthetic with high-contrast volumetric neon lighting (cyan/magenta) and reflective rain puddles; rejects daylight, pastel tones, and rustic/medieval settings.",
+    ),
+}
+
 GENRE_STYLE_PRESETS: dict[str, StyleAnchor] = {
     "bedtime": StyleAnchor(
         genre="bedtime",
@@ -153,6 +192,7 @@ GENRE_STYLE_PRESETS: dict[str, StyleAnchor] = {
         negative_prompt="lowres, bad anatomy, bad hands, text, cropped, blurry, nsfw, photographic textures, 3d render, cgi, gradients, painterly, realistic skin, sketchy lines, soft brushstrokes",
         review_witness_rule="Witness B confirms 2D flat vector motion explainer aesthetic; strictly rejects photographic textures, 3D CGI, and painterly gradients.",
     ),
+    **DIRECTORIAL_STYLE_PROFILES,
 }
 
 
@@ -690,6 +730,7 @@ class PromptCompiler:
         dims: tuple[int, int] | None = None,
         fallback_action: str = "",
         extra_negative: str = "",
+        style_profile: str | None = None,
     ) -> CompiledPrompt:
         """Compile a ShotSpec into a target-appropriate image prompt.
 
@@ -720,11 +761,18 @@ class PromptCompiler:
                 fallback_action=fallback_action,
                 dims=dims,
                 extra_negative=extra_negative,
+                style_profile=style_profile,
             )
 
-        genre_key = story.bible.premise.genre
-        genre_obj = GENRES.get(genre_key)
-        preset = GENRE_STYLE_PRESETS.get(genre_key)
+        active_style = (
+            style_profile
+            or getattr(spec, "style_profile", None)
+            or getattr(spec, "style", None)
+            or story.bible.premise.genre
+        )
+        genre_key = active_style
+        genre_obj = GENRES.get(genre_key) or GENRES.get(story.bible.premise.genre)
+        preset = GENRE_STYLE_PRESETS.get(genre_key) or GENRE_STYLE_PRESETS.get(story.bible.premise.genre)
 
         chars = {c.id: c for c in story.bible.characters}
         shown = [c for c in spec.characters if c.id in chars][:2]
@@ -934,9 +982,17 @@ class PromptCompiler:
         fallback_action: str = "",
         dims: tuple[int, int] | None = None,
         extra_negative: str = "",
+        style_profile: str | None = None,
     ) -> CompiledPrompt:
         """Compile a ShotSpec into Danbooru/SDXL tag-style prompts for legacy and ControlNet pipelines."""
-        genre = GENRES[story.bible.premise.genre]
+        active_style = (
+            style_profile
+            or getattr(spec, "style_profile", None)
+            or getattr(spec, "style", None)
+            or story.bible.premise.genre
+        )
+        genre = GENRES.get(active_style) or GENRES.get(story.bible.premise.genre, None)
+        preset = GENRE_STYLE_PRESETS.get(active_style) or GENRE_STYLE_PRESETS.get(story.bible.premise.genre)
         chars = {c.id: c for c in story.bible.characters}
         loc = next((x for x in story.bible.locations if x.id == location_id), None)
         shown = [c for c in spec.characters if c.id in chars][:2]
@@ -989,7 +1045,8 @@ class PromptCompiler:
                 tokens.append(w)
                 words += n
 
-        tokens += [t for t in _tokens(genre.art_style) + _tokens(QUALITY) if t not in tokens]
+        style_tags = _tokens(genre.art_style) if genre else (preset.to_tags() if preset else [])
+        tokens += [t for t in style_tags + _tokens(QUALITY) if t not in tokens]
 
         neg = NEGATIVE
         if any("closed eyes" in t for t in tokens):
@@ -1263,6 +1320,7 @@ class PromptCompiler:
         spec = ShotSpec(**panel.director)
         emphasis = panel.director.get("emphasis") or []
         fallback_action = panel.action or ""
+        style_profile = panel.director.get("style_profile") or panel.director.get("style")
 
         target_str = str(resolved_target.value if isinstance(resolved_target, TargetModel) else resolved_target).lower().strip()
         if target_str in ("sdxl", "tags", TargetModel.SDXL.value):
@@ -1272,6 +1330,7 @@ class PromptCompiler:
                 location_id=panel.location_id,
                 emphasis=emphasis,
                 fallback_action=fallback_action,
+                style_profile=style_profile,
             )
 
         return cls.compile_image_prompt(
@@ -1281,6 +1340,7 @@ class PromptCompiler:
             target=resolved_target,
             emphasis=emphasis,
             simplify=attempt >= 2,
+            style_profile=style_profile,
         )
 
 
@@ -1298,6 +1358,7 @@ def compile_image_prompt(
     dims: tuple[int, int] | None = None,
     fallback_action: str = "",
     extra_negative: str = "",
+    style_profile: str | None = None,
 ) -> CompiledPrompt:
     """Convenience wrapper for PromptCompiler.compile_image_prompt."""
     return PromptCompiler.compile_image_prompt(
@@ -1310,6 +1371,7 @@ def compile_image_prompt(
         dims=dims,
         fallback_action=fallback_action,
         extra_negative=extra_negative,
+        style_profile=style_profile,
     )
 
 
@@ -1360,6 +1422,7 @@ def compile_sdxl_tag_prompt(
     fallback_action: str = "",
     dims: tuple[int, int] | None = None,
     extra_negative: str = "",
+    style_profile: str | None = None,
 ) -> CompiledPrompt:
     """Convenience wrapper for PromptCompiler.compile_sdxl_tag_prompt."""
     return PromptCompiler.compile_sdxl_tag_prompt(
@@ -1370,6 +1433,7 @@ def compile_sdxl_tag_prompt(
         fallback_action=fallback_action,
         dims=dims,
         extra_negative=extra_negative,
+        style_profile=style_profile,
     )
 
 
@@ -1413,6 +1477,7 @@ __all__ = [
     "CompiledPrompt",
     # Presets & Mappings
     "GENRE_STYLE_PRESETS",
+    "DIRECTORIAL_STYLE_PROFILES",
     "NATURAL_PERSON_LOOKUP",
     "CLOTHING_KEYWORDS",
     "POSE_SENSITIVE_WORDS",

@@ -1,5 +1,6 @@
 """Original Story Studio endpoints (docs/ORIGINAL_STORY_STUDIO.md)."""
 import asyncio
+import base64
 import json
 import os
 import uuid
@@ -7,10 +8,14 @@ from pathlib import Path
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from engine.llm.registry import llm_registry
 from engine.original import art as art_mod
+from engine.original import refine as refine_mod
+from engine.original import review as review_mod
+from engine.original import shotspec
 from engine.original.beats import BEATS_FILE, expand_story, media_story
 from engine.original import story as story_mod
 from engine.original.genres import GENRES
@@ -18,6 +23,129 @@ from engine.original.models import OriginalStory
 
 router = APIRouter(prefix="/api/original", tags=["original"])
 STORY_ROOT = Path(__file__).resolve().parents[3] / "output" / "Original_Stories"
+
+
+def _resolve_story_ws(slug: str, episode: str | None = None) -> Path:
+    slug_name = Path(slug).name
+    ws = STORY_ROOT / slug_name
+    if episode:
+        ep_name = Path(episode).name
+        if (ws / ep_name).exists():
+            return ws / ep_name
+        series_ep = STORY_ROOT / "series" / slug_name / ep_name
+        if series_ep.exists():
+            return series_ep
+    if not ws.exists():
+        series_dir = STORY_ROOT / "series" / slug_name
+        if series_dir.exists():
+            if episode:
+                ep_name = Path(episode).name
+                if (series_dir / ep_name).exists():
+                    return series_dir / ep_name
+            return series_dir
+    return ws
+
+
+class StoryboardBeatCard(BaseModel):
+    panel_id: str
+    order: int
+    shot: str
+    angle: str
+    action: str
+    caption: str
+    status: str  # accept | accept_low | needs_review | repaired | unverified
+    score: float | None = None
+    audio_duration: float = 0.0
+    image_url: str = ""
+    candidate_count: int = 0
+    selected_candidate: int = 1
+    iterations: list[dict] = Field(default_factory=list)
+    defects: list[str] = Field(default_factory=list)
+    reasons: list[str] = Field(default_factory=list)
+
+
+class StoryboardWorkbenchData(BaseModel):
+    slug: str
+    episode: str | None = None
+    title: str = ""
+    genre: str = ""
+    total_panels: int = 0
+    beats: list[StoryboardBeatCard] = Field(default_factory=list)
+
+
+class ApprovePanelRequest(BaseModel):
+    episode: str | None = None
+    reason: str | None = None
+
+
+class ApprovePanelResponse(BaseModel):
+    panel_id: str
+    status: str
+    message: str
+
+
+class RerollPanelRequest(BaseModel):
+    episode: str | None = None
+    seed: int | None = None
+    prompt: str | None = None
+
+
+class RerollPanelResponse(BaseModel):
+    panel_id: str
+    status: str
+    seed: int
+    candidate_file: str
+    candidate_n: int
+    iterations: list[dict] = Field(default_factory=list)
+
+
+class ScalePanelRequest(BaseModel):
+    episode: str | None = None
+    sigma: float = 0.35
+    steps: int = 4
+
+
+class ScalePanelResponse(BaseModel):
+    panel_id: str
+    status: str
+    width: int
+    height: int
+    scale_info: dict = Field(default_factory=dict)
+
+
+class ScaleStoryRequest(BaseModel):
+    episode: str | None = None
+    sigma: float = 0.35
+    steps: int = 4
+
+
+class ScaleStoryResponse(BaseModel):
+    slug: str
+    episode: str | None = None
+    scaled_panels: int
+    results: list[ScalePanelResponse] = Field(default_factory=list)
+
+
+class InpaintPanelRequest(BaseModel):
+    mask_png_base64: str = Field(default="", description="Base64-encoded PNG mask (white=redraw, black=preserve)")
+    mask: str = Field(default="", description="Alternative alias for mask_png_base64")
+    prompt: str = Field(default="", description="Scene prompt describing whole picture with corrected area")
+    negative_prompt: str = Field(default="", description="Negative prompt")
+    seed: int | None = Field(default=None, description="PRNG seed")
+    episode: str | None = Field(default=None, description="Optional episode subfolder")
+
+
+class InpaintPanelResponse(BaseModel):
+    panel_id: str
+    candidate_file: str
+    candidate_n: int
+    seed: int
+    sha256: str
+    image: str = ""
+    candidate: dict = Field(default_factory=dict)
+    selected: int | None = None
+    prompt: str = ""
+    iterations: list[dict] = Field(default_factory=list)
 
 
 class StoryRequest(BaseModel):
@@ -139,6 +267,468 @@ async def create_art(slug: str, limit: int | None = None, check: bool = True, re
     return await asyncio.to_thread(art_mod.generate_art, story, ws, runner, provider, limit, refine=True if refine else None)
 
 
+@router.post("/story/{slug}/panel/{panel_id}/inpaint", response_model=InpaintPanelResponse)
+async def inpaint_panel_endpoint(slug: str, panel_id: str, req: InpaintPanelRequest):
+    """Inpaints a single story panel with adaptive mask padding, Gaussian blur feathering, and 0-pixel drift splicing."""
+    raw_mask_b64 = req.mask_png_base64 or req.mask
+    if not raw_mask_b64:
+        raise HTTPException(status_code=422, detail="mask_png_base64 must not be empty")
+
+    if "," in raw_mask_b64:
+        raw_mask_b64 = raw_mask_b64.split(",", 1)[1]
+
+    try:
+        mask_bytes = base64.b64decode(raw_mask_b64)
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=f"Invalid base64 mask: {e}")
+
+    ws = STORY_ROOT / Path(slug).name
+    if req.episode:
+        ep_ws = ws / req.episode
+        if ep_ws.exists():
+            ws = ep_ws
+        else:
+            series_ep = STORY_ROOT / "series" / Path(slug).name / req.episode
+            if series_ep.exists():
+                ws = series_ep
+    elif not ws.exists():
+        series_dir = STORY_ROOT / "series" / Path(slug).name
+        if series_dir.exists():
+            ws = series_dir
+
+    if not ws.exists():
+        raise HTTPException(status_code=404, detail=f"Story '{slug}' not found")
+
+    panel_file = ws / "panels" / f"{panel_id}.png"
+    if not panel_file.exists():
+        raise HTTPException(status_code=404, detail=f"Panel image '{panel_id}.png' not found")
+
+    try:
+        runner = art_mod.ComfyRunner()
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+    try:
+        result = await asyncio.to_thread(
+            art_mod.inpaint_panel,
+            ws=ws,
+            panel_id=panel_id,
+            mask_bytes=mask_bytes,
+            prompt=req.prompt,
+            neg=req.negative_prompt,
+            seed=req.seed,
+            runner=runner,
+        )
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    return InpaintPanelResponse(**result)
+
+
+@router.get("/story/{slug}/workbench", response_model=StoryboardWorkbenchData)
+def get_storyboard_workbench(slug: str, episode: str | None = None):
+    """Retrieve full storyboard workbench data for an episode or story including all beat cards, status, duration, and candidate metadata."""
+    ws = _resolve_story_ws(slug, episode)
+    if not ws.exists():
+        raise HTTPException(status_code=404, detail=f"Story workspace '{slug}' not found")
+
+    story_file = ws / BEATS_FILE
+    if not story_file.exists():
+        story_file = ws / "story.json"
+    if not story_file.exists():
+        raise HTTPException(status_code=404, detail=f"No story or beats found in workspace '{slug}'")
+
+    story = OriginalStory.model_validate_json(story_file.read_text(encoding="utf-8"))
+
+    art_path = ws / "art.json"
+    art_records: dict[str, dict] = {}
+    if art_path.exists():
+        try:
+            raw_art = json.loads(art_path.read_text(encoding="utf-8"))
+            art_records = {r.get("panel_id", ""): r for r in raw_art if isinstance(r, dict)}
+        except Exception:
+            art_records = {}
+
+    beats: list[StoryboardBeatCard] = []
+    for order, p in enumerate(story.panels, 1):
+        rec = art_records.get(p.id, {})
+        status = rec.get("status") or ("accept" if (ws / "panels" / f"{p.id}.png").exists() else "unverified")
+        score = rec.get("score") if rec.get("score") is not None else rec.get("match_score")
+
+        duration = 0.0
+        wav_file = ws / "voice" / f"{p.id}.wav"
+        if not wav_file.exists():
+            wav_file = ws / "audio" / f"{p.id}.wav"
+        if wav_file.exists():
+            try:
+                import wave
+                with wave.open(str(wav_file), "rb") as wf:
+                    duration = round(wf.getnframes() / float(wf.getframerate()), 2)
+            except Exception:
+                duration = 0.0
+        if duration <= 0.0:
+            if p.seconds and p.seconds > 0:
+                duration = round(p.seconds, 2)
+            elif p.caption:
+                word_count = len(p.caption.split())
+                duration = round(max(1.5, word_count / 2.5), 2)
+
+        panel_png = ws / "panels" / f"{p.id}.png"
+        image_url = ""
+        if panel_png.exists():
+            ep_param = f"?episode={episode}" if episode else ""
+            image_url = f"/api/original/story/{slug}/panel/{p.id}/file{ep_param}"
+
+        iterations = rec.get("iterations", [])
+        selected = rec.get("selected") or (iterations[-1]["n"] if iterations else 1)
+        rev = rec.get("review", {})
+        defects = rev.get("defects", []) if isinstance(rev, dict) else []
+        reasons = rev.get("reasons", []) if isinstance(rev, dict) else []
+
+        beats.append(StoryboardBeatCard(
+            panel_id=p.id,
+            order=order,
+            shot=p.shot,
+            angle=p.angle,
+            action=p.action,
+            caption=p.caption,
+            status=status,
+            score=round(score, 3) if score is not None else None,
+            audio_duration=duration,
+            image_url=image_url,
+            candidate_count=len(iterations),
+            selected_candidate=selected,
+            iterations=iterations,
+            defects=defects,
+            reasons=reasons,
+        ))
+
+    return StoryboardWorkbenchData(
+        slug=slug,
+        episode=episode,
+        title=story.bible.premise.title if story.bible and story.bible.premise else slug,
+        genre=story.bible.premise.genre if story.bible and story.bible.premise else "",
+        total_panels=len(beats),
+        beats=beats,
+    )
+
+
+@router.get("/story/{slug}/panel/{panel_id}/file")
+def get_panel_file(slug: str, panel_id: str, episode: str | None = None, candidate: int | None = None):
+    """Serve canonical or candidate panel PNG image file."""
+    ws = _resolve_story_ws(slug, episode)
+    if not ws.exists():
+        raise HTTPException(status_code=404, detail="Story not found")
+
+    if candidate is not None:
+        target_file = ws / "panels" / "_candidates" / panel_id / f"c{candidate:03d}.png"
+    else:
+        target_file = ws / "panels" / f"{panel_id}.png"
+
+    if not target_file.exists():
+        raise HTTPException(status_code=404, detail=f"Image file '{target_file.name}' not found")
+
+    return FileResponse(
+        str(target_file),
+        media_type="image/png",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
+
+
+@router.post("/story/{slug}/panel/{panel_id}/approve", response_model=ApprovePanelResponse)
+def approve_panel(slug: str, panel_id: str, req: ApprovePanelRequest):
+    """Overrule false alarm on ambiguous panel and set status to 'accept'."""
+    ws = _resolve_story_ws(slug, req.episode)
+    if not ws.exists():
+        raise HTTPException(status_code=404, detail="Story not found")
+
+    art_path = ws / "art.json"
+    if not art_path.exists():
+        raise HTTPException(status_code=404, detail="art.json not found")
+
+    try:
+        raw_art = json.loads(art_path.read_text(encoding="utf-8"))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to read art.json: {e}")
+
+    found = False
+    for rec in raw_art:
+        if rec.get("panel_id") == panel_id:
+            rec["status"] = "accept"
+            rev = rec.setdefault("review", {})
+            reasons = rev.setdefault("reasons", [])
+            approve_note = req.reason or "Approved as-is by creator"
+            if approve_note not in reasons:
+                reasons.append(approve_note)
+            found = True
+            break
+
+    if not found:
+        raise HTTPException(status_code=404, detail=f"Panel '{panel_id}' not found in art.json")
+
+    art_path.write_text(json.dumps(raw_art, indent=1), encoding="utf-8")
+    return ApprovePanelResponse(panel_id=panel_id, status="accept", message="Panel approved by creator")
+
+
+@router.post("/story/{slug}/panel/{panel_id}/reroll", response_model=RerollPanelResponse)
+async def reroll_panel(slug: str, panel_id: str, req: RerollPanelRequest):
+    """Regenerate single panel with new PRNG seed (seed + 7919) and update candidate archive."""
+    ws = _resolve_story_ws(slug, req.episode)
+    if not ws.exists():
+        raise HTTPException(status_code=404, detail="Story not found")
+
+    story_file = ws / BEATS_FILE
+    if not story_file.exists():
+        story_file = ws / "story.json"
+    if not story_file.exists():
+        raise HTTPException(status_code=404, detail="story.json not found")
+
+    story = OriginalStory.model_validate_json(story_file.read_text(encoding="utf-8"))
+    panel = next((p for p in story.panels if p.id == panel_id), None)
+    if panel is None:
+        raise HTTPException(status_code=404, detail=f"Panel '{panel_id}' not found in story")
+
+    art_path = ws / "art.json"
+    raw_art = []
+    if art_path.exists():
+        try:
+            raw_art = json.loads(art_path.read_text(encoding="utf-8"))
+        except Exception:
+            raw_art = []
+
+    rec = next((r for r in raw_art if r.get("panel_id") == panel_id), None)
+    existing_seed = rec.get("seed", 42) if rec else 42
+    iters = rec.get("iterations", []) if rec else []
+
+    new_seed = req.seed if req.seed is not None else (existing_seed + 7919)
+
+    try:
+        runner = art_mod.ComfyRunner()
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"ComfyUI runner unavailable: {e}")
+
+    shown = [c for c in story.bible.characters if c.id in panel.character_ids][:2]
+    spec = shotspec.ShotSpec(**panel.director) if panel.director else None
+    spec_shot = spec.shot if spec else panel.shot
+    pw, ph = art_mod.frame_size(story) or shotspec.resolve_dimensions(spec_shot, num_characters=len(shown), default=(1344, 768))
+
+    style = getattr(runner, "style", "tags")
+    engine = getattr(runner, "engine", "qwen")
+    pos_i, neg_i = art_mod.build_prompt(story, panel, style=style, runner=runner, engine=engine)
+    if req.prompt:
+        pos_i = req.prompt
+
+    ref = ws / "sheets" / f"{shown[0].id}.png" if shown and getattr(runner, "ipa", None) is not None else None
+    ref_b = ws / "sheets" / f"{shown[1].id}.png" if len(shown) == 2 and getattr(runner, "ipa2", None) is not None else None
+
+    png = await asyncio.to_thread(
+        runner.generate,
+        pos=pos_i,
+        neg=neg_i,
+        seed=new_seed,
+        width=pw,
+        height=ph,
+        prefix=f"panel_{panel_id}_reroll",
+        reference=ref,
+        reference_b=ref_b,
+    )
+
+    cand = art_mod._record_candidate(
+        ws,
+        panel_id,
+        iters,
+        png,
+        kind="generate",
+        attempt=len(iters),
+        seed=new_seed,
+        prompt=pos_i,
+        negative=neg_i,
+        width=pw,
+        height=ph,
+        engine=str(engine),
+        workflow="qwen_image_21" if engine == "qwen" else "",
+    )
+
+    panel_img = ws / "panels" / f"{panel_id}.png"
+    panel_img.write_bytes(png)
+
+    provider = llm_registry.get_ollama_provider()
+    rev = None
+    status = "accept"
+    if await provider.health_check() and spec is not None:
+        tmp = ws / "panels" / f"_try_reroll_{panel_id}.png"
+        tmp.write_bytes(png)
+        try:
+            claims = await review_mod.extract_claims(provider, panel.caption) if panel.caption else []
+            chars_dict = {c.id: c for c in story.bible.characters}
+            rev = await review_mod.review_image(provider, tmp, claims, spec, chars_dict, review_mode="assisted")
+            status = "accept" if rev.decision == "accept" else "needs_review"
+            cand["review"] = art_mod._review_summary(rev)
+        except Exception:
+            status = "unverified"
+        finally:
+            tmp.unlink(missing_ok=True)
+
+    if rec:
+        rec["seed"] = new_seed
+        rec["selected"] = cand["n"]
+        rec["status"] = status
+        rec["iterations"] = iters
+        if rev:
+            rec["review"] = rev.model_dump()
+            rec["score"] = rev.score
+    else:
+        new_rec = {
+            "panel_id": panel_id,
+            "image": str(panel_img),
+            "seed": new_seed,
+            "attempts": 1,
+            "score": rev.score if rev else 1.0,
+            "status": status,
+            "review": rev.model_dump() if rev else {},
+            "iterations": iters,
+            "selected": cand["n"],
+        }
+        raw_art.append(new_rec)
+
+    art_path.write_text(json.dumps(raw_art, indent=1), encoding="utf-8")
+
+    return RerollPanelResponse(
+        panel_id=panel_id,
+        status=status,
+        seed=new_seed,
+        candidate_file=cand["file"],
+        candidate_n=cand["n"],
+        iterations=iters,
+    )
+
+
+@router.post("/story/{slug}/panel/{panel_id}/scale", response_model=ScalePanelResponse)
+async def scale_panel_endpoint(slug: str, panel_id: str, req: ScalePanelRequest):
+    """Two-stage composition-preserving scaling for a single panel: 2x Lanczos + partial-denoise refiner pass."""
+    ws = _resolve_story_ws(slug, req.episode)
+    if not ws.exists():
+        raise HTTPException(status_code=404, detail="Story not found")
+
+    panel_img = ws / "panels" / f"{panel_id}.png"
+    if not panel_img.exists():
+        raise HTTPException(status_code=404, detail=f"Panel image '{panel_id}.png' not found")
+
+    story_file = ws / BEATS_FILE
+    if not story_file.exists():
+        story_file = ws / "story.json"
+    story = OriginalStory.model_validate_json(story_file.read_text(encoding="utf-8")) if story_file.exists() else None
+    panel = next((p for p in story.panels if p.id == panel_id), None) if story else None
+
+    prompt = panel.action if panel else "masterpiece, highly detailed, clean lines"
+    neg = "blurry, low quality, distorted"
+
+    try:
+        runner = art_mod.ComfyRunner()
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"ComfyUI runner unavailable: {e}")
+
+    draft_bytes = panel_img.read_bytes()
+    try:
+        refined_bytes, scale_info = await asyncio.to_thread(
+            refine_mod.scale_and_refine_panel,
+            runner=runner,
+            draft_bytes=draft_bytes,
+            prompt=prompt,
+            neg=neg,
+            seed=42,
+            sigma=req.sigma,
+            steps=req.steps,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Scaling failed: {e}")
+
+    art_path = ws / "art.json"
+    raw_art = []
+    if art_path.exists():
+        try:
+            raw_art = json.loads(art_path.read_text(encoding="utf-8"))
+        except Exception:
+            raw_art = []
+    rec = next((r for r in raw_art if r.get("panel_id") == panel_id), None)
+    iters = rec.get("iterations", []) if rec else []
+
+    cand = art_mod._record_candidate(
+        ws,
+        panel_id,
+        iters,
+        refined_bytes,
+        kind="scale_2x",
+        seed=42,
+        prompt=prompt,
+        width=scale_info["width"],
+        height=scale_info["height"],
+        workflow="qwen_image_21_inpaint",
+    )
+    panel_img.write_bytes(refined_bytes)
+
+    if rec:
+        rec["selected"] = cand["n"]
+        rec["iterations"] = iters
+        rec["status"] = "accept"
+    else:
+        raw_art.append({
+            "panel_id": panel_id,
+            "image": str(panel_img),
+            "seed": 42,
+            "status": "accept",
+            "iterations": iters,
+            "selected": cand["n"],
+        })
+    art_path.write_text(json.dumps(raw_art, indent=1), encoding="utf-8")
+
+    return ScalePanelResponse(
+        panel_id=panel_id,
+        status="accept",
+        width=scale_info["width"],
+        height=scale_info["height"],
+        scale_info=scale_info,
+    )
+
+
+@router.post("/story/{slug}/scale", response_model=ScaleStoryResponse)
+async def scale_story_endpoint(slug: str, req: ScaleStoryRequest):
+    """Batch two-stage composition-preserving scaling for all panels in an episode or story."""
+    ws = _resolve_story_ws(slug, req.episode)
+    if not ws.exists():
+        raise HTTPException(status_code=404, detail="Story not found")
+
+    story_file = ws / BEATS_FILE
+    if not story_file.exists():
+        story_file = ws / "story.json"
+    if not story_file.exists():
+        raise HTTPException(status_code=404, detail="Story file not found")
+
+    story = OriginalStory.model_validate_json(story_file.read_text(encoding="utf-8"))
+    results: list[ScalePanelResponse] = []
+
+    for p in story.panels:
+        panel_file = ws / "panels" / f"{p.id}.png"
+        if not panel_file.exists():
+            continue
+        scale_req = ScalePanelRequest(episode=req.episode, sigma=req.sigma, steps=req.steps)
+        res = await scale_panel_endpoint(slug=slug, panel_id=p.id, req=scale_req)
+        results.append(res)
+
+    return ScaleStoryResponse(
+        slug=slug,
+        episode=req.episode,
+        scaled_panels=len(results),
+        results=results,
+    )
+
+
 @router.post("/story/{slug}/animate")
 async def animate_story(slug: str, beats: str | None = None, max_clips: int | None = None, seconds: float = 3.6):
     """Animates beats with the fast H3 image-to-video workflow (about a minute each) into clips/<beat>.mp4; the video step then shows them.
@@ -225,6 +815,7 @@ class EpisodesRequest(BaseModel):
     check: bool = True
     refine: bool = False  # review each picture, then repair or redraw it (slower; needs check=true)
     animate: bool = False  # animate about one beat in five with the fast H3 workflow (about a minute each)
+    preview: bool = False  # fast preview pass (0.25 MP drafts in 8-11s, sets status="draft", skips video render)
 
 
 @router.post("/series")
@@ -271,7 +862,7 @@ def queue_episodes(series_id: str, req: EpisodesRequest, db: Session = Depends(g
     except KeyError:
         raise HTTPException(status_code=404, detail="series not found")
     try:
-        return enqueue_episodes(db, store, series_id, req.count, publish_times(req.count, req.start_date), req.scenes, req.check, req.refine, req.animate)
+        return enqueue_episodes(db, store, series_id, req.count, publish_times(req.count, req.start_date), req.scenes, req.check, req.refine, req.animate, req.preview)
     except KeyError as e:
         raise HTTPException(status_code=422, detail=str(e))
 

@@ -17,6 +17,10 @@ COMFY = Path(comfy_art.__file__).parent
 ENTRY = next(e for e in json.loads((COMFY / "workflow_registry.json").read_text(encoding="utf-8")) if e["id"] == animate.FAST_H3_ID)
 GRAPH = json.loads((COMFY / "workflows" / ENTRY["filename"]).read_text(encoding="utf-8"))
 
+ENTRY_WAN = next(e for e in json.loads((COMFY / "workflow_registry.json").read_text(encoding="utf-8")) if e["id"] == animate.WAN21_I2V_ID)
+GRAPH_WAN = json.loads((COMFY / "workflows" / ENTRY_WAN["filename"]).read_text(encoding="utf-8"))
+
+
 
 def story(n_scenes=3, per_scene=2):
     bible = Bible(premise=Premise(title="T", genre="vox", logline="l", tone="t", setting="s"),
@@ -102,7 +106,8 @@ class FakeEngine:
 
     def run(self, wf, **kw):
         self.graphs.append(wf)
-        if wf["136"]["inputs"]["image"] in self.fail_on:
+        img = wf.get("6", {}).get("inputs", {}).get("image") or wf.get("136", {}).get("inputs", {}).get("image")
+        if img in self.fail_on:
             raise RuntimeError("ComfyUI did not produce a video")
         assert kw["collect"] is not None  # the video collector, not the image one
         return b"MP4", f"pid{len(self.graphs)}", {}
@@ -129,9 +134,13 @@ def rig(tmp_path, monkeypatch):
             return {"ready": True, "missing_nodes": [], "missing_models": []}
 
         def load(self, wid):
+            if wid == animate.WAN21_I2V_ID:
+                return GRAPH_WAN, "wan_sha"
             return GRAPH, "sha"
 
         def metadata(self, wid):
+            if wid == animate.WAN21_I2V_ID:
+                return ENTRY_WAN
             return ENTRY
 
     def make_engine(c, r):
@@ -147,7 +156,7 @@ def rig(tmp_path, monkeypatch):
 
 def test_the_stage_writes_a_clip_per_beat_logs_how_it_was_made_and_frees_the_llm_first(rig):
     s, ws, client, engines, released = rig
-    out = animate.animate_beats(s, ws, ["p01_1", "p03_1"], client=client)
+    out = animate.animate_beats(s, ws, ["p01_1", "p03_1"], client=client, workflow_id=animate.FAST_H3_ID)
     assert out["animated"] == ["p01_1", "p03_1"] and out["failed"] == [] and released == [1]
     assert (ws / "clips" / "p01_1.mp4").read_bytes() == b"MP4"
     g = engines[0].graphs[0]
@@ -159,18 +168,18 @@ def test_the_stage_writes_a_clip_per_beat_logs_how_it_was_made_and_frees_the_llm
 
 def test_a_fresh_clip_is_reused_and_a_clip_older_than_its_picture_is_made_again(rig):
     s, ws, client, engines, released = rig
-    animate.animate_beats(s, ws, ["p01_1"], client=client)
-    again = animate.animate_beats(s, ws, ["p01_1"], client=client)
+    animate.animate_beats(s, ws, ["p01_1"], client=client, workflow_id=animate.FAST_H3_ID)
+    again = animate.animate_beats(s, ws, ["p01_1"], client=client, workflow_id=animate.FAST_H3_ID)
     assert again["reused"] == ["p01_1"] and again["animated"] == []
     old = time.time() - 100
     os.utime(ws / "clips" / "p01_1.mp4", (old, old))  # the picture was redrawn after the clip was made
-    assert animate.animate_beats(s, ws, ["p01_1"], client=client)["animated"] == ["p01_1"]
+    assert animate.animate_beats(s, ws, ["p01_1"], client=client, workflow_id=animate.FAST_H3_ID)["animated"] == ["p01_1"]
 
 
 def test_one_failed_beat_does_not_stop_the_others(rig):
     s, ws, client, engines, released = rig
     FAIL.add("up_p01_1.png")
-    out = animate.animate_beats(s, ws, ["p01_1", "p02_1"], client=client)
+    out = animate.animate_beats(s, ws, ["p01_1", "p02_1"], client=client, workflow_id=animate.FAST_H3_ID)
     assert out["animated"] == ["p02_1"] and out["failed"][0]["beat"] == "p01_1" and "did not produce a video" in out["failed"][0]["error"]
     assert not (ws / "clips" / "p01_1.mp4").exists()  # that beat simply stays a still
 
@@ -212,3 +221,154 @@ def test_the_episode_animate_stage_reports_clip_failures_and_never_stops_the_epi
     monkeypatch.setattr(episode, "animate_beats", cancelled)
     with pytest.raises(RuntimeError, match="cancelled"):
         episode.animate_stage("STORY", "WS", lambda p, m: None, lambda: True)  # a cancel is never swallowed
+
+
+def test_wan21_animate_beats_generates_clips(rig):
+    """Verifies animate_beats with Wan2.1 workflow generates clips and records metadata."""
+    s, ws, client, engines, released = rig
+    out = animate.animate_beats(s, ws, ["p01_1", "p03_1"], client=client)  # default is WAN21_I2V_ID
+    assert out["workflow"] == animate.WAN21_I2V_ID
+    assert out["animated"] == ["p01_1", "p03_1"]
+    assert out["failed"] == []
+    assert released == [1]  # Ollama released before GPU work
+    assert (ws / "clips" / "p01_1.mp4").read_bytes() == b"MP4"
+    assert (ws / "clips" / "p03_1.mp4").read_bytes() == b"MP4"
+
+    # Verify ComfyUI graph patching
+    g = engines[0].graphs[0]
+    assert g["6"]["inputs"]["image"] == "up_p01_1.png"
+    assert "Biscuit" in g["8"]["inputs"]["text"]
+    assert "<Picture 1>" not in g["8"]["inputs"]["text"]
+    assert g["9"]["inputs"]["text"] == animate.UNIVERSAL_VIDEO_NEGATIVE_PROMPT
+    assert g["10"]["inputs"]["width"] == animate.DEFAULT_WIDTH
+    assert g["10"]["inputs"]["height"] == animate.DEFAULT_HEIGHT
+    assert g["11"]["inputs"]["seed"] != 0
+    assert g["14"]["inputs"]["filename_prefix"] == "video/panelflow_p01_1"
+
+    # Verify metadata logged to animate.json
+    log = json.loads((ws / "clips" / "animate.json").read_text())
+    assert log["p01_1"]["workflow"] == animate.WAN21_I2V_ID
+    assert log["p01_1"]["workflow_sha256"] == "wan_sha"
+    assert log["p01_1"]["seed"] != log["p03_1"]["seed"]
+    assert log["p01_1"]["clip"] == "clips/p01_1.mp4"
+    assert log["p01_1"]["prompt"] == g["8"]["inputs"]["text"]
+
+
+def test_wan21_motion_prompt_natural_prose():
+    """Verifies prompt lacks MiniMax XML tags and contains natural kinematic descriptions."""
+    s = story()
+    text = animate.wan_motion_prompt(s, s.panels[0])
+
+    # No MiniMax XML or multimodal header scaffolding
+    assert "<Picture 1>" not in text
+    assert "integrated_multimodal_description:" not in text
+    assert "overall_soundscape:" not in text
+    assert "non_diegetic_music:" not in text
+    assert "[Shot 1]" not in text
+
+    # Natural kinematic and character descriptions
+    assert "Biscuit (chubby orange tabby, white paws, green eyes) crouching" in text
+    assert "expression focused" in text
+    assert "a dark living room" in text
+    assert "blue moonlight lighting, tense atmosphere" in text
+    assert "Action of the moment: Biscuit does thing number 1." in text
+    assert "Natural cloth and hair physics" in text
+    assert "identity and environment stay consistent as drawn" in text
+    assert "static, fixed on a tripod" in text and "push-in" not in text
+
+    # Camera move opt-in
+    moved = s.panels[1].model_copy(update={"camera": "a slow, steady push-in"})
+    moved_text = animate.wan_motion_prompt(s, moved)
+    assert "The camera does a slow, steady push-in" in moved_text
+    assert "static" not in moved_text
+
+    # Undirected panel
+    plain = s.panels[0].model_copy(update={"director": {}, "action": "a cat sits on a rug"})
+    plain_text = animate.wan_motion_prompt(s, plain)
+    assert "a cat sits on a rug" in plain_text
+    assert "<Picture 1>" not in plain_text
+
+    # motion_prompt dispatch matches wan_motion_prompt
+    dispatched = animate.motion_prompt(s, s.panels[0], workflow_id=animate.WAN21_I2V_ID)
+    assert dispatched == text
+
+
+def test_wan21_patch_slots_and_negative_prompt():
+    """Verifies _patch_workflow injects negative_prompt, width, height, and reference_image."""
+    before = json.dumps(GRAPH_WAN, sort_keys=True)
+    out = comfy_art._patch_workflow(
+        GRAPH_WAN,
+        ENTRY_WAN["patch_slots"],
+        prompt="A dynamic motion prompt",
+        negative_prompt="blurry, distorted, morphing",
+        width=832,
+        height=480,
+        seed=424242,
+        prefix="video/wan_test",
+        reference_image="uploaded_frame.png",
+    )
+    # Check all slots
+    assert out["6"]["inputs"]["image"] == "uploaded_frame.png"
+    assert out["8"]["inputs"]["text"] == "A dynamic motion prompt"
+    assert out["9"]["inputs"]["text"] == "blurry, distorted, morphing"
+    assert out["10"]["inputs"]["width"] == 832
+    assert out["10"]["inputs"]["height"] == 480
+    assert out["11"]["inputs"]["seed"] == 424242
+    assert out["14"]["inputs"]["filename_prefix"] == "video/wan_test"
+
+    # Immutability check
+    assert json.dumps(GRAPH_WAN, sort_keys=True) == before
+
+
+def test_wan21_animate_beats_mtime_caching(rig):
+    """Verifies existing newer clips are not regenerated."""
+    s, ws, client, engines, released = rig
+    first = animate.animate_beats(s, ws, ["p01_1"], client=client)
+    assert first["animated"] == ["p01_1"]
+    assert first["reused"] == []
+
+    # Second run without touching picture: clip is reused
+    again = animate.animate_beats(s, ws, ["p01_1"], client=client)
+    assert again["reused"] == ["p01_1"]
+    assert again["animated"] == []
+
+    # Picture touched after clip: clip is regenerated
+    old = time.time() - 100
+    os.utime(ws / "clips" / "p01_1.mp4", (old, old))
+    regenerated = animate.animate_beats(s, ws, ["p01_1"], client=client)
+    assert regenerated["animated"] == ["p01_1"]
+    assert regenerated["reused"] == []
+
+
+def test_wan21_error_resilience(rig):
+    """Verifies individual beat failures log to failed list and don't stop other beats."""
+    s, ws, client, engines, released = rig
+    FAIL.add("up_p01_1.png")
+    out = animate.animate_beats(s, ws, ["p01_1", "p02_1"], client=client)
+    assert out["workflow"] == animate.WAN21_I2V_ID
+    assert out["animated"] == ["p02_1"]
+    assert len(out["failed"]) == 1
+    assert out["failed"][0]["beat"] == "p01_1"
+    assert "did not produce a video" in out["failed"][0]["error"]
+    assert not (ws / "clips" / "p01_1.mp4").exists()
+    assert (ws / "clips" / "p02_1.mp4").exists()
+
+
+def test_wan21_custom_parameters(rig):
+    """Verifies custom dimensions and negative prompt override."""
+    s, ws, client, engines, released = rig
+    custom_neg = "ugly, oversaturated, deformed"
+    out = animate.animate_beats(
+        s,
+        ws,
+        ["p01_1"],
+        width=1280,
+        height=720,
+        negative_prompt=custom_neg,
+        client=client,
+    )
+    assert out["animated"] == ["p01_1"]
+    g = engines[0].graphs[0]
+    assert g["10"]["inputs"]["width"] == 1280
+    assert g["10"]["inputs"]["height"] == 720
+    assert g["9"]["inputs"]["text"] == custom_neg

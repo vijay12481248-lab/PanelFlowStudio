@@ -718,15 +718,69 @@ export interface NarrationLineCheck {
   reason: string;
 }
 
+export interface NarrationQaCheck {
+  rule: string;
+  passed: boolean;
+  severity: "block" | "warn";
+  reason: string;
+  repair: string; // what the reviewer can do about it
+}
+
+export interface NarrationQa {
+  passed: boolean;
+  checks: NarrationQaCheck[];
+  repairs: string[]; // the repairs the report suggests
+}
+
 export interface NarrationLine {
   line_id: string;
   panel_id: string;
   text: string;
   status: string;
   kind: string;
+  speaker_id: string; // "narrator", or the id of the character who reads the line
+  speaker_name: string; // the display name of that speaker
   checks: NarrationLineCheck[];
   facts: string;
-  take: { wer: number; flagged: boolean; stt_text: string } | null;
+  take: {
+    wer: number;
+    flagged: boolean;
+    stt_text: string;
+    voice_profile_id: string; // the cast profile that read the line
+    script_revision: number; // the script revision the words came from
+    direction_revision: number; // the direction revision the delivery came from
+    provider: string; // the TTS provider that produced the take
+  } | null;
+  outdated: boolean; // the take no longer matches the line: the text, the direction or the voice moved on
+  qa: NarrationQa | null; // the audio QA of the take, with the repairs it suggests
+}
+
+export interface NarrationOpenIssue {
+  kind: "line" | "voice" | "qa" | "outdated" | "music";
+  severity: "block" | "warn";
+  detail: string;
+  line_ids: string[];
+  character_ids: string[];
+}
+
+export interface NarrationReadiness {
+  ready: boolean;
+  issues: NarrationOpenIssue[];
+  lines_awaiting_review: string[];
+  characters_without_a_voice: string[];
+  failed_qa_lines: string[];
+  outdated_take_lines: string[];
+  music_tracks: number;
+}
+
+export interface NarrationStopPoint {
+  kind: "brief" | "voice" | "casting";
+  detail: string;
+  severity: "block" | "warn";
+  line_ids: string[];
+  character_ids: string[];
+  options: string[]; // what the owner can choose
+  resolution: string; // what the owner chose, once the stop point is settled
 }
 
 export interface NarrationRunDetail {
@@ -737,7 +791,40 @@ export interface NarrationRunDetail {
     chapter_summary: string;
     scenes: { scene_id: string; goal: string; first_panel_id: string; last_panel_id: string }[];
   } | null;
+  casting: NarrationCast | null;
+  readiness: NarrationReadiness | null; // what is still open before the project renders
+  stop_points: NarrationStopPoint[]; // the decisions this run is waiting for
   review: { run_id: string; project_id: string; series_key: string; run_dir: string; reasons: string[]; line_ids: string[]; status: "pending" | "approved" } | null;
+}
+
+export interface NarrationVoiceProfile {
+  id: string;
+  name: string;
+  voice: string;
+  gender: "female" | "male" | "neutral";
+  engine: string;
+}
+
+export interface NarrationCastAssignment {
+  character_id: string;
+  profile_id: string;
+  source: "assigned" | "recommended" | "narrator";
+}
+
+export interface NarrationCast {
+  series_key: string;
+  assignments: NarrationCastAssignment[];
+  uncast: string[];
+  recommendations: NarrationCastAssignment[];
+}
+
+export interface NarrationProjectCast {
+  series_key: string;
+  catalog: NarrationVoiceProfile[];
+  assigned: Record<string, string>;
+  cast: NarrationCastAssignment[];
+  recommendations: NarrationCastAssignment[];
+  uncast: string[];
 }
 
 export interface NarrationLineActionRequest {
@@ -837,7 +924,9 @@ export type RenderStatus =
   | "VALIDATING"
   | "COMPLETE"
   | "FAILED"
-  | "CANCELLED";
+  | "CANCELLED"
+  /** A render the project has changed under since it was made. The engine sends it; it is history, not work. */
+  | "STALE";
 
 export interface YouTubeThumbnailResearch {
   aspect_ratio: "16:9" | "9:16" | "1:1";

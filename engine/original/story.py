@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import math
 import re
+from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -438,3 +440,50 @@ async def generate_series_bible(genre_key: str, provider, idea: str = "") -> Bib
                     else ["logline too short or contains forbidden words"], temperature=0.9, max_tokens=600)
     premise = Premise(title=pr.title.strip(), genre=genre.key, logline=pr.logline.strip(), tone=genre.tone, setting=pr.setting.strip())
     return await _make_bible(provider, genre, premise)
+
+
+def init_character_turnaround(
+    char: Character,
+    story: OriginalStory,
+    ws: Path,
+    runner: Any | None = None,
+    spec: Any | None = None,
+) -> Character:
+    """Automate generation of a 4-view turnaround master sheet (1536x768, 2:1 ratio)
+    on clean white background for a character, and link it into character metadata."""
+    import shutil
+    from engine.original import rigging
+
+    sheets_dir = ws / "sheets"
+    sheets_dir.mkdir(parents=True, exist_ok=True)
+    turnaround_file = sheets_dir / f"{char.id}_turnaround.png"
+
+    if not turnaround_file.exists():
+        sheet = rigging.generate_turnaround_sheet(char, story, ws, runner=runner, spec=spec)
+        if sheet.image_path and Path(sheet.image_path).exists() and not turnaround_file.exists():
+            shutil.copy2(sheet.image_path, turnaround_file)
+
+    rel_path = f"sheets/{char.id}_turnaround.png" if turnaround_file.exists() else None
+    return char.model_copy(update={"turnaround_sheet": rel_path})
+
+
+def init_bible_turnarounds(
+    story: OriginalStory,
+    ws: Path,
+    runner: Any | None = None,
+    spec: Any | None = None,
+) -> OriginalStory:
+    """Automates generation of 4-view turnaround sheets for all characters in the story bible."""
+    new_chars = [
+        init_character_turnaround(c, story, ws, runner=runner, spec=spec)
+        for c in story.bible.characters
+    ]
+    new_bible = story.bible.model_copy(update={"characters": new_chars})
+    updated_story = story.model_copy(update={"bible": new_bible})
+
+    # If story.json exists in workspace, update it on disk
+    story_file = ws / "story.json"
+    if story_file.exists():
+        story_file.write_text(updated_story.model_dump_json(indent=2), encoding="utf-8")
+    return updated_story
+

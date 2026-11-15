@@ -1,7 +1,88 @@
 import React, { useState } from "react";
-import { Film, Sparkles, Image as ImageIcon, Play, Check, X, ExternalLink, RefreshCw, Layers } from "lucide-react";
+import { Film, Sparkles, Image as ImageIcon, Play, Check, X, ExternalLink, RefreshCw, Layers, Lock } from "lucide-react";
 import type { Project, VideoScene } from "@panelflow/shared-types";
 import { api } from "@panelflow/api-client";
+
+interface VaultCharacter {
+  id: string;
+  name: string;
+  role: string;
+  image: string;
+  description: string;
+}
+
+/** Character Lock picker: bind Character Vault reference sheets to image generation so faces follow the locked identity. */
+const CharacterLockPicker: React.FC<{
+  selected: string[];
+  onToggle: (id: string) => void;
+  max?: number;
+}> = ({ selected, onToggle, max = 4 }) => {
+  const [chars, setChars] = useState<VaultCharacter[]>([]);
+  React.useEffect(() => {
+    let cancelled = false;
+    fetch("http://127.0.0.1:8765/api/chronoflow/characters")
+      .then((r) => r.json())
+      .then((d) => {
+        if (!cancelled) setChars(d.characters || []);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (!chars.length) {
+    return (
+      <div>
+        <label className="flex items-center gap-1.5 text-xs font-semibold text-fg-dim mb-1.5">
+          <Lock className="w-3.5 h-3.5" />
+          Character Lock
+        </label>
+        <p className="text-[11px] text-fg-faint">Character Vault is empty — add reference sheets in the ChronoFlow Studio vault first.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1.5">
+        <label className="flex items-center gap-1.5 text-xs font-semibold text-fg-dim">
+          <Lock className="w-3.5 h-3.5" />
+          Character Lock
+        </label>
+        <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent/20 text-info border border-accent/30 font-semibold">
+          {selected.length ? `${selected.length} locked` : "off"}
+        </span>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {chars.map((c) => {
+          const on = selected.includes(c.id);
+          return (
+            <button
+              key={c.id}
+              type="button"
+              title={`${c.name} — ${c.role}`}
+              onClick={() => onToggle(c.id)}
+              className={`relative w-12 h-12 rounded-lg overflow-hidden border-2 transition-all ${
+                on ? "border-accent scale-105" : "border-edge hover:border-edge"
+              }`}
+            >
+              <img src={`http://127.0.0.1:8765/inputs/${c.image}`} alt={c.name} className="w-full h-full object-cover" />
+              {on && (
+                <span className="absolute bottom-0 right-0 w-4 h-4 bg-accent rounded-tl flex items-center justify-center">
+                  <Check className="w-2.5 h-2.5 text-white" />
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+      <p className="text-[10px] text-fg-faint mt-1">
+        Generated faces follow the selected approved sheets (max {max}). Never generate a character's face unlocked.
+      </p>
+    </div>
+  );
+};
 
 interface StoryEditorChronoFlowPanelProps {
   project: Project;
@@ -34,6 +115,7 @@ export const StoryEditorChronoFlowPanel: React.FC<StoryEditorChronoFlowPanelProp
   const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
   const [refine, setRefine] = useState(false);
   const [refineNote, setRefineNote] = useState<string | null>(null);
+  const [lockedIds, setLockedIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   // Active frame image from scene layers
@@ -79,6 +161,7 @@ export const StoryEditorChronoFlowPanel: React.FC<StoryEditorChronoFlowPanelProp
           prompt,
           width: 1344,
           height: 768,
+          character_ids: lockedIds,
           ...(refine ? { refine: true } : {}),
         }),
       });
@@ -109,28 +192,28 @@ export const StoryEditorChronoFlowPanel: React.FC<StoryEditorChronoFlowPanelProp
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 select-none">
-      <div className="w-full max-w-2xl bg-[#0e1220] border border-purple-800/40 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+      <div className="w-full max-w-2xl bg-[#0c1433] border border-accent/40 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header */}
-        <div className="px-5 py-3.5 bg-[#14192b] border-b border-[#232b45] flex items-center justify-between">
+        <div className="px-5 py-3.5 bg-[#101a3d] border-b border-[#162049] flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center text-white shadow-md">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-accent via-accent to-accent flex items-center justify-center text-white shadow-md">
               <Sparkles className="w-4 h-4" />
             </div>
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="font-bold text-sm text-white">ChronoFlow AI Generation Panel</h3>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 font-semibold">
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-accent/20 text-info border border-accent/30 font-semibold">
                   Scene #{scene?.id?.slice(-4) || "1"}
                 </span>
               </div>
-              <p className="text-[11px] text-zinc-400">MiniMax Fast H3 Video Chaining & Qwen Image 2.1 Art</p>
+              <p className="text-[11px] text-fg-dim">MiniMax Fast H3 Video Chaining & Qwen Image 2.1 Art</p>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
             <button
               onClick={onOpenFullStudio}
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-purple-950/60 hover:bg-purple-900/60 text-purple-300 hover:text-white border border-purple-800/40 text-xs font-semibold transition-colors"
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-accent/60 hover:bg-accent/60 text-info hover:text-white border border-accent/40 text-xs font-semibold transition-colors"
               title="Open standalone ChronoFlow Studio"
             >
               <ExternalLink className="w-3.5 h-3.5" />
@@ -138,7 +221,7 @@ export const StoryEditorChronoFlowPanel: React.FC<StoryEditorChronoFlowPanelProp
             </button>
             <button
               onClick={onClose}
-              className="p-1 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors"
+              className="p-1 rounded-lg hover:bg-flat text-fg-dim hover:text-white transition-colors"
             >
               <X className="w-4 h-4" />
             </button>
@@ -146,13 +229,13 @@ export const StoryEditorChronoFlowPanel: React.FC<StoryEditorChronoFlowPanelProp
         </div>
 
         {/* Tab Switcher */}
-        <div className="flex border-b border-[#1e2538] bg-[#0b0e18] px-5 pt-2 gap-3 text-xs">
+        <div className="flex border-b border-[#162049] bg-[#070b1c] px-5 pt-2 gap-3 text-xs">
           <button
             onClick={() => setActiveTab("video")}
             className={`pb-2.5 px-1 font-semibold flex items-center gap-1.5 border-b-2 transition-all ${
               activeTab === "video"
-                ? "border-purple-500 text-purple-300"
-                : "border-transparent text-zinc-400 hover:text-zinc-200"
+                ? "border-accent text-info"
+                : "border-transparent text-fg-dim hover:text-fg"
             }`}
           >
             <Film className="w-3.5 h-3.5" />
@@ -162,8 +245,8 @@ export const StoryEditorChronoFlowPanel: React.FC<StoryEditorChronoFlowPanelProp
             onClick={() => setActiveTab("image")}
             className={`pb-2.5 px-1 font-semibold flex items-center gap-1.5 border-b-2 transition-all ${
               activeTab === "image"
-                ? "border-purple-500 text-purple-300"
-                : "border-transparent text-zinc-400 hover:text-zinc-200"
+                ? "border-accent text-info"
+                : "border-transparent text-fg-dim hover:text-fg"
             }`}
           >
             <ImageIcon className="w-3.5 h-3.5" />
@@ -173,8 +256,8 @@ export const StoryEditorChronoFlowPanel: React.FC<StoryEditorChronoFlowPanelProp
             onClick={() => setActiveTab("chaining")}
             className={`pb-2.5 px-1 font-semibold flex items-center gap-1.5 border-b-2 transition-all ${
               activeTab === "chaining"
-                ? "border-purple-500 text-purple-300"
-                : "border-transparent text-zinc-400 hover:text-zinc-200"
+                ? "border-accent text-info"
+                : "border-transparent text-fg-dim hover:text-fg"
             }`}
           >
             <Layers className="w-3.5 h-3.5" />
@@ -186,24 +269,24 @@ export const StoryEditorChronoFlowPanel: React.FC<StoryEditorChronoFlowPanelProp
         <div className="p-5 overflow-y-auto space-y-4 flex-1">
           {/* Active Frame Thumbnail & Prompt */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div className="sm:col-span-1 rounded-lg border border-zinc-800 bg-black/60 overflow-hidden aspect-video flex items-center justify-center relative">
+            <div className="sm:col-span-1 rounded-lg border border-edge bg-black/60 overflow-hidden aspect-video flex items-center justify-center relative">
               {activeImageUrl ? (
                 <img src={activeImageUrl} alt="Scene Frame" className="w-full h-full object-contain" />
               ) : (
-                <span className="text-[11px] text-zinc-500">No panel image</span>
+                <span className="text-[11px] text-fg-faint">No panel image</span>
               )}
-              <span className="absolute bottom-1.5 left-1.5 text-[9px] px-1.5 py-0.5 rounded bg-black/70 text-zinc-300">
+              <span className="absolute bottom-1.5 left-1.5 text-[9px] px-1.5 py-0.5 rounded bg-black/70 text-fg-dim">
                 Source Keyframe
               </span>
             </div>
 
             <div className="sm:col-span-2 space-y-2">
-              <label className="text-xs font-semibold text-zinc-300">AI Prompt & Scene Description:</label>
+              <label className="text-xs font-semibold text-fg-dim">AI Prompt & Scene Description:</label>
               <textarea
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
                 rows={3}
-                className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-xs text-zinc-100 focus:outline-none focus:border-purple-500"
+                className="w-full bg-ink border border-edge rounded-lg p-2.5 text-xs text-fg focus:outline-none focus:border-accent"
                 placeholder="Motion description, visual effects, dynamic lighting..."
               />
             </div>
@@ -213,11 +296,11 @@ export const StoryEditorChronoFlowPanel: React.FC<StoryEditorChronoFlowPanelProp
             <div className="space-y-4 pt-1">
               <div className="grid grid-cols-2 gap-3 text-xs">
                 <div>
-                  <label className="font-medium text-zinc-400 block mb-1">Camera Dynamics:</label>
+                  <label className="font-medium text-fg-dim block mb-1">Camera Dynamics:</label>
                   <select
                     value={cameraMotion}
                     onChange={(e) => setCameraMotion(e.target.value)}
-                    className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-xs text-zinc-200 focus:outline-none focus:border-purple-500"
+                    className="w-full bg-ink border border-edge rounded-lg p-2 text-xs text-fg focus:outline-none focus:border-accent"
                   >
                     <option value="push_in">Push In (Dramatic Reveal)</option>
                     <option value="orbit">Orbit (Dynamic Circular Arc)</option>
@@ -226,20 +309,20 @@ export const StoryEditorChronoFlowPanel: React.FC<StoryEditorChronoFlowPanelProp
                   </select>
                 </div>
                 <div>
-                  <label className="font-medium text-zinc-400 block mb-1">Duration & Engine:</label>
-                  <div className="p-2 bg-zinc-950 border border-zinc-800 rounded-lg text-xs text-purple-300 font-mono">
+                  <label className="font-medium text-fg-dim block mb-1">Duration & Engine:</label>
+                  <div className="p-2 bg-ink border border-edge rounded-lg text-xs text-info font-mono">
                     5.2s / MiniMax Fast H3 Turbo
                   </div>
                 </div>
               </div>
 
               {generatedVideoUrl && (
-                <div className="p-3 bg-zinc-950 rounded-xl border border-purple-900/60 space-y-2">
-                  <div className="flex items-center justify-between text-xs text-purple-300 font-semibold">
+                <div className="p-3 bg-ink rounded-xl border border-accent/60 space-y-2">
+                  <div className="flex items-center justify-between text-xs text-info font-semibold">
                     <span>Generated Video Preview:</span>
                     <button
                       onClick={() => scene && onApplyVideoToScene(scene.id, generatedVideoUrl)}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white font-semibold transition-colors"
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-ok hover:bg-ok text-white font-semibold transition-colors"
                     >
                       <Check className="w-3.5 h-3.5" />
                       <span>Apply Video to Scene</span>
@@ -252,7 +335,7 @@ export const StoryEditorChronoFlowPanel: React.FC<StoryEditorChronoFlowPanelProp
               <button
                 onClick={handleGenerateVideo}
                 disabled={generating}
-                className="w-full bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white text-xs font-semibold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-purple-900/30 transition-all"
+                className="w-full bg-accent hover:bg-accent disabled:opacity-50 text-white text-xs font-semibold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-accent/30 transition-all"
               >
                 {generating ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
                 <span>{generating ? "Synthesizing Video Chunk with MiniMax H3..." : "Generate 5.2s AI Video"}</span>
@@ -262,17 +345,17 @@ export const StoryEditorChronoFlowPanel: React.FC<StoryEditorChronoFlowPanelProp
 
           {activeTab === "image" && (
             <div className="space-y-4 pt-1">
-              <p className="text-xs text-zinc-400">
+              <p className="text-xs text-fg-dim">
                 Generate high-resolution replacement panel art using Qwen Image 2.1 Turbo, preserving the narrative tone and character consistency.
               </p>
 
               {generatedImageUrl && (
-                <div className="p-3 bg-zinc-950 rounded-xl border border-purple-900/60 space-y-2">
-                  <div className="flex items-center justify-between text-xs text-purple-300 font-semibold">
+                <div className="p-3 bg-ink rounded-xl border border-accent/60 space-y-2">
+                  <div className="flex items-center justify-between text-xs text-info font-semibold">
                     <span>Generated Artwork:</span>
                     <button
                       onClick={() => scene && onApplyImageToScene(scene.id, generatedImageUrl)}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white font-semibold transition-colors"
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-ok hover:bg-ok text-white font-semibold transition-colors"
                     >
                       <Check className="w-3.5 h-3.5" />
                       <span>Apply Image to Scene</span>
@@ -283,18 +366,27 @@ export const StoryEditorChronoFlowPanel: React.FC<StoryEditorChronoFlowPanelProp
               )}
 
               <label
-                className="flex items-center gap-2 text-xs text-zinc-300"
+                className="flex items-center gap-2 text-xs text-fg-dim"
                 title="Review the picture against the prompt, then repair or redraw it if it fails. Needs the local vision model; slower."
               >
                 <input type="checkbox" checked={refine} onChange={(e) => setRefine(e.target.checked)} disabled={generating} />
                 Check and fix the picture (slower)
               </label>
-              {refineNote && <p className="text-xs text-amber-300" role="status">{refineNote}</p>}
+              {refineNote && <p className="text-xs text-warn" role="status">{refineNote}</p>}
+
+              <CharacterLockPicker
+                selected={lockedIds}
+                onToggle={(id) =>
+                  setLockedIds((prev) =>
+                    prev.includes(id) ? prev.filter((x) => x !== id) : prev.length >= 4 ? prev : [...prev, id]
+                  )
+                }
+              />
 
               <button
                 onClick={handleGenerateImage}
                 disabled={generating}
-                className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-semibold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-indigo-900/30 transition-all"
+                className="w-full bg-accent hover:bg-accent disabled:opacity-50 text-white text-xs font-semibold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-accent/30 transition-all"
               >
                 {generating ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
                 <span>{generating ? "Generating with Qwen Image 2.1..." : "Generate Panel Image"}</span>
@@ -303,13 +395,13 @@ export const StoryEditorChronoFlowPanel: React.FC<StoryEditorChronoFlowPanelProp
           )}
 
           {activeTab === "chaining" && (
-            <div className="space-y-3 pt-1 text-xs text-zinc-300 leading-relaxed">
-              <div className="p-3.5 rounded-xl bg-purple-950/20 border border-purple-900/40 space-y-2">
-                <span className="font-semibold text-purple-300 flex items-center gap-1.5">
+            <div className="space-y-3 pt-1 text-xs text-fg-dim leading-relaxed">
+              <div className="p-3.5 rounded-xl bg-accent/20 border border-accent/40 space-y-2">
+                <span className="font-semibold text-info flex items-center gap-1.5">
                   <Layers className="w-4 h-4" />
                   Sliding Window Continuation Chaining
                 </span>
-                <p className="text-[11px] text-zinc-400">
+                <p className="text-[11px] text-fg-dim">
                   ChronoFlow automatically extracts the final frame (tail frame) of Scene #{scene?.id?.slice(-4) || "1"} to use as the first keyframe of the subsequent scene. This ensures 100% fluid visual continuity across cut transitions without abrupt scene jumps.
                 </p>
               </div>
@@ -317,7 +409,7 @@ export const StoryEditorChronoFlowPanel: React.FC<StoryEditorChronoFlowPanelProp
               <div className="flex justify-end pt-2">
                 <button
                   onClick={onOpenFullStudio}
-                  className="px-3.5 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                  className="px-3.5 py-2 rounded-lg bg-accent hover:bg-accent text-white text-xs font-semibold flex items-center gap-1.5 transition-colors"
                 >
                   <ExternalLink className="w-3.5 h-3.5" />
                   <span>Open Multi-Track Timeline in ChronoFlow Studio</span>
@@ -327,7 +419,7 @@ export const StoryEditorChronoFlowPanel: React.FC<StoryEditorChronoFlowPanelProp
           )}
 
           {error && (
-            <div className="p-3 rounded-lg bg-rose-950/50 border border-rose-800 text-rose-300 text-xs">
+            <div className="p-3 rounded-lg bg-bad/50 border border-bad/40 text-bad text-xs">
               {error}
             </div>
           )}

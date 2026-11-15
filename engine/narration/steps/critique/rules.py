@@ -4,7 +4,9 @@ from __future__ import annotations
 import difflib
 import re
 
-from engine.narration.artifacts import LineCheck, PanelFacts, ScriptIR, SeriesBible, check_script_ids
+from engine.narration.artifacts import (
+    LineCheck, NARRATOR_ID, PanelFacts, ScriptIR, SeriesBible, check_script_ids,
+)
 
 DEFAULT_BANNED = ("in this panel", "the image shows", "in the image", "we see", "this scene shows", "the panel shows",
                   # narration about the narration, seen in real runs ("...no action or dialogue occurring")
@@ -97,6 +99,25 @@ def _warns(texts: list[str]) -> list[tuple[bool, bool]]:
     return [(any(first[j] == first[i] for j in range(max(0, i - 2), i)), similar(i)) for i in range(len(texts))]
 
 
+def _speaker_check(ln, facts: dict[str, PanelFacts], story_ids: list[str], bible: SeriesBible) -> tuple[bool, str]:
+    """A line may be read by the narrator, or by a character it quotes who is present in the scene."""
+    if ln.speaker_id == NARRATOR_ID:
+        return True, ""
+    if ln.speaker_id not in {c.id for c in bible.characters}:
+        return False, f"speaker {ln.speaker_id!r} is not a character in the bible"
+    if "dialogue" not in ln.facts_used:
+        return False, f"speaker {ln.speaker_id!r} does not quote any dialogue"
+    if ln.panel_id not in facts:
+        return True, ""
+    at = story_ids.index(ln.panel_id) if ln.panel_id in story_ids else -1
+    near = [facts[p] for p in story_ids[max(0, at - NEARBY):at + NEARBY + 1] if p in facts] if at >= 0 else [facts[ln.panel_id]]
+    here = facts[ln.panel_id]
+    present = {c for f in near for c in [*f.characters_visible, *(d.speaker_id for d in f.dialogue if d.speaker_id)]}
+    if ln.speaker_id not in present:
+        return False, f"speaker {ln.speaker_id!r} is not in this scene"
+    return True, ""
+
+
 def rule_checks(script: ScriptIR, facts: dict[str, PanelFacts], story_ids: list[str],
                 bible: SeriesBible) -> dict[str, list[LineCheck]]:
     order = check_script_ids(script, story_ids)
@@ -110,6 +131,7 @@ def rule_checks(script: ScriptIR, facts: dict[str, PanelFacts], story_ids: list[
         hit = [p for p in banned if re.search(rf"\b{re.escape(p)}\b", low)]
         unknown = _unknown_names(ln.text, known)
         absent, clash = _absent_and_pronoun(ln, facts, story_ids, bible, forms)
+        speaker_ok, speaker_reason = _speaker_check(ln, facts, story_ids, bible)
         out[ln.line_id] = [
             LineCheck(rule="absent_character", passed=not absent, severity="block",
                       reason=f"{', '.join(absent)} is not in this scene and not mentioned here"),
@@ -121,6 +143,7 @@ def rule_checks(script: ScriptIR, facts: dict[str, PanelFacts], story_ids: list[
             LineCheck(rule="unknown_name", passed=not unknown, severity="block", reason=", ".join(unknown)),
             LineCheck(rule="raw_unknown_label", passed=not _UNKNOWN.search(ln.text), severity="block",
                       reason="raw unknown_<n> label in line"),
+            LineCheck(rule="speaker", passed=speaker_ok, severity="block", reason=speaker_reason),
             LineCheck(rule="repeated_opener", passed=not opener, severity="warn", reason="same opener as a recent line"),
             LineCheck(rule="similar_to_previous", passed=not similar, severity="warn", reason="near-duplicate of previous line"),
         ]

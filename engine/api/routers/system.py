@@ -841,6 +841,56 @@ def api_get_ollama_pull_status():
     return ollama_pull_manager.get_status()
 
 
+# ---------------------------------------------------------------------
+# Dependencies Management & Auto-Launch
+# ---------------------------------------------------------------------
+
+@router.get("/dependencies/status")
+def api_get_dependencies_status():
+    """
+    Returns live health, detection, and lifecycle status for all core local AI dependencies:
+    ComfyUI (:8188), Ollama (:11434), and FFmpeg.
+    """
+    import socket
+    from engine.system.setup import comfyui_manager, locate_and_configure_ffmpeg
+    from engine.llm.registry import llm_registry
+
+    comfy_stat = comfyui_manager.get_status()
+    prov = llm_registry.get_ollama_provider()
+    ffmpeg_stat = locate_and_configure_ffmpeg()
+
+    ollama_running = False
+    try:
+        with socket.create_connection(("127.0.0.1", 11434), timeout=0.3):
+            ollama_running = True
+    except (OSError, socket.error):
+        pass
+
+    return {
+        "comfyui": comfy_stat,
+        "ollama": {
+            "running": ollama_running,
+            "endpoint": prov.endpoint_url if prov else "http://127.0.0.1:11434",
+            "model": "qwen3.5:9b",
+        },
+        "ffmpeg": {
+            "installed": ffmpeg_stat.get("found", False),
+            "version": ffmpeg_stat.get("version"),
+            "path": ffmpeg_stat.get("ffmpeg_path"),
+        }
+    }
+
+
+@router.post("/dependencies/launch_comfyui")
+def api_launch_comfyui(wait_seconds: float = 15.0):
+    """
+    Spawns ComfyUI in the background if not currently running and waits for it to become ready.
+    """
+    from engine.system.setup import comfyui_manager
+    return comfyui_manager.ensure_running(timeout_s=wait_seconds)
+
+
+
 # =====================================================================
 # Cloud & Free LLM API Gateway Endpoints (OpenRouter, Groq, Custom)
 # =====================================================================

@@ -309,3 +309,81 @@ def test_upload_route_requires_connection_and_refuses_unconfirmed_public(api):
     bad = c.post(url, json={"made_for_kids": True, "privacy": "public"})
     assert bad.status_code == 422 and "confirm_public" in bad.json()["detail"]
     assert c.post("/api/original/series/none/episodes/1/upload", json={"made_for_kids": True}).status_code == 404
+
+
+# ---- Multi-channel & File Config ----------------------------------------------------------------------------------
+def test_parse_client_file_supports_installed_web_and_flat_formats():
+    # Installed Desktop app format from Google Cloud Console
+    cid, csec = ya.parse_client_file({"installed": {"client_id": "installed-id", "client_secret": "installed-secret"}})
+    assert cid == "installed-id" and csec == "installed-secret"
+
+    # Web format
+    cid, csec = ya.parse_client_file({"web": {"client_id": "web-id", "client_secret": "web-secret"}})
+    assert cid == "web-id" and csec == "web-secret"
+
+    # Flat JSON string
+    raw_str = json.dumps({"client_id": "flat-id", "client_secret": "flat-secret"})
+    cid, csec = ya.parse_client_file(raw_str)
+    assert cid == "flat-id" and csec == "flat-secret"
+
+    # Missing fields
+    with pytest.raises(ya.AuthError):
+        ya.parse_client_file({"installed": {"client_id": ""}})
+    with pytest.raises(ya.AuthError):
+        ya.parse_client_file("not valid json")
+
+
+def test_multi_channel_profiles_and_active_switching(tmp_path):
+    store = ya.OAuthStore(tmp_path)
+    # Default channel exists
+    assert store.get_active_channel_id() == "default"
+    channels = store.list_channels()
+    assert len(channels) == 1 and channels[0]["id"] == "default" and channels[0]["is_active"]
+
+    # Create new channel
+    ch2 = store.create_channel("Anime Reviews", "anime_rev")
+    assert ch2["id"] == "anime_rev" and ch2["name"] == "Anime Reviews"
+
+    # Switch active channel
+    store.set_active_channel("anime_rev")
+    assert store.get_active_channel_id() == "anime_rev"
+
+    # Save tokens for anime_rev
+    store.save_tokens({"access_token": "anime_at", "refresh_token": "anime_rt"})
+    assert store.tokens()["refresh_token"] == "anime_rt"
+    assert store.tokens(channel_id="default") is None
+
+    # Delete channel
+    store.create_channel("Temp Channel", "temp")
+    store.delete_channel("temp")
+    assert "temp" not in [c["id"] for c in store.list_channels()]
+
+
+def test_agent_settings_and_file_upload_routes(api):
+    c, store, tmp, yr = api
+
+    # Upload client file route
+    payload = {"installed": {"client_id": "gcloud-client-id", "client_secret": "gcloud-client-secret"}}
+    r = c.post("/api/youtube/client/file", json={"content": payload})
+    assert r.status_code == 200
+    assert store.client()["client_id"] == "gcloud-client-id"
+
+    # Channel management routes
+    r_create = c.post("/api/youtube/channels", json={"name": "Manga Daily", "channel_id": "manga_daily"})
+    assert r_create.status_code == 200
+    assert r_create.json()["created"]["id"] == "manga_daily"
+
+    r_activate = c.post("/api/youtube/channels/manga_daily/activate")
+    assert r_activate.status_code == 200
+    assert store.get_active_channel_id() == "manga_daily"
+
+    # Agent upload settings routes including scheduler time
+    r_agent = c.put(
+        "/api/youtube/agent-settings",
+        json={"enabled": False, "default_privacy": "unlisted", "publish_time": "20:30", "lead_time_min": 45},
+    )
+    assert r_agent.status_code == 200
+    settings = store.get_agent_settings()
+    assert not settings["enabled"] and settings["default_privacy"] == "unlisted"
+    assert settings["publish_time"] == "20:30" and settings["lead_time_min"] == 45
+

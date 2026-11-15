@@ -33,7 +33,11 @@
         "3",
         0
       ],
-      "resolution": 1024
+      "resolution": 1024,
+      "images.image_1": null,
+      "images.image_2": null,
+      "images.image_3": null,
+      "images.image_4": null
     }
   },
   "5": {

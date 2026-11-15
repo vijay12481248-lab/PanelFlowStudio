@@ -1,0 +1,37 @@
+[
+  {
+    "id": "h_char_01",
+    "domain": "character_lore",
+    "rule": "Preserve exact physical markers, scars, eye colors, armor materials, and signature weapons across all scenes without visual or psychological drift."
+  },
+  {
+    "id": "h_prose_01",
+    "domain": "novel_prose",
+    "rule": "Show emotional turmoil through visceral physiological cues (acrid ozone, clenched jaw, trembling bowstring, bloodied dust) rather than naming emotions abstractly."
+  },
+  {
+    "id": "h_prose_02",
+    "domain": "novel_prose",
+    "rule": "Maintain distinct speech cadences: ancient monarchs speak with solemn economy; conflicted warriors speak with clipped, breathless hesitation."
+  },
+  {
+    "id": "h_cine_01",
+    "domain": "cinematography",
+    "rule": "Anchor spatial geography with a Wide Establishing shot before cutting to Medium Tracking or Macro Close-Up. Never use identical shot framings back-to-back."
+  },
+  {
+    "id": "h_cine_02",
+    "domain": "cinematography",
+    "rule": "Ensure camera vectors complement emotional stakes: slow push-in for tragic realization, sweeping low-angle crane for monumental cosmic destiny."
+  },
+  {
+    "id": "h_h3_01",
+    "domain": "h3_prompting",
+    "rule": "MiniMax H3 overall_soundscape must strictly prohibit human dialogue to prevent unnatural lip-sync artifacting in generated video chunks."
+  },
+  {
+    "id": "h_art_01",
+    "domain": "art_engine",
+    "rule": "Qwen Image 2.1 Turbo prompts must unname characters into concrete physical tags with explicit lighting temperature, volumetric depth, and anamorphic lens optics."
+  }
+]

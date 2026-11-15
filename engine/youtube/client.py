@@ -87,13 +87,14 @@ def fit_tags(tags: list[str], limit: int = 500) -> list[str]:
 
 
 class YouTubeClient:
-    def __init__(self, auth: YouTubeAuth, http: httpx.Client | None = None, sleep: Callable[[float], None] = time.sleep):
+    def __init__(self, auth: YouTubeAuth, http: httpx.Client | None = None, sleep: Callable[[float], None] = time.sleep, channel_id: str | None = None):
         self.auth = auth
         self.http = http or httpx.Client(timeout=httpx.Timeout(120.0, connect=30.0))
         self.sleep = sleep
+        self.channel_id = channel_id
 
     def _headers(self, extra: dict | None = None) -> dict:
-        return {"Authorization": f"Bearer {self.auth.access_token()}", **(extra or {})}
+        return {"Authorization": f"Bearer {self.auth.access_token(channel_id=self.channel_id)}", **(extra or {})}
 
     @staticmethod
     def _error(r: httpx.Response) -> YouTubeError:
@@ -170,5 +171,16 @@ class YouTubeClient:
             raise ValueError("thumbnail must be 2 MB or smaller")
         r = self.http.post(THUMB_URL, params={"videoId": video_id, "uploadType": "media"}, content=data,
                            headers=self._headers({"Content-Type": "image/png" if image.suffix.lower() == ".png" else "image/jpeg"}))
+        if r.status_code != 200:
+            raise self._error(r)
+
+    def schedule(self, video_id: str, publish_at: datetime, made_for_kids: bool, synthetic: bool = True) -> None:
+        """Gives an uploaded private video a release time: it stays private until then and YouTube makes it public at `publish_at`."""
+        if publish_at.tzinfo is None:
+            raise ValueError("publish_at must include a time zone")
+        status = {"privacyStatus": "private", "publishAt": publish_at.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                  "selfDeclaredMadeForKids": made_for_kids, "containsSyntheticMedia": synthetic}
+        r = self.http.put("https://www.googleapis.com/youtube/v3/videos", params={"part": "status"}, headers=self._headers(),
+                          json={"id": video_id, "status": status})
         if r.status_code != 200:
             raise self._error(r)

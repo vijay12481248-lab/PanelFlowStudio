@@ -341,7 +341,7 @@ export const ErrorProvider: React.FC<{ children: React.ReactNode }> = ({
       }}
     >
       {children}
-      {/* EngineJobStatus is now rendered in workspace toolbars (StoryEditorScreen, PanelReviewScreen) via useError() */}
+      {/* EngineJobStatus is now rendered in workspace toolbars (StoryEditorScreen) via useError() */}
     </ErrorContext.Provider>
   );
 };

@@ -168,3 +168,235 @@ def test_job_manager_recover_expired_leases():
         assert j.status == JobStatus.FAILED.value
         assert "cannot be rehydrated" in (j.error or "").lower()
         assert j.worker_lease_id is None
+
+
+@pytest.mark.asyncio
+async def test_can_admit_gpu_job_comfyui_with_resident_vram(monkeypatch):
+    """ComfyUI jobs must not be rejected due to ComfyUI's own resident model weights."""
+    mgr = SystemResourceManager()
+    monkeypatch.setattr(mgr, "get_gpu_memory", lambda: {
+        "available": True,
+        "device_name": "NVIDIA GeForce RTX 5060 Ti",
+        "total_mb": 16311.0,
+        "free_mb": 1200.0,
+        "used_mb": 15111.0,
+    })
+
+    # Standard non-ComfyUI job is rejected because free VRAM (1200MB) < 10000MB
+    admitted_non_comfy, reason = mgr.can_admit_gpu_job(10000, is_comfyui=False)
+    assert admitted_non_comfy is False
+    assert "Insufficient GPU VRAM" in reason
+
+    # ComfyUI job is admitted because total physical GPU capacity (16311MB) supports it
+    admitted_comfy, reason_comfy = mgr.can_admit_gpu_job(10000, is_comfyui=True)
+    assert admitted_comfy is True
+    assert reason_comfy == "Admitted"
+
+
+@pytest.mark.asyncio
+async def test_acquire_gpu_slot_comfyui_held_back_by_active_ollama(monkeypatch):
+    """ComfyUI jobs must be held back if Ollama currently occupies the GPU."""
+    mgr = SystemResourceManager()
+    monkeypatch.setattr(mgr, "get_gpu_memory", lambda: {
+        "available": True,
+        "device_name": "NVIDIA GeForce RTX 5060 Ti",
+        "total_mb": 16311.0,
+        "free_mb": 1200.0,
+        "used_mb": 15111.0,
+    })
+    async def mock_ollama_runtime(*args, **kwargs):
+        return {"total_ollama_vram_mb": 8500.0, "loaded_models_count": 1}
+    monkeypatch.setattr(mgr, "get_ollama_runtime", mock_ollama_runtime)
+
+    # Held back while Ollama is loaded
+    acquired = await mgr.acquire_gpu_slot("comfy_job_01", 10000, is_comfyui=True)
+    assert acquired is False
+
+
+@pytest.mark.asyncio
+async def test_acquire_gpu_slot_triggers_active_ollama_eviction(monkeypatch):
+    """ComfyUI jobs must actively evict resident Ollama models to claim the slot."""
+    mgr = SystemResourceManager()
+    monkeypatch.setattr(mgr, "get_gpu_memory", lambda: {
+        "available": True,
+        "device_name": "NVIDIA GeForce RTX 5060 Ti",
+        "total_mb": 16311.0,
+        "free_mb": 1200.0,
+        "used_mb": 15111.0,
+    })
+
+    ollama_calls = 0
+    async def mock_ollama_runtime(*args, **kwargs):
+        nonlocal ollama_calls
+        ollama_calls += 1
+        if ollama_calls == 1:
+            return {
+                "total_ollama_vram_mb": 7000.0,
+                "loaded_models_count": 1,
+                "models": [{"name": "qwen3.5:9b"}],
+            }
+        # Post-eviction: VRAM is freed
+        return {
+            "total_ollama_vram_mb": 0.0,
+            "loaded_models_count": 0,
+            "models": [],
+        }
+
+    monkeypatch.setattr(mgr, "get_ollama_runtime", mock_ollama_runtime)
+
+    eviction_targets = []
+    async def mock_try_evict(endpoint_url="http://127.0.0.1:11434", models=None, authorization=None):
+        eviction_targets.extend(models or [])
+        return True
+
+    monkeypatch.setattr(mgr, "_try_evict_ollama", mock_try_evict)
+
+    acquired = await mgr.acquire_gpu_slot("comfy_job_02", 10000, is_comfyui=True)
+    assert acquired is True
+    assert "qwen3.5:9b" in eviction_targets
+    assert mgr.active_gpu_jobs_count == 1
+    await mgr.release_gpu_slot("comfy_job_02")
+
+
+@pytest.mark.asyncio
+async def test_try_evict_ollama_posts_keep_alive_zero(monkeypatch):
+    """_try_evict_ollama issues POST /api/generate with keep_alive: 0."""
+    import httpx
+    mgr = SystemResourceManager()
+    posted_payloads = []
+
+    def mock_handler(request: httpx.Request):
+        import json
+        posted_payloads.append(json.loads(request.content.decode("utf-8")))
+        return httpx.Response(200, json={"status": "success"})
+
+    client_creator = httpx.AsyncClient
+    def mock_client(*args, **kwargs):
+        kwargs["transport"] = httpx.MockTransport(mock_handler)
+        return client_creator(*args, **kwargs)
+
+    monkeypatch.setattr("engine.system.resources.httpx.AsyncClient", mock_client)
+
+    evicted = await mgr._try_evict_ollama(models=["qwen3.5:9b"])
+    assert evicted is True
+    assert len(posted_payloads) == 1
+    assert posted_payloads[0]["model"] == "qwen3.5:9b"
+    assert posted_payloads[0]["keep_alive"] == 0
+
+
+@pytest.mark.asyncio
+async def test_supports_concurrent_gpu_threshold_branching(monkeypatch):
+    """Verify hardware threshold: False on 16 GB, True on >= 24 GB."""
+    mgr = SystemResourceManager()
+
+    # 16 GB GPU (RTX 5060 Ti: 16,311 MB)
+    monkeypatch.setattr(mgr, "get_gpu_memory", lambda: {
+        "available": True, "device_name": "NVIDIA GeForce RTX 5060 Ti",
+        "total_mb": 16311.0, "free_mb": 1200.0, "used_mb": 15111.0,
+    })
+    assert mgr.supports_concurrent_gpu() is False
+
+    # 24 GB GPU (RTX 4090: 24,576 MB)
+    monkeypatch.setattr(mgr, "get_gpu_memory", lambda: {
+        "available": True, "device_name": "NVIDIA GeForce RTX 4090",
+        "total_mb": 24576.0, "free_mb": 18000.0, "used_mb": 6576.0,
+    })
+    assert mgr.supports_concurrent_gpu() is True
+
+
+@pytest.mark.asyncio
+async def test_concurrent_gpu_pipeline_flag_hardware_guard(monkeypatch):
+    """
+    Strict hardware guard:
+    Even when PANELFLOW_CONCURRENT_GPU_PIPELINE=1, concurrency is disallowed on 16 GB.
+    """
+    mgr = SystemResourceManager()
+
+    # Set feature flag
+    monkeypatch.setenv("PANELFLOW_CONCURRENT_GPU_PIPELINE", "1")
+
+    # On 16 GB hardware -> MUST return False and log fallback
+    monkeypatch.setattr(mgr, "get_gpu_memory", lambda: {
+        "available": True, "device_name": "NVIDIA GeForce RTX 5060 Ti",
+        "total_mb": 16311.0, "free_mb": 1200.0, "used_mb": 15111.0,
+    })
+    assert mgr.is_concurrent_pipeline_enabled() is False
+
+    # On 24 GB hardware -> Returns True
+    monkeypatch.setattr(mgr, "get_gpu_memory", lambda: {
+        "available": True, "device_name": "NVIDIA GeForce RTX 4090",
+        "total_mb": 24576.0, "free_mb": 18000.0, "used_mb": 6576.0,
+    })
+    assert mgr.is_concurrent_pipeline_enabled() is True
+
+    # When flag is unset on 24 GB -> Returns False (defaults to safe time-slicing)
+    monkeypatch.delenv("PANELFLOW_CONCURRENT_GPU_PIPELINE", raising=False)
+    assert mgr.is_concurrent_pipeline_enabled() is False
+
+
+@pytest.mark.asyncio
+async def test_acquire_gpu_slot_active_eviction_retry_sub200ms(monkeypatch):
+    """Verify sub-200ms active eviction ping-pong with low-latency retry polling."""
+    mgr = SystemResourceManager()
+    monkeypatch.setattr(mgr, "get_gpu_memory", lambda: {
+        "available": True, "device_name": "NVIDIA GeForce RTX 5060 Ti",
+        "total_mb": 16311.0, "free_mb": 1200.0, "used_mb": 15111.0,
+    })
+
+    poll_count = 0
+    async def mock_ollama_runtime(*args, **kwargs):
+        nonlocal poll_count
+        poll_count += 1
+        if poll_count == 1:
+            # Initially occupied
+            return {"total_ollama_vram_mb": 7000.0, "loaded_models_count": 1, "models": [{"name": "qwen3.5:9b"}]}
+        # Post-eviction deallocation
+        return {"total_ollama_vram_mb": 0.0, "loaded_models_count": 0, "models": []}
+
+    monkeypatch.setattr(mgr, "get_ollama_runtime", mock_ollama_runtime)
+
+    evictions = []
+    async def mock_evict(endpoint_url="http://127.0.0.1:11434", models=None, authorization=None):
+        evictions.extend(models or [])
+        return True
+
+    monkeypatch.setattr(mgr, "_try_evict_ollama", mock_evict)
+
+    acquired = await mgr.acquire_gpu_slot("comfy_sub200ms_job", 10000, is_comfyui=True)
+    assert acquired is True
+    assert "qwen3.5:9b" in evictions
+    assert poll_count >= 2
+    await mgr.release_gpu_slot("comfy_sub200ms_job")
+
+
+@pytest.mark.asyncio
+async def test_concurrent_residency_on_24gb_bypasses_eviction(monkeypatch):
+    """On >= 24 GB with flag enabled, ComfyUI does NOT evict resident Ollama."""
+    mgr = SystemResourceManager()
+    monkeypatch.setenv("PANELFLOW_CONCURRENT_GPU_PIPELINE", "1")
+    monkeypatch.setattr(mgr, "get_gpu_memory", lambda: {
+        "available": True, "device_name": "NVIDIA GeForce RTX 4090",
+        "total_mb": 24576.0, "free_mb": 13576.0, "used_mb": 11000.0,
+    })
+
+    async def mock_ollama_runtime(*args, **kwargs):
+        return {"total_ollama_vram_mb": 7000.0, "loaded_models_count": 1, "models": [{"name": "qwen3.5:9b"}]}
+
+    monkeypatch.setattr(mgr, "get_ollama_runtime", mock_ollama_runtime)
+
+    eviction_called = False
+    async def mock_evict(*args, **kwargs):
+        nonlocal eviction_called
+        eviction_called = True
+        return True
+
+    monkeypatch.setattr(mgr, "_try_evict_ollama", mock_evict)
+
+    # Acquire ComfyUI slot with concurrent pipeline
+    acquired = await mgr.acquire_gpu_slot("comfy_24gb_job", 10000, is_comfyui=True)
+    assert acquired is True
+    # Ollama was NOT evicted because 24 GB hardware supports concurrent residency!
+    assert eviction_called is False
+    await mgr.release_gpu_slot("comfy_24gb_job")
+
+

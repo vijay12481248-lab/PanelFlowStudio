@@ -14,12 +14,18 @@ from typing import Literal
 from pydantic import BaseModel
 
 from engine.narration.artifacts import (
-    BeatSheet, CritiqueReport, LockedTimeline, PanelFacts, PerformancePlan, ReviewItem, ScriptIR, VoiceTake,
+    BeatSheet, CritiqueReport, LockedTimeline, PanelFacts, PerformancePlan, ReviewItem, ScriptIR, StopPoint,
+    VoiceTake,
 )
 from engine.narration.bible.store import BibleStore, apply_once
 from engine.narration.cache import ArtifactCache
+from engine.narration.casting import cast_for_script
 from engine.narration.inputs import ChapterInputs
-from engine.narration.runtime.audio import KokoroTts, Stt, Tts, WhisperStt, release_audio_models
+from engine.narration.ledger import TakeLedger, outdated_lines
+from engine.narration.qa import QaReport, qa_report
+from engine.narration.readiness import ReadinessReport, readiness
+from engine.narration.stoppoints import add_stop_point
+from engine.narration.runtime.audio import KokoroTts, Stt, Tts, WhisperStt, get_default_tts, release_audio_models
 from engine.narration.runtime.client import ModelClient, StepModelError
 from engine.narration.runtime.roles import load_stt_config, load_tts_config
 from engine.narration.runtime.scheduler import ModelScheduler
@@ -66,6 +72,62 @@ class RunLog:
         _write_json(self.path, self._data)
 
 
+def _brief_stop_points(run_dir: Path, sheet: BeatSheet) -> None:
+    """The beats the analyst is unsure about: the workflow pauses for the owner on them."""
+    for beat in understand.uncertain_beats(sheet):
+        add_stop_point(run_dir, StopPoint(
+            kind="brief",
+            detail=beat.uncertain or f"{beat.beat_id} is read with low confidence",
+            line_ids=list(beat.panel_ids),
+            options=["accept as read", "edit the beat", "leave for later"],
+        ))
+
+
+def _casting_stop_points(run_dir: Path, cast_plan) -> None:
+    """The casting decisions the workflow pauses for."""
+    # a proposed voice that would replace an assignment the owner made pauses for them
+    for change in cast_plan.changes:
+        add_stop_point(run_dir, StopPoint(
+            kind="casting",
+            detail=f"{change.character_id} is cast to {change.profile_id}, not the voice already chosen",
+            character_ids=[change.character_id],
+            options=["keep the current voice", "use the proposed voice"],
+        ))
+    # a character with no voice yet needs one approved before it can be read
+    for rec in cast_plan.recommendations:
+        add_stop_point(run_dir, StopPoint(
+            kind="voice",
+            detail=f"{rec.character_id} has no voice yet; {rec.profile_id} is proposed",
+            character_ids=[rec.character_id],
+            options=["use the proposed voice", "choose another"],
+        ))
+
+
+def _readiness(run_dir: Path, script: ScriptIR, takes: list[VoiceTake] | None, cast_plan) -> ReadinessReport:
+    """What is still open before the project renders."""
+    qa: dict[str, QaReport] = {}
+    try:
+        raw = json.loads((run_dir / "qa.json").read_text(encoding="utf-8"))
+        qa = {lid: QaReport.model_validate(r) for lid, r in raw.items()}
+    except (ValueError, KeyError, TypeError, OSError):
+        qa = {}
+    outdated: list[str] = []
+    try:
+        plan = PerformancePlan.model_validate_json((run_dir / "performance.json").read_text(encoding="utf-8"))
+    except (ValueError, OSError):
+        plan = None
+    try:
+        raw = json.loads((run_dir / "casting.json").read_text(encoding="utf-8"))
+        profiles = {a["character_id"]: a["profile_id"] for a in raw.get("assignments", [])}
+    except (ValueError, KeyError, TypeError, OSError):
+        profiles = {}
+    if takes:
+        ledger = TakeLedger(script, direction_revision=plan.revision if plan else script.revision,
+                            voice_profile_ids=profiles)
+        outdated = outdated_lines(takes, ledger)
+    return readiness(script, takes, qa, cast_plan, outdated)
+
+
 @dataclass
 class CompileResult:
     run_id: str
@@ -80,6 +142,7 @@ class CompileResult:
     sync: dict | None = None
     plan: PerformancePlan | None = None
     takes: list[VoiceTake] | None = None
+    readiness: ReadinessReport | None = None
 
 
 class _CountingCache:
@@ -130,10 +193,12 @@ class NarrationCompiler:
         facts = [PanelFacts.model_validate(f) for f in json.loads((run_dir / "panel_facts.json").read_text(encoding="utf-8"))]
         story_ids = [f.panel_id for f in facts if f.is_story]
         plan = takes = tl = sync = None
+        ready: ReadinessReport | None = None
+        _brief_stop_points(run_dir, sheet)
 
         def result(gate: Gate, reasons: list[str]) -> CompileResult:
             log.finish(gate, reasons)
-            return CompileResult(run_dir.name, gate, reasons, run_dir, facts, sheet, script, None, tl, sync, plan, takes)
+            return CompileResult(run_dir.name, gate, reasons, run_dir, facts, sheet, script, None, tl, sync, plan, takes, ready)
 
         try:
             bible = self.bibles.load(inputs.series_key)
@@ -151,15 +216,23 @@ class NarrationCompiler:
             heard = {}  # voice review: takes the owner listened to; audio_path is keyed on the line text, so an edited line differs
             if (run_dir / "takes.json").exists():
                 heard = {t["line_id"]: t["audio_path"] for t in json.loads((run_dir / "takes.json").read_text(encoding="utf-8"))}
+            cast_plan, cast_voices = cast_for_script(inputs.series_key, bible, script)
+            _write_json(run_dir / "casting.json", cast_plan.model_dump(mode="json"))
+            _casting_stop_points(run_dir, cast_plan)
+            ledger = TakeLedger(script, direction_revision=plan.revision,
+                                voice_profile_ids={a.character_id: a.profile_id for a in cast_plan.assignments},
+                                provider=tts_cfg.model)
             with _recorded(log, "voice", audio_model, "-", _CountingCache(self.cache)):
                 takes, reasons = await voice.voice_lines(  # cached takes cost no synthesis; an edited line is voiced fresh
-                    script, plan, bible, self.tts or KokoroTts(), self.stt or WhisperStt(),
-                    Path(workspace) / "narration" / "voice", tts_cfg.voice, facts)
+                    script, plan, bible, self.tts or get_default_tts(), self.stt or WhisperStt(),
+                    Path(workspace) / "narration" / "voice", tts_cfg.voice, facts, cast_voices, ledger)
                 takes = [t.model_copy(update={"flagged": False}) if heard.get(t.line_id) == t.audio_path else t for t in takes]
                 if heard:
                     n = sum(t.flagged for t in takes)
                     reasons = [f"{n} of {len(takes)} takes failed the speech check"] if n > voice.FLAG_LIMIT * len(takes) else []
                 _write_json(run_dir / "takes.json", [t.model_dump(mode="json") for t in takes])
+                _write_json(run_dir / "qa.json", {lid: r.model_dump(mode="json") for lid, r in
+                                                  qa_report(takes, {ln.line_id: ln.text for ln in script.lines}).items()})
                 if reasons:
                     raise NeedsReview(reasons)
 
@@ -168,6 +241,8 @@ class NarrationCompiler:
                 sync = timeline.sync_metrics(tl, takes, script)
             _write_json(run_dir / "timeline.json", tl.model_dump(mode="json"))
             _write_json(run_dir / "sync.json", sync)
+            ready = _readiness(run_dir, script, takes, cast_plan)
+            _write_json(run_dir / "readiness.json", ready.model_dump(mode="json"))
             return result("pass", [])
         except NeedsReview as exc:  # voiced now and still bad: park it again for another look
             flagged = {t.line_id for t in takes or [] if t.flagged}
@@ -200,6 +275,7 @@ class NarrationCompiler:
         takes: list[VoiceTake] | None = None
         tl: LockedTimeline | None = None
         sync: dict | None = None
+        ready: ReadinessReport | None = None
 
         def result(gate: Gate, reasons: list[str]) -> CompileResult:
             log.finish(gate, reasons)
@@ -210,7 +286,7 @@ class NarrationCompiler:
                 _write_json(run_dir / "review.json", ReviewItem(
                     run_id=run_id, project_id=inputs.project_id, series_key=inputs.series_key, run_dir=str(run_dir),
                     reasons=list(reasons), line_ids=ids).model_dump(mode="json"))
-            return CompileResult(run_id, gate, reasons, run_dir, facts, sheet, script, report, tl, sync, plan, takes)
+            return CompileResult(run_id, gate, reasons, run_dir, facts, sheet, script, report, tl, sync, plan, takes, ready)
 
         try:
             bible = self.bibles.load(inputs.series_key)
@@ -232,6 +308,7 @@ class NarrationCompiler:
                 sheet = await understand.understand_chapter(
                     inputs.project_id, facts, bible, self.client, self.scheduler, counter)
             _write_json(run_dir / "beat_sheet.json", sheet.model_dump(mode="json"))
+            _brief_stop_points(run_dir, sheet)
             if stop_after == "understand":
                 return result("pass", [])
 
@@ -294,11 +371,19 @@ class NarrationCompiler:
             await self.scheduler.release()  # the LLM leaves the GPU before Kokoro arrives
             tts_cfg = load_tts_config()
             audio_model = f"{tts_cfg.model} + {load_stt_config().model}"
+            cast_plan, cast_voices = cast_for_script(inputs.series_key, bible, script)
+            _write_json(run_dir / "casting.json", cast_plan.model_dump(mode="json"))
+            _casting_stop_points(run_dir, cast_plan)
+            ledger = TakeLedger(script, direction_revision=plan.revision,
+                                voice_profile_ids={a.character_id: a.profile_id for a in cast_plan.assignments},
+                                provider=tts_cfg.model)
             with _recorded(log, "voice", audio_model, "-", _CountingCache(self.cache)):
                 takes, reasons = await voice.voice_lines(
-                    script, plan, bible, self.tts or KokoroTts(), self.stt or WhisperStt(),
-                    Path(workspace) / "narration" / "voice", tts_cfg.voice, facts)
+                    script, plan, bible, self.tts or get_default_tts(), self.stt or WhisperStt(),
+                    Path(workspace) / "narration" / "voice", tts_cfg.voice, facts, cast_voices, ledger)
                 _write_json(run_dir / "takes.json", [t.model_dump(mode="json") for t in takes])
+                _write_json(run_dir / "qa.json", {lid: r.model_dump(mode="json") for lid, r in
+                                                  qa_report(takes, {ln.line_id: ln.text for ln in script.lines}).items()})
                 if reasons:
                     raise NeedsReview(reasons)
             if stop_after == "voice":
@@ -309,6 +394,8 @@ class NarrationCompiler:
                 sync = timeline.sync_metrics(tl, takes, script)
             _write_json(run_dir / "timeline.json", tl.model_dump(mode="json"))
             _write_json(run_dir / "sync.json", sync)
+            ready = _readiness(run_dir, script, takes, cast_plan)
+            _write_json(run_dir / "readiness.json", ready.model_dump(mode="json"))
             return passed()
         except NeedsReview as exc:
             return result("review", exc.reasons)

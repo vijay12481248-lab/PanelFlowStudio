@@ -47,7 +47,7 @@ export const NewProjectScreen: React.FC<NewProjectScreenProps> = ({
   const [autoSfx, setAutoSfx] = useState(false);
   const [musicPath, setMusicPath] = useState("");
   const [sfxPath, setSfxPath] = useState("");
-  const [ttsProvider, setTtsProvider] = useState("kokoro_82m");
+  const [ttsProvider, setTtsProvider] = useState("qwen3_tts");
 
   // Multi-Chapter Manga / Series settings
   const [inspectingSeries, setInspectingSeries] = useState(false);
@@ -370,14 +370,14 @@ export const NewProjectScreen: React.FC<NewProjectScreenProps> = ({
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-16">
       {/* Header */}
-      <div className="flex items-center gap-3 pb-4 border-b border-zinc-800">
+      <div className="flex items-center gap-3 pb-4 border-b border-edge">
         <Button variant="ghost" size="sm" onClick={onBack}>
           <Icons.ArrowLeft className="w-4 h-4" />
           Back
         </Button>
         <div>
-          <h2 className="text-xl font-bold text-zinc-100">Create New Project</h2>
-          <p className="text-xs text-zinc-400">
+          <h2 className="text-xl font-bold text-fg">Create New Project</h2>
+          <p className="text-xs text-fg-dim">
             Define project metadata, select ingestion mode, and inspect acquisition & video generation options.
           </p>
         </div>
@@ -387,11 +387,11 @@ export const NewProjectScreen: React.FC<NewProjectScreenProps> = ({
         {/* Source Ingestion Card */}
         <Card className="space-y-5">
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold uppercase tracking-wider text-zinc-300 flex items-center gap-2">
-              <Icons.Folder className="w-4 h-4 text-indigo-400" />
+            <h3 className="text-sm font-semibold uppercase tracking-wider text-fg-dim flex items-center gap-2">
+              <Icons.Folder className="w-4 h-4 text-info" />
               1. Source Ingestion & Production Mode
             </h3>
-            <span className="text-[11px] text-zinc-500">Select pipeline target</span>
+            <span className="text-[11px] text-fg-faint">Select pipeline target</span>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -450,13 +450,13 @@ export const NewProjectScreen: React.FC<NewProjectScreenProps> = ({
                   }}
                   className={`p-3.5 rounded-xl border text-left transition-all ${
                     isSelected
-                      ? "border-indigo-500 bg-indigo-950/30 ring-1 ring-indigo-500/50 shadow-md shadow-indigo-950/40"
-                      : "border-zinc-800 bg-zinc-950 hover:border-zinc-700"
+                      ? "border-accent bg-accent/30 ring-1 ring-accent/50 shadow-md shadow-accent/40"
+                      : "border-edge bg-ink hover:border-edge"
                   }`}
                 >
-                  <IconComp className={`w-5 h-5 mb-2 ${isSelected ? "text-indigo-400" : "text-zinc-400"}`} />
-                  <div className="font-semibold text-sm text-zinc-200">{s.label}</div>
-                  <div className="text-xs text-zinc-500 mt-0.5">{s.desc}</div>
+                  <IconComp className={`w-5 h-5 mb-2 ${isSelected ? "text-info" : "text-fg-dim"}`} />
+                  <div className="font-semibold text-sm text-fg">{s.label}</div>
+                  <div className="text-xs text-fg-faint mt-0.5">{s.desc}</div>
                 </button>
               );
             })}
@@ -489,7 +489,7 @@ export const NewProjectScreen: React.FC<NewProjectScreenProps> = ({
                         onClick={handleInspectSeries}
                         loading={inspectingSeries}
                         disabled={!sourcePath.trim()}
-                        className="whitespace-nowrap bg-indigo-900/40 hover:bg-indigo-900/60 border-indigo-700/50 text-indigo-200"
+                        className="whitespace-nowrap bg-accent/40 hover:bg-accent/60 border-accent/50 text-info"
                       >
                         <Icons.Globe className="w-4 h-4 mr-1.5" />
                         Inspect Series
@@ -502,7 +502,7 @@ export const NewProjectScreen: React.FC<NewProjectScreenProps> = ({
                         onClick={handleInspectVideo}
                         loading={inspectingVideo}
                         disabled={!sourcePath.trim()}
-                        className="whitespace-nowrap bg-amber-900/40 hover:bg-amber-900/60 border-amber-700/50 text-amber-200"
+                        className="whitespace-nowrap bg-warn/40 hover:bg-warn/60 border-warn/50 text-warn"
                       >
                         <Icons.Film className="w-4 h-4 mr-1.5" />
                         Inspect Video
@@ -526,7 +526,7 @@ export const NewProjectScreen: React.FC<NewProjectScreenProps> = ({
 
               {/* Standard Inspection Error */}
               {inspectError && (
-                <div className="p-3 bg-rose-950/40 border border-rose-800/80 rounded-lg text-xs text-rose-300 flex items-center gap-2">
+                <div className="p-3 bg-bad/40 border border-bad/80 rounded-lg text-xs text-bad flex items-center gap-2">
                   <Icons.AlertTriangle className="w-4 h-4 flex-shrink-0" />
                   <span>{inspectError}</span>
                 </div>
@@ -534,8 +534,8 @@ export const NewProjectScreen: React.FC<NewProjectScreenProps> = ({
 
               {/* Standard Inspection Result */}
               {inspection && inspection.is_valid && (
-                <div className="p-3.5 bg-zinc-950 border border-zinc-800 rounded-lg space-y-2 text-xs">
-                  <div className="flex items-center justify-between text-emerald-400 font-medium">
+                <div className="p-3.5 bg-ink border border-edge rounded-lg space-y-2 text-xs">
+                  <div className="flex items-center justify-between text-ok font-medium">
                     <span className="flex items-center gap-1.5">
                       <Icons.CheckCircle className="w-4 h-4" />
                       Source verified successfully
@@ -543,8 +543,8 @@ export const NewProjectScreen: React.FC<NewProjectScreenProps> = ({
                     <Badge variant="success">{inspection.total_pages_detected} pages discovered</Badge>
                   </div>
                   {inspection.title_suggestion && (
-                    <div className="text-zinc-300">
-                      <span className="text-zinc-500">Suggested Title:</span> {inspection.title_suggestion}
+                    <div className="text-fg-dim">
+                      <span className="text-fg-faint">Suggested Title:</span> {inspection.title_suggestion}
                     </div>
                   )}
                 </div>
@@ -557,24 +557,24 @@ export const NewProjectScreen: React.FC<NewProjectScreenProps> = ({
         {/* PANEL: CHRONOFLOW AI VIDEO, IMAGE & PANEL GENERATION               */}
         {/* ------------------------------------------------------------------ */}
         {sourceType === "CHRONOFLOW_AI" && (
-          <Card className="space-y-5 border-purple-500/30 bg-purple-950/10">
-            <div className="flex items-center justify-between pb-2 border-b border-zinc-800">
+          <Card className="space-y-5 border-accent/30 bg-accent/10">
+            <div className="flex items-center justify-between pb-2 border-b border-edge">
               <div className="flex items-center gap-2">
-                <Icons.Sparkles className="w-5 h-5 text-purple-400" />
-                <h3 className="text-sm font-bold text-zinc-100">
+                <Icons.Sparkles className="w-5 h-5 text-info" />
+                <h3 className="text-sm font-bold text-fg">
                   ChronoFlow Studio: Core Generation Pipeline
                 </h3>
               </div>
               <Badge variant="accent">MiniMax H3 & Qwen Image 2.1</Badge>
             </div>
 
-            <p className="text-xs text-zinc-400 leading-relaxed">
+            <p className="text-xs text-fg-dim leading-relaxed">
               Start with video generation, image generation, or multi-shot panel storyboarding. If you start with video generation, you can synthesize the initial keyframe using Qwen Image 2.1 or let ChronoFlow dynamically generate starting and continuation video chunks.
             </p>
 
             {/* Workflow Mode Selector */}
             <div className="space-y-2">
-              <label className="text-xs font-semibold text-zinc-300">Choose Primary Generation Focus:</label>
+              <label className="text-xs font-semibold text-fg-dim">Choose Primary Generation Focus:</label>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {[
                   {
@@ -608,18 +608,18 @@ export const NewProjectScreen: React.FC<NewProjectScreenProps> = ({
                       onClick={() => setChronoWorkflow(mode.id as any)}
                       className={`p-3 rounded-xl border text-left transition-all ${
                         isSelected
-                          ? "border-purple-500 bg-purple-950/40 ring-1 ring-purple-500/50 shadow-md shadow-purple-950/30"
-                          : "border-zinc-800 bg-zinc-950 hover:border-zinc-700"
+                          ? "border-accent bg-accent/40 ring-1 ring-accent/50 shadow-md shadow-accent/30"
+                          : "border-edge bg-ink hover:border-edge"
                       }`}
                     >
                       <div className="flex items-center justify-between mb-1.5">
-                        <Icon className={`w-4 h-4 ${isSelected ? "text-purple-400" : "text-zinc-400"}`} />
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-900 text-purple-300 border border-purple-900/40 font-mono">
+                        <Icon className={`w-4 h-4 ${isSelected ? "text-info" : "text-fg-dim"}`} />
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-navy text-info border border-accent/40 font-mono">
                           {mode.badge}
                         </span>
                       </div>
-                      <div className="font-semibold text-xs text-zinc-100">{mode.title}</div>
-                      <div className="text-[11px] text-zinc-400 mt-1 leading-snug">{mode.desc}</div>
+                      <div className="font-semibold text-xs text-fg">{mode.title}</div>
+                      <div className="text-[11px] text-fg-dim mt-1 leading-snug">{mode.desc}</div>
                     </button>
                   );
                 })}
@@ -629,7 +629,7 @@ export const NewProjectScreen: React.FC<NewProjectScreenProps> = ({
             {/* Prompt & Synopsis */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <label className="text-xs font-semibold text-zinc-300">Initial Prompt / Story Synopsis:</label>
+                <label className="text-xs font-semibold text-fg-dim">Initial Prompt / Story Synopsis:</label>
                 <div className="flex gap-1.5">
                   {[
                     "Cyberpunk Chase",
@@ -646,7 +646,7 @@ export const NewProjectScreen: React.FC<NewProjectScreenProps> = ({
                         if (preset === "Anime Rain") setChronoPrompt("Dramatic anime confrontation in a rain-soaked neon alleyway, cinematic lighting, expressive eyes and flowing hair.");
                         if (preset === "Space Station") setChronoPrompt("Massive sci-fi orbital ring docking sequence, starry nebula background, smooth cinematic dolly push.");
                       }}
-                      className="text-[10px] px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700"
+                      className="text-[10px] px-2 py-0.5 rounded bg-flat hover:bg-glass-hi text-fg-dim border border-edge"
                     >
                       {preset}
                     </button>
@@ -657,7 +657,7 @@ export const NewProjectScreen: React.FC<NewProjectScreenProps> = ({
                 value={chronoPrompt}
                 onChange={(e) => setChronoPrompt(e.target.value)}
                 rows={3}
-                className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-xs text-zinc-100 focus:outline-none focus:border-purple-500 font-sans leading-relaxed"
+                className="w-full bg-ink border border-edge rounded-lg p-2.5 text-xs text-fg focus:outline-none focus:border-accent font-sans leading-relaxed"
                 placeholder="Describe your scene, camera motion, characters and visual style..."
               />
             </div>
@@ -699,9 +699,9 @@ export const NewProjectScreen: React.FC<NewProjectScreenProps> = ({
             </div>
 
             {/* Keyframe Generation Notice */}
-            <div className="p-3 bg-purple-950/30 border border-purple-800/40 rounded-lg flex items-center justify-between text-xs">
-              <div className="flex items-center gap-2 text-purple-200">
-                <Icons.CheckCircle className="w-4 h-4 text-purple-400" />
+            <div className="p-3 bg-accent/30 border border-accent/40 rounded-lg flex items-center justify-between text-xs">
+              <div className="flex items-center gap-2 text-info">
+                <Icons.CheckCircle className="w-4 h-4 text-info" />
                 <span>
                   {chronoWorkflow === "video"
                     ? "Continuous Chaining: Starts with Qwen Image 2.1 image synthesis if keyframe is needed, then chains MiniMax H3 video."
@@ -718,53 +718,53 @@ export const NewProjectScreen: React.FC<NewProjectScreenProps> = ({
         {/* PANEL: MULTI-CHAPTER MANGA REVIEW & BATCH VIDEO GENERATION         */}
         {/* ------------------------------------------------------------------ */}
         {sourceType === "MANGA_SERIES" && (
-          <Card className="space-y-5 border-indigo-500/30 bg-indigo-950/10">
-            <div className="flex items-center justify-between pb-2 border-b border-zinc-800">
+          <Card className="space-y-5 border-accent/30 bg-accent/10">
+            <div className="flex items-center justify-between pb-2 border-b border-edge">
               <div className="flex items-center gap-2">
-                <Icons.Layers className="w-5 h-5 text-indigo-400" />
-                <h3 className="text-sm font-bold text-zinc-100">
+                <Icons.Layers className="w-5 h-5 text-info" />
+                <h3 className="text-sm font-bold text-fg">
                   Multi-Chapter Manga Review & Batch Video Generation Panel
                 </h3>
               </div>
               <Badge variant="accent">Multi-Chapter Pipeline</Badge>
             </div>
 
-            <p className="text-xs text-zinc-400 leading-relaxed">
+            <p className="text-xs text-fg-dim leading-relaxed">
               Discovers the entire manga catalog across web sources, extracts structured chapter lists, and enables single-click batch generation of individual episodes or compiled multi-chapter movie cuts.
             </p>
 
             {seriesInspectError && (
-              <div className="p-3 bg-rose-950/40 border border-rose-800/80 rounded-lg text-xs text-rose-300 flex items-center gap-2">
+              <div className="p-3 bg-bad/40 border border-bad/80 rounded-lg text-xs text-bad flex items-center gap-2">
                 <Icons.AlertTriangle className="w-4 h-4 flex-shrink-0" />
                 <span>{seriesInspectError}</span>
               </div>
             )}
 
             {seriesMeta && (
-              <div className="p-4 bg-zinc-950/80 border border-indigo-900/50 rounded-xl space-y-3">
+              <div className="p-4 bg-ink/80 border border-accent/50 rounded-xl space-y-3">
                 <div className="flex items-center justify-between">
                   <div>
-                    <h4 className="text-sm font-bold text-zinc-100">{seriesMeta.title}</h4>
-                    <span className="text-xs text-indigo-400 font-mono">{seriesMeta.source_domain}</span>
+                    <h4 className="text-sm font-bold text-fg">{seriesMeta.title}</h4>
+                    <span className="text-xs text-info font-mono">{seriesMeta.source_domain}</span>
                   </div>
                   <Badge variant="success">
                     {seriesMeta.total_chapters_detected} Chapters Detected
                   </Badge>
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs text-zinc-400">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs text-fg-dim">
                   <div>
-                    <span className="text-zinc-500">Detected Range:</span>{" "}
-                    <span className="text-zinc-200 font-mono">
+                    <span className="text-fg-faint">Detected Range:</span>{" "}
+                    <span className="text-fg font-mono">
                       Ch {seriesMeta.detected_range[0]} - Ch {seriesMeta.detected_range[1]}
                     </span>
                   </div>
                   <div>
-                    <span className="text-zinc-500">Strategy:</span>{" "}
-                    <span className="text-zinc-200">{seriesMeta.discovery_strategy}</span>
+                    <span className="text-fg-faint">Strategy:</span>{" "}
+                    <span className="text-fg">{seriesMeta.discovery_strategy}</span>
                   </div>
                   <div>
-                    <span className="text-zinc-500">Pattern:</span>{" "}
-                    <span className="text-zinc-200 font-mono truncate block" title={seriesMeta.url_pattern || "N/A"}>
+                    <span className="text-fg-faint">Pattern:</span>{" "}
+                    <span className="text-fg font-mono truncate block" title={seriesMeta.url_pattern || "N/A"}>
                       {seriesMeta.url_pattern || "Inferred from index"}
                     </span>
                   </div>
@@ -822,12 +822,12 @@ export const NewProjectScreen: React.FC<NewProjectScreenProps> = ({
               </Select>
 
               <div className="flex items-center pt-6">
-                <label className="text-xs text-zinc-300 flex items-center gap-2 cursor-pointer">
+                <label className="text-xs text-fg-dim flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={seriesSubtitles}
                     onChange={(e) => setSeriesSubtitles(e.target.checked)}
-                    className="rounded border-zinc-700 bg-zinc-900 text-indigo-600 focus:ring-indigo-500"
+                    className="rounded border-edge bg-navy text-accent focus:ring-accent"
                   />
                   Burn synchronized 1080p subtitles
                 </label>
@@ -835,8 +835,8 @@ export const NewProjectScreen: React.FC<NewProjectScreenProps> = ({
             </div>
 
             {/* Batch Generation Direct Action */}
-            <div className="pt-2 border-t border-zinc-800 flex flex-wrap items-center justify-between gap-3">
-              <div className="text-xs text-zinc-400">
+            <div className="pt-2 border-t border-edge flex flex-wrap items-center justify-between gap-3">
+              <div className="text-xs text-fg-dim">
                 You can start multi-chapter batch video production directly or proceed to create the project workspace below.
               </div>
               <Button
@@ -845,20 +845,20 @@ export const NewProjectScreen: React.FC<NewProjectScreenProps> = ({
                 onClick={handleStartBatchGeneration}
                 loading={batchStarting}
                 disabled={!sourcePath.trim()}
-                className="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold shadow-md shadow-indigo-600/30"
+                className="bg-accent hover:bg-accent text-white font-semibold shadow-md shadow-accent/30"
               >
-                <Icons.Zap className="w-4 h-4 mr-1.5 text-amber-300" />
+                <Icons.Zap className="w-4 h-4 mr-1.5 text-warn" />
                 Start Batch Video Generation
               </Button>
             </div>
 
             {/* Live Batch Job Progress Tracker */}
             {batchJob && (
-              <div className="p-4 bg-zinc-950 border border-indigo-700/60 rounded-xl space-y-3">
+              <div className="p-4 bg-ink border border-accent/60 rounded-xl space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-indigo-400 animate-pulse" />
-                    <span className="text-xs font-bold text-zinc-200 uppercase">
+                    <span className="w-2.5 h-2.5 rounded-full bg-accent animate-pulse" />
+                    <span className="text-xs font-bold text-fg uppercase">
                       Batch Production: {batchJob.status}
                     </span>
                   </div>
@@ -870,18 +870,18 @@ export const NewProjectScreen: React.FC<NewProjectScreenProps> = ({
                 <ProgressBar progress={batchJob.progress} label={batchJob.current_step || "Processing..."} />
 
                 {batchJob.current_chapter && (
-                  <div className="text-xs text-indigo-300">
-                    <span className="text-zinc-500">Current Chapter:</span> {batchJob.current_chapter}
+                  <div className="text-xs text-info">
+                    <span className="text-fg-faint">Current Chapter:</span> {batchJob.current_chapter}
                   </div>
                 )}
 
                 {batchJob.generated_videos && batchJob.generated_videos.length > 0 && (
                   <div className="space-y-1.5 pt-2">
-                    <div className="text-xs font-semibold text-emerald-400">Generated Episode Videos:</div>
-                    <div className="max-h-28 overflow-y-auto space-y-1 text-xs text-zinc-300 font-mono bg-zinc-900/80 p-2.5 rounded-lg border border-zinc-800">
+                    <div className="text-xs font-semibold text-ok">Generated Episode Videos:</div>
+                    <div className="max-h-28 overflow-y-auto space-y-1 text-xs text-fg-dim font-mono bg-navy/80 p-2.5 rounded-lg border border-edge">
                       {batchJob.generated_videos.map((vid, idx) => (
                         <div key={idx} className="truncate flex items-center gap-1.5">
-                          <Icons.Check className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+                          <Icons.Check className="w-3.5 h-3.5 text-ok flex-shrink-0" />
                           <span title={vid}>{vid}</span>
                         </div>
                       ))}
@@ -897,53 +897,53 @@ export const NewProjectScreen: React.FC<NewProjectScreenProps> = ({
         {/* PANEL: VIDEO REVIEW & ANIME RECAP GENERATION                       */}
         {/* ------------------------------------------------------------------ */}
         {sourceType === "VIDEO_FILE" && (
-          <Card className="space-y-5 border-amber-500/30 bg-amber-950/10">
-            <div className="flex items-center justify-between pb-2 border-b border-zinc-800">
+          <Card className="space-y-5 border-warn/30 bg-warn/10">
+            <div className="flex items-center justify-between pb-2 border-b border-edge">
               <div className="flex items-center gap-2">
-                <Icons.Film className="w-5 h-5 text-amber-400" />
-                <h3 className="text-sm font-bold text-zinc-100">
+                <Icons.Film className="w-5 h-5 text-warn" />
+                <h3 className="text-sm font-bold text-fg">
                   Video Review & Anime Recap Generation Panel
                 </h3>
               </div>
               <Badge variant="warning">Video Ingestion Pipeline</Badge>
             </div>
 
-            <p className="text-xs text-zinc-400 leading-relaxed">
+            <p className="text-xs text-fg-dim leading-relaxed">
               Ingests raw anime or episode video files (.mp4/.mkv), automatically detects scene transitions and dynamic keyframe cuts, writes a 4-act recap and commentary review script, synthesizes neural voiceover, and produces a copyright-safe 1080p recap video.
             </p>
 
             {videoInspectError && (
-              <div className="p-3 bg-rose-950/40 border border-rose-800/80 rounded-lg text-xs text-rose-300 flex items-center gap-2">
+              <div className="p-3 bg-bad/40 border border-bad/80 rounded-lg text-xs text-bad flex items-center gap-2">
                 <Icons.AlertTriangle className="w-4 h-4 flex-shrink-0" />
                 <span>{videoInspectError}</span>
               </div>
             )}
 
             {videoInspect && videoInspect.valid && (
-              <div className="p-4 bg-zinc-950/80 border border-amber-900/50 rounded-xl space-y-3">
+              <div className="p-4 bg-ink/80 border border-warn/50 rounded-xl space-y-3">
                 <div className="flex items-center justify-between">
                   <div>
-                    <h4 className="text-sm font-bold text-zinc-100">{videoInspect.series_title}</h4>
-                    <span className="text-xs text-amber-400">Episode {videoInspect.episode_number} Stream</span>
+                    <h4 className="text-sm font-bold text-fg">{videoInspect.series_title}</h4>
+                    <span className="text-xs text-warn">Episode {videoInspect.episode_number} Stream</span>
                   </div>
                   <Badge variant="success">Stream Validated</Badge>
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs text-zinc-400">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs text-fg-dim">
                   <div>
-                    <span className="text-zinc-500">Resolution:</span>{" "}
-                    <span className="text-zinc-200 font-mono">{videoInspect.resolution}</span>
+                    <span className="text-fg-faint">Resolution:</span>{" "}
+                    <span className="text-fg font-mono">{videoInspect.resolution}</span>
                   </div>
                   <div>
-                    <span className="text-zinc-500">Duration:</span>{" "}
-                    <span className="text-zinc-200 font-mono">{videoInspect.duration_formatted}</span>
+                    <span className="text-fg-faint">Duration:</span>{" "}
+                    <span className="text-fg font-mono">{videoInspect.duration_formatted}</span>
                   </div>
                   <div>
-                    <span className="text-zinc-500">Frame Rate:</span>{" "}
-                    <span className="text-zinc-200 font-mono">{videoInspect.fps} fps</span>
+                    <span className="text-fg-faint">Frame Rate:</span>{" "}
+                    <span className="text-fg font-mono">{videoInspect.fps} fps</span>
                   </div>
                   <div>
-                    <span className="text-zinc-500">Est. Scene Cuts:</span>{" "}
-                    <span className="text-amber-400 font-mono font-bold">~{videoInspect.estimated_cuts} cuts</span>
+                    <span className="text-fg-faint">Est. Scene Cuts:</span>{" "}
+                    <span className="text-warn font-mono font-bold">~{videoInspect.estimated_cuts} cuts</span>
                   </div>
                 </div>
               </div>
@@ -979,8 +979,8 @@ export const NewProjectScreen: React.FC<NewProjectScreenProps> = ({
               </Select>
 
               <div className="space-y-1">
-                <label className="text-xs font-medium text-zinc-300">
-                  Original Audio Ducking: <span className="font-mono text-amber-400">{duckDb} dB</span>
+                <label className="text-xs font-medium text-fg-dim">
+                  Original Audio Ducking: <span className="font-mono text-warn">{duckDb} dB</span>
                 </label>
                 <input
                   type="range"
@@ -989,16 +989,16 @@ export const NewProjectScreen: React.FC<NewProjectScreenProps> = ({
                   step="1"
                   value={duckDb}
                   onChange={(e) => setDuckDb(parseFloat(e.target.value))}
-                  className="w-full h-2 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-amber-500"
+                  className="w-full h-2 bg-flat rounded-lg appearance-none cursor-pointer accent-warn"
                 />
-                <span className="text-[10px] text-zinc-500 block">
+                <span className="text-[10px] text-fg-faint block">
                   Preserves original BGM and battle SFX beneath narrator commentary.
                 </span>
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-medium text-zinc-300">
-                  Scene Cut Pacing: <span className="font-mono text-zinc-200">{minCut}s - {maxCut}s</span>
+                <label className="text-xs font-medium text-fg-dim">
+                  Scene Cut Pacing: <span className="font-mono text-fg">{minCut}s - {maxCut}s</span>
                 </label>
                 <div className="flex gap-2">
                   <Input
@@ -1023,12 +1023,12 @@ export const NewProjectScreen: React.FC<NewProjectScreenProps> = ({
               </div>
 
               <div className="flex items-center pt-6">
-                <label className="text-xs text-zinc-300 flex items-center gap-2 cursor-pointer">
+                <label className="text-xs text-fg-dim flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={antiCopyright}
                     onChange={(e) => setAntiCopyright(e.target.checked)}
-                    className="rounded border-zinc-700 bg-zinc-900 text-amber-600 focus:ring-amber-500"
+                    className="rounded border-edge bg-navy text-warn focus:ring-warn"
                   />
                   Anti-Copyright dynamic reframing & subtle scaling
                 </label>
@@ -1036,8 +1036,8 @@ export const NewProjectScreen: React.FC<NewProjectScreenProps> = ({
             </div>
 
             {/* Direct Action */}
-            <div className="pt-2 border-t border-zinc-800 flex flex-wrap items-center justify-between gap-3">
-              <div className="text-xs text-zinc-400">
+            <div className="pt-2 border-t border-edge flex flex-wrap items-center justify-between gap-3">
+              <div className="text-xs text-fg-dim">
                 Produce a full automated anime review video or create the project workspace to edit scenes manually.
               </div>
               <Button
@@ -1046,7 +1046,7 @@ export const NewProjectScreen: React.FC<NewProjectScreenProps> = ({
                 onClick={handleStartAnimeReview}
                 loading={animeStarting}
                 disabled={!sourcePath.trim()}
-                className="bg-amber-600 hover:bg-amber-500 text-white font-semibold shadow-md shadow-amber-600/30"
+                className="bg-warn hover:bg-warn text-white font-semibold shadow-md shadow-warn/30"
               >
                 <Icons.Play className="w-4 h-4 mr-1.5" />
                 Generate Video Review & Recap
@@ -1055,11 +1055,11 @@ export const NewProjectScreen: React.FC<NewProjectScreenProps> = ({
 
             {/* Live Anime Review Job Progress */}
             {animeJob && (
-              <div className="p-4 bg-zinc-950 border border-amber-700/60 rounded-xl space-y-3">
+              <div className="p-4 bg-ink border border-warn/60 rounded-xl space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse" />
-                    <span className="text-xs font-bold text-zinc-200 uppercase">
+                    <span className="w-2.5 h-2.5 rounded-full bg-warn animate-pulse" />
+                    <span className="text-xs font-bold text-fg uppercase">
                       Video Review: {animeJob.status}
                     </span>
                   </div>
@@ -1071,15 +1071,15 @@ export const NewProjectScreen: React.FC<NewProjectScreenProps> = ({
                 <ProgressBar progress={animeJob.progress} label={animeJob.current_step || "Processing..."} />
 
                 {animeJob.result && (
-                  <div className="p-3 bg-zinc-900 border border-emerald-800/60 rounded-lg space-y-2 text-xs">
-                    <div className="text-emerald-400 font-bold flex items-center gap-1.5">
+                  <div className="p-3 bg-navy border border-ok/60 rounded-lg space-y-2 text-xs">
+                    <div className="text-ok font-bold flex items-center gap-1.5">
                       <Icons.CheckCircle className="w-4 h-4" />
                       Anime Review Video Generated Successfully!
                     </div>
-                    <div className="text-zinc-300 font-mono truncate" title={animeJob.result.output_video_path}>
+                    <div className="text-fg-dim font-mono truncate" title={animeJob.result.output_video_path}>
                       Output: {animeJob.result.output_video_path}
                     </div>
-                    <div className="flex gap-4 text-zinc-400 text-[11px]">
+                    <div className="flex gap-4 text-fg-dim text-[11px]">
                       <span>Duration: {animeJob.result.video_duration_sec.toFixed(1)}s</span>
                       <span>Total Cuts: {animeJob.result.total_scene_cuts}</span>
                       <span>Review Beats: {animeJob.result.total_review_beats}</span>
@@ -1096,8 +1096,8 @@ export const NewProjectScreen: React.FC<NewProjectScreenProps> = ({
         {/* ------------------------------------------------------------------ */}
         {sourceType === "AUTHORIZED_WEB" && (
           <Card className="space-y-4">
-            <h3 className="text-sm font-semibold text-zinc-200">Chapter Storytelling</h3>
-            <p className="text-xs text-zinc-400">
+            <h3 className="text-sm font-semibold text-fg">Chapter Storytelling</h3>
+            <p className="text-xs text-fg-dim">
               Analyze source panels with a vision model, review the chapter story, then approve original narration before voice generation.
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1121,15 +1121,16 @@ export const NewProjectScreen: React.FC<NewProjectScreenProps> = ({
               <Input label="Narration language" value={language} onChange={(e) => setLanguage(e.target.value)} placeholder="en, hi, ja…" />
               <Input label="Chapter music file (optional)" value={musicPath} onChange={(e) => setMusicPath(e.target.value)} placeholder="Path to a local music track" />
               <Input label="SFX library folder (optional)" value={sfxPath} onChange={(e) => setSfxPath(e.target.value)} placeholder="Folder containing sword_draw.wav, wind.wav…" />
-              <label className="text-xs text-zinc-300 flex items-center gap-2">
+              <label className="text-xs text-fg-dim flex items-center gap-2">
                 <input type="checkbox" checked={autoMusic} onChange={(e) => setAutoMusic(e.target.checked)} />
                 Generate chapter music with local Lumina / ACE-Step
               </label>
-              <label className="text-xs text-zinc-300 flex items-center gap-2">
+              <label className="text-xs text-fg-dim flex items-center gap-2">
                 <input type="checkbox" checked={autoSfx} onChange={(e) => setAutoSfx(e.target.checked)} />
                 Select sparse effects from the local SFX library
               </label>
               <Select label="Installed speech adapter" value={ttsProvider} onChange={(e) => setTtsProvider(e.target.value)}>
+                <option value="qwen3_tts">Qwen3-TTS 1.7B (Neural Voice Cloning)</option>
                 <option value="kokoro_82m">Kokoro-82M (Neural Fast Voice)</option>
                 <option value="chatterbox_turbo">Chatterbox Turbo</option>
                 <option value="f5_tts">F5-TTS</option>
@@ -1142,18 +1143,18 @@ export const NewProjectScreen: React.FC<NewProjectScreenProps> = ({
         {/* PANEL: LOCAL FOLDER / ARCHIVE ACQUISITION PREVIEW                  */}
         {/* ------------------------------------------------------------------ */}
         {(sourceType === "LOCAL_FOLDER" || sourceType === "ZIP_ARCHIVE") && (
-          <div className="p-3.5 bg-zinc-900/60 border border-zinc-800 rounded-xl text-xs text-zinc-400 flex items-center gap-3">
-            <Icons.Info className="w-5 h-5 text-indigo-400 flex-shrink-0" />
+          <div className="p-3.5 bg-navy/60 border border-edge rounded-xl text-xs text-fg-dim flex items-center gap-3">
+            <Icons.Info className="w-5 h-5 text-info flex-shrink-0" />
             <div>
-              <span className="font-semibold text-zinc-200">Pipeline Ingestion Flow:</span> When you click{" "}
-              <span className="text-indigo-300 font-medium">"Create & Proceed to Acquisition"</span> below, this project will advance to the dedicated Acquisition Screen to extract pages, normalize resolution, and detect comic panels.
+              <span className="font-semibold text-fg">Pipeline Ingestion Flow:</span> When you click{" "}
+              <span className="text-info font-medium">"Create & Proceed to Acquisition"</span> below, this project will advance to the dedicated Acquisition Screen to extract pages, normalize resolution, and detect comic panels.
             </div>
           </div>
         )}
 
         {/* 2. Project Information & Storage */}
         <Card className="space-y-4">
-          <h3 className="text-sm font-semibold uppercase tracking-wider text-zinc-300">
+          <h3 className="text-sm font-semibold uppercase tracking-wider text-fg-dim">
             2. Project Information & Storage
           </h3>
 
@@ -1174,15 +1175,15 @@ export const NewProjectScreen: React.FC<NewProjectScreenProps> = ({
         </Card>
 
         {/* 3. Rights & Licensing Card */}
-        <Card className="space-y-4 border-amber-900/40 bg-zinc-900/80">
-          <div className="flex items-center gap-2 text-amber-400 text-sm font-semibold uppercase tracking-wider">
+        <Card className="space-y-4 border-warn/40 bg-navy/80">
+          <div className="flex items-center gap-2 text-warn text-sm font-semibold uppercase tracking-wider">
             <Icons.ShieldCheck className="w-5 h-5" />
             3. Legal & Rights Verification (Mandatory)
           </div>
 
-          <p className="text-xs text-zinc-400 leading-relaxed">
+          <p className="text-xs text-fg-dim leading-relaxed">
             PanelFlow Studio is designed exclusively for public domain, licensed, user-owned, or explicitly permitted material.
-            Material marked <span className="text-rose-400 font-semibold">UNKNOWN</span> cannot be processed.
+            Material marked <span className="text-bad font-semibold">UNKNOWN</span> cannot be processed.
           </p>
 
           <Select
@@ -1210,7 +1211,7 @@ export const NewProjectScreen: React.FC<NewProjectScreenProps> = ({
 
         {/* Submit Error */}
         {submitError && (
-          <div className="p-3.5 bg-rose-950/60 border border-rose-800 rounded-lg text-sm text-rose-200 flex items-center gap-2.5">
+          <div className="p-3.5 bg-bad/60 border border-bad/40 rounded-lg text-sm text-bad flex items-center gap-2.5">
             <Icons.XCircle className="w-5 h-5 flex-shrink-0" />
             <span>{submitError}</span>
           </div>
@@ -1227,7 +1228,7 @@ export const NewProjectScreen: React.FC<NewProjectScreenProps> = ({
             size="lg"
             loading={submitting}
             disabled={sourceType !== "CHRONOFLOW_AI" && (!rightsStatus || rightsStatus === "UNKNOWN")}
-            className={sourceType === "CHRONOFLOW_AI" ? "bg-purple-600 hover:bg-purple-500 shadow-md shadow-purple-600/30" : ""}
+            className={sourceType === "CHRONOFLOW_AI" ? "bg-accent hover:bg-accent shadow-md shadow-accent/30" : ""}
           >
             {sourceType === "CHRONOFLOW_AI" ? "Create Project & Launch ChronoFlow AI" : "Create & Proceed to Acquisition"}
           </Button>

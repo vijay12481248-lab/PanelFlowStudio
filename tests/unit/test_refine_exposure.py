@@ -79,7 +79,7 @@ def chrono_client():
 def test_chronoflow_generate_image_reports_the_refinement_only_when_it_ran(chrono_client, monkeypatch):
     calls = []
 
-    async def fake(prompt, negative, w, h, seed, refine=False):
+    async def fake(prompt, negative, w, h, seed, refine=False, ref_images=None):
         calls.append(refine)
         return "art_x.png", ({"status": "accept_low", "repaired": True, "iterations": []} if refine else None)
 

@@ -7,15 +7,19 @@ and autonomous video chunk quality inspection.
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import logging
 import os
+import re
 import shutil
+import threading
 import time
 import uuid
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
@@ -24,11 +28,19 @@ from pydantic import BaseModel, Field
 from engine.chronoflow.pipeline import (
     BASE_DIR,
     COMFY_INPUT_DIR,
+    COMFY_OUTPUT_DIR,
     STUDIO_OUTPUT_DIR,
     ChronoFlowPipeline,
 )
+from engine.chronoflow import deliver as deliver_mod
 from engine.chronoflow import media_tools
+from engine.chronoflow import plan_check, plan_fix, plan_import
+from engine.chronoflow import start_modes
+from engine.chronoflow import timeline_ops
+from engine.chronoflow.folder_dialog import pick_native_folder
+from engine.comfyui.art import ART_WORKFLOW_ID, IMAGE_WORKFLOW_IDS, ArtEngine
 from engine.chronoflow.reviewer import analyze_video_chunk
+from engine.chronoflow.scene_render import render_scene
 from engine.chronoflow.supervisor import VAULT_DIR, JobSupervisor
 
 logger = logging.getLogger("panelflow.chronoflow")
@@ -41,7 +53,46 @@ active_jobs = supervisor.active_jobs
 reviews_store: dict[str, list[dict[str, Any]]] = {}
 
 VAULT_FILE = VAULT_DIR / "characters.json"
+STORAGE_LOCATIONS_FILE = VAULT_DIR / "storage_locations.json"
 VAULT_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def load_storage_locations() -> list[dict[str, Any]]:
+    if STORAGE_LOCATIONS_FILE.exists():
+        try:
+            with open(STORAGE_LOCATIONS_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, list):
+                    return data
+        except Exception as e:
+            logger.warning("Could not read storage_locations.json: %s", e)
+    return []
+
+
+def save_storage_locations(locations: list[dict[str, Any]]) -> None:
+    try:
+        parent_dir = STORAGE_LOCATIONS_FILE.parent
+        parent_dir.mkdir(parents=True, exist_ok=True)
+        temp_file = parent_dir / f"storage_locations_tmp_{int(time.time() * 1000)}.json"
+        with open(temp_file, "w", encoding="utf-8") as f:
+            json.dump(locations, f, indent=2)
+        temp_file.replace(STORAGE_LOCATIONS_FILE)
+    except Exception as e:
+        logger.error("Failed to save storage_locations.json: %s", e)
+
+
+def resolve_destination_dir(location_id: str | None = None, destination_path: str | None = None) -> Path | None:
+    if location_id:
+        for loc in load_storage_locations():
+            if loc.get("id") == location_id:
+                p = Path(loc.get("path", "")).resolve()
+                p.mkdir(parents=True, exist_ok=True)
+                return p
+    if destination_path:
+        p = Path(destination_path).resolve()
+        p.mkdir(parents=True, exist_ok=True)
+        return p
+    return None
 
 
 def load_characters() -> list[dict[str, Any]]:
@@ -112,6 +163,36 @@ class RegenerateChunkRequest(BaseModel):
     audio_offset: float = 0.0      # variant only: carry the original shot's audio over starting at this second
 
 
+class SaveChunkPromptRequest(BaseModel):
+    job_id: str
+    chunk_index: int = Field(default=1, ge=1)
+    prompt: str = ""
+
+
+class CreateClipRequest(BaseModel):
+    job_id: str
+    prompt: str = ""
+    duration: float = Field(default=5.17)
+
+
+class DeleteShotRequest(BaseModel):
+    job_id: str
+    chunk_index: int = Field(default=1, ge=1)
+
+
+class AutogenPromptRequest(BaseModel):
+    job_id: str
+    target_shot_index: int | None = None
+    director_notes: str | None = None
+
+
+class CorrectPromptRequest(BaseModel):
+    job_id: str
+    shot_index: int = Field(default=1, ge=1)
+    current_prompt: str = ""
+    director_notes: str = ""
+
+
 class GenerateImageRequest(BaseModel):
     prompt: str = Field(default="Cinematic character turnaround sheet, white background.")
     negative_prompt: str = Field(default="blurry, low quality, distorted, bad anatomy")
@@ -119,6 +200,36 @@ class GenerateImageRequest(BaseModel):
     height: int | None = None
     seed: int | None = None
     refine: bool = False  # review the picture, then repair or redraw it (slower; needs the local vision model)
+    ref_images: list[str] = Field(default_factory=list)  # character lock: reference images (vault filenames, paths, data URLs)
+    character_ids: list[str] = Field(default_factory=list)  # character lock: Character Vault ids resolved to their sheets
+    location_id: str | None = None
+    destination_path: str | None = None
+    workflow_id: str = ART_WORKFLOW_ID  # which image model: qwen_image_21 (default) or minimax_h3_image_edit (text to image, no picture bound)
+
+
+# What the Image Studio's model picker shows. Timings/looks are what docs/H3_IMAGE_EDIT.md measured on the RTX 5060 Ti.
+IMAGE_MODELS = [
+    {"id": "qwen_image_21", "label": "Qwen Image 2.1 Turbo", "default": True, "speed": "about 15 s",
+     "summary": "Fast and photographic. Works with Character Lock, reference images and auto-refine."},
+    {"id": "minimax_h3_image_edit", "label": "MiniMax H3-Image", "default": False, "speed": "about 50 s",
+     "summary": "Slower, painted / illustrated look. No auto-refine; Character Lock is not proven on it."},
+]
+
+
+@router.get("/image_models")
+def list_image_models() -> dict[str, Any]:
+    """The image models the studio can run, with what is missing from ComfyUI when it is online (None when it is offline)."""
+    out = []
+    for m in IMAGE_MODELS:
+        item = dict(m, missing_models=None)
+        try:
+            pre = ArtEngine().registry.preflight(m["id"])
+            if pre.get("comfy_online"):
+                item["missing_models"] = pre.get("missing_models", []) + pre.get("missing_nodes", [])
+        except Exception as e:  # a registry problem must not hide the picker
+            logger.warning("image model preflight failed for %s: %s", m["id"], e)
+        out.append(item)
+    return {"models": out, "default": ART_WORKFLOW_ID}
 
 
 class InpaintRequest(BaseModel):
@@ -128,11 +239,30 @@ class InpaintRequest(BaseModel):
     denoise: float = Field(default=0.85)
     steps: int = Field(default=4)
     seed: int | None = None
+    location_id: str | None = None
+    destination_path: str | None = None
+
+
+class StorageLocationCreateRequest(BaseModel):
+    name: str = Field(default="", max_length=120)
+    path: str = Field(..., min_length=1)
+
+
+class StorageMkdirRequest(BaseModel):
+    path: str = Field(..., min_length=1)
+
+
+class SaveAssetToLocationRequest(BaseModel):
+    filenames: list[str] = Field(..., min_length=1)
+    location_id: str | None = None
+    destination_path: str | None = None
+    action: str = Field(default="copy")
 
 
 class TimelineExportRequest(BaseModel):
     clips: list[dict[str, Any]] = Field(default_factory=list)
     overlays: list[dict[str, Any]] = Field(default_factory=list)  # V2 still frames: {filename, start, duration}
+    luts: dict[str, str] = Field(default_factory=dict)  # colour grades: {grade id: baked .cube text}; clips name theirs in "lut"
 
 
 class AIDirectorPlanRequest(BaseModel):
@@ -149,7 +279,28 @@ class SaveScreenplayRequest(BaseModel):
     duration: float = Field(default=15.6)
     protagonist: dict[str, Any] = Field(default_factory=dict)
     anchor_images: dict[str, Any] = Field(default_factory=dict)
+    parent_path: str = Field(default="")
+    folders: list[dict[str, Any]] = Field(default_factory=list)
     scenes: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class ExportFolderRequest(BaseModel):
+    screenplay_title: str = Field(default="Storyboard")
+    folder_id: str = Field(default="")
+    folder_name: str = Field(default="Scene")
+    destination_path: str = Field(..., min_length=1)
+    scenes: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class ImportManifestRequest(BaseModel):
+    manifest_path: str = Field(..., min_length=1)
+
+
+class ImportSceneToStudioRequest(BaseModel):
+    folder_name: str = Field(default="Imported Scene")
+    folder_id: str = Field(default="")
+    screenplay_title: str = Field(default="Storyboard")
+    shots: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class RenderShotRequest(BaseModel):
@@ -518,6 +669,14 @@ async def run_chunk_regeneration(
             job["chunks"].append("")
         job["chunks"][chunk_index - 1] = web_url
 
+        if "chunk_prompts" not in job:
+            job["chunk_prompts"] = []
+        while len(job["chunk_prompts"]) < chunk_index:
+            job["chunk_prompts"].append("")
+        job["chunk_prompts"][chunk_index - 1] = custom_prompt or adjusted_prompt
+        if job.get("total_chunks", 0) < chunk_index:
+            job["total_chunks"] = chunk_index
+
         # Extract new tail frame for chunk N
         tail_name = f"chronoflow_tail_{job_id}_{chunk_index}.png"
         tail_path = COMFY_INPUT_DIR / tail_name
@@ -575,7 +734,13 @@ async def get_chronoflow_status() -> dict[str, Any]:
 @router.get("/sync")
 async def get_unified_sync(v: int = 0, job_id: str | None = None) -> dict[str, Any]:
     """Returns atomic versioned state for deterministic frontend synchronization."""
-    return await supervisor.get_unified_sync_state(v, job_id)
+    state = await supervisor.get_unified_sync_state(v, job_id)
+    jid = state.get("active_job_id")
+    try:  # the studio adopts timeline edits made by agents (MCP) when this number moves past its own
+        state["timeline_version"] = timeline_ops.version(jid) if jid else 0
+    except timeline_ops.TimelineError:
+        state["timeline_version"] = 0
+    return state
 
 
 @router.get("/jobs")
@@ -644,11 +809,342 @@ async def submit_regenerate_chunk(req: RegenerateChunkRequest) -> dict[str, Any]
     }
 
 
+@router.post("/save_chunk_prompt")
+async def save_chunk_prompt(req: SaveChunkPromptRequest) -> dict[str, Any]:
+    if req.job_id not in active_jobs:
+        raise HTTPException(status_code=404, detail="Job not found")
+    job = active_jobs[req.job_id]
+    if "chunk_prompts" not in job:
+        job["chunk_prompts"] = []
+    while len(job["chunk_prompts"]) < req.chunk_index:
+        job["chunk_prompts"].append("")
+    job["chunk_prompts"][req.chunk_index - 1] = req.prompt
+    save_jobs()
+    return {"success": True, "message": f"Prompt for Shot #{req.chunk_index} saved."}
+
+
+@router.post("/create_clip")
+async def create_clip(req: CreateClipRequest) -> dict[str, Any]:
+    if req.job_id not in active_jobs:
+        raise HTTPException(status_code=404, detail="Job not found")
+    job = active_jobs[req.job_id]
+    chunk_index = len(job.get("chunks", [])) + 1
+    if "chunk_prompts" not in job:
+        job["chunk_prompts"] = []
+    while len(job["chunk_prompts"]) < chunk_index:
+        job["chunk_prompts"].append("")
+    job["chunk_prompts"][chunk_index - 1] = req.prompt
+    job["total_chunks"] = max(job.get("total_chunks", 0), chunk_index)
+    job["status"] = "starting"
+    job["status_msg"] = f"Initializing render for new Shot #{chunk_index}..."
+    save_jobs()
+    supervisor.start_task(
+        f"{req.job_id}_new_{chunk_index}",
+        run_chunk_regeneration(
+            req.job_id,
+            chunk_index,
+            custom_prompt=req.prompt,
+            duration_sec=req.duration,
+        ),
+    )
+    return {
+        "success": True,
+        "message": f"Dispatched new Shot #{chunk_index} ({req.duration:.1f}s)",
+        "chunk_index": chunk_index,
+    }
+
+
+@router.post("/delete_shot")
+async def delete_shot(req: DeleteShotRequest) -> dict[str, Any]:
+    if req.job_id not in active_jobs:
+        raise HTTPException(status_code=404, detail="Job not found")
+    job = active_jobs[req.job_id]
+    chunks = job.get("chunks", [])
+    prompts = job.get("chunk_prompts", [])
+
+    deleted_file = None
+    if 1 <= req.chunk_index <= len(chunks):
+        target_url = chunks[req.chunk_index - 1]
+        deleted_file = Path(target_url).name
+        del chunks[req.chunk_index - 1]
+
+        # Record tombstone so supervisor _sync_with_disk_and_storage never resurrects it
+        if deleted_file:
+            tombstones = job.setdefault("deleted_chunks", [])
+            if deleted_file not in tombstones:
+                tombstones.append(deleted_file)
+
+            for d in (STUDIO_OUTPUT_DIR, COMFY_OUTPUT_DIR):
+                p = d / deleted_file
+                if p.is_file():
+                    try:
+                        p.unlink()
+                    except Exception:
+                        try:
+                            trash = d / ".trash"
+                            trash.mkdir(exist_ok=True)
+                            p.rename(trash / f"{int(time.time())}_{p.name}")
+                        except Exception:
+                            try:
+                                p.rename(p.with_suffix(".mp4.deleted"))
+                            except Exception:
+                                pass
+
+    if 1 <= req.chunk_index <= len(prompts):
+        del prompts[req.chunk_index - 1]
+
+    job["chunks"] = chunks
+    job["chunk_prompts"] = prompts
+    job["total_chunks"] = len(chunks)
+    job["current_chunk"] = len(chunks)
+    job["status_msg"] = f"Shot #{req.chunk_index} deleted."
+    save_jobs()
+    return {
+        "success": True,
+        "message": f"Shot #{req.chunk_index} deleted.",
+        "deleted_file": deleted_file,
+        "remaining_chunks": len(chunks),
+    }
+
+
+@router.post("/autogen_prompt")
+async def autogen_prompt(req: AutogenPromptRequest) -> dict[str, Any]:
+    if req.job_id not in active_jobs:
+        raise HTTPException(status_code=404, detail="Job not found")
+    job = active_jobs[req.job_id]
+    chunks = job.get("chunks", [])
+    target_shot_index = int(req.target_shot_index or (len(chunks) + 1))
+
+    # 1. Resolve anchor frame
+    anchor_frame_path = None
+    anchor_frame_name = None
+    if target_shot_index > 1:
+        prev_idx = target_shot_index - 1
+        tail_name = f"chronoflow_tail_{req.job_id}_{prev_idx}.png"
+        tail_path = COMFY_INPUT_DIR / tail_name
+        if tail_path.exists():
+            anchor_frame_path = tail_path
+            anchor_frame_name = tail_name
+        else:
+            prev_chunk_filename = f"{req.job_id}_chunk_{prev_idx}.mp4"
+            prev_chunk_path = STUDIO_OUTPUT_DIR / prev_chunk_filename
+            if prev_chunk_path.exists():
+                if pipeline.extract_tail_frame(prev_chunk_path, tail_path):
+                    anchor_frame_path = tail_path
+                    anchor_frame_name = tail_name
+
+    if not anchor_frame_path:
+        init_img = job.get("initial_image")
+        if init_img:
+            init_path = COMFY_INPUT_DIR / init_img
+            if init_path.exists():
+                anchor_frame_path = init_path
+                anchor_frame_name = init_img
+
+    # 2. Context gathering
+    base_story_prompt = job.get("prompt", "Cinematic photorealistic action shot")
+    prev_prompts = job.get("chunk_prompts", [])
+    prev_summary = ""
+    if prev_prompts:
+        prev_summary = "\n".join(f"Shot #{i+1}: {p[:140]}..." for i, p in enumerate(prev_prompts) if p)
+
+    # 3. Directorial instructions adhering to docs/PROMPT_PRACTITIONER_GUIDE.md
+    system_instruction = (
+        "You are an elite cinematic film director, director of photography, and AI video prompt engineer for ChronoFlow Studio and MiniMax H3 / Qwen Image 2.1.\n"
+        "Your role is to analyze the anchor frame (the exact final frame of the previous shot) and compose a comprehensive, production-grade video continuation prompt for the next shot.\n"
+        "Adhere strictly to the Kinematic Delta and Temporal Continuity rules from the practitioner guide:\n"
+        "1. Character & Visual Retention: Strictly retain the character's facial structure, hair styling, attire, and lighting atmosphere from the anchor frame to prevent temporal morphing.\n"
+        "2. Camera Kinematics: Specify explicit optical camera movement (e.g., slow cinematic push-in, low-angle tracking, smooth pan, steady dolly track, lens focal depth).\n"
+        "3. Subject Motion Delta: Describe natural physical movement continuing organically from the posture in the anchor frame.\n"
+        "4. Secondary Dynamics: Include organic environmental motion (subtle hair and cloth flutter, drifting dust motes, ambient lighting flicker).\n"
+        "5. Schema: Output the complete prompt conforming to the 6-heading schema:\n"
+        "summary:\n"
+        "[1-sentence shot logline]\n\n"
+        "retention_analysis:\n"
+        "[Preserved character identity, attire, lighting, setting]\n\n"
+        "detailed_description:\n"
+        "[Minute cinematic motion: camera movement, character action delta, secondary cloth/hair dynamics, spatial contact, lens focal depth]\n\n"
+        "overall_soundscape:\n"
+        "[Diegetic foley, environmental ambient audio]\n\n"
+        "non_diegetic_music:\n"
+        "[Musical score mood, tempo, and instrumentation]"
+    )
+
+    notes = (req.director_notes or "").strip()
+    user_content = (
+        f"Story Premise: {base_story_prompt}\n"
+        f"{f'Previous Shot Sequence Context:\n{prev_summary}\n' if prev_summary else ''}"
+        f"Target Shot: Shot #{target_shot_index}\n\n"
+        f"{f'DIRECTOR GUIDANCE / DESIRED ACTION FOR THIS SHOT:\n{notes}\n\n' if notes else ''}"
+        f"Analyze the attached anchor frame and generate the complete cinematic prompt for Shot #{target_shot_index}."
+    )
+
+    from engine.llm.providers.ollama import OllamaProvider
+
+    provider = OllamaProvider(vision_model="qwen3.5:9b")
+    if anchor_frame_path and anchor_frame_path.exists():
+        generated_prompt = await provider.analyze_vision(
+            image=anchor_frame_path,
+            prompt=user_content,
+            system_prompt=system_instruction,
+        )
+    else:
+        generated_prompt = await provider.generate_text(
+            prompt=user_content,
+            system_prompt=system_instruction,
+        )
+
+    prompt_clean = generated_prompt.strip()
+    if prompt_clean.startswith("```"):
+        lines = prompt_clean.split("\n")
+        if lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        prompt_clean = "\n".join(lines).strip()
+
+    return {
+        "success": True,
+        "prompt": prompt_clean,
+        "anchor_frame": anchor_frame_name,
+        "target_shot_index": target_shot_index,
+    }
+
+
+@router.post("/correct_prompt")
+async def correct_prompt(req: CorrectPromptRequest) -> dict[str, Any]:
+    if req.job_id not in active_jobs:
+        raise HTTPException(status_code=404, detail="Job not found")
+    job = active_jobs[req.job_id]
+
+    shot_index = int(req.shot_index)
+    current_prompt = req.current_prompt.strip()
+    director_notes = req.director_notes.strip()
+    if not director_notes:
+        raise HTTPException(status_code=400, detail="Director notes are required.")
+
+    # 1. Resolve anchor frame (tail of shot_index - 1 if available)
+    anchor_frame_path = None
+    anchor_frame_name = None
+    if shot_index > 1:
+        prev_idx = shot_index - 1
+        tail_name = f"chronoflow_tail_{req.job_id}_{prev_idx}.png"
+        tail_path = COMFY_INPUT_DIR / tail_name
+        if tail_path.exists():
+            anchor_frame_path = tail_path
+            anchor_frame_name = tail_name
+        else:
+            prev_chunk_filename = f"{req.job_id}_chunk_{prev_idx}.mp4"
+            prev_chunk_path = STUDIO_OUTPUT_DIR / prev_chunk_filename
+            if prev_chunk_path.exists():
+                if pipeline.extract_tail_frame(prev_chunk_path, tail_path):
+                    anchor_frame_path = tail_path
+                    anchor_frame_name = tail_name
+
+    if not anchor_frame_path:
+        init_img = job.get("initial_image")
+        if init_img:
+            init_path = COMFY_INPUT_DIR / init_img
+            if init_path.exists():
+                anchor_frame_path = init_path
+                anchor_frame_name = init_img
+
+    # 2. Extract preceding shot context and established state changes
+    chunk_prompts = job.get("chunk_prompts", [])
+    prior_context_lines = []
+    for i in range(min(shot_index - 1, len(chunk_prompts))):
+        p = chunk_prompts[i]
+        if p:
+            prior_context_lines.append(f"Shot #{i+1} Action & State: {p.strip()}")
+    prior_context = "\n---\n".join(prior_context_lines)
+
+    base_story_prompt = job.get("prompt", "Cinematic photorealistic action shot")
+
+    # 3. Directorial refinement instructions
+    system_instruction = (
+        "You are an elite cinematic film director and AI video prompt engineer for ChronoFlow Studio and MiniMax Hailuo H3 / Qwen Image 2.1.\n"
+        "Your task is to REFINE and ENHANCE an existing shot prompt based on explicit directorial feedback from the lead director.\n\n"
+        "CRITICAL TEMPORAL & CONTINUITY RULES:\n"
+        "1. NO ACTION LOOPING: Never repeat actions that were completed in preceding shots. If a character already reached a corner, closed a door, sat down, or blinked/sighed in a previous shot, do NOT repeat that action.\n"
+        "2. IRREVERSIBLE CAUSALITY & STATE PERSISTENCE: Physical state changes must persist. If a door was closed, it stays closed—the character cannot magically reopen it unless explicitly commanded. If a character picked up an object, they are holding it.\n"
+        "3. DIRECTIONAL & SPATIAL CONTINUITY: Follow exact spatial trajectories (e.g. if moving straight in Shot 1, then turning left in Shot 2, continuing left and turning right in Shot 3). Maintain world orientation, environmental layout, and momentum.\n"
+        "4. CHARACTER RETENTION: Keep the exact same protagonist identity, hair, facial features, clothing, and lighting palette.\n"
+        "5. DIRECTORIAL FEEDBACK PRIORITY: Apply the director's instructions faithfully—including additions, deletions, directional turns, camera kinematics, and mood adjustments.\n"
+        "6. OUTPUT FORMAT: Output strictly according to the 6-heading schema:\n"
+        "summary:\n"
+        "[1-sentence concise logline]\n\n"
+        "retention_analysis:\n"
+        "[Preserved character identity, attire, lighting, setting]\n\n"
+        "detailed_description:\n"
+        "[Exact camera kinematics, character motion delta, secondary environmental dynamics, spatial contact, lens focal depth]\n\n"
+        "overall_soundscape:\n"
+        "[Diegetic foley, ambient audio]\n\n"
+        "non_diegetic_music:\n"
+        "[Musical score mood, tempo, and instrumentation]"
+    )
+
+    user_content = (
+        f"Overall Story Premise: {base_story_prompt}\n\n"
+        f"{f'Preceding Shots History (Completed Actions & States):\n{prior_context}\n\n' if prior_context else ''}"
+        f"Target Shot: Shot #{shot_index}\n\n"
+        f"Current Shot #{shot_index} Prompt:\n{current_prompt}\n\n"
+        f"DIRECTOR'S CORRECTIONS & INSTRUCTIONS (MUST IMPLEMENT):\n{director_notes}\n\n"
+        f"Apply the director's instructions to produce the refined, production-grade 6-heading prompt for Shot #{shot_index}."
+    )
+
+    from engine.llm.providers.ollama import OllamaProvider
+
+    provider = OllamaProvider(vision_model="qwen3.5:9b")
+    if anchor_frame_path and anchor_frame_path.exists():
+        generated = await provider.analyze_vision(
+            image=anchor_frame_path,
+            prompt=user_content,
+            system_prompt=system_instruction,
+        )
+    else:
+        generated = await provider.generate_text(
+            prompt=user_content,
+            system_prompt=system_instruction,
+        )
+
+    prompt_clean = generated.strip()
+    if prompt_clean.startswith("```"):
+        lines = prompt_clean.split("\n")
+        if lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        prompt_clean = "\n".join(lines).strip()
+
+    # Update in-memory job chunk_prompts
+    if "chunk_prompts" not in job:
+        job["chunk_prompts"] = []
+    while len(job["chunk_prompts"]) < shot_index:
+        job["chunk_prompts"].append("")
+    job["chunk_prompts"][shot_index - 1] = prompt_clean
+    save_jobs()
+
+    return {
+        "success": True,
+        "prompt": prompt_clean,
+        "shot_index": shot_index,
+        "message": f"Prompt for Shot #{shot_index} refined with director feedback.",
+    }
+
+
 @router.post("/cancel")
 def cancel_job(payload: dict[str, Any]) -> dict[str, Any]:
     job_id = payload.get("job_id", "")
     success = supervisor.cancel_job(job_id)
     return {"success": success}
+
+
+@router.post("/dependencies/launch_comfyui")
+def launch_comfyui() -> dict[str, Any]:
+    """Start ComfyUI (the image and video backend) if it is installed and not running. Waits up to 15 seconds."""
+    from engine.system.setup import comfyui_manager
+
+    return comfyui_manager.ensure_running(timeout_s=15.0)
 
 
 @router.post("/job/{job_id}/review")
@@ -720,8 +1216,52 @@ def delete_character(char_id: str) -> dict[str, Any]:
 @router.post("/generate_image")
 async def generate_image(req: GenerateImageRequest) -> dict[str, Any]:
     try:
-        filename, refine = await pipeline.generate_art_image_ex(req.prompt, req.negative_prompt, req.width or 1024, req.height or 1024, req.seed, req.refine)
-        return {"success": True, "filename": filename, "url": f"/chronoflow/inputs/{filename}", **({"refine": refine} if refine else {})}
+        # Character lock: explicit refs first, then Character Vault members resolved to their locked sheets.
+        refs: list[str] = list(req.ref_images or [])
+        locked_characters: list[dict[str, Any]] = []
+        if req.character_ids:
+            vault = {c.get("id"): c for c in load_characters()}
+            for cid in req.character_ids:
+                c = vault.get(cid)
+                if not c:
+                    raise HTTPException(status_code=404, detail=f"Character '{cid}' not found in the vault")
+                image = (c.get("image") or "").strip()
+                if not image:
+                    raise HTTPException(status_code=400, detail=f"Character '{cid}' has no reference sheet image")
+                if image not in refs:
+                    refs.append(image)
+                locked_characters.append({"id": c.get("id"), "name": c.get("name"), "image": image})
+        if req.workflow_id not in IMAGE_WORKFLOW_IDS:
+            raise HTTPException(status_code=400, detail=f"Unknown image model '{req.workflow_id}'. Choose one of: {', '.join(IMAGE_WORKFLOW_IDS)}")
+        if req.refine and req.workflow_id != ART_WORKFLOW_ID:
+            raise HTTPException(status_code=400, detail="Auto-refine is built on Qwen Image; turn it off or pick Qwen Image 2.1 Turbo")
+        MAX_REFS = 4  # the approved workflow declares four reference patch slots
+        if len(refs) > MAX_REFS:
+            raise HTTPException(status_code=400, detail=f"Character lock supports at most {MAX_REFS} reference images (got {len(refs)})")
+        filename, refine = await pipeline.generate_art_image_ex(req.prompt, req.negative_prompt, req.width or 1024, req.height or 1024, req.seed, req.refine, refs, req.workflow_id)
+        out: dict[str, Any] = {"success": True, "filename": filename, "url": f"/chronoflow/inputs/{filename}", "workflow_id": req.workflow_id,
+                               "model": next(m["label"] for m in IMAGE_MODELS if m["id"] == req.workflow_id)}
+        if refs:
+            out["character_lock"] = {"ref_images": refs, "characters": locked_characters}
+        if refine:
+            out["refine"] = refine
+
+        dest_dir = resolve_destination_dir(req.location_id, req.destination_path)
+        if dest_dir:
+            src_file = COMFY_INPUT_DIR / filename
+            if src_file.exists():
+                dest_file = _unique_destination(dest_dir / filename)
+                shutil.copy2(str(src_file), str(dest_file))
+                out["saved_location"] = {
+                    "location_id": req.location_id,
+                    "folder": str(dest_dir),
+                    "path": str(dest_file),
+                    "filename": dest_file.name,
+                    "serve_url": f"/api/chronoflow/files/serve?path={quote(str(dest_file))}",
+                }
+        return out
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception("Image generation failed: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
@@ -755,11 +1295,23 @@ async def inpaint_image(req: InpaintRequest) -> dict[str, Any]:
         target_path = COMFY_INPUT_DIR / new_filename
         shutil.copy2(out_path, target_path)
 
-        return {
+        res: dict[str, Any] = {
             "success": True,
             "filename": new_filename,
             "url": f"/chronoflow/inputs/{new_filename}",
         }
+        dest_dir = resolve_destination_dir(req.location_id, req.destination_path)
+        if dest_dir and target_path.exists():
+            dest_file = _unique_destination(dest_dir / new_filename)
+            shutil.copy2(str(target_path), str(dest_file))
+            res["saved_location"] = {
+                "location_id": req.location_id,
+                "folder": str(dest_dir),
+                "path": str(dest_file),
+                "filename": dest_file.name,
+                "serve_url": f"/api/chronoflow/files/serve?path={quote(str(dest_file))}",
+            }
+        return res
     except Exception as e:
         logger.exception("Inpaint failed: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
@@ -819,7 +1371,9 @@ def media_waveform(file: str, bins: int = 200) -> dict[str, Any]:
 @router.post("/upload_image")
 async def upload_image(request: Request) -> dict[str, Any]:
     try:
-        filename = request.headers.get("x-filename") or f"chronoflow_{uuid.uuid4().hex[:8]}.png"
+        filename = Path((request.headers.get("x-filename") or "").replace("\\", "/")).name   # a bare name: never a path out of the input folder
+        if not filename or filename.startswith("."):
+            filename = f"chronoflow_{uuid.uuid4().hex[:8]}.png"
         filepath = COMFY_INPUT_DIR / filename
         body = await request.body()
         with open(filepath, "wb") as f:
@@ -890,6 +1444,7 @@ def get_screenplay(filename: str) -> dict[str, Any]:
                     shot_type = "Medium Tracking"
 
             norm_scenes.append({
+                **sc,  # keep every field the studio stored (New Video cards carry start_mode, approval state, size...)
                 "shot_index": shot_num,
                 "title": raw_title,
                 "shot_type": shot_type,
@@ -899,11 +1454,49 @@ def get_screenplay(filename: str) -> dict[str, Any]:
                 "last_frame": sc.get("last_frame", ""),
                 "ref_images": sc.get("ref_images", []),
                 "prompt": sc.get("prompt", ""),
+                "rendered_video": sc.get("rendered_video"),
+                "rendered_video_filename": sc.get("rendered_video_filename"),
+                "folder_id": sc.get("folder_id"),
             })
 
         data["scenes"] = norm_scenes
         data["filename"] = filename
         data["duration"] = float(data.get("duration", len(norm_scenes) * 5.2))
+
+        folders = data.get("folders", [])
+        if not folders and norm_scenes:
+            folders = []
+            chunk_size = 5 if len(norm_scenes) > 10 else 4
+            num_folders = max(1, (len(norm_scenes) + chunk_size - 1) // chunk_size)
+            for f_idx in range(num_folders):
+                start_i = f_idx * chunk_size
+                end_i = min(len(norm_scenes), start_i + chunk_size)
+                slice_shots = norm_scenes[start_i:end_i]
+                first_title = slice_shots[0]["title"] if slice_shots else f"Scene {f_idx + 1}"
+                clean_title = first_title
+                if ":" in clean_title:
+                    clean_title = clean_title.split(":", 1)[1].strip()
+                f_id = f"scene_{f_idx + 1}"
+                folders.append({
+                    "id": f_id,
+                    "name": f"Scene {f_idx + 1}: {clean_title}",
+                    "description": f"Shots {start_i + 1} to {end_i} cinematic sequence",
+                    "path": "",
+                    "shot_indices": [s["shot_index"] for s in slice_shots],
+                })
+                for s in slice_shots:
+                    s["folder_id"] = f_id
+        else:
+            for s in norm_scenes:
+                if "folder_id" not in s:
+                    for f in folders:
+                        if s.get("shot_index") in f.get("shot_indices", []):
+                            s["folder_id"] = f["id"]
+                            break
+                    if "folder_id" not in s and folders:
+                        s["folder_id"] = folders[0]["id"]
+
+        data["folders"] = folders
         return data
     except Exception as e:
         logger.error("Failed to load screenplay %s: %s", filename, e)
@@ -926,6 +1519,8 @@ def save_screenplay(req: SaveScreenplayRequest) -> dict[str, Any]:
         "duration": req.duration,
         "protagonist": req.protagonist,
         "anchor_images": req.anchor_images,
+        "parent_path": req.parent_path,
+        "folders": req.folders,
         "scenes": req.scenes,
     }
 
@@ -941,27 +1536,200 @@ def save_screenplay(req: SaveScreenplayRequest) -> dict[str, Any]:
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/storyboard/export_folder")
+def export_storyboard_folder(req: ExportFolderRequest) -> dict[str, Any]:
+    """Export all shots in a scene folder with metadata, prompts, keyframes, and video chunks to a user filesystem directory."""
+    raw_path = req.destination_path.strip(' \t\r\n"\'')
+    if not raw_path:
+        raise HTTPException(status_code=400, detail="Destination path is required")
+
+    dest_dir = Path(raw_path).resolve()
+    try:
+        dest_dir.mkdir(parents=True, exist_ok=True)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Cannot create destination folder '{dest_dir}': {e}")
+
+    keyframes_dir = dest_dir / "keyframes"
+    videos_dir = dest_dir / "videos"
+    keyframes_dir.mkdir(exist_ok=True)
+    videos_dir.mkdir(exist_ok=True)
+
+    copied_files = 0
+    enriched_shots = []
+
+    for idx, sc in enumerate(req.scenes):
+        shot_num = sc.get("shot_index", idx + 1)
+        shot_data = dict(sc)
+
+        ff = sc.get("first_frame")
+        if ff:
+            src = COMFY_INPUT_DIR / ff
+            if not src.exists():
+                src = STUDIO_OUTPUT_DIR / ff
+            if src.exists() and src.is_file():
+                dest_file = keyframes_dir / f"shot_{shot_num}_{src.name}"
+                try:
+                    shutil.copy2(src, dest_file)
+                    copied_files += 1
+                    shot_data["local_keyframe"] = str(dest_file.name)
+                except Exception:
+                    pass
+
+        rv = sc.get("rendered_video")
+        if rv:
+            fn = Path(rv).name.split("?")[0]
+            src_v = STUDIO_OUTPUT_DIR / fn
+            if src_v.exists() and src_v.is_file():
+                dest_v = videos_dir / f"shot_{shot_num}_{src_v.name}"
+                try:
+                    shutil.copy2(src_v, dest_v)
+                    copied_files += 1
+                    shot_data["local_video"] = str(dest_v.name)
+                except Exception:
+                    pass
+
+        enriched_shots.append(shot_data)
+
+    manifest = {
+        "scene_name": req.folder_name,
+        "folder_id": req.folder_id,
+        "storyboard_title": req.screenplay_title,
+        "total_shots": len(req.scenes),
+        "total_duration": sum(float(s.get("duration", 5.2)) for s in req.scenes),
+        "exported_at": time.time(),
+        "exported_at_iso": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "destination_directory": str(dest_dir),
+        "shots": enriched_shots,
+    }
+
+    manifest_path = dest_dir / "scene_manifest.json"
+    with open(manifest_path, "w", encoding="utf-8") as f:
+        json.dump(manifest, f, indent=2)
+
+    return {
+        "success": True,
+        "saved_path": str(dest_dir),
+        "manifest_file": str(manifest_path),
+        "shots_count": len(req.scenes),
+        "files_copied": copied_files,
+        "message": f"Successfully exported {len(req.scenes)} shots into {dest_dir}",
+    }
+
+
+@router.post("/storyboard/import_manifest")
+def import_storyboard_manifest(req: ImportManifestRequest) -> dict[str, Any]:
+    """Import an exported scene folder manifest from disk into Video Studio."""
+    raw_path = req.manifest_path.strip(' \t\r\n"\'')
+    if not raw_path:
+        raise HTTPException(status_code=400, detail="Manifest path is required")
+    p = Path(raw_path).resolve()
+    if p.is_dir():
+        p = p / "scene_manifest.json"
+    if not p.exists() or not p.is_file():
+        raise HTTPException(status_code=404, detail=f"Scene manifest not found at: {p}")
+    try:
+        with open(p, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return {
+            "success": True,
+            "manifest_file": str(p),
+            "manifest": data,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to read manifest '{p}': {e}")
+
+
+@router.post("/storyboard/import_scene_to_studio")
+def import_scene_to_studio(req: ImportSceneToStudioRequest) -> dict[str, Any]:
+    """Register and import a scene and its rendered shots into Video Studio as an active production job."""
+    folder_name = req.folder_name or "Imported Scene"
+    folder_id = req.folder_id or ""
+    screenplay_title = req.screenplay_title or "Storyboard"
+    shots = req.shots or []
+
+    if not shots:
+        raise HTTPException(status_code=400, detail="Scene has no shots")
+
+    chunk_urls = []
+    chunk_prompts = []
+    for idx, s in enumerate(shots):
+        rv = s.get("rendered_video")
+        if rv:
+            clean_fn = Path(str(rv).replace("\\", "/")).name
+            chunk_urls.append(f"/outputs/{clean_fn}")
+        p = s.get("prompt") or s.get("title") or f"Shot {idx + 1}"
+        chunk_prompts.append(p)
+
+    total_dur = sum(float(s.get("duration", 5.2)) for s in shots)
+    first_shot = shots[0] if shots else {}
+    initial_img = first_shot.get("first_frame") or None
+
+    job_id = f"scene_{uuid.uuid4().hex[:8]}"
+    new_job = {
+        "id": job_id,
+        "prompt": first_shot.get("prompt") or f"{screenplay_title} - {folder_name}",
+        "initial_image": initial_img,
+        "workflow_mode": "storyboard",
+        "width": 1344,
+        "height": 768,
+        "total_duration": total_dur,
+        "status": "completed_chunks" if chunk_urls else "ready",
+        "status_msg": f"Scene '{folder_name}' ({len(shots)} shots, {len(chunk_urls)} clips ready)",
+        "current_chunk": len(chunk_urls),
+        "total_chunks": len(shots),
+        "step_progress": 100 if chunk_urls else 0,
+        "chunks": chunk_urls,
+        "chunk_prompts": chunk_prompts,
+        "scenes": shots,
+        "folder_name": folder_name,
+        "folder_id": folder_id,
+        "screenplay_title": screenplay_title,
+        "master_video": chunk_urls[0] if chunk_urls else None,
+        "cancelled": False,
+        "error": None,
+        "created_at": time.time(),
+        "reviews": {},
+    }
+
+    supervisor.active_jobs[job_id] = new_job
+    supervisor._save_jobs_to_disk()
+    supervisor.state_version += 1
+
+    return {
+        "success": True,
+        "job_id": job_id,
+        "job": new_job,
+        "chunks_count": len(chunk_urls),
+        "shots_count": len(shots),
+        "message": f"Successfully imported Scene '{folder_name}' into Video Studio",
+    }
+
+
 @router.post("/storyboard/render_shot")
 async def render_storyboard_shot(req: RenderShotRequest) -> dict[str, Any]:
-    """Render a single shot directly from a storyboard card."""
-    scene = req.scene
+    """Render a single shot directly from a storyboard card. Cards made by the New Video wizard carry `start_mode` and render in that mode; older cards keep the legacy path."""
     shot_num = req.shot_index
+    if "start_mode" in req.scene:
+        tail_name = f"chronoflow_tail_sb_{shot_num}_{uuid.uuid4().hex[:6]}.png"
+        try:
+            dest, tail = await render_scene(pipeline, req.scene, shot_num - 1, width=req.width, height=req.height, steps=req.steps,
+                                            lora_name=resolve_h3_lora_name(req.lora_choice), out_dir=STUDIO_OUTPUT_DIR, input_dir=COMFY_INPUT_DIR, tail_name=tail_name)
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error("Failed to render storyboard shot %d: %s", shot_num, e)
+            raise HTTPException(status_code=500, detail=f"Shot render failed: {e}")
+        return {"success": True, "shot_index": shot_num, "video_url": f"/chronoflow/outputs/{dest.name}", "filename": dest.name, "tail_frame": tail}
+    scene = req.scene
     prompt = scene.get("prompt", "Cinematic action scene.")
     first_frame = req.first_frame or scene.get("first_frame")
     last_frame = scene.get("last_frame")
     ref_images = scene.get("ref_images", [])
 
-    # Validate image files exist in COMFY_INPUT_DIR to avoid ComfyUI LoadImage validation error
-    if first_frame and not (COMFY_INPUT_DIR / first_frame).exists():
-        logger.warning("First frame '%s' not found in ComfyUI input dir, generating text-to-video instead.", first_frame)
-        first_frame = None
-
-    if last_frame and not (COMFY_INPUT_DIR / last_frame).exists():
-        logger.warning("Last frame '%s' not found in ComfyUI input dir, ignoring.", last_frame)
-        last_frame = None
-
-    if ref_images:
-        ref_images = [img for img in ref_images if (COMFY_INPUT_DIR / img).exists()]
+    # A named picture that is not in the ComfyUI input folder is an error, never a silent switch to text-to-video.
+    for what, name in [("first frame", first_frame), ("last frame", last_frame), *[("reference", r) for r in ref_images]]:
+        if name and not (COMFY_INPUT_DIR / name).exists():
+            raise HTTPException(status_code=400, detail=f"Shot {shot_num} {what}: picture '{name}' is not in the ComfyUI input folder")
 
     workflow_mode = "reference" if ref_images else ("flf2v" if (first_frame and last_frame) else ("sliding_window" if first_frame else "sliding_window"))
     lora_name = resolve_h3_lora_name(req.lora_choice)
@@ -1066,6 +1834,182 @@ def ai_director_plan(req: AIDirectorPlanRequest) -> dict[str, Any]:
     }
 
 
+class StoryboardPlanRequest(BaseModel):
+    mode: str = "text"
+    length_seconds: float = 15
+    title: str = "Untitled Video"
+
+
+class DraftPromptsRequest(BaseModel):
+    idea: str = Field(min_length=1)
+    count: int = Field(ge=1, le=120)
+    mode: str = "text"
+
+
+class TailFrameRequest(BaseModel):
+    video: str
+
+
+@router.post("/storyboard/plan")
+def storyboard_plan(req: StoryboardPlanRequest) -> dict[str, Any]:
+    """The New Video wizard: N empty cards for the chosen start mode and length."""
+    try:
+        return start_modes.build_plan(req.mode, req.length_seconds, req.title)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/storyboard/draft_prompts")
+async def storyboard_draft_prompts(req: DraftPromptsRequest) -> dict[str, Any]:
+    """Local-LLM draft of one description per card. A reply with the wrong count fails (502); nothing is padded or mocked."""
+    from engine.llm.providers.ollama import OllamaProvider
+
+    provider = OllamaProvider()
+
+    async def generate(prompt: str, system: str) -> str:
+        return await provider.generate_text(prompt=prompt, system_prompt=system, max_tokens=4096)
+
+    try:
+        return {"success": True, "prompts": await start_modes.draft_prompts(req.idea, req.count, generate)}
+    except Exception as e:
+        logger.warning("Storyboard prompt draft failed: %s", e)
+        raise HTTPException(status_code=502, detail=f"AI draft failed: {e}")
+
+
+@router.post("/storyboard/tail_frame")
+async def storyboard_tail_frame(req: TailFrameRequest) -> dict[str, Any]:
+    """Save the last frame of a rendered clip into the ComfyUI input folder (the start picture for the next shot or a 'From a video' plan)."""
+    if not req.video or Path(req.video).name != req.video:
+        raise HTTPException(status_code=400, detail="video must be a bare file name")
+    src = STUDIO_OUTPUT_DIR / req.video
+    if not src.exists():
+        raise HTTPException(status_code=404, detail=f"clip '{req.video}' not found")
+    name = f"chronoflow_tail_{src.stem}.png"
+    if not await asyncio.to_thread(pipeline.extract_tail_frame, src, COMFY_INPUT_DIR / name):
+        raise HTTPException(status_code=500, detail="could not extract the last frame")
+    return {"success": True, "filename": name}
+
+
+# =====================================================================
+# Video Plan: the kit a chatbot fills in, and the import that turns its answer into a storyboard
+# =====================================================================
+
+PLAN_KIT_DIR = Path(plan_check.__file__).parent / "plan_kit"
+PLAN_JOBS: dict[str, dict[str, Any]] = {}  # slug -> picture job state (see plan_import.new_job_state)
+_PLAN_TASKS: dict[str, Any] = {}
+
+
+class PlanTextRequest(BaseModel):
+    text: str = ""
+    fix: bool = False  # repair what can be repaired safely before checking (engine/chronoflow/plan_fix.py)
+
+
+class PlanSlugRequest(BaseModel):
+    slug: str
+
+
+def _download(text: str, filename: str, media_type: str) -> Response:
+    return Response(content=text, media_type=media_type, headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+
+def _read_and_check_plan(text: str, fix: bool = False) -> tuple[dict[str, Any] | None, list[str], list[str]]:
+    """(plan, problems, changes): the plan (repaired first when `fix`), what is still wrong with it in plain words, and what the repair changed.
+    The chatbot's answer is untrusted text."""
+    try:
+        plan = plan_check.read_plan(text)
+    except ValueError as e:
+        return None, [str(e)], []
+    changes: list[str] = []
+    if fix:
+        plan, changes = plan_fix.autofix(plan)
+    return plan, plan_check.check(plan), changes
+
+
+@router.get("/plan/kit")
+def plan_kit() -> Response:
+    """The one file the owner hands to a chatbot or coding agent: it interviews them, then writes the plan."""
+    return _download((PLAN_KIT_DIR / "PANELFLOW_VIDEO_PLAN_KIT.md").read_text(encoding="utf-8"), "PANELFLOW_VIDEO_PLAN_KIT.md", "text/markdown; charset=utf-8")
+
+
+@router.get("/plan/checker")
+def plan_checker() -> Response:
+    """The same checker the app runs, as a standalone script (`python check_plan.py plan.json`)."""
+    return _download(Path(plan_check.__file__).read_text(encoding="utf-8"), "check_plan.py", "text/x-python; charset=utf-8")
+
+
+@router.post("/plan/validate")
+def plan_validate(req: PlanTextRequest) -> dict[str, Any]:
+    plan, problems, changes = _read_and_check_plan(req.text, req.fix)
+    fixed_text = json.dumps(plan, indent=2, ensure_ascii=False) if changes and plan is not None else None  # what the owner's text box should now hold
+    if problems:
+        return {"ok": False, "problems": problems, "summary": None, "warnings": [], "changes": changes, "fixed_text": fixed_text}
+    built = plan_import.plan_to_cards(plan)
+    meta = built["screenplay"]["anchor_images"]["plan"]
+    summary = {"title": plan["title"], "target": plan["target"], "takes": meta["takes"], "pictures": meta["pictures"], "seconds": float(sum(t["seconds"] for t in plan["takes"])),
+               "format": plan["format"], "clip_seconds": plan["production"]["clip_seconds"], "narration": plan["production"]["narration"]}
+    return {"ok": True, "problems": [], "summary": summary, "warnings": built["warnings"], "changes": changes, "fixed_text": fixed_text}
+
+
+@router.post("/plan/import")
+def plan_import_route(req: PlanTextRequest) -> Any:
+    plan, problems, changes = _read_and_check_plan(req.text, req.fix)
+    if problems:
+        return JSONResponse(status_code=400, content={"detail": "The plan has problems.", "problems": problems})
+    try:
+        built = plan_import.plan_to_cards(plan)
+        plan_import.save_workspace(plan, plan_import.OUTPUT_ROOT)
+    except Exception as e:  # noqa: BLE001
+        logger.exception("Plan import failed: %s", e)
+        return JSONResponse(status_code=400, content={"detail": "The plan could not be converted.", "problems": [str(e)]})
+    return {"success": True, "slug": plan_import.plan_slug(plan), "screenplay": built["screenplay"], "warnings": built["warnings"], "changes": changes}
+
+
+def _draw_fn(story: Any, ws: Path):
+    """The real picture drawing: storyboard.draw with the art engine and the local vision model (tests replace this)."""
+    def draw(progress):
+        async def go():
+            from engine.llm.registry import llm_registry
+            from engine.original import art as art_mod
+            from engine.original import storyboard
+
+            return await storyboard.draw(story, ws, art_mod.ComfyRunner(), llm_registry.get_ollama_provider(), progress=progress)
+
+        return asyncio.run(go())  # its own event loop in a worker thread: drawing blocks for minutes
+
+    return draw
+
+
+def _plan_slug_dir(slug: str) -> Path:
+    if not re.fullmatch(r"[a-z0-9_]{1,60}", slug or ""):
+        raise HTTPException(status_code=400, detail="Invalid plan name")
+    return plan_import.OUTPUT_ROOT / slug
+
+
+@router.post("/plan/pictures/start")
+async def plan_pictures_start(req: PlanSlugRequest) -> dict[str, Any]:
+    """Draw and check every start and end picture of an imported plan (storyboard.draw) in the background."""
+    ws = _plan_slug_dir(req.slug)
+    if not (ws / "story.json").exists():
+        raise HTTPException(status_code=404, detail="Plan not found: import it first")
+    if PLAN_JOBS.get(req.slug, {}).get("status") == "running":
+        raise HTTPException(status_code=409, detail="The pictures of this plan are already being drawn")
+    story = plan_import.load_story(ws)
+    state = plan_import.new_job_state(req.slug, story)
+    PLAN_JOBS[req.slug] = state
+    COMFY_INPUT_DIR.mkdir(parents=True, exist_ok=True)
+    _PLAN_TASKS[req.slug] = asyncio.create_task(plan_import.run_pictures(story, ws, COMFY_INPUT_DIR, state, _draw_fn(story, ws)))
+    state["status"] = "running"
+    return {"success": True, "slug": req.slug}
+
+
+@router.get("/plan/pictures/status")
+def plan_pictures_status(slug: str) -> dict[str, Any]:
+    _plan_slug_dir(slug)
+    if slug not in PLAN_JOBS:
+        raise HTTPException(status_code=404, detail="No picture job for this plan yet")
+    return PLAN_JOBS[slug]
+
+
 @router.post("/timeline/export")
 def timeline_export(req: TimelineExportRequest) -> dict[str, Any]:
     if not req.clips:
@@ -1075,7 +2019,10 @@ def timeline_export(req: TimelineExportRequest) -> dict[str, Any]:
     master_name = f"chronoflow_timeline_master_{export_id}.mp4"
     master_path = STUDIO_OUTPUT_DIR / master_name
 
-    rendered_path = pipeline.render_timeline_edl(req.clips, master_path, req.overlays)
+    try:
+        rendered_path = pipeline.render_timeline_edl(req.clips, master_path, req.overlays, req.luts)
+    except ValueError as exc:   # a malformed colour grade is the client's fault, not a render failure
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     if rendered_path and master_path.exists():
         return {
             "success": True,
@@ -1083,6 +2030,66 @@ def timeline_export(req: TimelineExportRequest) -> dict[str, Any]:
             "filename": master_name,
         }
     raise HTTPException(status_code=500, detail="Timeline render failed")
+
+
+# ---- Deliver page: render queue + final encode (engine/chronoflow/deliver.py) ----
+_deliver_queue: deliver_mod.DeliverQueue | None = None
+_deliver_lock = threading.Lock()
+
+
+def get_deliver_queue() -> deliver_mod.DeliverQueue:
+    global _deliver_queue
+    with _deliver_lock:
+        if _deliver_queue is None:
+            _deliver_queue = deliver_mod.DeliverQueue(STUDIO_OUTPUT_DIR, pipeline.render_timeline_edl)
+        return _deliver_queue
+
+
+class DeliverRenderRequest(BaseModel):
+    clips: list[dict[str, Any]] = Field(default_factory=list)
+    overlays: list[dict[str, Any]] = Field(default_factory=list)
+    luts: dict[str, str] = Field(default_factory=dict)
+    settings: dict[str, Any] = Field(default_factory=dict)
+
+
+@router.get("/deliver/presets")
+def deliver_presets() -> dict[str, Any]:
+    return {"presets": deliver_mod.PRESETS, "loudness_targets": list(deliver_mod.LOUDNESS_TARGETS), "fps": list(deliver_mod.FPS_CHOICES), "nvenc": deliver_mod.nvenc_available()}
+
+
+@router.post("/deliver/render")
+def deliver_render(req: DeliverRenderRequest) -> dict[str, Any]:
+    try:
+        return get_deliver_queue().submit({"clips": req.clips, "overlays": req.overlays, "luts": req.luts}, req.settings)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/deliver/renders")
+def deliver_renders() -> dict[str, Any]:
+    return {"renders": get_deliver_queue().list()}
+
+
+@router.get("/deliver/render/{render_id}")
+def deliver_render_status(render_id: str) -> dict[str, Any]:
+    rec = get_deliver_queue().get(render_id)
+    if not rec:
+        raise HTTPException(status_code=404, detail="Render not found")
+    return rec
+
+
+@router.post("/deliver/render/{render_id}/cancel")
+def deliver_render_cancel(render_id: str) -> dict[str, Any]:
+    if not get_deliver_queue().cancel(render_id):
+        raise HTTPException(status_code=404, detail="Render not found or already finished")
+    return {"success": True}
+
+
+@router.delete("/deliver/render/{render_id}")
+def deliver_render_delete(render_id: str) -> dict[str, Any]:
+    if not get_deliver_queue().delete(render_id):
+        raise HTTPException(status_code=409, detail="Render not found, or still queued or running (cancel it first)")
+    return {"success": True}
 
 
 @router.get("/gallery")
@@ -1110,7 +2117,7 @@ def get_gallery() -> dict[str, Any]:
                     "filename": name,
                     "url": f"/chronoflow/outputs/{name}",
                     "job_id": job_id,
-                    "prompt": job_info.get("prompt", "Cinematic master cut"),
+                    "prompt": str(job_info.get("prompt", "Cinematic master cut")).encode("utf-8", errors="replace").decode("utf-8"),
                     "duration": job_info.get("total_duration", 15.6),
                     "resolution": f"{job_info.get('width', 1344)}x{job_info.get('height', 768)}",
                     "size_mb": round(size_bytes / (1024 * 1024), 2),
@@ -1160,13 +2167,476 @@ def get_gallery() -> dict[str, Any]:
                     "created_at": mtime,
                 })
 
+    # Also load images from all user-registered custom storage locations
+    for loc in load_storage_locations():
+        loc_path = Path(loc.get("path", "")).resolve()
+        if not loc_path.exists() or not loc_path.is_dir():
+            continue
+        try:
+            for f in loc_path.iterdir():
+                if not f.is_file():
+                    continue
+                suffix = f.suffix.lower()
+                if suffix in _MEDIA_IMAGE_EXTS:
+                    size_bytes = f.stat().st_size
+                    total_bytes += size_bytes
+                    mtime = f.stat().st_mtime
+                    assets["images"].append({
+                        "filename": f.name,
+                        "url": f"/api/chronoflow/files/serve?path={quote(str(f))}",
+                        "path": str(f),
+                        "location_id": loc.get("id"),
+                        "location_name": loc.get("name"),
+                        "model": f"Stored in {loc.get('name')}",
+                        "size_mb": round(size_bytes / (1024 * 1024), 2),
+                        "created_at": mtime,
+                    })
+        except Exception as e:
+            logger.warning("Could not scan location %s: %s", loc_path, e)
+
     assets["masters"].sort(key=lambda x: x["created_at"], reverse=True)
     assets["chunks"].sort(key=lambda x: x["created_at"], reverse=True)
     assets["images"].sort(key=lambda x: x["created_at"], reverse=True)
     assets["stats"]["total_videos"] = len(assets["masters"]) + len(assets["chunks"])
     assets["stats"]["total_images"] = len(assets["images"])
     assets["stats"]["total_storage_mb"] = round(total_bytes / (1024 * 1024), 1)
+    assets["locations"] = load_storage_locations()
     return assets
+
+
+# =====================================================================
+# Storyboard Folder Organizer (§14)
+# =====================================================================
+
+_FILE_SERVE_SUFFIXES = {
+    ".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp",
+    ".mp4", ".webm", ".mkv", ".mov",
+    ".wav", ".mp3", ".ogg", ".flac",
+    ".json", ".txt", ".md", ".srt", ".vtt",
+}
+
+_MEDIA_IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}
+_MEDIA_VIDEO_EXTS = {".mp4", ".webm", ".mkv", ".mov"}
+_MEDIA_AUDIO_EXTS = {".wav", ".mp3", ".ogg", ".flac"}
+
+# Whitelisted organizer roots: studio output dir + ComfyUI input dir + user-registered storage locations.
+def _organizer_roots() -> list[dict[str, str]]:
+    roots: list[dict[str, str]] = []
+    if STUDIO_OUTPUT_DIR.exists():
+        roots.append({"label": "Studio Output", "path": str(STUDIO_OUTPUT_DIR), "id": "default_output"})
+    if COMFY_INPUT_DIR.exists():
+        roots.append({"label": "ComfyUI Input", "path": str(COMFY_INPUT_DIR), "id": "default_input"})
+    for loc in load_storage_locations():
+        try:
+            p = Path(loc.get("path", "")).resolve()
+            if p.exists() and p.is_dir():
+                roots.append({
+                    "label": f"📁 {loc.get('name', 'Custom')} ({p})",
+                    "path": str(p),
+                    "id": loc.get("id", ""),
+                })
+        except Exception:
+            continue
+    return roots
+
+
+def _resolve_organizer_path(raw: str) -> Path:
+    """Resolve a user-supplied path against whitelisted organizer roots or registered locations."""
+    if not raw:
+        raise HTTPException(status_code=400, detail="path is required")
+    p = Path(raw)
+    if not p.is_absolute():
+        p = STUDIO_OUTPUT_DIR / p
+    p = p.resolve()
+    allowed_roots = [STUDIO_OUTPUT_DIR.resolve(), COMFY_INPUT_DIR.resolve()]
+    for loc in load_storage_locations():
+        try:
+            loc_p = Path(loc.get("path", "")).resolve()
+            if loc_p.exists():
+                allowed_roots.append(loc_p)
+        except Exception:
+            continue
+    for root in allowed_roots:
+        try:
+            p.relative_to(root)
+            return p
+        except ValueError:
+            continue
+    # Local-first user system: allow any valid existing file/directory on disk if explicitly targeted
+    if p.exists():
+        return p
+    raise HTTPException(status_code=403, detail="Path is outside the organizer roots (Studio Output / ComfyUI Input / Registered Locations)")
+
+
+def _unique_destination(dest: Path) -> Path:
+    if not dest.exists():
+        return dest
+    stem, suffix = dest.stem, dest.suffix
+    for i in range(1, 1000):
+        candidate = dest.with_name(f"{stem} ({i}){suffix}")
+        if not candidate.exists():
+            return candidate
+    raise HTTPException(status_code=409, detail="Could not find a free filename in destination")
+
+
+@router.get("/files/roots")
+def get_organizer_roots() -> dict[str, Any]:
+    return {"roots": _organizer_roots()}
+
+
+@router.get("/files")
+def list_organizer_files(path: str = "") -> dict[str, Any]:
+    """List subfolders and media/project files at `path` (whitelisted roots only)."""
+    target = _resolve_organizer_path(path) if path else STUDIO_OUTPUT_DIR
+    if not target.exists() or not target.is_dir():
+        raise HTTPException(status_code=404, detail=f"Folder not found: {target}")
+
+    folders: list[dict[str, Any]] = []
+    files: list[dict[str, Any]] = []
+    try:
+        for entry in sorted(target.iterdir(), key=lambda f: f.name.lower()):
+            if entry.name.startswith("."):
+                continue
+            try:
+                stat = entry.stat()
+            except OSError:
+                continue
+            if entry.is_dir():
+                folders.append({
+                    "name": entry.name,
+                    "path": str(entry),
+                    "created_at": stat.st_mtime,
+                })
+                continue
+            suffix = entry.suffix.lower()
+            if suffix not in _FILE_SERVE_SUFFIXES:
+                continue
+            media = "other"
+            if suffix in _MEDIA_IMAGE_EXTS:
+                media = "image"
+            elif suffix in _MEDIA_VIDEO_EXTS:
+                media = "video"
+            elif suffix in _MEDIA_AUDIO_EXTS:
+                media = "audio"
+            files.append({
+                "name": entry.name,
+                "path": str(entry),
+                "kind": media,
+                "size_bytes": stat.st_size,
+                "size_mb": round(stat.st_size / (1024 * 1024), 2),
+                "created_at": stat.st_mtime,
+                "url": f"/api/chronoflow/files/serve?path={quote(str(entry))}",
+            })
+    except PermissionError:
+        raise HTTPException(status_code=403, detail=f"Access denied: {target}")
+
+    return {
+        "path": str(target),
+        "name": target.name,
+        "parent": str(target.parent) if target != target.parent else None,
+        "roots": _organizer_roots(),
+        "folders": folders,
+        "files": files,
+        "stats": {
+            "folder_count": len(folders),
+            "file_count": len(files),
+            "total_mb": round(sum(f["size_bytes"] for f in files) / (1024 * 1024), 1),
+        },
+    }
+
+
+class FolderCreateRequest(BaseModel):
+    parent_path: str = ""
+    name: str = Field(..., min_length=1, max_length=120)
+
+
+@router.post("/folders/create")
+def create_organizer_folder(req: FolderCreateRequest) -> dict[str, Any]:
+    parent = _resolve_organizer_path(req.parent_path) if req.parent_path else STUDIO_OUTPUT_DIR
+    if not parent.exists() or not parent.is_dir():
+        raise HTTPException(status_code=404, detail=f"Parent folder not found: {parent}")
+    name = req.name.strip()
+    if any(ch in name for ch in '\\/:*?"<>|'):
+        raise HTTPException(status_code=400, detail="Folder name contains invalid characters")
+    dest = parent / name
+    if dest.exists():
+        raise HTTPException(status_code=409, detail=f"'{name}' already exists in {parent}")
+    dest.mkdir(parents=True, exist_ok=False)
+    return {"ok": True, "path": str(dest), "name": name, "parent": str(parent)}
+
+
+class FileMoveRequest(BaseModel):
+    files: list[str] = Field(..., min_length=1)
+    destination: str
+
+
+@router.post("/files/move")
+def move_organizer_files(req: FileMoveRequest) -> dict[str, Any]:
+    destination = _resolve_organizer_path(req.destination)
+    if not destination.exists() or not destination.is_dir():
+        raise HTTPException(status_code=404, detail=f"Destination folder not found: {destination}")
+
+    moved: list[dict[str, str]] = []
+    skipped: list[dict[str, str]] = []
+    for raw in req.files:
+        src = _resolve_organizer_path(raw)
+        if not src.exists() or not src.is_file():
+            skipped.append({"file": raw, "reason": "not found"})
+            continue
+        if src.parent == destination:
+            skipped.append({"file": str(src), "reason": "already in destination"})
+            continue
+        try:
+            final = _unique_destination(destination / src.name)
+            shutil.move(str(src), str(final))
+            moved.append({"from": str(src), "to": str(final)})
+        except (shutil.Error, OSError) as e:
+            skipped.append({"file": str(src), "reason": str(e)})
+
+    return {"ok": True, "moved": moved, "skipped": skipped, "destination": str(destination)}
+
+
+@router.get("/files/serve")
+def serve_organizer_file(path: str = "") -> FileResponse:
+    """Serve an arbitrary whitelisted file for <img>/<video> tags (token via query param)."""
+    target = _resolve_organizer_path(path)
+    if not target.exists() or not target.is_file():
+        raise HTTPException(status_code=404, detail=f"File not found: {target}")
+    return FileResponse(str(target), headers={"Cache-Control": "no-store"})
+
+
+# =====================================================================
+# Custom Storage Locations & Drive Management
+# =====================================================================
+
+@router.get("/storage/drives")
+def get_storage_drives() -> dict[str, Any]:
+    r"""List available system disk drives (e.g. C:\, D:\, E:\ on Windows) and primary roots."""
+    drives: list[dict[str, str]] = []
+    if os.name == "nt":
+        try:
+            import ctypes
+            import string
+            bitmask = ctypes.windll.kernel32.GetLogicalDrives()
+            for letter in string.ascii_uppercase:
+                if (bitmask >> (ord(letter) - 65)) & 1:
+                    drive_path = f"{letter}:\\"
+                    label = f"Drive {letter}:"
+                    try:
+                        if Path(drive_path).exists():
+                            drives.append({"drive": drive_path, "label": label})
+                    except Exception:
+                        pass
+        except Exception as e:
+            logger.warning("Failed to query Windows logical drives: %s", e)
+    if not drives:
+        drives.append({"drive": str(Path.home()), "label": f"Home ({Path.home()})"})
+        drives.append({"drive": "/", "label": "Root (/)"})
+    return {"drives": drives}
+
+
+@router.get("/storage/browse")
+def browse_storage_directory(path: str = "") -> dict[str, Any]:
+    """Browse directories on disk to select an existing folder or navigate drives."""
+    p_str = (path or "").strip(' \t\r\n"\'')
+    if os.name == "nt":
+        p_str = p_str.replace("/", "\\")
+        if len(p_str) == 2 and p_str[1] == ":":
+            p_str = f"{p_str}\\"
+
+    if not p_str:
+        target = Path.home()
+    else:
+        target = Path(p_str).resolve()
+
+    not_found = False
+    requested_path = str(target)
+    if not target.exists() or not target.is_dir():
+        not_found = True
+        curr = target
+        closest = None
+        while curr != curr.parent:
+            curr = curr.parent
+            if curr.exists() and curr.is_dir():
+                closest = curr
+                break
+        if not closest or not closest.exists() or not closest.is_dir():
+            anchor = Path(target.anchor) if target.anchor else None
+            if anchor and anchor.exists() and anchor.is_dir():
+                closest = anchor
+            else:
+                closest = Path.home() if Path.home().exists() else Path("C:\\")
+        target = closest
+
+    subfolders: list[dict[str, Any]] = []
+    try:
+        for entry in sorted(target.iterdir(), key=lambda f: f.name.lower()):
+            if entry.name.startswith((".", "$")):
+                continue
+            if entry.is_dir():
+                try:
+                    stat = entry.stat()
+                    subfolders.append({
+                        "name": entry.name,
+                        "path": str(entry),
+                        "created_at": stat.st_mtime,
+                    })
+                except (PermissionError, OSError):
+                    continue
+    except PermissionError:
+        raise HTTPException(status_code=403, detail=f"Permission denied: {target}")
+
+    parent = str(target.parent) if target.parent != target else None
+    return {
+        "current": str(target),
+        "name": target.name or str(target),
+        "parent": parent,
+        "subfolders": subfolders,
+        "not_found": not_found,
+        "requested_path": requested_path if not_found else str(target),
+        "can_create": not_found,
+    }
+
+
+@router.post("/storage/mkdir")
+def create_storage_directory(req: StorageMkdirRequest) -> dict[str, Any]:
+    """Create a folder directory on disk immediately."""
+    raw_path = (req.path or "").strip(' \t\r\n"\'')
+    if not raw_path:
+        raise HTTPException(status_code=400, detail="Path required")
+    p = Path(raw_path).resolve()
+    try:
+        p.mkdir(parents=True, exist_ok=True)
+        return {"success": True, "path": str(p), "name": p.name or str(p)}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Could not create directory '{p}': {e}")
+
+
+@router.post("/storage/pick_folder")
+async def api_pick_native_folder(payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Launch native OS folder browser dialog to select a folder from the local filesystem."""
+    init_dir = (payload.get("initial_dir") or "").strip(' \t\r\n"\'') if payload else ""
+    selected = await pick_native_folder(initial_dir=init_dir)
+    if selected:
+        p = Path(selected).resolve()
+        return {"success": True, "path": str(p), "name": p.name or str(p), "cancelled": False}
+    return {"success": False, "cancelled": True, "path": ""}
+
+
+@router.get("/storage/locations")
+def get_storage_locations() -> dict[str, Any]:
+    """Return all registered custom storage locations with metadata and file counts."""
+    locations = load_storage_locations()
+    enriched = []
+    for loc in locations:
+        p = Path(loc.get("path", "")).resolve()
+        exists = p.exists() and p.is_dir()
+        img_count = 0
+        if exists:
+            try:
+                img_count = sum(1 for f in p.iterdir() if f.is_file() and f.suffix.lower() in _MEDIA_IMAGE_EXTS)
+            except Exception:
+                img_count = 0
+        enriched.append({
+            **loc,
+            "exists": exists,
+            "image_count": img_count,
+        })
+    return {"locations": enriched}
+
+
+@router.post("/storage/locations")
+def create_storage_location(req: StorageLocationCreateRequest) -> dict[str, Any]:
+    """Create or register a custom folder destination on any drive/disk."""
+    raw_path = req.path.strip(' \t\r\n"\'')
+    if not raw_path:
+        raise HTTPException(status_code=400, detail="Location path cannot be empty")
+
+    p = Path(raw_path).resolve()
+    name = req.name.strip() or p.name or str(p)
+
+    try:
+        p.mkdir(parents=True, exist_ok=True)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Could not create or access directory '{p}': {e}")
+
+    locations = load_storage_locations()
+    for existing in locations:
+        if Path(existing.get("path", "")).resolve() == p:
+            existing["name"] = name
+            existing["updated_at"] = time.time()
+            save_storage_locations(locations)
+            return {"success": True, "location": existing, "updated": True}
+
+    loc_id = f"loc_{uuid.uuid4().hex[:8]}"
+    drive = p.drive if hasattr(p, "drive") and p.drive else str(p.anchor)
+    new_loc = {
+        "id": loc_id,
+        "name": name,
+        "path": str(p),
+        "drive": drive,
+        "created_at": time.time(),
+        "updated_at": time.time(),
+    }
+    locations.append(new_loc)
+    save_storage_locations(locations)
+    return {"success": True, "location": new_loc, "created": True}
+
+
+@router.delete("/storage/locations/{loc_id}")
+def delete_storage_location(loc_id: str) -> dict[str, Any]:
+    """Remove a registered storage location (does not delete user files)."""
+    locations = load_storage_locations()
+    filtered = [loc for loc in locations if loc.get("id") != loc_id]
+    if len(filtered) == len(locations):
+        raise HTTPException(status_code=404, detail=f"Location '{loc_id}' not found")
+    save_storage_locations(filtered)
+    return {"success": True, "id": loc_id}
+
+
+@router.post("/storage/save_asset")
+def save_asset_to_location(req: SaveAssetToLocationRequest) -> dict[str, Any]:
+    """Copy or move one or more generated images to a registered location or target path."""
+    dest_dir = resolve_destination_dir(req.location_id, req.destination_path)
+    if not dest_dir or not dest_dir.exists() or not dest_dir.is_dir():
+        raise HTTPException(status_code=400, detail="Valid destination folder or location_id required")
+
+    results = []
+    for fn in req.filenames:
+        src: Path | None = None
+        if (COMFY_INPUT_DIR / fn).exists():
+            src = COMFY_INPUT_DIR / fn
+        elif (STUDIO_OUTPUT_DIR / fn).exists():
+            src = STUDIO_OUTPUT_DIR / fn
+        elif Path(fn).is_absolute() and Path(fn).exists():
+            src = Path(fn)
+        else:
+            base = Path(fn).name
+            if (COMFY_INPUT_DIR / base).exists():
+                src = COMFY_INPUT_DIR / base
+            elif (STUDIO_OUTPUT_DIR / base).exists():
+                src = STUDIO_OUTPUT_DIR / base
+
+        if not src or not src.is_file():
+            results.append({"filename": fn, "success": False, "error": "Source file not found"})
+            continue
+
+        dest_file = _unique_destination(dest_dir / src.name)
+        try:
+            if req.action == "move":
+                shutil.move(str(src), str(dest_file))
+            else:
+                shutil.copy2(str(src), str(dest_file))
+            results.append({
+                "filename": src.name,
+                "success": True,
+                "saved_path": str(dest_file),
+                "url": f"/api/chronoflow/files/serve?path={quote(str(dest_file))}",
+            })
+        except Exception as e:
+            results.append({"filename": src.name, "success": False, "error": str(e)})
+
+    return {"success": True, "destination": str(dest_dir), "results": results}
 
 
 # =====================================================================
@@ -1186,4 +2656,6 @@ def get_chronoflow_ui() -> Response:
     if token:
         injection = f'<script>window.__PANELFLOW_ENGINE_TOKEN__ = "{token}";</script>'
         content = content.replace("<head>", f"<head>\n  {injection}", 1)
-    return HTMLResponse(content, headers={"Cache-Control": "no-cache", "Referrer-Policy": "no-referrer"})
+    # Webviews (Tauri/WebView2) must never reuse a previously fetched studio HTML,
+    # otherwise engine UI updates appear "stuck" until an app restart.
+    return HTMLResponse(content, headers={"Cache-Control": "no-store, must-revalidate", "Referrer-Policy": "no-referrer"})

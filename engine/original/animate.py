@@ -1,11 +1,12 @@
-"""Animate key beats with the fast MiniMax H3 image-to-video workflow (`fastvideo_h3_i2v`, registered and checksummed).
+"""Animate key beats with registered Image-to-Video workflows.
+
+Supported workflows:
+- `wan21_14b_i2v`: Wan2.1 14B Image-to-Video (primary workflow, 832x480 native 16:9, natural Kinematic Delta prose).
+- `fastvideo_h3_i2v`: Fast MiniMax H3 Image-to-Video (multimodal XML prompt format).
 
 A beat's picture is the first frame; the clip lands in `<workspace>/clips/<beat>.mp4`, where `video.py` already looks (it drops the clip's own
 audio, ping-pongs it to the narration length and shows it whole). The motion prompt is composed from the beat's ShotSpec and narration, the same
-way image prompts are: nothing is typed per story. H3 continues whatever action it sees in the picture, so the prompt names the moment from the
-narration and asks for everything else to stay as drawn.
-
-Measured on the owner's machine (2026-11-06, 864x480, 90 frames = 4.7 s): about 65 s per clip, against ~180 s expected for the earlier turbo graph.
+way image prompts are: nothing is typed per story.
 """
 from __future__ import annotations
 
@@ -18,16 +19,79 @@ from typing import Callable
 from engine.comfyui import ComfyUIClient, ComfyWorkflowRegistry
 from engine.comfyui.art import ArtEngine, ComfyImageGenerationError, _patch_workflow
 from engine.original.models import OriginalStory, Panel
+from engine.original.prompt import UNIVERSAL_VIDEO_NEGATIVE_PROMPT
 from engine.original.shotspec import ShotSpec
 
+WAN21_I2V_ID = "wan21_14b_i2v"
 FAST_H3_ID = "fastvideo_h3_i2v"
+DEFAULT_WORKFLOW_ID = WAN21_I2V_ID
 STATIC_CAMERA = "nothing; it is a Static Shot, fixed on a tripod, with no zoom, no pan and no tilt"  # the default: a push-in is opt-in per panel (Panel.camera)
-DEFAULT_SECONDS = 3.6  # the graph turns this into 90 frames (a multiple-of-17-plus-5 rule) = 4.7 s at 19 fps; video.py ping-pongs it to the narration
+DEFAULT_SECONDS = 3.6  # default duration in seconds; video.py ping-pongs clips to the narration
 BEATS_PER_CLIP = 4.5  # default: about one animated beat in 4-5
+DEFAULT_WIDTH = 832
+DEFAULT_HEIGHT = 480
 
 
-def motion_prompt(story: OriginalStory, panel: Panel) -> str:
-    """The H3 text for one beat, from its ShotSpec (or, for an undirected panel, its action) and its narration."""
+def wan_motion_prompt(story: OriginalStory, panel: Panel) -> str:
+    """Compose natural Kinematic Delta motion prose for Wan2.1 without MiniMax H3 XML tags."""
+    chars = {c.id: c for c in story.bible.characters}
+    parts: list[str] = []
+
+    # Camera kinematics
+    if panel.camera and panel.camera.strip():
+        cam = panel.camera.strip()
+        cam_desc = cam if cam.lower().startswith(("the camera", "camera")) else f"The camera does {cam}"
+    else:
+        cam_desc = "The camera is static, fixed on a tripod with no zoom, no pan, and no tilt"
+    parts.append(cam_desc.rstrip("."))
+
+    # Subject action and scene dynamics
+    if panel.director:
+        spec = ShotSpec(**panel.director)
+        who = []
+        for cp in spec.characters:
+            c = chars.get(cp.id)
+            look = ", ".join(t.strip() for t in c.look.split(",")[:3]) if c and c.look else ""
+            char_ident = f"{c.name} ({look})" if (c and look) else (c.name if c else cp.id)
+            actions = [a for a in (cp.pose, f"expression {cp.expression}" if cp.expression else "", cp.action) if a]
+            act_str = f" {', '.join(actions)}" if actions else ""
+            who.append(f"{char_ident}{act_str}")
+        who_str = "; ".join(who)
+        if who_str:
+            parts.append(who_str)
+        if spec.setting:
+            parts.append(f"in {spec.setting}")
+        if spec.lighting or spec.mood:
+            atmo = []
+            if spec.lighting:
+                atmo.append(f"{spec.lighting} lighting")
+            if spec.mood:
+                atmo.append(f"{spec.mood} atmosphere")
+            parts.append(", ".join(atmo))
+    else:
+        if panel.action:
+            parts.append(panel.action.strip())
+
+    # Moment action / narration
+    if panel.motion:
+        parts.append(panel.motion.strip())
+    elif panel.caption:
+        parts.append(f"Action of the moment: {panel.caption.strip()}")
+
+    # Secondary dynamics & temporal anti-morphing
+    parts.append("Natural cloth and hair physics, smooth continuous cinematic motion, identity and environment stay consistent as drawn")
+
+    return ". ".join(p.rstrip(".") for p in parts if p) + "."
+
+
+def motion_prompt(story: OriginalStory, panel: Panel, workflow_id: str = FAST_H3_ID) -> str:
+    """The motion prompt text for one beat.
+
+    When workflow_id is WAN21_I2V_ID, composes natural Kinematic Delta prose without MiniMax XML tags.
+    When workflow_id is FAST_H3_ID, composes MiniMax H3 multimodal format with XML tags.
+    """
+    if workflow_id == WAN21_I2V_ID:
+        return wan_motion_prompt(story, panel)
     chars = {c.id: c for c in story.bible.characters}
     if panel.director:
         spec = ShotSpec(**panel.director)
@@ -84,8 +148,10 @@ def release_ollama() -> None:
         pass
 
 
-def animate_beats(story: OriginalStory, ws: Path, beat_ids: list[str] | None = None, max_clips: int | None = None, *, seconds: float = DEFAULT_SECONDS,
-                  client: ComfyUIClient | None = None, timeout: float = 900.0, progress: Callable[[float, str], None] = lambda p, m: None,
+def animate_beats(story: OriginalStory, ws: Path, beat_ids: list[str] | None = None, max_clips: int | None = None, *,
+                  workflow_id: str = WAN21_I2V_ID, seconds: float = DEFAULT_SECONDS, width: int = DEFAULT_WIDTH,
+                  height: int = DEFAULT_HEIGHT, negative_prompt: str | None = None, client: ComfyUIClient | None = None,
+                  timeout: float = 1800.0, progress: Callable[[float, str], None] = lambda p, m: None,
                   is_cancelled: Callable[[], bool] = lambda: False, free_llm_memory: bool = True) -> dict:
     """Make `clips/<beat>.mp4` for each chosen beat (explicit ids, else `pick_beats`). A clip newer than its picture is reused; a failed beat
     is reported and the rest continue (a story with a missing clip just shows that picture still)."""
@@ -99,18 +165,23 @@ def animate_beats(story: OriginalStory, ws: Path, beat_ids: list[str] | None = N
         raise ValueError(f"no picture yet for: {missing} (draw the art first)")
     client = client or ComfyUIClient()
     registry = ComfyWorkflowRegistry(client)
-    pre = registry.preflight(FAST_H3_ID)
+    pre = registry.preflight(workflow_id)
     if not pre["ready"]:
         raise ComfyImageGenerationError(f"ComfyUI workflow preflight failed: missing nodes={pre['missing_nodes']}, missing models={pre['missing_models']}")
-    workflow, sha = registry.load(FAST_H3_ID)
-    slots = registry.metadata(FAST_H3_ID)["patch_slots"]
+    workflow, sha = registry.load(workflow_id)
+    slots = registry.metadata(workflow_id)["patch_slots"]
     engine = ArtEngine(client, registry)
     from engine.comfyui.service import _history_videos
+
+    neg_prompt = negative_prompt if negative_prompt is not None else UNIVERSAL_VIDEO_NEGATIVE_PROMPT
 
     clips = ws / "clips"
     clips.mkdir(exist_ok=True)
     log_path = clips / "animate.json"
-    log = json.loads(log_path.read_text(encoding="utf-8")) if log_path.exists() else {}
+    try:
+        log = json.loads(log_path.read_text(encoding="utf-8")) if log_path.exists() else {}
+    except (json.JSONDecodeError, OSError):
+        log = {}
     if free_llm_memory:
         release_ollama()
     done, skipped, failed = [], [], []
@@ -118,25 +189,56 @@ def animate_beats(story: OriginalStory, ws: Path, beat_ids: list[str] | None = N
         if is_cancelled():
             raise RuntimeError("cancelled")
         picture, clip = ws / "panels" / f"{bid}.png", clips / f"{bid}.mp4"
-        if clip.exists() and clip.stat().st_mtime >= picture.stat().st_mtime:
+        if clip.exists() and clip.stat().st_size > 0 and clip.stat().st_mtime >= picture.stat().st_mtime:
             skipped.append(bid)
             continue
         progress(n / len(ids), f"Animating {bid} ({n + 1}/{len(ids)})")
         seed = int(hashlib.sha256(f"{story.bible.premise.title}|{bid}".encode()).hexdigest()[:12], 16)
-        text = motion_prompt(story, by_id[bid])
+        if workflow_id == WAN21_I2V_ID:
+            text = wan_motion_prompt(story, by_id[bid])
+        else:
+            text = motion_prompt(story, by_id[bid], workflow_id=workflow_id)
         started = time.monotonic()
         try:
-            patched = _patch_workflow(workflow, slots, text, None, 0, 0, seed, f"video/panelflow_{bid}", reference_image=client.upload_image(picture),
-                                      duration=seconds)
+            patched = _patch_workflow(
+                workflow,
+                slots,
+                text,
+                neg_prompt,
+                width,
+                height,
+                seed,
+                f"video/panelflow_{bid}",
+                reference_image=client.upload_image(picture),
+                duration=seconds,
+            )
             raw, prompt_id, _ = engine.run(patched, timeout=timeout, is_cancelled=is_cancelled, collect=_history_videos)
         except Exception as exc:
+            if is_cancelled():
+                raise RuntimeError("cancelled")
             failed.append({"beat": bid, "error": str(exc)[:200]})
             continue
         clip.write_bytes(raw)
-        log[bid] = {"clip": f"clips/{bid}.mp4", "seed": seed, "seconds": seconds, "prompt": text, "workflow": FAST_H3_ID, "workflow_sha256": sha,
-                    "prompt_id": prompt_id, "elapsed_s": round(time.monotonic() - started, 1)}
+        log[bid] = {
+            "clip": f"clips/{bid}.mp4",
+            "seed": seed,
+            "seconds": seconds,
+            "prompt": text,
+            "workflow": workflow_id,
+            "workflow_sha256": sha,
+            "prompt_id": prompt_id,
+            "elapsed_s": round(time.monotonic() - started, 1),
+        }
         log_path.write_text(json.dumps(log, indent=1), encoding="utf-8")
         done.append(bid)
+    if is_cancelled():
+        raise RuntimeError("cancelled")
     progress(1.0, f"Animated {len(done)}, reused {len(skipped)}, failed {len(failed)}")
-    return {"animated": done, "reused": skipped, "failed": failed, "workflow": FAST_H3_ID, "workflow_sha256": sha,
-            "seconds_each": [log[b]["elapsed_s"] for b in done]}
+    return {
+        "animated": done,
+        "reused": skipped,
+        "failed": failed,
+        "workflow": workflow_id,
+        "workflow_sha256": sha,
+        "seconds_each": [log[b]["elapsed_s"] for b in done],
+    }

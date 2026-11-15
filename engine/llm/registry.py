@@ -336,6 +336,32 @@ def get_default_llm_registry() -> LLMRegistry:
 
     registry.load_persisted_cloud_provider()
 
+    # Auto-detect Free LLM API / OpenRouter environment variables
+    env_cloud_key = (
+        os.environ.get("FREELLMAPI_API_KEY")
+        or os.environ.get("OPENROUTER_API_KEY")
+        or os.environ.get("PANELFLOW_CLOUD_LLM_KEY", "")
+    ).strip()
+    if env_cloud_key:
+        env_url = (
+            os.environ.get("FREELLMAPI_BASE_URL")
+            or os.environ.get("OPENROUTER_BASE_URL")
+            or "https://openrouter.ai/api/v1"
+        ).strip()
+        env_model = (
+            os.environ.get("FREELLMAPI_MODEL")
+            or os.environ.get("OPENROUTER_MODEL")
+            or "meta-llama/llama-3.3-70b-instruct:free"
+        ).strip()
+        ptype = "freellmapi" if "freellmapi" in env_url.lower() or os.environ.get("FREELLMAPI_API_KEY") else "openrouter"
+        registry.configure_cloud_provider(
+            endpoint_url=env_url,
+            api_key=env_cloud_key,
+            model_name=env_model,
+            provider_type=ptype,
+            is_active=True,
+        )
+
     return registry
 
 llm_registry = get_default_llm_registry()

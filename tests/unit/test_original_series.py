@@ -95,7 +95,7 @@ def test_queue_runs_episodes_in_order_through_job_manager(client, monkeypatch):
     s = store.create("Moon Tales", "bedtime", full_bible(), "main")
     order = []
 
-    def fake_run(st_, sid, number, channel, provider, runner_factory, progress, is_cancelled, scenes, check, refine=False, animate=False):
+    def fake_run(st_, sid, number, channel, provider, runner_factory, progress, is_cancelled, scenes, check, refine=False, animate=False, preview: bool = False, **kwargs):
         order.append(number)
         progress(0.5, "half")
         st_.update_episode(sid, Episode(number=number, title=f"T{number}", summary=f"S{number}", status="done"))
@@ -154,7 +154,7 @@ def test_refine_reaches_the_episode_run_only_when_asked_and_never_without_the_re
     s = store.create("Moon Tales", "bedtime", full_bible(), "main")
     seen = []
 
-    def fake_run(st_, sid, number, channel, provider, runner_factory, progress, is_cancelled, scenes, check, refine=False, animate=False):
+    def fake_run(st_, sid, number, channel, provider, runner_factory, progress, is_cancelled, scenes, check, refine=False, animate=False, preview: bool = False, **kwargs):
         seen.append((number, check, refine))
         st_.update_episode(sid, Episode(number=number, title="T", summary="S", status="done"))
         return {"episode": number}
@@ -201,7 +201,7 @@ def test_animate_reaches_the_episode_run_only_when_asked(client, monkeypatch):
     s = store.create("Moon Tales", "bedtime", full_bible(), "main")
     seen = []
 
-    def fake_run(st_, sid, number, channel, provider, runner_factory, progress, is_cancelled, scenes, check, refine=False, animate=False):
+    def fake_run(st_, sid, number, channel, provider, runner_factory, progress, is_cancelled, scenes, check, refine=False, animate=False, preview: bool = False, **kwargs):
         seen.append((refine, animate))
         st_.update_episode(sid, Episode(number=number, title="T", summary="S", status="done"))
         return {"episode": number}
@@ -250,3 +250,33 @@ def test_animate_route_validates_and_passes_the_choice_through(client, monkeypat
     assert c.post("/api/original/story/tale/animate").json()["animated"] == ["auto"] and calls[-1][1] is None  # no list: the stage chooses
     assert c.post("/api/original/story/tale/animate?beats=bad").status_code == 422
     assert c.post("/api/original/story/tale/animate?beats=down").status_code == 503
+
+
+def test_preview_reaches_the_episode_run_only_when_asked(client, monkeypatch):
+    c, r, tmp = client
+    store = SeriesStore(tmp / "series")
+    s = store.create("Moon Tales", "bedtime", full_bible(), "main")
+    seen = []
+
+    def fake_run(st_, sid, number, channel, provider, runner_factory, progress, is_cancelled, scenes, check, refine=False, animate=False, preview: bool = False, **kwargs):
+        seen.append((number, preview))
+        st_.update_episode(sid, Episode(number=number, title="T", summary="S", status="done"))
+        return {"episode": number}
+
+    class P:
+        async def health_check(self):
+            return True
+
+    monkeypatch.setattr(queue, "run_episode", fake_run)
+    from engine.llm.registry import llm_registry
+    monkeypatch.setattr(llm_registry, "get_ollama_provider", lambda: P())
+    before = len(c.get("/api/original/jobs").json())
+    assert c.post(f"/api/original/series/{s.id}/episodes", json={"count": 1}).status_code == 200  # default: preview=False
+    assert c.post(f"/api/original/series/{s.id}/episodes", json={"count": 1, "preview": True}).status_code == 200
+    for _ in range(100):
+        jobs = c.get("/api/original/jobs").json()
+        if len(jobs) == before + 2 and all(j["status"] in ("SUCCEEDED", "FAILED") for j in jobs):
+            break
+        time.sleep(0.1)
+    assert sorted(seen) == [(1, False), (2, True)], (seen, jobs)
+

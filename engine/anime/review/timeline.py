@@ -67,7 +67,7 @@ def build_timeline(script: ReviewScript, plan: ClipPlan, durations: list[float],
 
 def voice_script(script: ReviewScript, plan: ClipPlan, workspace: Path, fps: float = 30.0, voice: str = "am_michael",
                  rate: float = 1.0, tts=None) -> Timeline:
-    tts = tts or rt.KokoroTts()
+    tts = tts or rt.get_default_tts()
     out_dir = workspace / "voice"
     paths, durs = [], []
     try:

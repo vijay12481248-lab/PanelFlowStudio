@@ -208,11 +208,11 @@ class ComfyUIClient:
             raise ComfyUIError(f"ComfyUI output retrieval failed for {filename}: {exc}") from exc
 
 
-    def upload_image(self, path: Path) -> str:
-        """Upload an image to ComfyUI's input directory and return the server filename."""
-        data = path.read_bytes()
+    def upload_image_bytes(self, data: bytes, filename: str | None = None) -> str:
+        """Upload raw image bytes to ComfyUI's input directory and return the server filename."""
         digest = hashlib.sha256(data).hexdigest()
-        name, boundary = f"pf_{digest[:16]}.png", "pfboundary" + digest[:8]
+        name = filename or f"pf_{digest[:16]}.png"
+        boundary = "pfboundary" + digest[:8]
         head = (f"--{boundary}\r\nContent-Disposition: form-data; name=\"image\"; filename=\"{name}\"\r\nContent-Type: image/png\r\n\r\n").encode()
         tail = (f"\r\n--{boundary}\r\nContent-Disposition: form-data; name=\"overwrite\"\r\n\r\ntrue\r\n--{boundary}--\r\n").encode()
         req = Request(
@@ -222,6 +222,10 @@ class ComfyUIClient:
         )
         with _NO_REDIRECT_OPENER.open(req, timeout=self.timeout_s) as response:
             return json.loads(response.read())["name"]
+
+    def upload_image(self, path: Path) -> str:
+        """Upload an image to ComfyUI's input directory and return the server filename."""
+        return self.upload_image_bytes(path.read_bytes(), path.name)
 
     def upload_audio(self, path: Path) -> str:
         """Upload a wav to ComfyUI's input directory (for LoadAudio) and return the server filename."""

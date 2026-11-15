@@ -543,3 +543,51 @@ class AssetRecord(Base):
         return self.id
 
 
+
+
+class SceneRunRecord(Base):
+    """One Scene Director picture: the plan, how the system did, and whether the owner has reviewed it (docs/SCENE_DIRECTOR.md)."""
+    __tablename__ = "scene_runs"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    project_id = Column(String(36), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    job_id = Column(String(36), nullable=True)
+    brief = Column(Text, default="", nullable=False)
+    scene_type = Column(String(32), default="", nullable=False, index=True)
+    plan = Column(JSON, default=dict, nullable=False)
+    image_path = Column(Text, default="", nullable=False)
+    status = Column(String(32), default="", nullable=False)
+    system_review = Column(JSON, default=dict, nullable=False)
+    attempts = Column(Integer, default=0, nullable=False)
+    seconds = Column(Float, default=0.0, nullable=False)
+    review_state = Column(String(16), default="pending", nullable=False, index=True)  # pending | reviewed | dismissed
+    created_at = Column(DateTime, default=utc_now, nullable=False, index=True)
+
+
+class SceneAnalysisRecord(Base):
+    """What the two vision judges (and their cross-check) said about a run's picture."""
+    __tablename__ = "scene_analyses"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    run_id = Column(String(36), ForeignKey("scene_runs.id", ondelete="CASCADE"), nullable=False, index=True)
+    crosscheck = Column(JSON, default=dict, nullable=False)
+    judges = Column(JSON, default=list, nullable=False)
+    single_judge = Column(Boolean, default=False, nullable=False)
+    seconds = Column(Float, default=0.0, nullable=False)
+    error = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+
+
+class SceneFeedbackRecord(Base):
+    """The owner's verdict on a run: how much they liked it, whether they agree with the AI review, tags and a note. One row per run."""
+    __tablename__ = "scene_feedback"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    run_id = Column(String(36), ForeignKey("scene_runs.id", ondelete="CASCADE"), nullable=False, unique=True)
+    liked = Column(Integer, nullable=False)  # 0-100
+    agrees_with_ai = Column(Boolean, default=False, nullable=False)
+    good_tags = Column(JSON, default=list, nullable=False)
+    wrong_tags = Column(JSON, default=list, nullable=False)
+    item_verdicts = Column(JSON, default=dict, nullable=False)  # the owner's own answer for items the judges disputed: {"camera": "looks_up"}
+    note = Column(Text, default="", nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)

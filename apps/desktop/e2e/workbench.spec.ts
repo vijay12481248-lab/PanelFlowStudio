@@ -1,0 +1,291 @@
+import { expect, test, type Page } from "@playwright/test";
+
+// These run against the live engine and the owner's real projects, so they only read and navigate:
+// they never press Approve, Retry, Get or Refresh packaging, or Start in Auto-Pilot.
+
+const STAGES = ["acquire", "pages", "panels", "ocr", "story", "script", "audio", "motion", "render", "publish"] as const;
+const LABELS = ["Source", "Pages", "Panels", "OCR", "Story", "Script", "Audio", "Motion", "Render", "Publish"];
+
+test.beforeEach(async ({ page }) => {
+  await page.goto("/#/home");
+  const ready = page.getByText("Engine ready");
+  const down = page.getByText("Processing engine unavailable");
+  await expect(ready.or(down).first()).toBeVisible({ timeout: 30_000 });
+  test.skip(await down.first().isVisible(), "The PanelFlow engine is not running.");
+});
+
+/** The first project that opens a pipeline stage (ChronoFlow projects open a different studio). */
+async function firstPipelineProject(page: Page): Promise<string> {
+  await page.goto("/#/projects");
+  const tiles = page.locator("[data-project-tile] > button");
+  await expect(tiles.first()).toBeVisible({ timeout: 15_000 });
+  const count = await tiles.count();
+  for (let i = 0; i < count; i++) {
+    await page.goto("/#/projects");
+    await expect(tiles.nth(i)).toBeVisible();
+    await tiles.nth(i).click();
+    await page.waitForTimeout(600);
+    const match = /#\/projects\/([^/]+)\/[a-z]+$/.exec(page.url());
+    if (match) return match[1];
+  }
+  test.skip(true, "No pipeline project exists.");
+  return "";
+}
+
+test("every stage has exactly one page heading and the full stepper", async ({ page }) => {
+  const id = await firstPipelineProject(page);
+  for (const stage of STAGES) {
+    await page.goto(`/#/projects/${id}/${stage}`);
+    await expect(page.getByRole("list", { name: "Pipeline stages" }).getByRole("listitem")).toHaveCount(10, { timeout: 15_000 });
+    await page.waitForTimeout(800);
+    await expect(page.locator("h1"), `${stage} has more than one h1`).toHaveCount(1);
+    const labels = await page.getByRole("list", { name: "Pipeline stages" }).getByRole("listitem").evaluateAll((els) => els.map((e) => (e.textContent ?? "").split(":")[0].replace(/(Stale|Blocked)$/, "")));
+    expect(labels).toEqual(LABELS);
+  }
+});
+
+for (const width of [1440, 1100]) {
+  test(`no stage scrolls sideways at ${width}px wide`, async ({ page }) => {
+    const id = await firstPipelineProject(page);
+    await page.setViewportSize({ width, height: 800 });
+    for (const stage of STAGES) {
+      await page.goto(`/#/projects/${id}/${stage}`);
+      await expect(page.getByRole("list", { name: "Pipeline stages" })).toBeVisible({ timeout: 15_000 });
+      await page.waitForTimeout(1200);
+      const { scroll, client } = await page.evaluate(() => {
+        const main = document.querySelector("main")!;
+        return { scroll: main.scrollWidth, client: main.clientWidth };
+      });
+      expect(scroll, `${stage}: main is ${scroll}px wide inside ${client}px`).toBeLessThanOrEqual(client + 1);
+    }
+  });
+}
+
+test("a stepper link can be reached and followed from the keyboard", async ({ page }) => {
+  const id = await firstPipelineProject(page);
+  await page.goto(`/#/projects/${id}/ocr`);
+  const first = page.getByRole("list", { name: "Pipeline stages" }).getByRole("link").first();
+  await expect(first).toBeVisible({ timeout: 15_000 });
+  await first.focus();
+  await expect(first).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(new RegExp(`#/projects/${id}/acquire$`));
+});
+
+test("there is one Auto-Pilot button; it opens and Escape closes it", async ({ page }) => {
+  const id = await firstPipelineProject(page);
+  await page.goto(`/#/projects/${id}/publish`);
+  const buttons = page.getByRole("button", { name: "Auto-Pilot", exact: true });
+  await expect(buttons).toHaveCount(1, { timeout: 15_000 });
+  await buttons.click();
+  await expect(page.getByText("1-Click End-to-End")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByText("1-Click End-to-End")).toBeHidden();
+});
+
+test("Open story editor goes to the editor for this project", async ({ page }) => {
+  const id = await firstPipelineProject(page);
+  await page.goto(`/#/projects/${id}/ocr`);
+  await page.getByRole("link", { name: "Open story editor" }).click();
+  await expect(page).toHaveURL(new RegExp(`#/editor/${id}$`));
+});
+
+test("Publish shows the checks and waits for a button before asking for packaging", async ({ page }) => {
+  const id = await firstPipelineProject(page);
+  const requests: string[] = [];
+  page.on("request", (request) => requests.push(request.url()));
+  await page.goto(`/#/projects/${id}/publish`);
+  await expect(page.getByRole("heading", { name: "Before you upload" })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText("PanelFlow does not upload pipeline videos yet.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Get packaging" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Upload now|Publish now|Schedule/ })).toHaveCount(0);
+  await page.waitForTimeout(1500);
+  expect(requests.filter((url) => url.includes("/youtube/packaging")), "packaging was requested without a button press").toEqual([]);
+});
+
+// M5b stages. These only read and navigate: they never press Start acquisition, Confirm, Plan, Generate, Regenerate, Approve or the Delete confirmation.
+for (const stage of ["acquire", "pages", "panels", "motion", "audio", "story", "script", "render"] as const) {
+  test(`${stage} is one frame with one title and no second back button`, async ({ page }) => {
+    const id = await firstPipelineProject(page);
+    await page.goto(`/#/projects/${id}/${stage}`);
+    await expect(page.getByRole("list", { name: "Pipeline stages" })).toBeVisible({ timeout: 15_000 });
+    await page.waitForTimeout(1500);
+    await expect(page.locator("h1")).toHaveCount(1);
+    await expect(page.locator("h2").first()).toBeVisible();
+    await expect(page.getByRole("button", { name: /^(Back|Projects)$/ }), "the frame owns navigation").toHaveCount(0);
+    await expect(page.locator("[data-stage-body]")).not.toContainText(/Proceed to|Inspect Manifest/);
+  });
+}
+
+test("Pages offers keyboard reordering, and Delete asks inside the app", async ({ page }) => {
+  const id = await firstPipelineProject(page);
+  const dialogs: string[] = [];
+  page.on("dialog", (dialog) => { dialogs.push(dialog.message()); void dialog.dismiss(); });
+  await page.goto(`/#/projects/${id}/pages`);
+  await expect(page.getByRole("heading", { name: "Review pages" })).toBeVisible({ timeout: 15_000 });
+  await page.waitForTimeout(1500);
+  const confirm = page.getByRole("button", { name: /^Confirm acquisition/ });
+  await expect(confirm).toBeVisible();
+  const deletes = page.getByRole("button", { name: /^Delete page/ });
+  test.skip((await deletes.count()) === 0, "This project has no pages to delete.");
+  await expect(page.getByRole("button", { name: /^Move page 1 earlier$/ })).toBeDisabled();
+  await deletes.first().click();
+  await expect(page.getByRole("dialog")).toContainText(/Delete page \d+\?/);
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  expect(dialogs, "no browser confirm or alert may appear").toEqual([]);
+});
+
+test("Motion shows either the shots with the preview-only note or the invitation to plan", async ({ page }) => {
+  const id = await firstPipelineProject(page);
+  await page.goto(`/#/projects/${id}/motion`);
+  await expect(page.getByRole("heading", { name: "Plan camera motion" })).toBeVisible({ timeout: 15_000 });
+  await page.waitForTimeout(2000);
+  const shots = page.getByText("Preview only. These choices are not saved to the plan.").first();
+  const invite = page.getByText("No camera plan yet");
+  await expect(shots.or(invite).first()).toBeVisible();
+});
+
+test("Audio shows either the player or the invitation to generate", async ({ page }) => {
+  const id = await firstPipelineProject(page);
+  await page.goto(`/#/projects/${id}/audio`);
+  await expect(page.getByRole("heading", { name: "Review the voice track" })).toBeVisible({ timeout: 15_000 });
+  await page.waitForTimeout(2000);
+  const player = page.getByRole("group", { name: "Voice track player" });
+  const invite = page.getByText("No voice track yet");
+  await expect(player.or(invite).first()).toBeVisible();
+  await page.getByRole("button", { name: "Voice casting" }).click();
+  await expect(page.getByRole("dialog")).toContainText("Voice casting");
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+});
+
+// M5c stages. Read and navigate only: never Run, Re-analyze, Approve, Generate, Re-adapt, Validate, Save, Merge, Split, Remove or a line action.
+test("Story shows its tabs, puts beats under their scenes, and Edit identity opens and cancels without a browser dialog", async ({ page }) => {
+  // The first project may have no analysis; look for one that has, so the real shapes are what is checked.
+  const token = await (await page.request.get("/__engine_token")).text();
+  const auth = { headers: { Authorization: `Bearer ${token}` } };
+  const projects: Array<{ id: string; source_type: string }> = await (await page.request.get("http://127.0.0.1:8765/api/projects", auth)).json();
+  let id = "";
+  let narrative: { beats?: unknown[] } = {};
+  for (const project of projects.filter((p) => p.source_type !== "CHRONOFLOW_AI")) {
+    const res = await page.request.get(`http://127.0.0.1:8765/api/projects/${project.id}/narrative`, auth);
+    if (res.ok()) { id = project.id; narrative = await res.json(); break; }
+  }
+  test.skip(!id, "No project has a story analysis.");
+  const dialogs: string[] = [];
+  page.on("dialog", (dialog) => { dialogs.push(dialog.message()); void dialog.dismiss(); });
+  await page.goto(`/#/projects/${id}/story`);
+  await expect(page.getByRole("heading", { name: "Review the story" })).toBeVisible({ timeout: 15_000 });
+  await page.waitForTimeout(2000);
+  const characters = page.getByRole("tab", { name: /^Characters/ });
+  await expect(characters).toBeVisible();
+
+  // If the engine's narrative has beats, the Scenes tab must show them under their scenes.
+  await page.getByRole("tab", { name: /^Scenes and beats/ }).click();
+  if ((narrative.beats ?? []).length > 0) {
+    await expect(page.getByText(/^Beat \d+$/).first(), "beats must appear under their scenes").toBeVisible();
+    await expect(page.locator("[data-scene-id]").filter({ hasNotText: "No beats in this scene." }).first()).toBeVisible();
+  }
+
+  await characters.click();
+  const edit = page.getByRole("button", { name: /^Edit / }).first();
+  if (await edit.count()) {
+    await edit.click();
+    await expect(page.getByRole("dialog")).toContainText("Edit character identity");
+    await page.getByRole("dialog").getByRole("button", { name: "Cancel" }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+  }
+  expect(dialogs, "no browser confirm or alert may appear").toEqual([]);
+});
+
+test("Script shows its content or the invitation to generate, and no stale boundary banner", async ({ page }) => {
+  const id = await firstPipelineProject(page);
+  await page.goto(`/#/projects/${id}/script`);
+  await expect(page.getByRole("heading", { name: "Review the script" })).toBeVisible({ timeout: 15_000 });
+  await page.waitForTimeout(2000);
+  const metrics = page.getByText("Faithfulness coverage");
+  const invite = page.getByText("No script yet");
+  await expect(metrics.or(invite).first()).toBeVisible();
+  await expect(page.getByText("Milestone 4")).toHaveCount(0);
+});
+
+// M5d Part A. Read and navigate only: never Start render, Cancel render, Open file, Open folder or Export.
+test("Render treats out-of-date renders as history, not as a running job, and shows a finished render's checks", async ({ page }) => {
+  const token = await (await page.request.get("/__engine_token")).text();
+  const auth = { headers: { Authorization: `Bearer ${token}` } };
+  const projects: Array<{ id: string; source_type: string }> = await (await page.request.get("http://127.0.0.1:8765/api/projects", auth)).json();
+  let stale = "";
+  let done = "";
+  for (const project of projects.filter((p) => p.source_type !== "CHRONOFLOW_AI")) {
+    const renders: Array<{ status: string }> = await (await page.request.get(`http://127.0.0.1:8765/api/projects/${project.id}/render/jobs`, auth)).json();
+    if (!stale && renders.some((r) => r.status === "STALE") && !renders.some((r) => ["QUEUED", "PREPARING", "COMPOSING", "ENCODING", "MUXING", "VALIDATING"].includes(r.status))) stale = project.id;
+    if (!done && renders.some((r) => r.status === "COMPLETE")) done = project.id;
+  }
+  test.skip(!stale && !done, "No project has a stale or finished render.");
+  const dialogs: string[] = [];
+  page.on("dialog", (dialog) => { dialogs.push(dialog.message()); void dialog.dismiss(); });
+  if (stale) {
+    await page.goto(`/#/projects/${stale}/render`);
+    await expect(page.getByRole("heading", { name: "Render the video" })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole("button", { name: "Start render" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Cancel render" })).toHaveCount(0);
+    await expect(page.getByText("Out of date: the project changed after this render.").first()).toBeVisible();
+  }
+  if (done) {
+    await page.goto(`/#/projects/${done}/render`);
+    await expect(page.getByRole("heading", { name: "The rendered video" })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole("heading", { name: "Render checks" })).toBeVisible();
+    await expect(page.locator("video")).toHaveCount(1);
+  }
+  expect(dialogs).toEqual([]);
+});
+
+// M5d Part B. Read and navigate only: never Detect, Normalize, Confirm, Blur, Restore, Merge, Split, Add, or the Delete confirmation.
+test("Panels draws labelled panels on the page, Delete asks inside the app, and a huge project stays windowed with no sideways scroll", async ({ page }) => {
+  const token = await (await page.request.get("/__engine_token")).text();
+  const auth = { headers: { Authorization: `Bearer ${token}` } };
+  const api = "http://127.0.0.1:8765/api/projects";
+  const projects: Array<{ id: string; source_type: string }> = await (await page.request.get(api, auth)).json();
+  let withImage = ""; // panels, and the first page's picture is on disk
+  let anyPanels = "";
+  let big = "";
+  let bigCount = 0;
+  for (const project of projects.filter((p) => p.source_type !== "CHRONOFLOW_AI")) {
+    const panels: unknown[] = await (await page.request.get(`${api}/${project.id}/panels`, auth)).json();
+    if (panels.length === 0) continue;
+    anyPanels ||= project.id;
+    if (panels.length > bigCount) { bigCount = panels.length; big = project.id; }
+    const pages: Array<{ id: string }> = await (await page.request.get(`${api}/${project.id}/pages`, auth)).json();
+    if (!withImage && pages.length > 0 && (await page.request.get(`${api}/${project.id}/pages/${pages[0].id}/normalized-file`, auth)).ok()) withImage = project.id;
+  }
+  test.skip(!anyPanels, "No project has panels.");
+  const dialogs: string[] = [];
+  page.on("dialog", (dialog) => { dialogs.push(dialog.message()); void dialog.dismiss(); });
+
+  if (withImage) {
+    await page.goto(`/#/projects/${withImage}/panels`);
+    await expect(page.getByRole("heading", { name: "Review panels" })).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator("[data-page-id]").first()).toBeVisible({ timeout: 15_000 });
+    await page.locator("[data-page-id]").filter({ hasNotText: "0 panels" }).first().click();
+    await expect(page.locator("[data-canvas-overlay]")).toHaveCount(1, { timeout: 15_000 });
+    await expect(page.locator("[data-box-id]").first()).toHaveAttribute("aria-label", /^Panel \d+, at /);
+    await page.getByRole("button", { name: /^Select panel \d+$/ }).first().click();
+    await page.keyboard.press("Delete");
+    await expect(page.getByRole("dialog")).toContainText(/Delete panel \d+\?/);
+    await page.getByRole("button", { name: "Cancel" }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+  }
+
+  // Most projects on this PC have lost their page files: the stage must say so, not draw an empty canvas or crash.
+  await page.goto(`/#/projects/${big}/panels`);
+  await expect(page.getByRole("heading", { name: "Review panels" })).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator("[data-page-id]").first()).toBeVisible({ timeout: 15_000 });
+  for (const width of [1440, 1100]) {
+    await page.setViewportSize({ width, height: 800 });
+    await page.waitForTimeout(800);
+    expect(await page.locator("[data-page-id]").count(), "the page strip is windowed").toBeLessThanOrEqual(40);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), `no sideways scroll at ${width}`).toBe(true);
+  }
+  expect(dialogs).toEqual([]);
+});

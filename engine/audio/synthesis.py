@@ -38,6 +38,9 @@ from engine.security.paths import (
 TOOLS_ROOT = Path(os.environ.get("PANELFLOW_LOCAL_TOOLS_ROOT", r"C:\Tools"))
 VOICE_REF_DIR = get_voice_reference_dir()
 CHATTERBOX_PYTHON = TOOLS_ROOT / "Chatterbox" / ".venv" / "Scripts" / "python.exe"
+QWEN3_TTS_PYTHON = Path(os.environ.get("PANELFLOW_QWEN3_TTS_PYTHON", r"D:\Tools\Qwen3-TTS\.venv\Scripts\python.exe"))
+QWEN3_TTS_RUNNER = Path(os.environ.get("PANELFLOW_QWEN3_TTS_RUNNER", r"D:\Tools\Qwen3-TTS\runner.py"))
+QWEN3_TTS_DIR = Path(os.environ.get("PANELFLOW_QWEN3_TTS_DIR", r"D:\models\Qwen3-TTS\Qwen3-TTS-12Hz-1.7B-Base"))
 
 # Voice identity mapping to authorized local reference files
 VOICE_MAP: Dict[str, Path] = {
@@ -350,7 +353,18 @@ class LocalSpeechSynthesizer:
         Synthesizes multiple narration segments in a SINGLE model session.
         Avoids reloading weights between segments, providing sub-second generation per line.
         """
-        if provider_id not in ("chatterbox_turbo", "chatterbox"):
+        if provider_id in ("qwen3_tts", "qwen3", "qwen", "qwen3-tts-1.7b"):
+            use_qwen = True
+        elif QWEN3_TTS_PYTHON.exists() and QWEN3_TTS_RUNNER.exists() and QWEN3_TTS_DIR.exists():
+            if provider_id in ("default", "chatterbox_turbo", "chatterbox") and not self.python_exe.exists():
+                provider_id = "qwen3_tts"
+                use_qwen = True
+            else:
+                use_qwen = provider_id in ("qwen3_tts", "qwen3", "qwen")
+        else:
+            use_qwen = False
+
+        if not use_qwen and provider_id not in ("chatterbox_turbo", "chatterbox"):
             logger.info(f"Mapping requested speech provider '{provider_id}' to verified local 'chatterbox_turbo'")
             provider_id = "chatterbox_turbo"
 
@@ -435,7 +449,7 @@ class LocalSpeechSynthesizer:
         if not prepared_tasks:
             return results
 
-        if not self.python_exe.exists():
+        if not (self.python_exe.exists() or (use_qwen and QWEN3_TTS_PYTHON.exists() and QWEN3_TTS_RUNNER.exists())):
             # Neural TTS Fallback (high quality Microsoft Neural edge-tts)
             import edge_tts
             import asyncio
@@ -528,14 +542,20 @@ class LocalSpeechSynthesizer:
                         except FileNotFoundError:
                             pass
 
-        # Run batch synthesis script via Chatterbox virtual environment
+        # Run batch synthesis script via Qwen3-TTS or Chatterbox virtual environment
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, encoding="utf-8") as f_in:
             json.dump(prepared_tasks, f_in, ensure_ascii=False)
             batch_input_path = f_in.name
 
         batch_output_path = batch_input_path.replace(".json", "_out.json")
 
-        runner_code = f"""
+        if use_qwen and QWEN3_TTS_PYTHON.exists() and QWEN3_TTS_RUNNER.exists():
+            provider_label = "Qwen3-TTS 1.7B"
+            runner_cmd = [str(QWEN3_TTS_PYTHON), str(QWEN3_TTS_RUNNER), "batch", "--input", batch_input_path, "--output", batch_output_path]
+            runner_py_path = None
+        else:
+            provider_label = "Chatterbox Turbo"
+            runner_code = f"""
 import sys, os, json, torch, soundfile as sf, numpy as np
 from pathlib import Path
 from chatterbox.tts_turbo import ChatterboxTurboTTS
@@ -579,22 +599,23 @@ for task in tasks:
 with open({repr(batch_output_path)}, 'w', encoding='utf-8') as f:
     json.dump(outputs, f)
 """
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False, encoding="utf-8") as f_py:
-            f_py.write(runner_code)
-            runner_py_path = f_py.name
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False, encoding="utf-8") as f_py:
+                f_py.write(runner_code)
+                runner_py_path = f_py.name
+            runner_cmd = [str(self.python_exe), runner_py_path]
 
         try:
             if progress_cb:
-                progress_cb(0.15, "Loading Chatterbox Turbo on GPU...")
+                progress_cb(0.15, f"Loading {provider_label} on GPU...")
             res = run_speech_process(
-                [str(self.python_exe), runner_py_path], timeout=180, cancelled=cancelled_cb,
+                runner_cmd, timeout=300, cancelled=cancelled_cb,
             )
             if res.returncode != 0:
-                logger.error(f"Chatterbox batch error: {res.stderr}")
-                raise ValueError(f"Chatterbox inference failed: {res.stderr.strip()[:300]}")
+                logger.error(f"{provider_label} batch error: {res.stderr}")
+                raise ValueError(f"{provider_label} inference failed: {res.stderr.strip()[:300]}")
 
             if not Path(batch_output_path).exists():
-                raise ValueError("Chatterbox produced no output payload")
+                raise ValueError(f"{provider_label} produced no output payload")
 
             batch_results = json.loads(Path(batch_output_path).read_text(encoding="utf-8"))
             tasks_by_id = {pt["id"]: pt for pt in prepared_tasks}
@@ -629,7 +650,8 @@ with open({repr(batch_output_path)}, 'w', encoding='utf-8') as f:
         finally:
             Path(batch_input_path).unlink(missing_ok=True)
             Path(batch_output_path).unlink(missing_ok=True)
-            Path(runner_py_path).unlink(missing_ok=True)
+            if runner_py_path:
+                Path(runner_py_path).unlink(missing_ok=True)
             for pt in prepared_tasks:
                 temporary = Path(pt["target_path"])
                 try:

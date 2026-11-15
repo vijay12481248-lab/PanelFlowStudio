@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import re
+import subprocess
 import tempfile
 import wave
 from pathlib import Path
@@ -51,6 +52,69 @@ class KokoroTts:
         chunks = [np.asarray(a.cpu() if hasattr(a, "cpu") else a, dtype=np.float32).reshape(-1)
                   for _, _, a in _pipeline(text, voice=voice, speed=rate) if a is not None]
         return np.concatenate(chunks) if chunks else np.zeros(0, dtype=np.float32)
+
+
+class Qwen3Tts:
+    r"""Qwen3-TTS adapter executing via D:\Tools\Qwen3-TTS runner on CUDA."""
+
+    def __init__(self, python_exe: Path | None = None, runner_script: Path | None = None):
+        self.python_exe = python_exe or Path(os.environ.get("PANELFLOW_QWEN3_TTS_PYTHON", r"D:\Tools\Qwen3-TTS\.venv\Scripts\python.exe"))
+        self.runner_script = runner_script or Path(os.environ.get("PANELFLOW_QWEN3_TTS_RUNNER", r"D:\Tools\Qwen3-TTS\runner.py"))
+
+    def synth(self, text: str, voice: str, rate: float) -> np.ndarray:
+        if not self.python_exe.exists() or not self.runner_script.exists():
+            return KokoroTts().synth(text, voice, rate)
+
+        try:
+            from engine.audio.synthesis import resolve_voice_reference
+            ref_path = resolve_voice_reference(voice)
+        except Exception:
+            ref_path = None
+
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+            tmp_wav = Path(tmp.name)
+
+        try:
+            cmd = [
+                str(self.python_exe),
+                str(self.runner_script),
+                "synth",
+                "--text", text,
+                "--output", str(tmp_wav),
+            ]
+            if ref_path and Path(ref_path).exists():
+                cmd.extend(["--ref-audio", str(ref_path)])
+
+            res = subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=120)
+            import soundfile as sf
+            data, sr = sf.read(str(tmp_wav), dtype="float32")
+            if len(data.shape) > 1:
+                data = data[:, 0]
+            if sr != SR:
+                n = max(1, round(data.size * SR / sr))
+                data = np.interp(np.linspace(0, data.size - 1, n), np.arange(data.size), data).astype(np.float32)
+            return data
+        except Exception:
+            return KokoroTts().synth(text, voice, rate)
+        finally:
+            if tmp_wav.exists():
+                try:
+                    tmp_wav.unlink(missing_ok=True)
+                except Exception:
+                    pass
+
+
+def get_default_tts() -> Tts:
+    try:
+        from engine.narration.runtime.roles import load_tts_config
+        cfg = load_tts_config()
+        if "qwen" in cfg.model.lower():
+            qwen = Qwen3Tts()
+            if qwen.python_exe.exists() and qwen.runner_script.exists():
+                return qwen
+    except Exception:
+        pass
+    return KokoroTts()
 
 
 class WhisperStt:

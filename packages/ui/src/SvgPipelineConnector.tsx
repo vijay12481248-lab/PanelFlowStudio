@@ -20,12 +20,12 @@ export const SvgPipelineConnector: React.FC<SvgPipelineConnectorProps> = ({
   const isStale = toStatus === "STALE" || fromStatus === "STALE";
 
   const strokeColor = isStale
-    ? "#f59e0b"
+    ? "#f0b35a"
     : isComplete
-    ? "#10b981"
+    ? "#46d6a3"
     : isMoving
-    ? "#818cf8"
-    : "#3f3f46";
+    ? "#7aa2ff"
+    : "#26346a";
 
   const glowId = `connector-glow-${fromStatus}-${toStatus}`;
 

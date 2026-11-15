@@ -212,7 +212,7 @@ def build_video(story: OriginalStory, ws: Path, tts=None, fps: float = 30.0, bur
                 engine: str = "auto", fx: str = "none", size: tuple[int, int] | None = None) -> dict:
     """Voices and renders every panel that has an image (missing panels are listed, not faked); reruns reuse unchanged work."""
     ws = Path(ws).resolve()
-    tts = tts or rt.KokoroTts()
+    tts = tts or rt.get_default_tts()
     narrator, chars = voices_for(story, narrator)
     (ws / "voice").mkdir(parents=True, exist_ok=True)
     (ws / "segments").mkdir(exist_ok=True)

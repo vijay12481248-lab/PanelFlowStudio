@@ -121,6 +121,12 @@ def run_sqlite_migrations(db_engine):
                         conn.exec_driver_sql(f"ALTER TABLE assets ADD COLUMN {col_name} {col_type}")
                         conn.commit()
 
+            # 4b. Scene feedback: the owner's per-item answers (added after the first version of the table)
+            existing_fb_cols = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(scene_feedback)").fetchall()}
+            if existing_fb_cols and "item_verdicts" not in existing_fb_cols:
+                conn.exec_driver_sql("ALTER TABLE scene_feedback ADD COLUMN item_verdicts JSON DEFAULT '{}'")
+                conn.commit()
+
             # 5. Characters columns
             res_chars = conn.exec_driver_sql("PRAGMA table_info(characters)").fetchall()
             existing_char_cols = {row[1] for row in res_chars}
@@ -140,11 +146,18 @@ def run_sqlite_migrations(db_engine):
         raise RuntimeError("PanelFlow SQLite schema migration failed") from exc
 
 
+def ensure_scene_fts(db_engine) -> None:
+    """Full-text search over scene briefs and owner notes (SQLite FTS5): a virtual table cannot be declared as a SQLAlchemy model."""
+    with db_engine.begin() as conn:
+        conn.exec_driver_sql("CREATE VIRTUAL TABLE IF NOT EXISTS scene_fts USING fts5(run_id UNINDEXED, text)")
+
+
 def init_db():
     """Initializes tables in database and runs non-destructive migrations."""
     # Register additive history tables even when init_db is called without app imports.
     from engine.history import models as _history_models
     Base.metadata.create_all(bind=engine)
+    ensure_scene_fts(engine)
     run_sqlite_migrations(engine)
 
 def get_db():

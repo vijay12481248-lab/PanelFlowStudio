@@ -38,7 +38,7 @@ export const StoryEditorLeftRail: React.FC<StoryEditorLeftRailProps> = ({
     {
       id: "chronoflow",
       label: "AI Video",
-      icon: <Icons.Sparkles className="w-5 h-5 text-purple-400" />,
+      icon: <Icons.Sparkles className="w-5 h-5 text-info" />,
     },
     {
       id: "audio",
@@ -53,7 +53,7 @@ export const StoryEditorLeftRail: React.FC<StoryEditorLeftRailProps> = ({
   ];
 
   return (
-    <aside className="w-[72px] lg:w-[100px] min-h-0 bg-[#0d1019] border-r border-[#262a3b] flex flex-col items-center py-3 select-none z-30 shrink-0">
+    <aside className="w-[72px] lg:w-[100px] min-h-0 bg-[#0c1433] border-r border-[#162049] flex flex-col items-center py-3 select-none z-30 shrink-0">
       <nav aria-label="Editor workspaces" className="flex min-h-0 flex-1 flex-col gap-2 w-full overflow-y-auto px-2 pb-3">
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id;
@@ -66,11 +66,11 @@ export const StoryEditorLeftRail: React.FC<StoryEditorLeftRailProps> = ({
               className={`w-full py-2.5 px-1 rounded-xl flex flex-col items-center justify-center gap-1 transition-all ${
                 isActive
                   ? tab.id === "chronoflow"
-                    ? "bg-[#281347] text-purple-300 font-semibold border border-purple-500/50 shadow-md shadow-purple-900/40"
-                    : "bg-[#333d6a] text-white font-semibold border border-indigo-400/40 shadow-sm shadow-indigo-950/50"
+                    ? "bg-[#162049] text-info font-semibold border border-accent/50 shadow-md shadow-accent/40"
+                    : "bg-[#3b6bf5] text-white font-semibold border border-accent/40 shadow-sm shadow-accent/50"
                   : tab.id === "chronoflow"
-                  ? "text-purple-400 hover:text-purple-200 hover:bg-[#1a132b]"
-                  : "text-zinc-400 hover:text-zinc-200 hover:bg-[#191d2d]"
+                  ? "text-info hover:text-info hover:bg-[#101a3d]"
+                  : "text-fg-dim hover:text-fg hover:bg-[#101a3d]"
               }`}
             >
               <div className="flex items-center justify-center">
@@ -85,10 +85,10 @@ export const StoryEditorLeftRail: React.FC<StoryEditorLeftRailProps> = ({
       </nav>
 
       {/* Engine Status indicator footer */}
-      <div className="pt-2 border-t border-[#232738] w-full flex flex-col items-center gap-1 px-1">
+      <div className="pt-2 border-t border-[#162049] w-full flex flex-col items-center gap-1 px-1">
         <div className="flex items-center gap-1.5" title={engineConnected ? "Backend Engine Online" : "Backend Engine Offline"}>
-          <div className={`w-2 h-2 rounded-full ${engineConnected ? "bg-emerald-400 animate-pulse" : "bg-rose-500"}`} />
-          <span className="text-[9px] text-zinc-400 font-mono hidden lg:inline">
+          <div className={`w-2 h-2 rounded-full ${engineConnected ? "bg-ok animate-pulse" : "bg-bad"}`} />
+          <span className="text-[9px] text-fg-dim font-mono hidden lg:inline">
             {engineConnected ? "ENGINE" : "OFFLINE"}
           </span>
         </div>

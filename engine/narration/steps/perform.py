@@ -15,7 +15,7 @@ from engine.narration.steps._cached import cached_call
 from engine.narration.steps.factview import char_names, cues_of, panel_line
 from engine.narration.steps.understand import NeedsReview
 
-PERFORM_PROMPT_VERSION = "v1"
+PERFORM_PROMPT_VERSION = "v2"
 STEP = "perform_scene"
 
 
@@ -24,6 +24,7 @@ class MarksDraft(BaseModel):
     emotion: str
     energy: Literal["low", "med", "high"]
     emphasis_words: list[str] = []
+    intent: str = ""  # why this line is said; the model writes it, the code keeps it
 
 
 class SceneMarksDraft(BaseModel):
@@ -95,6 +96,7 @@ async def perform(script: ScriptIR, sheet: BeatSheet, facts: list[PanelFacts], b
             words = [w for w in dict.fromkeys(stripped) if w and re.search(rf"\b{re.escape(w)}\b", ln.text, re.I)]
             # the last line's 0 ms pause is stored as the 150 ms floor the artifact allows
             marks[i] = LineMarks(line_id=ln.line_id, emotion=d.emotion, energy=d.energy, rate=rate,
-                                 pause_after_ms=max(150, pause), emphasis_words=words)
+                                 pause_after_ms=max(150, pause), emphasis_words=words,
+                                 intent=" ".join(d.intent.split())[:160])
     return PerformancePlan(project_id=script.project_id, script_revision=script.revision,
-                           lines=[marks[i] for i in range(len(script.lines))])
+                           revision=script.revision, lines=[marks[i] for i in range(len(script.lines))])

@@ -113,47 +113,47 @@ export const ErrorDetailsModal: React.FC<ErrorDetailsModalProps> = ({
       className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 select-none animate-in fade-in duration-150"
     >
       <div
-        className="bg-[#0f121d] border border-[#232b42] rounded-2xl w-full max-w-3xl shadow-2xl overflow-hidden flex flex-col max-h-[88vh] text-zinc-100"
+        className="bg-[#0c1433] border border-[#162049] rounded-2xl w-full max-w-3xl shadow-2xl overflow-hidden flex flex-col max-h-[88vh] text-fg"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="px-6 py-4 border-b border-[#1c2336] bg-[#131726] flex items-center justify-between flex-shrink-0">
+        <div className="px-6 py-4 border-b border-[#162049] bg-[#101a3d] flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-3">
             <div
               className={`w-9 h-9 rounded-xl flex items-center justify-center ${
                 isSevere
-                  ? "bg-rose-500/15 border border-rose-500/30 text-rose-400"
+                  ? "bg-bad/15 border border-bad/30 text-bad"
                   : isWarning
-                  ? "bg-amber-500/15 border border-amber-500/30 text-amber-400"
-                  : "bg-indigo-500/15 border border-indigo-500/30 text-indigo-400"
+                  ? "bg-warn/15 border border-warn/30 text-warn"
+                  : "bg-accent/15 border border-accent/30 text-info"
               }`}
             >
               {isSevere ? (
-                <AlertOctagon className="w-5 h-5 text-rose-400" />
+                <AlertOctagon className="w-5 h-5 text-bad" />
               ) : isWarning ? (
-                <AlertTriangle className="w-5 h-5 text-amber-400" />
+                <AlertTriangle className="w-5 h-5 text-warn" />
               ) : (
-                <Info className="w-5 h-5 text-indigo-400" />
+                <Info className="w-5 h-5 text-info" />
               )}
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="font-bold text-base text-zinc-100">{error.title}</h3>
+                <h3 className="font-bold text-base text-fg">{error.title}</h3>
                 <span
                   className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${
                     isSevere
-                      ? "bg-rose-950/80 text-rose-300 border border-rose-800"
+                      ? "bg-bad/80 text-bad border border-bad/40"
                       : isWarning
-                      ? "bg-amber-950/80 text-amber-300 border border-amber-800"
-                      : "bg-indigo-950/80 text-indigo-300 border border-indigo-800"
+                      ? "bg-warn/80 text-warn border border-warn/40"
+                      : "bg-accent/80 text-info border border-accent/40"
                   }`}
                 >
                   {error.severity}
                 </span>
               </div>
-              <p className="text-xs text-zinc-400 mt-0.5">
+              <p className="text-xs text-fg-dim mt-0.5">
                 Occurred {new Date(error.timestamp).toLocaleTimeString()} • Source:{" "}
-                <span className="text-zinc-300 font-medium capitalize">
+                <span className="text-fg-dim font-medium capitalize">
                   {error.source}
                 </span>
               </p>
@@ -162,7 +162,7 @@ export const ErrorDetailsModal: React.FC<ErrorDetailsModalProps> = ({
 
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-[#1a2133] flex items-center justify-center transition-colors"
+            className="w-8 h-8 rounded-lg text-fg-dim hover:text-fg hover:bg-[#101a3d] flex items-center justify-center transition-colors"
             title="Close dialog"
           >
             <X className="w-5 h-5" />
@@ -175,24 +175,24 @@ export const ErrorDetailsModal: React.FC<ErrorDetailsModalProps> = ({
           <div
             className={`p-4 rounded-xl border ${
               isSevere
-                ? "bg-rose-950/20 border-rose-900/50 text-rose-100"
+                ? "bg-bad/20 border-bad/50 text-bad"
                 : isWarning
-                ? "bg-amber-950/20 border-amber-900/50 text-amber-100"
-                : "bg-indigo-950/20 border-indigo-900/50 text-indigo-100"
+                ? "bg-warn/20 border-warn/50 text-warn"
+                : "bg-accent/20 border-accent/50 text-info"
             }`}
           >
             <div className="flex items-start gap-3">
               <ShieldAlert
                 className={`w-5 h-5 flex-shrink-0 mt-0.5 ${
                   isSevere
-                    ? "text-rose-400"
+                    ? "text-bad"
                     : isWarning
-                    ? "text-amber-400"
-                    : "text-indigo-400"
+                    ? "text-warn"
+                    : "text-info"
                 }`}
               />
               <div className="space-y-1 flex-1">
-                <h4 className="text-xs font-semibold uppercase tracking-wider text-zinc-300">
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-fg-dim">
                   Diagnostic Message
                 </h4>
                 <p className="text-sm font-medium leading-relaxed font-mono whitespace-pre-wrap select-text">
@@ -206,23 +206,23 @@ export const ErrorDetailsModal: React.FC<ErrorDetailsModalProps> = ({
           {liveJob && <JobActivityCard job={liveJob} engineHealthy={engineHealthy} onCancel={cancelJob} />}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
             {error.jobType && (
-              <div className="bg-[#141826] border border-[#21293d] rounded-lg p-2.5 space-y-0.5">
-                <div className="text-[10px] text-zinc-500 font-semibold uppercase">
+              <div className="bg-[#101a3d] border border-[#162049] rounded-lg p-2.5 space-y-0.5">
+                <div className="text-[10px] text-fg-faint font-semibold uppercase">
                   Operation / Job
                 </div>
-                <div className="text-xs text-indigo-300 font-mono font-medium truncate">
+                <div className="text-xs text-info font-mono font-medium truncate">
                   {error.jobType}
                 </div>
               </div>
             )}
 
             {error.jobId && (
-              <div className="bg-[#141826] border border-[#21293d] rounded-lg p-2.5 space-y-0.5">
-                <div className="text-[10px] text-zinc-500 font-semibold uppercase">
+              <div className="bg-[#101a3d] border border-[#162049] rounded-lg p-2.5 space-y-0.5">
+                <div className="text-[10px] text-fg-faint font-semibold uppercase">
                   Job ID
                 </div>
                 <div
-                  className="text-xs text-zinc-300 font-mono truncate cursor-pointer hover:text-white"
+                  className="text-xs text-fg-dim font-mono truncate cursor-pointer hover:text-white"
                   title="Click to copy Job ID"
                   onClick={() => navigator.clipboard.writeText(error.jobId!)}
                 >
@@ -232,12 +232,12 @@ export const ErrorDetailsModal: React.FC<ErrorDetailsModalProps> = ({
             )}
 
             {error.projectId && (
-              <div className="bg-[#141826] border border-[#21293d] rounded-lg p-2.5 space-y-0.5">
-                <div className="text-[10px] text-zinc-500 font-semibold uppercase">
+              <div className="bg-[#101a3d] border border-[#162049] rounded-lg p-2.5 space-y-0.5">
+                <div className="text-[10px] text-fg-faint font-semibold uppercase">
                   Project ID
                 </div>
                 <div
-                  className="text-xs text-zinc-300 font-mono truncate cursor-pointer hover:text-white"
+                  className="text-xs text-fg-dim font-mono truncate cursor-pointer hover:text-white"
                   title="Click to copy Project ID"
                   onClick={() => navigator.clipboard.writeText(error.projectId!)}
                 >
@@ -246,11 +246,11 @@ export const ErrorDetailsModal: React.FC<ErrorDetailsModalProps> = ({
               </div>
             )}
 
-            <div className="bg-[#141826] border border-[#21293d] rounded-lg p-2.5 space-y-0.5">
-              <div className="text-[10px] text-zinc-500 font-semibold uppercase">
+            <div className="bg-[#101a3d] border border-[#162049] rounded-lg p-2.5 space-y-0.5">
+              <div className="text-[10px] text-fg-faint font-semibold uppercase">
                 Timestamp
               </div>
-              <div className="text-xs text-zinc-300 font-mono truncate">
+              <div className="text-xs text-fg-dim font-mono truncate">
                 {new Date(error.timestamp).toLocaleTimeString([], {
                   hour: "2-digit",
                   minute: "2-digit",
@@ -262,14 +262,14 @@ export const ErrorDetailsModal: React.FC<ErrorDetailsModalProps> = ({
 
           {/* Actionable Recovery Suggestions */}
           {error.suggestions && error.suggestions.length > 0 && (
-            <div className="bg-[#121624] border border-[#222b42] rounded-xl p-4 space-y-2.5">
-              <h4 className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
+            <div className="bg-[#0c1433] border border-[#162049] rounded-xl p-4 space-y-2.5">
+              <h4 className="text-xs font-bold text-ok uppercase tracking-wider flex items-center gap-1.5">
                 <span>💡</span> Recommended Recovery Actions
               </h4>
-              <ul className="space-y-1.5 text-xs text-zinc-300 pl-1">
+              <ul className="space-y-1.5 text-xs text-fg-dim pl-1">
                 {error.suggestions.map((suggestion, idx) => (
                   <li key={idx} className="flex items-start gap-2">
-                    <span className="text-emerald-400 font-bold flex-shrink-0">
+                    <span className="text-ok font-bold flex-shrink-0">
                       {idx + 1}.
                     </span>
                     <span className="leading-relaxed select-text">{suggestion}</span>
@@ -281,30 +281,30 @@ export const ErrorDetailsModal: React.FC<ErrorDetailsModalProps> = ({
 
           {/* Collapsible Technical Details / Raw Stack */}
           {(error.stack || error.rawDetails) && (
-            <div className="border border-[#1e263c] rounded-xl overflow-hidden bg-[#0a0c14]">
+            <div className="border border-[#162049] rounded-xl overflow-hidden bg-[#070b1c]">
               <button
                 onClick={() => setShowRawJson(!showRawJson)}
-                className="w-full px-4 py-2.5 bg-[#121624] hover:bg-[#161c2e] flex items-center justify-between text-left text-xs font-semibold text-zinc-300 transition-colors"
+                className="w-full px-4 py-2.5 bg-[#0c1433] hover:bg-[#101a3d] flex items-center justify-between text-left text-xs font-semibold text-fg-dim transition-colors"
               >
                 <div className="flex items-center gap-2">
-                  <Terminal className="w-3.5 h-3.5 text-cyan-400" />
+                  <Terminal className="w-3.5 h-3.5 text-info" />
                   <span>Technical Diagnostics & Stack Trace</span>
                 </div>
                 {showRawJson ? (
-                  <ChevronDown className="w-4 h-4 text-zinc-500" />
+                  <ChevronDown className="w-4 h-4 text-fg-faint" />
                 ) : (
-                  <ChevronRight className="w-4 h-4 text-zinc-500" />
+                  <ChevronRight className="w-4 h-4 text-fg-faint" />
                 )}
               </button>
 
               {showRawJson && (
-                <div className="p-4 space-y-3 font-mono text-xs select-text overflow-x-auto max-h-60 bg-[#080910]">
+                <div className="p-4 space-y-3 font-mono text-xs select-text overflow-x-auto max-h-60 bg-[#070b1c]">
                   {error.stack && (
                     <div className="space-y-1">
-                      <div className="text-[10px] text-zinc-500 font-bold uppercase">
+                      <div className="text-[10px] text-fg-faint font-bold uppercase">
                         Stack Trace:
                       </div>
-                      <pre className="text-rose-300 text-[11px] leading-relaxed whitespace-pre-wrap">
+                      <pre className="text-bad text-[11px] leading-relaxed whitespace-pre-wrap">
                         {error.stack}
                       </pre>
                     </div>
@@ -312,10 +312,10 @@ export const ErrorDetailsModal: React.FC<ErrorDetailsModalProps> = ({
 
                   {error.rawDetails && (
                     <div className="space-y-1">
-                      <div className="text-[10px] text-zinc-500 font-bold uppercase">
+                      <div className="text-[10px] text-fg-faint font-bold uppercase">
                         Raw Payload / State:
                       </div>
-                      <pre className="text-zinc-400 text-[11px] leading-relaxed whitespace-pre-wrap">
+                      <pre className="text-fg-dim text-[11px] leading-relaxed whitespace-pre-wrap">
                         {typeof error.rawDetails === "string"
                           ? error.rawDetails
                           : JSON.stringify(error.rawDetails, null, 2)}
@@ -329,23 +329,23 @@ export const ErrorDetailsModal: React.FC<ErrorDetailsModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-3.5 border-t border-[#1c2336] bg-[#121626] flex items-center justify-between gap-3 flex-shrink-0">
+        <div className="px-6 py-3.5 border-t border-[#162049] bg-[#0c1433] flex items-center justify-between gap-3 flex-shrink-0">
           <div className="flex items-center gap-2">
             <button
               onClick={handleCopyDetails}
-              className="px-3.5 py-1.5 bg-[#1a2133] hover:bg-[#232c45] text-zinc-200 border border-[#2b3652] rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors shadow-sm"
+              className="px-3.5 py-1.5 bg-[#101a3d] hover:bg-[#162049] text-fg border border-[#26346a] rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors shadow-sm"
               title="Copy complete error report to clipboard for debugging"
             >
               {copied ? (
                 <>
-                  <Check className="w-3.5 h-3.5 text-emerald-400" />
-                  <span className="text-emerald-400 font-semibold">
+                  <Check className="w-3.5 h-3.5 text-ok" />
+                  <span className="text-ok font-semibold">
                     Copied to Clipboard!
                   </span>
                 </>
               ) : (
                 <>
-                  <Copy className="w-3.5 h-3.5 text-zinc-400" />
+                  <Copy className="w-3.5 h-3.5 text-fg-dim" />
                   <span>Copy Error Details</span>
                 </>
               )}
@@ -355,7 +355,7 @@ export const ErrorDetailsModal: React.FC<ErrorDetailsModalProps> = ({
               <button
                 onClick={handleRetry}
                 disabled={retrying}
-                className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-md shadow-indigo-600/30 disabled:opacity-50"
+                className="px-3.5 py-1.5 bg-accent hover:bg-accent text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-md shadow-accent/30 disabled:opacity-50"
               >
                 <RotateCcw
                   className={`w-3.5 h-3.5 ${retrying ? "animate-spin" : ""}`}
@@ -372,14 +372,14 @@ export const ErrorDetailsModal: React.FC<ErrorDetailsModalProps> = ({
                   onDismissAlert(error.id);
                   onClose();
                 }}
-                className="px-3 py-1.5 text-zinc-400 hover:text-zinc-200 text-xs font-medium transition-colors"
+                className="px-3 py-1.5 text-fg-dim hover:text-fg text-xs font-medium transition-colors"
               >
                 Dismiss Alert
               </button>
             )}
             <button
               onClick={onClose}
-              className="px-4 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-lg text-xs font-semibold transition-colors"
+              className="px-4 py-1.5 bg-flat hover:bg-glass-hi text-fg rounded-lg text-xs font-semibold transition-colors"
             >
               Close
             </button>

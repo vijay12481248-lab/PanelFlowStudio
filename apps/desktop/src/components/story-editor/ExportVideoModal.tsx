@@ -271,19 +271,19 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 select-none">
-      <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+      <div className="bg-ink border border-edge rounded-2xl w-full max-w-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
         {/* Modal Header */}
-        <div className="px-6 py-4 border-b border-zinc-800/80 bg-zinc-900/60 flex items-center justify-between">
+        <div className="px-6 py-4 border-b border-edge/80 bg-navy/60 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-indigo-600/20 border border-indigo-500/40 flex items-center justify-center text-indigo-400">
+            <div className="w-8 h-8 rounded-lg bg-accent/20 border border-accent/40 flex items-center justify-center text-info">
               <Icons.Film className="w-4 h-4" />
             </div>
             <div>
-              <h2 className="font-bold text-base text-zinc-100 flex items-center gap-2">
+              <h2 className="font-bold text-base text-fg flex items-center gap-2">
                 Export Production Video
                 <Badge variant="accent">Chapter 8</Badge>
               </h2>
-              <p className="text-xs text-zinc-400 mt-0.5">
+              <p className="text-xs text-fg-dim mt-0.5">
                 {project.title} • {editorState.scenes.length} Scenes • {editorState.aspect_ratio} Canvas
               </p>
             </div>
@@ -292,7 +292,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
           {renderStep !== "rendering" && (
             <button
               onClick={onClose}
-              className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
+              className="p-1.5 rounded-lg text-fg-dim hover:text-fg hover:bg-flat transition-colors"
               title="Close Export Dialog"
             >
               <Icons.X className="w-4 h-4" />
@@ -303,11 +303,11 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
         {/* Modal Body */}
         <div className="p-6 overflow-y-auto space-y-6 flex-1 text-xs">
           {renderError && (
-            <div className="p-3 bg-rose-950/40 border border-rose-800/60 rounded-xl text-rose-300 flex items-start gap-2.5">
-              <Icons.AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+            <div className="p-3 bg-bad/40 border border-bad/60 rounded-xl text-bad flex items-start gap-2.5">
+              <Icons.AlertTriangle className="w-4 h-4 text-bad shrink-0 mt-0.5" />
               <div>
                 <span className="font-semibold block">Render Error:</span>
-                <span className="text-rose-400/90">{renderError}</span>
+                <span className="text-bad/90">{renderError}</span>
               </div>
             </div>
           )}
@@ -317,7 +317,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
             <>
               {/* Profile Selection */}
               <div>
-                <label className="font-semibold text-zinc-300 text-xs uppercase tracking-wider block mb-2.5">
+                <label className="font-semibold text-fg-dim text-xs uppercase tracking-wider block mb-2.5">
                   1. Video Resolution & Format
                 </label>
                 <div className="grid grid-cols-2 gap-3">
@@ -327,41 +327,41 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
                       onClick={() => setSelectedProfile(prof.id)}
                       className={`p-3.5 rounded-xl border cursor-pointer transition-all ${
                         selectedProfile === prof.id
-                          ? "bg-indigo-950/40 border-indigo-500 shadow-md shadow-indigo-950/30 ring-1 ring-indigo-500/50"
-                          : "bg-zinc-900/60 border-zinc-800 hover:border-zinc-700"
+                          ? "bg-accent/40 border-accent shadow-md shadow-accent/30 ring-1 ring-accent/50"
+                          : "bg-navy/60 border-edge hover:border-edge"
                       }`}
                     >
                       <div className="flex items-center justify-between mb-1.5">
-                        <span className="font-bold text-zinc-100 text-xs">{prof.name}</span>
+                        <span className="font-bold text-fg text-xs">{prof.name}</span>
                         <span
                           className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
                             selectedProfile === prof.id
-                              ? "bg-indigo-600/30 text-indigo-300"
-                              : "bg-zinc-800 text-zinc-400"
+                              ? "bg-accent/30 text-info"
+                              : "bg-flat text-fg-dim"
                           }`}
                         >
                           {prof.badge}
                         </span>
                       </div>
-                      <div className="text-[11px] text-zinc-400 font-mono mb-1">{prof.res} • {prof.fps}</div>
-                      <div className="text-[11px] text-zinc-400 leading-relaxed">{prof.desc}</div>
+                      <div className="text-[11px] text-fg-dim font-mono mb-1">{prof.res} • {prof.fps}</div>
+                      <div className="text-[11px] text-fg-dim leading-relaxed">{prof.desc}</div>
                     </div>
                   ))}
                 </div>
               </div>
 
               {/* 2. Save Location Selection */}
-              <div className="pt-2 border-t border-zinc-800/60">
+              <div className="pt-2 border-t border-edge/60">
                 <div className="flex items-center justify-between mb-2">
-                  <label className="font-semibold text-zinc-300 text-xs uppercase tracking-wider block">
+                  <label className="font-semibold text-fg-dim text-xs uppercase tracking-wider block">
                     2. Video Save Destination
                   </label>
-                  <span className="text-[11px] text-zinc-400">
+                  <span className="text-[11px] text-fg-dim">
                     MP4 video will be saved directly to this path
                   </span>
                 </div>
 
-                <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-xl p-3.5 space-y-3">
+                <div className="bg-navy/60 border border-edge/80 rounded-xl p-3.5 space-y-3">
                   <div className="flex items-center gap-2">
                     <div className="relative flex-1">
                       <input
@@ -369,7 +369,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
                         value={saveLocation}
                         onChange={(e) => setSaveLocation(e.target.value)}
                         placeholder="Choose or paste output directory / file path..."
-                        className="w-full bg-zinc-950/80 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-200 font-mono focus:outline-none focus:border-indigo-500 transition-colors"
+                        className="w-full bg-ink/80 border border-edge rounded-lg px-3 py-2 text-xs text-fg font-mono focus:outline-none focus:border-accent transition-colors"
                       />
                     </div>
                     <Button
@@ -377,9 +377,9 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
                       variant="secondary"
                       size="sm"
                       onClick={handleBrowseFolder}
-                      className="text-xs shrink-0 flex items-center gap-1.5 border-zinc-700 hover:border-indigo-500"
+                      className="text-xs shrink-0 flex items-center gap-1.5 border-edge hover:border-accent"
                     >
-                      <Icons.Folder className="w-3.5 h-3.5 text-indigo-400" />
+                      <Icons.Folder className="w-3.5 h-3.5 text-info" />
                       <span>Browse Folder...</span>
                     </Button>
                     <Button
@@ -387,16 +387,16 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
                       variant="secondary"
                       size="sm"
                       onClick={handleBrowseSaveFile}
-                      className="text-xs shrink-0 flex items-center gap-1.5 border-zinc-700 hover:border-emerald-500"
+                      className="text-xs shrink-0 flex items-center gap-1.5 border-edge hover:border-ok"
                     >
-                      <Icons.Film className="w-3.5 h-3.5 text-emerald-400" />
+                      <Icons.Film className="w-3.5 h-3.5 text-ok" />
                       <span>Save As File...</span>
                     </Button>
                   </div>
 
                   {/* Quick Preset Folders */}
                   <div className="flex items-center gap-2 pt-1 overflow-x-auto">
-                    <span className="text-[10px] uppercase font-bold text-zinc-400 shrink-0">Quick Destinations:</span>
+                    <span className="text-[10px] uppercase font-bold text-fg-dim shrink-0">Quick Destinations:</span>
                     {quickDestinations.map((d) => (
                       <button
                         key={d.id}
@@ -404,8 +404,8 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
                         onClick={() => setSaveLocation(d.path)}
                         className={`text-[11px] px-2.5 py-1 rounded-md border transition-all shrink-0 font-medium ${
                           saveLocation === d.path
-                            ? "bg-indigo-950/70 text-indigo-300 border-indigo-500/80 shadow-sm"
-                            : "bg-zinc-950/60 text-zinc-400 hover:text-zinc-200 border-zinc-800 hover:border-zinc-700"
+                            ? "bg-accent/70 text-info border-accent/80 shadow-sm"
+                            : "bg-ink/60 text-fg-dim hover:text-fg border-edge hover:border-edge"
                         }`}
                         title={d.path}
                       >
@@ -417,25 +417,25 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
               </div>
 
               {/* 3. Pacing & Framing Options */}
-              <div className="pt-2 border-t border-zinc-800/60">
+              <div className="pt-2 border-t border-edge/60">
                 <div className="flex items-center justify-between mb-2">
-                  <label className="font-semibold text-zinc-300 text-xs uppercase tracking-wider block">
+                  <label className="font-semibold text-fg-dim text-xs uppercase tracking-wider block">
                     3. Panel Reading Pacing & Framing
                   </label>
-                  <span className="text-[11px] text-zinc-400">
+                  <span className="text-[11px] text-fg-dim">
                     Fixes fast-moving panels & prevents cropped dialog bubbles
                   </span>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   {/* Panel Duration Floor (Pacing) */}
-                  <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-xl p-3.5 space-y-3">
+                  <div className="bg-navy/40 border border-edge/80 rounded-xl p-3.5 space-y-3">
                     <div className="flex justify-between items-center">
                       <div>
-                        <span className="font-semibold text-zinc-200 block text-xs">Panel Display Time</span>
-                        <span className="text-[11px] text-zinc-400">Time each comic panel stays on screen</span>
+                        <span className="font-semibold text-fg block text-xs">Panel Display Time</span>
+                        <span className="text-[11px] text-fg-dim">Time each comic panel stays on screen</span>
                       </div>
-                      <span className="font-mono font-bold text-indigo-400 text-xs bg-indigo-950/60 border border-indigo-800/50 px-2 py-0.5 rounded">
+                      <span className="font-mono font-bold text-info text-xs bg-accent/60 border border-accent/50 px-2 py-0.5 rounded">
                         {minPanelDuration.toFixed(1)}s / panel
                       </span>
                     </div>
@@ -454,19 +454,19 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
                           onClick={() => setMinPanelDuration(preset.dur)}
                           className={`py-1 px-1.5 rounded-lg border text-center transition-all ${
                             minPanelDuration === preset.dur
-                              ? "bg-indigo-950/80 border-indigo-500 text-indigo-300 font-bold"
-                              : "bg-zinc-950/50 border-zinc-800/80 text-zinc-400 hover:text-zinc-200"
+                              ? "bg-accent/80 border-accent text-info font-bold"
+                              : "bg-ink/50 border-edge/80 text-fg-dim hover:text-fg"
                           }`}
                         >
                           <div className="text-[11px]">{preset.label}</div>
-                          <div className="text-[9px] text-zinc-400 font-mono">{preset.dur}s</div>
+                          <div className="text-[9px] text-fg-dim font-mono">{preset.dur}s</div>
                         </button>
                       ))}
                     </div>
 
                     {/* Fine-tuning Slider */}
                     <div className="pt-1">
-                      <div className="flex justify-between text-[10px] text-zinc-400 mb-1">
+                      <div className="flex justify-between text-[10px] text-fg-dim mb-1">
                         <span>1.5s (Faster)</span>
                         <span>Adjust Minimum Panel Hold Time</span>
                         <span>8.0s (Slower)</span>
@@ -478,20 +478,20 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
                         step={0.5}
                         value={minPanelDuration}
                         onChange={(e) => setMinPanelDuration(parseFloat(e.target.value))}
-                        className="w-full accent-indigo-500 cursor-pointer"
+                        className="w-full accent-accent cursor-pointer"
                       />
                     </div>
                   </div>
 
                   {/* Panel Zoom & Framing Mode */}
-                  <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-xl p-3.5 space-y-3">
+                  <div className="bg-navy/40 border border-edge/80 rounded-xl p-3.5 space-y-3">
                     <div className="flex justify-between items-center">
                       <div>
-                        <span className="font-semibold text-zinc-200 block text-xs">Framing & Zoom Mode</span>
-                        <span className="text-[11px] text-zinc-400">Controls artwork scaling & camera motion</span>
+                        <span className="font-semibold text-fg block text-xs">Framing & Zoom Mode</span>
+                        <span className="text-[11px] text-fg-dim">Controls artwork scaling & camera motion</span>
                       </div>
                       <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider ${
-                        panelZoomMode === "fit" ? "bg-emerald-950 text-emerald-400 border border-emerald-800/50" : "bg-indigo-950 text-indigo-400 border border-indigo-800/50"
+                        panelZoomMode === "fit" ? "bg-ok/20 text-ok border border-ok/50" : "bg-accent/20 text-info border border-accent/50"
                       }`}>
                         {panelZoomMode === "fit" ? "Full Art (No Crop)" : "Cinematic Zoom"}
                       </span>
@@ -502,15 +502,15 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
                         onClick={() => setPanelZoomMode("fit")}
                         className={`p-2.5 rounded-lg border cursor-pointer transition-all ${
                           panelZoomMode === "fit"
-                            ? "bg-emerald-950/40 border-emerald-500 ring-1 ring-emerald-500/40"
-                            : "bg-zinc-950/50 border-zinc-800 hover:border-zinc-700"
+                            ? "bg-ok/40 border-ok ring-1 ring-ok/40"
+                            : "bg-ink/50 border-edge hover:border-edge"
                         }`}
                       >
-                        <div className="font-bold text-xs text-zinc-200 flex items-center gap-1.5 mb-1">
-                          <Icons.CheckCircle className={`w-3.5 h-3.5 ${panelZoomMode === "fit" ? "text-emerald-400" : "text-zinc-400"}`} />
+                        <div className="font-bold text-xs text-fg flex items-center gap-1.5 mb-1">
+                          <Icons.CheckCircle className={`w-3.5 h-3.5 ${panelZoomMode === "fit" ? "text-ok" : "text-fg-dim"}`} />
                           <span>Fit Entire Panel</span>
                         </div>
-                        <p className="text-[10px] text-zinc-400 leading-tight">
+                        <p className="text-[10px] text-fg-dim leading-tight">
                           Shows 100% of manga panel with blurred background. Speech balloons are never cut off.
                         </p>
                       </div>
@@ -519,21 +519,21 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
                         onClick={() => setPanelZoomMode("motion")}
                         className={`p-2.5 rounded-lg border cursor-pointer transition-all ${
                           panelZoomMode === "motion"
-                            ? "bg-indigo-950/40 border-indigo-500 ring-1 ring-indigo-500/40"
-                            : "bg-zinc-950/50 border-zinc-800 hover:border-zinc-700"
+                            ? "bg-accent/40 border-accent ring-1 ring-accent/40"
+                            : "bg-ink/50 border-edge hover:border-edge"
                         }`}
                       >
-                        <div className="font-bold text-xs text-zinc-200 flex items-center gap-1.5 mb-1">
-                          <Icons.Film className={`w-3.5 h-3.5 ${panelZoomMode === "motion" ? "text-indigo-400" : "text-zinc-400"}`} />
+                        <div className="font-bold text-xs text-fg flex items-center gap-1.5 mb-1">
+                          <Icons.Film className={`w-3.5 h-3.5 ${panelZoomMode === "motion" ? "text-info" : "text-fg-dim"}`} />
                           <span>Cinematic Zoom</span>
                         </div>
-                        <p className="text-[10px] text-zinc-400 leading-tight">
+                        <p className="text-[10px] text-fg-dim leading-tight">
                           Fills canvas with 15% slow cinematic zoom. Best for splash arts and wide panoramas.
                         </p>
                       </div>
                     </div>
 
-                    <div className="text-[10px] text-zinc-400 bg-zinc-950/40 px-2 py-1 rounded border border-zinc-800/40">
+                    <div className="text-[10px] text-fg-dim bg-ink/40 px-2 py-1 rounded border border-edge/40">
                       💡 Tip: "Fit Entire Panel" is recommended to ensure speech text and sound effects stay in view.
                     </div>
                   </div>
@@ -541,21 +541,21 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
               </div>
 
               {/* 4. Narration Speed & Audio Mix */}
-              <div className="pt-2 border-t border-zinc-800/60">
+              <div className="pt-2 border-t border-edge/60">
                 <div className="flex items-center justify-between mb-2">
-                  <label className="font-semibold text-zinc-300 text-xs uppercase tracking-wider block">
+                  <label className="font-semibold text-fg-dim text-xs uppercase tracking-wider block">
                     4. Narration Speed & Audio Mix
                   </label>
-                  <span className="text-[11px] text-zinc-400">
+                  <span className="text-[11px] text-fg-dim">
                     Character speech rate and soundscape balance
                   </span>
                 </div>
 
                 {/* Narration Speed Selector */}
-                <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-xl p-3.5 mb-3 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <div className="bg-navy/40 border border-edge/80 rounded-xl p-3.5 mb-3 flex flex-col md:flex-row md:items-center justify-between gap-3">
                   <div>
-                    <span className="font-semibold text-zinc-200 block text-xs">Narration & Dialogue Speed</span>
-                    <span className="text-[11px] text-zinc-400">Controls speech synthesis pacing for dialogue lines</span>
+                    <span className="font-semibold text-fg block text-xs">Narration & Dialogue Speed</span>
+                    <span className="text-[11px] text-fg-dim">Controls speech synthesis pacing for dialogue lines</span>
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
                     {[
@@ -571,8 +571,8 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
                         onClick={() => setNarrationSpeed(sp.rate)}
                         className={`px-2.5 py-1 rounded-lg border text-xs transition-all font-mono ${
                           narrationSpeed === sp.rate
-                            ? "bg-indigo-600 text-white border-indigo-500 font-bold shadow-sm"
-                            : "bg-zinc-950/70 text-zinc-400 hover:text-zinc-200 border-zinc-800"
+                            ? "bg-accent text-white border-accent font-bold shadow-sm"
+                            : "bg-ink/70 text-fg-dim hover:text-fg border-edge"
                         }`}
                         title={`${sp.hint} narration speech`}
                       >
@@ -584,13 +584,13 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
 
                 <div className="grid grid-cols-3 gap-4">
                   {/* Subtitles */}
-                  <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-xl p-3 flex flex-col justify-between">
+                  <div className="bg-navy/40 border border-edge/80 rounded-xl p-3 flex flex-col justify-between">
                     <div className="flex justify-between items-start">
                       <div>
-                        <span className="font-semibold text-zinc-200 block text-xs mb-1">Burn-In Subtitles</span>
-                        <span className="text-[11px] text-zinc-400 block">Render dialogue captions directly into the video stream</span>
+                        <span className="font-semibold text-fg block text-xs mb-1">Burn-In Subtitles</span>
+                        <span className="text-[11px] text-fg-dim block">Render dialogue captions directly into the video stream</span>
                       </div>
-                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider shrink-0 ${subtitleEnabled ? "bg-indigo-950 text-indigo-400 border border-indigo-800/60" : "bg-zinc-800 text-zinc-400"}`}>
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider shrink-0 ${subtitleEnabled ? "bg-accent/20 text-info border border-accent/60" : "bg-flat text-fg-dim"}`}>
                         {subtitleEnabled ? "ON" : "OFF"}
                       </span>
                     </div>
@@ -601,7 +601,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
                         aria-checked={subtitleEnabled}
                         onClick={() => setSubtitleEnabled(!subtitleEnabled)}
                         className={`relative inline-flex h-5 w-10 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                          subtitleEnabled ? "bg-indigo-600" : "bg-zinc-700"
+                          subtitleEnabled ? "bg-accent" : "bg-glass-hi"
                         }`}
                       >
                         <span
@@ -613,7 +613,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
                       </button>
                       <span
                         onClick={() => setSubtitleEnabled(!subtitleEnabled)}
-                        className="text-xs text-zinc-300 font-medium select-none cursor-pointer hover:text-white"
+                        className="text-xs text-fg-dim font-medium select-none cursor-pointer hover:text-white"
                       >
                         Enable Subtitles (Default: Off)
                       </span>
@@ -621,12 +621,12 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
                   </div>
 
                   {/* BGM Volume */}
-                  <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-xl p-3">
+                  <div className="bg-navy/40 border border-edge/80 rounded-xl p-3">
                     <div className="flex justify-between items-center mb-1">
-                      <span className="font-semibold text-zinc-200 text-xs">Music Volume</span>
-                      <span className="font-mono text-zinc-400 text-[11px]">{bgmVolumeDb.toFixed(1)} dB</span>
+                      <span className="font-semibold text-fg text-xs">Music Volume</span>
+                      <span className="font-mono text-fg-dim text-[11px]">{bgmVolumeDb.toFixed(1)} dB</span>
                     </div>
-                    <span className="text-[11px] text-zinc-400 block mb-3">Auto-ducks by -12 dB during voice speech</span>
+                    <span className="text-[11px] text-fg-dim block mb-3">Auto-ducks by -12 dB during voice speech</span>
                     <input
                       type="range"
                       min={-24}
@@ -634,17 +634,17 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
                       step={0.5}
                       value={bgmVolumeDb}
                       onChange={(e) => setBgmVolumeDb(parseFloat(e.target.value))}
-                      className="w-full accent-indigo-500 cursor-pointer"
+                      className="w-full accent-accent cursor-pointer"
                     />
                   </div>
 
                   {/* Dialogue Gain */}
-                  <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-xl p-3">
+                  <div className="bg-navy/40 border border-edge/80 rounded-xl p-3">
                     <div className="flex justify-between items-center mb-1">
-                      <span className="font-semibold text-zinc-200 text-xs">Dialogue Clarity</span>
-                      <span className="font-mono text-zinc-400 text-[11px]">+{dialogueGainDb.toFixed(1)} dB</span>
+                      <span className="font-semibold text-fg text-xs">Dialogue Clarity</span>
+                      <span className="font-mono text-fg-dim text-[11px]">+{dialogueGainDb.toFixed(1)} dB</span>
                     </div>
-                    <span className="text-[11px] text-zinc-400 block mb-3">Master vocal gain across character speech</span>
+                    <span className="text-[11px] text-fg-dim block mb-3">Master vocal gain across character speech</span>
                     <input
                       type="range"
                       min={-6}
@@ -652,29 +652,29 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
                       step={0.5}
                       value={dialogueGainDb}
                       onChange={(e) => setDialogueGainDb(parseFloat(e.target.value))}
-                      className="w-full accent-emerald-500 cursor-pointer"
+                      className="w-full accent-ok cursor-pointer"
                     />
                   </div>
                 </div>
               </div>
 
               {/* Preflight Verification Report */}
-              <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-xl p-4 space-y-3">
+              <div className="bg-navy/60 border border-edge/80 rounded-xl p-4 space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="font-semibold text-zinc-200 text-xs flex items-center gap-1.5">
-                    <Icons.CheckCircle className="w-4 h-4 text-emerald-400" />
+                  <span className="font-semibold text-fg text-xs flex items-center gap-1.5">
+                    <Icons.CheckCircle className="w-4 h-4 text-ok" />
                     Preflight Timeline Verification
                   </span>
                   {preflightLoading ? (
-                    <span className="text-zinc-400 text-[11px] animate-pulse">Verifying assets...</span>
+                    <span className="text-fg-dim text-[11px] animate-pulse">Verifying assets...</span>
                   ) : preflight?.valid ? (
-                    <span className="text-emerald-400 font-semibold text-[11px] flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                    <span className="text-ok font-semibold text-[11px] flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-ok" />
                       Passed All Checks
                     </span>
                   ) : (
-                    <span className="text-amber-400 font-semibold text-[11px] flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                    <span className="text-warn font-semibold text-[11px] flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-warn" />
                       Warnings Reported
                     </span>
                   )}
@@ -682,37 +682,37 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
 
                 {/* Preflight Stats Grid */}
                 <div className="grid grid-cols-4 gap-2 pt-1 font-mono text-[11px]">
-                  <div className="bg-zinc-950/60 p-2 rounded-lg border border-zinc-800/50">
-                    <span className="text-zinc-400 block text-[10px]">TOTAL DURATION</span>
-                    <span className="font-bold text-zinc-200">{preflight?.stats.planned_duration_sec ?? 0}s</span>
-                    <span className="text-zinc-400 text-[10px] block">({preflight?.stats.total_frames_30fps ?? 0} frames)</span>
+                  <div className="bg-ink/60 p-2 rounded-lg border border-edge/50">
+                    <span className="text-fg-dim block text-[10px]">TOTAL DURATION</span>
+                    <span className="font-bold text-fg">{preflight?.stats.planned_duration_sec ?? 0}s</span>
+                    <span className="text-fg-dim text-[10px] block">({preflight?.stats.total_frames_30fps ?? 0} frames)</span>
                   </div>
-                  <div className="bg-zinc-950/60 p-2 rounded-lg border border-zinc-800/50">
-                    <span className="text-zinc-400 block text-[10px]">SCENES & LAYERS</span>
-                    <span className="font-bold text-zinc-200">{preflight?.stats.scenes_count ?? 0} scenes</span>
-                    <span className="text-zinc-400 text-[10px] block">{preflight?.stats.layers_count ?? 0} visual layers</span>
+                  <div className="bg-ink/60 p-2 rounded-lg border border-edge/50">
+                    <span className="text-fg-dim block text-[10px]">SCENES & LAYERS</span>
+                    <span className="font-bold text-fg">{preflight?.stats.scenes_count ?? 0} scenes</span>
+                    <span className="text-fg-dim text-[10px] block">{preflight?.stats.layers_count ?? 0} visual layers</span>
                   </div>
-                  <div className="bg-zinc-950/60 p-2 rounded-lg border border-zinc-800/50">
-                    <span className="text-zinc-400 block text-[10px]">VOICE TRACKS</span>
-                    <span className="font-bold text-emerald-300">{preflight?.stats.narration_approved ?? 0} clips</span>
-                    <span className="text-zinc-400 text-[10px] block">
+                  <div className="bg-ink/60 p-2 rounded-lg border border-edge/50">
+                    <span className="text-fg-dim block text-[10px]">VOICE TRACKS</span>
+                    <span className="font-bold text-ok">{preflight?.stats.narration_approved ?? 0} clips</span>
+                    <span className="text-fg-dim text-[10px] block">
                       {preflight?.stats.narration_outdated ? `${preflight.stats.narration_outdated} outdated` : "All synchronized"}
                     </span>
                   </div>
-                  <div className="bg-zinc-950/60 p-2 rounded-lg border border-zinc-800/50">
-                    <span className="text-zinc-400 block text-[10px]">AUDIO MIX</span>
-                    <span className="font-bold text-amber-300">{preflight?.stats.bgm_tracks_count ?? 0} BGM</span>
-                    <span className="text-zinc-400 text-[10px] block">{preflight?.stats.sfx_cues_count ?? 0} SFX cues</span>
+                  <div className="bg-ink/60 p-2 rounded-lg border border-edge/50">
+                    <span className="text-fg-dim block text-[10px]">AUDIO MIX</span>
+                    <span className="font-bold text-warn">{preflight?.stats.bgm_tracks_count ?? 0} BGM</span>
+                    <span className="text-fg-dim text-[10px] block">{preflight?.stats.sfx_cues_count ?? 0} SFX cues</span>
                   </div>
                 </div>
 
                 {/* Outdated Narration Warning Box */}
                 {hasOutdatedNarration && (
-                  <div className="p-3 bg-amber-950/40 border border-amber-800/60 rounded-xl space-y-2 mt-2">
+                  <div className="p-3 bg-warn/40 border border-warn/60 rounded-xl space-y-2 mt-2">
                     <div className="flex items-start gap-2">
-                      <Icons.AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                      <div className="text-[11px] text-amber-200/90 leading-relaxed">
-                        <strong className="text-amber-100">Outdated Narration Detected: </strong>
+                      <Icons.AlertTriangle className="w-4 h-4 text-warn shrink-0 mt-0.5" />
+                      <div className="text-[11px] text-warn/90 leading-relaxed">
+                        <strong className="text-warn">Outdated Narration Detected: </strong>
                         One or more dialogue lines were edited in the script after speech audio was generated.
                         Rendering will use the current audio unless regenerated.
                       </div>
@@ -723,8 +723,8 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
                         onClick={() => setIgnoreOutdatedWarning(true)}
                         className={`text-[11px] px-2.5 py-1 rounded font-medium transition-colors flex items-center gap-1.5 ${
                           ignoreOutdatedWarning
-                            ? "bg-amber-600 text-white font-bold"
-                            : "bg-amber-950/80 text-amber-300 hover:bg-amber-900 border border-amber-800/60"
+                            ? "bg-warn text-white font-bold"
+                            : "bg-warn/80 text-warn hover:bg-warn/20 border border-warn/60"
                         }`}
                       >
                         <Icons.Check className="w-3.5 h-3.5" />
@@ -737,7 +737,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
                             onClose();
                             onOpenNarrationStudio();
                           }}
-                          className="text-[11px] text-zinc-300 hover:text-white underline"
+                          className="text-[11px] text-fg-dim hover:text-white underline"
                         >
                           Open Narration Studio to Regenerate →
                         </button>
@@ -754,25 +754,25 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
             <div className="py-8 px-4 flex flex-col items-center justify-center text-center space-y-6">
               {/* Spinning status icon */}
               <div className="relative">
-                <div className="w-16 h-16 rounded-2xl bg-indigo-600/20 border border-indigo-500/40 flex items-center justify-center text-indigo-400 animate-pulse">
+                <div className="w-16 h-16 rounded-2xl bg-accent/20 border border-accent/40 flex items-center justify-center text-info animate-pulse">
                   <Icons.Film className="w-8 h-8 animate-spin" style={{ animationDuration: "3s" }} />
                 </div>
               </div>
 
               <div>
-                <h3 className="font-bold text-zinc-100 text-base mb-1">
+                <h3 className="font-bold text-fg text-base mb-1">
                   Rendering Production Motion Comic
                 </h3>
-                <p className="text-xs text-zinc-400 max-w-md">
+                <p className="text-xs text-fg-dim max-w-md">
                   Synthesizing camera paths, multi-layer transforms, 48kHz audio mixdown with dialogue ducking, and 1080p H.264 video.
                 </p>
               </div>
 
               {/* Progress details */}
               <div className="w-full max-w-md space-y-2">
-                <div className="flex justify-between text-xs text-zinc-400 font-mono">
+                <div className="flex justify-between text-xs text-fg-dim font-mono">
                   <span>
-                    Stage: <strong className="text-indigo-300 uppercase">{activeJob?.current_stage || activeJob?.status || "ENCODING"}</strong>
+                    Stage: <strong className="text-info uppercase">{activeJob?.current_stage || activeJob?.status || "ENCODING"}</strong>
                   </span>
                   <span>
                     {activeJob?.frames_done ?? (activeJob as any)?.current_frame ?? 0} / {activeJob?.frames_total ?? (activeJob as any)?.total_frames ?? 720} frames ({Math.round(activeJob?.progress ?? 0)}%)
@@ -782,7 +782,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
                   progress={activeJob?.progress ?? 5}
                   className="h-3"
                 />
-                <div className="flex justify-between text-[11px] text-zinc-400 pt-1">
+                <div className="flex justify-between text-[11px] text-fg-dim pt-1">
                   <span>Profile: {selectedProfile}</span>
                   <span>30.0 FPS Deterministic Clock</span>
                 </div>
@@ -794,7 +794,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
                 size="sm"
                 onClick={handleCancelRender}
                 disabled={cancelling}
-                className="text-xs text-zinc-400 hover:text-rose-400 border border-zinc-800 hover:border-rose-900/60"
+                className="text-xs text-fg-dim hover:text-bad border border-edge hover:border-bad/60"
               >
                 {cancelling ? "Cancelling..." : "Cancel Export"}
               </Button>
@@ -804,10 +804,10 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
           {/* STEP 3: COMPLETED VIDEO PREVIEW */}
           {renderStep === "completed" && (
             <div className="space-y-4">
-              <div className="flex items-center justify-between pb-2 border-b border-zinc-800/80">
+              <div className="flex items-center justify-between pb-2 border-b border-edge/80">
                 <div className="flex items-center gap-2">
-                  <Icons.CheckCircle className="w-5 h-5 text-emerald-400" />
-                  <span className="font-bold text-zinc-100 text-sm">
+                  <Icons.CheckCircle className="w-5 h-5 text-ok" />
+                  <span className="font-bold text-fg text-sm">
                     Video Render Complete & Verified
                   </span>
                 </div>
@@ -816,7 +816,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
 
               {/* Video Player */}
               {videoUrl && (
-                <div className="rounded-xl overflow-hidden bg-black border border-zinc-800 shadow-lg relative group">
+                <div className="rounded-xl overflow-hidden bg-black border border-edge shadow-lg relative group">
                   <video
                     src={videoUrl}
                     controls
@@ -828,39 +828,39 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
 
               {/* Quality & File Metadata */}
               <div className="grid grid-cols-4 gap-2 font-mono text-[11px]">
-                <div className="bg-zinc-900/60 p-2.5 rounded-xl border border-zinc-800">
-                  <span className="text-zinc-400 block text-[10px]">OUTPUT DURATION</span>
-                  <span className="font-bold text-zinc-200">
+                <div className="bg-navy/60 p-2.5 rounded-xl border border-edge">
+                  <span className="text-fg-dim block text-[10px]">OUTPUT DURATION</span>
+                  <span className="font-bold text-fg">
                     {(activeJob as any)?.audit_report?.actual_duration_sec ?? 24.0}s
                   </span>
                 </div>
-                <div className="bg-zinc-900/60 p-2.5 rounded-xl border border-zinc-800">
-                  <span className="text-zinc-400 block text-[10px]">FILE SIZE</span>
-                  <span className="font-bold text-zinc-200">
+                <div className="bg-navy/60 p-2.5 rounded-xl border border-edge">
+                  <span className="text-fg-dim block text-[10px]">FILE SIZE</span>
+                  <span className="font-bold text-fg">
                     {(activeJob as any)?.audit_report?.file_size_bytes
                       ? `${((activeJob as any).audit_report.file_size_bytes / (1024 * 1024)).toFixed(2)} MB`
                       : "6.58 MB"}
                   </span>
                 </div>
-                <div className="bg-zinc-900/60 p-2.5 rounded-xl border border-zinc-800">
-                  <span className="text-zinc-400 block text-[10px]">AV SYNC DRIFT</span>
-                  <span className="font-bold text-emerald-400">0 ms (Zero drift)</span>
+                <div className="bg-navy/60 p-2.5 rounded-xl border border-edge">
+                  <span className="text-fg-dim block text-[10px]">AV SYNC DRIFT</span>
+                  <span className="font-bold text-ok">0 ms (Zero drift)</span>
                 </div>
-                <div className="bg-zinc-900/60 p-2.5 rounded-xl border border-zinc-800">
-                  <span className="text-zinc-400 block text-[10px]">AUDIO MIXDOWN</span>
-                  <span className="font-bold text-emerald-400">48 kHz Stereo</span>
+                <div className="bg-navy/60 p-2.5 rounded-xl border border-edge">
+                  <span className="text-fg-dim block text-[10px]">AUDIO MIXDOWN</span>
+                  <span className="font-bold text-ok">48 kHz Stereo</span>
                 </div>
               </div>
 
               {/* YouTube Thumbnail & Packaging Action Banner */}
-              <div className="p-4 bg-gradient-to-r from-red-950/40 via-zinc-900 to-indigo-950/40 border border-zinc-800/90 rounded-xl flex items-center justify-between gap-4">
+              <div className="p-4 bg-gradient-to-r from-bad/40 via-navy to-accent/40 border border-edge/90 rounded-xl flex items-center justify-between gap-4">
                 <div className="space-y-0.5">
-                  <div className="text-xs font-bold text-zinc-100 flex items-center gap-1.5">
-                    <Icons.Sparkles className="w-4 h-4 text-rose-400" />
+                  <div className="text-xs font-bold text-fg flex items-center gap-1.5">
+                    <Icons.Sparkles className="w-4 h-4 text-bad" />
                     <span>Next: YouTube Thumbnail & Video Packaging</span>
                     <Badge variant="accent" className="text-[9px]">ComfyUI AI</Badge>
                   </div>
-                  <p className="text-[11px] text-zinc-400">
+                  <p className="text-[11px] text-fg-dim">
                     Generate an AI anime thumbnail via ComfyUI and copy SEO titles, chapter timestamps & tags.
                   </p>
                 </div>
@@ -868,7 +868,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
                   variant="primary"
                   size="sm"
                   onClick={() => setShowPackagingModal(true)}
-                  className="bg-red-600 hover:bg-red-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-red-600/30 shrink-0"
+                  className="bg-bad hover:bg-bad text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-bad/30 shrink-0"
                 >
                   <Icons.Sparkles className="w-3.5 h-3.5" />
                   <span>Create Thumbnail & Metadata</span>
@@ -877,18 +877,18 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
 
               {/* Output Path Box */}
               {outputPath && (
-                <div className="p-3 bg-zinc-900/40 border border-zinc-800/80 rounded-xl flex items-center justify-between text-xs font-mono text-zinc-400">
+                <div className="p-3 bg-navy/40 border border-edge/80 rounded-xl flex items-center justify-between text-xs font-mono text-fg-dim">
                   <span className="truncate max-w-[500px]" title={outputPath}>
                     {outputPath}
                   </span>
                   <button
                     onClick={handleCopyPath}
-                    className="px-2.5 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-sans transition-colors shrink-0 flex items-center gap-1.5"
+                    className="px-2.5 py-1 rounded bg-flat hover:bg-glass-hi text-fg text-xs font-sans transition-colors shrink-0 flex items-center gap-1.5"
                   >
                     {copiedPath ? (
                       <>
-                        <Icons.Check className="w-3.5 h-3.5 text-emerald-400" />
-                        <span className="text-emerald-400 font-medium">Copied</span>
+                        <Icons.Check className="w-3.5 h-3.5 text-ok" />
+                        <span className="text-ok font-medium">Copied</span>
                       </>
                     ) : (
                       "Copy Path"
@@ -901,7 +901,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
         </div>
 
         {/* Modal Footer */}
-        <div className="px-6 py-4 border-t border-zinc-800/80 bg-zinc-900/60 flex items-center justify-between">
+        <div className="px-6 py-4 border-t border-edge/80 bg-navy/60 flex items-center justify-between">
           {renderStep === "configure" && (
             <>
               <Button variant="secondary" size="sm" onClick={onClose} className="text-xs">
@@ -912,7 +912,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
                 size="sm"
                 onClick={handleStartRender}
                 disabled={!canStart || preflightLoading}
-                className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-5 text-xs shadow-md shadow-indigo-600/30 flex items-center gap-1.5"
+                className="bg-accent hover:bg-accent text-white font-bold px-5 text-xs shadow-md shadow-accent/30 flex items-center gap-1.5"
               >
                 <Icons.Film className="w-3.5 h-3.5" />
                 Render Production Video
@@ -921,9 +921,9 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
           )}
 
           {renderStep === "rendering" && (
-            <div className="w-full flex justify-between items-center text-xs text-zinc-400">
+            <div className="w-full flex justify-between items-center text-xs text-fg-dim">
               <span>Rendering in background — you can monitor live progress here.</span>
-              <span className="font-mono text-indigo-400">FPS ~20.0</span>
+              <span className="font-mono text-info">FPS ~20.0</span>
             </div>
           )}
 
@@ -941,7 +941,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
                 variant="primary"
                 size="sm"
                 onClick={onClose}
-                className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-6 text-xs"
+                className="bg-ok hover:bg-ok text-white font-bold px-6 text-xs"
               >
                 Done
               </Button>
@@ -949,9 +949,9 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
                 variant="secondary"
                 size="sm"
                 onClick={() => setShowPackagingModal(true)}
-                className="text-xs flex items-center gap-1.5 border-zinc-700 text-zinc-200"
+                className="text-xs flex items-center gap-1.5 border-edge text-fg"
               >
-                <Icons.Sparkles className="w-3.5 h-3.5 text-rose-400" />
+                <Icons.Sparkles className="w-3.5 h-3.5 text-bad" />
                 <span>YouTube Packaging</span>
               </Button>
             </div>

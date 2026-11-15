@@ -1,0 +1,21 @@
+{
+  "_note": "Labels written 2026-11-14 by the AGENT after looking at each picture (not by the owner). Camera is judged from the view: looks_up = the viewer looks up at the subject from below, level = about eye level. A few are mild/ambiguous (fight-02, fight-04, fight-08, concept_art-03). 'actions' is left to right and is omitted where the picture is ambiguous (fight-04, fight-07). Replace or extend with the owner's ratings when they exist.",
+  "labels": [
+    {"file": "output/Original_Scenes/_baseline/director/panels/fight-01.png", "scene_type": "fight", "camera": "looks_up", "people": 2, "actions": ["striking", "struck"]},
+    {"file": "output/Original_Scenes/_baseline/director/panels/fight-02.png", "scene_type": "fight", "camera": "looks_up", "people": 2, "actions": ["striking", "blocking"]},
+    {"file": "output/Original_Scenes/_baseline/director/panels/fight-03.png", "scene_type": "fight", "camera": "level", "people": 2, "actions": ["striking", "blocking"]},
+    {"file": "output/Original_Scenes/_baseline/director/panels/fight-04.png", "scene_type": "fight", "camera": "looks_up", "people": 2, "actions": []},
+    {"file": "output/Original_Scenes/_baseline/director/panels/fight-05.png", "scene_type": "fight", "camera": "looks_up", "people": 2, "actions": ["striking", "readying"]},
+    {"file": "output/Original_Scenes/_baseline/director/panels/fight-06.png", "scene_type": "fight", "camera": "looks_up", "people": 2, "actions": ["striking", "blocking"]},
+    {"file": "output/Original_Scenes/_baseline/director/panels/fight-07.png", "scene_type": "fight", "camera": "level", "people": 4, "actions": []},
+    {"file": "output/Original_Scenes/_baseline/director/panels/fight-08.png", "scene_type": "fight", "camera": "looks_up", "people": 2, "actions": ["striking", "blocking"]},
+    {"file": "output/Original_Scenes/_baseline/director/panels/emotion-01.png", "scene_type": "emotion", "camera": "level", "people": 1, "actions": ["grieving"]},
+    {"file": "output/Original_Scenes/_baseline/director/panels/emotion-03.png", "scene_type": "emotion", "camera": "level", "people": 1, "actions": ["afraid"]},
+    {"file": "output/Original_Scenes/_baseline/director/panels/emotion-05.png", "scene_type": "emotion", "camera": "level", "people": 1, "actions": ["nostalgic"]},
+    {"file": "output/Original_Scenes/_baseline/director/panels/emotion-06.png", "scene_type": "emotion", "camera": "level", "people": 1, "actions": ["guilty"]},
+    {"file": "output/Original_Scenes/_baseline/director/panels/concept_art-01.png", "scene_type": "concept_art", "camera": "level", "people": 0, "actions": []},
+    {"file": "output/Original_Scenes/_baseline/director/panels/concept_art-03.png", "scene_type": "concept_art", "camera": "looks_up", "people": 0, "actions": []},
+    {"file": "output/Original_Scenes/_baseline/director/panels/concept_art-07.png", "scene_type": "concept_art", "camera": "looks_up", "people": 0, "actions": []},
+    {"file": "output/Original_Scenes/_baseline/director/panels/concept_art-08.png", "scene_type": "concept_art", "camera": "level", "people": 0, "actions": []}
+  ]
+}

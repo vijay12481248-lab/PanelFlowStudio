@@ -58,6 +58,18 @@ class SttConfig(BaseModel):
     compute_type: str = "int8"
 
 
+class VoiceProfile(BaseModel):
+    """An approved voice: the profile a character can be cast to."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    name: str
+    voice: str  # the engine's voice id (a Kokoro pack name, for example)
+    gender: Literal["female", "male", "neutral"] = "neutral"
+    engine: str = ""  # empty means the default TTS engine
+
+
 def _read_section(name: str, path: Path | None) -> dict:
     data = yaml.safe_load((path or DEFAULT_PATH).read_text(encoding="utf-8")) or {}
     raw = data.get(name) or {}
@@ -68,9 +80,32 @@ def _read_section(name: str, path: Path | None) -> dict:
     return raw
 
 
+def _read_list_section(name: str, path: Path | None) -> list:
+    """A section that is a list, not a mapping: the user's list replaces the bundled one."""
+    data = yaml.safe_load((path or DEFAULT_PATH).read_text(encoding="utf-8")) or {}
+    raw = list(data.get(name) or [])
+    if path is None:
+        user = settings.app_data_dir / "config" / "narration_models.yaml"
+        if user.exists():
+            user_raw = (yaml.safe_load(user.read_text(encoding="utf-8")) or {}).get(name)
+            if user_raw:
+                raw = list(user_raw)
+    return raw
+
+
 def load_tts_config(path: Path | None = None) -> TtsConfig:
     return TtsConfig(**_read_section("tts", path))
 
 
 def load_stt_config(path: Path | None = None) -> SttConfig:
     return SttConfig(**_read_section("stt", path))
+
+
+def load_voice_catalog(path: Path | None = None) -> list[VoiceProfile]:
+    """The approved voices a character can be cast to. The user's own entry wins on an id."""
+    profiles: list[VoiceProfile] = []
+    for item in _read_list_section("voices", path):
+        profile = VoiceProfile.model_validate(item)
+        profiles = [p for p in profiles if p.id != profile.id]  # the later list replaces the earlier one
+        profiles.append(profile)
+    return profiles

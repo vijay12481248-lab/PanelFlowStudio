@@ -1,0 +1,1616 @@
+{
+ "report": {
+  "items": 48,
+  "judge_A": {
+   "answered": 48,
+   "correct": 39,
+   "wrong": 9,
+   "coverage": 1.0,
+   "accuracy_of_answered": 0.8125
+  },
+  "judge_B": {
+   "answered": 32,
+   "correct": 29,
+   "wrong": 3,
+   "coverage": 0.6666666666666666,
+   "accuracy_of_answered": 0.90625
+  },
+  "vote": {
+   "answered": 31,
+   "correct": 29,
+   "wrong": 2,
+   "coverage": 0.6458333333333334,
+   "accuracy_of_answered": 0.9354838709677419
+  },
+  "crosscheck": {
+   "answered": 48,
+   "correct": 38,
+   "wrong": 10,
+   "coverage": 1.0,
+   "accuracy_of_answered": 0.7916666666666666
+  }
+ },
+ "gate": false,
+ "seconds_per_picture": {
+  "A": 1.94,
+  "B": 3.59,
+  "cc": 3.81
+ },
+ "suspect_flips": 0,
+ "per_picture": {
+  "output/Original_Scenes/_baseline/director/panels/fight-01.png": {
+   "A": {
+    "judge": "qwen3.5:9b",
+    "ok": true,
+    "camera": "looks_up",
+    "people": 2,
+    "actions": [
+     "striking",
+     "struck"
+    ],
+    "evidence": "The left person's arm is extended forward in a punch, while the right person's face shows impact and defensive posture.",
+    "raw": "CAMERA: looks_up\nPEOPLE: 2\nACTIONS: striking; struck\nEVIDENCE: The left person's arm is extended forward in a punch, while the right person's face shows impact and defensive posture."
+   },
+   "B": {
+    "judge": "qwen3-vl-8b",
+    "ok": true,
+    "camera": null,
+    "people": 2,
+    "actions": [
+     "striking",
+     "blocking"
+    ],
+    "evidence": "The left person's arm is extended forward in a punch, and the right person's head is turned to the side with their hand near their chin, indicating they are blocking.",
+    "raw": "CAMERA: looks_up | level | looks_down | tilted\nPEOPLE: 2\nACTIONS: striking; blocking\nEVIDENCE: The left person's arm is extended forward in a punch, and the right person's head is turned to the side with their hand near their chin, indicating they are blocking."
+   },
+   "cc": {
+    "judges": [
+     "qwen3.5:9b",
+     "qwen3-vl-8b"
+    ],
+    "items": [
+     {
+      "key": "camera",
+      "status": "single",
+      "value": "looks_up",
+      "confidence": 0.5,
+      "answers": {
+       "qwen3.5:9b": {
+        "round1": "looks_up",
+        "round2": null,
+        "evidence": "The left person's arm is extended forward in a punch, while the right person's face shows impact and defensive posture."
+       },
+       "qwen3-vl-8b": {
+        "round1": null,
+        "round2": null,
+        "evidence": "The left person's arm is extended forward in a punch, and the right person's head is turned to the side with their hand near their chin, indicating they are blocking."
+       }
+      },
+      "suspect_flips": []
+     },
+     {
+      "key": "people",
+      "status": "agreed",
+      "value": "2",
+      "confidence": 0.9,
+      "answers": {
+       "qwen3.5:9b": {
+        "round1": "2",
+        "round2": null,
+        "evidence": "The left person's arm is extended forward in a punch, while the right person's face shows impact and defensive posture."
+       },
+       "qwen3-vl-8b": {
+        "round1": "2",
+        "round2": null,
+        "evidence": "The left person's arm is extended forward in a punch, and the right person's head is turned to the side with their hand near their chin, indicating they are blocking."
+       }
+      },
+      "suspect_flips": []
+     },
+     {
+      "key": "action:0",
+      "status": "agreed",
+      "value": "striking",
+      "confidence": 0.9,
+      "answers": {
+       "qwen3.5:9b": {
+        "round1": "striking",
+        "round2": null,
+        "evidence": "The left person's arm is extended forward in a punch, while the right person's face shows impact and defensive posture."
+       },
+       "qwen3-vl-8b": {
+        "round1": "striking",
+        "round2": null,
+        "evidence": "The left person's arm is extended forward in a punch, and the right person's head is turned to the side with their hand near their chin, indicating they are blocking."
+       }
+      },
+      "suspect_flips": []
+     },
+     {
+      "key": "action:1",
+      "status": "resolved",
+      "value": "striking",
+      "confidence": 0.7,
+      "answers": {
+       "qwen3.5:9b": {
+        "round1": "struck",
+        "round2": "striking",
+        "evidence": "The left person\u2019s arm is fully extended with a clenched fist making contact with the right person\u2019s face, and the right person\u2019s head is being pushed back by the impact \u2014 indicating they are receiving a strike, not blocking."
+       },
+       "qwen3-vl-8b": {
+        "round1": "blocking",
+        "round2": "striking",
+        "evidence": "The left person\u2019s arm is extended forward in a punch, and the right person\u2019s face shows impact and defensive posture, indicating the punch has made contact."
+       }
+      },
+      "suspect_flips": []
+     }
+    ],
+    "single_judge": false,
+    "seconds": 20.68
+   }
+  },
+  "output/Original_Scenes/_baseline/director/panels/fight-02.png": {
+   "A": {
+    "judge": "qwen3.5:9b",
+    "ok": true,
+    "camera": "level",
+    "people": 2,
+    "actions": [
+     "striking",
+     "blocking"
+    ],
+    "evidence": "The left person's sword is extended towards the right person, who has their hands positioned to block or parry.",
+    "raw": "CAMERA: level\nPEOPLE: 2\nACTIONS: striking; blocking\nEVIDENCE: The left person's sword is extended towards the right person, who has their hands positioned to block or parry."
+   },
+   "B": {
+    "judge": "qwen3-vl-8b",
+    "ok": true,
+    "camera": null,
+    "people": 2,
+    "actions": [
+     "striking",
+     "blocking"
+    ],
+    "evidence": "The left person is extending their sword forward in a striking motion, while the right person holds their sword in a defensive blocking stance.",
+    "raw": "CAMERA: looks_up | level | looks_down | tilted\nPEOPLE: 2\nACTIONS: striking; blocking\nEVIDENCE: The left person is extending their sword forward in a striking motion, while the right person holds their sword in a defensive blocking stance."
+   },
+   "cc": {
+    "judges": [
+     "qwen3.5:9b",
+     "qwen3-vl-8b"
+    ],
+    "items": [
+     {
+      "key": "camera",
+      "status": "single",
+      "value": "level",
+      "confidence": 0.5,
+      "answers": {
+       "qwen3.5:9b": {
+        "round1": "level",
+        "round2": null,
+        "evidence": "The left person's sword is extended towards the right person, who has their hands positioned to block or parry."
+       },
+       "qwen3-vl-8b": {
+        "round1": null,
+        "round2": null,
+        "evidence": "The left person is extending their sword forward in a striking motion, while the right person holds their sword in a defensive blocking stance."
+       }
+      },
+      "suspect_flips": []
+     },
+     {
+      "key": "people",
+      "status": "agreed",
+      "value": "2",
+      "confidence": 0.9,
+      "answers": {
+       "qwen3.5:9b": {
+        "round1": "2",
+        "round2": null,
+        "evidence": "The left person's sword is extended towards the right person, who has their hands positioned to block or parry."
+       },
+       "qwen3-vl-8b": {
+        "round1": "2",
+        "round2": null,
+        "evidence": "The left person is extending their sword forward in a striking motion, while the right person holds their sword in a defensive blocking stance."
+       }
+      },
+      "suspect_flips": []
+     },
+     {
+      "key": "action:0",
+      "status": "agreed",
+      "value": "striking",
+      "confidence": 0.9,
+      "answers": {
+       "qwen3.5:9b": {
+        "round1": "striking",
+        "round2": null,
+        "evidence": "The left person's sword is extended towards the right person, who has their hands positioned to block or parry."
+       },
+       "qwen3-vl-8b": {
+        "round1": "striking",
+        "round2": null,
+        "evidence": "The left person is extending their sword forward in a striking motion, while the right person holds their sword in a defensive blocking stance."
+       }
+      },
+      "suspect_flips": []
+     },
+     {
+      "key": "action:1",
+      "status": "agreed",
+      "value": "blocking",
+      "confidence": 0.9,
+      "answers": {
+       "qwen3.5:9b": {
+        "round1": "blocking",
+        "round2": null,
+        "evidence": "The left person's sword is extended towards the right person, who has their hands positioned to block or parry."
+       },
+       "qwen3-vl-8b": {
+        "round1": "blocking",
+        "round2": null,
+        "evidence": "The left person is extending their sword forward in a striking motion, while the right person holds their sword in a defensive blocking stance."
+       }
+      },
+      "suspect_flips": []
+     }
+    ],
+    "single_judge": false,
+    "seconds": 0.03
+   }
+  },
+  "output/Original_Scenes/_baseline/director/panels/fight-03.png": {
+   "A": {
+    "judge": "qwen3.5:9b",
+    "ok": true,
+    "camera": "level",
+    "people": 2,
+    "actions": [
+     "striking",
+     "blocking"
+    ],
+    "evidence": "The left person's fist is extended toward the right person's raised hand, indicating a strike and block.",
+    "raw": "CAMERA: level\nPEOPLE: 2\nACTIONS: striking; blocking\nEVIDENCE: The left person's fist is extended toward the right person's raised hand, indicating a strike and block."
+   },
+   "B": {
+    "judge": "qwen3-vl-8b",
+    "ok": true,
+    "camera": null,
+    "people": 2,
+    "actions": [
+     "striking",
+     "blocking"
+    ],
+    "evidence": "Left person's fist is extended toward right person's open hand, indicating a strike being blocked.",
+    "raw": "CAMERA: looks_up | level | looks_down | tilted\nPEOPLE: 2\nACTIONS: striking; blocking\nEVIDENCE: Left person's fist is extended toward right person's open hand, indicating a strike being blocked."
+   },
+   "cc": {
+    "judges": [
+     "qwen3.5:9b",
+     "qwen3-vl-8b"
+    ],
+    "items": [
+     {
+      "key": "camera",
+      "status": "single",
+      "value": "level",
+      "confidence": 0.5,
+      "answers": {
+       "qwen3.5:9b": {
+        "round1": "level",
+        "round2": null,
+        "evidence": "The left person's fist is extended toward the right person's raised hand, indicating a strike and block."
+       },
+       "qwen3-vl-8b": {
+        "round1": null,
+        "round2": null,
+        "evidence": "Left person's fist is extended toward right person's open hand, indicating a strike being blocked."
+       }
+      },
+      "suspect_flips": []
+     },
+     {
+      "key": "people",
+      "status": "agreed",
+      "value": "2",
+      "confidence": 0.9,
+      "answers": {
+       "qwen3.5:9b": {
+        "round1": "2",
+        "round2": null,
+        "evidence": "The left person's fist is extended toward the right person's raised hand, indicating a strike and block."
+       },
+       "qwen3-vl-8b": {
+        "round1": "2",
+        "round2": null,
+        "evidence": "Left person's fist is extended toward right person's open hand, indicating a strike being blocked."
+       }
+      },
+      "suspect_flips": []
+     },
+     {
+      "key": "action:0",
+      "status": "agreed",
+      "value": "striking",
+      "confidence": 0.9,
+      "answers": {
+       "qwen3.5:9b": {
+        "round1": "striking",
+        "round2": null,
+        "evidence": "The left person's fist is extended toward the right person's raised hand, indicating a strike and block."
+       },
+       "qwen3-vl-8b": {
+        "round1": "striking",
+        "round2": null,
+        "evidence": "Left person's fist is extended toward right person's open hand, indicating a strike being blocked."
+       }
+      },
+      "suspect_flips": []
+     },
+     {
+      "key": "action:1",
+      "status": "agreed",
+      "value": "blocking",
+      "confidence": 0.9,
+      "answers": {
+       "qwen3.5:9b": {
+        "round1": "blocking",
+        "round2": null,
+        "evidence": "The left person's fist is extended toward the right person's raised hand, indicating a strike and block."
+       },
+       "qwen3-vl-8b": {
+        "round1": "blocking",
+        "round2": null,
+        "evidence": "Left person's fist is extended toward right person's open hand, indicating a strike being blocked."
+       }
+      },
+      "suspect_flips": []
+     }
+    ],
+    "single_judge": false,
+    "seconds": 0.01
+   }
+  },
+  "output/Original_Scenes/_baseline/director/panels/fight-04.png": {
+   "A": {
+    "judge": "qwen3.5:9b",
+    "ok": true,
+    "camera": "level",
+    "people": 2,
+    "actions": [
+     "striking",
+     "blocking"
+    ],
+    "evidence": "The knight on the left holds a sword pointed at the creature, while the creature raises its hands to block or parry.",
+    "raw": "CAMERA: level\nPEOPLE: 2\nACTIONS: striking; blocking\nEVIDENCE: The knight on the left holds a sword pointed at the creature, while the creature raises its hands to block or parry."
+   },
+   "B": {
+    "judge": "qwen3-vl-8b",
+    "ok": true,
+    "camera": null,
+    "people": 2,
+    "actions": [
+     "blocking",
+     "blocking"
+    ],
+    "evidence": "Both characters have swords extended toward each other in a defensive stance.",
+    "raw": "CAMERA: looks_up | level | looks_down | tilted\nPEOPLE: 2\nACTIONS: blocking; blocking\nEVIDENCE: Both characters have swords extended toward each other in a defensive stance."
+   },
+   "cc": {
+    "judges": [
+     "qwen3.5:9b",
+     "qwen3-vl-8b"
+    ],
+    "items": [
+     {
+      "key": "camera",
+      "status": "single",
+      "value": "level",
+      "confidence": 0.5,
+      "answers": {
+       "qwen3.5:9b": {
+        "round1": "level",
+        "round2": null,
+        "evidence": "The knight on the left holds a sword pointed at the creature, while the creature raises its hands to block or parry."
+       },
+       "qwen3-vl-8b": {
+        "round1": null,
+        "round2": null,
+        "evidence": "Both characters have swords extended toward each other in a defensive stance."
+       }
+      },
+      "suspect_flips": []
+     },
+     {
+      "key": "people",
+      "status": "agreed",
+      "value": "2",
+      "confidence": 0.9,
+      "answers": {
+       "qwen3.5:9b": {
+        "round1": "2",
+        "round2": null,
+        "evidence": "The knight on the left holds a sword pointed at the creature, while the creature raises its hands to block or parry."
+       },
+       "qwen3-vl-8b": {
+        "round1": "2",
+        "round2": null,
+        "evidence": "Both characters have swords extended toward each other in a defensive stance."
+       }
+      },
+      "suspect_flips": []
+     },
+     {
+      "key": "action:0",
+      "status": "disputed",
+      "value": null,
+      "confidence": 0.3,
+      "answers": {
+       "qwen3.5:9b": {
+        "round1": "striking",
+        "round2": "striking",
+        "evidence": "The character on the left is holding their sword forward with both hands, blade pointed directly at the opponent\u2019s face \u2014 indicating an offensive thrust or strike, not a defensive block."
+       },
+       "qwen3-vl-8b": {
+        "round1": "blocking",
+        "round2": "blocking",
+        "evidence": "The knight\u2019s sword is held in a defensive posture, angled to meet the creature\u2019s raised hands, not to attack."
+       }
+      },
+      "suspect_flips": []
+     },
+     {
+      "key": "action:1",
+      "status": "agreed",
+      "value": "blocking",
+      "confidence": 0.9,
+      "answers": {
+       "qwen3.5:9b": {
+        "round1": "blocking",
+        "round2": null,
+        "evidence": "The knight on the left holds a sword pointed at the creature, while the creature raises its hands to block or parry."
+       },
+       "qwen3-vl-8b": {
+        "round1": "blocking",
+        "round2": null,
+        "evidence": "Both characters have swords extended toward each other in a defensive stance."
+       }
+      },
+      "suspect_flips": []
+     }
+    ],
+    "single_judge": false,
+    "seconds": 19.59
+   }
+  },
+  "output/Original_Scenes/_baseline/director/panels/fight-05.png": {
+   "A": {
+    "judge": "qwen3.5:9b",
+    "ok": true,
+    "camera": "looks_up",
+    "people": 2,
+    "actions": [
+     "striking",
+     "blocking"
+    ],
+    "evidence": "The camera angle shows the figures from below, emphasizing their muscular builds and dynamic poses against a dark sky.",
+    "raw": "CAMERA: looks_up\nPEOPLE: 2\nACTIONS: striking; blocking\nEVIDENCE: The camera angle shows the figures from below, emphasizing their muscular builds and dynamic poses against a dark sky."
+   },
+   "B": {
+    "judge": "qwen3-vl-8b",
+    "ok": true,
+    "camera": null,
+    "people": 2,
+    "actions": [
+     "striking",
+     "blocking"
+    ],
+    "evidence": "left person's arm extended forward in a striking motion, right person's arm raised to block",
+    "raw": "CAMERA: looks_up | level | looks_down | tilted\nPEOPLE: 2\nACTIONS: striking; blocking\nEVIDENCE: left person's arm extended forward in a striking motion, right person's arm raised to block"
+   },
+   "cc": {
+    "judges": [
+     "qwen3.5:9b",
+     "qwen3-vl-8b"
+    ],
+    "items": [
+     {
+      "key": "camera",
+      "status": "single",
+      "value": "looks_up",
+      "confidence": 0.5,
+      "answers": {
+       "qwen3.5:9b": {
+        "round1": "looks_up",
+        "round2": null,
+        "evidence": "The camera angle shows the figures from below, emphasizing their muscular builds and dynamic poses against a dark sky."
+       },
+       "qwen3-vl-8b": {
+        "round1": null,
+        "round2": null,
+        "evidence": "left person's arm extended forward in a striking motion, right person's arm raised to block"
+       }
+      },
+      "suspect_flips": []
+     },
+     {
+      "key": "people",
+      "status": "agreed",
+      "value": "2",
+      "confidence": 0.9,
+      "answers": {
+       "qwen3.5:9b": {
+        "round1": "2",
+        "round2": null,
+        "evidence": "The camera angle shows the figures from below, emphasizing their muscular builds and dynamic poses against a dark sky."
+       },
+       "qwen3-vl-8b": {
+        "round1": "2",
+        "round2": null,
+        "evidence": "left person's arm extended forward in a striking motion, right person's arm raised to block"
+       }
+      },
+      "suspect_flips": []
+     },
+     {
+      "key": "action:0",
+      "status": "agreed",
+      "value": "striking",
+      "confidence": 0.9,
+      "answers": {
+       "qwen3.5:9b": {
+        "round1": "striking",
+        "round2": null,
+        "evidence": "The camera angle shows the figures from below, emphasizing their muscular builds and dynamic poses against a dark sky."
+       },
+       "qwen3-vl-8b": {
+        "round1": "striking",
+        "round2": null,
+        "evidence": "left person's arm extended forward in a striking motion, right person's arm raised to block"
+       }
+      },
+      "suspect_flips": []
+     },
+     {
+      "key": "action:1",
+      "status": "agreed",
+      "value": "blocking",
+      "confidence": 0.9,
+      "answers": {
+       "qwen3.5:9b": {
+        "round1": "blocking",
+        "round2": null,
+        "evidence": "The camera angle shows the figures from below, emphasizing their muscular builds and dynamic poses against a dark sky."
+       },
+       "qwen3-vl-8b": {
+        "round1": "blocking",
+        "round2": null,
+        "evidence": "left person's arm extended forward in a striking motion, right person's arm raised to block"
+       }
+      },
+      "suspect_flips": []
+     }
+    ],
+    "single_judge": false,
+    "seconds": 0.01
+   }
+  },
+  "output/Original_Scenes/_baseline/director/panels/fight-06.png": {
+   "A": {
+    "judge": "qwen3.5:9b",
+    "ok": true,
+    "camera": "level",
+    "people": 2,
+    "actions": [
+     "striking",
+     "blocking"
+    ],
+    "evidence": "The person on the left holds a staff forward while the person on the right raises their hands defensively.",
+    "raw": "CAMERA: level\nPEOPLE: 2\nACTIONS: striking; blocking\nEVIDENCE: The person on the left holds a staff forward while the person on the right raises their hands defensively."
+   },
+   "B": {
+    "judge": "qwen3-vl-8b",
+    "ok": true,
+    "camera": null,
+    "people": 2,
+    "actions": [
+     "striking",
+     "blocking"
+    ],
+    "evidence": "left person holds stick forward as if striking, right person hands out to block",
+    "raw": "CAMERA: looks_up | level | looks_down | tilted\nPEOPLE: 2\nACTIONS: striking; blocking\nEVIDENCE: left person holds stick forward as if striking, right person hands out to block"
+   },
+   "cc": {
+    "judges": [
+     "qwen3.5:9b",
+     "qwen3-vl-8b"
+    ],
+    "items": [
+     {
+      "key": "camera",
+      "status": "single",
+      "value": "level",
+      "confidence": 0.5,
+      "answers": {
+       "qwen3.5:9b": {
+        "round1": "level",
+        "round2": null,
+        "evidence": "The person on the left holds a staff forward while the person on the right raises their hands defensively."
+       },
+       "qwen3-vl-8b": {
+        "round1": null,
+        "round2": null,
+        "evidence": "left person holds stick forward as if striking, right person hands out to block"
+       }
+      },
+      "suspect_flips": []
+     },
+     {
+      "key": "people",
+      "status": "agreed",
+      "value": "2",
+      "confidence": 0.9,
+      "answers": {
+       "qwen3.5:9b": {
+        "round1": "2",
+        "round2": null,
+        "evidence": "The person on the left holds a staff forward while the person on the right raises their hands defensively."
+       },
+       "qwen3-vl-8b": {
+        "round1": "2",
+        "round2": null,
+        "evidence": "left person holds stick forward as if striking, right person hands out to block"
+       }
+      },
+      "suspect_flips": []
+     },
+     {
+      "key": "action:0",
+      "status": "agreed",
+      "value": "striking",
+      "confidence": 0.9,
+      "answers": {
+       "qwen3.5:9b": {
+        "round1": "striking",
+        "round2": null,
+        "evidence": "The person on the left holds a staff forward while the person on the right raises their hands defensively."
+       },
+       "qwen3-vl-8b": {
+        "round1": "striking",
+        "round2": null,
+        "evidence": "left person holds stick forward as if striking, right person hands out to block"
+       }
+      },
+      "suspect_flips": []
+     },
+     {
+      "key": "action:1",
+      "status": "agreed",
+      "value": "blocking",
+      "confidence": 0.9,
+      "answers": {
+       "qwen3.5:9b": {
+        "round1": "blocking",
+        "round2": null,
+        "evidence": "The person on the left holds a staff forward while the person on the right raises their hands defensively."
+       },
+       "qwen3-vl-8b": {
+        "round1": "blocking",
+        "round2": null,
+        "evidence": "left person holds stick forward as if striking, right person hands out to block"
+       }
+      },
+      "suspect_flips": []
+     }
+    ],
+    "single_judge": false,
+    "seconds": 0.01
+   }
+  },
+  "output/Original_Scenes/_baseline/director/panels/fight-07.png": {
+   "A": {
+    "judge": "qwen3.5:9b",
+    "ok": true,
+    "camera": "level",
+    "people": 4,
+    "actions": [
+     "striking",
+     "blocking",
+     "striking",
+     "other"
+    ],
+    "evidence": "The central figure's arms are raised to block punches from the left and right figures.",
+    "raw": "CAMERA: level\nPEOPLE: 4\nACTIONS: striking; blocking; striking; other\nEVIDENCE: The central figure's arms are raised to block punches from the left and right figures."
+   },
+   "B": {
+    "judge": "qwen3-vl-8b",
+    "ok": true,
+    "camera": null,
+    "people": 4,
+    "actions": [
+     "striking",
+     "blocking",
+     "blocking",
+     "other"
+    ],
+    "evidence": "The leftmost person has an extended arm in a striking motion, while the two on the right have arms raised in a blocking posture, and the rightmost person is in a hunched, non-combat stance.",
+    "raw": "CAMERA: looks_up | level | looks_down | tilted\nPEOPLE: 4\nACTIONS: striking; blocking; blocking; other\nEVIDENCE: The leftmost person has an extended arm in a striking motion, while the two on the right have arms raised in a blocking posture, and the rightmost person is in a hunched, non-combat stance."
+   },
+   "cc": {
+    "judges": [
+     "qwen3.5:9b",
+     "qwen3-vl-8b"
+    ],
+    "items": [
+     {
+      "key": "camera",
+      "status": "single",
+      "value": "level",
+      "confidence": 0.5,
+      "answers": {
+       "qwen3.5:9b": {
+        "round1": "level",
+        "round2": null,
+        "evidence": "The central figure's arms are raised to block punches from the left and right figures."
+       },
+       "qwen3-vl-8b": {
+        "round1": null,
+        "round2": null,
+        "evidence": "The leftmost person has an extended arm in a striking motion, while the two on the right have arms raised in a blocking posture, and the rightmost person is in a hunched, non-combat stance."
+       }
+      },
+      "suspect_flips": []
+     },
+     {
+      "key": "people",
+      "status": "agreed",
+      "value": "4",
+      "confidence": 0.9,
+      "answers": {
+       "qwen3.5:9b": {
+        "round1": "4",
+        "round2": null,
+        "evidence": "The central figure's arms are raised to block punches from the left and right figures."
+       },
+       "qwen3-vl-8b": {
+        "round1": "4",
+        "round2": null,
+        "evidence": "The leftmost person has an extended arm in a striking motion, while the two on the right have arms raised in a blocking posture, and the rightmost person is in a hunched, non-combat stance."
+       }
+      },
+      "suspect_flips": []
+     },
+     {
+      "key": "action:0",
+      "status": "agreed",
+      "value": "striking",
+      "confidence": 0.9,
+      "answers": {
+       "qwen3.5:9b": {
+        "round1": "striking",
+        "round2": null,
+        "evidence": "The central figure's arms are raised to block punches from the left and right figures."
+       },
+       "qwen3-vl-8b": {
+        "round1": "striking",
+        "round2": null,
+        "evidence": "The leftmost person has an extended arm in a striking motion, while the two on the right have arms raised in a blocking posture, and the rightmost person is in a hunched, non-combat stance."
+       }
+      },
+      "suspect_flips": []
+     },
+     {
+      "key": "action:1",
+      "status": "agreed",
+      "value": "blocking",
+      "confidence": 0.9,
+      "answers": {
+       "qwen3.5:9b": {
+        "round1": "blocking",
+        "round2": null,
+        "evidence": "The central figure's arms are raised to block punches from the left and right figures."
+       },
+       "qwen3-vl-8b": {
+        "round1": "blocking",
+        "round2": null,
+        "evidence": "The leftmost person has an extended arm in a striking motion, while the two on the right have arms raised in a blocking posture, and the rightmost person is in a hunched, non-combat stance."
+       }
+      },
+      "suspect_flips": []
+     },
+     {
+      "key": "action:2",
+      "status": "resolved",
+      "value": "blocking",
+      "confidence": 0.7,
+      "answers": {
+       "qwen3.5:9b": {
+        "round1": "striking",
+        "round2": "blocking",
+        "evidence": "The third person from the left (second from right) has their right arm raised and bent at the elbow, with fist clenched near chest level \u2014 a classic defensive guard position consistent with blocking an incoming strike."
+       },
+       "qwen3-vl-8b": {
+        "round1": "blocking",
+        "round2": "blocking",
+        "evidence": "The third person from the left has their arm raised in a defensive posture, directly in front of their face, matching the central figure\u2019s blocking stance."
+       }
+      },
+      "suspect_flips": []
+     },
+     {
+      "key": "action:3",
+      "status": "agreed",
+      "value": "other",
+      "confidence": 0.9,
+      "answers": {
+       "qwen3.5:9b": {
+        "round1": "other",
+        "round2": null,
+        "evidence": "The central figure's arms are raised to block punches from the left and right figures."
+       },
+       "qwen3-vl-8b": {
+        "round1": "other",
+        "round2": null,
+        "evidence": "The leftmost person has an extended arm in a striking motion, while the two on the right have arms raised in a blocking posture, and the rightmost person is in a hunched, non-combat stance."
+       }
+      },
+      "suspect_flips": []
+     }
+    ],
+    "single_judge": false,
+    "seconds": 20.31
+   }
+  },
+  "output/Original_Scenes/_baseline/director/panels/fight-08.png": {
+   "A": {
+    "judge": "qwen3.5:9b",
+    "ok": true,
+    "camera": "level",
+    "people": 2,
+    "actions": [
+     "striking",
+     "blocking"
+    ],
+    "evidence": "The person on the left holds a sword forward while the person on the right raises their hand to block.",
+    "raw": "CAMERA: level\nPEOPLE: 2\nACTIONS: striking; blocking\nEVIDENCE: The person on the left holds a sword forward while the person on the right raises their hand to block."
+   },
+   "B": {
+    "judge": "qwen3-vl-8b",
+    "ok": true,
+    "camera": null,
+    "people": 2,
+    "actions": [
+     "striking",
+     "blocking"
+    ],
+    "evidence": "The person on the left holds a sword in a striking pose, while the person on the right raises their hand to block the blade.",
+    "raw": "CAMERA: looks_up | level | looks_down | tilted\nPEOPLE: 2\nACTIONS: striking; blocking\nEVIDENCE: The person on the left holds a sword in a striking pose, while the person on the right raises their hand to block the blade."
+   },
+   "cc": {
+    "judges": [
+     "qwen3.5:9b",
+     "qwen3-vl-8b"
+    ],
+    "items": [
+     {
+      "key": "camera",
+      "status": "single",
+      "value": "level",
+      "confidence": 0.5,
+      "answers": {
+       "qwen3.5:9b": {
+        "round1": "level",
+        "round2": null,
+        "evidence": "The person on the left holds a sword forward while the person on the right raises their hand to block."
+       },
+       "qwen3-vl-8b": {
+        "round1": null,
+        "round2": null,
+        "evidence": "The person on the left holds a sword in a striking pose, while the person on the right raises their hand to block the blade."
+       }
+      },
+      "suspect_flips": []
+     },
+     {
+      "key": "people",
+      "status": "agreed",
+      "value": "2",
+      "confidence": 0.9,
+      "answers": {
+       "qwen3.5:9b": {
+        "round1": "2",
+        "round2": null,
+        "evidence": "The person on the left holds a sword forward while the person on the right raises their hand to block."
+       },
+       "qwen3-vl-8b": {
+        "round1": "2",
+        "round2": null,
+        "evidence": "The person on the left holds a sword in a striking pose, while the person on the right raises their hand to block the blade."
+       }
+      },
+      "suspect_flips": []
+     },
+     {
+      "key": "action:0",
+      "status": "agreed",
+      "value": "striking",
+      "confidence": 0.9,
+      "answers": {
+       "qwen3.5:9b": {
+        "round1": "striking",
+        "round2": null,
+        "evidence": "The person on the left holds a sword forward while the person on the right raises their hand to block."
+       },
+       "qwen3-vl-8b": {
+        "round1": "striking",
+        "round2": null,
+        "evidence": "The person on the left holds a sword in a striking pose, while the person on the right raises their hand to block the blade."
+       }
+      },
+      "suspect_flips": []
+     },
+     {
+      "key": "action:1",
+      "status": "agreed",
+      "value": "blocking",
+      "confidence": 0.9,
+      "answers": {
+       "qwen3.5:9b": {
+        "round1": "blocking",
+        "round2": null,
+        "evidence": "The person on the left holds a sword forward while the person on the right raises their hand to block."
+       },
+       "qwen3-vl-8b": {
+        "round1": "blocking",
+        "round2": null,
+        "evidence": "The person on the left holds a sword in a striking pose, while the person on the right raises their hand to block the blade."
+       }
+      },
+      "suspect_flips": []
+     }
+    ],
+    "single_judge": false,
+    "seconds": 0.02
+   }
+  },
+  "output/Original_Scenes/_baseline/director/panels/emotion-01.png": {
+   "A": {
+    "judge": "qwen3.5:9b",
+    "ok": true,
+    "camera": "level",
+    "people": 1,
+    "actions": [
+     "grieving"
+    ],
+    "evidence": "The person has tears on their face and a sad expression.",
+    "raw": "CAMERA: level\nPEOPLE: 1\nACTIONS: grieving\nEVIDENCE: The person has tears on their face and a sad expression."
+   },
+   "B": {
+    "judge": "qwen3-vl-8b",
+    "ok": true,
+    "camera": null,
+    "people": 1,
+    "actions": [
+     "grieving"
+    ],
+    "evidence": "The person is sitting on the floor with tears on their face.",
+    "raw": "CAMERA: looks_up | level | looks_down | tilted\nPEOPLE: 1\nACTIONS: grieving\nEVIDENCE: The person is sitting on the floor with tears on their face."
+   },
+   "cc": {
+    "judges": [
+     "qwen3.5:9b",
+     "qwen3-vl-8b"
+    ],
+    "items": [
+     {
+      "key": "camera",
+      "status": "single",
+      "value": "level",
+      "confidence": 0.5,
+      "answers": {
+       "qwen3.5:9b": {
+        "round1": "level",
+        "round2": null,
+        "evidence": "The person has tears on their face and a sad expression."
+       },
+       "qwen3-vl-8b": {
+        "round1": null,
+        "round2": null,
+        "evidence": "The person is sitting on the floor with tears on their face."
+       }
+      },
+      "suspect_flips": []
+     },
+     {
+      "key": "people",
+      "status": "agreed",
+      "value": "1",
+      "confidence": 0.9,
+      "answers": {
+       "qwen3.5:9b": {
+        "round1": "1",
+        "round2": null,
+        "evidence": "The person has tears on their face and a sad expression."
+       },
+       "qwen3-vl-8b": {
+        "round1": "1",
+        "round2": null,
+        "evidence": "The person is sitting on the floor with tears on their face."
+       }
+      },
+      "suspect_flips": []
+     },
+     {
+      "key": "action:0",
+      "status": "agreed",
+      "value": "grieving",
+      "confidence": 0.9,
+      "answers": {
+       "qwen3.5:9b": {
+        "round1": "grieving",
+        "round2": null,
+        "evidence": "The person has tears on their face and a sad expression."
+       },
+       "qwen3-vl-8b": {
+        "round1": "grieving",
+        "round2": null,
+        "evidence": "The person is sitting on the floor with tears on their face."
+       }
+      },
+      "suspect_flips": []
+     }
+    ],
+    "single_judge": false,
+    "seconds": 0.03
+   }
+  },
+  "output/Original_Scenes/_baseline/director/panels/emotion-03.png": {
+   "A": {
+    "judge": "qwen3.5:9b",
+    "ok": true,
+    "camera": "level",
+    "people": 1,
+    "actions": [
+     "determined"
+    ],
+    "evidence": "The soldier's focused gaze and firm posture suggest determination.",
+    "raw": "CAMERA: level\nPEOPLE: 1\nACTIONS: determined\nEVIDENCE: The soldier's focused gaze and firm posture suggest determination."
+   },
+   "B": {
+    "judge": "qwen3-vl-8b",
+    "ok": true,
+    "camera": null,
+    "people": 1,
+    "actions": [
+     "determined"
+    ],
+    "evidence": "The soldier's focused expression and firm posture show determination.",
+    "raw": "CAMERA: looks_up | level | looks_down | tilted\nPEOPLE: 1\nACTIONS: determined\nEVIDENCE: The soldier's focused expression and firm posture show determination."
+   },
+   "cc": {
+    "judges": [
+     "qwen3.5:9b",
+     "qwen3-vl-8b"
+    ],
+    "items": [
+     {
+      "key": "camera",
+      "status": "single",
+      "value": "level",
+      "confidence": 0.5,
+      "answers": {
+       "qwen3.5:9b": {
+        "round1": "level",
+        "round2": null,
+        "evidence": "The soldier's focused gaze and firm posture suggest determination."
+       },
+       "qwen3-vl-8b": {
+        "round1": null,
+        "round2": null,
+        "evidence": "The soldier's focused expression and firm posture show determination."
+       }
+      },
+      "suspect_flips": []
+     },
+     {
+      "key": "people",
+      "status": "agreed",
+      "value": "1",
+      "confidence": 0.9,
+      "answers": {
+       "qwen3.5:9b": {
+        "round1": "1",
+        "round2": null,
+        "evidence": "The soldier's focused gaze and firm posture suggest determination."
+       },
+       "qwen3-vl-8b": {
+        "round1": "1",
+        "round2": null,
+        "evidence": "The soldier's focused expression and firm posture show determination."
+       }
+      },
+      "suspect_flips": []
+     },
+     {
+      "key": "action:0",
+      "status": "agreed",
+      "value": "determined",
+      "confidence": 0.9,
+      "answers": {
+       "qwen3.5:9b": {
+        "round1": "determined",
+        "round2": null,
+        "evidence": "The soldier's focused gaze and firm posture suggest determination."
+       },
+       "qwen3-vl-8b": {
+        "round1": "determined",
+        "round2": null,
+        "evidence": "The soldier's focused expression and firm posture show determination."
+       }
+      },
+      "suspect_flips": []
+     }
+    ],
+    "single_judge": false,
+    "seconds": 0.03
+   }
+  },
+  "output/Original_Scenes/_baseline/director/panels/emotion-05.png": {
+   "A": {
+    "judge": "qwen3.5:9b",
+    "ok": true,
+    "camera": "level",
+    "people": 1,
+    "actions": [
+     "peaceful"
+    ],
+    "evidence": "The person has a serene expression with closed eyes and a gentle smile, suggesting inner peace.",
+    "raw": "CAMERA: level\nPEOPLE: 1\nACTIONS: peaceful\nEVIDENCE: The person has a serene expression with closed eyes and a gentle smile, suggesting inner peace."
+   },
+   "B": {
+    "judge": "qwen3-vl-8b",
+    "ok": true,
+    "camera": null,
+    "people": 1,
+    "actions": [
+     "peaceful"
+    ],
+    "evidence": "The elderly woman has her eyes closed and a gentle smile, suggesting inner peace.",
+    "raw": "CAMERA: looks_up | level | looks_down | tilted\nPEOPLE: 1\nACTIONS: peaceful\nEVIDENCE: The elderly woman has her eyes closed and a gentle smile, suggesting inner peace."
+   },
+   "cc": {
+    "judges": [
+     "qwen3.5:9b",
+     "qwen3-vl-8b"
+    ],
+    "items": [
+     {
+      "key": "camera",
+      "status": "single",
+      "value": "level",
+      "confidence": 0.5,
+      "answers": {
+       "qwen3.5:9b": {
+        "round1": "level",
+        "round2": null,
+        "evidence": "The person has a serene expression with closed eyes and a gentle smile, suggesting inner peace."
+       },
+       "qwen3-vl-8b": {
+        "round1": null,
+        "round2": null,
+        "evidence": "The elderly woman has her eyes closed and a gentle smile, suggesting inner peace."
+       }
+      },
+      "suspect_flips": []
+     },
+     {
+      "key": "people",
+      "status": "agreed",
+      "value": "1",
+      "confidence": 0.9,
+      "answers": {
+       "qwen3.5:9b": {
+        "round1": "1",
+        "round2": null,
+        "evidence": "The person has a serene expression with closed eyes and a gentle smile, suggesting inner peace."
+       },
+       "qwen3-vl-8b": {
+        "round1": "1",
+        "round2": null,
+        "evidence": "The elderly woman has her eyes closed and a gentle smile, suggesting inner peace."
+       }
+      },
+      "suspect_flips": []
+     },
+     {
+      "key": "action:0",
+      "status": "agreed",
+      "value": "peaceful",
+      "confidence": 0.9,
+      "answers": {
+       "qwen3.5:9b": {
+        "round1": "peaceful",
+        "round2": null,
+        "evidence": "The person has a serene expression with closed eyes and a gentle smile, suggesting inner peace."
+       },
+       "qwen3-vl-8b": {
+        "round1": "peaceful",
+        "round2": null,
+        "evidence": "The elderly woman has her eyes closed and a gentle smile, suggesting inner peace."
+       }
+      },
+      "suspect_flips": []
+     }
+    ],
+    "single_judge": false,
+    "seconds": 0.03
+   }
+  },
+  "output/Original_Scenes/_baseline/director/panels/emotion-06.png": {
+   "A": {
+    "judge": "qwen3.5:9b",
+    "ok": true,
+    "camera": "level",
+    "people": 1,
+    "actions": [
+     "determined"
+    ],
+    "evidence": "The character's intense gaze and furrowed brow suggest determination.",
+    "raw": "CAMERA: level\nPEOPLE: 1\nACTIONS: determined\nEVIDENCE: The character's intense gaze and furrowed brow suggest determination."
+   },
+   "B": {
+    "judge": "qwen3-vl-8b",
+    "ok": true,
+    "camera": null,
+    "people": 1,
+    "actions": [
+     "determined"
+    ],
+    "evidence": "The man\u2019s stern expression and tense posture show determination.",
+    "raw": "CAMERA: looks_up | level | looks_down | tilted\nPEOPLE: 1\nACTIONS: determined\nEVIDENCE: The man\u2019s stern expression and tense posture show determination."
+   },
+   "cc": {
+    "judges": [
+     "qwen3.5:9b",
+     "qwen3-vl-8b"
+    ],
+    "items": [
+     {
+      "key": "camera",
+      "status": "single",
+      "value": "level",
+      "confidence": 0.5,
+      "answers": {
+       "qwen3.5:9b": {
+        "round1": "level",
+        "round2": null,
+        "evidence": "The character's intense gaze and furrowed brow suggest determination."
+       },
+       "qwen3-vl-8b": {
+        "round1": null,
+        "round2": null,
+        "evidence": "The man\u2019s stern expression and tense posture show determination."
+       }
+      },
+      "suspect_flips": []
+     },
+     {
+      "key": "people",
+      "status": "agreed",
+      "value": "1",
+      "confidence": 0.9,
+      "answers": {
+       "qwen3.5:9b": {
+        "round1": "1",
+        "round2": null,
+        "evidence": "The character's intense gaze and furrowed brow suggest determination."
+       },
+       "qwen3-vl-8b": {
+        "round1": "1",
+        "round2": null,
+        "evidence": "The man\u2019s stern expression and tense posture show determination."
+       }
+      },
+      "suspect_flips": []
+     },
+     {
+      "key": "action:0",
+      "status": "agreed",
+      "value": "determined",
+      "confidence": 0.9,
+      "answers": {
+       "qwen3.5:9b": {
+        "round1": "determined",
+        "round2": null,
+        "evidence": "The character's intense gaze and furrowed brow suggest determination."
+       },
+       "qwen3-vl-8b": {
+        "round1": "determined",
+        "round2": null,
+        "evidence": "The man\u2019s stern expression and tense posture show determination."
+       }
+      },
+      "suspect_flips": []
+     }
+    ],
+    "single_judge": false,
+    "seconds": 0.03
+   }
+  },
+  "output/Original_Scenes/_baseline/director/panels/concept_art-01.png": {
+   "A": {
+    "judge": "qwen3.5:9b",
+    "ok": true,
+    "camera": "looks_up",
+    "people": 0,
+    "actions": [],
+    "evidence": "No people are visible in the image; only floating cities and clouds are shown.",
+    "raw": "CAMERA: looks_up\nPEOPLE: 0\nACTIONS: \nEVIDENCE: No people are visible in the image; only floating cities and clouds are shown."
+   },
+   "B": {
+    "judge": "qwen3-vl-8b",
+    "ok": true,
+    "camera": null,
+    "people": 0,
+    "actions": [],
+    "evidence": "No people are visible in the image.",
+    "raw": "CAMERA: looks_up | level | looks_down | tilted\nPEOPLE: 0\nACTIONS: \nEVIDENCE: No people are visible in the image."
+   },
+   "cc": {
+    "judges": [
+     "qwen3.5:9b",
+     "qwen3-vl-8b"
+    ],
+    "items": [
+     {
+      "key": "camera",
+      "status": "single",
+      "value": "looks_up",
+      "confidence": 0.5,
+      "answers": {
+       "qwen3.5:9b": {
+        "round1": "looks_up",
+        "round2": null,
+        "evidence": "No people are visible in the image; only floating cities and clouds are shown."
+       },
+       "qwen3-vl-8b": {
+        "round1": null,
+        "round2": null,
+        "evidence": "No people are visible in the image."
+       }
+      },
+      "suspect_flips": []
+     },
+     {
+      "key": "people",
+      "status": "agreed",
+      "value": "0",
+      "confidence": 0.9,
+      "answers": {
+       "qwen3.5:9b": {
+        "round1": "0",
+        "round2": null,
+        "evidence": "No people are visible in the image; only floating cities and clouds are shown."
+       },
+       "qwen3-vl-8b": {
+        "round1": "0",
+        "round2": null,
+        "evidence": "No people are visible in the image."
+       }
+      },
+      "suspect_flips": []
+     }
+    ],
+    "single_judge": false,
+    "seconds": 0.02
+   }
+  },
+  "output/Original_Scenes/_baseline/director/panels/concept_art-03.png": {
+   "A": {
+    "judge": "qwen3.5:9b",
+    "ok": true,
+    "camera": "level",
+    "people": 0,
+    "actions": [],
+    "evidence": "No people are visible in the image.",
+    "raw": "CAMERA: level\nPEOPLE: 0\nACTIONS: \nEVIDENCE: No people are visible in the image."
+   },
+   "B": {
+    "judge": "qwen3-vl-8b",
+    "ok": true,
+    "camera": null,
+    "people": 0,
+    "actions": [],
+    "evidence": "no people visible in the image",
+    "raw": "CAMERA: looks_up | level | looks_down | tilted\nPEOPLE: 0\nACTIONS: \nEVIDENCE: no people visible in the image"
+   },
+   "cc": {
+    "judges": [
+     "qwen3.5:9b",
+     "qwen3-vl-8b"
+    ],
+    "items": [
+     {
+      "key": "camera",
+      "status": "single",
+      "value": "level",
+      "confidence": 0.5,
+      "answers": {
+       "qwen3.5:9b": {
+        "round1": "level",
+        "round2": null,
+        "evidence": "No people are visible in the image."
+       },
+       "qwen3-vl-8b": {
+        "round1": null,
+        "round2": null,
+        "evidence": "no people visible in the image"
+       }
+      },
+      "suspect_flips": []
+     },
+     {
+      "key": "people",
+      "status": "agreed",
+      "value": "0",
+      "confidence": 0.9,
+      "answers": {
+       "qwen3.5:9b": {
+        "round1": "0",
+        "round2": null,
+        "evidence": "No people are visible in the image."
+       },
+       "qwen3-vl-8b": {
+        "round1": "0",
+        "round2": null,
+        "evidence": "no people visible in the image"
+       }
+      },
+      "suspect_flips": []
+     }
+    ],
+    "single_judge": false,
+    "seconds": 0.01
+   }
+  },
+  "output/Original_Scenes/_baseline/director/panels/concept_art-07.png": {
+   "A": {
+    "judge": "qwen3.5:9b",
+    "ok": true,
+    "camera": "level",
+    "people": 0,
+    "actions": [],
+    "evidence": "no people are visible in the image",
+    "raw": "CAMERA: level\nPEOPLE: 0\nACTIONS: \nEVIDENCE: no people are visible in the image"
+   },
+   "B": {
+    "judge": "qwen3-vl-8b",
+    "ok": true,
+    "camera": null,
+    "people": 0,
+    "actions": [],
+    "evidence": "There are no people visible in the image.",
+    "raw": "CAMERA: looks_up | level | looks_down | tilted\nPEOPLE: 0\nACTIONS: \nEVIDENCE: There are no people visible in the image."
+   },
+   "cc": {
+    "judges": [
+     "qwen3.5:9b",
+     "qwen3-vl-8b"
+    ],
+    "items": [
+     {
+      "key": "camera",
+      "status": "single",
+      "value": "level",
+      "confidence": 0.5,
+      "answers": {
+       "qwen3.5:9b": {
+        "round1": "level",
+        "round2": null,
+        "evidence": "no people are visible in the image"
+       },
+       "qwen3-vl-8b": {
+        "round1": null,
+        "round2": null,
+        "evidence": "There are no people visible in the image."
+       }
+      },
+      "suspect_flips": []
+     },
+     {
+      "key": "people",
+      "status": "agreed",
+      "value": "0",
+      "confidence": 0.9,
+      "answers": {
+       "qwen3.5:9b": {
+        "round1": "0",
+        "round2": null,
+        "evidence": "no people are visible in the image"
+       },
+       "qwen3-vl-8b": {
+        "round1": "0",
+        "round2": null,
+        "evidence": "There are no people visible in the image."
+       }
+      },
+      "suspect_flips": []
+     }
+    ],
+    "single_judge": false,
+    "seconds": 0.01
+   }
+  },
+  "output/Original_Scenes/_baseline/director/panels/concept_art-08.png": {
+   "A": {
+    "judge": "qwen3.5:9b",
+    "ok": true,
+    "camera": "level",
+    "people": 0,
+    "actions": [],
+    "evidence": "No people are visible in the image.",
+    "raw": "CAMERA: level\nPEOPLE: 0\nACTIONS: \nEVIDENCE: No people are visible in the image."
+   },
+   "B": {
+    "judge": "qwen3-vl-8b",
+    "ok": true,
+    "camera": null,
+    "people": 0,
+    "actions": [],
+    "evidence": "No people are visible, only covered wagons are shown.",
+    "raw": "CAMERA: looks_up | level | looks_down | tilted\nPEOPLE: 0\nACTIONS: \nEVIDENCE: No people are visible, only covered wagons are shown."
+   },
+   "cc": {
+    "judges": [
+     "qwen3.5:9b",
+     "qwen3-vl-8b"
+    ],
+    "items": [
+     {
+      "key": "camera",
+      "status": "single",
+      "value": "level",
+      "confidence": 0.5,
+      "answers": {
+       "qwen3.5:9b": {
+        "round1": "level",
+        "round2": null,
+        "evidence": "No people are visible in the image."
+       },
+       "qwen3-vl-8b": {
+        "round1": null,
+        "round2": null,
+        "evidence": "No people are visible, only covered wagons are shown."
+       }
+      },
+      "suspect_flips": []
+     },
+     {
+      "key": "people",
+      "status": "agreed",
+      "value": "0",
+      "confidence": 0.9,
+      "answers": {
+       "qwen3.5:9b": {
+        "round1": "0",
+        "round2": null,
+        "evidence": "No people are visible in the image."
+       },
+       "qwen3-vl-8b": {
+        "round1": "0",
+        "round2": null,
+        "evidence": "No people are visible, only covered wagons are shown."
+       }
+      },
+      "suspect_flips": []
+     }
+    ],
+    "single_judge": false,
+    "seconds": 0.03
+   }
+  }
+ }
+}

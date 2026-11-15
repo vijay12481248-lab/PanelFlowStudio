@@ -1,0 +1,111 @@
+{
+  "panelflow_plan": 2,
+  "target": "film",
+  "title": "Why Do Rainbows Appear?",
+  "logline": "A young guide named Mira and her cat Pip show children how sunlight and raindrops make a rainbow.",
+  "language": "English",
+  "genre": "explainer",
+  "format": "16:9",
+  "style": "",
+  "production": {
+    "total_seconds": 20,
+    "clip_seconds": 5,
+    "join": "matched_pictures",
+    "narration": "narrator",
+    "music": "gentle curious instrumental, soft piano and light strings, slow tempo"
+  },
+  "cast": [
+    {
+      "id": "mira",
+      "name": "Mira",
+      "role": "protagonist",
+      "species": "human",
+      "age_group": "adult",
+      "gender": "female",
+      "look": "young woman, shoulder-length copper-red hair, green scarf, brown jacket, friendly round face",
+      "personality": "curious, warm and patient"
+    },
+    {
+      "id": "pip",
+      "name": "Pip",
+      "role": "companion",
+      "species": "orange tabby cat",
+      "age_group": "adult",
+      "gender": "neutral",
+      "look": "small orange tabby cat, white chest, bright green eyes",
+      "personality": "playful and curious"
+    }
+  ],
+  "places": [
+    { "id": "meadow", "name": "Rainy meadow", "look": "wide green meadow, wet grass, low rolling hills, grey clouds, soft daylight" },
+    { "id": "hilltop", "name": "Grassy hilltop", "look": "grassy hilltop, golden hour light, wide open sky, distant green hills" }
+  ],
+  "rules": [
+    "Mira is the only person in the video and Pip is the only animal",
+    "It rained shortly before the video starts, so the grass is wet"
+  ],
+  "scenes": [
+    { "id": "s1", "title": "After the rain", "place": "meadow", "summary": "Sunlight returns after rain and tiny water drops still hang in the air.", "mood": "calm and curious", "music": "" },
+    { "id": "s2", "title": "Light splits into colors", "place": "hilltop", "summary": "A prism and raindrops split sunlight into the colors of a rainbow.", "mood": "wonder", "music": "" }
+  ],
+  "takes": [
+    {
+      "id": "t01",
+      "scene": "s1",
+      "seconds": 5,
+      "framing": "wide",
+      "cast": ["mira", "pip"],
+      "start_from": "new_picture",
+      "start_picture": "Wide view of a green meadow after rain; Mira stands on the left side of the frame; Pip sits beside her; grey rain clouds above and pale sunlight breaking through on the right.",
+      "motion": "Mira looks up at the clouds while the light slowly grows brighter and Pip looks up too.",
+      "end_picture": "The same meadow; Mira stands in the center of the frame pointing up at the sky; Pip sits at her feet looking up; the clouds are thinner and the sunlight brighter on the right.",
+      "shows": "bright sunlight breaking through thinning rain clouds over a wet green meadow",
+      "camera": "",
+      "atmosphere": "grey clouds thinning, pale sunlight growing stronger",
+      "narration": "After rain, sunlight breaks through the thinning clouds above the meadow."
+    },
+    {
+      "id": "t02",
+      "scene": "s1",
+      "seconds": 5,
+      "framing": "wide",
+      "cast": ["mira", "pip"],
+      "start_from": "previous_end",
+      "motion": "Mira walks to the right across the meadow while Pip follows, and tiny water drops in the air glow in the sunlight.",
+      "end_picture": "Mira stands on the right side of the frame; Pip stands beside her; a faint arc of colored light begins to appear over the hills on the left.",
+      "shows": "tiny glowing water drops hanging in the sunlit air over the meadow",
+      "camera": "",
+      "atmosphere": "bright sunlight, clearing sky, glowing mist",
+      "narration": "Millions of tiny water drops still float in the sunlit air."
+    },
+    {
+      "id": "t03",
+      "scene": "s2",
+      "seconds": 5,
+      "framing": "wide",
+      "cast": ["mira", "pip"],
+      "start_from": "new_picture",
+      "start_picture": "Wide view from a grassy hilltop at golden hour; Mira stands on the left side of the frame holding up a small glass prism; Pip sits on the right side; a bright sun hangs low behind them.",
+      "motion": "Mira turns the prism slowly and a band of colored light spreads across the grass in front of her.",
+      "end_picture": "The same hilltop; Mira holds the prism steady in the center of the frame; Pip sits on the right side; a wide band of rainbow colors lies on the grass between them.",
+      "shows": "a prism splitting white sunlight into a band of rainbow colors on the grass",
+      "camera": "",
+      "atmosphere": "low golden sunlight, clear sky",
+      "narration": "A prism bends sunlight and splits it into all its colors."
+    },
+    {
+      "id": "t04",
+      "scene": "s2",
+      "seconds": 5,
+      "framing": "wide",
+      "cast": ["mira", "pip"],
+      "start_from": "previous_end",
+      "motion": "Mira lifts her hand toward the sky and a full rainbow slowly appears in the clouds above the hills while Pip watches.",
+      "end_picture": "The same hilltop; Mira stands on the left side of the frame; Pip sits on the right side; a bright full rainbow arches over the hills behind them.",
+      "shows": "a bright full rainbow arching over green hills after the rain",
+      "camera": "slow push-in",
+      "atmosphere": "golden light, clear sky with a bright rainbow",
+      "narration": "Raindrops do the same thing, so the sky shows a rainbow."
+    }
+  ]
+}

@@ -43,17 +43,17 @@ export const Icons = {
     </svg>
   ),
   CheckCircle: (props: React.SVGProps<SVGSVGElement>) => (
-    <svg fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-emerald-500" {...props}>
+    <svg fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-ok" {...props}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
     </svg>
   ),
   AlertTriangle: (props: React.SVGProps<SVGSVGElement>) => (
-    <svg fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-amber-500" {...props}>
+    <svg fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-warn" {...props}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
     </svg>
   ),
   XCircle: (props: React.SVGProps<SVGSVGElement>) => (
-    <svg fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-rose-500" {...props}>
+    <svg fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-bad" {...props}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 9.75l4.5 4.5m0-4.5l-4.5 4.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
     </svg>
   ),
@@ -318,11 +318,11 @@ export const Button: React.FC<ButtonProps> = ({
   }[size];
 
   const variantStyles = {
-    primary: "bg-indigo-600 text-white hover:bg-indigo-700 focus:ring-indigo-500",
-    secondary: "bg-zinc-800 text-zinc-100 hover:bg-zinc-700 focus:ring-zinc-500",
-    destructive: "bg-rose-600 text-white hover:bg-rose-700 focus:ring-rose-500",
-    outline: "border border-zinc-700 text-zinc-200 hover:bg-zinc-800 focus:ring-zinc-500",
-    ghost: "text-zinc-300 hover:bg-zinc-800 focus:ring-zinc-600",
+    primary: "bg-accent text-white hover:bg-accent focus:ring-accent",
+    secondary: "bg-flat text-fg hover:bg-glass-hi focus:ring-fg-faint",
+    destructive: "bg-bad text-white hover:bg-bad focus:ring-bad",
+    outline: "border border-edge text-fg hover:bg-flat focus:ring-fg-faint",
+    ghost: "text-fg-dim hover:bg-flat focus:ring-edge",
   }[variant];
 
   return (
@@ -344,7 +344,7 @@ export const Button: React.FC<ButtonProps> = ({
 
 // Card Component
 export const Card: React.FC<{ children: React.ReactNode; className?: string; id?: string }> = ({ children, className = "", id }) => (
-  <div id={id} className={`bg-zinc-900 border border-zinc-800 rounded-xl p-5 shadow-sm ${className}`}>
+  <div id={id} className={`bg-navy border border-edge rounded-xl p-5 shadow-sm ${className}`}>
     {children}
   </div>
 );
@@ -356,11 +356,11 @@ export const Badge: React.FC<{
   className?: string;
 }> = ({ children, variant = "neutral", className = "" }) => {
   const styles = {
-    neutral: "bg-zinc-800 text-zinc-300 border-zinc-700",
-    success: "bg-emerald-950 text-emerald-400 border-emerald-800",
-    warning: "bg-amber-950 text-amber-400 border-amber-800",
-    danger: "bg-rose-950 text-rose-400 border-rose-800",
-    accent: "bg-indigo-950 text-indigo-400 border-indigo-800",
+    neutral: "bg-flat text-fg-dim border-edge",
+    success: "bg-ok/20 text-ok border-ok/40",
+    warning: "bg-warn/20 text-warn border-warn/40",
+    danger: "bg-bad/20 text-bad border-bad/40",
+    accent: "bg-accent/20 text-info border-accent/40",
   }[variant];
 
   return (
@@ -381,14 +381,14 @@ export const ProgressBar: React.FC<{
   return (
     <div className={`w-full space-y-1.5 ${className}`}>
       {label && (
-        <div className="flex justify-between text-xs text-zinc-400 font-medium">
+        <div className="flex justify-between text-xs text-fg-dim font-medium">
           <span>{label}</span>
           <span>{pct}%</span>
         </div>
       )}
-      <div className="w-full bg-zinc-800 rounded-full h-2.5 overflow-hidden">
+      <div className="w-full bg-flat rounded-full h-2.5 overflow-hidden">
         <div
-          className="bg-indigo-500 h-2.5 rounded-full transition-all duration-300 ease-out"
+          className="bg-accent h-2.5 rounded-full transition-all duration-300 ease-out"
           style={{ width: `${pct}%` }}
         />
       </div>
@@ -405,17 +405,17 @@ export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> 
 
 export const Input: React.FC<InputProps> = ({ label, error, helperText, className = "", ...props }) => (
   <div className="w-full space-y-1.5">
-    {label && <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-400">{label}</label>}
+    {label && <label className="block text-xs font-semibold uppercase tracking-wider text-fg-dim">{label}</label>}
     <input
-      className={`w-full px-3.5 py-2.5 bg-zinc-950 border ${
-        error ? "border-rose-500" : "border-zinc-700 focus:border-indigo-500"
-      } rounded-lg text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 ${className}`}
+      className={`w-full px-3.5 py-2.5 bg-ink border ${
+        error ? "border-bad" : "border-edge focus:border-accent"
+      } rounded-lg text-sm text-fg placeholder-fg-faint focus:outline-none focus:ring-1 focus:ring-accent ${className}`}
       {...props}
     />
     {error ? (
-      <p className="text-xs text-rose-400">{error}</p>
+      <p className="text-xs text-bad">{error}</p>
     ) : helperText ? (
-      <p className="text-xs text-zinc-500">{helperText}</p>
+      <p className="text-xs text-fg-faint">{helperText}</p>
     ) : null}
   </div>
 );
@@ -429,19 +429,19 @@ export interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElemen
 
 export const Select: React.FC<SelectProps> = ({ label, error, helperText, children, className = "", ...props }) => (
   <div className="w-full space-y-1.5">
-    {label && <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-400">{label}</label>}
+    {label && <label className="block text-xs font-semibold uppercase tracking-wider text-fg-dim">{label}</label>}
     <select
-      className={`w-full px-3.5 py-2.5 bg-zinc-950 border ${
-        error ? "border-rose-500" : "border-zinc-700 focus:border-indigo-500"
-      } rounded-lg text-sm text-zinc-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 ${className}`}
+      className={`w-full px-3.5 py-2.5 bg-ink border ${
+        error ? "border-bad" : "border-edge focus:border-accent"
+      } rounded-lg text-sm text-fg focus:outline-none focus:ring-1 focus:ring-accent ${className}`}
       {...props}
     >
       {children}
     </select>
     {error ? (
-      <p className="text-xs text-rose-400">{error}</p>
+      <p className="text-xs text-bad">{error}</p>
     ) : helperText ? (
-      <p className="text-xs text-zinc-500">{helperText}</p>
+      <p className="text-xs text-fg-faint">{helperText}</p>
     ) : null}
   </div>
 );
@@ -474,10 +474,10 @@ export const Modal: React.FC<{
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
-      <div className={`bg-zinc-900 border border-zinc-800 rounded-xl ${selectedSize} w-full p-6 shadow-2xl space-y-4 ${className}`}>
-        <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
-          <h3 className="text-lg font-semibold text-zinc-100">{title}</h3>
-          <button onClick={onClose} className="text-zinc-400 hover:text-zinc-200">
+      <div className={`bg-navy border border-edge rounded-xl ${selectedSize} w-full p-6 shadow-2xl space-y-4 ${className}`}>
+        <div className="flex items-center justify-between border-b border-edge pb-3">
+          <h3 className="text-lg font-semibold text-fg">{title}</h3>
+          <button onClick={onClose} className="text-fg-dim hover:text-fg">
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>

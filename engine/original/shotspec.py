@@ -73,28 +73,57 @@ SHOT_DIMENSIONS: dict[str, tuple[int, int]] = {
     "rigging_view": (832, 1216),
 }
 
+# Standard 0.25-Megapixel resolution buckets for rapid preview pass (all multiples of 16)
+SHOT_DIMENSIONS_PREVIEW: dict[str, tuple[int, int]] = {
+    "wide": (672, 384),
+    "extreme_wide": (672, 384),
+    "landscape": (672, 384),
+    "over_shoulder": (576, 448),
+    "medium": (512, 512),
+    "cowboy": (512, 512),
+    "close": (512, 512),
+    "extreme_close": (512, 512),
+    "full": (416, 608),
+    "full_body": (416, 608),
+    "character_sheet": (416, 608),
+    "sheet": (416, 608),
+    "portrait": (416, 608),
+    "turnaround": (768, 384),
+    "turnaround_sheet": (768, 384),
+    "rigging": (416, 608),
+    "rigging_view": (416, 608),
+}
+
 
 def resolve_dimensions(
     shot: str | None,
     num_characters: int = 1,
     default: tuple[int, int] = (1344, 768),
+    preview: bool = False,
 ) -> tuple[int, int]:
-    """Resolve standard 1-MP (width, height) bucket for a given shot type and character count.
-    Two or more characters side-by-side need landscape widescreen (1344x768) to prevent occlusion.
-    Single full-body shots use portrait (832x1216) to prevent cutting off head or feet.
-    Single close-up or medium shots use square (1024x1024) for centered framing.
-    Turnaround sheets use ultra-wide landscape (1536x768) regardless of character count.
+    """Resolve standard 1-MP (or 0.25-MP when preview=True) (width, height) bucket for a given shot type and character count.
+    Two or more characters side-by-side need landscape widescreen (1344x768 / 672x384) to prevent occlusion.
+    Single full-body shots use portrait (832x1216 / 416x608) to prevent cutting off head or feet.
+    Single close-up or medium shots use square (1024x1024 / 512x512) for centered framing.
+    Turnaround sheets use ultra-wide landscape (1536x768 / 768x384) regardless of character count.
     """
+    table = SHOT_DIMENSIONS_PREVIEW if preview else SHOT_DIMENSIONS
+    def_dims = (
+        (round(default[0] / 32) * 16, round(default[1] / 32) * 16)
+        if preview
+        else default
+    )
+
     if shot:
         normalized = shot.strip().lower().replace("-", "_").replace(" ", "_")
         if normalized in ("turnaround", "turnaround_sheet"):
-            return SHOT_DIMENSIONS["turnaround"]
+            return table["turnaround"]
     if num_characters >= 2:
-        return (1344, 768)
+        return table["wide"]
     if not shot:
-        return default
+        return def_dims
     normalized = shot.strip().lower().replace("-", "_").replace(" ", "_")
-    return SHOT_DIMENSIONS.get(normalized, default)
+    return table.get(normalized, def_dims)
 
 
 INTERACTION_BINDING_TAGS: dict[str, list[str]] = {

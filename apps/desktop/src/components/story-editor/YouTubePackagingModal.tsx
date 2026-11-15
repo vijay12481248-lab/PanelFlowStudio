@@ -181,20 +181,20 @@ export const YouTubePackagingModal: React.FC<YouTubePackagingModalProps> = ({
       aria-modal="true"
       aria-label="YouTube Packaging and Thumbnail Studio"
     >
-      <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-5xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden">
+      <div className="bg-ink border border-edge rounded-2xl w-full max-w-5xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-zinc-800/80 bg-zinc-900/60 flex items-center justify-between">
+        <div className="px-6 py-4 border-b border-edge/80 bg-navy/60 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-red-600 to-rose-700 flex items-center justify-center text-white shadow-md shadow-red-600/30">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-bad to-bad flex items-center justify-center text-white shadow-md shadow-bad/30">
               <Icons.Sparkles className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-zinc-100 flex items-center gap-2">
+              <h2 className="text-base font-bold text-fg flex items-center gap-2">
                 YouTube Packaging & ComfyUI Thumbnail Studio
                 <Badge variant="accent" className="text-[10px]">AI RESEARCH</Badge>
               </h2>
-              <p className="text-xs text-zinc-400">
-                SEO titles, description with chapter timestamps, tags, and AI thumbnail generation for <span className="text-zinc-200 font-medium">{project.title}</span>
+              <p className="text-xs text-fg-dim">
+                SEO titles, description with chapter timestamps, tags, and AI thumbnail generation for <span className="text-fg font-medium">{project.title}</span>
               </p>
             </div>
           </div>
@@ -203,12 +203,12 @@ export const YouTubePackagingModal: React.FC<YouTubePackagingModalProps> = ({
               variant="secondary"
               size="sm"
               onClick={handleCopyAllMetadata}
-              className="text-xs flex items-center gap-1.5 border-zinc-700 hover:border-zinc-500"
+              className="text-xs flex items-center gap-1.5 border-edge hover:border-fg-faint"
             >
               {copiedKey === "all_metadata" ? (
                 <>
-                  <Icons.Check className="w-3.5 h-3.5 text-emerald-400" />
-                  <span className="text-emerald-400 font-bold">Copied All!</span>
+                  <Icons.Check className="w-3.5 h-3.5 text-ok" />
+                  <span className="text-ok font-bold">Copied All!</span>
                 </>
               ) : (
                 <>
@@ -219,7 +219,7 @@ export const YouTubePackagingModal: React.FC<YouTubePackagingModalProps> = ({
             </Button>
             <button
               onClick={onClose}
-              className="w-8 h-8 rounded-lg flex items-center justify-center text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors"
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-fg-dim hover:text-fg hover:bg-flat transition-colors"
               aria-label="Close dialog"
             >
               <Icons.X className="w-4 h-4" />
@@ -228,26 +228,26 @@ export const YouTubePackagingModal: React.FC<YouTubePackagingModalProps> = ({
         </div>
 
         {/* Tab Navigation */}
-        <div className="px-6 pt-3 border-b border-zinc-800/80 bg-zinc-900/30 flex items-center justify-between">
+        <div className="px-6 pt-3 border-b border-edge/80 bg-navy/30 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <button
               onClick={() => setActiveTab("thumbnail")}
               className={`flex items-center gap-2 px-4 py-2 border-b-2 font-medium text-xs transition-colors ${
                 activeTab === "thumbnail"
-                  ? "border-indigo-500 text-indigo-400 font-bold"
-                  : "border-transparent text-zinc-400 hover:text-zinc-200"
+                  ? "border-accent text-info font-bold"
+                  : "border-transparent text-fg-dim hover:text-fg"
               }`}
             >
               <Icons.Sparkles className="w-4 h-4" />
               <span>ComfyUI Thumbnail Studio</span>
-              {latestThumbAsset && <span className="w-2 h-2 rounded-full bg-emerald-400" />}
+              {latestThumbAsset && <span className="w-2 h-2 rounded-full bg-ok" />}
             </button>
             <button
               onClick={() => setActiveTab("metadata")}
               className={`flex items-center gap-2 px-4 py-2 border-b-2 font-medium text-xs transition-colors ${
                 activeTab === "metadata"
-                  ? "border-indigo-500 text-indigo-400 font-bold"
-                  : "border-transparent text-zinc-400 hover:text-zinc-200"
+                  ? "border-accent text-info font-bold"
+                  : "border-transparent text-fg-dim hover:text-fg"
               }`}
             >
               <Icons.Film className="w-4 h-4" />
@@ -266,8 +266,8 @@ export const YouTubePackagingModal: React.FC<YouTubePackagingModalProps> = ({
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
           {loading ? (
             <div className="py-20 flex flex-col items-center justify-center space-y-3">
-              <Icons.Refresh className="w-8 h-8 text-indigo-400 animate-spin" />
-              <p className="text-xs text-zinc-400">Researching video metadata and thumbnail art...</p>
+              <Icons.Refresh className="w-8 h-8 text-info animate-spin" />
+              <p className="text-xs text-fg-dim">Researching video metadata and thumbnail art...</p>
             </div>
           ) : activeTab === "thumbnail" ? (
             /* TAB 1: THUMBNAIL STUDIO */
@@ -275,13 +275,13 @@ export const YouTubePackagingModal: React.FC<YouTubePackagingModalProps> = ({
               {/* Left Column: ComfyUI Configuration & Prompts (7 cols) */}
               <div className="lg:col-span-7 space-y-4">
                 {/* Aspect Ratio & Format Controls */}
-                <div className="bg-zinc-900/60 p-3.5 rounded-xl border border-zinc-800 space-y-3">
+                <div className="bg-navy/60 p-3.5 rounded-xl border border-edge space-y-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-zinc-200 flex items-center gap-1.5">
-                      <Icons.Layers className="w-3.5 h-3.5 text-indigo-400" />
+                    <span className="text-xs font-semibold text-fg flex items-center gap-1.5">
+                      <Icons.Layers className="w-3.5 h-3.5 text-info" />
                       Thumbnail Format & Dimensions
                     </span>
-                    <span className="text-[10px] text-zinc-400 font-mono">Must be multiple of 8</span>
+                    <span className="text-[10px] text-fg-dim font-mono">Must be multiple of 8</span>
                   </div>
                   <div className="grid grid-cols-3 gap-2">
                     <button
@@ -289,46 +289,46 @@ export const YouTubePackagingModal: React.FC<YouTubePackagingModalProps> = ({
                       onClick={() => handleAspectRatioChange("16:9")}
                       className={`p-2.5 rounded-lg border text-left transition-all ${
                         aspectRatio === "16:9"
-                          ? "border-indigo-500 bg-indigo-950/40 text-white"
-                          : "border-zinc-800 bg-zinc-950 text-zinc-400 hover:border-zinc-700"
+                          ? "border-accent bg-accent/40 text-white"
+                          : "border-edge bg-ink text-fg-dim hover:border-edge"
                       }`}
                     >
                       <div className="font-bold text-xs">16:9 Landscape</div>
-                      <div className="text-[10px] text-zinc-400 font-mono">1280 × 720 (Standard)</div>
+                      <div className="text-[10px] text-fg-dim font-mono">1280 × 720 (Standard)</div>
                     </button>
                     <button
                       type="button"
                       onClick={() => handleAspectRatioChange("9:16")}
                       className={`p-2.5 rounded-lg border text-left transition-all ${
                         aspectRatio === "9:16"
-                          ? "border-indigo-500 bg-indigo-950/40 text-white"
-                          : "border-zinc-800 bg-zinc-950 text-zinc-400 hover:border-zinc-700"
+                          ? "border-accent bg-accent/40 text-white"
+                          : "border-edge bg-ink text-fg-dim hover:border-edge"
                       }`}
                     >
                       <div className="font-bold text-xs">9:16 Vertical</div>
-                      <div className="text-[10px] text-zinc-400 font-mono">720 × 1280 (Shorts)</div>
+                      <div className="text-[10px] text-fg-dim font-mono">720 × 1280 (Shorts)</div>
                     </button>
                     <button
                       type="button"
                       onClick={() => handleAspectRatioChange("1:1")}
                       className={`p-2.5 rounded-lg border text-left transition-all ${
                         aspectRatio === "1:1"
-                          ? "border-indigo-500 bg-indigo-950/40 text-white"
-                          : "border-zinc-800 bg-zinc-950 text-zinc-400 hover:border-zinc-700"
+                          ? "border-accent bg-accent/40 text-white"
+                          : "border-edge bg-ink text-fg-dim hover:border-edge"
                       }`}
                     >
                       <div className="font-bold text-xs">1:1 Square</div>
-                      <div className="text-[10px] text-zinc-400 font-mono">1024 × 1024</div>
+                      <div className="text-[10px] text-fg-dim font-mono">1024 × 1024</div>
                     </button>
                   </div>
 
                   {/* Workflow Selector */}
                   <div className="flex items-center justify-between pt-1 text-xs">
-                    <span className="text-zinc-400">ComfyUI Workflow:</span>
+                    <span className="text-fg-dim">ComfyUI Workflow:</span>
                     <select
                       value={selectedWorkflow}
                       onChange={(e) => setSelectedWorkflow(e.target.value)}
-                      className="bg-zinc-950 border border-zinc-700 rounded-md px-2 py-1 text-xs text-zinc-200"
+                      className="bg-ink border border-edge rounded-md px-2 py-1 text-xs text-fg"
                       disabled={generating}
                     >
                       {workflows.length > 0 ? (
@@ -347,19 +347,19 @@ export const YouTubePackagingModal: React.FC<YouTubePackagingModalProps> = ({
                 {/* ComfyUI Positive Prompt */}
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
-                    <label className="text-xs font-semibold text-zinc-200 flex items-center gap-1.5">
-                      <Icons.Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                    <label className="text-xs font-semibold text-fg flex items-center gap-1.5">
+                      <Icons.Sparkles className="w-3.5 h-3.5 text-info" />
                       ComfyUI Thumbnail Prompt
                     </label>
                     <button
                       type="button"
                       onClick={() => copyToClipboard(prompt, "prompt")}
-                      className="text-[11px] text-indigo-400 hover:text-indigo-300 flex items-center gap-1"
+                      className="text-[11px] text-info hover:text-info flex items-center gap-1"
                     >
                       {copiedKey === "prompt" ? (
                         <>
-                          <Icons.Check className="w-3 h-3 text-emerald-400" />
-                          <span className="text-emerald-400">Copied!</span>
+                          <Icons.Check className="w-3 h-3 text-ok" />
+                          <span className="text-ok">Copied!</span>
                         </>
                       ) : (
                         <>
@@ -374,7 +374,7 @@ export const YouTubePackagingModal: React.FC<YouTubePackagingModalProps> = ({
                     value={prompt}
                     onChange={(e) => setPrompt(e.target.value)}
                     disabled={generating}
-                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-xs text-zinc-200 font-mono focus:border-indigo-500 focus:outline-none"
+                    className="w-full bg-ink border border-edge rounded-xl p-3 text-xs text-fg font-mono focus:border-accent focus:outline-none"
                     placeholder="Anime thumbnail prompt..."
                   />
                 </div>
@@ -382,18 +382,18 @@ export const YouTubePackagingModal: React.FC<YouTubePackagingModalProps> = ({
                 {/* ComfyUI Negative Prompt */}
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
-                    <label className="text-xs font-semibold text-zinc-400">
+                    <label className="text-xs font-semibold text-fg-dim">
                       Negative Prompt (Removes Text, Watermarks, Distortion)
                     </label>
                     <button
                       type="button"
                       onClick={() => copyToClipboard(negativePrompt, "negative_prompt")}
-                      className="text-[11px] text-zinc-400 hover:text-zinc-300 flex items-center gap-1"
+                      className="text-[11px] text-fg-dim hover:text-fg-dim flex items-center gap-1"
                     >
                       {copiedKey === "negative_prompt" ? (
                         <>
-                          <Icons.Check className="w-3 h-3 text-emerald-400" />
-                          <span className="text-emerald-400">Copied!</span>
+                          <Icons.Check className="w-3 h-3 text-ok" />
+                          <span className="text-ok">Copied!</span>
                         </>
                       ) : (
                         <>
@@ -408,40 +408,40 @@ export const YouTubePackagingModal: React.FC<YouTubePackagingModalProps> = ({
                     value={negativePrompt}
                     onChange={(e) => setNegativePrompt(e.target.value)}
                     disabled={generating}
-                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-xs text-zinc-300 font-mono focus:border-indigo-500 focus:outline-none"
+                    className="w-full bg-ink border border-edge rounded-xl p-2.5 text-xs text-fg-dim font-mono focus:border-accent focus:outline-none"
                   />
                 </div>
 
                 {/* Seed and Hook Tags Row */}
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="bg-zinc-900/60 p-2.5 rounded-xl border border-zinc-800 flex items-center justify-between">
-                    <span className="text-xs text-zinc-400 font-medium">Seed:</span>
+                  <div className="bg-navy/60 p-2.5 rounded-xl border border-edge flex items-center justify-between">
+                    <span className="text-xs text-fg-dim font-medium">Seed:</span>
                     <div className="flex items-center gap-1.5">
                       <input
                         type="number"
                         value={seed}
                         onChange={(e) => setSeed(Number(e.target.value))}
                         disabled={generating}
-                        className="w-24 bg-zinc-950 border border-zinc-700 rounded px-2 py-0.5 text-xs font-mono text-zinc-200"
+                        className="w-24 bg-ink border border-edge rounded px-2 py-0.5 text-xs font-mono text-fg"
                       />
                       <button
                         type="button"
                         onClick={() => setSeed(Math.floor(Math.random() * 2000000000))}
                         disabled={generating}
-                        className="px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-[10px] text-zinc-200 font-medium"
+                        className="px-2 py-0.5 rounded bg-flat hover:bg-glass-hi text-[10px] text-fg font-medium"
                       >
                         Dice
                       </button>
                     </div>
                   </div>
 
-                  <div className="bg-zinc-900/60 p-2.5 rounded-xl border border-zinc-800 flex items-center justify-between">
-                    <span className="text-xs text-zinc-400 font-medium">Mock Overlay:</span>
+                  <div className="bg-navy/60 p-2.5 rounded-xl border border-edge flex items-center justify-between">
+                    <span className="text-xs text-fg-dim font-medium">Mock Overlay:</span>
                     <button
                       type="button"
                       onClick={() => setPreviewOverlay(!previewOverlay)}
                       className={`px-2.5 py-0.5 rounded text-xs font-medium transition-colors ${
-                        previewOverlay ? "bg-indigo-600 text-white" : "bg-zinc-800 text-zinc-400"
+                        previewOverlay ? "bg-accent text-white" : "bg-flat text-fg-dim"
                       }`}
                     >
                       {previewOverlay ? "YouTube Frame ON" : "Off"}
@@ -451,8 +451,8 @@ export const YouTubePackagingModal: React.FC<YouTubePackagingModalProps> = ({
 
                 {/* Click-to-copy Hook Text Badges */}
                 {packaging?.thumbnail?.text_hooks && packaging.thumbnail.text_hooks.length > 0 && (
-                  <div className="space-y-1.5 bg-zinc-900/40 p-3 rounded-xl border border-zinc-800/80">
-                    <span className="text-[11px] font-semibold text-zinc-300 block">
+                  <div className="space-y-1.5 bg-navy/40 p-3 rounded-xl border border-edge/80">
+                    <span className="text-[11px] font-semibold text-fg-dim block">
                       Recommended Thumbnail Text Hooks (Click to copy hook):
                     </span>
                     <div className="flex flex-wrap gap-1.5">
@@ -461,10 +461,10 @@ export const YouTubePackagingModal: React.FC<YouTubePackagingModalProps> = ({
                           key={hIdx}
                           type="button"
                           onClick={() => copyToClipboard(hook, `hook_${hIdx}`)}
-                          className="px-2.5 py-1 rounded-md bg-zinc-950 hover:bg-indigo-950 border border-zinc-800 hover:border-indigo-600 text-xs font-bold text-yellow-400 transition-all flex items-center gap-1"
+                          className="px-2.5 py-1 rounded-md bg-ink hover:bg-accent/20 border border-edge hover:border-accent text-xs font-bold text-warn transition-all flex items-center gap-1"
                         >
                           {copiedKey === `hook_${hIdx}` ? (
-                            <Icons.Check className="w-3 h-3 text-emerald-400" />
+                            <Icons.Check className="w-3 h-3 text-ok" />
                           ) : (
                             <span>{hook}</span>
                           )}
@@ -481,7 +481,7 @@ export const YouTubePackagingModal: React.FC<YouTubePackagingModalProps> = ({
                     size="md"
                     onClick={handleGenerateThumbnail}
                     disabled={generating || !prompt.trim()}
-                    className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2.5 text-sm shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2"
+                    className="w-full bg-accent hover:bg-accent text-white font-bold py-2.5 text-sm shadow-lg shadow-accent/30 flex items-center justify-center gap-2"
                   >
                     {generating ? (
                       <>
@@ -499,7 +499,7 @@ export const YouTubePackagingModal: React.FC<YouTubePackagingModalProps> = ({
                   {generating && (
                     <div className="mt-3 space-y-1">
                       <ProgressBar progress={(activeJob?.progress ?? 0)} />
-                      <div className="flex justify-between text-[11px] text-zinc-400 font-mono">
+                      <div className="flex justify-between text-[11px] text-fg-dim font-mono">
                         <span>{activeJob?.message || "Submitting to ComfyUI..."}</span>
                         <span>{progressPercent}%</span>
                       </div>
@@ -507,8 +507,8 @@ export const YouTubePackagingModal: React.FC<YouTubePackagingModalProps> = ({
                   )}
 
                   {generationError && (
-                    <div className="mt-3 p-3 rounded-xl bg-rose-950/40 border border-rose-800 text-xs text-rose-300 flex items-center gap-2">
-                      <Icons.AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+                    <div className="mt-3 p-3 rounded-xl bg-bad/40 border border-bad/40 text-xs text-bad flex items-center gap-2">
+                      <Icons.AlertTriangle className="w-4 h-4 text-bad shrink-0" />
                       <span>{generationError}</span>
                     </div>
                   )}
@@ -518,7 +518,7 @@ export const YouTubePackagingModal: React.FC<YouTubePackagingModalProps> = ({
               {/* Right Column: Live Thumbnail & YouTube Card Preview (5 cols) */}
               <div className="lg:col-span-5 space-y-4">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-zinc-200 uppercase tracking-wider">
+                  <span className="text-xs font-bold text-fg uppercase tracking-wider">
                     Thumbnail Preview
                   </span>
                   {latestThumbAsset && (
@@ -527,7 +527,7 @@ export const YouTubePackagingModal: React.FC<YouTubePackagingModalProps> = ({
                       download={`thumbnail-${project.id}.png`}
                       target="_blank"
                       rel="noreferrer"
-                      className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1 font-semibold"
+                      className="text-xs text-info hover:text-info flex items-center gap-1 font-semibold"
                     >
                       <Icons.Download className="w-3.5 h-3.5" />
                       Download PNG
@@ -535,12 +535,12 @@ export const YouTubePackagingModal: React.FC<YouTubePackagingModalProps> = ({
                   )}
                 </div>
 
-                <div className="bg-black rounded-2xl border border-zinc-800 overflow-hidden shadow-2xl relative group">
+                <div className="bg-black rounded-2xl border border-edge overflow-hidden shadow-2xl relative group">
                   {latestThumbAsset ? (
                     <div
                       className={`relative w-full ${
                         aspectRatio === "9:16" ? "aspect-[9/16] max-h-[440px]" : "aspect-video"
-                      } bg-zinc-950 flex items-center justify-center overflow-hidden`}
+                      } bg-ink flex items-center justify-center overflow-hidden`}
                     >
                       <img
                         src={api.getGeneratedAssetUrl(project.id, latestThumbAsset.id)}
@@ -553,7 +553,7 @@ export const YouTubePackagingModal: React.FC<YouTubePackagingModalProps> = ({
                         <div className="absolute inset-0 pointer-events-none flex flex-col justify-between p-3">
                           {/* Top Hook Text (if any) */}
                           <div className="flex justify-start">
-                            <span className="bg-yellow-400 text-black font-extrabold px-2 py-0.5 text-xs rounded uppercase tracking-wider shadow-md transform -rotate-1">
+                            <span className="bg-warn text-black font-extrabold px-2 py-0.5 text-xs rounded uppercase tracking-wider shadow-md transform -rotate-1">
                               {packaging?.thumbnail?.text_hooks?.[0] || "NEW EPISODE"}
                             </span>
                           </div>
@@ -571,13 +571,13 @@ export const YouTubePackagingModal: React.FC<YouTubePackagingModalProps> = ({
                     <div
                       className={`w-full ${
                         aspectRatio === "9:16" ? "aspect-[9/16] max-h-[440px]" : "aspect-video"
-                      } bg-zinc-950 border-2 border-dashed border-zinc-800 flex flex-col items-center justify-center p-6 text-center space-y-2`}
+                      } bg-ink border-2 border-dashed border-edge flex flex-col items-center justify-center p-6 text-center space-y-2`}
                     >
-                      <div className="w-12 h-12 rounded-2xl bg-zinc-900 flex items-center justify-center text-zinc-500">
+                      <div className="w-12 h-12 rounded-2xl bg-navy flex items-center justify-center text-fg-faint">
                         <Icons.Sparkles className="w-6 h-6" />
                       </div>
-                      <p className="text-xs font-semibold text-zinc-300">No thumbnail generated yet</p>
-                      <p className="text-[11px] text-zinc-500 max-w-xs">
+                      <p className="text-xs font-semibold text-fg-dim">No thumbnail generated yet</p>
+                      <p className="text-[11px] text-fg-faint max-w-xs">
                         Click "Generate Thumbnail with ComfyUI" to generate a high-CTR visual for your video.
                       </p>
                     </div>
@@ -585,15 +585,15 @@ export const YouTubePackagingModal: React.FC<YouTubePackagingModalProps> = ({
 
                   {/* YouTube Card Metadata Simulation */}
                   {previewOverlay && (
-                    <div className="p-3 bg-zinc-950 border-t border-zinc-800/80 flex items-start gap-2.5">
-                      <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-600 flex items-center justify-center text-white text-xs font-bold shrink-0">
+                    <div className="p-3 bg-ink border-t border-edge/80 flex items-start gap-2.5">
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-accent to-accent flex items-center justify-center text-white text-xs font-bold shrink-0">
                         PF
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="text-xs font-bold text-zinc-100 line-clamp-2 leading-tight">
+                        <p className="text-xs font-bold text-fg line-clamp-2 leading-tight">
                           {selectedTitle || project.title}
                         </p>
-                        <p className="text-[10px] text-zinc-400 mt-0.5">
+                        <p className="text-[10px] text-fg-dim mt-0.5">
                           PanelFlow Studio · 12K views · 2 hours ago
                         </p>
                       </div>
@@ -603,9 +603,9 @@ export const YouTubePackagingModal: React.FC<YouTubePackagingModalProps> = ({
 
                 {/* Composition Guidance */}
                 {packaging?.thumbnail?.composition_guidance && (
-                  <div className="p-3 bg-zinc-900/40 border border-zinc-800 rounded-xl space-y-1 text-xs text-zinc-400">
-                    <span className="font-semibold text-zinc-300 flex items-center gap-1">
-                      <Icons.CheckCircle className="w-3.5 h-3.5 text-indigo-400" />
+                  <div className="p-3 bg-navy/40 border border-edge rounded-xl space-y-1 text-xs text-fg-dim">
+                    <span className="font-semibold text-fg-dim flex items-center gap-1">
+                      <Icons.CheckCircle className="w-3.5 h-3.5 text-info" />
                       Thumbnail CTR Strategy
                     </span>
                     <p className="text-[11px] leading-relaxed">
@@ -621,19 +621,19 @@ export const YouTubePackagingModal: React.FC<YouTubePackagingModalProps> = ({
               {/* Titles Section */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-xs font-bold text-zinc-200 uppercase tracking-wider flex items-center gap-1.5">
-                    <Icons.Film className="w-4 h-4 text-indigo-400" />
+                  <h3 className="text-xs font-bold text-fg uppercase tracking-wider flex items-center gap-1.5">
+                    <Icons.Film className="w-4 h-4 text-info" />
                     Researched Video Titles (High CTR)
                   </h3>
                   <button
                     type="button"
                     onClick={() => copyToClipboard(selectedTitle, "title")}
-                    className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1 font-semibold"
+                    className="text-xs text-info hover:text-info flex items-center gap-1 font-semibold"
                   >
                     {copiedKey === "title" ? (
                       <>
-                        <Icons.Check className="w-3.5 h-3.5 text-emerald-400" />
-                        <span className="text-emerald-400">Copied Title!</span>
+                        <Icons.Check className="w-3.5 h-3.5 text-ok" />
+                        <span className="text-ok">Copied Title!</span>
                       </>
                     ) : (
                       <>
@@ -652,11 +652,11 @@ export const YouTubePackagingModal: React.FC<YouTubePackagingModalProps> = ({
                       onClick={() => setSelectedTitle(titleOption)}
                       className={`p-3 rounded-xl border text-left transition-all flex items-start gap-2.5 ${
                         selectedTitle === titleOption
-                          ? "border-indigo-500 bg-indigo-950/40 text-white shadow-sm"
-                          : "border-zinc-800 bg-zinc-950 text-zinc-300 hover:border-zinc-700"
+                          ? "border-accent bg-accent/40 text-white shadow-sm"
+                          : "border-edge bg-ink text-fg-dim hover:border-edge"
                       }`}
                     >
-                      <span className="w-5 h-5 rounded-full bg-zinc-800 flex items-center justify-center text-[10px] font-bold text-zinc-300 shrink-0 mt-0.5">
+                      <span className="w-5 h-5 rounded-full bg-flat flex items-center justify-center text-[10px] font-bold text-fg-dim shrink-0 mt-0.5">
                         {tIdx + 1}
                       </span>
                       <span className="text-xs font-medium leading-snug">{titleOption}</span>
@@ -669,7 +669,7 @@ export const YouTubePackagingModal: React.FC<YouTubePackagingModalProps> = ({
                   type="text"
                   value={selectedTitle}
                   onChange={(e) => setSelectedTitle(e.target.value)}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs font-medium text-zinc-100 focus:border-indigo-500 focus:outline-none"
+                  className="w-full bg-ink border border-edge rounded-xl px-3 py-2 text-xs font-medium text-fg focus:border-accent focus:outline-none"
                   placeholder="Custom title..."
                 />
               </div>
@@ -677,19 +677,19 @@ export const YouTubePackagingModal: React.FC<YouTubePackagingModalProps> = ({
               {/* Description Section with Chapters */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-xs font-bold text-zinc-200 uppercase tracking-wider flex items-center gap-1.5">
-                    <Icons.FileText className="w-4 h-4 text-indigo-400" />
+                  <h3 className="text-xs font-bold text-fg uppercase tracking-wider flex items-center gap-1.5">
+                    <Icons.FileText className="w-4 h-4 text-info" />
                     YouTube Description (With Timestamps & CTA)
                   </h3>
                   <button
                     type="button"
                     onClick={() => copyToClipboard(description, "description")}
-                    className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1 font-semibold"
+                    className="text-xs text-info hover:text-info flex items-center gap-1 font-semibold"
                   >
                     {copiedKey === "description" ? (
                       <>
-                        <Icons.Check className="w-3.5 h-3.5 text-emerald-400" />
-                        <span className="text-emerald-400">Copied Description!</span>
+                        <Icons.Check className="w-3.5 h-3.5 text-ok" />
+                        <span className="text-ok">Copied Description!</span>
                       </>
                     ) : (
                       <>
@@ -703,26 +703,26 @@ export const YouTubePackagingModal: React.FC<YouTubePackagingModalProps> = ({
                   rows={9}
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-xs text-zinc-200 font-mono focus:border-indigo-500 focus:outline-none leading-relaxed"
+                  className="w-full bg-ink border border-edge rounded-xl p-3 text-xs text-fg font-mono focus:border-accent focus:outline-none leading-relaxed"
                 />
               </div>
 
               {/* Video Tags Section */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-xs font-bold text-zinc-200 uppercase tracking-wider flex items-center gap-1.5">
-                    <Icons.Sparkles className="w-4 h-4 text-indigo-400" />
+                  <h3 className="text-xs font-bold text-fg uppercase tracking-wider flex items-center gap-1.5">
+                    <Icons.Sparkles className="w-4 h-4 text-info" />
                     YouTube SEO Tags (Paste into YouTube Studio)
                   </h3>
                   <button
                     type="button"
                     onClick={() => copyToClipboard(tagsString, "tags")}
-                    className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1 font-semibold"
+                    className="text-xs text-info hover:text-info flex items-center gap-1 font-semibold"
                   >
                     {copiedKey === "tags" ? (
                       <>
-                        <Icons.Check className="w-3.5 h-3.5 text-emerald-400" />
-                        <span className="text-emerald-400">Copied Tags!</span>
+                        <Icons.Check className="w-3.5 h-3.5 text-ok" />
+                        <span className="text-ok">Copied Tags!</span>
                       </>
                     ) : (
                       <>
@@ -737,7 +737,7 @@ export const YouTubePackagingModal: React.FC<YouTubePackagingModalProps> = ({
                   rows={3}
                   value={tagsString}
                   onChange={(e) => setTagsString(e.target.value)}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-xs text-zinc-200 font-mono focus:border-indigo-500 focus:outline-none"
+                  className="w-full bg-ink border border-edge rounded-xl p-3 text-xs text-fg font-mono focus:border-accent focus:outline-none"
                   placeholder="tag1, tag2, tag3..."
                 />
 
@@ -746,7 +746,7 @@ export const YouTubePackagingModal: React.FC<YouTubePackagingModalProps> = ({
                   {packaging?.tags.map((tag, idx) => (
                     <span
                       key={idx}
-                      className="px-2 py-0.5 rounded-md bg-zinc-900 border border-zinc-800 text-[11px] text-zinc-300 font-mono"
+                      className="px-2 py-0.5 rounded-md bg-navy border border-edge text-[11px] text-fg-dim font-mono"
                     >
                       {tag}
                     </span>
@@ -755,17 +755,17 @@ export const YouTubePackagingModal: React.FC<YouTubePackagingModalProps> = ({
               </div>
 
               {/* Regenerate Research Controls */}
-              <div className="p-4 bg-zinc-900/60 rounded-xl border border-zinc-800 space-y-3">
-                <span className="text-xs font-semibold text-zinc-200 block">
+              <div className="p-4 bg-navy/60 rounded-xl border border-edge space-y-3">
+                <span className="text-xs font-semibold text-fg block">
                   Regenerate Research with Custom Tone or Hook
                 </span>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   <div>
-                    <label className="text-[11px] text-zinc-400 block mb-1">Tone & Pacing:</label>
+                    <label className="text-[11px] text-fg-dim block mb-1">Tone & Pacing:</label>
                     <select
                       value={styleTone}
                       onChange={(e) => setStyleTone(e.target.value as any)}
-                      className="w-full bg-zinc-950 border border-zinc-700 rounded-lg p-2 text-xs text-zinc-200"
+                      className="w-full bg-ink border border-edge rounded-lg p-2 text-xs text-fg"
                     >
                       <option value="dramatic">Dramatic / Cinematic</option>
                       <option value="action">High-Octane Action</option>
@@ -775,14 +775,14 @@ export const YouTubePackagingModal: React.FC<YouTubePackagingModalProps> = ({
                     </select>
                   </div>
                   <div className="md:col-span-2">
-                    <label className="text-[11px] text-zinc-400 block mb-1">Custom Clickbait Hook / Keyword:</label>
+                    <label className="text-[11px] text-fg-dim block mb-1">Custom Clickbait Hook / Keyword:</label>
                     <div className="flex gap-2">
                       <input
                         type="text"
                         value={customHook}
                         onChange={(e) => setCustomHook(e.target.value)}
                         placeholder="e.g. WAIT FOR IT, HE AWAKENED, UNFORGIVABLE"
-                        className="flex-1 bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-xs text-zinc-200"
+                        className="flex-1 bg-ink border border-edge rounded-lg px-3 py-2 text-xs text-fg"
                       />
                       <Button
                         variant="secondary"
@@ -802,8 +802,8 @@ export const YouTubePackagingModal: React.FC<YouTubePackagingModalProps> = ({
         </div>
 
         {/* Modal Footer */}
-        <div className="px-6 py-4 border-t border-zinc-800/80 bg-zinc-900/60 flex items-center justify-between">
-          <div className="flex items-center gap-2 text-xs text-zinc-400">
+        <div className="px-6 py-4 border-t border-edge/80 bg-navy/60 flex items-center justify-between">
+          <div className="flex items-center gap-2 text-xs text-fg-dim">
             <span>All metadata and prompts are saved into project workspace.</span>
           </div>
           <div className="flex items-center gap-2">
@@ -814,7 +814,7 @@ export const YouTubePackagingModal: React.FC<YouTubePackagingModalProps> = ({
               variant="primary"
               size="sm"
               onClick={handleCopyAllMetadata}
-              className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-4 text-xs"
+              className="bg-accent hover:bg-accent text-white font-bold px-4 text-xs"
             >
               {copiedKey === "all_metadata" ? "Copied All!" : "Copy Full Release Packaging"}
             </Button>

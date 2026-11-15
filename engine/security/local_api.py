@@ -21,8 +21,8 @@ _DEFAULT_DESKTOP_ORIGINS = frozenset(
         "tauri://localhost",
         "http://tauri.localhost",
         "https://tauri.localhost",
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
+        "http://localhost:5273",
+        "http://127.0.0.1:5273",
         "http://localhost:5174",
         "http://127.0.0.1:5174",
         "http://localhost:4173",
@@ -30,9 +30,6 @@ _DEFAULT_DESKTOP_ORIGINS = frozenset(
         "http://localhost:8765",
         "http://127.0.0.1:8765",
         "http://[::1]:8765",
-        "http://localhost:7860",
-        "http://127.0.0.1:7860",
-        "http://[::1]:7860",
         "null",
     }
 )
@@ -147,9 +144,10 @@ class LocalApiSecurityMiddleware(BaseHTTPMiddleware):
     @staticmethod
     def _is_resource_path(path: str) -> bool:
         return (
-            path.endswith(("/file", "/normalized-file", "/output", "/contact-sheet"))
+            path.endswith(("/file", "/normalized-file", "/output", "/contact-sheet", "/cover", "/text-blur-preview"))
             or "/samples/" in path
             or "/chronoflow/" in path
             or path.startswith(("/outputs/", "/inputs/"))
+            or (path.startswith("/api/original/scene/runs/") and path.endswith("/image"))  # the Scene review picture, shown by an <img> tag
             or path == "/api/render/events"
         )

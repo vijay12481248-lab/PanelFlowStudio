@@ -958,39 +958,39 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
   }, [selectedPanelIndex, panels.length, deleteConfirmPanel, handleNavigatePanel]);
 
   const getRegionBorderColor = (type: string, status: string) => {
-    if (status === "BLURRED" || type === "REDACTED") return "#f97316"; // Orange for blurred/redacted
-    if (status === "NEEDS_REVIEW") return "#f59e0b"; // Amber warning
-    if (status === "REJECTED") return "#71717a"; // Muted gray
+    if (status === "BLURRED" || type === "REDACTED") return "#f0b35a"; // Orange for blurred/redacted
+    if (status === "NEEDS_REVIEW") return "#f0b35a"; // Amber warning
+    if (status === "REJECTED") return "#6a76a3"; // Muted gray
     switch (type) {
       case "SPEECH":
-        return "#0ea5e9"; // Sky blue
+        return "#7aa2ff"; // Sky blue
       case "NARRATION":
-        return "#eab308"; // Gold
+        return "#f0b35a"; // Gold
       case "THOUGHT":
-        return "#a855f7"; // Purple
+        return "#3b6bf5"; // Purple
       case "SFX":
-        return "#ec4899"; // Pink
+        return "#3b6bf5"; // Pink
       case "CAPTION":
-        return "#14b8a6"; // Teal
+        return "#46d6a3"; // Teal
       default:
-        return "#6366f1"; // Indigo
+        return "#3b6bf5"; // Indigo
     }
   };
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-16">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-zinc-800">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-edge">
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="sm" onClick={onBack}>
             <Icons.ArrowLeft className="w-4 h-4" />
             Back
           </Button>
           <div>
-            <h2 className="text-xl font-bold text-zinc-100 flex items-center gap-2">
+            <h2 className="text-xl font-bold text-fg flex items-center gap-2">
               Text Region Detection & OCR Review
             </h2>
-            <p className="text-xs text-zinc-400">
+            <p className="text-xs text-fg-dim">
               Detect speech balloons, transcribe text via OCR cache, and verify human corrections.
             </p>
           </div>
@@ -1011,11 +1011,11 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
             </Button>
           )}
           <div className="flex items-center gap-2">
-            <span className="text-xs text-zinc-400">Engine:</span>
+            <span className="text-xs text-fg-dim">Engine:</span>
             <select
               value={selectedEngine}
               onChange={(e) => setSelectedEngine(e.target.value)}
-              className="bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500"
+              className="bg-navy border border-edge rounded-lg px-2.5 py-1.5 text-xs text-fg focus:outline-none focus:border-accent"
             >
               <option value="">Best available (auto)</option>
               {engines.map((e) => (
@@ -1052,7 +1052,7 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
               size="sm"
               onClick={handleConfirmAllPending}
               loading={confirming}
-              className="bg-amber-600/20 text-amber-300 border-amber-800 hover:bg-amber-600/30"
+              className="bg-warn/20 text-warn border-warn/40 hover:bg-warn/30"
               title="Confirm all pending text regions for gate approval"
             >
               <Icons.Check className="w-4 h-4 mr-1" />
@@ -1067,8 +1067,8 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
             loading={confirming}
             className={`border ${
               needsReviewCount > 0
-                ? "bg-amber-950/40 text-amber-300 border-amber-800/80 hover:bg-amber-950/60"
-                : "bg-emerald-600/20 text-emerald-300 border-emerald-800 hover:bg-emerald-600/30"
+                ? "bg-warn/40 text-warn border-warn/80 hover:bg-warn/60"
+                : "bg-ok/20 text-ok border-ok/40 hover:bg-ok/30"
             }`}
           >
             <Icons.CheckCircle className="w-4 h-4 mr-1" />
@@ -1091,7 +1091,7 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
               variant="primary"
               size="sm"
               onClick={() => onOpenStoryEditor(project)}
-              className="bg-indigo-600 hover:bg-indigo-500 text-white font-medium shadow-md shadow-indigo-600/30"
+              className="bg-accent hover:bg-accent text-white font-medium shadow-md shadow-accent/30"
               title="Open the unified Video-First Story Editor"
             >
               <Icons.Film className="w-3.5 h-3.5 mr-1 text-white" />
@@ -1114,7 +1114,7 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
       )}
       {reviewFlagged && (
         <section className="space-y-3" aria-label="Flagged OCR crops">
-          <p className="text-sm text-zinc-300">Inspect each crop. Ignore artwork without text; open unreadable dialogue in the editor to correct it.</p>
+          <p className="text-sm text-fg-dim">Inspect each crop. Ignore artwork without text; open unreadable dialogue in the editor to correct it.</p>
           <Button size="sm" variant="secondary" loading={savingRegion}
             disabled={textRegions.filter((tr) => tr.status === "NEEDS_REVIEW").slice(0, 6).some((tr) => !!(tr.corrected_text || tr.raw_text || "").trim())}
             onClick={async () => {
@@ -1126,15 +1126,15 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
             }}>
             Ignore shown empty artwork
           </Button>
-          <p className="text-xs text-zinc-500">Use only after checking every displayed crop contains no text.</p>
+          <p className="text-xs text-fg-faint">Use only after checking every displayed crop contains no text.</p>
           <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
             {textRegions.filter((tr) => tr.status === "NEEDS_REVIEW").slice(0, 6).map((tr) => (
               <Card key={tr.id} className="space-y-2">
-                <p className="text-xs text-zinc-400">Panel #{panels.find((p) => p.id === tr.panel_id)?.sequence} · Region #{tr.sequence_in_panel}</p>
+                <p className="text-xs text-fg-dim">Panel #{panels.find((p) => p.id === tr.panel_id)?.sequence} · Region #{tr.sequence_in_panel}</p>
                 <div className="h-48 overflow-auto bg-white rounded">
                   <img src={api.getTextRegionImageUrl(project.id, tr.id)} alt={`Flagged region ${tr.sequence_global}`} className="w-full h-full object-contain" loading="lazy" />
                 </div>
-                <p className="text-xs text-zinc-300 break-words">{tr.corrected_text || tr.raw_text || "No text recognized"}</p>
+                <p className="text-xs text-fg-dim break-words">{tr.corrected_text || tr.raw_text || "No text recognized"}</p>
                 <div className="flex gap-2">
                   <Button size="sm" variant="secondary" onClick={() => handleRejectRegion(tr.id)}>Ignore artwork</Button>
                   <Button size="sm" variant="primary" onClick={() => {
@@ -1155,15 +1155,15 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
         const activeEng = engines.find((e) => e.engine_id === selectedEngine);
         if (activeEng && !activeEng.is_available) {
           return (
-            <div className="p-3 bg-zinc-900/90 border border-amber-800/60 rounded-xl flex items-center justify-between gap-3 text-amber-300 text-xs">
+            <div className="p-3 bg-navy/90 border border-warn/60 rounded-xl flex items-center justify-between gap-3 text-warn text-xs">
               <div className="flex items-center gap-2">
-                <Icons.AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                <Icons.AlertTriangle className="w-4 h-4 text-warn flex-shrink-0" />
                 <span>
                   <strong>{activeEng.display_name} — Configuration required:</strong>{" "}
                   {activeEng.diagnostic_message || "Required dependencies or model weights are missing."}
                 </span>
               </div>
-              <span className="bg-amber-950/80 border border-amber-800 text-amber-400 px-2 py-0.5 rounded text-[11px] font-mono">
+              <span className="bg-warn/80 border border-warn/40 text-warn px-2 py-0.5 rounded text-[11px] font-mono">
                 {activeEng.status_label || "Configuration required"}
               </span>
             </div>
@@ -1174,14 +1174,14 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
 
       {/* Milestone 3 Completion & Downstream Contract Export Banner */}
       {project.current_stage === "OCR_APPROVED" && (
-        <div className="p-4 bg-emerald-950/30 border border-emerald-800/80 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+        <div className="p-4 bg-ok/30 border border-ok/80 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
           <div className="flex items-center gap-3">
-            <Icons.CheckCircle className="w-5 h-5 text-emerald-400 flex-shrink-0" />
+            <Icons.CheckCircle className="w-5 h-5 text-ok flex-shrink-0" />
             <div>
-              <p className="font-semibold text-emerald-200">
+              <p className="font-semibold text-ok">
                 Milestone 3 Production Gate Passed: OCR Approved
               </p>
-              <p className="text-zinc-400">
+              <p className="text-fg-dim">
                 Source truth established across Layer 1 (Machine OCR), Layer 2 (Human Corrections), and Layer 3 (Speaker Attribution).
               </p>
             </div>
@@ -1204,7 +1204,7 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                   alert(`Failed to export contract: ${err.message}`);
                 }
               }}
-              className="text-emerald-300 border-emerald-700/60 hover:bg-emerald-950/50"
+              className="text-ok border-ok/60 hover:bg-ok/50"
             >
               Export Downstream Contract
             </Button>
@@ -1213,7 +1213,7 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                 variant="ghost"
                 size="sm"
                 onClick={() => onProceedToStory(project)}
-                className="text-zinc-400 hover:text-zinc-200 text-xs"
+                className="text-fg-dim hover:text-fg text-xs"
                 title="Experimental Milestone 4 Story Understanding preview"
               >
                 M4 Story Preview <Icons.ArrowRight className="w-3.5 h-3.5 ml-1" />
@@ -1225,19 +1225,19 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
 
       {/* Strict Gate Banner Warning */}
       {needsReviewCount > 0 && (
-        <div className="p-3.5 bg-amber-950/40 border border-amber-800/80 rounded-xl flex items-center justify-between gap-3 text-amber-200 text-xs">
+        <div className="p-3.5 bg-warn/40 border border-warn/80 rounded-xl flex items-center justify-between gap-3 text-warn text-xs">
           <div className="flex items-center gap-2.5">
-            <Icons.AlertTriangle className="w-5 h-5 text-amber-400 flex-shrink-0" />
+            <Icons.AlertTriangle className="w-5 h-5 text-warn flex-shrink-0" />
             <span>
               <strong>Strict Approval Gate:</strong> {needsReviewCount} text region(s) are flagged as{" "}
-              <code className="bg-amber-900/60 px-1 py-0.5 rounded font-mono font-bold">NEEDS_REVIEW</code>.
+              <code className="bg-warn/60 px-1 py-0.5 rounded font-mono font-bold">NEEDS_REVIEW</code>.
               Inspect and confirm low-confidence or untranscribed regions before downstream pipeline approval.
             </span>
           </div>
           <Button
             variant="ghost"
             size="sm"
-            className="text-amber-300 hover:bg-amber-900/40 text-xs"
+            className="text-warn hover:bg-warn/40 text-xs"
             onClick={() => {
               const firstFlagged = textRegions.find((tr) => tr.status === "NEEDS_REVIEW");
               if (firstFlagged) {
@@ -1254,12 +1254,12 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
 
       {/* Progress Bar when running */}
       {extracting && (
-        <Card className="p-4 bg-indigo-950/30 border-indigo-900 space-y-2">
+        <Card className="p-4 bg-accent/30 border-accent/40 space-y-2">
           <div className="flex justify-between text-xs">
-            <span className="text-indigo-300 font-medium">{progressMsg}</span>
-            <span className="text-indigo-400 font-mono">{(ocrProgress * 100).toFixed(0)}%</span>
+            <span className="text-info font-medium">{progressMsg}</span>
+            <span className="text-info font-mono">{(ocrProgress * 100).toFixed(0)}%</span>
           </div>
-          <p className="text-[11px] text-indigo-300/80">
+          <p className="text-[11px] text-info/80">
             Region edits are locked until OCR finishes so the completion refresh cannot overwrite unsaved changes.
           </p>
           <ProgressBar progress={ocrProgress * 100} />
@@ -1268,33 +1268,33 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
 
       {/* Top Review Toolbar / Status Bar */}
       {panels.length > 0 && (
-        <div className="flex flex-wrap items-center justify-between gap-3 px-3 py-2 bg-zinc-900/60 border border-zinc-800/80 rounded-xl">
+        <div className="flex flex-wrap items-center justify-between gap-3 px-3 py-2 bg-navy/60 border border-edge/80 rounded-xl">
           <div className="flex items-center gap-3">
             <Button
               variant="outline"
               size="sm"
               onClick={() => setIsVerticalPanelsOpen((v) => !v)}
-              className="text-xs flex items-center gap-1.5 text-zinc-300 border-zinc-700 hover:bg-zinc-800"
+              className="text-xs flex items-center gap-1.5 text-fg-dim border-edge hover:bg-flat"
               title={isVerticalPanelsOpen ? "Hide vertical panel list" : "Show vertical panel list"}
             >
-              <Icons.Layout className="w-4 h-4 text-indigo-400" />
+              <Icons.Layout className="w-4 h-4 text-info" />
               <span>{isVerticalPanelsOpen ? "Hide Panel List" : `Show Panels (${panels.length})`}</span>
             </Button>
 
             {activePanel && (
               <div className="flex items-center gap-2 text-xs">
-                <span className="font-semibold text-zinc-200">
+                <span className="font-semibold text-fg">
                   Panel #{activePanel.sequence}
                 </span>
-                <span className="text-zinc-500">
+                <span className="text-fg-faint">
                   ({selectedPanelIndex + 1} of {panels.length})
                 </span>
-                <span className="text-zinc-600 hidden sm:inline">·</span>
-                <span className="text-zinc-400 text-[11px] hidden sm:inline">
+                <span className="text-fg-faint hidden sm:inline">·</span>
+                <span className="text-fg-dim text-[11px] hidden sm:inline">
                   {activePanel.width} × {activePanel.height}px
                 </span>
-                <span className="text-zinc-600 hidden sm:inline">·</span>
-                <span className="text-zinc-400 text-[11px] hidden sm:inline">
+                <span className="text-fg-faint hidden sm:inline">·</span>
+                <span className="text-fg-dim text-[11px] hidden sm:inline">
                   {panelRegions.length} text {panelRegions.length === 1 ? "region" : "regions"}
                 </span>
               </div>
@@ -1302,18 +1302,18 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
-            <span className="text-[11px] text-zinc-500 hidden md:inline">
-              Use <kbd className="px-1.5 py-0.5 bg-zinc-800 border border-zinc-700 rounded text-zinc-300 font-mono">←</kbd> / <kbd className="px-1.5 py-0.5 bg-zinc-800 border border-zinc-700 rounded text-zinc-300 font-mono">→</kbd> keys or preview edge arrows to navigate
+            <span className="text-[11px] text-fg-faint hidden md:inline">
+              Use <kbd className="px-1.5 py-0.5 bg-flat border border-edge rounded text-fg-dim font-mono">←</kbd> / <kbd className="px-1.5 py-0.5 bg-flat border border-edge rounded text-fg-dim font-mono">→</kbd> keys or preview edge arrows to navigate
             </span>
 
             <Button
               variant="outline"
               size="sm"
               onClick={() => setIsBatchBlurModalOpen(true)}
-              className="text-xs text-amber-300 border-amber-700/60 hover:bg-amber-950/40"
+              className="text-xs text-warn border-warn/60 hover:bg-warn/40"
               title="Batch blur site watermark banners, headers, or subscribe notes across all panels"
             >
-              <Icons.EyeOff className="w-3.5 h-3.5 mr-1 text-amber-400" />
+              <Icons.EyeOff className="w-3.5 h-3.5 mr-1 text-warn" />
               Batch Watermarks...
             </Button>
 
@@ -1323,7 +1323,7 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                 size="sm"
                 onClick={() => setDeleteConfirmPanel(activePanel)}
                 disabled={deletingPanel}
-                className="text-rose-400 hover:text-rose-200 hover:bg-rose-950/60 border border-rose-900/50 text-xs flex items-center gap-1.5 transition-colors"
+                className="text-bad hover:text-bad hover:bg-bad/60 border border-bad/50 text-xs flex items-center gap-1.5 transition-colors"
                 title={`Delete Panel #${activePanel.sequence}`}
               >
                 <Icons.Trash className="w-3.5 h-3.5" />
@@ -1339,11 +1339,11 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
         {/* Column 1: Vertical Panels Strip (When Open) */}
         {isVerticalPanelsOpen && panels.length > 0 && (
           <div className="lg:col-span-3 xl:col-span-2 space-y-2.5">
-            <Card className="p-3 bg-zinc-950 border-zinc-800 flex flex-col max-h-[82vh]">
+            <Card className="p-3 bg-ink border-edge flex flex-col max-h-[82vh]">
               {/* Vertical Header */}
-              <div className="flex items-center justify-between pb-2 border-b border-zinc-800/80 mb-2">
-                <span className="text-xs font-bold uppercase tracking-wider text-zinc-200 flex items-center gap-1.5">
-                  <Icons.Film className="w-4 h-4 text-indigo-400" />
+              <div className="flex items-center justify-between pb-2 border-b border-edge/80 mb-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-fg flex items-center gap-1.5">
+                  <Icons.Film className="w-4 h-4 text-info" />
                   Panels ({panels.length})
                 </span>
                 <Badge variant={needsReviewCount > 0 ? "warning" : "success"} className="text-[10px]">
@@ -1352,14 +1352,14 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
               </div>
 
               {/* Category Filter Pills */}
-              <div className="grid grid-cols-4 gap-1 p-0.5 bg-zinc-900 border border-zinc-800/80 rounded-lg text-[10px] font-medium mb-2">
+              <div className="grid grid-cols-4 gap-1 p-0.5 bg-navy border border-edge/80 rounded-lg text-[10px] font-medium mb-2">
                 <button
                   type="button"
                   onClick={() => setPanelFilter("all")}
                   className={`py-1 rounded text-center transition-colors ${
                     panelFilter === "all"
-                      ? "bg-zinc-800 text-zinc-100 font-semibold shadow-sm"
-                      : "text-zinc-400 hover:text-zinc-200"
+                      ? "bg-flat text-fg font-semibold shadow-sm"
+                      : "text-fg-dim hover:text-fg"
                   }`}
                 >
                   All ({panels.length})
@@ -1369,8 +1369,8 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                   onClick={() => setPanelFilter("flagged")}
                   className={`py-1 rounded text-center transition-colors ${
                     panelFilter === "flagged"
-                      ? "bg-amber-950/80 text-amber-200 font-semibold border border-amber-800"
-                      : "text-zinc-400 hover:text-amber-300"
+                      ? "bg-warn/80 text-warn font-semibold border border-warn/40"
+                      : "text-fg-dim hover:text-warn"
                   }`}
                   title="Panels with flagged regions needing review"
                 >
@@ -1381,8 +1381,8 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                   onClick={() => setPanelFilter("ready")}
                   className={`py-1 rounded text-center transition-colors ${
                     panelFilter === "ready"
-                      ? "bg-emerald-950/80 text-emerald-200 font-semibold border border-emerald-800"
-                      : "text-zinc-400 hover:text-emerald-300"
+                      ? "bg-ok/80 text-ok font-semibold border border-ok/40"
+                      : "text-fg-dim hover:text-ok"
                   }`}
                   title="Panels with all text regions confirmed"
                 >
@@ -1393,8 +1393,8 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                   onClick={() => setPanelFilter("empty")}
                   className={`py-1 rounded text-center transition-colors ${
                     panelFilter === "empty"
-                      ? "bg-zinc-800 text-zinc-200 font-semibold"
-                      : "text-zinc-400 hover:text-zinc-200"
+                      ? "bg-flat text-fg font-semibold"
+                      : "text-fg-dim hover:text-fg"
                   }`}
                   title="Panels with no detected text regions"
                 >
@@ -1409,13 +1409,13 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                   placeholder="Filter or jump #..."
                   value={panelSearchQuery}
                   onChange={(e) => setPanelSearchQuery(e.target.value)}
-                  className="w-full px-2.5 py-1.5 pr-6 bg-zinc-900 border border-zinc-800 rounded text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-indigo-500"
+                  className="w-full px-2.5 py-1.5 pr-6 bg-navy border border-edge rounded text-xs text-fg placeholder-fg-faint focus:outline-none focus:border-accent"
                 />
                 {panelSearchQuery && (
                   <button
                     type="button"
                     onClick={() => setPanelSearchQuery("")}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-200 text-xs"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-fg-dim hover:text-fg text-xs"
                     title="Clear filter"
                   >
                     ✕
@@ -1460,15 +1460,15 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                         onClick={() => handleNavigatePanel(idx)}
                         className={`group relative p-2 rounded-lg border text-left cursor-pointer transition-all ${
                           isSelected
-                            ? "bg-gradient-to-r from-indigo-950/80 via-zinc-900/90 to-zinc-900 border-indigo-500 border-l-4 shadow-xl ring-1 ring-indigo-500/40"
-                            : "bg-zinc-900/70 hover:bg-zinc-800/80 border-zinc-800/90 hover:border-zinc-700"
+                            ? "bg-gradient-to-r from-accent/80 via-navy/90 to-navy border-accent border-l-4 shadow-xl ring-1 ring-accent/40"
+                            : "bg-navy/70 hover:bg-flat/80 border-edge/90 hover:border-edge"
                         }`}
                       >
                         {/* Panel Top Row: Sequence + Delete Button */}
                         <div className="flex items-center justify-between mb-1.5">
                           <span
                             className={`text-xs ${
-                              isSelected ? "text-indigo-200 font-bold" : "text-zinc-300 font-medium"
+                              isSelected ? "text-info font-bold" : "text-fg-dim font-medium"
                             }`}
                           >
                             Panel #{p.sequence}
@@ -1479,7 +1479,7 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                               e.stopPropagation();
                               setDeleteConfirmPanel(p);
                             }}
-                            className="p-1 rounded text-zinc-500 hover:text-rose-400 hover:bg-rose-950/60 opacity-0 group-hover:opacity-100 transition-opacity"
+                            className="p-1 rounded text-fg-faint hover:text-bad hover:bg-bad/60 opacity-0 group-hover:opacity-100 transition-opacity"
                             title={`Delete Panel #${p.sequence}`}
                             aria-label={`Delete Panel #${p.sequence}`}
                           >
@@ -1488,7 +1488,7 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                         </div>
 
                         {/* Panel Thumbnail */}
-                        <div className="relative w-full h-24 rounded overflow-hidden bg-zinc-950 border border-zinc-800/80 mb-1.5 flex items-center justify-center">
+                        <div className="relative w-full h-24 rounded overflow-hidden bg-ink border border-edge/80 mb-1.5 flex items-center justify-center">
                           <img
                             src={`${api.getPanelImageUrl(project.id, p.id)}?t=${cacheBuster}`}
                             alt={`Panel ${p.sequence}`}
@@ -1496,7 +1496,7 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                             loading="lazy"
                           />
                           {hasNeedsReview && (
-                            <span className="absolute top-1 right-1 px-1.5 py-0.5 rounded bg-amber-900/90 text-amber-200 text-[9px] font-bold border border-amber-700 flex items-center gap-0.5 shadow">
+                            <span className="absolute top-1 right-1 px-1.5 py-0.5 rounded bg-warn/90 text-warn text-[9px] font-bold border border-warn flex items-center gap-0.5 shadow">
                               ⚠️
                             </span>
                           )}
@@ -1504,15 +1504,15 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
 
                         {/* Panel Footer: Region Count & Status */}
                         <div className="flex items-center justify-between text-[10px]">
-                          <span className="text-zinc-400 font-mono">
+                          <span className="text-fg-dim font-mono">
                             {count} {count === 1 ? "region" : "regions"}
                           </span>
                           {hasNeedsReview ? (
-                            <span className="text-amber-400 font-medium">Needs Review</span>
+                            <span className="text-warn font-medium">Needs Review</span>
                           ) : count > 0 ? (
-                            <span className="text-emerald-400 font-medium">✓ Ready</span>
+                            <span className="text-ok font-medium">✓ Ready</span>
                           ) : (
-                            <span className="text-zinc-500 italic">No text</span>
+                            <span className="text-fg-faint italic">No text</span>
                           )}
                         </div>
                       </div>
@@ -1531,7 +1531,7 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
               : "lg:col-span-7"
           } space-y-3`}
         >
-          <Card className="p-4 bg-zinc-950 flex flex-col items-center justify-center min-h-[520px]">
+          <Card className="p-4 bg-ink flex flex-col items-center justify-center min-h-[520px]">
             {activePanel ? (
               <div
                 onWheel={handleWheel}
@@ -1539,7 +1539,7 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUp}
                 onMouseLeave={handleMouseUp}
-                className={`relative inline-block max-w-full overflow-hidden rounded-lg shadow-2xl border border-zinc-800 group/preview select-none ${
+                className={`relative inline-block max-w-full overflow-hidden rounded-lg shadow-2xl border border-edge group/preview select-none ${
                   isMarqueeBlurMode
                     ? "cursor-crosshair"
                     : zoomLevel > 1.0
@@ -1592,8 +1592,8 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                             y={tr.y}
                             width={tr.width}
                             height={tr.height}
-                            fill={isSelected ? "rgba(99, 102, 241, 0.28)" : "rgba(15, 23, 42, 0.22)"}
-                            stroke={isSelected ? "#818cf8" : stroke}
+                            fill={isSelected ? "rgba(59,107,245, 0.28)" : "rgba(16,26,61, 0.22)"}
+                            stroke={isSelected ? "#7aa2ff" : stroke}
                             strokeWidth={isSelected ? 3 : 2}
                             strokeDasharray={tr.status === "NEEDS_REVIEW" ? "6,3" : undefined}
                             rx={4}
@@ -1630,8 +1630,8 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                           y={marqueePendingBox ? marqueePendingBox.y : marqueeCurrent!.y}
                           width={marqueePendingBox ? marqueePendingBox.width : marqueeCurrent!.w}
                           height={marqueePendingBox ? marqueePendingBox.height : marqueeCurrent!.h}
-                          fill="rgba(245, 158, 11, 0.35)"
-                          stroke="#f59e0b"
+                          fill="rgba(240,179,90, 0.35)"
+                          stroke="#f0b35a"
                           strokeWidth={3}
                           strokeDasharray="6,4"
                           rx={4}
@@ -1641,7 +1641,7 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                           y={Math.max(0, (marqueePendingBox ? marqueePendingBox.y : marqueeCurrent!.y) - 22)}
                           width={130}
                           height={20}
-                          fill="#b45309"
+                          fill="#f0b35a"
                           rx={4}
                         />
                         <text
@@ -1669,7 +1669,7 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                       e.stopPropagation();
                       handleNavigatePanel(selectedPanelIndex - 1);
                     }}
-                    className="absolute left-3 top-1/2 -translate-y-1/2 z-30 flex items-center justify-center w-11 h-11 rounded-full bg-zinc-950/85 hover:bg-indigo-600 text-zinc-100 hover:text-white border border-zinc-700 hover:border-indigo-400 shadow-2xl backdrop-blur-md transition-all duration-150 transform hover:scale-110 active:scale-95 focus:outline-none focus:ring-2 focus:ring-indigo-400 cursor-pointer group"
+                    className="absolute left-3 top-1/2 -translate-y-1/2 z-30 flex items-center justify-center w-11 h-11 rounded-full bg-ink/85 hover:bg-accent text-fg hover:text-white border border-edge hover:border-accent shadow-2xl backdrop-blur-md transition-all duration-150 transform hover:scale-110 active:scale-95 focus:outline-none focus:ring-2 focus:ring-accent cursor-pointer group"
                     title={`Previous Panel (Panel #${panels[selectedPanelIndex - 1]?.sequence}) — Left Arrow key`}
                     aria-label="Previous Panel"
                   >
@@ -1679,7 +1679,7 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                   <button
                     type="button"
                     disabled
-                    className="absolute left-3 top-1/2 -translate-y-1/2 z-30 flex items-center justify-center w-11 h-11 rounded-full bg-zinc-950/35 text-zinc-600 border border-zinc-800/50 shadow opacity-30 cursor-not-allowed"
+                    className="absolute left-3 top-1/2 -translate-y-1/2 z-30 flex items-center justify-center w-11 h-11 rounded-full bg-ink/35 text-fg-faint border border-edge/50 shadow opacity-30 cursor-not-allowed"
                     title="First panel"
                     aria-label="First panel"
                   >
@@ -1695,7 +1695,7 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                       e.stopPropagation();
                       handleNavigatePanel(selectedPanelIndex + 1);
                     }}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 z-30 flex items-center justify-center w-11 h-11 rounded-full bg-zinc-950/85 hover:bg-indigo-600 text-zinc-100 hover:text-white border border-zinc-700 hover:border-indigo-400 shadow-2xl backdrop-blur-md transition-all duration-150 transform hover:scale-110 active:scale-95 focus:outline-none focus:ring-2 focus:ring-indigo-400 cursor-pointer group"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 z-30 flex items-center justify-center w-11 h-11 rounded-full bg-ink/85 hover:bg-accent text-fg hover:text-white border border-edge hover:border-accent shadow-2xl backdrop-blur-md transition-all duration-150 transform hover:scale-110 active:scale-95 focus:outline-none focus:ring-2 focus:ring-accent cursor-pointer group"
                     title={`Next Panel (Panel #${panels[selectedPanelIndex + 1]?.sequence}) — Right Arrow key`}
                     aria-label="Next Panel"
                   >
@@ -1705,7 +1705,7 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                   <button
                     type="button"
                     disabled
-                    className="absolute right-3 top-1/2 -translate-y-1/2 z-30 flex items-center justify-center w-11 h-11 rounded-full bg-zinc-950/35 text-zinc-600 border border-zinc-800/50 shadow opacity-30 cursor-not-allowed"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 z-30 flex items-center justify-center w-11 h-11 rounded-full bg-ink/35 text-fg-faint border border-edge/50 shadow opacity-30 cursor-not-allowed"
                     title="Last panel"
                     aria-label="Last panel"
                   >
@@ -1715,14 +1715,14 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
 
                 {/* In-Preview Floating Header Overlay: Indicator & Direct Panel Actions */}
                 <div className="absolute top-3 inset-x-3 z-20 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
-                  <div className="px-2.5 py-1 rounded-md bg-zinc-950/85 border border-zinc-700/80 backdrop-blur-md text-xs font-semibold text-zinc-200 shadow-lg pointer-events-auto flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></span>
+                  <div className="px-2.5 py-1 rounded-md bg-ink/85 border border-edge/80 backdrop-blur-md text-xs font-semibold text-fg shadow-lg pointer-events-auto flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-accent animate-pulse"></span>
                     <span>Panel #{activePanel.sequence}</span>
-                    <span className="text-zinc-500 text-[11px]">
+                    <span className="text-fg-faint text-[11px]">
                       ({selectedPanelIndex + 1} / {panels.length})
                     </span>
                     {panelBlurStatus?.is_blurred && (
-                      <span className="ml-1 px-1.5 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-800 text-[10px] font-bold">
+                      <span className="ml-1 px-1.5 py-0.5 rounded bg-warn/20 text-warn border border-warn/40 text-[10px] font-bold">
                         BLURRED
                       </span>
                     )}
@@ -1734,10 +1734,10 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                         type="button"
                         onClick={handleResetPanelImage}
                         disabled={resettingPanel}
-                        className="px-2.5 py-1 rounded-md bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-700/80 text-xs font-medium text-zinc-300 hover:text-white shadow-lg backdrop-blur-md flex items-center gap-1 transition-all cursor-pointer"
+                        className="px-2.5 py-1 rounded-md bg-navy/90 hover:bg-flat border border-edge/80 text-xs font-medium text-fg-dim hover:text-white shadow-lg backdrop-blur-md flex items-center gap-1 transition-all cursor-pointer"
                         title="Restore original unblurred image for this panel"
                       >
-                        <Icons.Rotate className="w-3.5 h-3.5 text-zinc-400" />
+                        <Icons.Rotate className="w-3.5 h-3.5 text-fg-dim" />
                         <span>Reset Blur</span>
                       </button>
                     )}
@@ -1747,7 +1747,7 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                         type="button"
                         onClick={handleBlurAllPanelText}
                         disabled={blurringPanel}
-                        className="px-2.5 py-1 rounded-md bg-amber-950/85 hover:bg-amber-900 border border-amber-800/80 text-xs font-medium text-amber-300 hover:text-amber-100 shadow-lg backdrop-blur-md flex items-center gap-1 transition-all cursor-pointer"
+                        className="px-2.5 py-1 rounded-md bg-warn/85 hover:bg-warn/20 border border-warn/80 text-xs font-medium text-warn hover:text-warn shadow-lg backdrop-blur-md flex items-center gap-1 transition-all cursor-pointer"
                         title="Blur all detected text regions/watermarks on this panel and in video"
                       >
                         <Icons.EyeOff className="w-3.5 h-3.5" />
@@ -1764,14 +1764,14 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                       }}
                       className={`px-2.5 py-1 rounded-md border text-xs font-medium shadow-lg backdrop-blur-md flex items-center gap-1.5 transition-all cursor-pointer ${
                         isMarqueeBlurMode
-                          ? "bg-amber-600 text-white border-amber-400 ring-2 ring-amber-400/50"
-                          : "bg-zinc-900/90 hover:bg-zinc-800 border-zinc-700/80 text-zinc-300 hover:text-white"
+                          ? "bg-warn text-white border-warn ring-2 ring-warn/50"
+                          : "bg-navy/90 hover:bg-flat border-edge/80 text-fg-dim hover:text-white"
                       }`}
                       title="Click & drag directly on the panel image to marquee-select and blur any watermark or text [R]"
                     >
-                      <Icons.Crosshair className="w-3.5 h-3.5 text-amber-400" />
+                      <Icons.Crosshair className="w-3.5 h-3.5 text-warn" />
                       <span>{isMarqueeBlurMode ? "Redact Mode: Active" : "Marquee Redact"}</span>
-                      <kbd className="text-[10px] bg-zinc-950/60 px-1 py-0.2 rounded font-mono text-zinc-400">R</kbd>
+                      <kbd className="text-[10px] bg-ink/60 px-1 py-0.2 rounded font-mono text-fg-dim">R</kbd>
                     </button>
 
                     <button
@@ -1788,7 +1788,7 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                         }
                         setIsCustomBlurOpen(true);
                       }}
-                      className="px-2.5 py-1 rounded-md bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-700/80 text-xs font-medium text-zinc-300 hover:text-white shadow-lg backdrop-blur-md flex items-center gap-1 transition-all cursor-pointer"
+                      className="px-2.5 py-1 rounded-md bg-navy/90 hover:bg-flat border border-edge/80 text-xs font-medium text-fg-dim hover:text-white shadow-lg backdrop-blur-md flex items-center gap-1 transition-all cursor-pointer"
                       title="Blur a custom area, banner, or watermark box"
                     >
                       <span>Blur Box...</span>
@@ -1798,7 +1798,7 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                       type="button"
                       onClick={handleBlurEntirePanel}
                       disabled={blurringPanel}
-                      className="px-2.5 py-1 rounded-md bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-700/80 text-xs font-medium text-zinc-300 hover:text-white shadow-lg backdrop-blur-md flex items-center gap-1 transition-all cursor-pointer"
+                      className="px-2.5 py-1 rounded-md bg-navy/90 hover:bg-flat border border-edge/80 text-xs font-medium text-fg-dim hover:text-white shadow-lg backdrop-blur-md flex items-center gap-1 transition-all cursor-pointer"
                       title="Blur entire panel image (recommended for ad/recommendation panels)"
                     >
                       <span>Blur Panel</span>
@@ -1811,7 +1811,7 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                         setDeleteConfirmPanel(activePanel);
                       }}
                       disabled={deletingPanel}
-                      className="px-2.5 py-1 rounded-md bg-rose-950/85 hover:bg-rose-900 border border-rose-800/80 text-xs font-medium text-rose-200 hover:text-white shadow-lg backdrop-blur-md flex items-center gap-1 transition-all hover:scale-105 active:scale-95 cursor-pointer"
+                      className="px-2.5 py-1 rounded-md bg-bad/85 hover:bg-bad/20 border border-bad/80 text-xs font-medium text-bad hover:text-white shadow-lg backdrop-blur-md flex items-center gap-1 transition-all hover:scale-105 active:scale-95 cursor-pointer"
                       title={`Delete Panel #${activePanel.sequence}`}
                     >
                       <Icons.Trash className="w-3.5 h-3.5" />
@@ -1822,10 +1822,10 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
 
                 {/* Active Marquee Redact Guide Banner */}
                 {isMarqueeBlurMode && (
-                  <div className="absolute top-14 left-1/2 -translate-x-1/2 z-30 px-3.5 py-1.5 rounded-full bg-amber-950/95 border border-amber-500/80 text-amber-200 text-xs font-medium shadow-2xl backdrop-blur-md flex items-center gap-2 animate-in fade-in duration-150 pointer-events-auto">
-                    <Icons.Crosshair className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+                  <div className="absolute top-14 left-1/2 -translate-x-1/2 z-30 px-3.5 py-1.5 rounded-full bg-warn/95 border border-warn/80 text-warn text-xs font-medium shadow-2xl backdrop-blur-md flex items-center gap-2 animate-in fade-in duration-150 pointer-events-auto">
+                    <Icons.Crosshair className="w-3.5 h-3.5 text-warn animate-pulse" />
                     <span>Click & drag over any watermark, credit, or text to redact.</span>
-                    <span className="text-[11px] text-amber-300 bg-amber-900/70 px-1.5 py-0.5 rounded font-mono font-semibold">
+                    <span className="text-[11px] text-warn bg-warn/70 px-1.5 py-0.5 rounded font-mono font-semibold">
                       Shift+Drag = Instant Blur
                     </span>
                     <button
@@ -1835,7 +1835,7 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                         setMarqueePendingBox(null);
                         setMarqueeCurrent(null);
                       }}
-                      className="ml-1 text-amber-400 hover:text-white p-0.5 rounded hover:bg-amber-900/50"
+                      className="ml-1 text-warn hover:text-white p-0.5 rounded hover:bg-warn/50"
                       title="Exit Marquee Mode (Esc)"
                     >
                       <Icons.X className="w-3.5 h-3.5" />
@@ -1845,17 +1845,17 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
 
                 {/* Floating Marquee Action Confirmation Bar */}
                 {marqueePendingBox && (
-                  <div className="absolute bottom-3 left-3 z-40 max-w-lg bg-zinc-950/95 border border-amber-500/90 rounded-xl p-3 shadow-2xl backdrop-blur-md flex flex-wrap items-center gap-3 animate-in fade-in slide-in-from-bottom-2 duration-150 pointer-events-auto">
+                  <div className="absolute bottom-3 left-3 z-40 max-w-lg bg-ink/95 border border-warn/90 rounded-xl p-3 shadow-2xl backdrop-blur-md flex flex-wrap items-center gap-3 animate-in fade-in slide-in-from-bottom-2 duration-150 pointer-events-auto">
                     <div className="flex items-center gap-2">
-                      <div className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse"></div>
+                      <div className="w-2.5 h-2.5 rounded-full bg-warn animate-pulse"></div>
                       <div>
-                        <div className="text-xs font-bold text-amber-200 flex items-center gap-2">
+                        <div className="text-xs font-bold text-warn flex items-center gap-2">
                           <span>Area: {marqueePendingBox.width} × {marqueePendingBox.height}px</span>
-                          <span className="text-[10px] text-zinc-400 font-mono font-normal">
+                          <span className="text-[10px] text-fg-dim font-mono font-normal">
                             (X: {marqueePendingBox.x}, Y: {marqueePendingBox.y})
                           </span>
                         </div>
-                        <div className="text-[10px] text-amber-300/70">
+                        <div className="text-[10px] text-warn/70">
                           Redacts watermark or logo in preview and final MP4 video
                         </div>
                       </div>
@@ -1863,8 +1863,8 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
 
                     <div className="flex items-center gap-2 ml-auto">
                       {/* Blur Radius Selector */}
-                      <div className="flex items-center gap-1 bg-zinc-900 border border-zinc-800 rounded-lg p-0.5 text-[11px]">
-                        <span className="text-zinc-500 px-1 text-[10px] uppercase font-bold">Radius</span>
+                      <div className="flex items-center gap-1 bg-navy border border-edge rounded-lg p-0.5 text-[11px]">
+                        <span className="text-fg-faint px-1 text-[10px] uppercase font-bold">Radius</span>
                         {[16, 24, 36, 48].map((rad) => (
                           <button
                             key={rad}
@@ -1872,8 +1872,8 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                             onClick={() => setCustomBlurBox((prev) => ({ ...prev, blur_radius: rad }))}
                             className={`px-1.5 py-0.5 rounded text-[11px] font-mono transition-colors ${
                               customBlurBox.blur_radius === rad
-                                ? "bg-amber-600 text-white font-bold"
-                                : "text-zinc-400 hover:text-white"
+                                ? "bg-warn text-white font-bold"
+                                : "text-fg-dim hover:text-white"
                             }`}
                           >
                             {rad}px
@@ -1886,7 +1886,7 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                         size="sm"
                         disabled={blurringPanel}
                         onClick={handleApplyMarqueeBlur}
-                        className="bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold flex items-center gap-1.5 shadow-lg shadow-amber-900/40"
+                        className="bg-warn hover:bg-warn text-white text-xs font-semibold flex items-center gap-1.5 shadow-lg shadow-warn/40"
                       >
                         <Icons.EyeOff className="w-3.5 h-3.5" />
                         <span>{blurringPanel ? "Blurring..." : "Blur Area"}</span>
@@ -1896,10 +1896,10 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                         variant="outline"
                         size="sm"
                         onClick={handleCreateTextRegionFromMarquee}
-                        className="text-xs text-indigo-300 border-indigo-700/60 hover:bg-indigo-950/50 flex items-center gap-1"
+                        className="text-xs text-info border-accent/60 hover:bg-accent/50 flex items-center gap-1"
                         title="Extract dialogue or speech bubble from this selection"
                       >
-                        <Icons.Plus className="w-3.5 h-3.5 text-indigo-400" />
+                        <Icons.Plus className="w-3.5 h-3.5 text-info" />
                         <span>+ Bubble</span>
                       </Button>
 
@@ -1909,7 +1909,7 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                           setMarqueePendingBox(null);
                           setMarqueeCurrent(null);
                         }}
-                        className="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+                        className="p-1 rounded-lg text-fg-dim hover:text-white hover:bg-flat transition-colors"
                         title="Cancel Selection (Esc)"
                       >
                         <Icons.X className="w-4 h-4" />
@@ -1919,12 +1919,12 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                 )}
 
                 {/* Floating Zoom & Pan Controls (Bottom Right) */}
-                <div className="absolute bottom-3 right-3 z-30 flex items-center gap-1 bg-zinc-950/90 backdrop-blur-md border border-zinc-700/80 rounded-lg p-1 shadow-2xl text-zinc-300">
+                <div className="absolute bottom-3 right-3 z-30 flex items-center gap-1 bg-ink/90 backdrop-blur-md border border-edge/80 rounded-lg p-1 shadow-2xl text-fg-dim">
                   <button
                     type="button"
                     onClick={handleZoomOut}
                     disabled={zoomLevel <= 0.5}
-                    className="p-1.5 hover:bg-zinc-800 disabled:opacity-40 rounded text-zinc-300 hover:text-white transition-colors"
+                    className="p-1.5 hover:bg-flat disabled:opacity-40 rounded text-fg-dim hover:text-white transition-colors"
                     title="Zoom Out (or Ctrl + Wheel Down)"
                   >
                     <Icons.ZoomOut className="w-4 h-4" />
@@ -1932,7 +1932,7 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                   <button
                     type="button"
                     onClick={handleZoomReset}
-                    className="px-2 py-1 hover:bg-zinc-800 rounded font-mono text-[11px] font-semibold text-zinc-200 hover:text-white transition-colors min-w-[3.5rem] text-center"
+                    className="px-2 py-1 hover:bg-flat rounded font-mono text-[11px] font-semibold text-fg hover:text-white transition-colors min-w-[3.5rem] text-center"
                     title="Reset Zoom to 100%"
                   >
                     {Math.round(zoomLevel * 100)}%
@@ -1941,7 +1941,7 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                     type="button"
                     onClick={handleZoomIn}
                     disabled={zoomLevel >= 3.0}
-                    className="p-1.5 hover:bg-zinc-800 disabled:opacity-40 rounded text-zinc-300 hover:text-white transition-colors"
+                    className="p-1.5 hover:bg-flat disabled:opacity-40 rounded text-fg-dim hover:text-white transition-colors"
                     title="Zoom In (or Ctrl + Wheel Up)"
                   >
                     <Icons.ZoomIn className="w-4 h-4" />
@@ -1950,7 +1950,7 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                     <button
                       type="button"
                       onClick={handleZoomReset}
-                      className="p-1.5 hover:bg-zinc-800 rounded text-indigo-400 hover:text-indigo-300 transition-colors border-l border-zinc-800 ml-0.5"
+                      className="p-1.5 hover:bg-flat rounded text-info hover:text-info transition-colors border-l border-edge ml-0.5"
                       title="Reset Pan & Zoom"
                     >
                       <Icons.Rotate className="w-3.5 h-3.5" />
@@ -1959,8 +1959,8 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                 </div>
               </div>
             ) : (
-              <div className="text-zinc-500 text-sm py-16 flex flex-col items-center gap-2">
-                <Icons.AlertTriangle className="w-8 h-8 text-zinc-600" />
+              <div className="text-fg-faint text-sm py-16 flex flex-col items-center gap-2">
+                <Icons.AlertTriangle className="w-8 h-8 text-fg-faint" />
                 <span>No panels available in this project.</span>
               </div>
             )}
@@ -1968,13 +1968,13 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
 
           {/* Panel Quick Scrubber & Navigation Track */}
           {panels.length > 0 && (
-            <div className="flex items-center justify-between gap-3 px-4 py-2 bg-zinc-900/60 border border-zinc-800/80 rounded-xl text-xs">
-              <div className="flex items-center gap-2 text-zinc-400 font-medium flex-shrink-0">
-                <Icons.Film className="w-3.5 h-3.5 text-indigo-400" />
-                <span className="text-zinc-200 font-mono font-bold">
+            <div className="flex items-center justify-between gap-3 px-4 py-2 bg-navy/60 border border-edge/80 rounded-xl text-xs">
+              <div className="flex items-center gap-2 text-fg-dim font-medium flex-shrink-0">
+                <Icons.Film className="w-3.5 h-3.5 text-info" />
+                <span className="text-fg font-mono font-bold">
                   Panel {selectedPanelIndex + 1}
                 </span>
-                <span className="text-zinc-500 font-mono">/ {panels.length}</span>
+                <span className="text-fg-faint font-mono">/ {panels.length}</span>
               </div>
 
               <div className="flex-1 max-w-md mx-2 flex items-center gap-2">
@@ -1982,7 +1982,7 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                   type="button"
                   onClick={() => handleNavigatePanel(selectedPanelIndex - 1)}
                   disabled={selectedPanelIndex <= 0}
-                  className="p-1 hover:bg-zinc-800 disabled:opacity-30 rounded text-zinc-400 hover:text-white transition-colors"
+                  className="p-1 hover:bg-flat disabled:opacity-30 rounded text-fg-dim hover:text-white transition-colors"
                   title="Previous Panel (←)"
                 >
                   <Icons.ArrowLeft className="w-3.5 h-3.5" />
@@ -1993,14 +1993,14 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                   max={Math.max(0, panels.length - 1)}
                   value={selectedPanelIndex}
                   onChange={(e) => handleNavigatePanel(Number(e.target.value))}
-                  className="w-full accent-indigo-500 cursor-pointer h-1.5 bg-zinc-800 rounded-lg appearance-none"
+                  className="w-full accent-accent cursor-pointer h-1.5 bg-flat rounded-lg appearance-none"
                   title="Scrub across panels"
                 />
                 <button
                   type="button"
                   onClick={() => handleNavigatePanel(selectedPanelIndex + 1)}
                   disabled={selectedPanelIndex >= panels.length - 1}
-                  className="p-1 hover:bg-zinc-800 disabled:opacity-30 rounded text-zinc-400 hover:text-white transition-colors"
+                  className="p-1 hover:bg-flat disabled:opacity-30 rounded text-fg-dim hover:text-white transition-colors"
                   title="Next Panel (→)"
                 >
                   <Icons.ArrowRight className="w-3.5 h-3.5" />
@@ -2021,11 +2021,11 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                         showToast(`Jumped to flagged region in Panel #${panels[targetIdx]?.sequence}`, "warn");
                       }
                     }}
-                    className="text-[11px] h-7 text-amber-300 hover:bg-amber-950/60 border border-amber-800/60 flex items-center gap-1.5"
+                    className="text-[11px] h-7 text-warn hover:bg-warn/60 border border-warn/60 flex items-center gap-1.5"
                   >
-                    <Icons.AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+                    <Icons.AlertTriangle className="w-3.5 h-3.5 text-warn" />
                     <span>Next Flagged</span>
-                    <span className="px-1.5 py-0.2 rounded-full bg-amber-900 text-[10px] font-bold text-amber-200">
+                    <span className="px-1.5 py-0.2 rounded-full bg-warn/20 text-[10px] font-bold text-warn">
                       {needsReviewCount}
                     </span>
                   </Button>
@@ -2044,9 +2044,9 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
           } space-y-4`}
         >
           {selectedRegion ? (
-            <Card className="p-4 space-y-4 bg-zinc-900 border-zinc-800">
+            <Card className="p-4 space-y-4 bg-navy border-edge">
               {/* Region Header */}
-              <div className="flex items-center justify-between pb-2 border-b border-zinc-800">
+              <div className="flex items-center justify-between pb-2 border-b border-edge">
                 <div className="flex items-center gap-2">
                   <Badge variant="accent">
                     Region #{selectedRegion.sequence_in_panel} (Global #{selectedRegion.sequence_global})
@@ -2054,10 +2054,10 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                   <span
                     className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider ${
                       selectedRegion.status === "CONFIRMED"
-                        ? "bg-emerald-950 text-emerald-300 border border-emerald-800"
+                        ? "bg-ok/20 text-ok border border-ok/40"
                         : selectedRegion.status === "NEEDS_REVIEW"
-                        ? "bg-amber-950 text-amber-300 border border-amber-800"
-                        : "bg-zinc-800 text-zinc-400"
+                        ? "bg-warn/20 text-warn border border-warn/40"
+                        : "bg-flat text-fg-dim"
                     }`}
                   >
                     {selectedRegion.status}
@@ -2072,8 +2072,8 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                     loading={blurringRegion}
                     className={`text-xs ${
                       selectedRegion.status === "BLURRED" || selectedRegion.region_type === "REDACTED"
-                        ? "bg-amber-950/70 text-amber-300 border-amber-800"
-                        : "text-amber-400 hover:text-amber-300 hover:bg-amber-950/40 border-amber-800/60"
+                        ? "bg-warn/70 text-warn border-warn/40"
+                        : "text-warn hover:text-warn hover:bg-warn/40 border-warn/60"
                     }`}
                     title="Blur this text directly on the panel crop and in the video (redacts watermarks, site credits, subscribe notes)"
                   >
@@ -2095,7 +2095,7 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                     variant="ghost"
                     size="sm"
                     onClick={() => handleDeleteRegion(selectedRegion.id)}
-                    className="text-rose-400 hover:text-rose-300 hover:bg-rose-950/40 text-xs p-1"
+                    className="text-bad hover:text-bad hover:bg-bad/40 text-xs p-1"
                     title="Delete Region"
                   >
                     <Icons.Trash className="w-4 h-4" />
@@ -2106,17 +2106,17 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
               {/* Layer 1: Machine OCR (Immutable Provenance) */}
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">
+                  <span className="text-[10px] font-semibold text-fg-dim uppercase tracking-wider">
                     Layer 1: Machine OCR
                   </span>
                   <div className="flex items-center gap-2">
                     <span
                       className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
                         (selectedRegion.raw_confidence || 0) >= 0.85
-                          ? "bg-emerald-950/80 text-emerald-300 border-emerald-800"
+                          ? "bg-ok/80 text-ok border-ok/40"
                           : (selectedRegion.raw_confidence || 0) >= 0.6
-                          ? "bg-amber-950/80 text-amber-300 border-amber-800"
-                          : "bg-rose-950/80 text-rose-300 border-rose-800"
+                          ? "bg-warn/80 text-warn border-warn/40"
+                          : "bg-bad/80 text-bad border-bad/40"
                       }`}
                     >
                       Confidence:{" "}
@@ -2135,13 +2135,13 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                         }
                       }}
                       disabled={!selectedRegion.raw_text}
-                      className="px-2 py-0.5 rounded bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 hover:text-white border border-zinc-700 text-[10px] flex items-center gap-1 transition-colors disabled:opacity-40"
+                      className="px-2 py-0.5 rounded bg-flat/80 hover:bg-glass-hi text-fg-dim hover:text-white border border-edge text-[10px] flex items-center gap-1 transition-colors disabled:opacity-40"
                       title="Copy raw machine OCR text"
                     >
                       {copiedRawText ? (
                         <>
-                          <Icons.Check className="w-3 h-3 text-emerald-400" />
-                          <span className="text-emerald-400">Copied</span>
+                          <Icons.Check className="w-3 h-3 text-ok" />
+                          <span className="text-ok">Copied</span>
                         </>
                       ) : (
                         <>
@@ -2152,10 +2152,10 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                     </button>
                   </div>
                 </div>
-                <div className="bg-zinc-950 p-2.5 rounded border border-zinc-800/80">
-                  <p className="text-xs font-mono text-zinc-300 select-all min-h-[2.5rem] leading-relaxed">
+                <div className="bg-ink p-2.5 rounded border border-edge/80">
+                  <p className="text-xs font-mono text-fg-dim select-all min-h-[2.5rem] leading-relaxed">
                     {selectedRegion.raw_text || (
-                      <span className="text-zinc-600 italic">No machine text extracted yet.</span>
+                      <span className="text-fg-faint italic">No machine text extracted yet.</span>
                     )}
                   </p>
                 </div>
@@ -2164,10 +2164,10 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
               {/* Layer 2: Human Correction (Canonical Reading Text) */}
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <label className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">
+                  <label className="text-[10px] font-semibold text-fg-dim uppercase tracking-wider">
                     Layer 2: Human Correction / Verified Script
                   </label>
-                  <span className="text-[10px] text-zinc-500 font-mono">
+                  <span className="text-[10px] text-fg-faint font-mono">
                     {selectedRegion.correction_status || "UNEDITED"}
                   </span>
                 </div>
@@ -2183,7 +2183,7 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                   }}
                   disabled={extracting}
                   placeholder="Enter or correct dialogue text... (Press Ctrl + Enter to confirm and advance)"
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-xs text-zinc-100 focus:outline-none focus:border-indigo-500 resize-none font-sans leading-relaxed"
+                  className="w-full bg-ink border border-edge rounded-lg p-2.5 text-xs text-fg focus:outline-none focus:border-accent resize-none font-sans leading-relaxed"
                 />
 
                 {/* Quick Formatting Chips */}
@@ -2195,7 +2195,7 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                       setEditForm((prev) => ({ ...prev, corrected_text: trimmed }));
                       showToast("Trimmed whitespace", "info");
                     }}
-                    className="px-2 py-0.5 rounded bg-zinc-800/90 hover:bg-zinc-700 border border-zinc-700/60 text-[10px] text-zinc-300 transition-colors"
+                    className="px-2 py-0.5 rounded bg-flat/90 hover:bg-glass-hi border border-edge/60 text-[10px] text-fg-dim transition-colors"
                     title="Collapse repeated whitespace into single space and trim edges"
                   >
                     Trim Spaces
@@ -2211,7 +2211,7 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                       setEditForm((prev) => ({ ...prev, corrected_text: cleaned }));
                       showToast("Standardized quotes", "info");
                     }}
-                    className="px-2 py-0.5 rounded bg-zinc-800/90 hover:bg-zinc-700 border border-zinc-700/60 text-[10px] text-zinc-300 transition-colors"
+                    className="px-2 py-0.5 rounded bg-flat/90 hover:bg-glass-hi border border-edge/60 text-[10px] text-fg-dim transition-colors"
                     title="Convert Japanese brackets 「」 and curved quotes to standard quotes"
                   >
                     Fix Quotes
@@ -2226,7 +2226,7 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                       setEditForm((prev) => ({ ...prev, corrected_text: sentence }));
                       showToast("Sentence capitalized", "info");
                     }}
-                    className="px-2 py-0.5 rounded bg-zinc-800/90 hover:bg-zinc-700 border border-zinc-700/60 text-[10px] text-zinc-300 transition-colors"
+                    className="px-2 py-0.5 rounded bg-flat/90 hover:bg-glass-hi border border-edge/60 text-[10px] text-fg-dim transition-colors"
                     title="Capitalize first letter of each sentence"
                   >
                     Sentence Case
@@ -2237,7 +2237,7 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                       setEditForm((prev) => ({ ...prev, corrected_text: "" }));
                       showToast("Text cleared", "warn");
                     }}
-                    className="px-2 py-0.5 rounded bg-zinc-800/90 hover:bg-zinc-700 border border-zinc-700/60 text-[10px] text-zinc-400 hover:text-zinc-200 transition-colors ml-auto"
+                    className="px-2 py-0.5 rounded bg-flat/90 hover:bg-glass-hi border border-edge/60 text-[10px] text-fg-dim hover:text-fg transition-colors ml-auto"
                     title="Clear text"
                   >
                     Clear
@@ -2246,17 +2246,17 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
               </div>
 
               {/* Classification & Status Controls */}
-              <div className="space-y-2 pt-1 border-t border-zinc-800/80">
-                <label className="text-[10px] text-zinc-400 font-semibold uppercase tracking-wider block">
+              <div className="space-y-2 pt-1 border-t border-edge/80">
+                <label className="text-[10px] text-fg-dim font-semibold uppercase tracking-wider block">
                   Region Classification:
                 </label>
                 <div className="grid grid-cols-5 gap-1.5">
                   {[
-                    { id: "SPEECH", label: "Speech", color: "#0ea5e9" },
-                    { id: "NARRATION", label: "Narration", color: "#eab308" },
-                    { id: "THOUGHT", label: "Thought", color: "#a855f7" },
-                    { id: "SFX", label: "SFX", color: "#ec4899" },
-                    { id: "CAPTION", label: "Caption", color: "#14b8a6" },
+                    { id: "SPEECH", label: "Speech", color: "#7aa2ff" },
+                    { id: "NARRATION", label: "Narration", color: "#f0b35a" },
+                    { id: "THOUGHT", label: "Thought", color: "#3b6bf5" },
+                    { id: "SFX", label: "SFX", color: "#3b6bf5" },
+                    { id: "CAPTION", label: "Caption", color: "#46d6a3" },
                   ].map((cat) => {
                     const isSelected = editForm.region_type === cat.id;
                     return (
@@ -2267,8 +2267,8 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                         disabled={extracting}
                         className={`py-1 rounded text-center text-[10px] font-semibold transition-all border ${
                           isSelected
-                            ? "bg-zinc-950 text-white shadow-md ring-2"
-                            : "bg-zinc-950/60 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 border-zinc-800"
+                            ? "bg-ink text-white shadow-md ring-2"
+                            : "bg-ink/60 text-fg-dim hover:bg-flat hover:text-fg border-edge"
                         }`}
                         style={{
                           borderColor: isSelected ? cat.color : undefined,
@@ -2283,14 +2283,14 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
 
                 <div className="grid grid-cols-2 gap-2.5 pt-1">
                   <div>
-                    <label className="text-[10px] text-zinc-400 font-medium block mb-1">
+                    <label className="text-[10px] text-fg-dim font-medium block mb-1">
                       More Types:
                     </label>
                     <select
                       value={editForm.region_type}
                       onChange={(e) => setEditForm({ ...editForm, region_type: e.target.value })}
                       disabled={extracting}
-                      className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500"
+                      className="w-full bg-ink border border-edge rounded px-2 py-1 text-xs text-fg focus:outline-none focus:border-accent"
                     >
                       <option value="SPEECH">Speech Bubble</option>
                       <option value="NARRATION">Narration Box</option>
@@ -2302,14 +2302,14 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                   </div>
 
                   <div>
-                    <label className="text-[10px] text-zinc-400 font-medium block mb-1">
+                    <label className="text-[10px] text-fg-dim font-medium block mb-1">
                       Review Status:
                     </label>
                     <select
                       value={editForm.status}
                       onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
                       disabled={extracting}
-                      className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500"
+                      className="w-full bg-ink border border-edge rounded px-2 py-1 text-xs text-fg focus:outline-none focus:border-accent"
                     >
                       <option value="DETECTED">DETECTED (Not reviewed)</option>
                       <option value="CONFIRMED">CONFIRMED (Approved)</option>
@@ -2321,13 +2321,13 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
               </div>
 
               {/* Layer 3: Speaker Attribution Preparation */}
-              <div className="pt-2 border-t border-zinc-800/80 space-y-2">
-                <span className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider block">
+              <div className="pt-2 border-t border-edge/80 space-y-2">
+                <span className="text-[10px] font-semibold text-fg-dim uppercase tracking-wider block">
                   Layer 3: Speaker Attribution (Milestone 4 Ready)
                 </span>
                 <div className="grid grid-cols-2 gap-2.5">
                   <div>
-                    <label className="text-[10px] text-zinc-400 block mb-1">Speaker Tag / ID:</label>
+                    <label className="text-[10px] text-fg-dim block mb-1">Speaker Tag / ID:</label>
                     <input
                       type="text"
                       placeholder="e.g. char_protagonist_01"
@@ -2336,19 +2336,19 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                         setEditForm({ ...editForm, speaker_character_id: e.target.value })
                       }
                       disabled={extracting}
-                      className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500"
+                      className="w-full bg-ink border border-edge rounded px-2 py-1 text-xs text-fg focus:outline-none focus:border-accent"
                     />
                   </div>
 
                   <div>
-                    <label className="text-[10px] text-zinc-400 block mb-1">Method:</label>
+                    <label className="text-[10px] text-fg-dim block mb-1">Method:</label>
                     <select
                       value={editForm.speaker_assignment_method}
                       onChange={(e) =>
                         setEditForm({ ...editForm, speaker_assignment_method: e.target.value })
                       }
                       disabled={extracting}
-                      className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500"
+                      className="w-full bg-ink border border-edge rounded px-2 py-1 text-xs text-fg focus:outline-none focus:border-accent"
                     >
                       <option value="MANUAL">Manual Review</option>
                       <option value="RULE_TAIL">Balloon Tail Trace</option>
@@ -2360,13 +2360,13 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
               </div>
 
               {/* Save & Approve Actions */}
-              <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-zinc-800">
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-edge">
                 <Button
                   variant="secondary"
                   size="sm"
                   onClick={() => handleApproveRegion(selectedRegion.id)}
                   disabled={extracting || savingRegion}
-                  className="text-xs bg-emerald-950/40 text-emerald-300 border-emerald-800/80 hover:bg-emerald-900/60"
+                  className="text-xs bg-ok/40 text-ok border-ok/80 hover:bg-ok/60"
                 >
                   <Icons.Check className="w-3.5 h-3.5 mr-1" />
                   Mark Confirmed
@@ -2379,7 +2379,7 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                     onClick={handleSaveRegion}
                     disabled={extracting}
                     loading={savingRegion}
-                    className="text-xs text-zinc-300 hover:text-white"
+                    className="text-xs text-fg-dim hover:text-white"
                   >
                     Save
                   </Button>
@@ -2389,7 +2389,7 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                     onClick={handleSaveAndNextRegion}
                     disabled={extracting}
                     loading={savingRegion}
-                    className="text-xs bg-indigo-600 hover:bg-indigo-500 text-white font-semibold flex items-center gap-1 shadow-lg shadow-indigo-950/50"
+                    className="text-xs bg-accent hover:bg-accent text-white font-semibold flex items-center gap-1 shadow-lg shadow-accent/50"
                     title="Confirm this region and auto-advance to next (Ctrl + Enter)"
                   >
                     <span>Approve & Next</span>
@@ -2399,14 +2399,14 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
               </div>
             </Card>
           ) : (
-            <Card className="text-center py-16 text-zinc-500 text-xs border-dashed">
+            <Card className="text-center py-16 text-fg-faint text-xs border-dashed">
               No text region selected. Click a region box in the panel preview or click &quot;Detect Bubbles&quot;.
             </Card>
           )}
 
           {/* Region List in Active Panel */}
           <div className="space-y-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
+            <span className="text-xs font-semibold uppercase tracking-wider text-fg-dim">
               Panel #{activePanel?.sequence || 1} Regions ({panelRegions.length})
             </span>
             <div className="space-y-1.5 max-h-[36vh] overflow-y-auto pr-1">
@@ -2418,12 +2418,12 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                     onClick={() => setSelectedRegionId(tr.id)}
                     className={`w-full p-2.5 rounded-lg text-left transition-all border flex items-center justify-between ${
                       isSelected
-                        ? "bg-indigo-950/60 border-indigo-700 text-white"
-                        : "bg-zinc-900 border-zinc-800 text-zinc-300 hover:bg-zinc-800/60"
+                        ? "bg-accent/60 border-accent text-white"
+                        : "bg-navy border-edge text-fg-dim hover:bg-flat/60"
                     }`}
                   >
                     <div className="flex items-center gap-2 overflow-hidden">
-                      <span className="text-xs font-bold text-indigo-400 flex-shrink-0">
+                      <span className="text-xs font-bold text-info flex-shrink-0">
                         #{tr.sequence_in_panel}
                       </span>
                       <span className="text-xs truncate font-mono">
@@ -2450,21 +2450,21 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
       {/* Delete Panel Confirmation Modal */}
       {deleteConfirmPanel && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fadeIn">
-          <Card className="max-w-md w-full p-6 bg-zinc-900 border-zinc-700 shadow-2xl space-y-4">
+          <Card className="max-w-md w-full p-6 bg-navy border-edge shadow-2xl space-y-4">
             <div className="flex items-start gap-3.5">
-              <div className="p-3 rounded-full bg-rose-950 border border-rose-800 text-rose-400 flex-shrink-0">
+              <div className="p-3 rounded-full bg-bad/20 border border-bad/40 text-bad flex-shrink-0">
                 <Icons.Trash className="w-6 h-6" />
               </div>
               <div className="space-y-1">
-                <h3 className="text-base font-semibold text-zinc-100">
+                <h3 className="text-base font-semibold text-fg">
                   Delete Panel #{deleteConfirmPanel.sequence}?
                 </h3>
-                <p className="text-xs text-zinc-400 leading-relaxed">
+                <p className="text-xs text-fg-dim leading-relaxed">
                   Are you sure you want to delete this panel crop from the project? This operation cannot be undone.
                 </p>
                 {textRegions.filter((tr) => tr.panel_id === deleteConfirmPanel.id).length > 0 && (
-                  <div className="mt-2.5 p-2.5 rounded bg-amber-950/40 border border-amber-800/60 text-xs text-amber-300 flex items-center gap-2">
-                    <Icons.AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                  <div className="mt-2.5 p-2.5 rounded bg-warn/40 border border-warn/60 text-xs text-warn flex items-center gap-2">
+                    <Icons.AlertTriangle className="w-4 h-4 text-warn flex-shrink-0" />
                     <span>
                       <strong>Warning:</strong> {textRegions.filter((tr) => tr.panel_id === deleteConfirmPanel.id).length} detected text region(s) inside this panel will also be removed.
                     </span>
@@ -2473,7 +2473,7 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
               </div>
             </div>
 
-            <div className="flex justify-end gap-2.5 pt-3 border-t border-zinc-800">
+            <div className="flex justify-end gap-2.5 pt-3 border-t border-edge">
               <Button
                 variant="ghost"
                 size="sm"
@@ -2487,7 +2487,7 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                 size="sm"
                 loading={deletingPanel}
                 onClick={() => handleDeletePanel(deleteConfirmPanel.id)}
-                className="bg-rose-600 hover:bg-rose-500 text-white"
+                className="bg-bad hover:bg-bad text-white"
               >
                 Yes, Delete Panel
               </Button>
@@ -2499,17 +2499,17 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
       {/* Custom Blur Area Modal */}
       {isCustomBlurOpen && activePanel && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <Card className="max-w-md w-full p-5 bg-zinc-900 border-zinc-800 space-y-4 shadow-2xl">
-            <div className="flex items-start justify-between border-b border-zinc-800 pb-3">
+          <Card className="max-w-md w-full p-5 bg-navy border-edge space-y-4 shadow-2xl">
+            <div className="flex items-start justify-between border-b border-edge pb-3">
               <div className="flex items-center gap-2">
-                <div className="p-2 rounded-lg bg-amber-950 border border-amber-800 text-amber-400">
+                <div className="p-2 rounded-lg bg-warn/20 border border-warn/40 text-warn">
                   <Icons.EyeOff className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-zinc-100">
+                  <h3 className="text-sm font-bold text-fg">
                     Blur Custom Area on Panel #{activePanel.sequence}
                   </h3>
-                  <p className="text-xs text-zinc-400">
+                  <p className="text-xs text-fg-dim">
                     Blur site names, recommendations, subscribe notes, or logos.
                   </p>
                 </div>
@@ -2517,7 +2517,7 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
               <button
                 type="button"
                 onClick={() => setIsCustomBlurOpen(false)}
-                className="text-zinc-500 hover:text-zinc-300"
+                className="text-fg-faint hover:text-fg-dim"
               >
                 ✕
               </button>
@@ -2525,7 +2525,7 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
 
             {/* Quick Presets */}
             <div className="space-y-1.5">
-              <span className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">
+              <span className="text-[10px] font-semibold text-fg-dim uppercase tracking-wider">
                 Quick Placement Presets
               </span>
               <div className="grid grid-cols-2 gap-2 text-xs">
@@ -2541,7 +2541,7 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                       blur_radius: 24,
                     })
                   }
-                  className="text-xs text-zinc-300 border-zinc-700 hover:bg-zinc-800"
+                  className="text-xs text-fg-dim border-edge hover:bg-flat"
                 >
                   Top Watermark Banner
                 </Button>
@@ -2557,7 +2557,7 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                       blur_radius: 24,
                     })
                   }
-                  className="text-xs text-zinc-300 border-zinc-700 hover:bg-zinc-800"
+                  className="text-xs text-fg-dim border-edge hover:bg-flat"
                 >
                   Bottom Subscribe Note
                 </Button>
@@ -2567,7 +2567,7 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
             {/* Coordinate inputs */}
             <div className="grid grid-cols-2 gap-3 text-xs">
               <div>
-                <label className="text-[10px] text-zinc-400 block mb-1">X Offset (px):</label>
+                <label className="text-[10px] text-fg-dim block mb-1">X Offset (px):</label>
                 <input
                   type="number"
                   value={customBlurBox.x}
@@ -2576,11 +2576,11 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                   onChange={(e) =>
                     setCustomBlurBox({ ...customBlurBox, x: parseInt(e.target.value) || 0 })
                   }
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1.5 text-zinc-100 font-mono"
+                  className="w-full bg-ink border border-edge rounded px-2.5 py-1.5 text-fg font-mono"
                 />
               </div>
               <div>
-                <label className="text-[10px] text-zinc-400 block mb-1">Y Offset (px):</label>
+                <label className="text-[10px] text-fg-dim block mb-1">Y Offset (px):</label>
                 <input
                   type="number"
                   value={customBlurBox.y}
@@ -2589,11 +2589,11 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                   onChange={(e) =>
                     setCustomBlurBox({ ...customBlurBox, y: parseInt(e.target.value) || 0 })
                   }
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1.5 text-zinc-100 font-mono"
+                  className="w-full bg-ink border border-edge rounded px-2.5 py-1.5 text-fg font-mono"
                 />
               </div>
               <div>
-                <label className="text-[10px] text-zinc-400 block mb-1">Width (px):</label>
+                <label className="text-[10px] text-fg-dim block mb-1">Width (px):</label>
                 <input
                   type="number"
                   value={customBlurBox.width}
@@ -2602,11 +2602,11 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                   onChange={(e) =>
                     setCustomBlurBox({ ...customBlurBox, width: parseInt(e.target.value) || 10 })
                   }
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1.5 text-zinc-100 font-mono"
+                  className="w-full bg-ink border border-edge rounded px-2.5 py-1.5 text-fg font-mono"
                 />
               </div>
               <div>
-                <label className="text-[10px] text-zinc-400 block mb-1">Height (px):</label>
+                <label className="text-[10px] text-fg-dim block mb-1">Height (px):</label>
                 <input
                   type="number"
                   value={customBlurBox.height}
@@ -2615,12 +2615,12 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                   onChange={(e) =>
                     setCustomBlurBox({ ...customBlurBox, height: parseInt(e.target.value) || 10 })
                   }
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1.5 text-zinc-100 font-mono"
+                  className="w-full bg-ink border border-edge rounded px-2.5 py-1.5 text-fg font-mono"
                 />
               </div>
             </div>
 
-            <div className="flex justify-end gap-2.5 pt-3 border-t border-zinc-800">
+            <div className="flex justify-end gap-2.5 pt-3 border-t border-edge">
               <Button
                 variant="ghost"
                 size="sm"
@@ -2633,7 +2633,7 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                 size="sm"
                 loading={blurringPanel}
                 onClick={handleBlurCustomBox}
-                className="bg-amber-600 hover:bg-amber-500 text-white font-medium"
+                className="bg-warn hover:bg-warn text-white font-medium"
               >
                 <Icons.EyeOff className="w-4 h-4 mr-1.5" />
                 Apply Blur
@@ -2651,12 +2651,12 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
           title="Batch Watermark & Banner Redaction"
         >
           <div className="space-y-4">
-            <p className="text-xs text-zinc-400 leading-relaxed">
-              Automatically blur website banners (e.g. <code className="text-amber-300">manhuaplus.com</code>), translator notes, or credit watermarks across all {panels.length} panels in this chapter. Pristine originals are safely backed up before modification.
+            <p className="text-xs text-fg-dim leading-relaxed">
+              Automatically blur website banners (e.g. <code className="text-warn">manhuaplus.com</code>), translator notes, or credit watermarks across all {panels.length} panels in this chapter. Pristine originals are safely backed up before modification.
             </p>
 
             <div className="space-y-2">
-              <label className="text-xs font-semibold uppercase tracking-wider text-zinc-300 block">
+              <label className="text-xs font-semibold uppercase tracking-wider text-fg-dim block">
                 Redaction Preset
               </label>
               <div className="grid grid-cols-2 gap-2 text-xs">
@@ -2668,12 +2668,12 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                   }}
                   className={`p-3 rounded-lg border text-left transition-all ${
                     batchPreset === "TOP_WATERMARK"
-                      ? "bg-amber-950/60 border-amber-500 text-amber-200"
-                      : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200"
+                      ? "bg-warn/60 border-warn text-warn"
+                      : "bg-navy border-edge text-fg-dim hover:text-fg"
                   }`}
                 >
                   <div className="font-bold flex items-center gap-1.5 mb-1">
-                    <Icons.EyeOff className="w-4 h-4 text-amber-400" />
+                    <Icons.EyeOff className="w-4 h-4 text-warn" />
                     <span>Top Watermark Banner</span>
                   </div>
                   <span className="text-[11px] opacity-80 block">
@@ -2689,12 +2689,12 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                   }}
                   className={`p-3 rounded-lg border text-left transition-all ${
                     batchPreset === "BOTTOM_SUBSCRIBE"
-                      ? "bg-amber-950/60 border-amber-500 text-amber-200"
-                      : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200"
+                      ? "bg-warn/60 border-warn text-warn"
+                      : "bg-navy border-edge text-fg-dim hover:text-fg"
                   }`}
                 >
                   <div className="font-bold flex items-center gap-1.5 mb-1">
-                    <Icons.EyeOff className="w-4 h-4 text-amber-400" />
+                    <Icons.EyeOff className="w-4 h-4 text-warn" />
                     <span>Bottom Subscribe Note</span>
                   </div>
                   <span className="text-[11px] opacity-80 block">
@@ -2707,12 +2707,12 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                   onClick={() => setBatchPreset("ALL_TEXT_REGIONS")}
                   className={`p-3 rounded-lg border text-left transition-all ${
                     batchPreset === "ALL_TEXT_REGIONS"
-                      ? "bg-amber-950/60 border-amber-500 text-amber-200"
-                      : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200"
+                      ? "bg-warn/60 border-warn text-warn"
+                      : "bg-navy border-edge text-fg-dim hover:text-fg"
                   }`}
                 >
                   <div className="font-bold flex items-center gap-1.5 mb-1">
-                    <Icons.Layers className="w-4 h-4 text-indigo-400" />
+                    <Icons.Layers className="w-4 h-4 text-info" />
                     <span>All Detected Text</span>
                   </div>
                   <span className="text-[11px] opacity-80 block">
@@ -2725,12 +2725,12 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                   onClick={() => setBatchPreset("ENTIRE_PANEL")}
                   className={`p-3 rounded-lg border text-left transition-all ${
                     batchPreset === "ENTIRE_PANEL"
-                      ? "bg-amber-950/60 border-amber-500 text-amber-200"
-                      : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200"
+                      ? "bg-warn/60 border-warn text-warn"
+                      : "bg-navy border-edge text-fg-dim hover:text-fg"
                   }`}
                 >
                   <div className="font-bold flex items-center gap-1.5 mb-1">
-                    <Icons.EyeOff className="w-4 h-4 text-rose-400" />
+                    <Icons.EyeOff className="w-4 h-4 text-bad" />
                     <span>Entire Panels</span>
                   </div>
                   <span className="text-[11px] opacity-80 block">
@@ -2741,8 +2741,8 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
             </div>
 
             {(batchPreset === "TOP_WATERMARK" || batchPreset === "BOTTOM_SUBSCRIBE") && (
-              <div className="bg-zinc-900/60 p-3 rounded-lg border border-zinc-800 space-y-1.5">
-                <label className="text-xs text-zinc-300 font-medium block">
+              <div className="bg-navy/60 p-3 rounded-lg border border-edge space-y-1.5">
+                <label className="text-xs text-fg-dim font-medium block">
                   Banner Height (pixels from {batchPreset === "TOP_WATERMARK" ? "top" : "bottom"}):
                 </label>
                 <div className="flex items-center gap-2">
@@ -2753,23 +2753,23 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                     step={10}
                     value={batchHeight}
                     onChange={(e) => setBatchHeight(Number(e.target.value))}
-                    className="flex-1 accent-amber-500"
+                    className="flex-1 accent-warn"
                   />
-                  <span className="text-xs font-mono text-amber-300 font-bold w-14 text-right">
+                  <span className="text-xs font-mono text-warn font-bold w-14 text-right">
                     {batchHeight}px
                   </span>
                 </div>
               </div>
             )}
 
-            <div className="flex items-center justify-between pt-3 border-t border-zinc-800">
+            <div className="flex items-center justify-between pt-3 border-t border-edge">
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
                 onClick={handleRunBatchReset}
                 disabled={batchBlurLoading}
-                className="text-zinc-400 hover:text-rose-300 text-xs"
+                className="text-fg-dim hover:text-bad text-xs"
                 title="Restore all panels back to pristine originals"
               >
                 <Icons.Refresh className="w-3.5 h-3.5 mr-1" />
@@ -2791,7 +2791,7 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
                   size="sm"
                   loading={batchBlurLoading}
                   onClick={handleRunBatchBlur}
-                  className="bg-amber-600 hover:bg-amber-500 text-white font-medium"
+                  className="bg-warn hover:bg-warn text-white font-medium"
                 >
                   <Icons.EyeOff className="w-4 h-4 mr-1.5" />
                   Apply Batch Blur ({panels.length} Panels)
@@ -2804,10 +2804,10 @@ export const OCRReviewScreen: React.FC<OCRReviewScreenProps> = ({
 
       {/* Non-blocking Floating Toast Notification */}
       {toastMessage && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-4 py-2 bg-zinc-900/95 border border-zinc-700 text-zinc-100 rounded-full shadow-2xl flex items-center gap-2 text-xs backdrop-blur-md pointer-events-none transition-all animate-fadeIn">
-          {toastMessage.type === "success" && <Icons.CheckCircle className="w-4 h-4 text-emerald-400" />}
-          {toastMessage.type === "warn" && <Icons.AlertTriangle className="w-4 h-4 text-amber-400" />}
-          {toastMessage.type === "info" && <Icons.Info className="w-4 h-4 text-indigo-400" />}
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-4 py-2 bg-navy/95 border border-edge text-fg rounded-full shadow-2xl flex items-center gap-2 text-xs backdrop-blur-md pointer-events-none transition-all animate-fadeIn">
+          {toastMessage.type === "success" && <Icons.CheckCircle className="w-4 h-4 text-ok" />}
+          {toastMessage.type === "warn" && <Icons.AlertTriangle className="w-4 h-4 text-warn" />}
+          {toastMessage.type === "info" && <Icons.Info className="w-4 h-4 text-info" />}
           <span className="font-medium">{toastMessage.text}</span>
         </div>
       )}

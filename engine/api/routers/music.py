@@ -393,3 +393,9 @@ def stream_music_asset(
 
     media_type = "audio/wav" if p.suffix.lower() == ".wav" else "audio/mpeg"
     return FileResponse(path=str(p), media_type=media_type, filename=p.name)
+
+
+# Studio music and speech jobs (queued through the job manager); kept in their own module.
+from engine.api.routers.studio_audio import router as _studio_audio_router  # noqa: E402
+
+router.include_router(_studio_audio_router)

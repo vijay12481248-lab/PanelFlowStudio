@@ -199,11 +199,33 @@ def get_audio_providers():
     Returns the real audit status of local TTS systems discovered under C:\\Tools.
     Documents verified licenses, capabilities, active status, and commercial suitability.
     """
-    from engine.audio.synthesis import CHATTERBOX_PYTHON, TOOLS_ROOT
+    from engine.audio.synthesis import CHATTERBOX_PYTHON, TOOLS_ROOT, QWEN3_TTS_PYTHON, QWEN3_TTS_DIR
+    qwen3_active = QWEN3_TTS_DIR.exists() and (QWEN3_TTS_DIR / "model.safetensors").exists()
     chatterbox_active = CHATTERBOX_PYTHON.exists()
+    primary = "qwen3_tts" if qwen3_active else ("chatterbox_turbo" if chatterbox_active else "edge_tts")
     return {
-        "primary_provider": "chatterbox_turbo",
+        "primary_provider": primary,
         "providers": [
+            {
+                "id": "qwen3_tts",
+                "name": "Qwen3-TTS 1.7B (Alibaba Qwen)",
+                "location": str(QWEN3_TTS_DIR),
+                "license": "Apache-2.0",
+                "commercial_use": "Approved (Apache 2.0)",
+                "status": "ACTIVE" if qwen3_active else "STANDBY",
+                "device": "CUDA (NVIDIA GeForce RTX 5060 Ti)",
+                "capabilities": {
+                    "zero_shot_voice_cloning": True,
+                    "languages_supported": ["English", "Chinese", "Japanese", "Korean", "German", "French", "Russian", "Portuguese", "Spanish", "Italian"],
+                    "output_format": "24kHz Mono PCM_16 WAV",
+                    "typical_rtf": 0.45,
+                },
+                "voices": [
+                    {"id": "the narrator", "name": "Aria (The Narrator)", "gender": "Female", "ref": "aria_female_narrator.wav"},
+                    {"id": "marcus", "name": "Marcus (Male Warrior)", "gender": "Male", "ref": "marcus_male.wav"},
+                    {"id": "seraphina", "name": "Seraphina (Cinematic)", "gender": "Female", "ref": "seraphina_female_cinematic.mp3"},
+                ],
+            },
             {
                 "id": "chatterbox_turbo",
                 "name": "Chatterbox Turbo (Resemble AI)",
@@ -242,15 +264,6 @@ def get_audio_providers():
                 "commercial_use": "Restricted (Non-Commercial Only)",
                 "status": "DEPRECATED",
                 "notes": "Intentionally excluded from commercial production pipeline due to CC-BY-NC model weight terms.",
-            },
-            {
-                "id": "qwen3_tts",
-                "name": "Qwen3-TTS 1.7B",
-                "location": str(TOOLS_ROOT / "Qwen3-TTS"),
-                "license": "Apache-2.0",
-                "commercial_use": "Approved (Apache 2.0)",
-                "status": "STANDBY",
-                "notes": "Python environment verified; offline weights uninitialized.",
             },
         ],
     }

@@ -243,19 +243,19 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
       const width = Math.max(1, Math.round(panel.width * scale)), height = Math.max(1, Math.round(panel.height * scale));
       preview.dataset.panelDragPreview = "true";
       preview.setAttribute("aria-hidden", "true");
-      Object.assign(preview.style, { position: "fixed", width: `${width}px`, height: `${height}px`, overflow: "hidden", borderRadius: "6px", background: "#09090b", pointerEvents: "none", zIndex: "2147483647", boxShadow: "0 8px 24px #0008" });
+      Object.assign(preview.style, { position: "fixed", width: `${width}px`, height: `${height}px`, overflow: "hidden", borderRadius: "6px", background: "#04060f", pointerEvents: "none", zIndex: "2147483647", boxShadow: "0 8px 24px #0008" });
       const image = document.createElement("img");
       image.src = api.getPageImageUrl(projectId, activePage.id);
       image.draggable = false;
       Object.assign(image.style, { position: "absolute", maxWidth: "none", width: `${(activePage.width || 1200) / panel.width * 100}%`, height: `${(activePage.height || 1800) / panel.height * 100}%`, left: `${-panel.x / panel.width * 100}%`, top: `${-panel.y / panel.height * 100}%` });
       preview.appendChild(image);
       const outline = document.createElement("div");
-      Object.assign(outline.style, { position: "absolute", inset: "0", border: "2px solid #67e8f9", borderRadius: "6px", boxSizing: "border-box", zIndex: "2" });
+      Object.assign(outline.style, { position: "absolute", inset: "0", border: "2px solid #7aa2ff", borderRadius: "6px", boxSizing: "border-box", zIndex: "2" });
       preview.appendChild(outline);
       if (items.length > 1) {
         const count = document.createElement("span");
         count.textContent = `${items.length} panels`;
-        Object.assign(count.style, { position: "absolute", bottom: "2px", right: "2px", background: "#164e63", color: "white", padding: "3px 6px", font: "bold 12px sans-serif", zIndex: "3" });
+        Object.assign(count.style, { position: "absolute", bottom: "2px", right: "2px", background: "#26346a", color: "white", padding: "3px 6px", font: "bold 12px sans-serif", zIndex: "3" });
         preview.appendChild(count);
       }
       // Keep the preview in the native modal's top layer when dragging from it.
@@ -531,34 +531,34 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
 
   // Distinct bounding box border colors matching the screenshot
   const panelColors = [
-    { border: "#38bdf8", fill: "rgba(56, 189, 248, 0.12)" }, // cyan
-    { border: "#f87171", fill: "rgba(248, 113, 113, 0.12)" }, // red
-    { border: "#c084fc", fill: "rgba(192, 132, 252, 0.12)" }, // purple
-    { border: "#4ade80", fill: "rgba(74, 222, 128, 0.12)" }, // green
-    { border: "#fbbf24", fill: "rgba(251, 191, 36, 0.12)" }, // amber
+    { border: "#7aa2ff", fill: "rgba(122,162,255, 0.12)" }, // cyan
+    { border: "#f2667a", fill: "rgba(242,102,122, 0.12)" }, // red
+    { border: "#7aa2ff", fill: "rgba(122,162,255, 0.12)" }, // purple
+    { border: "#46d6a3", fill: "rgba(70,214,163, 0.12)" }, // green
+    { border: "#f0b35a", fill: "rgba(240,179,90, 0.12)" }, // amber
   ];
 
   const header = (
-      <div className="p-2.5 border-b border-zinc-800 bg-zinc-950/70 flex items-center justify-between shrink-0">
+      <div className="p-2.5 border-b border-edge bg-ink/70 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2">
-          <span className="text-xs font-bold text-zinc-100 uppercase tracking-wider">
+          <span className="text-xs font-bold text-fg uppercase tracking-wider">
             Source Pages
           </span>
-          <span className="text-[11px] font-mono text-zinc-400">
+          <span className="text-[11px] font-mono text-fg-dim">
             {activePage ? Math.max(0, activePageIndex) + 1 : 0} / {pages.length}
           </span>
         </div>
 
         {/* Sub-tabs: Pages | Panels and Page Pager */}
         <div className="flex items-center gap-2">
-          <div className="flex items-center bg-zinc-900 rounded p-0.5 border border-zinc-800">
+          <div className="flex items-center bg-navy rounded p-0.5 border border-edge">
             <button
               type="button"
               onClick={() => setSubTab("pages")}
               className={`px-2 py-0.5 text-[11px] font-semibold rounded ${
                 subTab === "pages"
-                  ? "bg-indigo-600 text-white"
-                  : "text-zinc-400 hover:text-white"
+                  ? "bg-accent text-white"
+                  : "text-fg-dim hover:text-white"
               }`}
             >
               Pages
@@ -568,32 +568,32 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
               onClick={() => setSubTab("panels")}
               className={`px-2 py-0.5 text-[11px] font-semibold rounded ${
                 subTab === "panels"
-                  ? "bg-indigo-600 text-white"
-                  : "text-zinc-400 hover:text-white"
+                  ? "bg-accent text-white"
+                  : "text-fg-dim hover:text-white"
               }`}
             >
               Panels
             </button>
           </div>
 
-          <div className="flex items-center gap-0.5 bg-zinc-950 border border-zinc-800 rounded px-1">
+          <div className="flex items-center gap-0.5 bg-ink border border-edge rounded px-1">
             <button
               type="button"
               onClick={handlePrevPage}
               disabled={activePageIndex <= 0}
-              className="p-1 text-zinc-400 hover:text-white disabled:opacity-30"
+              className="p-1 text-fg-dim hover:text-white disabled:opacity-30"
               title="Previous Page"
             >
               <Icons.ChevronDown className="w-3.5 h-3.5 rotate-90" />
             </button>
-            <span className="text-[11px] font-mono font-bold text-zinc-200 px-1">
+            <span className="text-[11px] font-mono font-bold text-fg px-1">
               {activePageIndex + 1}
             </span>
             <button
               type="button"
               onClick={handleNextPage}
               disabled={activePageIndex >= pages.length - 1}
-              className="p-1 text-zinc-400 hover:text-white disabled:opacity-30"
+              className="p-1 text-fg-dim hover:text-white disabled:opacity-30"
               title="Next Page"
             >
               <Icons.ChevronDown className="w-3.5 h-3.5 -rotate-90" />
@@ -604,7 +604,7 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
             <button
               type="button"
               onClick={compact && expanded ? closeWorkspace : onClose}
-              className="p-1 text-zinc-400 hover:text-white ml-1"
+              className="p-1 text-fg-dim hover:text-white ml-1"
               title={compact && expanded ? "Close source workspace" : "Close Source Panel"}
               aria-label={compact && expanded ? "Close source workspace" : "Close Source Panel"}
             >
@@ -616,11 +616,11 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
   );
 
   const workspace = (
-    <div className="h-full flex flex-col bg-zinc-900 border-l border-zinc-800 select-none overflow-hidden">
+    <div className="h-full flex flex-col bg-navy border-l border-edge select-none overflow-hidden">
       {header}
 
       {/* Main Area: Page Canvas on Left + Vertical Filmstrip on Right */}
-      <div className="flex-1 flex overflow-hidden bg-zinc-950 relative">
+      <div className="flex-1 flex overflow-hidden bg-ink relative">
         {subTab === "panels" && activePage ? (
           /* Draggable Panels Gallery Grid */
           <div className="flex-1 overflow-auto p-3 grid grid-cols-2 gap-3 content-start">
@@ -634,28 +634,28 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
                     onDragEnd={clearDragPreview}
                     onDragStart={(e) => handlePanelDragStart(e, p)}
                     onClick={(e) => selectPanel(e, p)}
-                    className={`relative p-2 rounded-lg border bg-zinc-900 flex flex-col gap-1.5 cursor-grab active:cursor-grabbing transition-all select-none ${
+                    className={`relative p-2 rounded-lg border bg-navy flex flex-col gap-1.5 cursor-grab active:cursor-grabbing transition-all select-none ${
                       isSelected
-                        ? "border-cyan-300 ring-2 ring-cyan-400/50 bg-zinc-850"
-                        : "border-zinc-800 hover:border-zinc-700 hover:bg-zinc-850/60"
+                        ? "border-info ring-2 ring-info/50 bg-flat"
+                        : "border-edge hover:border-edge hover:bg-flat/60"
                     }`}
                   >
                     {isSelected && <span data-panel-selection-outline="true" aria-hidden="true"
-                      className="absolute inset-0 z-10 rounded-lg border-2 border-cyan-300 pointer-events-none">
-                      <span className="absolute top-0 left-0 rounded-br bg-cyan-300 px-1 text-[10px] font-bold text-zinc-950">✓</span>
+                      className="absolute inset-0 z-10 rounded-lg border-2 border-info pointer-events-none">
+                      <span className="absolute top-0 left-0 rounded-br bg-info px-1 text-[10px] font-bold text-ink">✓</span>
                     </span>}
-                    <div className="flex items-center justify-between text-[11px] text-zinc-300 font-medium">
+                    <div className="flex items-center justify-between text-[11px] text-fg-dim font-medium">
                       <span className="flex items-center gap-1 font-bold">
-                        <span className="text-zinc-500">⠿</span>
+                        <span className="text-fg-faint">⠿</span>
                         Panel #{p.page_sequence}
                       </span>
-                      <span className="text-[10px] font-mono text-zinc-500">
+                      <span className="text-[10px] font-mono text-fg-faint">
                         {Math.round(p.width)}×{Math.round(p.height)}
                       </span>
                     </div>
 
                     {/* Cropped thumbnail representation */}
-                    <div className="relative w-full aspect-[4/3] bg-black rounded overflow-hidden border border-zinc-800 pointer-events-none">
+                    <div className="relative w-full aspect-[4/3] bg-black rounded overflow-hidden border border-edge pointer-events-none">
                       <div
                         style={{
                           position: "absolute",
@@ -675,7 +675,7 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
 
                     {/* Action buttons */}
                     <div className="flex items-center justify-between gap-1 pt-1 mt-auto">
-                      <span className="text-[9px] text-indigo-400 font-bold tracking-tight">
+                      <span className="text-[9px] text-info font-bold tracking-tight">
                         DRAG TO TIMELINE
                       </span>
                       <div className="flex items-center gap-1">
@@ -685,7 +685,7 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
                             e.stopPropagation();
                             onAddPanelToScene(activePage, p, undefined, false);
                           }}
-                          className="px-1.5 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-[10px] text-zinc-300"
+                          className="px-1.5 py-0.5 rounded bg-flat hover:bg-glass-hi text-[10px] text-fg-dim"
                           title="Add as layer to active scene"
                         >
                           + Layer
@@ -696,7 +696,7 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
                             e.stopPropagation();
                             onAddPanelToScene(activePage, p, undefined, true);
                           }}
-                          className="px-1.5 py-0.5 rounded bg-indigo-600 hover:bg-indigo-500 text-[10px] text-white"
+                          className="px-1.5 py-0.5 rounded bg-accent hover:bg-accent text-[10px] text-white"
                           title="Add as new scene"
                         >
                           + Scene
@@ -707,7 +707,7 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
                 );
               })
             ) : (
-              <div className="col-span-2 text-center text-zinc-500 py-12 text-xs">
+              <div className="col-span-2 text-center text-fg-faint py-12 text-xs">
                 No detected panels on Page #{activePage.sequence}.
               </div>
             )}
@@ -718,7 +718,7 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
             {activePage ? (
               <div
                 ref={imageContainerRef}
-                className="relative shadow-2xl rounded overflow-hidden border border-zinc-800 transition-all duration-150 mx-auto"
+                className="relative shadow-2xl rounded overflow-hidden border border-edge transition-all duration-150 mx-auto"
                 style={{ width: `${zoomLevel}%` }}
               >
                 <img
@@ -766,18 +766,18 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
                           y={p.y}
                           width={p.width}
                           height={p.height}
-                          fill={isSelected ? "rgba(99, 102, 241, 0.3)" : colorScheme.fill}
+                          fill={isSelected ? "rgba(59,107,245, 0.3)" : colorScheme.fill}
                           stroke={isSelected ? "#ffffff" : colorScheme.border}
                           strokeWidth={isSelected ? 4 : 2}
-                          className="transition-colors group-hover:fill-indigo-500/25"
+                          className="transition-colors group-hover:fill-accent/25"
                         />
 
                         {isSelected && (
                           <>
-                            <circle cx={p.x} cy={p.y} r={5} fill="#ffffff" stroke="#6366f1" strokeWidth={2} />
-                            <circle cx={p.x + p.width} cy={p.y} r={5} fill="#ffffff" stroke="#6366f1" strokeWidth={2} />
-                            <circle cx={p.x} cy={p.y + p.height} r={5} fill="#ffffff" stroke="#6366f1" strokeWidth={2} />
-                            <circle cx={p.x + p.width} cy={p.y + p.height} r={5} fill="#ffffff" stroke="#6366f1" strokeWidth={2} />
+                            <circle cx={p.x} cy={p.y} r={5} fill="#ffffff" stroke="#3b6bf5" strokeWidth={2} />
+                            <circle cx={p.x + p.width} cy={p.y} r={5} fill="#ffffff" stroke="#3b6bf5" strokeWidth={2} />
+                            <circle cx={p.x} cy={p.y + p.height} r={5} fill="#ffffff" stroke="#3b6bf5" strokeWidth={2} />
+                            <circle cx={p.x + p.width} cy={p.y + p.height} r={5} fill="#ffffff" stroke="#3b6bf5" strokeWidth={2} />
                           </>
                         )}
                       </g>
@@ -792,8 +792,8 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
                         y={drawBox.y}
                         width={drawBox.w}
                         height={drawBox.h}
-                        fill="rgba(245, 158, 11, 0.22)"
-                        stroke="#fbbf24"
+                        fill="rgba(240,179,90, 0.22)"
+                        stroke="#f0b35a"
                         strokeWidth={3}
                         strokeDasharray={isDrawing ? "6 3" : "none"}
                         className="transition-all"
@@ -806,14 +806,14 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
                         width={120}
                         height={20}
                         rx={4}
-                        fill="rgba(24, 24, 27, 0.9)"
-                        stroke="#fbbf24"
+                        fill="rgba(12,20,51, 0.9)"
+                        stroke="#f0b35a"
                         strokeWidth={1}
                       />
                       <text
                         x={drawBox.x + 8}
                         y={Math.max(14, drawBox.y - 10)}
-                        fill="#fde68a"
+                        fill="#f0b35a"
                         fontSize={12}
                         fontFamily="monospace"
                         fontWeight="bold"
@@ -830,7 +830,7 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
                             cy={drawBox.y}
                             r={7}
                             fill="#ffffff"
-                            stroke="#fbbf24"
+                            stroke="#f0b35a"
                             strokeWidth={2.5}
                             className="cursor-nwse-resize hover:scale-125 transition-transform"
                             onMouseDown={(e) => {
@@ -846,7 +846,7 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
                             cy={drawBox.y}
                             r={7}
                             fill="#ffffff"
-                            stroke="#fbbf24"
+                            stroke="#f0b35a"
                             strokeWidth={2.5}
                             className="cursor-nesw-resize hover:scale-125 transition-transform"
                             onMouseDown={(e) => {
@@ -862,7 +862,7 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
                             cy={drawBox.y + drawBox.h}
                             r={7}
                             fill="#ffffff"
-                            stroke="#fbbf24"
+                            stroke="#f0b35a"
                             strokeWidth={2.5}
                             className="cursor-nesw-resize hover:scale-125 transition-transform"
                             onMouseDown={(e) => {
@@ -878,7 +878,7 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
                             cy={drawBox.y + drawBox.h}
                             r={7}
                             fill="#ffffff"
-                            stroke="#fbbf24"
+                            stroke="#f0b35a"
                             strokeWidth={2.5}
                             className="cursor-nwse-resize hover:scale-125 transition-transform"
                             onMouseDown={(e) => {
@@ -895,7 +895,7 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
                             width={10}
                             height={10}
                             fill="#ffffff"
-                            stroke="#fbbf24"
+                            stroke="#f0b35a"
                             strokeWidth={2}
                             rx={1}
                             className="cursor-ns-resize hover:scale-125 transition-transform"
@@ -913,7 +913,7 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
                             width={10}
                             height={10}
                             fill="#ffffff"
-                            stroke="#fbbf24"
+                            stroke="#f0b35a"
                             strokeWidth={2}
                             rx={1}
                             className="cursor-ns-resize hover:scale-125 transition-transform"
@@ -931,7 +931,7 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
                             width={10}
                             height={10}
                             fill="#ffffff"
-                            stroke="#fbbf24"
+                            stroke="#f0b35a"
                             strokeWidth={2}
                             rx={1}
                             className="cursor-ew-resize hover:scale-125 transition-transform"
@@ -949,7 +949,7 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
                             width={10}
                             height={10}
                             fill="#ffffff"
-                            stroke="#fbbf24"
+                            stroke="#f0b35a"
                             strokeWidth={2}
                             rx={1}
                             className="cursor-ew-resize hover:scale-125 transition-transform"
@@ -966,7 +966,7 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
                             y={drawBox.y + drawBox.h / 2 - 8}
                             width={16}
                             height={16}
-                            fill="#fbbf24"
+                            fill="#f0b35a"
                             rx={3}
                             className="cursor-move hover:scale-115 transition-transform shadow-md"
                             onMouseDown={(e) => {
@@ -988,8 +988,8 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
                       {isPolygonClosed ? (
                         <polygon
                           points={polygonPoints.map((p) => `${p.x},${p.y}`).join(" ")}
-                          fill="rgba(6, 182, 212, 0.25)"
-                          stroke="#06b6d4"
+                          fill="rgba(122,162,255, 0.25)"
+                          stroke="#7aa2ff"
                           strokeWidth={3}
                           className="shadow-lg"
                         />
@@ -998,7 +998,7 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
                           <polyline
                             points={polygonPoints.map((p) => `${p.x},${p.y}`).join(" ")}
                             fill="none"
-                            stroke="#06b6d4"
+                            stroke="#7aa2ff"
                             strokeWidth={3}
                             strokeDasharray="6 3"
                           />
@@ -1008,7 +1008,7 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
                               y1={polygonPoints[polygonPoints.length - 1].y}
                               x2={polyHoverCursor.x}
                               y2={polyHoverCursor.y}
-                              stroke="#38bdf8"
+                              stroke="#7aa2ff"
                               strokeWidth={2}
                               strokeDasharray="4 2"
                             />
@@ -1023,8 +1023,8 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
                           cx={p.x}
                           cy={p.y}
                           r={idx === 0 && !isPolygonClosed ? 8 : 6}
-                          fill={idx === 0 && !isPolygonClosed ? "#22d3ee" : "#ffffff"}
-                          stroke="#06b6d4"
+                          fill={idx === 0 && !isPolygonClosed ? "#7aa2ff" : "#ffffff"}
+                          stroke="#7aa2ff"
                           strokeWidth={2.5}
                           className="cursor-move hover:scale-125 transition-transform"
                           onMouseDown={(e) => {
@@ -1046,7 +1046,7 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
                           cy={polygonPoints[0].y}
                           r={14}
                           fill="none"
-                          stroke="#22d3ee"
+                          stroke="#7aa2ff"
                           strokeWidth={2}
                           strokeDasharray="3 3"
                           className="animate-spin pointer-events-none"
@@ -1061,8 +1061,8 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
                       {penPoints.length >= 3 && !isPenDrawing ? (
                         <polygon
                           points={penPoints.map((p) => `${p.x},${p.y}`).join(" ")}
-                          fill="rgba(244, 63, 94, 0.25)"
-                          stroke="#f43f5e"
+                          fill="rgba(242,102,122, 0.25)"
+                          stroke="#f2667a"
                           strokeWidth={3}
                           className="shadow-lg"
                         />
@@ -1070,7 +1070,7 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
                         <polyline
                           points={penPoints.map((p) => `${p.x},${p.y}`).join(" ")}
                           fill="none"
-                          stroke="#f43f5e"
+                          stroke="#f2667a"
                           strokeWidth={3.5}
                           strokeLinecap="round"
                           strokeLinejoin="round"
@@ -1083,7 +1083,7 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
                           cy={penPoints[0].y}
                           r={5}
                           fill="#ffffff"
-                          stroke="#f43f5e"
+                          stroke="#f2667a"
                           strokeWidth={2}
                         />
                       )}
@@ -1101,7 +1101,7 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
                       left: `${(activeSelectedPanel.x / (activePage.width || 1200)) * 100}%`,
                       top: `${(activeSelectedPanel.y / (activePage.height || 1800)) * 100}%`,
                     }}
-                    className="absolute z-20 m-1 px-2 py-0.5 rounded bg-indigo-600 text-white text-[10px] font-bold flex items-center gap-1 shadow-lg cursor-grab active:cursor-grabbing border border-indigo-400 select-none"
+                    className="absolute z-20 m-1 px-2 py-0.5 rounded bg-accent text-white text-[10px] font-bold flex items-center gap-1 shadow-lg cursor-grab active:cursor-grabbing border border-accent select-none"
                     title="Drag this panel onto the Timeline or Canvas"
                   >
                     <span>⠿</span>
@@ -1110,7 +1110,7 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
                 )}
               </div>
             ) : (
-              <div className="flex flex-col items-center justify-center h-full text-zinc-500 p-6 text-center">
+              <div className="flex flex-col items-center justify-center h-full text-fg-faint p-6 text-center">
                 <Icons.BookOpen className="w-10 h-10 mb-2 opacity-40" />
                 <p className="text-xs">No pages available</p>
               </div>
@@ -1119,7 +1119,7 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
         )}
 
         {/* Right Vertical Filmstrip Column (matching the screenshot) */}
-        <div className="w-16 border-l border-zinc-800 bg-zinc-950 p-1.5 flex flex-col gap-2 overflow-y-auto shrink-0 select-none">
+        <div className="w-16 border-l border-edge bg-ink p-1.5 flex flex-col gap-2 overflow-y-auto shrink-0 select-none">
           {pages.map((page, idx) => {
             const isCurrent = page.id === activePage?.id;
             return (
@@ -1133,8 +1133,8 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
                 }}
                 className={`relative w-full aspect-[2/3] rounded overflow-hidden border transition-all ${
                   isCurrent
-                    ? "border-indigo-500 ring-2 ring-indigo-500/40 scale-105"
-                    : "border-zinc-800 opacity-60 hover:opacity-100 hover:border-zinc-600"
+                    ? "border-accent ring-2 ring-accent/40 scale-105"
+                    : "border-edge opacity-60 hover:opacity-100 hover:border-edge"
                 }`}
                 title={`Page ${idx + 1}`}
               >
@@ -1143,7 +1143,7 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
                   alt={`Thumb ${page.sequence}`}
                   className="w-full h-full object-cover object-top"
                 />
-                <span className="absolute bottom-0 right-0 bg-black/80 px-1 text-[9px] font-mono text-zinc-300">
+                <span className="absolute bottom-0 right-0 bg-black/80 px-1 text-[9px] font-mono text-fg-dim">
                   {idx + 1}
                 </span>
               </button>
@@ -1153,16 +1153,16 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
       </div>
 
       {/* Bottom Toolbar: Tools, Zoom, Auto-Add Toggle, and Add to Timeline */}
-      <div className="h-10 bg-zinc-950/95 border-t border-zinc-800 px-3 flex items-center justify-between shrink-0 select-none">
+      <div className="h-10 bg-ink/95 border-t border-edge px-3 flex items-center justify-between shrink-0 select-none">
         {/* Left: Tool Selection & Zoom */}
-        <div className="flex items-center gap-1.5 text-zinc-400">
+        <div className="flex items-center gap-1.5 text-fg-dim">
           {/* Select Tool */}
           <button
             type="button"
             onClick={() => setToolMode("select")}
             className={`px-2 py-1 rounded text-[11px] font-semibold flex items-center gap-1 transition-colors ${
               toolMode === "select"
-                ? "text-indigo-400 bg-zinc-900 border border-indigo-500/40"
+                ? "text-info bg-navy border border-accent/40"
                 : "hover:text-white"
             }`}
             title="Selection Tool (Select Panels)"
@@ -1180,7 +1180,7 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
             }}
             className={`px-2 py-1 rounded text-[11px] font-semibold flex items-center gap-1 transition-colors ${
               toolMode === "rect"
-                ? "text-amber-400 bg-amber-950/40 border border-amber-500/50"
+                ? "text-warn bg-warn/40 border border-warn/50"
                 : "hover:text-white"
             }`}
             title="Rectangle Adjustment Crop Tool"
@@ -1198,7 +1198,7 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
             }}
             className={`px-2 py-1 rounded text-[11px] font-semibold flex items-center gap-1 transition-colors ${
               toolMode === "polygon"
-                ? "text-cyan-400 bg-cyan-950/40 border border-cyan-500/50"
+                ? "text-info bg-info/40 border border-info/50"
                 : "hover:text-white"
             }`}
             title="Polygon Adjustment Crop Tool (Click vertices, close to finish)"
@@ -1216,7 +1216,7 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
             }}
             className={`px-2 py-1 rounded text-[11px] font-semibold flex items-center gap-1 transition-colors ${
               toolMode === "pen"
-                ? "text-rose-400 bg-rose-950/40 border border-rose-500/50"
+                ? "text-bad bg-bad/40 border border-bad/50"
                 : "hover:text-white"
             }`}
             title="Pen Cut Tool (Freehand / Click Cutline)"
@@ -1225,10 +1225,10 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
             <span>Pen Cut</span>
           </button>
 
-          <div className="h-4 w-px bg-zinc-800 mx-1" />
+          <div className="h-4 w-px bg-flat mx-1" />
 
           {/* Zoom controls */}
-          <span className="text-[10px] font-mono text-zinc-300">{zoomLevel}%</span>
+          <span className="text-[10px] font-mono text-fg-dim">{zoomLevel}%</span>
           <button
             type="button"
             onClick={() => setZoomLevel((z) => Math.max(50, z - 20))}
@@ -1246,7 +1246,7 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
             <Icons.ZoomIn className="w-3.5 h-3.5" />
           </button>
 
-          <div className="h-4 w-px bg-zinc-800 mx-1" />
+          <div className="h-4 w-px bg-flat mx-1" />
 
           {/* Auto-Add to Timeline Toggle */}
           <button
@@ -1262,8 +1262,8 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
             }}
             className={`px-2 py-0.5 rounded text-[10px] font-semibold flex items-center gap-1 transition-colors ${
               autoAddToTimeline
-                ? "bg-cyan-950/80 text-cyan-300 border border-cyan-700/60"
-                : "bg-zinc-850 text-zinc-400 hover:text-white border border-zinc-800"
+                ? "bg-info/80 text-info border border-info/60"
+                : "bg-flat text-fg-dim hover:text-white border border-edge"
             }`}
             title="Toggle: automatically add completed crops directly to timeline"
           >
@@ -1280,7 +1280,7 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
               <button
                 type="button"
                 onClick={handleClearCrop}
-                className="px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-[11px] text-zinc-400 hover:text-zinc-200 transition-colors"
+                className="px-2 py-0.5 rounded bg-flat hover:bg-glass-hi text-[11px] text-fg-dim hover:text-fg transition-colors"
                 title="Clear Current Crop"
               >
                 Clear
@@ -1290,7 +1290,7 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
                 variant="primary"
                 size="sm"
                 onClick={() => handleTriggerAddToTimeline("scene")}
-                className="text-[11px] py-0.5 px-3 h-6 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold flex items-center gap-1 shadow-md"
+                className="text-[11px] py-0.5 px-3 h-6 bg-accent hover:bg-accent text-white font-semibold flex items-center gap-1 shadow-md"
                 title="Add cropped region to timeline"
               >
                 <Icons.Play className="w-3 h-3 fill-current" />
@@ -1331,7 +1331,7 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
                     }
                   }
                 }}
-                className="text-[11px] py-0.5 px-2 h-6 bg-indigo-600 hover:bg-indigo-500 text-white"
+                className="text-[11px] py-0.5 px-2 h-6 bg-accent hover:bg-accent text-white"
                 title={activeSelectedPanel ? `Create new scene from Panel #${activeSelectedPanel.page_sequence}` : "Create new scene from page"}
               >
                 + Scene
@@ -1344,16 +1344,16 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
       {/* Confirmation Modal: "May I add to the timeline this cropping?" */}
       {showAddPromptModal && pendingCropData && activePage && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="bg-zinc-900 border border-zinc-700/80 rounded-2xl shadow-2xl max-w-md w-full p-6 flex flex-col gap-4 text-zinc-100 animate-in fade-in zoom-in-95 duration-150">
+          <div className="bg-navy border border-edge/80 rounded-2xl shadow-2xl max-w-md w-full p-6 flex flex-col gap-4 text-fg animate-in fade-in zoom-in-95 duration-150">
             {/* Modal Header */}
-            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+            <div className="flex items-center justify-between border-b border-edge pb-3">
               <div className="flex items-center gap-2">
-                <span className="p-1.5 rounded-lg bg-indigo-600/20 text-indigo-400 border border-indigo-500/30">
+                <span className="p-1.5 rounded-lg bg-accent/20 text-info border border-accent/30">
                   <Icons.Scissors className="w-5 h-5" />
                 </span>
                 <div>
                   <h3 className="text-sm font-bold">Add Crop to Timeline?</h3>
-                  <p className="text-[11px] text-zinc-400">
+                  <p className="text-[11px] text-fg-dim">
                     May I add this {pendingCropData.crop_type.toUpperCase()} crop to your timeline?
                   </p>
                 </div>
@@ -1361,14 +1361,14 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
               <button
                 type="button"
                 onClick={() => setShowAddPromptModal(false)}
-                className="text-zinc-500 hover:text-zinc-300"
+                className="text-fg-faint hover:text-fg-dim"
               >
                 <Icons.XCircle className="w-5 h-5" />
               </button>
             </div>
 
             {/* Cutout Preview Box */}
-            <div className="relative aspect-[16/9] w-full bg-zinc-950 rounded-xl overflow-hidden border border-zinc-800 flex items-center justify-center p-2">
+            <div className="relative aspect-[16/9] w-full bg-ink rounded-xl overflow-hidden border border-edge flex items-center justify-center p-2">
               <img
                 src={api.getPageImageUrl(projectId, activePage.id)}
                 alt="Crop preview"
@@ -1377,13 +1377,13 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
                   clipPath: pendingCropData.clip_path,
                 }}
               />
-              <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded bg-black/80 font-mono text-[10px] text-cyan-300 border border-cyan-500/40">
+              <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded bg-black/80 font-mono text-[10px] text-info border border-info/40">
                 {pendingCropData.crop_type.toUpperCase()} • {pendingCropData.width}×{pendingCropData.height}px
               </div>
             </div>
 
             {/* Remember Choice Checkbox */}
-            <label className="flex items-center gap-2.5 text-xs text-zinc-300 cursor-pointer select-none">
+            <label className="flex items-center gap-2.5 text-xs text-fg-dim cursor-pointer select-none">
               <input
                 type="checkbox"
                 checked={autoAddToTimeline}
@@ -1393,13 +1393,13 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
                     localStorage.setItem("panelflow_auto_add_timeline", String(e.target.checked));
                   } catch {}
                 }}
-                className="w-4 h-4 rounded accent-indigo-600 cursor-pointer"
+                className="w-4 h-4 rounded accent-accent cursor-pointer"
               />
               <span>Always add future crops automatically without asking</span>
             </label>
 
             {/* Modal Actions */}
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-800">
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-edge">
               <Button
                 variant="ghost"
                 size="sm"
@@ -1425,7 +1425,7 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
               <Button
                 variant="primary"
                 size="sm"
-                className="bg-indigo-600 hover:bg-indigo-500 text-white flex items-center gap-1.5 font-semibold"
+                className="bg-accent hover:bg-accent text-white flex items-center gap-1.5 font-semibold"
                 onClick={() => {
                   if (activePage && pendingCropData) {
                     onAddPanelToScene(activePage, activeSelectedPanel, pendingCropData, true, true);
@@ -1448,12 +1448,12 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
 
   return (
     <>
-      <section aria-label="Source Pages" className="min-w-0 flex-1 h-full flex flex-col overflow-hidden rounded-xl border border-zinc-800 bg-[#0b0d15] text-zinc-200">
+      <section aria-label="Source Pages" className="min-w-0 flex-1 h-full flex flex-col overflow-hidden rounded-xl border border-edge bg-[#070b1c] text-fg">
         {header}
-        {subTab === "panels" && <div className="px-3 py-2 text-[10px] text-zinc-400 border-b border-zinc-800" aria-live="polite">
-          <span className="text-cyan-300">{selectedPanelIds.length} selected</span> · Ctrl/Cmd-click to select · Shift-click for a range
+        {subTab === "panels" && <div className="px-3 py-2 text-[10px] text-fg-dim border-b border-edge" aria-live="polite">
+          <span className="text-info">{selectedPanelIds.length} selected</span> · Ctrl/Cmd-click to select · Shift-click for a range
           <div className="flex gap-3 mt-1">
-            <button type="button" className="text-violet-300 hover:text-white" onClick={() => { if (activePage) { setPanelSelection({ pageId: activePage.id, ids: pagePanels.map(p => p.id) }); selectionAnchor.current = pagePanels[0]?.id || null; } }}>Select all panels</button>
+            <button type="button" className="text-info hover:text-white" onClick={() => { if (activePage) { setPanelSelection({ pageId: activePage.id, ids: pagePanels.map(p => p.id) }); selectionAnchor.current = pagePanels[0]?.id || null; } }}>Select all panels</button>
             <button type="button" className="hover:text-white" onClick={() => { if (activePage) setPanelSelection({ pageId: activePage.id, ids: [] }); onSelectPanel(null); }}>Clear selection</button>
           </div>
         </div>}
@@ -1469,7 +1469,7 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
               }}
               onDoubleClick={() => { onSelectPage(page.id); if (!hideEditingTools) { setSubTab("pages"); setExpanded(true); } }}
               title={`Page ${index + 1} — double-click to open workspace`}
-              className={`relative min-w-0 h-full rounded-md border overflow-hidden focus-visible:outline focus-visible:outline-2 focus-visible:outline-violet-400 select-none ${page.id === activePage?.id ? "border-violet-500 ring-2 ring-violet-500/50" : "border-zinc-700 hover:border-violet-400"}`}>
+              className={`relative min-w-0 h-full rounded-md border overflow-hidden focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent select-none ${page.id === activePage?.id ? "border-accent ring-2 ring-accent/50" : "border-edge hover:border-accent"}`}>
               <img src={api.getPageImageUrl(projectId, page.id)} alt={`Page ${page.sequence}`} loading="lazy" draggable={false} className="w-full h-full object-cover object-top pointer-events-none select-none" />
               <span className="absolute top-1 right-1 rounded bg-black/80 px-1 text-[10px] pointer-events-none">{index + 1}</span>
             </button>
@@ -1484,7 +1484,7 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
               }}
               onDoubleClick={() => { if (!hideEditingTools) { setSubTab("pages"); setExpanded(true); } }}
               title={`Panel ${p.page_sequence} — drag to timeline or double-click to edit`}
-              className={`relative min-w-0 h-full rounded-md border overflow-hidden cursor-grab active:cursor-grabbing select-none transition-all ${selectedPanelIds.includes(p.id) ? "border-cyan-300 ring-2 ring-cyan-400/50 shadow-md" : "border-zinc-700 hover:border-violet-400"}`}>
+              className={`relative min-w-0 h-full rounded-md border overflow-hidden cursor-grab active:cursor-grabbing select-none transition-all ${selectedPanelIds.includes(p.id) ? "border-info ring-2 ring-info/50 shadow-md" : "border-edge hover:border-accent"}`}>
               <img src={api.getPageImageUrl(projectId, activePage!.id)} alt={`Panel ${p.page_sequence}`}
                 loading="lazy" draggable={false} className="absolute max-w-none pointer-events-none select-none" style={{
                   width: `${((activePage!.width || 1200) / Math.max(1, p.width)) * 100}%`,
@@ -1492,18 +1492,18 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
                   left: `-${(p.x / Math.max(1, p.width)) * 100}%`,
                   top: `-${(p.y / Math.max(1, p.height)) * 100}%`,
                 }} />
-              <span className="absolute top-1 right-1 rounded bg-black/80 px-1 text-[10px] pointer-events-none font-bold text-zinc-300">{p.page_sequence}</span>
+              <span className="absolute top-1 right-1 rounded bg-black/80 px-1 text-[10px] pointer-events-none font-bold text-fg-dim">{p.page_sequence}</span>
               {selectedPanelIds.includes(p.id) && <span data-panel-selection-outline="true" aria-hidden="true"
-                className="absolute inset-0 z-10 rounded-md border-2 border-cyan-300 pointer-events-none">
-                <span className="absolute top-0 left-0 rounded-br bg-cyan-300 px-1 text-[10px] font-bold text-zinc-950">✓</span>
+                className="absolute inset-0 z-10 rounded-md border-2 border-info pointer-events-none">
+                <span className="absolute top-0 left-0 rounded-br bg-info px-1 text-[10px] font-bold text-ink">✓</span>
               </span>}
             </div>
           ))}
           {(subTab === "pages" ? pages.length === 0 : pagePanels.length === 0) && (
-            <p className="col-span-4 text-xs text-zinc-500 py-4 text-center">{subTab === "pages" ? "No pages available" : "No detected panels on this page"}</p>
+            <p className="col-span-4 text-xs text-fg-faint py-4 text-center">{subTab === "pages" ? "No pages available" : "No detected panels on this page"}</p>
           )}
         </div>
-        {!hideEditingTools && <div className="border-t border-zinc-800 p-2 flex flex-wrap gap-1" role="group" aria-label="Source tools">
+        {!hideEditingTools && <div className="border-t border-edge p-2 flex flex-wrap gap-1" role="group" aria-label="Source tools">
           {([
             ["select", "Select", Icons.Layout], ["rect", "Rectangle", Icons.Maximize],
             ["polygon", "Polygon", Icons.Sparkles], ["pen", "Pen", Icons.Scissors],
@@ -1513,15 +1513,15 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
                 setToolMode(mode);
                 if (mode !== "select") { onSelectPanel(null); setSubTab("pages"); setExpanded(true); }
               }}
-              className={`flex items-center gap-1 px-2 py-2 rounded-md border text-[11px] disabled:opacity-40 ${toolMode === mode ? "bg-violet-600/20 border-violet-500 text-violet-300" : "border-zinc-800 text-zinc-400 hover:text-white"}`}>
+              className={`flex items-center gap-1 px-2 py-2 rounded-md border text-[11px] disabled:opacity-40 ${toolMode === mode ? "bg-accent/20 border-accent text-info" : "border-edge text-fg-dim hover:text-white"}`}>
               <Icon className="w-3.5 h-3.5" />{label}
             </button>
           ))}
         </div>}
-        {!hideEditingTools && <div className="px-3 pb-2 flex items-center justify-end gap-3 text-zinc-400">
+        {!hideEditingTools && <div className="px-3 pb-2 flex items-center justify-end gap-3 text-fg-dim">
           <Icons.ZoomOut className="w-4 h-4" />
           <input type="range" aria-label="Source zoom" min={50} max={200} step={10} value={zoomLevel}
-            onChange={(e) => setZoomLevel(Number(e.target.value))} className="w-24 accent-violet-500" />
+            onChange={(e) => setZoomLevel(Number(e.target.value))} className="w-24 accent-accent" />
           <span className="text-[10px] font-mono w-8">{zoomLevel}%</span>
           <button type="button" aria-label="Expand source workspace" title="Expand source workspace" disabled={!activePage}
             onClick={() => { setSubTab("pages"); setExpanded(true); }} className="p-1 hover:text-white disabled:opacity-40">
@@ -1531,7 +1531,7 @@ export const SourcePageBrowser: React.FC<SourcePageBrowserProps> = ({
       </section>
       {expanded && (
         <dialog ref={workspaceDialogRef} aria-label="Source page workspace" aria-modal="true"
-          className="fixed inset-0 m-auto w-[94vw] max-w-none h-[90vh] max-h-none p-0 overflow-hidden rounded-xl border border-zinc-700 bg-zinc-950 text-zinc-100 shadow-2xl backdrop:bg-black/80"
+          className="fixed inset-0 m-auto w-[94vw] max-w-none h-[90vh] max-h-none p-0 overflow-hidden rounded-xl border border-edge bg-ink text-fg shadow-2xl backdrop:bg-black/80"
           onCancel={(e) => {
             e.preventDefault();
             if (showAddPromptModal) setShowAddPromptModal(false);
