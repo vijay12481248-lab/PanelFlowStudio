@@ -66,7 +66,7 @@
       if (wantDraft && !idea) return err('Write a story idea first, or untick "Draft all prompts with AI".');
       btn.disabled = true; err('');
       try {
-        const plan = await cfg.post('/storyboard/plan', { mode: st.mode, length_seconds: st.seconds, title: idea.slice(0, 40) || 'New Video' });
+        const plan = await cfg.post('/storyboard/plan', { mode: st.mode, length_seconds: st.seconds, title: `${idea.slice(0, 40) || 'New Video'} ${new Date().toISOString().slice(5, 16).replace(/\D/g, '')}` }); // the stamp keeps two plans from sharing one vault file
         if (wantDraft) {
           btn.textContent = 'Drafting prompts…';
           const d = await cfg.post('/storyboard/draft_prompts', { idea, count: plan.scenes.length, mode: st.mode });

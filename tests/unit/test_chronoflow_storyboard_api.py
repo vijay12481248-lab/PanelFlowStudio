@@ -195,3 +195,17 @@ def test_tail_frame_rejects_paths_and_missing_clips(client, monkeypatch, tmp_pat
     monkeypatch.setattr(router.pipeline, "extract_tail_frame", lambda v, o: (open(o, "wb").write(b"png"), True)[1])
     r = client.post("/api/chronoflow/storyboard/tail_frame", json={"video": "clip.mp4"})
     assert r.status_code == 200 and (tmp_path / r.json()["filename"]).exists()
+
+
+def test_screenplay_round_trip_keeps_wizard_card_fields(client, monkeypatch, tmp_path):
+    """A plan saved by the New Video wizard must come back with its start mode, frames-to-be, approval state and size intact."""
+    from engine.api.routers import chronoflow as router
+
+    monkeypatch.setattr(router, "VAULT_DIR", tmp_path)
+    plan = client.post("/api/chronoflow/storyboard/plan", json={"mode": "first_last", "length_seconds": 15, "title": "Round trip"}).json()
+    plan["scenes"][0].update(prompt="a door opens", first_frame="a.png", last_frame="b.png", approved=True, state="approved", tail_frame="t.png", width=768, height=1344, lora_choice="8step")
+    saved = client.post("/api/chronoflow/screenplay/save", json={"title": "Round trip", "duration": plan["duration"], "scenes": plan["scenes"]}).json()
+    back = client.get(f"/api/chronoflow/screenplay/{saved['filename']}").json()["scenes"][0]
+    for key, want in {"start_mode": "first_last", "inherits_tail": False, "approved": True, "state": "approved", "tail_frame": "t.png", "width": 768, "height": 1344,
+                      "lora_choice": "8step", "first_prompt": "", "last_frame": "b.png"}.items():
+        assert back[key] == want, key

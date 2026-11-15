@@ -3545,7 +3545,7 @@
 
     <!-- Right Controls: the one primary action -->
     <div class="header-status">
-      <button type="button" class="cfx-primary" onclick="openPromptModal()" title="Describe a scene and generate a new video clip with AI">＋ New video</button>
+      <button type="button" class="cfx-primary" onclick="openNewVideoWizard()" title="Choose how to start, plan the segments, then generate them one by one">＋ New video</button>
     </div>
   </header>
 
@@ -3641,7 +3641,7 @@
               <section class="cf-ai-card">
                 <h4>New shot</h4>
                 <p>Describe a scene and let the video model generate a clip for it.</p>
-                <button type="button" class="cfx-primary" onclick="openPromptModal()">＋ Generate new shot</button>
+                <button type="button" class="cfx-primary" onclick="openNewVideoWizard()">＋ New video</button>
               </section>
               <section class="cf-ai-card">
                 <h4>Change this frame</h4>
@@ -4799,6 +4799,78 @@
     </div>
   </div>
 
+  <!-- NEW VIDEO WIZARD (static/nle/newvideo.js): start mode -> length -> story idea -> a storyboard of N cards -->
+  <style>
+    .nv-modes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .nv-mode { text-align: left; background: #0b1231; border: 1px solid var(--card-border); border-radius: 8px; padding: 10px 12px; color: #d5dcf5; cursor: pointer; font: inherit; }
+    .nv-mode b { display: block; font-size: 0.86rem; color: #f6f8ff; margin-bottom: 2px; }
+    .nv-mode span { font-size: 0.74rem; color: #9aa6d0; }
+    .nv-mode:hover, .nv-mode.active { border-color: #7aa2ff; background: rgba(59,107,245,0.16); }
+    .nv-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .nv-label { font-size: 0.8rem; font-weight: 700; color: #d5dcf5; margin-bottom: 6px; display: block; }
+    #nvError { color: #f2667a; font-size: 0.8rem; min-height: 1.1em; margin-top: 8px; }
+  </style>
+  <div id="newVideoModal" class="modal-overlay" style="display: none;" onclick="if(event.target===this) closeNewVideoWizard()">
+    <div class="modal-box" style="width: 620px; max-width: 95vw;" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 1.2rem;">🎬</span>
+          <h3 style="margin: 0; font-size: 1.05rem; font-weight: 800; color: #f6f8ff;">New video</h3>
+        </div>
+        <button type="button" class="btn-close" onclick="closeNewVideoWizard()" title="Close">&times;</button>
+      </div>
+      <div class="modal-scroll-body" style="max-height: 75vh; overflow-y: auto; padding-right: 4px;">
+        <div id="nvStep1">
+          <span class="nv-label">1. How do you want to start?</span>
+          <div class="nv-modes" id="nvModeCards">
+            <button type="button" class="nv-mode" data-mode="text"><b>Text only</b><span>Describe the video. No pictures needed.</span></button>
+            <button type="button" class="nv-mode" data-mode="first"><b>First frame</b><span>Start from one picture.</span></button>
+            <button type="button" class="nv-mode" data-mode="first_last"><b>First + last frame</b><span>A picture for where each shot starts and where it ends.</span></button>
+            <button type="button" class="nv-mode" data-mode="last"><b>Last frame only</b><span>Say where a shot must end up.</span></button>
+            <button type="button" class="nv-mode" data-mode="reference"><b>Reference images</b><span>Keep a character or place consistent (1-2 pictures).</span></button>
+            <button type="button" class="nv-mode" data-mode="from_video"><b>From a video</b><span>Continue from the end of a clip you already have.</span></button>
+          </div>
+        </div>
+        <div id="nvStep2" style="display: none;">
+          <span class="nv-label">2. How long is the video?</span>
+          <div class="nv-row">
+            <select id="nvLengthPreset" style="font-size: 0.85rem; flex: 1;">
+              <option value="15">15 seconds</option>
+              <option value="30">30 seconds</option>
+              <option value="60">1 minute</option>
+              <option value="300" selected>5 minutes</option>
+              <option value="custom">Custom (seconds)…</option>
+            </select>
+            <input type="number" id="nvLengthCustom" min="1" max="600" value="120" style="display: none; width: 110px; font-size: 0.85rem;">
+          </div>
+          <div id="nvLengthLabel" style="margin: 8px 0 12px; font-size: 0.86rem; color: #a9c1ff; font-weight: 700;"></div>
+          <div class="nv-row" style="margin-bottom: 8px;">
+            <label><input type="radio" name="nvFormat" value="landscape" checked> 16:9 landscape</label>
+            <label><input type="radio" name="nvFormat" value="portrait"> 9:16 Shorts / vertical</label>
+          </div>
+          <details style="margin-bottom: 12px;"><summary style="cursor: pointer; font-size: 0.8rem; color: #9aa6d0;">More</summary>
+            <label class="nv-label" style="margin-top: 8px;" for="nvSpeed">Speed</label>
+            <select id="nvSpeed" style="font-size: 0.85rem;"><option value="4step" selected>Turbo 4-step (2&times; faster)</option><option value="8step">Turbo 8-step (more precise)</option></select>
+          </details>
+          <div class="nv-row" style="justify-content: space-between;">
+            <button type="button" class="btn-tool" data-nv-back="1">&larr; Back</button>
+            <button type="button" class="btn-primary" id="nvToStep3" style="width: auto; padding: 8px 22px;"><span>Next</span></button>
+          </div>
+        </div>
+        <div id="nvStep3" style="display: none;">
+          <span class="nv-label">3. What is the video about? (optional)</span>
+          <textarea id="nvIdea" rows="4" style="font-size: 0.85rem;" placeholder="A short story idea. Each segment's prompt can be drafted from it and edited afterwards."></textarea>
+          <label style="display: block; margin: 8px 0 12px; font-size: 0.82rem;"><input type="checkbox" id="nvDraft" checked> Draft all prompts with AI (local model; you can edit each one)</label>
+          <div class="nv-row" style="justify-content: space-between;">
+            <button type="button" class="btn-tool" data-nv-back="2">&larr; Back</button>
+            <button type="button" class="btn-primary" id="nvCreate" style="width: auto; padding: 8px 22px;">Create storyboard</button>
+          </div>
+        </div>
+        <div id="nvError" role="alert"></div>
+      </div>
+    </div>
+  </div>
+
   <!-- DEEP 6-HEADING SHOT BEAT EDITOR MODAL -->
   <div id="shotBeatModal" class="modal-overlay" style="display: none;" onclick="if(event.target===this) closeBeatEditor()">
     <div class="modal-box" style="width: 720px; max-width: 95vw;" onclick="event.stopPropagation()">
@@ -5256,6 +5328,33 @@
         const textarea = document.getElementById('promptInput');
         if (textarea) textarea.focus();
       }
+    }
+
+    function openNewVideoWizard() {
+      const modal = document.getElementById('newVideoModal');
+      if (!modal || !window._newVideo) { alert('The studio is still loading. Try again in a moment.'); return; }
+      window._newVideo.open();
+      modal.style.display = 'flex';
+    }
+
+    function closeNewVideoWizard() {
+      const modal = document.getElementById('newVideoModal');
+      if (modal) modal.style.display = 'none';
+    }
+
+    // The wizard's plan becomes the open storyboard: N cards, saved to the vault, shown flat so every card is visible.
+    async function onNewVideoPlanReady(plan) {
+      currentScreenplay = plan;
+      currentScreenplayFilename = '';
+      storyboardScenes = plan.scenes;
+      storyboardFolders = [];
+      storyboardProtagonist = null;
+      activeStoryboardFolderId = null;
+      await saveCurrentStoryboard(true);
+      closeNewVideoWizard();
+      switchTab('storyboard');
+      setStoryboardViewMode('flat');
+      addTerminalLog('NEW_VIDEO', `Planned "${plan.title}": ${plan.scenes.length} segments, first card ready.`, true);
     }
 
     function closePromptModal() {
@@ -9508,7 +9607,7 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
                <h4>No videos in this project yet</h4>
                <p>Import videos you already have, or generate a new clip with AI.</p>
                <button type="button" class="cfx-primary" onclick="switchResolvePage('media')">＋ Import videos</button>
-               <button type="button" class="cfx-btn" onclick="openPromptModal()">✨ Generate with AI</button>
+               <button type="button" class="cfx-btn" onclick="openNewVideoWizard()">✨ New video</button>
              </div>`;
         return;
       }
@@ -11718,9 +11817,9 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
       alert(`🎬 Exported ${timelineClips.length} storyboard shots into the Multi-Track NLE Editor!`);
     }
 
-    async function saveCurrentStoryboard() {
+    async function saveCurrentStoryboard(quiet = false) {  // quiet: no pop-ups (used after every render/approve)
       if (!storyboardScenes || storyboardScenes.length === 0) {
-        alert("Nothing to save in storyboard.");
+        if (!quiet) alert("Nothing to save in storyboard.");
         return;
       }
       const title = (currentScreenplay && currentScreenplay.title) || prompt("Enter Storyboard Project Title:", "New AI Storyboard");
@@ -11746,10 +11845,10 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
           currentScreenplayFilename = data.filename;
           await loadScreenplaysDropdown();
           addTerminalLog("VAULT", `Saved storyboard blueprint "${data.filename}".`, true);
-          alert(`💾 Storyboard "${data.title}" successfully saved to Vault!\nFile: ${data.filename}`);
+          if (!quiet) alert(`💾 Storyboard "${data.title}" successfully saved to Vault!\nFile: ${data.filename}`);
         }
       } catch (e) {
-        alert(`Save failed: ${e.message}`);
+        if (quiet) addTerminalLog("VAULT", `Auto-save failed: ${e.message}`, true); else alert(`Save failed: ${e.message}`);
       }
     }
 
@@ -11809,7 +11908,7 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
         css.rel = 'stylesheet'; css.href = `${STATIC_BASE}/nle/${sheet}?${tq}`; document.head.appendChild(css);
       });
       const load = (f) => new Promise((res, rej) => { const s = document.createElement('script'); s.src = `${STATIC_BASE}/nle/${f}?${tq}`; s.onload = res; s.onerror = () => rej(new Error(`could not load ${f}`)); document.head.appendChild(s); });
-      return ['model.js', 'nle.js', 'frame-edit.js', 'grade.js', 'color.js', 'fusion-graph.js', 'fusion.js', 'deliver.js', 'library.js', 'panels.js'].reduce((p, f) => p.then(() => load(f)), Promise.resolve());
+      return ['model.js', 'nle.js', 'frame-edit.js', 'grade.js', 'color.js', 'fusion-graph.js', 'fusion.js', 'deliver.js', 'library.js', 'panels.js', 'newvideo.js'].reduce((p, f) => p.then(() => load(f)), Promise.resolve());
     }
 
     async function initApp() {
@@ -11829,6 +11928,17 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
         }
         if (window.NLEFusion && typeof NLEFusion.mount === 'function') {
           NLEFusion.mount();
+        }
+        if (window.NewVideo) {
+          window._newVideo = NewVideo.mount({
+            post: async (path, body) => {
+              const res = await fetch(`${API_BASE}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+              const data = await res.json().catch(() => ({}));
+              if (!res.ok) throw new Error(typeof data.detail === 'string' ? data.detail : `Server returned HTTP ${res.status}`);
+              return data;
+            },
+            onPlanReady: onNewVideoPlanReady,
+          });
         }
         NLE.on('load', refreshMediaPool);
         NLE.on('render', refreshMediaPool);

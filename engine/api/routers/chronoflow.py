@@ -1442,6 +1442,7 @@ def get_screenplay(filename: str) -> dict[str, Any]:
                     shot_type = "Medium Tracking"
 
             norm_scenes.append({
+                **sc,  # keep every field the studio stored (New Video cards carry start_mode, approval state, size...)
                 "shot_index": shot_num,
                 "title": raw_title,
                 "shot_type": shot_type,
