@@ -28,7 +28,8 @@ ART_WORKFLOW_ID = "qwen_image_21"
 EDIT_WORKFLOW_ID = "minimax_h3_image_edit"  # MiniMax-H3-Image: edit an existing picture from a written instruction
 # What an image job may run. Qwen is the default everywhere; the H3-Image graph with no picture bound is text to image
 # (the same registered graph as the edit, not a second text_to_image entry), chosen per job by its caller.
-IMAGE_WORKFLOW_IDS = (ART_WORKFLOW_ID, EDIT_WORKFLOW_ID)
+OPEN_ART_WORKFLOW_ID = "flux2_klein_4b"  # FLUX.2 klein 4B (Apache-2.0): the licence-clean replacement being proven for Qwen; text to image only, no picture slots
+IMAGE_WORKFLOW_IDS = (ART_WORKFLOW_ID, EDIT_WORKFLOW_ID, OPEN_ART_WORKFLOW_ID)
 logger = logging.getLogger(__name__)
 POLL_SECONDS = 1.5
 
@@ -406,6 +407,9 @@ class ArtEngine:
                                     dimension_policy=policy)  # rejects a request the workflow cannot honour before any GPU time is spent
         if seed is None:
             seed = random.randint(1, 2**31 - 1)
+
+        if (reference_image is not None or reference_images is not None) and "reference_image" not in metadata["patch_slots"]:
+            raise ComfyImageGenerationError(f"Workflow {workflow_id} is text to image only and takes no reference pictures")
 
         ref_image_name: str | None = None
         if reference_image is not None:
