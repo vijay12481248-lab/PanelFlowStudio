@@ -79,8 +79,8 @@ def check(p):
     if not isinstance(total, (int, float)) or total <= 0:
         add("production.total_seconds must be a positive number")
         total = 0
-    if pr.get("join") not in ("matched_pictures", "seamless_chain", "clip_tail"):
-        add('production.join must be "matched_pictures", "seamless_chain" or "clip_tail"')
+    if pr.get("join") not in ("matched_pictures", "seamless_chain"):
+        add('production.join must be "matched_pictures" or "seamless_chain"')
     narrated = pr.get("narration") == "narrator"
     if pr.get("narration") not in ("narrator", "none"):
         add('production.narration must be "narrator" or "none"')
@@ -127,18 +127,18 @@ def check(p):
             if c not in cast:
                 add_t(f"cast id {c!r} is not defined")
         start_from = t.get("start_from")
-        if start_from not in ("new_picture", "previous_end", "clip_tail"):
-            add_t('start_from must be "new_picture", "previous_end" or "clip_tail"')
+        if start_from not in ("new_picture", "previous_end"):
+            add_t('start_from must be "new_picture" or "previous_end"')
         first_in_scene = t.get("scene") != prev_scene
         if first_in_scene and start_from != "new_picture":
             add_t('the first take of every scene must use start_from "new_picture" (a new place or time is a cut)')
         if start_from == "new_picture" and W(t.get("start_picture", "")) < 8:
             add_t("start_picture is needed (at least 8 words: who stands where in the frame, doing what)")
-        if start_from in ("previous_end", "clip_tail") and t.get("start_picture"):
-            add_t("start_picture must be left out when start_from is previous_end or clip_tail")
+        if start_from == "previous_end" and t.get("start_picture"):
+            add_t("start_picture must be left out when start_from is previous_end")
         if start_from == "previous_end" and i > 0 and sorted(t.get("cast", [])) != sorted(takes[i - 1].get("cast", [])) and takes[i - 1].get("end_picture"):
             add_t("a take that starts from the previous end picture must have the same cast as the previous take")
-        if t.get("end_picture") is not None and W(t.get("end_picture", "")) < 8:
+        if W(t.get("end_picture", "")) < 8:
             add_t("end_picture needs at least 8 words (who stands where in the frame, doing what)")
         if W(t.get("motion", "")) < 6:
             add_t("motion needs one concrete action in at least 6 words")

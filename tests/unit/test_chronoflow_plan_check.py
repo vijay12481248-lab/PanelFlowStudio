@@ -114,3 +114,14 @@ def test_kit_short_example_has_exactly_the_keys_of_a_shipped_reel():
     short = json.loads(blocks()[1][1])["short"]
     shipped = specs.REELS[0]
     assert sorted(short) == sorted(shipped) and all(sorted(s) == sorted(shipped["scenes"][0]) for s in short["scenes"]) and len(short["scenes"]) == 5
+
+
+# ---- v2 tightening: every take is two pictures; the app has no clip-tail start
+@pytest.mark.parametrize("fn, expect", [
+    (lambda p: p["takes"][0].pop("end_picture"), "end_picture needs at least 8 words"),
+    (lambda p: p["production"].update(join="clip_tail"), "production.join"),
+    (lambda p: p["takes"][1].update(start_from="clip_tail"), "start_from"),
+])
+def test_checker_v2_rules(fn, expect):
+    found = mutate(fn)
+    assert any(expect.lower() in m.lower() for m in found), (expect, found)

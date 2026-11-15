@@ -51,10 +51,9 @@ Your job: **interview the owner, then write ONE plan file** that PanelFlow can r
 - Recommended: **5 seconds**. A stronger card can use 8, 10 or 15 seconds; then you will plan each take with **beats** (Part 3, rule 18) and the owner accepts more invention.
 - Every take lasts at most `clip_seconds`. The number of takes is about `total_seconds / clip_seconds`.
 
-**Q5. How do takes connect?** Explain and ask (`production.join`):
+**Q5. How do takes connect?** Explain and ask (`production.join`; there are two ways):
 - **Matched pictures (recommended, `matched_pictures`)**: inside a scene, each take starts from the *same picture* the previous take ended on, so every cut is picture-perfect and the same cast and place carry over. Motion restarts at each cut. This is the tested method.
 - **Seamless chain (`seamless_chain`, experimental)**: motion flows across takes without a visible cut. Needs one single place, the same shot size throughout, wide 16:9 only, about 4.5 s per clip, and is not yet in the PanelFlow screens (run from a script). Offer it only if the owner insists on no cuts.
-- **Continue from the clip (`clip_tail`, use rarely)**: a take starts from the last frame of the *video clip* before it. No new picture is drawn, so it is fast, but the look slowly drifts. Only for a calm continuation inside one scene.
 
 **Q6. Sound** (workflow A only). "Narrator voice-over, or no narration? Any music mood?" (Characters cannot speak on screen in this system; the voice-over is a narrator.)
 
@@ -246,7 +245,7 @@ Write **one JSON object** exactly like the example below (every key, same spelli
 | `format` | `"16:9"` or `"9:16"`. |
 | `production.total_seconds` | Total length wanted. The takes must add up to it, give or take one clip. |
 | `production.clip_seconds` | The owner's chosen clip length (Q4). Every take's `seconds` is at most this. |
-| `production.join` | `"matched_pictures"` (default), `"seamless_chain"` or `"clip_tail"` (Q5). |
+| `production.join` | `"matched_pictures"` (default) or `"seamless_chain"` (Q5). PanelFlow currently imports `seamless_chain` plans as matched pictures and tells the owner. |
 | `production.narration` | `"narrator"` or `"none"` (always `"none"` for `target: "cards"`; then leave `narration` and `shows` as `""`). |
 | `production.music` | One sentence of musical mood, or `"none"`. |
 | `cast[]` | `id` (lowercase letters, digits, `_`, at most 24), `name`, `role` (protagonist, companion, antagonist, mentor, other), `species` (`"human"` or what they are, e.g. `"orange tabby cat"`), `age_group` (child, teen, adult, elder), `gender` (male, female or neutral; neutral for non-humans), `look` (comma-separated visual tags), `personality` (a few words). |
@@ -256,10 +255,10 @@ Write **one JSON object** exactly like the example below (every key, same spelli
 | `takes[].id` | `t01`, `t02`, ... in order. |
 | `takes[].scene`, `seconds`, `framing` | A scene id; length in seconds (at most `clip_seconds`); `"wide"`, `"medium"` or `"close"`. |
 | `takes[].cast` | Character ids visible in the start picture (rule 3). |
-| `takes[].start_from` | `"new_picture"`, `"previous_end"` or `"clip_tail"` (rule 13). |
+| `takes[].start_from` | `"new_picture"` or `"previous_end"` (rule 13). |
 | `takes[].start_picture` | What the first frame shows (rule 4). **Only** when `start_from` is `"new_picture"`; at least 8 words. |
 | `takes[].motion` | The one continuous action, at least 6 words, with direction for travellers (rule 7). |
-| `takes[].end_picture` | What the last frame shows, same framing, at least 8 words. Leave the key out only for a calm "single picture" take (no end picture; then the take is animated from the start picture alone). |
+| `takes[].end_picture` | What the last frame shows, same framing, at least 8 words. **Required for every take**: the video model animates between the start picture and the end picture. |
 | `takes[].shows`, `narration` | Rules 15 and 16. Both `""` when there is no narrator. |
 | `takes[].camera` | Rule 11. |
 | `takes[].atmosphere` | The sky and light of this take, 5-14 words; it changes across the video as the story changes. |
@@ -445,8 +444,8 @@ def check(p):
     if not isinstance(total, (int, float)) or total <= 0:
         add("production.total_seconds must be a positive number")
         total = 0
-    if pr.get("join") not in ("matched_pictures", "seamless_chain", "clip_tail"):
-        add('production.join must be "matched_pictures", "seamless_chain" or "clip_tail"')
+    if pr.get("join") not in ("matched_pictures", "seamless_chain"):
+        add('production.join must be "matched_pictures" or "seamless_chain"')
     narrated = pr.get("narration") == "narrator"
     if pr.get("narration") not in ("narrator", "none"):
         add('production.narration must be "narrator" or "none"')
@@ -493,18 +492,18 @@ def check(p):
             if c not in cast:
                 add_t(f"cast id {c!r} is not defined")
         start_from = t.get("start_from")
-        if start_from not in ("new_picture", "previous_end", "clip_tail"):
-            add_t('start_from must be "new_picture", "previous_end" or "clip_tail"')
+        if start_from not in ("new_picture", "previous_end"):
+            add_t('start_from must be "new_picture" or "previous_end"')
         first_in_scene = t.get("scene") != prev_scene
         if first_in_scene and start_from != "new_picture":
             add_t('the first take of every scene must use start_from "new_picture" (a new place or time is a cut)')
         if start_from == "new_picture" and W(t.get("start_picture", "")) < 8:
             add_t("start_picture is needed (at least 8 words: who stands where in the frame, doing what)")
-        if start_from in ("previous_end", "clip_tail") and t.get("start_picture"):
-            add_t("start_picture must be left out when start_from is previous_end or clip_tail")
+        if start_from == "previous_end" and t.get("start_picture"):
+            add_t("start_picture must be left out when start_from is previous_end")
         if start_from == "previous_end" and i > 0 and sorted(t.get("cast", [])) != sorted(takes[i - 1].get("cast", [])) and takes[i - 1].get("end_picture"):
             add_t("a take that starts from the previous end picture must have the same cast as the previous take")
-        if t.get("end_picture") is not None and W(t.get("end_picture", "")) < 8:
+        if W(t.get("end_picture", "")) < 8:
             add_t("end_picture needs at least 8 words (who stands where in the frame, doing what)")
         if W(t.get("motion", "")) < 6:
             add_t("motion needs one concrete action in at least 6 words")
