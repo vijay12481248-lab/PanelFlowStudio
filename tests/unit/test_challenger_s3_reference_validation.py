@@ -243,7 +243,7 @@ def test_qwen_image_21_direct_wiring_tuple_or_list():
 
 
 # ---------------------------------------------------------------------------
-# Requirement 2: All 16 other approved workflows declaring reference_image
+# Requirement 2: All 17 other approved workflows declaring reference_image
 # ---------------------------------------------------------------------------
 
 ALL_NON_QWEN_REFERENCE_WORKFLOWS = [
@@ -263,6 +263,7 @@ ALL_NON_QWEN_REFERENCE_WORKFLOWS = [
     "fastvideo_h3_film_fl2va_voice",
     "wan21_14b_i2v",
     "herrgott_h3_chain_start",
+    "flux2_klein_4b_ref",
 ]
 
 # The conditioning nodes that bind their pictures through autogrow slots: the picture may be
@@ -273,8 +274,8 @@ AUTOGROW_REFERENCE_CLASS_TYPES = ("TextEncodeQwenImage21", "MiniMaxH3ImageCondit
 AUTOGROW_REFERENCE_WORKFLOWS = ["qwen_image_21", "minimax_h3_image_edit"]
 
 
-def test_registry_contains_exactly_16_non_qwen_reference_image_workflows():
-    """Verify our list of 16 workflows matches every reference workflow that needs its picture."""
+def test_registry_contains_exactly_17_non_qwen_reference_image_workflows():
+    """Verify our list of 17 workflows matches every reference workflow that needs its picture."""
     with open("engine/comfyui/workflow_registry.json", "r", encoding="utf-8") as f:
         raw = json.load(f)
     workflows = raw if isinstance(raw, list) else raw.get("workflows", [])
