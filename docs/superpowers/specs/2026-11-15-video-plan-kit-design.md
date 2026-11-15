@@ -1,6 +1,6 @@
 # Video Plan Kit: any chatbot interviews the owner, then writes a plan PanelFlow can run
 
-Date 2026-11-15. Status: kit written and verified against the code; the importer is NOT built yet. Supersedes the first "brief" idea (a ChronoFlow-only JSON) written earlier the same day.
+Date 2026-11-15. Status: kit, importer, picture job and the New video screen are built (see Built); videos from an imported plan were not rendered (page-file limit). Supersedes the first "brief" idea (a ChronoFlow-only JSON) written earlier the same day.
 
 ## Intent
 The owner does not want to walk through every screen. They hand ONE file to any assistant (ChatGPT, Gemini, Claude, or a coding agent such as Claude Code, Codex, Antigravity). The assistant **interviews the owner** (which workflow, how long a clip their GPU makes, how scenes connect, cast, places, direction), then returns one JSON **plan** that fits PanelFlow's real workflows. The owner imports it; PanelFlow draws the pictures, shows them for review, then makes the videos. The kit also tells the assistant HOW to guide the plan so continuity, scene flow and direction survive the video model.
@@ -41,3 +41,20 @@ The owner does not want to walk through every screen. They hand ONE file to any 
 - The kit has not been given to a real chatbot yet (only its example and script were checked).
 - No video clip from any workflow was rendered today (the machine's page file blocks the H3 model load; see the start-modes spec).
 - The reference-PC timings are the owner's PC only; the kit tells the assistant to ask for theirs.
+
+## Built (2026-11-15)
+- **New video** now asks: start from a plan file (JSON) or build step by step. The plan path: Download the kit (and the optional checker) -> upload or paste the plan -> the plan is read (code fence, prose, BOM, curly quotes, trailing comma tolerated) and checked -> problems listed in plain words with "Copy for the assistant" -> summary -> Import.
+- Import = `plan_check` (the same rules as the portable `check_plan.py`) -> `plan_import.plan_to_story` (a real `OriginalStory`) -> storyboard cards whose video prompt is `storyboard.clip_prompt` and whose picture prompts are `storyboard.keyframe_prompt`; workspace `output/Original_Stories/<slug>/{plan,story}.json`.
+- Plan bar above the storyboard: Draw the pictures (the real `storyboard.draw` in the background: checked cast counts, redraws up to 4 times, previous end picture reused as the next start; finished pictures appear on the cards while the rest are drawn; unresolved problems show as "Picture check" warnings) -> Pictures look good -> Render all videos (client-driven, stops on the first failed render).
+- v2 format changes made while building: every take needs an end picture; `clip_tail` was dropped; a picture clause may name only one character.
+- Endpoints (`/api/chronoflow/plan/...`): `kit`, `checker`, `validate`, `import`, `pictures/start`, `pictures/status`.
+
+## Measured with the real models (not unit tests)
+- First run of the example: the picture model drew **two cats** and the vision check rejected it on all 4 tries of takes 1 and 2. Cause: a clause naming two characters keeps the second in the first one's description and again in his own. Fix: one character per clause, separated by `;` (now a checker rule, a kit rule, and how the example is written). After the fix: take 1 passed on try 2, take 2 on try 2, take 3 on try 1 (pictures looked at: one woman, one cat, same style, the end picture matches the plan).
+- The plan's `motion` is not sent to the video model: `clip_prompt` is built from the two pictures by design (the model acts out every event it is told). The kit says so.
+- ComfyUI crashed natively (access violation 0xc0000005) during take 4 of the second run; the job reported it, kept the three finished takes and the screen showed 3/4. The machine's memory limit (see the start-modes spec) is the likely cause.
+
+## Known limits
+- If drawing fails midway, "Draw the pictures again" starts over (`storyboard.draw` redraws every take; a resume would need it to keep chaining for the remaining takes).
+- Mira was drawn larger in a start picture than in its end picture (scale change between the two pictures of a take): the video step is expected to drift; not checked because no clip could be rendered.
+- No clip was rendered from an imported plan; narration, captions and music are not produced from the screen; `seamless_chain` imports as matched pictures; Short/Reel plans are not importable yet; the kit has not been used with a real chatbot.
