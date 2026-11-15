@@ -4,6 +4,7 @@ import { Button, Chip, EngineStatus, ErrorState, GlassPanel, Progress, Skeleton 
 import { useEngine } from "../../app/providers";
 import { useResources } from "../data/queries";
 import { resourceGauges, toolRows, type ToolRow } from "./settingsModels";
+import { LocationsCard } from "./LocationsCard";
 import { settingsKeys, useFfmpeg, usePlaywrightStatus, useProviderHealth, useSettingsMutation } from "./settingsQueries";
 
 const STATE_CHIP: Record<ToolRow["state"], { word: string; tone: "ok" | "warn" | "bad" }> = {
@@ -102,6 +103,8 @@ export const EngineSection: React.FC = () => {
           );
         })}
       </Card>
+
+      <LocationsCard />
 
       <Card title="Voices">
         <RowShell

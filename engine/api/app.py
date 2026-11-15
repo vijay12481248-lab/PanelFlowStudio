@@ -19,6 +19,7 @@ from engine.security.local_api import (
 )
 from engine.api.routers import projects, pages, panels, ocr, jobs, adapters, system, story, audio, motion, render, music, comfyui
 from engine.api.routers import chronoflow_library, chronoflow_timeline, history, backgrounds, packaging, autopilot, series, browser_bridge, anime, anime_review, original, youtube, motion_graphics, narration, chronoflow, creative, chronoflow_nle, chronoflow_stories, scene
+from engine.api.routers import locations as locations_router
 from starlette.staticfiles import StaticFiles
 from engine.chronoflow.pipeline import STUDIO_OUTPUT_DIR, COMFY_INPUT_DIR
 from engine.chronoflow.supervisor import JobSupervisor
@@ -112,6 +113,7 @@ def create_app(
 
     # Include routers
     app.include_router(system.router)
+    app.include_router(locations_router.router)
     app.include_router(projects.router)
     app.include_router(history.router)
     app.include_router(backgrounds.router)

@@ -267,6 +267,18 @@ export interface YouTubeAgentSettings {
   lead_time_min?: number;
 }
 
+export interface ToolLocation {
+  key: string;
+  label: string;
+  kind: "dir" | "file" | "url";
+  note: string;
+  value: string;
+  source: "saved" | "env" | "default";
+  default: string;
+  found: boolean;
+  restart: boolean;
+}
+
 export interface YouTubeStatus {
   configured: boolean;
   connected: boolean;
@@ -2552,6 +2564,18 @@ export class PanelFlowApiClient {
   async provisionVoices(): Promise<{ success: boolean; voice_directory: string; copied_count: number; total_profiles: number; profiles: any[] }> {
     return this.request<{ success: boolean; voice_directory: string; copied_count: number; total_profiles: number; profiles: any[] }>("/api/system/provision-voices", {
       method: "POST",
+    });
+  }
+
+  async getToolLocations(): Promise<{ items: ToolLocation[] }> {
+    return this.request<{ items: ToolLocation[] }>("/api/system/locations");
+  }
+
+  /** value null or "" resets that item to the environment variable / built-in default. */
+  async saveToolLocations(values: Record<string, string | null>): Promise<{ items: ToolLocation[] }> {
+    return this.request<{ items: ToolLocation[] }>("/api/system/locations", {
+      method: "PUT",
+      body: JSON.stringify({ values }),
     });
   }
 

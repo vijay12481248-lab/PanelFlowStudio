@@ -92,3 +92,7 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+# Saved Settings-page locations (tools, models, addresses) become environment variables before other modules read them.
+from engine.config import locations as _locations  # noqa: E402
+_locations.apply_saved(settings.app_data_dir)
