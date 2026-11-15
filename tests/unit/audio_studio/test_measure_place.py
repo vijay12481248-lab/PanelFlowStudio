@@ -44,3 +44,21 @@ def test_placement_positive():
 def test_placement_negative_trims():
     p = placement_for(hit_t=0.1, anchor_s=0.3)
     assert p.start_s == 0.0 and p.trim_s == pytest.approx(0.2)
+
+
+def _mp3_and_reference(tmp_path):
+    import shutil
+    import subprocess
+    if shutil.which("ffmpeg") is None:
+        pytest.skip("ffmpeg not installed")
+    src = _burst(tmp_path / "src.wav", at=0.5, amp=0.5, dur=0.4, total=1.5)
+    mp3, ref = tmp_path / "x.mp3", tmp_path / "ref.wav"
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(src), "-c:a", "libmp3lame", "-b:a", "128k", str(mp3)], check=True)
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(mp3), str(ref)], check=True)  # the decoder the mixer uses
+    return mp3, ref
+
+
+def test_mp3_is_measured_the_way_the_mixer_decodes_it(tmp_path):
+    mp3, ref = _mp3_and_reference(tmp_path)
+    a, b = measure_take(mp3), measure_take(ref)
+    assert abs(a.onset_s - b.onset_s) < 0.002 and abs(a.peak_s - b.peak_s) < 0.002 and abs(a.duration_s - b.duration_s) < 0.002

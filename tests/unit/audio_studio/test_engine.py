@@ -119,3 +119,14 @@ def test_only_engine_calls_providers():
     files += [root / "engine/api/routers/audio_studio.py", root / "engine/mcp/tools/audio_studio_tools.py"]
     pat = re.compile(r"\bproviders?\b[^\n]*\.find\(|\bp\.find\(")
     assert [f.name for f in files if f.exists() and pat.search(f.read_text(encoding="utf-8"))] == []
+
+
+def test_auto_prefers_a_clip_no_other_cue_already_uses(rig):
+    store, plan = rig
+    plan.cues = [Cue(id=f"k{i}", track="sfx", kind="impact", intent="door", hit_t=1.0 + i) for i in range(3)]
+    store.save(plan)
+    eng = AudioEngine(store, [Fake("a", [(0.5, 1.0), (0.5, 1.1), (0.5, 1.2)])])
+    for i in range(3):
+        eng.source_cue(plan.id, f"k{i}")
+    chosen = [c.chosen_take for c in store.load(plan.id).cues]
+    assert sorted(chosen) == ["a0", "a1", "a2"]

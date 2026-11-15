@@ -18,9 +18,15 @@ def _to_take(c: Candidate) -> Take:
     return Take(**{k: v for k, v in c.model_dump().items() if k in Take.model_fields})
 
 
-def _auto_choice(cue: Cue, cands: list[Candidate]) -> Candidate:
+def _key(c: Candidate | Take) -> str:
+    p = c.provenance
+    return p.url or f"{p.source}:{p.seed if p.seed is not None else c.id}"
+
+
+def _auto_choice(cue: Cue, cands: list[Candidate], used: set[str] = frozenset()) -> Candidate:
     usable = [c for c in cands if c.peak_db > -30]
     clean = [c for c in usable if c.clipped_samples == 0] or usable or cands
+    clean = [c for c in clean if _key(c) not in used] or clean  # a different clip than the other cues use, when there is one
     if cue.kind == "music":
         return clean[0]
     if cue.t_out is not None and cue.track == "ambience":  # a bed: closest to the span it must fill
@@ -57,7 +63,8 @@ class AudioEngine:
             if mode == "ask":
                 cue.status, cue.candidates = "needs_pick", cands
             else:
-                chosen = _auto_choice(cue, cands)
+                used = {_key(t) for other in plan.cues if other.id != cue.id for t in [other.chosen()] if t}
+                chosen = _auto_choice(cue, cands, used)
                 cue.takes.append(_to_take(chosen))
                 cue.chosen_take, cue.status = chosen.id, "ready"
         return self.store.save(plan, note=f"sourced {cue_id}")

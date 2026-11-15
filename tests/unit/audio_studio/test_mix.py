@@ -1,4 +1,5 @@
 import shutil
+import subprocess
 from pathlib import Path
 
 import numpy as np
@@ -143,3 +144,17 @@ def test_ducked_music_stem_keeps_full_length_and_tail(tmp_path):
         x = _read(render_roles(plan, tmp_path / f"s{i}")["music"])
         assert len(x) == int(4.0 * SR)
         assert 20 * np.log10(np.sqrt(np.mean(x[-int(0.1 * SR):] ** 2)) + 1e-9) > -30
+
+
+def test_mp3_whoosh_peak_lands_on_hit(tmp_path):
+    """Regression from the real reel: mp3 library clips landed ~150 ms off (decoder start padding + unstable peak)."""
+    wav = tmp_path / "wh.wav"
+    sf.write(str(wav), render("whoosh", 1.5, 3), SR)
+    mp3 = tmp_path / "wh.mp3"
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(wav), "-c:a", "libmp3lame", "-b:a", "96k", str(mp3)], check=True)
+    m = measure_take(mp3)
+    take = Take(id="mp3", path=str(mp3), provenance=PROV, onset_s=m.onset_s, peak_s=m.peak_s, duration_s=m.duration_s,
+                peak_db=m.peak_db, rms_db=m.rms_db, clipped_samples=m.clipped_samples)
+    plan = _plan(tmp_path)
+    cue = _add(plan, tmp_path, Cue(id="w", track="sfx", kind="whoosh", anchor="peak", hit_t=2.0), take)
+    assert abs(measure_take(render_cue(plan, cue, tmp_path / "w.wav")).peak_s - 2.0) <= 0.021

@@ -28,14 +28,16 @@ def _db(x: float) -> float:
 
 
 def _decode(path: Path) -> tuple[np.ndarray, int]:
-    try:
+    """wav/flac are read directly; everything else (mp3 especially) goes through ffmpeg, the decoder the mixer uses, so a take's
+    measured onset/peak are the ones the rendered mix will have. libsndfile and ffmpeg disagree on mp3 start padding by tens of ms."""
+    if path.suffix.lower() in {".wav", ".flac"}:
         data, sr = sf.read(str(path), dtype="float32", always_2d=True)
-    except Exception:  # mp3 and anything libsndfile cannot read: let ffmpeg decode it
-        with tempfile.TemporaryDirectory() as tmp:
-            wav = Path(tmp) / "x.wav"
-            subprocess.run([shutil.which("ffmpeg") or "ffmpeg", "-v", "error", "-y", "-i", str(path), str(wav)],
-                           check=True, timeout=60)
-            data, sr = sf.read(str(wav), dtype="float32", always_2d=True)
+        return data, sr
+    with tempfile.TemporaryDirectory() as tmp:
+        wav = Path(tmp) / "x.wav"
+        subprocess.run([shutil.which("ffmpeg") or "ffmpeg", "-v", "error", "-y", "-i", str(path), "-c:a", "pcm_f32le", str(wav)],
+                       check=True, timeout=60)
+        data, sr = sf.read(str(wav), dtype="float32", always_2d=True)
     return data, sr
 
 
@@ -58,5 +60,12 @@ def measure_take(path: Path) -> Measure:
     onset = (lo + int(idx[0])) / sr if idx.size else first * win / sr
     smooth = max(1, int(round(0.02 / _WIN_S)))  # peak = centre of the loudest 20 ms
     sm = np.convolve(env, np.ones(smooth) / smooth, mode="same")
-    peak = (int(np.argmax(sm)) + 0.5) * win / sr
+    # peak = middle of the stretch within 3 dB of the loudest point: the exact maximum jumps around on a flat-topped sound
+    i = int(np.argmax(sm))
+    lo_i = hi_i = i
+    while lo_i > 0 and sm[lo_i - 1] >= 0.708 * sm[i]:
+        lo_i -= 1
+    while hi_i < len(sm) - 1 and sm[hi_i + 1] >= 0.708 * sm[i]:
+        hi_i += 1
+    peak = ((lo_i + hi_i) / 2 + 0.5) * win / sr
     return Measure(onset, peak, duration, _db(peak_amp), _db(rms_all), clipped)
