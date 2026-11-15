@@ -1831,5 +1831,76 @@
       "max": 2048,
       "multiple_of": 16
     }
+  },
+  {
+    "id": "flux2_klein_4b_ref",
+    "purpose": "image_edit",
+    "filename": "flux2_klein_4b_ref.api.json",
+    "sha256": "3bdd216cc41634a4742d5ce861325fcc526d3646d70cfdd4f30b5af39de30fb0",
+    "requires_gpu": true,
+    "gpu_vram_mb": 10000,
+    "model_files": [
+      "flux-2-klein-4b.safetensors",
+      "qwen_3_4b.safetensors",
+      "flux2-vae.safetensors"
+    ],
+    "required_nodes": [
+      "UNETLoader",
+      "CLIPLoader",
+      "VAELoader",
+      "CLIPTextEncode",
+      "ConditioningZeroOut",
+      "EmptyFlux2LatentImage",
+      "Flux2Scheduler",
+      "KSamplerSelect",
+      "RandomNoise",
+      "CFGGuider",
+      "SamplerCustomAdvanced",
+      "VAEDecode",
+      "SaveImage",
+      "PrimitiveInt",
+      "LoadImage",
+      "ImageScaleToTotalPixels",
+      "VAEEncode",
+      "ReferenceLatent"
+    ],
+    "patch_slots": {
+      "prompt": {
+        "node_id": "4",
+        "input": "text",
+        "class_type": "CLIPTextEncode"
+      },
+      "seed": {
+        "node_id": "9",
+        "input": "noise_seed",
+        "class_type": "RandomNoise"
+      },
+      "width": {
+        "node_id": "14",
+        "input": "value",
+        "class_type": "PrimitiveInt"
+      },
+      "height": {
+        "node_id": "15",
+        "input": "value",
+        "class_type": "PrimitiveInt"
+      },
+      "filename_prefix": {
+        "node_id": "13",
+        "input": "filename_prefix",
+        "class_type": "SaveImage"
+      },
+      "reference_image": {
+        "node_id": "20",
+        "input": "image",
+        "class_type": "LoadImage"
+      }
+    },
+    "dimension_policy": {
+      "mode": "exact",
+      "min": 256,
+      "max": 2048,
+      "multiple_of": 16
+    }
   }
 ]

@@ -29,7 +29,14 @@ EDIT_WORKFLOW_ID = "minimax_h3_image_edit"  # MiniMax-H3-Image: edit an existing
 # What an image job may run. Qwen is the default everywhere; the H3-Image graph with no picture bound is text to image
 # (the same registered graph as the edit, not a second text_to_image entry), chosen per job by its caller.
 OPEN_ART_WORKFLOW_ID = "flux2_klein_4b"  # FLUX.2 klein 4B (Apache-2.0): the licence-clean replacement being proven for Qwen; text to image only, no picture slots
+OPEN_ART_REF_WORKFLOW_ID = "flux2_klein_4b_ref"  # the same model with one reference picture; generate() switches to it when a picture is given
 IMAGE_WORKFLOW_IDS = (ART_WORKFLOW_ID, EDIT_WORKFLOW_ID, OPEN_ART_WORKFLOW_ID)
+
+
+def _klein_reference_prompt(prompt: str) -> str:
+    """klein copies the reference unless told what to keep and what to change (measured 2026-11-16): state both."""
+    return ("Keep exactly the same characters (same faces, hair and clothes), the same art style and the same setting as in the reference picture. "
+            f"Show a new moment: {prompt}")
 logger = logging.getLogger(__name__)
 POLL_SECONDS = 1.5
 
@@ -304,6 +311,10 @@ class ArtEngine:
         self.registry = registry or ComfyWorkflowRegistry(self.client)
         self._ready: set[str] = set()
 
+    def accepts_reference(self, workflow_id: str) -> bool:
+        """True when `generate` can bind a reference picture for this image workflow (klein does so through its reference variant)."""
+        return workflow_id == OPEN_ART_WORKFLOW_ID or "reference_image" in self.registry.metadata(workflow_id)["patch_slots"]
+
     def require_ready(self, workflow_id: str = ART_WORKFLOW_ID) -> None:
         if workflow_id in self._ready:
             return
@@ -399,6 +410,8 @@ class ArtEngine:
     ) -> ArtImage:
         if workflow_id not in IMAGE_WORKFLOW_IDS:
             raise ComfyImageGenerationError(f"Image workflows are {IMAGE_WORKFLOW_IDS}; got {workflow_id!r}")
+        if workflow_id == OPEN_ART_WORKFLOW_ID and (reference_image is not None or reference_images is not None):
+            workflow_id, prompt = OPEN_ART_REF_WORKFLOW_ID, _klein_reference_prompt(prompt)
         self.require_ready(workflow_id)
         workflow, workflow_sha256 = self.registry.load(workflow_id)
         metadata = self.registry.metadata(workflow_id)
