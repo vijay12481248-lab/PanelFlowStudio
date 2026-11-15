@@ -76,3 +76,56 @@ test('recording a render puts the card in review and keeps its tail frame', () =
   assert.equal(s[0].tail_frame, 't.png');
   assert.equal(s[0].approved, false);
 });
+
+// ---- card helpers
+const wiz = (mode, i, extra = {}) => ({ start_mode: mode, inherits_tail: i >= 1 && ['text', 'first', 'from_video'].includes(mode), first_frame: '', last_frame: '', ref_images: [], prompt: 'x', width: 1344, height: 768, ...extra });
+
+test('slots read and write the right scene fields', () => {
+  const s = wiz('reference', 0);
+  NV.setSlot(s, 'ref1', 'a.png');
+  NV.setSlot(s, 'ref2', 'b.png');
+  assert.deepEqual(s.ref_images, ['a.png', 'b.png']);
+  assert.equal(NV.getSlot(s, 'ref2'), 'b.png');
+  NV.setSlot(s, 'first', 'f.png');
+  NV.setSlot(s, 'last', 'l.png');
+  assert.equal(s.first_frame, 'f.png');
+  assert.equal(s.last_frame, 'l.png');
+  assert.throws(() => NV.setSlot(wiz('reference', 0), 'ref2', 'b.png'), /reference 1/); // the second reference needs the first
+  NV.setSlot(s, 'ref1', '');
+  assert.deepEqual(s.ref_images, ['b.png']); // clearing the first reference shifts the second up (a hole would break the server)
+});
+
+test('effective mode matches the server', () => {
+  assert.equal(NV.effectiveMode(wiz('text', 0), 0), 'text');
+  assert.equal(NV.effectiveMode(wiz('text', 2), 2), 'first');
+  assert.equal(NV.effectiveMode(wiz('from_video', 0), 0), 'first');
+  assert.equal(NV.effectiveMode(wiz('first_last', 3), 3), 'first_last');
+});
+
+test('missing inputs match the server rules', () => {
+  assert.deepEqual(NV.missingInputs(wiz('first_last', 0, { first_frame: 'a.png' }), 0), ['last']);
+  assert.deepEqual(NV.missingInputs(wiz('reference', 0), 0), ['ref1']);
+  assert.deepEqual(NV.missingInputs(wiz('reference', 0, { ref_images: ['a.png'] }), 0), []);
+  assert.deepEqual(NV.missingInputs(wiz('first', 1), 1), []); // chained: the tail frame arrives at render time
+  assert.deepEqual(NV.missingInputs(wiz('from_video', 0), 0), ['first']);
+  assert.deepEqual(NV.missingInputs(wiz('text', 0, { prompt: '  ' }), 0), ['prompt']);
+});
+
+test('text and reference cards warn about the smaller canvas, others do not', () => {
+  assert.match(NV.sizeWarning(wiz('text', 0), 0), /960.544/);
+  assert.match(NV.sizeWarning(wiz('text', 0, { width: 768, height: 1344 }), 0), /544.960/);
+  assert.match(NV.sizeWarning(wiz('reference', 0), 0), /960.544/);
+  assert.equal(NV.sizeWarning(wiz('first_last', 0), 0), '');
+  assert.equal(NV.sizeWarning(wiz('text', 2), 2), ''); // chained text renders as first-frame at full size
+});
+
+test('changing a rendered card to another mode invalidates it and its chained followers', () => {
+  const s = [wiz('first', 0, { first_frame: 'a.png', state: 'approved', approved: true, rendered_video: 'v.mp4' }), wiz('first', 1, { state: 'approved', approved: true })];
+  NV.setMode(s, 0, 'text');
+  assert.equal(s[0].start_mode, 'text');
+  assert.equal(s[0].approved, false);
+  assert.equal(s[1].state, 'stale');
+  NV.setMode(s, 1, 'first_last');
+  assert.equal(s[1].inherits_tail, false);
+  assert.equal(s[1].start_mode, 'first_last');
+});
