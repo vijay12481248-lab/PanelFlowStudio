@@ -158,3 +158,15 @@ def test_mp3_whoosh_peak_lands_on_hit(tmp_path):
     plan = _plan(tmp_path)
     cue = _add(plan, tmp_path, Cue(id="w", track="sfx", kind="whoosh", anchor="peak", hit_t=2.0), take)
     assert abs(measure_take(render_cue(plan, cue, tmp_path / "w.wav")).peak_s - 2.0) <= 0.021
+
+
+def test_nothing_to_mix_is_a_clear_error_not_a_crash(tmp_path):
+    """Review #5: a plan with no dialogue and no ready cue gave an ffmpeg 'Result too large' error."""
+    plan = _plan(tmp_path)
+    with pytest.raises(ValueError, match="nothing to mix"):
+        render_master(plan, tmp_path / "m.wav")
+
+
+def test_loudness_parser_accepts_silence(tmp_path):
+    sf.write(str(tmp_path / "z.wav"), np.zeros(SR, dtype=np.float32), SR)
+    assert measure_loudness(tmp_path / "z.wav")["integrated_lufs"] <= -70

@@ -83,3 +83,23 @@ def test_availability_checks_health_before_any_attempt():
     a = down.availability()
     assert a.ok is False and "connection refused" in a.reason
     assert MusicProvider(generator=_gen([]), slot=Slot(), health=lambda: {"available": True}).availability().ok is True
+
+
+def test_default_slot_uses_the_shared_gpu_manager_and_its_loop(monkeypatch):
+    """Review #3: a private SystemResourceManager never saw the jobs the JobManager admits."""
+    import asyncio
+    import threading
+    from engine.audio.studio.sources import music
+    from engine.system.resources import resource_manager
+    loop = asyncio.new_event_loop()
+    threading.Thread(target=loop.run_forever, daemon=True).start()
+    try:
+        music.bind_loop(loop)
+        slot = music.ResourceSlot()
+        assert slot._rm is resource_manager
+        assert slot.acquire("job_audiostudio_t") is True and "job_audiostudio_t" in resource_manager._active_gpu_jobs
+        slot.release("job_audiostudio_t")
+        assert "job_audiostudio_t" not in resource_manager._active_gpu_jobs
+    finally:
+        music.bind_loop(None)
+        loop.call_soon_threadsafe(loop.stop)

@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import pytest
 
@@ -88,3 +89,13 @@ def test_long_clip_skipped_for_sfx_but_kept_for_ambience(ctx):
 def test_limit_caps_candidates(ctx):
     plan, cue, out = ctx
     assert len(OpenverseProvider(_fake([_result(i) for i in range(9)])).find(cue, out, plan, limit=2)) == 2
+
+
+def test_hostile_result_id_cannot_leave_the_take_folder(ctx):
+    """Review (re-graded): an id from the API went into a file name unchecked."""
+    plan, cue, out = ctx
+    evil = _result(1)
+    evil["id"] = "..\\..\\evil/x-yyyyyyyy"
+    got = OpenverseProvider(_fake([evil])).find(cue, out, plan)
+    assert len(got) == 1 and "/" not in got[0].id and "\\" not in got[0].id and ".." not in got[0].id
+    assert Path(got[0].path).resolve().parent == out.resolve()

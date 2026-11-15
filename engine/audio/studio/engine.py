@@ -49,32 +49,36 @@ class AudioEngine:
         limit = 1 if (mode == "auto" and cue.kind == "music") else 3
         out_dir = self.store.take_dir(plan_id)
         cands: list[Candidate] = []
-        for p in self.providers:
+        for p in self.providers:  # slow (network, GPU): done without holding the plan lock
             cands = p.find(cue, out_dir, plan, limit=limit)
             if cands:
                 break
-        cue.candidates, cue.chosen_take = [], None
-        if not cands:
-            reasons = [f"{p.name}: {p.availability().reason or 'no match'}" for p in self.providers]
-            cue.status, cue.reason = "failed", "; ".join(reasons) if reasons else f"no provider serves kind {cue.kind!r}"
-        else:
-            cands = [_measured(c) for c in cands]
-            cue.reason = None
-            if mode == "ask":
-                cue.status, cue.candidates = "needs_pick", cands
+        cands = [_measured(c) for c in cands]
+        reasons = [f"{p.name}: {p.availability().reason or 'no match'}" for p in self.providers]
+        with self.store.lock(plan_id):  # re-read: other calls may have changed the plan meanwhile
+            plan = self.store.load(plan_id)
+            cue = plan.cue(cue_id)
+            cue.candidates, cue.chosen_take = [], None
+            if not cands:
+                cue.status, cue.reason = "failed", "; ".join(reasons) if reasons else f"no provider serves kind {cue.kind!r}"
             else:
-                used = {_key(t) for other in plan.cues if other.id != cue.id for t in [other.chosen()] if t}
-                chosen = _auto_choice(cue, cands, used)
-                cue.takes.append(_to_take(chosen))
-                cue.chosen_take, cue.status = chosen.id, "ready"
-        return self.store.save(plan, note=f"sourced {cue_id}")
+                cue.reason = None
+                if mode == "ask":
+                    cue.status, cue.candidates = "needs_pick", cands
+                else:
+                    used = {_key(t) for other in plan.cues if other.id != cue.id for t in [other.chosen()] if t}
+                    chosen = _auto_choice(cue, cands, used)
+                    cue.takes.append(_to_take(chosen))
+                    cue.chosen_take, cue.status = chosen.id, "ready"
+            return self.store.save(plan, note=f"sourced {cue_id}")
 
     def pick(self, plan_id: str, cue_id: str, candidate_id: str) -> SoundPlan:
-        plan = self.store.load(plan_id)
-        cue = plan.cue(cue_id)
-        chosen = next((c for c in cue.candidates if c.id == candidate_id), None)
-        if chosen is None:
-            raise KeyError(f"cue {cue_id!r} has no candidate {candidate_id!r}")
-        cue.takes.append(_to_take(chosen))
-        cue.chosen_take, cue.candidates, cue.status, cue.reason = chosen.id, [], "ready", None
-        return self.store.save(plan, note=f"picked {candidate_id} for {cue_id}")
+        with self.store.lock(plan_id):
+            plan = self.store.load(plan_id)
+            cue = plan.cue(cue_id)
+            chosen = next((c for c in cue.candidates if c.id == candidate_id), None)
+            if chosen is None:
+                raise KeyError(f"cue {cue_id!r} has no candidate {candidate_id!r}")
+            cue.takes.append(_to_take(chosen))
+            cue.chosen_take, cue.candidates, cue.status, cue.reason = chosen.id, [], "ready", None
+            return self.store.save(plan, note=f"picked {candidate_id} for {cue_id}")

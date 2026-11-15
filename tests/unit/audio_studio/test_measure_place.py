@@ -90,3 +90,14 @@ def test_measurement_is_made_at_the_mixers_48k(tmp_path):
     subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(src), "-ar", "48000", str(ref)], check=True)  # what the mixer does
     a, b = measure_take(src), measure_take(ref)
     assert abs(a.peak_s - b.peak_s) < 0.002 and abs(a.onset_s - b.onset_s) < 0.002
+
+
+def test_peak_lands_on_a_sound_not_between_two_far_apart_bursts(tmp_path):
+    """Review #2: the centroid of two bursts 2 s apart was in the silence between them."""
+    x = np.zeros(int(SR * 3.0), dtype=np.float32)
+    for at in (0.5, 2.5):
+        i = int(SR * at)
+        x[i:i + 2400] = 0.5 * np.sin(2 * np.pi * 1000 * np.arange(2400) / SR)
+    sf.write(str(tmp_path / "two.wav"), x, SR)
+    p = measure_take(tmp_path / "two.wav").peak_s
+    assert min(abs(p - 0.525), abs(p - 2.525)) < 0.05

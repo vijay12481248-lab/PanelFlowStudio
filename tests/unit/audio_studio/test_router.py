@@ -118,3 +118,40 @@ def test_put_cues_upserts_and_keeps_unlisted_cues_until_removed(client, video):
     got = put(remove_cues=["a", "c"]).json()
     assert [c["id"] for c in got["cues"]] == ["b"]
     assert put(remove_cues=["nope"]).status_code == 400
+
+
+def test_long_qa_does_not_wipe_an_edit_made_while_it_ran(client, video):
+    """Review #1: qa/export saved the plan loaded before they started."""
+    import threading
+    pid = _create(client, video)["id"]
+    base = f"/api/audio/studio/plans/{pid}"
+    client.put(base, json={"cues": [{"id": "c1", "track": "sfx", "kind": "impact", "hit_t": 1.0, "intent": "first"}]})
+    client.post(f"{base}/cues/c1/source", json={})
+    started, release = threading.Event(), threading.Event()
+    real = mod.mixer.render_cue
+
+    def slow(plan, cue, out):
+        started.set()
+        release.wait(10)
+        return real(plan, cue, out)
+    mod.mixer.render_cue = slow
+    try:
+        t = threading.Thread(target=lambda: client.post(f"{base}/qa"))
+        t.start()
+        assert started.wait(10)
+        client.put(base, json={"cues": [{"id": "c1", "intent": "edited during qa"}]})
+        release.set()
+        t.join(30)
+    finally:
+        mod.mixer.render_cue = real
+    cue = client.get(base).json()["cues"][0]
+    assert cue["intent"] == "edited during qa" and cue["placement_error_ms"] is not None
+
+
+def test_put_plan_refuses_server_owned_cue_fields(client, video):
+    """Review #4: a caller could set takes with any path and any licence, skipping the licence gate."""
+    pid = _create(client, video)["id"]
+    forged = {"id": "c1", "track": "sfx", "kind": "x", "chosen_take": "t", "status": "ready",
+              "takes": [{"id": "t", "path": "C:/secret.wav", "provenance": {"source": "x", "licence": "CC0"}}]}
+    r = client.put(f"/api/audio/studio/plans/{pid}", json={"cues": [forged]})
+    assert r.status_code == 400 and "source_cue" in r.json()["detail"]

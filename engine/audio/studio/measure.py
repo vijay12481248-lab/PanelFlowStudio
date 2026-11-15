@@ -63,9 +63,12 @@ def measure_take(path: Path) -> Measure:
     onset = (lo + int(idx[0])) / sr if idx.size else first * win / sr
     smooth = max(1, int(round(0.02 / _WIN_S)))  # peak = centre of the loudest 20 ms
     sm = np.convolve(env, np.ones(smooth) / smooth, mode="same")
-    # peak = energy-weighted centre of everything within 6 dB of the loudest point. The exact maximum flips between two
-    # near-equal lobes when the sample rate or the 5 ms grid shifts a little; a centroid moves only as much as the sound does.
+    # peak = energy-weighted centre of the loudest cluster within 6 dB of the maximum. Windows less than 0.5 s apart form one
+    # cluster (two near-equal lobes of one whoosh merge, so the result cannot flip between them); a far-apart second sound is its
+    # own cluster, so the peak never lands in the silence between two events.
     idx = np.nonzero(sm >= 0.5 * sm.max())[0]
-    w = sm[idx] ** 2
-    peak = (float(np.sum(idx * w) / np.sum(w)) + 0.5) * win / sr
+    clusters = np.split(idx, np.nonzero(np.diff(idx) > int(0.5 / _WIN_S))[0] + 1)
+    best = max(clusters, key=lambda c: float(np.sum(sm[c] ** 2)))
+    w = sm[best] ** 2
+    peak = (float(np.sum(best * w) / np.sum(w)) + 0.5) * win / sr
     return Measure(onset, peak, duration, _db(peak_amp), _db(rms_all), clipped)

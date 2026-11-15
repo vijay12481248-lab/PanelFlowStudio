@@ -130,3 +130,23 @@ def test_auto_prefers_a_clip_no_other_cue_already_uses(rig):
         eng.source_cue(plan.id, f"k{i}")
     chosen = [c.chosen_take for c in store.load(plan.id).cues]
     assert sorted(chosen) == ["a0", "a1", "a2"]
+
+
+def test_parallel_sourcing_keeps_every_cue(rig):
+    """Review #1: two cues sourced at once used to overwrite each other's take (load-modify-save without a lock)."""
+    import threading
+    import time
+    store, plan = rig
+    plan.cues = [Cue(id="p1", track="sfx", kind="impact", intent="a", hit_t=1.0), Cue(id="p2", track="sfx", kind="impact", intent="b", hit_t=2.0)]
+    store.save(plan)
+
+    class Slow(Fake):
+        def find(self, cue, out_dir, plan, limit=3):
+            time.sleep(0.3)
+            return super().find(cue, out_dir, plan, limit)
+    eng = AudioEngine(store, [Slow("a", [(0.5, 1.0), (0.4, 1.0)])])
+    ts = [threading.Thread(target=eng.source_cue, args=(plan.id, c)) for c in ("p1", "p2")]
+    [t.start() for t in ts]
+    [t.join() for t in ts]
+    final = store.load(plan.id)
+    assert [c.status for c in final.cues] == ["ready", "ready"] and all(c.chosen_take for c in final.cues)

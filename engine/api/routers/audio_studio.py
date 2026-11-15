@@ -1,11 +1,13 @@
 """Audio Studio REST API: sound plans (cue sheets), sourcing, checks, mix and export. The MCP tools call exactly these endpoints."""
 from __future__ import annotations
 
+import asyncio
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
@@ -13,6 +15,7 @@ from engine.audio.studio import mix as mixer
 from engine.audio.studio.engine import AudioEngine
 from engine.audio.studio.plan import Cue, PlanStore, Track, check_id, snap
 from engine.audio.studio.qa import check_plan
+from engine.audio.studio.sources import music as music_source
 from engine.audio.studio.sources.music import MusicProvider
 from engine.audio.studio.sources.openverse import OpenverseProvider
 from engine.audio.studio.sources.synth import SynthProvider
@@ -20,6 +23,8 @@ from engine.audio.studio.spot import detect_cuts, draft_cues
 from engine.audio.studio.stems import export as export_plan
 
 router = APIRouter(prefix="/api/audio/studio", tags=["audio-studio"])
+# These come from source_cue / pick / qa, never from a caller: otherwise a caller could attach any file with any licence to a cue.
+_SERVER_OWNED = {"takes", "candidates", "chosen_take", "status", "reason", "placement_error_ms"}
 _engine: AudioEngine | None = None
 
 
@@ -73,6 +78,17 @@ class RenderBody(BaseModel):
     allow_incomplete: bool = False
 
 
+def _save_measured(engine: AudioEngine, plan_id: str, measured: Any, note: str):
+    """Copy the placement errors a long run measured onto the plan as it is now, so edits made meanwhile are not overwritten."""
+    errors = {c.id: c.placement_error_ms for c in measured.cues if c.placement_error_ms is not None}
+    with engine.store.lock(plan_id):
+        fresh = engine.store.load(plan_id)
+        for c in fresh.cues:
+            if c.id in errors:
+                c.placement_error_ms = errors[c.id]
+        return engine.store.save(fresh, note)
+
+
 @router.get("/providers")
 def providers(engine: AudioEngine = Depends(get_engine)) -> dict[str, Any]:
     return {n: {"ok": a.ok, "reason": a.reason} for n, a in engine.providers_report().items()}
@@ -105,7 +121,11 @@ def get_plan(plan_id: str, engine: AudioEngine = Depends(get_engine)) -> dict[st
 
 @router.put("/plans/{plan_id}")
 def put_plan(plan_id: str, body: PutBody, engine: AudioEngine = Depends(get_engine)) -> dict[str, Any]:
-    with _errors():
+    with _errors(), engine.store.lock(plan_id):
+        for raw in body.cues or []:
+            owned = sorted(_SERVER_OWNED & set(raw))
+            if owned:
+                raise ValueError(f"cue {raw.get('id')!r}: {', '.join(owned)} are set by source_cue / pick / qa, not by put_plan")
         plan = engine.store.load(plan_id)
         if body.cues is not None or body.remove_cues:
             by_id = {c.id: c for c in plan.cues}  # upsert: cues the body does not mention stay as they are
@@ -142,17 +162,23 @@ def put_plan(plan_id: str, body: PutBody, engine: AudioEngine = Depends(get_engi
 @router.post("/plans/{plan_id}/spot")
 def spot(plan_id: str, engine: AudioEngine = Depends(get_engine)) -> dict[str, Any]:
     with _errors():
-        plan = engine.store.load(plan_id)
-        keep = [c for c in plan.cues if c.status != "draft"]
-        taken = {c.id for c in keep}
-        plan.cues = keep + [c for c in draft_cues(plan, detect_cuts(Path(plan.video_path))) if c.id not in taken]
-        return engine.store.save(plan, "spotted").model_dump()
+        cuts = detect_cuts(Path(engine.store.load(plan_id).video_path))  # slow: no lock held
+        with engine.store.lock(plan_id):
+            plan = engine.store.load(plan_id)
+            keep = [c for c in plan.cues if c.status != "draft"]
+            taken = {c.id for c in keep}
+            plan.cues = keep + [c for c in draft_cues(plan, cuts) if c.id not in taken]
+            return engine.store.save(plan, "spotted").model_dump()
 
 
 @router.post("/plans/{plan_id}/cues/{cue_id}/source")
-def source_cue(plan_id: str, cue_id: str, body: SourceBody | None = None, engine: AudioEngine = Depends(get_engine)) -> dict[str, Any]:
-    with _errors():
-        return engine.source_cue(plan_id, check_id(cue_id), (body.mode if body else None)).model_dump()
+async def source_cue(plan_id: str, cue_id: str, body: SourceBody | None = None, engine: AudioEngine = Depends(get_engine)) -> dict[str, Any]:
+    music_source.bind_loop(asyncio.get_running_loop())
+
+    def work() -> dict[str, Any]:
+        with _errors():
+            return engine.source_cue(plan_id, check_id(cue_id), (body.mode if body else None)).model_dump()
+    return await run_in_threadpool(work)
 
 
 @router.post("/plans/{plan_id}/cues/{cue_id}/pick")
@@ -165,8 +191,8 @@ def pick(plan_id: str, cue_id: str, body: PickBody, engine: AudioEngine = Depend
 def qa(plan_id: str, engine: AudioEngine = Depends(get_engine)) -> dict[str, Any]:
     with _errors():
         plan = engine.store.load(plan_id)
-        findings = check_plan(plan, mixer.render_cue)
-        saved = engine.store.save(plan, "qa")
+        findings = check_plan(plan, mixer.render_cue)  # slow: no lock held
+        saved = _save_measured(engine, plan_id, plan, "qa")
         errors = sum(f.severity == "error" for f in findings)
         return {"plan_version": saved.version, "errors": errors, "warnings": len(findings) - errors,
                 "findings": [f.model_dump() for f in findings]}
@@ -190,7 +216,7 @@ def export(plan_id: str, body: RenderBody | None = None, engine: AudioEngine = D
         plan = engine.store.load(plan_id)
         out = engine.store.plan_dir(plan_id) / "exports" / f"v{plan.version}"
         res = export_plan(plan, out, body.target_lufs, Path(plan.video_path) if body.mux else None, body.allow_incomplete)
-        engine.store.save(plan, "exported")  # keeps the placement errors the export measured
+        _save_measured(engine, plan_id, plan, "exported")  # keeps the placement errors the export measured
         return {**res, "dir": f"exports/v{plan.version}"}
 
 

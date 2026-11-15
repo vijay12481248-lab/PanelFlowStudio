@@ -10,20 +10,33 @@ from engine.audio.studio.plan import Candidate, Cue, Provenance, SoundPlan
 from engine.audio.studio.sources.base import Availability
 
 _ONE_AT_A_TIME = threading.Lock()
+_loop: asyncio.AbstractEventLoop | None = None
+
+
+def bind_loop(loop: asyncio.AbstractEventLoop | None) -> None:
+    """The server's event loop: the shared resource manager's lock belongs to it, so slot calls from worker threads run there."""
+    global _loop
+    _loop = loop
 
 
 class ResourceSlot:
-    """The engine's GPU admission (SystemResourceManager), callable from sync code."""
+    """The engine's shared GPU admission (the same manager the JobManager uses), callable from worker threads."""
 
     def __init__(self):
-        from engine.system.resources import SystemResourceManager
-        self._rm = SystemResourceManager()
+        from engine.system.resources import resource_manager
+        self._rm = resource_manager
+
+    @staticmethod
+    def _run(coro):
+        if _loop is not None and _loop.is_running():
+            return asyncio.run_coroutine_threadsafe(coro, _loop).result(timeout=60)
+        return asyncio.run(coro)
 
     def acquire(self, job_id: str) -> bool:
-        return asyncio.run(self._rm.acquire_gpu_slot(job_id, required_vram_mb=0.0))
+        return self._run(self._rm.acquire_gpu_slot(job_id, required_vram_mb=0.0))
 
     def release(self, job_id: str) -> None:
-        asyncio.run(self._rm.release_gpu_slot(job_id))
+        self._run(self._rm.release_gpu_slot(job_id))
 
 
 class MusicProvider:

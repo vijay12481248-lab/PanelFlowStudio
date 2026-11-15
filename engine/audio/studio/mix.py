@@ -5,6 +5,7 @@ Every intermediate file is 48 kHz stereo float32 wav, so stems add up exactly; o
 from __future__ import annotations
 
 import json
+import math
 import re
 import shutil
 import subprocess
@@ -134,9 +135,12 @@ def render_roles(plan: SoundPlan, out_dir: Path) -> dict[str, Path]:
 def measure_loudness(path: Path) -> dict:
     err = _run([_FFMPEG, "-hide_banner", "-nostats", "-i", str(path), "-af", "ebur128=peak=true", "-f", "null", "-"])
     summary = err[err.rfind("Summary:"):]
-    num = lambda pat: float(re.findall(pat, summary)[-1])  # noqa: E731
-    return {"integrated_lufs": num(r"I:\s+(-?\d+\.\d+) LUFS"), "lra": num(r"LRA:\s+(\d+\.\d+) LU"),
-            "true_peak_db": num(r"Peak:\s+(-?\d+\.\d+) dBFS")}
+    def num(pat: str) -> float:
+        v = re.findall(pat, summary)[-1]
+        return -120.0 if v == "-inf" else float(v)  # a silent file measures -inf
+
+    return {"integrated_lufs": num(r"I:\s+(-?\d+\.\d+|-inf) LUFS"), "lra": num(r"LRA:\s+(\d+\.\d+) LU"),
+            "true_peak_db": num(r"Peak:\s+(-?\d+\.\d+|-inf) dBFS")}
 
 
 def render_master(plan: SoundPlan, out_wav: Path, target_lufs: float = -14.0, video_in: Path | None = None,
@@ -152,6 +156,8 @@ def render_master(plan: SoundPlan, out_wav: Path, target_lufs: float = -14.0, vi
         first = _run([_FFMPEG, "-hide_banner", "-nostats", "-i", str(premix), "-af",
                       f"{limit},{loudnorm_filter(target_lufs, None)}:print_format=json", "-f", "null", "-"])
         stats = json.loads(first[first.rfind("{"):first.rfind("}") + 1])
+        if not math.isfinite(float(stats["input_i"])):
+            raise ValueError("nothing to mix: the plan has no dialogue and no ready cue")
         _run([_FFMPEG, "-v", "error", "-y", "-i", str(premix), "-af", f"{limit},{loudnorm_filter(target_lufs, stats)}",
               "-ar", str(SR), "-ac", "2", "-c:a", "pcm_s24le", str(out_wav)])
     result = measure_loudness(out_wav)

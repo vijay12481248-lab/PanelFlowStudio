@@ -66,3 +66,7 @@ Not exercised: ACE-Step itself (not installed at `C:\Tools\ACE-Step-1.5`, GPU 15
 - **Openverse's anonymous API rate-limits.** After roughly a hundred requests in one day it answered HTTP 403 and the cue failed with that reason. A free Openverse API key would raise the limit; creating one is the owner's account action, so it is not wired in yet.
 - Auto fetches three candidates per cue, so at most three different library clips exist per intent; vary the intent wording across cues for more variety.
 - Two cues in the reel (`buzz`, `night`) found no CC0 match at all; the CC0-only default is strict by design.
+
+## Final review (2026-11-15)
+
+A fresh whole-branch review found no critical issues and five important ones, all fixed with a failing test first: lost updates when two calls changed one plan (per-plan lock, slow work outside it, long runs write back only what they measured); the `peak` anchor could land in silence between two far-apart sounds (now the loudest cluster, merging lobes under 0.5 s apart); the music GPU slot used a private resource manager instead of the shared one the job manager uses; `put_plan` could attach any file with any licence to a cue (server-owned cue fields are now refused); a plan with nothing to mix crashed ffmpeg (now a clear error). A malformed Openverse id can no longer reach a file name. Minor findings deferred are listed in the ledger summary of the pull request.

@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import json
+import re
 import urllib.parse
+import uuid
 import urllib.request
 from pathlib import Path
 from typing import Callable
@@ -63,11 +65,12 @@ class OpenverseProvider:
                 continue
             if len(data) > MAX_BYTES or not str(ctype).lower().startswith("audio/"):
                 continue
-            ext = Path(urllib.parse.urlparse(r["url"]).path).suffix or ".mp3"
+            rid = re.sub(r"[^A-Za-z0-9_-]", "", str(r.get("id", "")))[:12] or uuid.uuid4().hex[:10]
+            ext = re.sub(r"[^A-Za-z0-9.]", "", Path(urllib.parse.urlparse(r["url"]).path).suffix) or ".mp3"
             out_dir.mkdir(parents=True, exist_ok=True)
-            path = out_dir / f"{cue.id}_ov_{str(r['id'])[:8]}{ext}"
+            path = out_dir / f"{cue.id}_ov_{rid[:8]}{ext}"
             path.write_bytes(data)
-            cands.append(Candidate(id=str(r["id"])[:12], path=str(path), provider=self.name, label=str(r.get("title", "")),
+            cands.append(Candidate(id=rid, path=str(path), provider=self.name, label=str(r.get("title", "")),
                                    provenance=Provenance(source=f"openverse/{r.get('source', 'unknown')}", licence=lic.upper(),
                                                          url=r.get("foreign_landing_url"), author=r.get("creator"))))
         return cands

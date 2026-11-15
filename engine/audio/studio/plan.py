@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import re
 import secrets
+import threading
 import time
 from pathlib import Path
 from typing import Literal
@@ -111,6 +112,13 @@ def check_id(value: str) -> str:
 class PlanStore:
     def __init__(self, root: Path | None = None):
         self.root = Path(root) if root else settings.app_data_dir / "audio_studio" / "plans"
+        self._locks: dict[str, threading.RLock] = {}
+        self._guard = threading.Lock()
+
+    def lock(self, plan_id: str) -> threading.RLock:
+        """Hold it around load-modify-save so parallel REST/MCP calls on one plan do not overwrite each other."""
+        with self._guard:
+            return self._locks.setdefault(check_id(plan_id), threading.RLock())
 
     def _dir(self, plan_id: str) -> Path:
         return self.root / check_id(plan_id)
@@ -141,7 +149,7 @@ class PlanStore:
         saved = plan.model_copy(update={"version": plan.version + 1, "note": note or plan.note})
         d = self._dir(saved.id)
         d.mkdir(parents=True, exist_ok=True)
-        tmp = d / "plan.json.tmp"
+        tmp = d / f"plan.json.{secrets.token_hex(4)}.tmp"
         tmp.write_text(saved.model_dump_json(indent=1), encoding="utf-8")
         for attempt in range(5):  # Windows refuses to replace a file another process holds open
             try:
