@@ -64,6 +64,7 @@ class Cue(BaseModel):
     gain_db: float = 0.0
     fade_in: float = 0.0
     fade_out: float = 0.0
+    hints: dict = Field(default_factory=dict)  # optional music hints: bpm, key_scale
     status: Literal["draft", "needs_pick", "ready", "failed"] = "draft"
     reason: str | None = None
     placement_error_ms: float | None = None
