@@ -5327,6 +5327,8 @@
         setTimeout(() => {
           if (typeof openImageStudioStory === 'function') openImageStudioStory(_storyFromUrl);
         }, 200);
+      } else if (_tabFromUrl === 'image-generate') {
+        setTimeout(() => { if (typeof openImageStudio === 'function') openImageStudio('generate'); }, 200);
       } else if (_tabFromUrl === 'image-studio') {
         setTimeout(() => {
           if (typeof openImageStudio === 'function') openImageStudio('timeline');

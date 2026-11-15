@@ -2,13 +2,12 @@ import React from "react";
 import { Navigate, useNavigate, useParams, useSearchParams } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@panelflow/api-client";
-import { Button, EmptyState, ErrorState, ListRow, PageHeader, Skeleton } from "@panelflow/ui-v2";
+import { ErrorState, Skeleton } from "@panelflow/ui-v2";
 import type { Project } from "@panelflow/shared-types";
 import { NewProjectScreen } from "../../screens/NewProjectScreen";
 import { OriginalStoriesScreen } from "../../screens/OriginalStoriesScreen";
 import { AnimeReviewScreen } from "../../screens/AnimeReviewScreen";
 import { ChronoFlowScreen } from "../../screens/ChronoFlowScreen";
-import { ComfyImageScreen } from "../../screens/ComfyImageScreen";
 import { StoryEditorScreen } from "../../screens/StoryEditorScreen";
 import { useEngine } from "../../app/providers";
 import { isChronoFlowProject, paths, stageForProject } from "../../app/routes";
@@ -58,24 +57,10 @@ export const ChronoFlowRoute: React.FC = () => {
   return <ChronoFlowScreen project={project.data ?? null} jobId={jobId ?? null} tab={tab} story={story} onBack={() => navigate(paths.home())} />;
 };
 
+/** Same screen as ChronoFlow's Image Studio "Generate New Image" (one art path: ArtEngine). */
 export const ImageRoute: React.FC = () => {
-  const [params] = useSearchParams();
   const navigate = useNavigate();
-  const projectId = params.get("project") ?? undefined;
-  const project = useProject(projectId);
-  const projects = useQuery({ queryKey: ["projects"], queryFn: () => api.listProjects(), enabled: !projectId });
-  if (projectId) {
-    if (project.isError) return <ProjectMissing />;
-    if (!project.data) return <Loading />;
-    return <div className="mx-auto w-full max-w-7xl p-6 md:p-8"><ComfyImageScreen project={project.data} onBack={() => navigate(paths.create())} /></div>;
-  }
-  return (
-    <div className="mx-auto grid w-full max-w-3xl gap-4 p-6 md:p-8 grid-cols-1">
-      <PageHeader title="Create an image" meta={<span>Pick the project the image belongs to.</span>} />
-      {projects.data?.length === 0 && <EmptyState title="No projects yet" description="Create a project first, then generate images for it." action={<Button variant="primary" onClick={() => navigate(paths.create("new"))}>Create a project</Button>} />}
-      {projects.data?.map((p) => <ListRow key={p.id} title={p.title} subtitle={p.current_stage} onSelect={() => navigate(`${paths.create("image")}?project=${encodeURIComponent(p.id)}`)} />)}
-    </div>
-  );
+  return <ChronoFlowScreen project={null} jobId={null} tab="image-generate" story={null} onBack={() => navigate(paths.create())} />;
 };
 
 export const EditorRoute: React.FC = () => {
