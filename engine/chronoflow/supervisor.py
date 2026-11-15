@@ -13,10 +13,15 @@ from pathlib import Path
 # Paths
 from engine.chronoflow.pipeline import BASE_DIR, COMFY_INPUT_DIR, STUDIO_OUTPUT_DIR
 
+from engine.config.settings import settings
+
 VAULT_DIR = Path(__file__).resolve().parent / "vault"
-JOBS_FILE = VAULT_DIR / "jobs.json"
+# Jobs are user data, not source: they live in the app-data folder (tests point that at a temp dir), never in the git-tracked vault.
+JOBS_DIR = settings.app_data_dir / "chronoflow"
+JOBS_FILE = JOBS_DIR / "jobs.json"
 
 VAULT_DIR.mkdir(parents=True, exist_ok=True)
+JOBS_DIR.mkdir(parents=True, exist_ok=True)
 STUDIO_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 def _clean_surrogates(obj):
@@ -27,6 +32,12 @@ def _clean_surrogates(obj):
     elif isinstance(obj, list):
         return [_clean_surrogates(item) for item in obj]
     return obj
+
+
+def job_title(j: dict) -> str:
+    """A human name for the project picker and the monitor title (never a raw id or a prompt's first heading)."""
+    t = j.get("title") or j.get("folder_name") or j.get("screenplay_title") or " ".join((j.get("prompt") or "").split())
+    return t[:60] or "Untitled project"
 
 
 class JobSupervisor:
@@ -116,7 +127,7 @@ class JobSupervisor:
 
     def _save_jobs_to_disk(self):
         try:
-            temp_file = VAULT_DIR / f"jobs_tmp_{int(time.time()*1000)}.json"
+            temp_file = JOBS_DIR / f"jobs_tmp_{int(time.time()*1000)}.json"
             with open(temp_file, "w", encoding="utf-8") as f:
                 json.dump(self.active_jobs, f, indent=2)
             temp_file.replace(JOBS_FILE)
@@ -308,7 +319,7 @@ class JobSupervisor:
         # Resolve active job
         active_job = None
         if requested_job_id and requested_job_id in self.active_jobs:
-            active_job = self.active_jobs[requested_job_id]
+            active_job = _clean_surrogates(self.active_jobs[requested_job_id])   # a lone surrogate in LLM text made /sync 500 and froze the studio
         elif running_job:
             active_job = running_job
         elif jobs_list:
@@ -331,6 +342,8 @@ class JobSupervisor:
                 "id": j["id"],
                 "status": j.get("status", "unknown"),
                 "prompt": (j.get("prompt") or "")[:40],
+                "title": job_title(j),
+                "mode": j.get("workflow_mode") or "generated",
                 "created_at": j.get("created_at", 0),
                 "chunks_count": len(j.get("chunks", [])),
                 "total_chunks": j.get("total_chunks", 3)

@@ -58,3 +58,25 @@ if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {{
 async def pick_native_folder(initial_dir: str = "", title: str = "Select Folder for PanelFlow Studio") -> str:
     """Run native folder dialog in a background thread without blocking event loop."""
     return await asyncio.to_thread(_open_native_dialog_sync, initial_dir, title)
+
+
+def _open_files_dialog_sync(title: str = "Choose videos to import") -> list[str]:
+    """Native multi-file picker (tkinter ships with Python; returns real paths, nothing is uploaded)."""
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+        root = tk.Tk()
+        root.withdraw()
+        root.wm_attributes("-topmost", 1)
+        picked = filedialog.askopenfilenames(parent=root, title=title, filetypes=[("Video", "*.mp4 *.webm *.mov"), ("All files", "*.*")])
+        try:
+            root.destroy()
+        except Exception:
+            pass
+        return [str(Path(p).resolve()) for p in picked]
+    except Exception:
+        return []
+
+
+async def pick_native_files(title: str = "Choose videos to import") -> list[str]:
+    return await asyncio.to_thread(_open_files_dialog_sync, title)

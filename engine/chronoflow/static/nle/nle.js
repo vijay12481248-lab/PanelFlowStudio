@@ -1109,8 +1109,7 @@
         <span class="grow"></span>
         <div class="nle-tc" id="nleTc">00:00:00:00<small id="nleTcTotal">/ 00:00:00:00</small></div>
       </div>
-      <div class="nle-status" id="nleStatus"></div>
-      <div id="nleFrameMount"></div>`;
+      <div class="nle-status" id="nleStatus"></div>`;   // #nleFrameMount (shot prompt / Regen) lives in the AI Tools panel in index.html
     tlMount.className = 'nle-tl';
     tlMount.innerHTML = `
       <div class="nle-tl-bar">

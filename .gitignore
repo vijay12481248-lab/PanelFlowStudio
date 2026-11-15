@@ -103,3 +103,7 @@ apps/desktop/src-tauri/tauri.nobundle.conf.json
 # Playwright
 apps/desktop/test-results/
 apps/desktop/playwright-report/
+
+# ChronoFlow jobs are user data (app-data folder); never track
+engine/chronoflow/vault/jobs.json
+engine/chronoflow/vault/jobs_tmp_*.json

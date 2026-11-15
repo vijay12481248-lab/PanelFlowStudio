@@ -3434,7 +3434,7 @@
 
   </style>
 </head>
-<body>
+<body data-tab="director" data-page="edit">
 
   <!-- Top Navigation Bar -->
   <header>
@@ -3530,30 +3530,22 @@
         </div>
       </div>
 
-      <!-- Prompt Modal Trigger Button -->
-      <button id="btnPromptModal" type="button" onclick="openPromptModal()" class="btn-prompt-trigger" title="Open Scene &amp; Production Controls Popup">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-        <span>Prompt</span>
-      </button>
-
       <!-- Project Badge -->
       <span id="headerProjectBadge" class="brand-project-tag" style="display: none;"></span>
     </div>
 
     <!-- Center Navigation Tabs -->
     <div class="nav-tabs">
-      <button class="nav-tab active" data-tab="director" onclick="switchTab('director')">🎬 Video Studio</button>
-      <button class="nav-tab" data-tab="image-studio" onclick="switchTab('image-studio')">🎨 Image Studio</button>
-      <button class="nav-tab" data-tab="vault" onclick="switchTab('vault')">🏛️ Gallery</button>
-      <button class="nav-tab" data-tab="storyboard" onclick="switchTab('storyboard')">📜 Storyboard</button>
-      <button class="nav-tab" data-tab="organizer" onclick="switchTab('organizer')">🗂 Organizer</button>
+      <button class="nav-tab active" data-tab="director" onclick="switchResolvePage(cfPage === 'media' ? 'media' : cfPage)" title="Edit, color and deliver videos">Video Studio</button>
+      <button class="nav-tab" data-tab="image-studio" onclick="switchTab('image-studio')" title="Generate and edit pictures">Image Studio</button>
+      <button class="nav-tab" data-tab="vault" onclick="switchTab('vault')" title="Everything ChronoFlow has rendered">Gallery</button>
+      <button class="nav-tab" data-tab="storyboard" onclick="switchTab('storyboard')" title="Plan a video shot by shot">Storyboard</button>
+      <button class="nav-tab" data-tab="organizer" onclick="switchTab('organizer')" title="Move and tidy your files">Organizer</button>
     </div>
 
-    <!-- Right Controls -->
+    <!-- Right Controls: the one primary action -->
     <div class="header-status">
-      <button type="button" class="btn-prompt-trigger" onclick="openPromptModal()" style="font-size: 0.74rem; padding: 4px 10px;">
-        <span>🎬 New Shot Controls</span>
-      </button>
+      <button type="button" class="cfx-primary" onclick="openPromptModal()" title="Describe a scene and generate a new video clip with AI">＋ New video</button>
     </div>
   </header>
 
@@ -3562,7 +3554,9 @@
   <!-- Main Workspace -->
   <main>
     <div class="tab-content active" id="tab-director">
-      <div class="davinci-nle-wrapper">
+      <!-- Media page: everything PanelFlow has made + anything on disk (built by static/nle/library.js) -->
+      <div class="cf-library" id="cfLibrary" style="display:none"></div>
+      <div class="davinci-nle-wrapper" id="cfWorkspace" data-page="edit">
         <!-- Sleek Task Progress Notification Strip (Auto-hides when idle) -->
         <div class="progress-box" id="progressBox" style="display: none;">
           <div class="prog-compact-row">
@@ -3598,13 +3592,7 @@
               </div>
               <div class="pool-tools-group">
                 <input type="text" id="poolSearchInput" placeholder="Filter clips..." oninput="filterMediaPool(this.value)" class="pool-search-input">
-                <button type="button" class="btn-pool-action" onclick="openSceneImporterModal()" title="Import Storyboard Scene into Video Studio" style="color: #d3deff; background: rgba(59,107,245,0.25); border: 1px solid rgba(59,107,245,0.5); font-weight: 700; padding: 3px 8px; font-size: 0.72rem; border-radius: 4px; display: inline-flex; align-items: center; gap: 4px;">
-                  <span>📥 Import Scene</span>
-                </button>
-                <button type="button" class="btn-pool-action" onclick="browseDiskForVideoStudio()" title="Browse local disk folder or scene manifest" style="color: #8fe6c6; background: rgba(70,214,163,0.2); border: 1px solid rgba(70,214,163,0.5); font-weight: 700; padding: 3px 8px; font-size: 0.72rem; border-radius: 4px; display: inline-flex; align-items: center; gap: 4px;">
-                  <span>📂 Browse Disk</span>
-                </button>
-                <button type="button" class="btn-pool-action" onclick="refreshMediaPool()" title="Refresh Pool">🔄</button>
+                <button type="button" class="cfx-primary sm" onclick="switchResolvePage('media')" title="Bring in videos from your computer or from anything PanelFlow has made">＋ Import</button>
               </div>
             </div>
 
@@ -3627,25 +3615,54 @@
           <div class="davinci-cinema-monitor">
             <div class="monitor-top-bar">
               <div class="monitor-title-box">
-                <span class="monitor-seq-title" id="monitorSequenceTitle">MATT GOSS PROMO v2</span>
+                <span class="monitor-seq-title" id="monitorSequenceTitle">No project open</span>
                 <span class="monitor-badge-tag">1080p24 • Rec.709</span>
               </div>
               <div class="monitor-top-controls">
                 <div class="job-select-wrapper">
-                  <span style="color: #6a76a3; font-size: 0.72rem; font-weight: 700;">JOB:</span>
-                  <select id="projectJobSelect" onchange="onSelectProjectJob(this.value)" class="monitor-job-select">
-                    <option value="">Loading jobs...</option>
+                  <span class="cf-label">Project</span>
+                  <select id="projectJobSelect" onchange="onSelectProjectJob(this.value)" class="monitor-job-select" title="Switch between your projects">
+                    <option value="">Loading projects...</option>
                   </select>
                 </div>
-                <button type="button" class="btn-monitor-tool" onclick="openSceneImporterModal()" title="Load Scene from Storyboard into Video Studio" style="border-color: rgba(59,107,245,0.5); color: #d3deff;">📥 Load Scene</button>
-                <button type="button" class="btn-monitor-tool" id="btnMagicBrush" onclick="NLEFrameEdit.toggleBrush()" title="Magic Brush: paint on the paused frame, describe the change, merge it into the timeline" style="border-color:#3b6bf5;color:#7aa2ff">✨ Magic Brush</button>
-                <button type="button" class="btn-monitor-tool" onclick="extractFrameToImageStudio()" title="Send the current frame to Image Studio">📸 Image Studio</button>
               </div>
             </div>
 
             <!-- Program monitor + transport + frame-edit bar (built by static/nle/nle.js) -->
             <div id="nleMonitorBody"></div>
           </div>
+
+          <!-- AI Tools (right of the monitor on the Edit page): every AI action in one place, each with what it is for -->
+          <aside class="cf-ai" id="cfAiPanel" aria-label="AI tools">
+            <div class="cf-panel-head"><span>✨ AI Tools</span></div>
+            <div class="cf-ai-scroll">
+              <section class="cf-ai-card">
+                <h4>New shot</h4>
+                <p>Describe a scene and let the video model generate a clip for it.</p>
+                <button type="button" class="cfx-primary" onclick="openPromptModal()">＋ Generate new shot</button>
+              </section>
+              <section class="cf-ai-card">
+                <h4>Change this frame</h4>
+                <p>Pause on a frame, paint over the part to change, describe it, then merge the result back into the timeline.</p>
+                <button type="button" class="cfx-btn" id="btnMagicBrush" onclick="NLEFrameEdit.toggleBrush()">✨ Magic Brush</button>
+              </section>
+              <section class="cf-ai-card">
+                <h4>Shot prompt</h4>
+                <p>Edit the prompt of the shot under the playhead, let AI write or fix it, then regenerate.</p>
+                <div id="nleFrameMount"></div>
+              </section>
+              <section class="cf-ai-card">
+                <h4>Plan a storyboard</h4>
+                <p>Turn an idea into a shot-by-shot plan, then render it.</p>
+                <button type="button" class="cfx-btn" onclick="switchTab('storyboard'); openAIDirectorModal()">⚡ Open AI Director</button>
+              </section>
+              <section class="cf-ai-card">
+                <h4>Touch up in Image Studio</h4>
+                <p>Send the current frame to Image Studio for retouching or upscaling.</p>
+                <button type="button" class="cfx-btn" onclick="extractFrameToImageStudio()">📸 Send frame</button>
+              </section>
+            </div>
+          </aside>
 
           <!-- Color Scopes (Right on Color page) -->
           <div class="color-scopes" id="colorScopes"></div>
@@ -5338,11 +5355,7 @@
       if (tabId === 'storyboard') initStoryboard();
       if (tabId === 'organizer') loadOrganizer();
 
-      // Sync DaVinci Resolve Bottom Rail
-      if (tabId === 'vault') syncResolveRail('media');
-      else if (tabId === 'director') syncResolveRail('edit');
-      else if (tabId === 'image-studio') syncResolveRail('color');
-      else if (tabId === 'storyboard') syncResolveRail('cut');
+      document.body.dataset.tab = tabId;   // the page rail only shows on 'director' (see layout.css)
     }
 
     // Dynamic Timeline Renderer
@@ -5494,13 +5507,11 @@
       if (subtab === 'chunks') {
         if (btnChunks) btnChunks.classList.add('active');
         if (btnNLE) btnNLE.classList.remove('active');
-        syncResolveRail('cut');
         if (chunksContent) chunksContent.style.display = 'block';
         if (nleContent) nleContent.style.display = 'none';
       } else {
         if (btnNLE) btnNLE.classList.add('active');
         if (btnChunks) btnChunks.classList.remove('active');
-        syncResolveRail('edit');
         if (chunksContent) chunksContent.style.display = 'none';
         if (nleContent) nleContent.style.display = 'block';
         initTimeline();
@@ -5880,24 +5891,36 @@ The AI Director is modifying the prompt and rendering in ComfyUI.`);
       renderJobsDropdown(jobs) {
         const select = document.getElementById('projectJobSelect');
         if (!select || !jobs) return;
-        
-        const sig = jobs.map(j => `${j.id}_${j.status}_${j.chunks_count}`).join('|');
+
+        const sig = jobs.map(j => `${j.id}_${j.status}_${j.chunks_count}_${j.title}`).join('|');
         if (select.getAttribute('data-sig') === sig && select.value === this.activeJobId) {
           return;
         }
         select.setAttribute('data-sig', sig);
 
-        select.innerHTML = '';
+        const ago = (t) => { const d = (Date.now() / 1000 - (t || 0)) / 3600; return !t ? '' : d < 1 ? 'just now' : d < 24 ? `${Math.round(d)}h ago` : `${Math.round(d / 24)}d ago`; };
+        const groups = { imported: ['Imported videos', []], generated: ['Generated by AI', []] };
         jobs.forEach(j => {
           const opt = document.createElement('option');
           opt.value = j.id;
-          const statusIcon = (j.status === 'completed' || j.status === 'completed_chunks') ? '✓' : (j.status === 'failed') ? '✕' : (j.status === 'cancelled') ? '⊘' : '⚡';
-          const promptShort = (j.prompt || '').slice(0, 34);
-          opt.textContent = `${statusIcon} #${j.id.slice(0, 8)}: ${promptShort}... (${j.status})`;
+          const state = (j.status === 'completed' || j.status === 'completed_chunks') ? '' : (j.status === 'failed') ? ' - failed' : (j.status === 'cancelled') ? ' - cancelled' : ' - working...';
+          opt.textContent = `${j.title || 'Untitled project'} · ${j.chunks_count} clip${j.chunks_count === 1 ? '' : 's'} · ${ago(j.created_at)}${state}`;
           if (j.id === this.activeJobId) opt.selected = true;
-          select.appendChild(opt);
+          groups[j.mode === 'imported' ? 'imported' : 'generated'][1].push(opt);
+        });
+        select.innerHTML = '';
+        Object.values(groups).forEach(([label, opts]) => {
+          if (!opts.length) return;
+          const g = document.createElement('optgroup'); g.label = label; opts.forEach(o => g.appendChild(o)); select.appendChild(g);
         });
         select.value = this.activeJobId;
+        this.updateProjectTitle();
+      }
+
+      updateProjectTitle() {
+        const el = document.getElementById('monitorSequenceTitle');
+        const j = (this.jobsSummary || []).find(x => x.id === this.activeJobId);
+        if (el) el.textContent = j ? j.title : 'No project open';
       }
 
       renderComfyStatus(comfy) {
@@ -9346,7 +9369,15 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
       if (badge) badge.textContent = `${items.length} Clips`;
       if (!items.length) {
         currentPoolItems = [];
-        grid.innerHTML = '<div style="grid-column: 1 / -1; text-align: center; padding: 30px; color: #6a76a3; font-size: 0.75rem;">No media in this bin</div>';
+        grid.innerHTML = (q || currentMediaBin !== 'all')
+          ? '<div class="cf-empty-note">Nothing matches here.</div>'
+          : `<div class="cf-empty">
+               <div class="cf-empty-icon">🎞️</div>
+               <h4>No videos in this project yet</h4>
+               <p>Import videos you already have, or generate a new clip with AI.</p>
+               <button type="button" class="cfx-primary" onclick="switchResolvePage('media')">＋ Import videos</button>
+               <button type="button" class="cfx-btn" onclick="openPromptModal()">✨ Generate with AI</button>
+             </div>`;
         return;
       }
       currentPoolItems = items;
@@ -11610,48 +11641,29 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
     
     
 
-    // DaVinci Resolve Workflow Page Switcher
+    // Video Studio pages. ONE source of truth: the rail highlight, the layout (data-page, see layout.css) and the
+    // Color / Fusion / Deliver / Library modules all follow cfPage. Nothing else may highlight the rail.
+    const CF_PAGES = ['media', 'edit', 'fusion', 'color', 'deliver'];
+    let cfPage = 'edit';
     function switchResolvePage(page) {
-      document.querySelectorAll('.resolve-rail-item').forEach(b => b.classList.remove('active'));
-      const btn = document.getElementById('rail' + page.charAt(0).toUpperCase() + page.slice(1));
-      if (btn) btn.classList.add('active');
-
-      if (window.NLEColor && page !== 'color') window.NLEColor.close();
-      if (window.NLEFusion && page !== 'fusion') window.NLEFusion.close();
-      if (window.NLEDeliver && page !== 'deliver') window.NLEDeliver.close();
-
-      if (page === 'media') {
-        switchTab('vault');
-      } else if (page === 'cut') {
-        switchTab('director');
-        switchBottomTimelineTab('chunks');
-      } else if (page === 'edit') {
-        switchTab('director');
-        switchBottomTimelineTab('nle');
-      } else if (page === 'fusion') {
-        switchTab('director');
-        switchBottomTimelineTab('nle');
-        if (window.NLEFusion) window.NLEFusion.open();
-      } else if (page === 'color') {
-        switchTab('director');
-        switchBottomTimelineTab('nle');
-        if (window.NLEColor) window.NLEColor.open();
-      } else if (page === 'fairlight') {
-        switchTab('director');
-        switchBottomTimelineTab('nle');
-      } else if (page === 'deliver') {
-        switchTab('director');
-        switchBottomTimelineTab('nle');
-        if (window.NLEDeliver) window.NLEDeliver.open();    // the page has its own settings and render queue; "Bake Master Cut" stays as the quick export
-      }
-      // switchTab()/switchBottomTimelineTab() above re-highlight "Edit"; keep the page the user actually chose
-      if (page === 'color' || page === 'fusion' || page === 'deliver') syncResolveRail(page);
-    }
-
-    function syncResolveRail(page) {
-      document.querySelectorAll('.resolve-rail-item').forEach(b => b.classList.remove('active'));
-      const btn = document.getElementById('rail' + page.charAt(0).toUpperCase() + page.slice(1));
-      if (btn) btn.classList.add('active');
+      if (!CF_PAGES.includes(page)) page = 'edit';
+      cfPage = page;
+      switchTab('director');
+      document.body.dataset.page = page;
+      const ws = document.getElementById('cfWorkspace'); if (ws) ws.dataset.page = page;
+      document.querySelectorAll('.resolve-rail-item').forEach(b => {
+        const on = b.id === 'rail' + page.charAt(0).toUpperCase() + page.slice(1);
+        b.classList.toggle('active', on);
+        if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+      });
+      if (window.NLEColor && page !== 'color') NLEColor.close();
+      if (window.NLEFusion && page !== 'fusion') NLEFusion.close();
+      if (window.NLEDeliver && page !== 'deliver') NLEDeliver.close();
+      if (window.CFLibrary) { if (page === 'media') CFLibrary.open(); else CFLibrary.close(); }
+      if (page === 'color' && window.NLEColor) NLEColor.open();
+      if (page === 'fusion' && window.NLEFusion) NLEFusion.open();
+      if (page === 'deliver' && window.NLEDeliver) NLEDeliver.open();   // has its own settings + render queue; "Bake Master Cut" stays the quick export
+      if (page !== 'media' && typeof initTimeline === 'function') initTimeline();
     }
 
     // The timeline/player live in static/nle/*. Static files need the engine token as a query param (script/link tags cannot send headers).
@@ -11659,12 +11671,12 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
     function loadNLEAssets() {
       const v = Date.now();
       const tq = ENGINE_TOKEN ? `token=${encodeURIComponent(ENGINE_TOKEN)}&v=${v}` : `v=${v}`;
-      ['nle.css', 'color.css', 'fusion.css', 'deliver.css'].forEach(sheet => {
+      ['nle.css', 'color.css', 'fusion.css', 'deliver.css', 'library.css', 'layout.css'].forEach(sheet => {
         const css = document.createElement('link');
         css.rel = 'stylesheet'; css.href = `${STATIC_BASE}/nle/${sheet}?${tq}`; document.head.appendChild(css);
       });
       const load = (f) => new Promise((res, rej) => { const s = document.createElement('script'); s.src = `${STATIC_BASE}/nle/${f}?${tq}`; s.onload = res; s.onerror = () => rej(new Error(`could not load ${f}`)); document.head.appendChild(s); });
-      return ['model.js', 'nle.js', 'frame-edit.js', 'grade.js', 'color.js', 'fusion-graph.js', 'fusion.js', 'deliver.js'].reduce((p, f) => p.then(() => load(f)), Promise.resolve());
+      return ['model.js', 'nle.js', 'frame-edit.js', 'grade.js', 'color.js', 'fusion-graph.js', 'fusion.js', 'deliver.js', 'library.js'].reduce((p, f) => p.then(() => load(f)), Promise.resolve());
     }
 
     async function initApp() {
@@ -11722,31 +11734,23 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
   </script>
   <!-- Iconic DaVinci Resolve Workflow Page Switcher Rail -->
   <nav class="resolve-bottom-rail" id="resolveBottomRail">
-    <button type="button" class="resolve-rail-item" id="railMedia" onclick="switchResolvePage('media')" title="Media & Asset Vault">
+    <button type="button" class="resolve-rail-item" id="railMedia" onclick="switchResolvePage('media')" title="Media: import videos and browse everything PanelFlow has made">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/></svg>
       <span>Media</span>
     </button>
-    <button type="button" class="resolve-rail-item" id="railCut" onclick="switchResolvePage('cut')" title="Cut Page (Storyboard Chunks)">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg>
-      <span>Cut</span>
-    </button>
-    <button type="button" class="resolve-rail-item active" id="railEdit" onclick="switchResolvePage('edit')" title="Edit Page (Multi-Track NLE Timeline)">
+    <button type="button" class="resolve-rail-item active" id="railEdit" onclick="switchResolvePage('edit')" title="Edit: arrange clips on the timeline, use AI tools">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="7" y1="8" x2="17" y2="8"/><line x1="7" y1="12" x2="17" y2="12"/><line x1="7" y1="16" x2="13" y2="16"/></svg>
       <span>Edit</span>
     </button>
-    <button type="button" class="resolve-rail-item" id="railFusion" onclick="switchResolvePage('fusion')" title="Fusion FX & Inpainting">
+    <button type="button" class="resolve-rail-item" id="railFusion" onclick="switchResolvePage('fusion')" title="Fusion: effects and inpainting on the current frame">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg>
       <span>Fusion</span>
     </button>
-    <button type="button" class="resolve-rail-item" id="railColor" onclick="switchResolvePage('color')" title="Color & Image Generation Studio">
+    <button type="button" class="resolve-rail-item" id="railColor" onclick="switchResolvePage('color')" title="Color: grade the look of your clips">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><line x1="12" y1="3" x2="12" y2="8"/><line x1="12" y1="16" x2="12" y2="21"/><line x1="3" y1="12" x2="8" y2="12"/><line x1="16" y1="12" x2="21" y2="12"/></svg>
       <span>Color</span>
     </button>
-    <button type="button" class="resolve-rail-item" id="railFairlight" onclick="switchResolvePage('fairlight')" title="Fairlight Audio Mixer">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
-      <span>Fairlight</span>
-    </button>
-    <button type="button" class="resolve-rail-item" id="railDeliver" onclick="switchResolvePage('deliver')" title="Deliver & Bake Master Video">
+    <button type="button" class="resolve-rail-item" id="railDeliver" onclick="switchResolvePage('deliver')" title="Deliver: export the finished video">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
       <span>Deliver</span>
     </button>

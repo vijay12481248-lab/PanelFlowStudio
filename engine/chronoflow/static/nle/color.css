@@ -1,11 +1,7 @@
 /* ChronoFlow Color page (Midnight Glass tokens). The page is the Edit page with three extra panels switched on by .is-color. */
 .color-gallery, .color-scopes, .color-panel { display: none; }
-.davinci-nle-wrapper.is-color .davinci-top-row { grid-template-columns: 20% minmax(0, 1fr) 300px; height: 48vh; min-height: 380px; max-height: 560px; }
-.davinci-nle-wrapper.is-color { margin-bottom: 64px; }                                   /* keeps the bottom of the panel clear of the page rail */
-.davinci-nle-wrapper.is-color .davinci-media-pool { display: none; }
 .davinci-nle-wrapper.is-color .color-gallery, .davinci-nle-wrapper.is-color .color-scopes { display: flex; }
 .davinci-nle-wrapper.is-color .color-panel { display: flex; }
-@media (max-width: 1100px) { .davinci-nle-wrapper.is-color .davinci-top-row { grid-template-columns: 1fr; height: auto; max-height: none; } }
 
 .color-gallery, .color-scopes { flex-direction: column; background: #0b1230; border: 1px solid #1a2350; border-radius: 6px; overflow: hidden; min-height: 0; }
 .color-scopes { overflow-y: auto; }

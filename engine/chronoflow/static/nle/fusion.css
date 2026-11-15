@@ -3,25 +3,10 @@
 
 .fusion-inspector, .fusion-panel { display: none; }
 
-/* Layout adjustments when Fusion page is active */
-.davinci-nle-wrapper.is-fusion .davinci-top-row {
-  grid-template-columns: minmax(0, 1fr) 320px;
-  height: 48vh;
-  min-height: 380px;
-  max-height: 560px;
-}
-.davinci-nle-wrapper.is-fusion .davinci-media-pool { display: none; }
 .davinci-nle-wrapper.is-fusion .fusion-inspector { display: flex; }
 .davinci-nle-wrapper.is-fusion .fusion-panel { display: flex; }
 .davinci-nle-wrapper.is-fusion #nleTimeline { display: none; }
 
-@media (max-width: 1100px) {
-  .davinci-nle-wrapper.is-fusion .davinci-top-row {
-    grid-template-columns: 1fr;
-    height: auto;
-    max-height: none;
-  }
-}
 
 /* Fusion Canvas on Program Monitor */
 .nle-screen canvas.cf-fusion-canvas {

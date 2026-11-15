@@ -1,0 +1,38 @@
+/* ChronoFlow Media page (library + import). Shown instead of the workspace when #cfWorkspace[data-page=media]. */
+.cf-library { flex: 1; min-height: 0; display: none; gap: 8px; color: #d5dcf5; }
+.lib-side { width: 280px; flex: none; display: flex; flex-direction: column; background: #0b1230; border: 1px solid #1a2350; border-radius: 6px; overflow: hidden; }
+.lib-sources { flex: 1; min-height: 0; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 2px; }
+.lib-grp { margin: 10px 4px 4px; }
+.lib-src { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 7px 10px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: #b8c3ea; font: inherit; font-size: .78rem; cursor: pointer; text-align: left; }
+.lib-src span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lib-src b { font-weight: 700; font-size: .68rem; color: #6a76a3; flex: none; }
+.lib-src:hover { background: #101a3d; }
+.lib-src.on { background: rgba(59,107,245,.2); border-color: #3b6bf5; color: #fff; }
+.lib-src:focus-visible { outline: 2px solid #7aa2ff; outline-offset: -2px; }
+.lib-side-actions { padding: 10px; border-top: 1px solid #1a2350; display: flex; flex-direction: column; gap: 6px; }
+
+.lib-main { flex: 1; min-width: 0; display: flex; flex-direction: column; background: #0b1230; border: 1px solid #1a2350; border-radius: 6px; overflow: hidden; }
+.lib-toolbar { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; background: #101a3d; border-bottom: 1px solid #1a2350; }
+.lib-toolbar h2 { margin: 0; font-size: 1rem; color: #eef1ff; }
+.lib-sub { font-size: .7rem; color: #6a76a3; }
+.lib-toolbar input { width: 280px; max-width: 40%; background: #050816; color: #eef1ff; border: 1px solid #222d5e; border-radius: 6px; padding: 7px 10px; font: inherit; font-size: .78rem; }
+.lib-toolbar input:focus-visible { outline: 2px solid #7aa2ff; }
+.lib-note { flex: none; padding: 8px 14px; font-size: .76rem; color: #a9c1ff; background: rgba(59,107,245,.12); border-bottom: 1px solid #1a2350; }
+.lib-note.bad { color: #ffb4bf; background: rgba(242,102,122,.12); }
+.lib-grid { flex: 1; min-height: 0; overflow-y: auto; padding: 12px; display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; align-content: start; grid-auto-rows: max-content; }
+.lib-card { background: #0e1638; border: 1px solid #1a2350; border-radius: 8px; overflow: hidden; cursor: pointer; }
+.lib-card:hover { border-color: #3a4a95; }
+.lib-card.sel { border-color: #3b6bf5; box-shadow: 0 0 0 1px #3b6bf5; }
+.lib-card:focus-visible { outline: 2px solid #7aa2ff; outline-offset: 2px; }
+.lib-thumb { position: relative; aspect-ratio: 16 / 9; background: #000; }
+.lib-thumb video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.lib-check { position: absolute; top: 6px; left: 6px; width: 20px; height: 20px; border-radius: 5px; border: 2px solid rgba(255,255,255,.7); background: rgba(0,0,0,.45); color: #fff; font-size: .72rem; font-weight: 800; display: flex; align-items: center; justify-content: center; }
+.lib-card.sel .lib-check { background: #3b6bf5; border-color: #3b6bf5; }
+.lib-meta { padding: 7px 9px; }
+.lib-name { font-size: .76rem; color: #eef1ff; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lib-meta .lib-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lib-more { flex: none; display: flex; justify-content: center; padding: 0 0 8px; }
+.lib-more:has(button[style*="none"]) { padding: 0; }
+.lib-footer { flex: none; display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: #101a3d; border-top: 1px solid #1a2350; font-size: .8rem; font-weight: 700; }
+.lib-footer .grow { flex: 1; }
+@media (max-width: 1000px) { .lib-side { width: 210px; } .lib-toolbar input { max-width: 50%; } }

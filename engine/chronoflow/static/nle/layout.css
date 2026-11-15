@@ -1,0 +1,103 @@
+/* ChronoFlow Video Studio layout. ONE place decides how every page is arranged (loaded last, so it wins).
+   The workspace is a fixed frame - header, [left | monitor | right] row, bottom row, page rail - and never scrolls the page;
+   panels scroll inside themselves. #cfWorkspace[data-page] is set by switchResolvePage() in index.html; nothing else may change it. */
+
+/* ---------- buttons (the only two button styles the studio chrome uses) ---------- */
+.cfx-btn, .cfx-primary { font: inherit; font-size: .76rem; font-weight: 700; border-radius: 6px; padding: 7px 12px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 1px solid #2a3770; background: #101a3d; color: #d5dcf5; white-space: nowrap; }
+.cfx-btn:hover { background: #18255a; color: #fff; }
+.cfx-primary { background: linear-gradient(180deg, #3b6bf5, #2c52c4); border-color: #3b6bf5; color: #fff; }
+.cfx-primary:hover { filter: brightness(1.12); }
+.cfx-primary.sm { padding: 4px 10px; font-size: .72rem; }
+.cfx-btn:focus-visible, .cfx-primary:focus-visible { outline: 2px solid #7aa2ff; outline-offset: 2px; }
+.cfx-btn:disabled, .cfx-primary:disabled { opacity: .45; cursor: default; filter: none; }
+.cf-label { color: #6a76a3; font-size: .68rem; font-weight: 800; text-transform: uppercase; letter-spacing: .07em; }
+
+/* ---------- the frame ---------- */
+body[data-tab="director"] { height: 100vh; overflow: hidden; padding-bottom: 50px; }
+body[data-tab="director"] main { flex: 1; min-height: 0; overflow: hidden; padding: 6px 8px 4px; }
+body[data-tab="director"] #tab-director.active { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+body:not([data-tab="director"]) { padding-bottom: 0; }
+body:not([data-tab="director"]) .resolve-bottom-rail { display: none; }
+.resolve-bottom-rail { height: 50px; }
+.resolve-rail-item { min-width: 92px; }
+.resolve-rail-item.active { color: #a9c1ff; border-top-color: #3b6bf5; background: #101a3d; }
+
+#cfWorkspace { --cf-l: 300px; --cf-r: 320px; --cf-tl: 250px; flex: 1; min-height: 0; overflow: hidden; }
+#cfWorkspace[data-page="media"] { display: none; }
+#cfWorkspace[data-page="fusion"] { --cf-l: 260px; --cf-r: 320px; }
+#cfWorkspace[data-page="color"] { --cf-l: 240px; --cf-r: 320px; --cf-tl: 190px; }
+#cfWorkspace[data-page="deliver"] { --cf-l: 340px; --cf-r: 320px; --cf-tl: 190px; }
+
+#cfWorkspace .davinci-top-row { flex: 1 1 0; min-height: 0; max-height: none; height: auto; grid-template-columns: var(--cf-l) minmax(0, 1fr) var(--cf-r); grid-template-rows: minmax(0, 1fr); }
+#cfWorkspace .davinci-top-row > * { display: none; grid-row: 1; min-width: 0; min-height: 0; }
+#cfWorkspace .davinci-top-row > .davinci-cinema-monitor { display: flex; grid-column: 2; }
+#cfWorkspace[data-page="edit"] .davinci-media-pool,
+#cfWorkspace[data-page="fusion"] .davinci-media-pool { display: flex; grid-column: 1; }
+#cfWorkspace[data-page="edit"] .cf-ai { display: flex; grid-column: 3; }
+#cfWorkspace[data-page="fusion"] .fusion-inspector { display: flex; grid-column: 3; }
+#cfWorkspace[data-page="color"] .color-gallery { display: flex; grid-column: 1; }
+#cfWorkspace[data-page="color"] .color-scopes { display: flex; grid-column: 3; }
+#cfWorkspace[data-page="deliver"] .deliver-settings { display: flex; grid-column: 1; }
+#cfWorkspace[data-page="deliver"] .deliver-queue { display: flex; grid-column: 3; }
+
+/* bottom row: the timeline is a fixed-height strip, Color / Fusion put their own panel under it */
+#cfWorkspace #nleTimeline { flex: 0 0 var(--cf-tl); min-height: 0; overflow: auto; }
+#cfWorkspace[data-page="fusion"] #nleTimeline { display: none; }
+#cfWorkspace[data-page="color"] .color-panel { flex: 0 0 270px; min-height: 0; overflow: auto; }
+#cfWorkspace[data-page="fusion"] .fusion-panel { flex: 0 0 300px; min-height: 0; }
+#cfWorkspace .progress-box { flex: none; }
+
+@media (max-width: 1200px) { #cfWorkspace { --cf-l: 250px; --cf-r: 280px; } #cfWorkspace[data-page="deliver"] { --cf-l: 300px; } }
+@media (max-width: 1000px) {
+  #cfWorkspace .davinci-top-row { grid-template-columns: minmax(0, 1fr) var(--cf-r); }
+  #cfWorkspace .davinci-top-row > .davinci-cinema-monitor { grid-column: 1; }
+  #cfWorkspace .davinci-top-row > [class*="davinci-media-pool"], #cfWorkspace .davinci-top-row > .color-gallery, #cfWorkspace .davinci-top-row > .deliver-settings { display: none !important; }
+  #cfWorkspace .davinci-top-row > .cf-ai, #cfWorkspace .davinci-top-row > .color-scopes, #cfWorkspace .davinci-top-row > .deliver-queue, #cfWorkspace .davinci-top-row > .fusion-inspector { grid-column: 2; }
+}
+
+/* ---------- monitor header: title + project picker only ---------- */
+.monitor-top-bar { flex: none; }
+.monitor-title-box { min-width: 0; flex: 0 1 auto; }
+.monitor-seq-title { max-width: 26vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.monitor-top-controls { min-width: 0; flex: 1; justify-content: flex-end; }
+.job-select-wrapper { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; justify-content: flex-end; }
+.job-select-wrapper > select.monitor-job-select { min-width: 0; flex: 1 1 auto; width: 100%; max-width: 420px; }
+@media (max-width: 1200px) { .monitor-badge-tag { display: none; } .monitor-top-bar { flex-wrap: wrap; } .monitor-top-controls { flex: 1 1 100%; } .job-select-wrapper { flex: 1 1 100%; justify-content: flex-start; } .job-select-wrapper > select.monitor-job-select { max-width: none; } }
+/* media pool header: title row, then search + Import (the Import button must never be pushed out of a narrow panel) */
+.pool-header-bar { flex-wrap: wrap; }
+.pool-tools-group { flex: 1 1 100%; display: flex; gap: 6px; align-items: center; }
+.pool-tools-group .pool-search-input { flex: 1; min-width: 0; width: auto; }
+
+/* grids inside a fixed-height panel must keep their row height (auto rows otherwise shrink to fit and clip the cards) */
+.pool-content-area { grid-auto-rows: max-content; align-content: start; }
+
+/* ---------- AI Tools panel ---------- */
+.cf-ai { flex-direction: column; background: #0b1230; border: 1px solid #1a2350; border-radius: 6px; overflow: hidden; }
+.cf-panel-head { flex: none; padding: 8px 12px; font-size: .72rem; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; color: #a9c1ff; background: #101a3d; border-bottom: 1px solid #1a2350; }
+.cf-ai-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 8px; }
+.cf-ai-card { background: #0e1638; border: 1px solid #1a2350; border-radius: 8px; padding: 10px; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.cf-ai-card h4 { margin: 0; font-size: .8rem; color: #eef1ff; }
+.cf-ai-card p { margin: 0; font-size: .72rem; line-height: 1.4; color: #9aa6d0; }
+.cf-ai-card .cfx-btn, .cf-ai-card .cfx-primary { align-self: stretch; }
+#btnMagicBrush.on { border-color: #3b6bf5; color: #7aa2ff; background: rgba(59,107,245,.2); }
+/* the shot-prompt bar (built by frame-edit.js) is a horizontal bar by default; stack it for a 300 px column */
+.cf-ai #nleFrameMount { align-self: stretch; }
+.cf-ai .nle-framebar { padding: 0; background: transparent; border: 0; }
+.cf-ai .nle-fb-top, .cf-ai .nle-fb-main { flex-direction: column; align-items: stretch; }
+.cf-ai .nle-framebar .thumb { width: 100%; min-height: 84px; }
+.cf-ai .nle-framebar .col { flex-direction: row; min-width: 0; }
+.cf-ai .nle-framebar .col .nle-btn { flex: 1; }
+.cf-ai #feBrushBtn { display: none; }               /* the "Change this frame" card above is the one Magic Brush button */
+.cf-ai #fePrompt { min-height: 96px; }
+
+/* ---------- empty states ---------- */
+.cf-empty { grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 26px 14px; text-align: center; }
+.cf-empty-icon { font-size: 2rem; opacity: .7; }
+.cf-empty h4 { margin: 0; font-size: .86rem; color: #eef1ff; }
+.cf-empty p { margin: 0 0 4px; font-size: .74rem; color: #9aa6d0; max-width: 240px; line-height: 1.4; }
+.cf-empty .cfx-btn, .cf-empty .cfx-primary { width: 100%; max-width: 220px; }
+.cf-empty-note { grid-column: 1 / -1; text-align: center; padding: 24px; color: #6a76a3; font-size: .75rem; }
+
+/* ---------- header ---------- */
+header .cfx-primary { padding: 6px 14px; }
+.nav-tab { text-transform: none; font-size: .78rem; letter-spacing: 0; padding: 5px 14px; }
