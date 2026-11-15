@@ -62,3 +62,40 @@ def missing_inputs(scene: dict[str, Any], index: int) -> list[str]:
     if not (scene.get("prompt") or "").strip():
         out.append("prompt")
     return out
+
+
+DRAFT_BATCH = 10  # a 2048-token reply holds about this many shot descriptions
+DRAFT_SYSTEM = ("You write shot lists for an AI video generator. Each item is one plain-language description of what happens in ONE five-second shot: "
+                "the subject, the setting, the motion and the camera. Items continue the story in order, never repeat each other, contain no dialogue and no numbering. "
+                "Reply with only a JSON array of strings.")
+
+
+def parse_draft(text: str, n: int) -> list[str]:
+    """The model's reply as exactly `n` non-blank strings, or ValueError (never padded or trimmed)."""
+    import json
+    import re
+
+    body = re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip())
+    try:
+        items = json.loads(body)
+    except ValueError as e:
+        raise ValueError(f"the model did not return a JSON list: {e}") from e
+    if not isinstance(items, list) or not all(isinstance(i, str) for i in items):
+        raise ValueError("the model did not return a list of strings")
+    if len(items) != n:
+        raise ValueError(f"expected {n} prompts, the model wrote {len(items)}")
+    if any(not i.strip() for i in items):
+        raise ValueError("the model wrote an empty prompt")
+    return [i.strip() for i in items]
+
+
+async def draft_prompts(idea: str, count: int, generate) -> list[str]:
+    """`count` shot descriptions for `idea`, written in batches so the story carries forward. `generate(prompt, system) -> str` is the LLM call."""
+    out: list[str] = []
+    while len(out) < count:
+        k = min(DRAFT_BATCH, count - len(out))
+        before = f"The shot before these ended with: {out[-1]}\n" if out else ""
+        prompt = (f"Story idea: {idea}\n{before}Write shots {len(out) + 1} to {len(out) + k} of a {count}-shot video. "
+                  f"Return exactly {k} items as a JSON array of strings.")
+        out += parse_draft(await generate(prompt, DRAFT_SYSTEM), k)
+    return out

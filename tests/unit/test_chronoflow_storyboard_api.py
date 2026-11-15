@@ -150,3 +150,48 @@ async def test_mcp_screenplay_tools():
         })
         assert get_res["title"] == "CHRONO RELIC: AVALON PRIME"
         assert len(get_res["scenes"]) == 24
+
+
+# ---- New Video wizard endpoints
+def test_storyboard_plan_builds_cards(client):
+    r = client.post("/api/chronoflow/storyboard/plan", json={"mode": "first_last", "length_seconds": 300, "title": "T"})
+    assert r.status_code == 200 and len(r.json()["scenes"]) == 58 and r.json()["scenes"][0]["start_mode"] == "first_last"
+
+
+@pytest.mark.parametrize("body", [{"mode": "first", "length_seconds": 0}, {"mode": "sideways", "length_seconds": 15}, {"mode": "text", "length_seconds": 5000}])
+def test_storyboard_plan_rejects_bad_input(client, body):
+    assert client.post("/api/chronoflow/storyboard/plan", json=body).status_code == 400
+
+
+def _fake_llm(monkeypatch, reply):
+    from engine.llm.providers.ollama import OllamaProvider
+
+    async def fake(self, prompt, system_prompt=None, **kw):
+        return reply
+
+    monkeypatch.setattr(OllamaProvider, "generate_text", fake)
+
+
+def test_draft_prompts_returns_exactly_count(client, monkeypatch):
+    _fake_llm(monkeypatch, '["a", "b", "c"]')
+    r = client.post("/api/chronoflow/storyboard/draft_prompts", json={"idea": "x", "count": 3, "mode": "text"})
+    assert r.status_code == 200 and r.json()["prompts"] == ["a", "b", "c"]
+
+
+def test_draft_prompts_wrong_count_is_502_not_padded(client, monkeypatch):
+    _fake_llm(monkeypatch, '["a", "b", "c"]')
+    r = client.post("/api/chronoflow/storyboard/draft_prompts", json={"idea": "x", "count": 4, "mode": "text"})
+    assert r.status_code == 502 and "4" in r.json()["detail"]
+
+
+def test_tail_frame_rejects_paths_and_missing_clips(client, monkeypatch, tmp_path):
+    from engine.api.routers import chronoflow as router
+
+    monkeypatch.setattr(router, "STUDIO_OUTPUT_DIR", tmp_path)
+    monkeypatch.setattr(router, "COMFY_INPUT_DIR", tmp_path)
+    assert client.post("/api/chronoflow/storyboard/tail_frame", json={"video": "../x.mp4"}).status_code == 400
+    assert client.post("/api/chronoflow/storyboard/tail_frame", json={"video": "nope.mp4"}).status_code == 404
+    (tmp_path / "clip.mp4").write_bytes(b"x")
+    monkeypatch.setattr(router.pipeline, "extract_tail_frame", lambda v, o: (open(o, "wb").write(b"png"), True)[1])
+    r = client.post("/api/chronoflow/storyboard/tail_frame", json={"video": "clip.mp4"})
+    assert r.status_code == 200 and (tmp_path / r.json()["filename"]).exists()

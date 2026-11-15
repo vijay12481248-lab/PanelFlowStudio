@@ -65,3 +65,41 @@ def test_missing_inputs_names_slots():
     head = sm.build_plan("from_video", 15)["scenes"][0]
     head["prompt"] = "x"
     assert sm.missing_inputs(head, 0) == ["first"]  # no video picked yet
+
+
+# ---- AI draft of the segment prompts
+import asyncio
+import json
+import re
+
+
+def test_parse_draft_accepts_fenced_json():
+    assert sm.parse_draft('```json\n["a fox runs", "the fox stops"]\n```', 2) == ["a fox runs", "the fox stops"]
+
+
+@pytest.mark.parametrize("text", ['["one"]', '["a", "  "]', "not json at all", '{"a": 1}', '["a", 2]'])
+def test_parse_draft_rejects_wrong_count_blank_or_garbage(text):
+    with pytest.raises(ValueError):
+        sm.parse_draft(text, 2)
+
+
+def test_draft_prompts_batches_and_carries_the_story_forward():
+    prompts_seen = []
+
+    async def fake(prompt, system):
+        prompts_seen.append(prompt)
+        k = int(re.search(r"exactly (\d+)", prompt).group(1))
+        return json.dumps([f"beat {len(prompts_seen)}.{i}" for i in range(k)])
+
+    out = asyncio.run(sm.draft_prompts("a lighthouse keeper finds a door", 23, fake))
+    assert len(out) == 23 and len(prompts_seen) == 3
+    assert "beat 1.9" in prompts_seen[1]  # the next batch sees the last beat so far
+    assert all("lighthouse keeper" in p for p in prompts_seen)
+
+
+def test_draft_prompts_does_not_pad_a_short_reply():
+    async def fake(prompt, system):
+        return json.dumps(["only one"])
+
+    with pytest.raises(ValueError):
+        asyncio.run(sm.draft_prompts("idea", 4, fake))

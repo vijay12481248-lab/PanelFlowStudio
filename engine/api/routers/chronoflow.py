@@ -7,6 +7,7 @@ and autonomous video chunk quality inspection.
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import logging
@@ -32,6 +33,7 @@ from engine.chronoflow.pipeline import (
 )
 from engine.chronoflow import deliver as deliver_mod
 from engine.chronoflow import media_tools
+from engine.chronoflow import start_modes
 from engine.chronoflow import timeline_ops
 from engine.chronoflow.folder_dialog import pick_native_folder
 from engine.comfyui.art import ART_WORKFLOW_ID, IMAGE_WORKFLOW_IDS, ArtEngine
@@ -1834,6 +1836,62 @@ def ai_director_plan(req: AIDirectorPlanRequest) -> dict[str, Any]:
         "scenes_count": num_scenes,
         "scenes": scenes,
     }
+
+
+class StoryboardPlanRequest(BaseModel):
+    mode: str = "text"
+    length_seconds: float = 15
+    title: str = "Untitled Video"
+
+
+class DraftPromptsRequest(BaseModel):
+    idea: str = Field(min_length=1)
+    count: int = Field(ge=1, le=120)
+    mode: str = "text"
+
+
+class TailFrameRequest(BaseModel):
+    video: str
+
+
+@router.post("/storyboard/plan")
+def storyboard_plan(req: StoryboardPlanRequest) -> dict[str, Any]:
+    """The New Video wizard: N empty cards for the chosen start mode and length."""
+    try:
+        return start_modes.build_plan(req.mode, req.length_seconds, req.title)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/storyboard/draft_prompts")
+async def storyboard_draft_prompts(req: DraftPromptsRequest) -> dict[str, Any]:
+    """Local-LLM draft of one description per card. A reply with the wrong count fails (502); nothing is padded or mocked."""
+    from engine.llm.providers.ollama import OllamaProvider
+
+    provider = OllamaProvider()
+
+    async def generate(prompt: str, system: str) -> str:
+        return await provider.generate_text(prompt=prompt, system_prompt=system, max_tokens=4096)
+
+    try:
+        return {"success": True, "prompts": await start_modes.draft_prompts(req.idea, req.count, generate)}
+    except Exception as e:
+        logger.warning("Storyboard prompt draft failed: %s", e)
+        raise HTTPException(status_code=502, detail=f"AI draft failed: {e}")
+
+
+@router.post("/storyboard/tail_frame")
+async def storyboard_tail_frame(req: TailFrameRequest) -> dict[str, Any]:
+    """Save the last frame of a rendered clip into the ComfyUI input folder (the start picture for the next shot or a 'From a video' plan)."""
+    if not req.video or Path(req.video).name != req.video:
+        raise HTTPException(status_code=400, detail="video must be a bare file name")
+    src = STUDIO_OUTPUT_DIR / req.video
+    if not src.exists():
+        raise HTTPException(status_code=404, detail=f"clip '{req.video}' not found")
+    name = f"chronoflow_tail_{src.stem}.png"
+    if not await asyncio.to_thread(pipeline.extract_tail_frame, src, COMFY_INPUT_DIR / name):
+        raise HTTPException(status_code=500, detail="could not extract the last frame")
+    return {"success": True, "filename": name}
 
 
 @router.post("/timeline/export")
