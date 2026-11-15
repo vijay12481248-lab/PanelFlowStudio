@@ -62,3 +62,31 @@ def test_mp3_is_measured_the_way_the_mixer_decodes_it(tmp_path):
     mp3, ref = _mp3_and_reference(tmp_path)
     a, b = measure_take(mp3), measure_take(ref)
     assert abs(a.onset_s - b.onset_s) < 0.002 and abs(a.peak_s - b.peak_s) < 0.002 and abs(a.duration_s - b.duration_s) < 0.002
+
+
+def _two_lobes(path, sr=SR, a1=0.5, a2=0.499, lead=0.0):
+    t = np.arange(int(sr * 1.5)) / sr
+    env = a1 * np.exp(-((t - 0.45) / 0.08) ** 2) + a2 * np.exp(-((t - 0.85) / 0.08) ** 2)
+    x = (env * np.sin(2 * np.pi * 700 * t)).astype(np.float32)
+    x = np.concatenate([np.zeros(int(sr * lead), dtype=np.float32), x])
+    sf.write(str(path), x, sr)
+    return path
+
+
+def test_peak_is_stable_when_two_lobes_are_nearly_equal(tmp_path):
+    a = measure_take(_two_lobes(tmp_path / "a.wav"))
+    b = measure_take(_two_lobes(tmp_path / "b.wav", lead=0.003))
+    assert abs((b.peak_s - a.peak_s) - 0.003) < 0.002  # a tiny shift must move the peak by the same tiny amount
+    assert 0.5 < a.peak_s < 0.8  # between the lobes, not on one of them
+
+
+def test_measurement_is_made_at_the_mixers_48k(tmp_path):
+    import shutil
+    import subprocess
+    if shutil.which("ffmpeg") is None:
+        pytest.skip("ffmpeg not installed")
+    src = _two_lobes(tmp_path / "s44.wav", sr=44100)
+    ref = tmp_path / "s48.wav"
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(src), "-ar", "48000", str(ref)], check=True)  # what the mixer does
+    a, b = measure_take(src), measure_take(ref)
+    assert abs(a.peak_s - b.peak_s) < 0.002 and abs(a.onset_s - b.onset_s) < 0.002
