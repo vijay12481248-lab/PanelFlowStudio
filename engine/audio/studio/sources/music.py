@@ -39,6 +39,9 @@ class MusicProvider:
                 self._health or (lambda: p.check_health(timeout=2.0)))
 
     def availability(self) -> Availability:
+        h = self._deps()[2]()  # probe the server now: an error only seen after a failed attempt would hide a missing install
+        if not h.get("available"):
+            return Availability(False, f"ACE-Step is not reachable: {h.get('error') or h.get('detail') or 'health check failed'}")
         return Availability(self._error is None, self._error)
 
     def find(self, cue: Cue, out_dir: Path, plan: SoundPlan, limit: int = 1) -> list[Candidate]:

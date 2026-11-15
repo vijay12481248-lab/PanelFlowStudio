@@ -76,3 +76,10 @@ def test_gpu_busy_returns_empty_with_reason(tmp_path):
     p = MusicProvider(generator=_gen([]), slot=Slot(ok=False), health=lambda: {"available": True})
     assert p.find(cue, tmp_path, plan) == []
     assert "GPU busy" in p.availability().reason
+
+
+def test_availability_checks_health_before_any_attempt():
+    down = MusicProvider(generator=_gen([]), slot=Slot(), health=lambda: {"available": False, "error": "connection refused"})
+    a = down.availability()
+    assert a.ok is False and "connection refused" in a.reason
+    assert MusicProvider(generator=_gen([]), slot=Slot(), health=lambda: {"available": True}).availability().ok is True
