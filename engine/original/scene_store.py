@@ -14,6 +14,8 @@ from engine.database.models import SceneAnalysisRecord, SceneFeedbackRecord, Sce
 MAX_NOTE = 4000
 MAX_TAGS, MAX_TAG_LEN = 12, 40
 MAX_LIMIT = 200
+MAX_VERDICTS = 20
+VERDICT_KEY = re.compile(r"^(camera|people|action:\d{1,2})$")
 
 
 def _iso(dt) -> str | None:
@@ -29,6 +31,16 @@ def _clean_tags(tags: list[str]) -> list[str]:
     return out[:MAX_TAGS]
 
 
+def _clean_verdicts(verdicts: dict[str, str] | None) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for k, v in (verdicts or {}).items():
+        if VERDICT_KEY.match(str(k)) and str(v).strip():
+            out[str(k)] = str(v).strip()[:MAX_TAG_LEN]
+        if len(out) >= MAX_VERDICTS:
+            break
+    return out
+
+
 def _analysis_dict(a: SceneAnalysisRecord | None) -> dict | None:
     if a is None:
         return None
@@ -38,7 +50,7 @@ def _analysis_dict(a: SceneAnalysisRecord | None) -> dict | None:
 def _feedback_dict(f: SceneFeedbackRecord | None) -> dict | None:
     if f is None:
         return None
-    return {"liked": f.liked, "agrees_with_ai": f.agrees_with_ai, "good_tags": f.good_tags, "wrong_tags": f.wrong_tags, "note": f.note, "created_at": _iso(f.created_at)}
+    return {"liked": f.liked, "agrees_with_ai": f.agrees_with_ai, "good_tags": f.good_tags, "wrong_tags": f.wrong_tags, "item_verdicts": f.item_verdicts or {}, "note": f.note, "created_at": _iso(f.created_at)}
 
 
 def _run_dict(db, r: SceneRunRecord, full: bool = True) -> dict:
@@ -60,7 +72,7 @@ def create_run(db, *, project_id: str, job_id: str | None, brief: str, plan: dic
     rec = SceneRunRecord(
         project_id=project_id, job_id=job_id, brief=brief, scene_type=str(plan.get("scene_type", "")), plan=plan, image_path=image_path,
         status=str(result.get("status", "")), attempts=sum(1 for i in result.get("iterations", []) if i.get("kind") == "generate"), seconds=float(result.get("seconds", 0.0)),
-        system_review={"unmet": result.get("unmet", []), "unverified": result.get("unverified", False), "review": result.get("review")})
+        system_review={"unmet": result.get("unmet", []), "unverified": result.get("unverified", False), "review": result.get("review"), "final": result.get("final", {})})
     db.add(rec)
     db.flush()
     _fts_write(db, rec.id, brief, rec.scene_type)
@@ -78,7 +90,8 @@ def save_analysis(db, run_id: str, crosscheck: dict | None, error: str = "") -> 
     return _analysis_dict(rec)
 
 
-def submit_feedback(db, run_id: str, *, liked: int, agrees_with_ai: bool, good_tags: list[str], wrong_tags: list[str], note: str = "") -> dict:
+def submit_feedback(db, run_id: str, *, liked: int, agrees_with_ai: bool, good_tags: list[str], wrong_tags: list[str], note: str = "",
+                    item_verdicts: dict[str, str] | None = None) -> dict:
     """KeyError for an unknown run, ValueError for `liked` outside 0-100. A second submission replaces the first (one row per run)."""
     run = db.get(SceneRunRecord, run_id)
     if run is None:
@@ -87,6 +100,7 @@ def submit_feedback(db, run_id: str, *, liked: int, agrees_with_ai: bool, good_t
         raise ValueError("liked must be a whole number from 0 to 100")
     fb = db.query(SceneFeedbackRecord).filter_by(run_id=run_id).first() or SceneFeedbackRecord(run_id=run_id, liked=liked)
     fb.liked, fb.agrees_with_ai, fb.good_tags, fb.wrong_tags, fb.note = liked, bool(agrees_with_ai), _clean_tags(good_tags), _clean_tags(wrong_tags), (note or "")[:MAX_NOTE]
+    fb.item_verdicts = _clean_verdicts(item_verdicts)
     db.add(fb)
     run.review_state = "reviewed"
     _fts_write(db, run_id, run.brief, run.scene_type, fb.note, " ".join(fb.good_tags + fb.wrong_tags))
@@ -135,16 +149,22 @@ def _share(flags: list[bool]) -> float | None:
     return sum(flags) / len(flags) if flags else None
 
 
-def _judge_shares(analyses: dict[str, SceneAnalysisRecord]) -> dict:
+def _judge_shares(analyses: dict[str, SceneAnalysisRecord], feedback: dict[str, SceneFeedbackRecord] | None = None) -> dict:
     per: dict[str, dict] = {}
-    for a in analyses.values():
+    for run_id, a in analyses.items():
+        verdicts = (feedback or {}).get(run_id).item_verdicts if (feedback or {}).get(run_id) else {}
         for it in (a.crosscheck or {}).get("items", []):
-            for judge in (it.get("answers") or {}):
-                t = per.setdefault(judge, {"items": 0, "disputed": 0, "flips": 0})
+            for judge, ans in (it.get("answers") or {}).items():
+                t = per.setdefault(judge, {"items": 0, "disputed": 0, "flips": 0, "checked": 0, "agreed": 0})
                 t["items"] += 1
                 t["disputed"] += it.get("status") == "disputed"
                 t["flips"] += judge in it.get("suspect_flips", [])
-    return {j: {"items": t["items"], "disputed_share": t["disputed"] / t["items"], "suspect_flip_share": t["flips"] / t["items"]} for j, t in per.items()}
+                chosen = (verdicts or {}).get(it.get("key"))
+                if chosen is not None and ans.get("round1") is not None:  # the owner settled this item: was this judge's first answer the owner's answer?
+                    t["checked"] += 1
+                    t["agreed"] += str(ans["round1"]) == chosen
+    return {j: {"items": t["items"], "disputed_share": t["disputed"] / t["items"], "suspect_flip_share": t["flips"] / t["items"],
+                "owner_checked": t["checked"], "owner_agreed": t["agreed"]} for j, t in per.items()}
 
 
 def _latest_analyses(db) -> dict[str, SceneAnalysisRecord]:
@@ -157,7 +177,8 @@ def _latest_analyses(db) -> dict[str, SceneAnalysisRecord]:
 def judge_report(db) -> dict:
     """How the vision judges fare: per judge how many items it answered, the share that ended disputed and the share where it gave in without a new reason;
     and how often the owner agreed with the AI review (overall, when the judges disputed, when only one judge looked)."""
-    return {"judges": _judge_shares(_latest_analyses(db)), "owner_agreement": stats(db)["ai_agreement"]}
+    feedback = {f.run_id: f for f in db.query(SceneFeedbackRecord).all()}
+    return {"judges": _judge_shares(_latest_analyses(db), feedback), "owner_agreement": stats(db)["ai_agreement"]}
 
 
 def stats(db) -> dict:
@@ -176,6 +197,9 @@ def stats(db) -> dict:
         t["mean_liked"] = sum(liked) / len(liked) if liked else None
     tags = Counter(tag for f in feedback.values() for tag in f.wrong_tags)
 
+    def usable(a) -> bool:  # "I agree with the AI" only means something when there was an AI review to agree with
+        return not a.error and bool((a.crosscheck or {}).get("items"))
+
     def disputed(a) -> bool:
         return any(i.get("status") == "disputed" for i in (a.crosscheck or {}).get("items", []))
 
@@ -184,6 +208,6 @@ def stats(db) -> dict:
     return {
         "runs": len(runs), "reviewed": sum(1 for r in runs if r.review_state == "reviewed"), "mean_liked": sum(liked_all) / len(liked_all) if liked_all else None,
         "by_scene_type": by_type, "wrong_tags": dict(tags),
-        "ai_agreement": {"overall": _share([f.agrees_with_ai for f in feedback.values()]), "when_disputed": agree(disputed), "single_judge": agree(lambda a: a.single_judge)},
-        "judges": _judge_shares(analyses),
+        "ai_agreement": {"overall": agree(usable), "when_disputed": agree(disputed), "single_judge": agree(lambda a: a.single_judge)},
+        "judges": _judge_shares(analyses, feedback),
     }

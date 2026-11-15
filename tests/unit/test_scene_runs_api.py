@@ -105,3 +105,13 @@ def test_mcp_tools_for_runs_and_knowledge_are_registered():
 
     for name in ("panelflow_scene_runs", "panelflow_scene_knowledge_stats", "panelflow_scene_knowledge_search"):
         assert registry.get_tool(name) is not None, name
+
+
+def test_feedback_accepts_owner_choices_for_disputed_items_and_bounds_them(env):
+    c, db, pid, _ = env
+    run = make_run(db, pid)
+    url = f"/api/original/scene/runs/{run['id']}/feedback"
+    base = {"liked": 50, "agrees_with_ai": False, "good_tags": [], "wrong_tags": [], "note": ""}
+    ok = c.post(url, json={**base, "item_verdicts": {"camera": "looks_up"}})
+    assert ok.status_code == 200 and ok.json()["feedback"]["item_verdicts"] == {"camera": "looks_up"}
+    assert c.post(url, json={**base, "item_verdicts": {f"action:{i}": "x" for i in range(30)}}).status_code == 422

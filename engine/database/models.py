@@ -588,5 +588,6 @@ class SceneFeedbackRecord(Base):
     agrees_with_ai = Column(Boolean, default=False, nullable=False)
     good_tags = Column(JSON, default=list, nullable=False)
     wrong_tags = Column(JSON, default=list, nullable=False)
+    item_verdicts = Column(JSON, default=dict, nullable=False)  # the owner's own answer for items the judges disputed: {"camera": "looks_up"}
     note = Column(Text, default="", nullable=False)
     created_at = Column(DateTime, default=utc_now, nullable=False)

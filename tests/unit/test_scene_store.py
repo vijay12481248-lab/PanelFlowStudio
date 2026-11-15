@@ -143,3 +143,52 @@ def test_deleting_a_project_removes_its_runs(db):
         store.get_run(db, run["id"])
     assert db.query(SceneFeedbackRecord).filter_by(run_id=run["id"]).count() == 0
     assert all(r["id"] != run["id"] for r in store.search(db, "hero"))
+
+
+def test_item_verdicts_are_stored_and_cleaned(db):
+    run = new_run(db)
+    out = store.submit_feedback(db, run["id"], liked=60, agrees_with_ai=False, good_tags=[], wrong_tags=[],
+                                item_verdicts={"camera": "looks_up", "action:1": "blocking", "evil": "x", "people": "y" * 100})
+    assert out["feedback"]["item_verdicts"] == {"camera": "looks_up", "action:1": "blocking", "people": "y" * 40}  # unknown keys dropped, values cut
+    again = store.submit_feedback(db, run["id"], liked=60, agrees_with_ai=False, good_tags=[], wrong_tags=[])
+    assert again["feedback"]["item_verdicts"] == {}
+
+
+def test_owner_choices_score_each_judge_against_the_owner(db):
+    run = new_run(db)
+    store.save_analysis(db, run["id"], {"judges": ["Aj", "Bj"], "single_judge": False, "seconds": 1.0, "items": [
+        {"key": "camera", "status": "disputed", "value": None, "confidence": 0.3, "suspect_flips": [],
+         "answers": {"Aj": {"round1": "level", "round2": "level", "evidence": ""}, "Bj": {"round1": "looks_up", "round2": "looks_up", "evidence": ""}}}]})
+    store.submit_feedback(db, run["id"], liked=50, agrees_with_ai=False, good_tags=[], wrong_tags=[], item_verdicts={"camera": "looks_up"})
+    rep = store.judge_report(db)["judges"]
+    assert rep["Bj"]["owner_checked"] >= 1 and rep["Bj"]["owner_agreed"] >= 1
+    assert rep["Aj"]["owner_checked"] >= 1 and rep["Aj"]["owner_agreed"] == rep["Aj"]["owner_checked"] - 1 or rep["Aj"]["owner_agreed"] < rep["Aj"]["owner_checked"]
+
+
+def test_agreement_with_the_ai_ignores_reviews_where_there_was_no_ai_review(db):
+    # review finding I8: "I agree with the AI" saved on a run whose judging failed must not inflate the agreement figure
+    base = store.stats(db)["ai_agreement"]["overall"]
+    good = new_run(db)
+    store.save_analysis(db, good["id"], CC_AGREED)
+    store.submit_feedback(db, good["id"], liked=80, agrees_with_ai=False, good_tags=[], wrong_tags=["style"])
+    failed = new_run(db)
+    store.save_analysis(db, failed["id"], None, error="judges exploded")
+    store.submit_feedback(db, failed["id"], liked=80, agrees_with_ai=True, good_tags=[], wrong_tags=[])
+    none = new_run(db)  # judging never finished
+    store.submit_feedback(db, none["id"], liked=80, agrees_with_ai=True, good_tags=[], wrong_tags=[])
+    s = store.stats(db)["ai_agreement"]["overall"]
+    # only the run with a usable analysis counts, and it disagreed: the two "agrees" without an AI review cannot raise the figure above what disagreement gives
+    assert s is not None and s <= (base if base is not None else 0.0) + 1e-9 or s == 0.0
+
+
+def test_migration_adds_item_verdicts_to_an_older_feedback_table():
+    from sqlalchemy import create_engine
+
+    from engine.database.session import run_sqlite_migrations
+
+    eng = create_engine("sqlite://")
+    with eng.begin() as c:
+        c.exec_driver_sql("CREATE TABLE scene_feedback (id TEXT PRIMARY KEY, run_id TEXT, liked INTEGER, agrees_with_ai BOOLEAN, good_tags JSON, wrong_tags JSON, note TEXT, created_at DATETIME)")
+    run_sqlite_migrations(eng)
+    with eng.connect() as c:
+        assert "item_verdicts" in {r[1] for r in c.exec_driver_sql("PRAGMA table_info(scene_feedback)").fetchall()}

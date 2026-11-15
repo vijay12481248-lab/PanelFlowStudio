@@ -17,6 +17,13 @@ from engine.original.judges import Judge, JudgeAnswer, Topic, item_value
 
 CONFIDENCE = {"agreed": 0.9, "resolved": 0.7, "single": 0.5, "disputed": 0.3, "unjudged": 0.0}
 MIN_EVIDENCE_WORDS = 4
+PARROT_OVERLAP = 0.7
+
+
+def _overlap(a: str, b: str) -> float:
+    """Share of shared words between two evidence sentences (Jaccard): near 1 means one was copied from the other."""
+    x, y = set(a.lower().split()), set(b.lower().split())
+    return len(x & y) / len(x | y) if x and y else 0.0
 
 
 class Item(BaseModel):
@@ -109,8 +116,10 @@ async def cross_check(judges: list[Judge], image: Path | bytes, states: list[str
                 e = it.answers[name]
                 new_evidence = e.get("round2_evidence", "")
                 gave_in = e["round2"] is not None and same(topic, e["round2"], item_value(other, topic, idx)) and not same(topic, e["round2"], e["round1"] or "")
-                if gave_in and (len(new_evidence.split()) < MIN_EVIDENCE_WORDS or new_evidence == own.evidence):
+                if gave_in and (len(new_evidence.split()) < MIN_EVIDENCE_WORDS or new_evidence == own.evidence or _overlap(new_evidence, other.evidence) >= PARROT_OVERLAP):
                     it.suspect_flips.append(name)
+            if it.suspect_flips and it.status == "resolved":  # agreement that rests on giving in (or parroting) is not agreement: the owner decides
+                it.status, it.value, it.confidence = "disputed", None, CONFIDENCE["disputed"]
             for e in it.answers.values():
                 e["evidence"] = e.pop("round2_evidence", e["evidence"])
 

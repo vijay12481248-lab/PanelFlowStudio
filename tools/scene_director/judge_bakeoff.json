@@ -9,32 +9,32 @@
    "accuracy_of_answered": 0.8125
   },
   "judge_B": {
-   "answered": 48,
-   "correct": 37,
-   "wrong": 11,
-   "coverage": 1.0,
-   "accuracy_of_answered": 0.7708333333333334
+   "answered": 32,
+   "correct": 29,
+   "wrong": 3,
+   "coverage": 0.6666666666666666,
+   "accuracy_of_answered": 0.90625
   },
   "vote": {
-   "answered": 34,
-   "correct": 31,
-   "wrong": 3,
-   "coverage": 0.7083333333333334,
-   "accuracy_of_answered": 0.9117647058823529
+   "answered": 31,
+   "correct": 29,
+   "wrong": 2,
+   "coverage": 0.6458333333333334,
+   "accuracy_of_answered": 0.9354838709677419
   },
   "crosscheck": {
-   "answered": 40,
-   "correct": 35,
-   "wrong": 5,
-   "coverage": 0.8333333333333334,
-   "accuracy_of_answered": 0.875
+   "answered": 48,
+   "correct": 38,
+   "wrong": 10,
+   "coverage": 1.0,
+   "accuracy_of_answered": 0.7916666666666666
   }
  },
- "gate": true,
+ "gate": false,
  "seconds_per_picture": {
-  "A": 1.79,
-  "B": 4.16,
-  "cc": 11.5
+  "A": 1.94,
+  "B": 3.59,
+  "cc": 3.81
  },
  "suspect_flips": 0,
  "per_picture": {
@@ -54,7 +54,7 @@
    "B": {
     "judge": "qwen3-vl-8b",
     "ok": true,
-    "camera": "looks_up",
+    "camera": null,
     "people": 2,
     "actions": [
      "striking",
@@ -71,9 +71,9 @@
     "items": [
      {
       "key": "camera",
-      "status": "agreed",
+      "status": "single",
       "value": "looks_up",
-      "confidence": 0.9,
+      "confidence": 0.5,
       "answers": {
        "qwen3.5:9b": {
         "round1": "looks_up",
@@ -81,7 +81,7 @@
         "evidence": "The left person's arm is extended forward in a punch, while the right person's face shows impact and defensive posture."
        },
        "qwen3-vl-8b": {
-        "round1": "looks_up",
+        "round1": null,
         "round2": null,
         "evidence": "The left person's arm is extended forward in a punch, and the right person's head is turned to the side with their hand near their chin, indicating they are blocking."
        }
@@ -147,7 +147,7 @@
      }
     ],
     "single_judge": false,
-    "seconds": 11.96
+    "seconds": 20.68
    }
   },
   "output/Original_Scenes/_baseline/director/panels/fight-02.png": {
@@ -166,7 +166,7 @@
    "B": {
     "judge": "qwen3-vl-8b",
     "ok": true,
-    "camera": "looks_up",
+    "camera": null,
     "people": 2,
     "actions": [
      "striking",
@@ -183,19 +183,19 @@
     "items": [
      {
       "key": "camera",
-      "status": "disputed",
-      "value": null,
-      "confidence": 0.3,
+      "status": "single",
+      "value": "level",
+      "confidence": 0.5,
       "answers": {
        "qwen3.5:9b": {
         "round1": "level",
-        "round2": "level",
-        "evidence": "The horizon line is parallel to the ground and neither character appears elevated or depressed relative to each other, indicating a straight-on, eye-level perspective."
+        "round2": null,
+        "evidence": "The left person's sword is extended towards the right person, who has their hands positioned to block or parry."
        },
        "qwen3-vl-8b": {
-        "round1": "looks_up",
-        "round2": "looks_up",
-        "evidence": "The sky occupies a large portion of the frame above the figures, and the horizon is positioned lower, suggesting the camera is angled upward."
+        "round1": null,
+        "round2": null,
+        "evidence": "The left person is extending their sword forward in a striking motion, while the right person holds their sword in a defensive blocking stance."
        }
       },
       "suspect_flips": []
@@ -259,7 +259,7 @@
      }
     ],
     "single_judge": false,
-    "seconds": 8.56
+    "seconds": 0.03
    }
   },
   "output/Original_Scenes/_baseline/director/panels/fight-03.png": {
@@ -278,7 +278,7 @@
    "B": {
     "judge": "qwen3-vl-8b",
     "ok": true,
-    "camera": "looks_up",
+    "camera": null,
     "people": 2,
     "actions": [
      "striking",
@@ -295,19 +295,19 @@
     "items": [
      {
       "key": "camera",
-      "status": "disputed",
-      "value": null,
-      "confidence": 0.3,
+      "status": "single",
+      "value": "level",
+      "confidence": 0.5,
       "answers": {
        "qwen3.5:9b": {
         "round1": "level",
-        "round2": "level",
-        "evidence": "The horizon line and background walls are parallel to the bottom edge of the image, with no upward or downward tilt; both characters\u2019 heads and shoulders align horizontally relative to the frame."
+        "round2": null,
+        "evidence": "The left person's fist is extended toward the right person's raised hand, indicating a strike and block."
        },
        "qwen3-vl-8b": {
-        "round1": "looks_up",
-        "round2": "looks_down",
-        "evidence": "The left fighter\u2019s extended fist is lower in the frame than the right fighter\u2019s raised hand, suggesting a downward viewing angle."
+        "round1": null,
+        "round2": null,
+        "evidence": "Left person's fist is extended toward right person's open hand, indicating a strike being blocked."
        }
       },
       "suspect_flips": []
@@ -371,7 +371,7 @@
      }
     ],
     "single_judge": false,
-    "seconds": 12.85
+    "seconds": 0.01
    }
   },
   "output/Original_Scenes/_baseline/director/panels/fight-04.png": {
@@ -390,7 +390,7 @@
    "B": {
     "judge": "qwen3-vl-8b",
     "ok": true,
-    "camera": "looks_up",
+    "camera": null,
     "people": 2,
     "actions": [
      "blocking",
@@ -407,19 +407,19 @@
     "items": [
      {
       "key": "camera",
-      "status": "disputed",
-      "value": null,
-      "confidence": 0.3,
+      "status": "single",
+      "value": "level",
+      "confidence": 0.5,
       "answers": {
        "qwen3.5:9b": {
         "round1": "level",
-        "round2": "level",
-        "evidence": "The horizon line is roughly parallel to the ground, and both characters are shown from a straight-on perspective without any upward or downward tilt; their eye levels appear aligned with each other."
+        "round2": null,
+        "evidence": "The knight on the left holds a sword pointed at the creature, while the creature raises its hands to block or parry."
        },
        "qwen3-vl-8b": {
-        "round1": "looks_up",
-        "round2": "looks_up",
-        "evidence": "The knight\u2019s helmet and sword are angled upward relative to the viewer, and the creature\u2019s raised hands appear smaller and lower in the frame, suggesting a low-angle perspective."
+        "round1": null,
+        "round2": null,
+        "evidence": "Both characters have swords extended toward each other in a defensive stance."
        }
       },
       "suspect_flips": []
@@ -483,7 +483,7 @@
      }
     ],
     "single_judge": false,
-    "seconds": 13.37
+    "seconds": 19.59
    }
   },
   "output/Original_Scenes/_baseline/director/panels/fight-05.png": {
@@ -502,7 +502,7 @@
    "B": {
     "judge": "qwen3-vl-8b",
     "ok": true,
-    "camera": "looks_up",
+    "camera": null,
     "people": 2,
     "actions": [
      "striking",
@@ -519,9 +519,9 @@
     "items": [
      {
       "key": "camera",
-      "status": "agreed",
+      "status": "single",
       "value": "looks_up",
-      "confidence": 0.9,
+      "confidence": 0.5,
       "answers": {
        "qwen3.5:9b": {
         "round1": "looks_up",
@@ -529,7 +529,7 @@
         "evidence": "The camera angle shows the figures from below, emphasizing their muscular builds and dynamic poses against a dark sky."
        },
        "qwen3-vl-8b": {
-        "round1": "looks_up",
+        "round1": null,
         "round2": null,
         "evidence": "left person's arm extended forward in a striking motion, right person's arm raised to block"
        }
@@ -595,7 +595,7 @@
      }
     ],
     "single_judge": false,
-    "seconds": 0.02
+    "seconds": 0.01
    }
   },
   "output/Original_Scenes/_baseline/director/panels/fight-06.png": {
@@ -614,7 +614,7 @@
    "B": {
     "judge": "qwen3-vl-8b",
     "ok": true,
-    "camera": "looks_up",
+    "camera": null,
     "people": 2,
     "actions": [
      "striking",
@@ -631,19 +631,19 @@
     "items": [
      {
       "key": "camera",
-      "status": "disputed",
-      "value": null,
-      "confidence": 0.3,
+      "status": "single",
+      "value": "level",
+      "confidence": 0.5,
       "answers": {
        "qwen3.5:9b": {
         "round1": "level",
-        "round2": "level",
-        "evidence": "The horizon line of the ruined architecture and the relative heights of both characters\u2019 heads are aligned horizontally, indicating a level camera angle."
+        "round2": null,
+        "evidence": "The person on the left holds a staff forward while the person on the right raises their hands defensively."
        },
        "qwen3-vl-8b": {
-        "round1": "looks_up",
-        "round2": "looks_up",
-        "evidence": "The tops of the ruined buildings and sky dominate the frame, and both figures are viewed from below, emphasizing their upward posture."
+        "round1": null,
+        "round2": null,
+        "evidence": "left person holds stick forward as if striking, right person hands out to block"
        }
       },
       "suspect_flips": []
@@ -707,7 +707,7 @@
      }
     ],
     "single_judge": false,
-    "seconds": 11.85
+    "seconds": 0.01
    }
   },
   "output/Original_Scenes/_baseline/director/panels/fight-07.png": {
@@ -728,7 +728,7 @@
    "B": {
     "judge": "qwen3-vl-8b",
     "ok": true,
-    "camera": "looks_up",
+    "camera": null,
     "people": 4,
     "actions": [
      "striking",
@@ -747,19 +747,19 @@
     "items": [
      {
       "key": "camera",
-      "status": "disputed",
-      "value": null,
-      "confidence": 0.3,
+      "status": "single",
+      "value": "level",
+      "confidence": 0.5,
       "answers": {
        "qwen3.5:9b": {
         "round1": "level",
-        "round2": "level",
-        "evidence": "The horizon line of the background buildings is horizontal and aligned with the middle of the frame, indicating a level camera angle; no upward or downward tilt is visible."
+        "round2": null,
+        "evidence": "The central figure's arms are raised to block punches from the left and right figures."
        },
        "qwen3-vl-8b": {
-        "round1": "looks_up",
-        "round2": "looks_down",
-        "evidence": "The central figure\u2019s head is lower than the two flanking figures, and their arms are raised upward to block, suggesting the camera is angled downward to capture the defensive posture."
+        "round1": null,
+        "round2": null,
+        "evidence": "The leftmost person has an extended arm in a striking motion, while the two on the right have arms raised in a blocking posture, and the rightmost person is in a hunched, non-combat stance."
        }
       },
       "suspect_flips": []
@@ -861,7 +861,7 @@
      }
     ],
     "single_judge": false,
-    "seconds": 24.76
+    "seconds": 20.31
    }
   },
   "output/Original_Scenes/_baseline/director/panels/fight-08.png": {
@@ -880,7 +880,7 @@
    "B": {
     "judge": "qwen3-vl-8b",
     "ok": true,
-    "camera": "looks_up",
+    "camera": null,
     "people": 2,
     "actions": [
      "striking",
@@ -897,19 +897,19 @@
     "items": [
      {
       "key": "camera",
-      "status": "resolved",
+      "status": "single",
       "value": "level",
-      "confidence": 0.7,
+      "confidence": 0.5,
       "answers": {
        "qwen3.5:9b": {
         "round1": "level",
-        "round2": "level",
-        "evidence": "The horizon line of the bamboo forest and the characters\u2019 eye levels are aligned horizontally, with no upward or downward tilt visible in the composition."
+        "round2": null,
+        "evidence": "The person on the left holds a sword forward while the person on the right raises their hand to block."
        },
        "qwen3-vl-8b": {
-        "round1": "looks_up",
-        "round2": "level",
-        "evidence": "Both figures are framed symmetrically at eye level, with no upward or downward tilt visible in their posture or the horizon line."
+        "round1": null,
+        "round2": null,
+        "evidence": "The person on the left holds a sword in a striking pose, while the person on the right raises their hand to block the blade."
        }
       },
       "suspect_flips": []
@@ -973,7 +973,7 @@
      }
     ],
     "single_judge": false,
-    "seconds": 12.68
+    "seconds": 0.02
    }
   },
   "output/Original_Scenes/_baseline/director/panels/emotion-01.png": {
@@ -991,7 +991,7 @@
    "B": {
     "judge": "qwen3-vl-8b",
     "ok": true,
-    "camera": "looks_up",
+    "camera": null,
     "people": 1,
     "actions": [
      "grieving"
@@ -1007,19 +1007,19 @@
     "items": [
      {
       "key": "camera",
-      "status": "resolved",
+      "status": "single",
       "value": "level",
-      "confidence": 0.7,
+      "confidence": 0.5,
       "answers": {
        "qwen3.5:9b": {
         "round1": "level",
-        "round2": "level",
-        "evidence": "The horizon line is parallel to the floor and chair legs, indicating a straight-on perspective without upward or downward tilt."
+        "round2": null,
+        "evidence": "The person has tears on their face and a sad expression."
        },
        "qwen3-vl-8b": {
-        "round1": "looks_up",
-        "round2": "level",
-        "evidence": "The horizon line is straight, and the subject\u2019s eyes and shoulders are centered, with no upward or downward tilt."
+        "round1": null,
+        "round2": null,
+        "evidence": "The person is sitting on the floor with tears on their face."
        }
       },
       "suspect_flips": []
@@ -1064,7 +1064,7 @@
      }
     ],
     "single_judge": false,
-    "seconds": 12.34
+    "seconds": 0.03
    }
   },
   "output/Original_Scenes/_baseline/director/panels/emotion-03.png": {
@@ -1082,7 +1082,7 @@
    "B": {
     "judge": "qwen3-vl-8b",
     "ok": true,
-    "camera": "looks_up",
+    "camera": null,
     "people": 1,
     "actions": [
      "determined"
@@ -1098,19 +1098,19 @@
     "items": [
      {
       "key": "camera",
-      "status": "resolved",
+      "status": "single",
       "value": "level",
-      "confidence": 0.7,
+      "confidence": 0.5,
       "answers": {
        "qwen3.5:9b": {
         "round1": "level",
-        "round2": "level",
-        "evidence": "The horizon line is parallel to the bottom of the frame, and the soldier\u2019s head and shoulders are centered without vertical distortion \u2014 indicating a straight-on, eye-level perspective."
+        "round2": null,
+        "evidence": "The soldier's focused gaze and firm posture suggest determination."
        },
        "qwen3-vl-8b": {
-        "round1": "looks_up",
-        "round2": "level",
-        "evidence": "The soldier\u2019s eyes are aligned with the camera\u2019s perspective, and his shoulders are straight, indicating no upward or downward tilt."
+        "round1": null,
+        "round2": null,
+        "evidence": "The soldier's focused expression and firm posture show determination."
        }
       },
       "suspect_flips": []
@@ -1155,7 +1155,7 @@
      }
     ],
     "single_judge": false,
-    "seconds": 17.87
+    "seconds": 0.03
    }
   },
   "output/Original_Scenes/_baseline/director/panels/emotion-05.png": {
@@ -1173,7 +1173,7 @@
    "B": {
     "judge": "qwen3-vl-8b",
     "ok": true,
-    "camera": "looks_up",
+    "camera": null,
     "people": 1,
     "actions": [
      "peaceful"
@@ -1189,19 +1189,19 @@
     "items": [
      {
       "key": "camera",
-      "status": "resolved",
+      "status": "single",
       "value": "level",
-      "confidence": 0.7,
+      "confidence": 0.5,
       "answers": {
        "qwen3.5:9b": {
         "round1": "level",
-        "round2": "level",
-        "evidence": "The horizon line of the room (window frame, furniture edges) is parallel to the bottom edge of the image, and the woman\u2019s shoulders are horizontally aligned with no upward or downward tilt."
+        "round2": null,
+        "evidence": "The person has a serene expression with closed eyes and a gentle smile, suggesting inner peace."
        },
        "qwen3-vl-8b": {
-        "round1": "looks_up",
-        "round2": "level",
-        "evidence": "The subject\u2019s face is centered and eye-level with the viewer, with no upward or downward tilt visible in the framing."
+        "round1": null,
+        "round2": null,
+        "evidence": "The elderly woman has her eyes closed and a gentle smile, suggesting inner peace."
        }
       },
       "suspect_flips": []
@@ -1246,7 +1246,7 @@
      }
     ],
     "single_judge": false,
-    "seconds": 10.91
+    "seconds": 0.03
    }
   },
   "output/Original_Scenes/_baseline/director/panels/emotion-06.png": {
@@ -1264,7 +1264,7 @@
    "B": {
     "judge": "qwen3-vl-8b",
     "ok": true,
-    "camera": "looks_up",
+    "camera": null,
     "people": 1,
     "actions": [
      "determined"
@@ -1280,19 +1280,19 @@
     "items": [
      {
       "key": "camera",
-      "status": "disputed",
-      "value": null,
-      "confidence": 0.3,
+      "status": "single",
+      "value": "level",
+      "confidence": 0.5,
       "answers": {
        "qwen3.5:9b": {
         "round1": "level",
-        "round2": "looks_down",
-        "evidence": "The man\u2019s chin and neck are visible above his shoulders, and his eyes appear slightly elevated relative to the viewer\u2019s perspective \u2014 indicating a downward camera angle."
+        "round2": null,
+        "evidence": "The character's intense gaze and furrowed brow suggest determination."
        },
        "qwen3-vl-8b": {
-        "round1": "looks_up",
-        "round2": "looks_up",
-        "evidence": "The character\u2019s eyes are directed upward, and the top of their head is slightly higher in the frame than their chin, indicating an upward camera angle."
+        "round1": null,
+        "round2": null,
+        "evidence": "The man\u2019s stern expression and tense posture show determination."
        }
       },
       "suspect_flips": []
@@ -1337,7 +1337,7 @@
      }
     ],
     "single_judge": false,
-    "seconds": 15.72
+    "seconds": 0.03
    }
   },
   "output/Original_Scenes/_baseline/director/panels/concept_art-01.png": {
@@ -1353,7 +1353,7 @@
    "B": {
     "judge": "qwen3-vl-8b",
     "ok": true,
-    "camera": "looks_up",
+    "camera": null,
     "people": 0,
     "actions": [],
     "evidence": "No people are visible in the image.",
@@ -1367,9 +1367,9 @@
     "items": [
      {
       "key": "camera",
-      "status": "agreed",
+      "status": "single",
       "value": "looks_up",
-      "confidence": 0.9,
+      "confidence": 0.5,
       "answers": {
        "qwen3.5:9b": {
         "round1": "looks_up",
@@ -1377,7 +1377,7 @@
         "evidence": "No people are visible in the image; only floating cities and clouds are shown."
        },
        "qwen3-vl-8b": {
-        "round1": "looks_up",
+        "round1": null,
         "round2": null,
         "evidence": "No people are visible in the image."
        }
@@ -1405,7 +1405,7 @@
      }
     ],
     "single_judge": false,
-    "seconds": 0.01
+    "seconds": 0.02
    }
   },
   "output/Original_Scenes/_baseline/director/panels/concept_art-03.png": {
@@ -1421,7 +1421,7 @@
    "B": {
     "judge": "qwen3-vl-8b",
     "ok": true,
-    "camera": "looks_up",
+    "camera": null,
     "people": 0,
     "actions": [],
     "evidence": "no people visible in the image",
@@ -1435,19 +1435,19 @@
     "items": [
      {
       "key": "camera",
-      "status": "disputed",
-      "value": null,
-      "confidence": 0.3,
+      "status": "single",
+      "value": "level",
+      "confidence": 0.5,
       "answers": {
        "qwen3.5:9b": {
         "round1": "level",
-        "round2": "level",
-        "evidence": "The horizon line is nearly horizontal and parallel to the base of the lighthouse, with no upward or downward tilt; wave crests and rock edges align horizontally, indicating a level camera angle."
+        "round2": null,
+        "evidence": "No people are visible in the image."
        },
        "qwen3-vl-8b": {
-        "round1": "looks_up",
-        "round2": "looks_up",
-        "evidence": "The lighthouse is centered and appears elevated above the crashing waves, with the viewer\u2019s perspective angled upward toward its light."
+        "round1": null,
+        "round2": null,
+        "evidence": "no people visible in the image"
        }
       },
       "suspect_flips": []
@@ -1473,7 +1473,7 @@
      }
     ],
     "single_judge": false,
-    "seconds": 8.7
+    "seconds": 0.01
    }
   },
   "output/Original_Scenes/_baseline/director/panels/concept_art-07.png": {
@@ -1489,7 +1489,7 @@
    "B": {
     "judge": "qwen3-vl-8b",
     "ok": true,
-    "camera": "looks_up",
+    "camera": null,
     "people": 0,
     "actions": [],
     "evidence": "There are no people visible in the image.",
@@ -1503,19 +1503,19 @@
     "items": [
      {
       "key": "camera",
-      "status": "resolved",
-      "value": "looks_up",
-      "confidence": 0.7,
+      "status": "single",
+      "value": "level",
+      "confidence": 0.5,
       "answers": {
        "qwen3.5:9b": {
         "round1": "level",
-        "round2": "looks_up",
-        "evidence": "The perspective shows the viewer looking upward toward the glowing door and distant temple structure, with towering arches framing the scene from below \u2014 indicating a low-angle shot."
+        "round2": null,
+        "evidence": "no people are visible in the image"
        },
        "qwen3-vl-8b": {
-        "round1": "looks_up",
-        "round2": "looks_up",
-        "evidence": "The viewer\u2019s gaze is directed upward toward the glowing door and the towering, overgrown arches above, with the sky visible at the top."
+        "round1": null,
+        "round2": null,
+        "evidence": "There are no people visible in the image."
        }
       },
       "suspect_flips": []
@@ -1541,7 +1541,7 @@
      }
     ],
     "single_judge": false,
-    "seconds": 8.68
+    "seconds": 0.01
    }
   },
   "output/Original_Scenes/_baseline/director/panels/concept_art-08.png": {
@@ -1557,7 +1557,7 @@
    "B": {
     "judge": "qwen3-vl-8b",
     "ok": true,
-    "camera": "looks_up",
+    "camera": null,
     "people": 0,
     "actions": [],
     "evidence": "No people are visible, only covered wagons are shown.",
@@ -1571,19 +1571,19 @@
     "items": [
      {
       "key": "camera",
-      "status": "disputed",
-      "value": null,
-      "confidence": 0.3,
+      "status": "single",
+      "value": "level",
+      "confidence": 0.5,
       "answers": {
        "qwen3.5:9b": {
         "round1": "level",
-        "round2": "level",
-        "evidence": "The horizon line is horizontal and aligned with the middle of the frame, showing no upward or downward tilt; reflections on the ice surface are symmetrical and consistent with a level viewpoint."
+        "round2": null,
+        "evidence": "No people are visible in the image."
        },
        "qwen3-vl-8b": {
-        "round1": "looks_up",
-        "round2": "looks_down",
-        "evidence": "The foreground ice is sharply detailed and dominates the frame, indicating a low-angle shot looking up from near ground level."
+        "round1": null,
+        "round2": null,
+        "evidence": "No people are visible, only covered wagons are shown."
        }
       },
       "suspect_flips": []
@@ -1609,7 +1609,7 @@
      }
     ],
     "single_judge": false,
-    "seconds": 13.76
+    "seconds": 0.03
    }
   }
  }

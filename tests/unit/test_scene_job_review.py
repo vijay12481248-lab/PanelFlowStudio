@@ -28,7 +28,8 @@ class FakeResult:
     def __init__(self, ws, key):
         (ws / "panels").mkdir(parents=True, exist_ok=True)
         (ws / "panels" / f"{key}.png").write_bytes(png())
-        self.d = {"image_path": f"panels/{key}.png", "status": "accept", "unmet": [], "unverified": False, "seconds": 12.0, "iterations": [{"n": 1, "kind": "generate"}], "review": None}
+        self.d = {"image_path": f"panels/{key}.png", "status": "accept", "unmet": [], "unverified": False, "seconds": 12.0, "iterations": [{"n": 1, "kind": "generate"}], "review": None,
+                  "final": {"prompt": "the delivered prompt", "seed": 123, "lessons": "a lesson"}}
 
     def model_dump(self, **kw):
         return dict(self.d)
@@ -153,7 +154,7 @@ def test_job_passes_the_owners_complaints_to_the_next_picture_as_lessons(env, mo
 
     monkeypatch.setattr(scene_job, "generate_scene", spy)
     run_job(db, pid)
-    assert "steeply upward" in seen["lessons"]
+    assert "horizon sits below the people" in seen["lessons"]
 
 
 def test_lessons_lookup_failing_never_stops_the_picture(env, monkeypatch):
@@ -164,3 +165,11 @@ def test_lessons_lookup_failing_never_stops_the_picture(env, monkeypatch):
 
     monkeypatch.setattr(scene_job, "lessons_from_feedback", boom)
     assert run_job(db, pid)["status"] == "accept"
+
+
+
+def test_the_saved_run_keeps_the_prompt_seed_and_lessons_that_made_the_picture(env):
+    db, pid = env
+    out = run_job(db, pid)
+    final = scene_store.get_run(db, out["run_id"])["system_review"]["final"]
+    assert final == {"prompt": "the delivered prompt", "seed": 123, "lessons": "a lesson"}

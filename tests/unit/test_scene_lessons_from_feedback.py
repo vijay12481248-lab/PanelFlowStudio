@@ -52,10 +52,10 @@ def test_two_owner_camera_complaints_make_a_camera_lesson_for_that_angle_only(db
         reviewed(db, low, 30, ["camera"], st)
     plan = fight_plan()
     plan.scene_type = st
-    assert "steeply upward" in lessons_from_feedback(db, st, plan)
+    assert "horizon sits below the people" in lessons_from_feedback(db, st, plan)
     high_plan = high
     high_plan.scene_type = st
-    assert "steeply upward" not in lessons_from_feedback(db, st, high_plan)
+    assert "horizon sits below the people" not in lessons_from_feedback(db, st, high_plan)
 
 
 def test_a_complaint_the_owner_still_liked_does_not_count(db):
@@ -121,3 +121,18 @@ def test_judge_report_counts_disputes_and_flips_per_judge(db):
     assert rep["Zjudge"]["items"] >= 2 and rep["Zjudge"]["disputed_share"] > 0
     assert rep["Yjudge"]["suspect_flip_share"] > 0 and 0 <= rep["Yjudge"]["disputed_share"] <= 1
     assert store.stats(db)["judges"]["Yjudge"]["suspect_flip_share"] > 0
+
+
+def test_the_owners_camera_lesson_adds_a_sentence_the_prompt_does_not_already_have(db):
+    # review finding I4: the low-angle sentence is already in every prompt, so returning it again as a "lesson" changed nothing
+    from engine.original.scene_prompt import CAMERA_FIX, compile_scene_prompt
+
+    st = scene(db)
+    for _ in range(2):
+        reviewed(db, fight_plan(), 30, ["camera"], st)
+    plan = fight_plan()
+    plan.scene_type = st
+    lesson = lessons_from_feedback(db, st, plan)
+    assert lesson and CAMERA_FIX["low"] not in lesson
+    positive, _neg, _dims = compile_scene_prompt(plan, lessons=lesson)
+    assert positive.count(CAMERA_FIX["low"]) == 1 and lesson in positive

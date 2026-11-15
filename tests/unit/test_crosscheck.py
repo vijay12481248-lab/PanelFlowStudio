@@ -73,7 +73,7 @@ def test_suspect_flip_is_recorded_when_a_judge_gives_in_without_evidence():
     a = Script("A", ans("A", camera="level", evidence="flat horizon across the middle"), {("camera", None): ans("A", camera="looks_up", evidence="ok")})
     b = Script("B", ans("B", camera="looks_up"), {("camera", None): ans("B", camera="looks_up", evidence="faces seen from below with a low horizon")})
     cam = item(run([a, b], b"png", STATES), "camera")
-    assert cam.status == "resolved" and cam.suspect_flips == ["A"]
+    assert cam.status == "disputed" and cam.value is None and cam.suspect_flips == ["A"]  # agreement that rests on giving in is not agreement
 
 
 def test_flip_with_new_evidence_is_not_suspect():
@@ -124,3 +124,21 @@ def test_between_is_called_between_judges_and_its_failure_is_ignored():
 
     cc = run([Script("A", ans("A")), Script("B", ans("B"))], b"png", STATES, between=between)
     assert len(calls) == 1 and cc.judges == ["A", "B"]
+
+
+def test_repeating_the_other_judges_evidence_word_for_word_is_a_suspect_flip():
+    # review finding I2: the re-look prompt quotes the other judge's sentence; parroting it is the likeliest way to give in
+    parrot = "faces seen from below with a low horizon"
+    a = Script("A", ans("A", camera="level", evidence="flat horizon across the middle"), {("camera", None): ans("A", camera="looks_up", evidence=parrot)})
+    b = Script("B", ans("B", camera="looks_up", evidence=parrot), {("camera", None): ans("B", camera="looks_up", evidence="a different and longer look at the chin line")})
+    cam = item(run([a, b], b"png", STATES), "camera")
+    assert cam.suspect_flips == ["A"] and cam.status == "disputed"
+
+
+def test_a_flip_with_its_own_new_evidence_still_resolves():
+    a = Script("A", ans("A", camera="level", evidence="flat horizon across the middle"),
+               {("camera", None): ans("A", camera="looks_up", evidence="looking again the chins are visible from underneath")})
+    b = Script("B", ans("B", camera="looks_up", evidence="faces seen from below with a low horizon"),
+               {("camera", None): ans("B", camera="looks_up", evidence="shoulders are foreshortened toward the viewer")})
+    cam = item(run([a, b], b"png", STATES), "camera")
+    assert cam.status == "resolved" and cam.value == "looks_up" and cam.suspect_flips == []

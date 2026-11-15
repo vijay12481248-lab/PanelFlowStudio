@@ -89,7 +89,7 @@ def lessons_from_feedback(db, scene_type: str, plan, min_reviews: int = 2) -> st
     the same action state) carry the owner's wrong-tag `camera` (resp. `pose`) and were liked under 60%, the matching rule is returned. A complaint the owner
     still liked (60% or more) never counts. The system's own failures are learned separately (`record_outcome`); this is the owner's word."""
     from engine.database.models import SceneFeedbackRecord, SceneRunRecord
-    from engine.original.scene_prompt import CAMERA_FIX
+    from engine.original.scene_prompt import CAMERA_EXTRA
 
     rows = (db.query(SceneRunRecord.plan, SceneFeedbackRecord.liked, SceneFeedbackRecord.wrong_tags)
             .join(SceneFeedbackRecord, SceneFeedbackRecord.run_id == SceneRunRecord.id)
@@ -105,7 +105,7 @@ def lessons_from_feedback(db, scene_type: str, plan, min_reviews: int = 2) -> st
                 pose_hits[state] = pose_hits.get(state, 0) + 1
     rules: list[str] = []
     if camera_hits.get(plan.camera.angle, 0) >= min_reviews:
-        rules.append(CAMERA_FIX[plan.camera.angle])
+        rules.append(CAMERA_EXTRA[plan.camera.angle])  # the standard sentence is already in the prompt: ask a second way
     for a in plan.actors:
         if pose_hits.get(a.action_state, 0) >= min_reviews:
             rule = POSE_FIX.get(a.action_state, f"Show the '{a.action_state}' state unmistakably in the whole body and face.")

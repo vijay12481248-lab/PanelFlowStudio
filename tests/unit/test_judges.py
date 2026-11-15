@@ -165,3 +165,41 @@ def test_a_reply_with_only_an_actions_line_is_usable():
     # real bake-off finding: the re-look for one person's action answers with ACTIONS + EVIDENCE only, and was thrown away as unusable
     a = parse_judge_text("ACTIONS: blocking\nEVIDENCE: both arms are raised in front of the chest", "j", STATES)
     assert a.ok and a.actions == ["blocking"] and a.camera is None and a.people is None
+
+
+
+@pytest.mark.parametrize("reply,expected", [
+    ("ACTIONS: The second person is blocking", ["blocking"]),
+    ("ACTIONS: left person striking; right person blocking", ["striking", "blocking"]),
+    ("ACTIONS: not striking", ["unclear"]),
+])
+def test_action_words_must_be_states_not_sentence_fragments(reply, expected):
+    # review finding I1: "The second person is blocking" used to parse as ["second"] and then come out "agreed"
+    assert parse_judge_text("CAMERA: level\nPEOPLE: 2\n" + reply, "j", STATES).actions == expected
+
+
+@pytest.mark.parametrize("reply,expected", [
+    ("close-up at eye level", "level"), ("looking straight down from above", "looks_down"), ("not looking up, it is level", "level"),
+    ("the camera is not tilted, it looks down", "looks_down"), ("seven people, even ground", None), ("looks_up", "looks_up"),
+])
+def test_camera_words_are_not_matched_inside_other_words_or_negations(reply, expected):
+    assert parse_judge_text(f"CAMERA: {reply}\nPEOPLE: 1\nACTIONS: standing", "j", STATES).camera == expected
+
+
+@pytest.mark.parametrize("reply,expected", [("1 woman and 2 men", None), ("no more than two", None), ("The other reviewer said 3 but I count 2", None), ("no people", 0), ("Two people.", 2)])
+def test_people_count_must_be_one_clear_number(reply, expected):
+    assert parse_judge_text(f"CAMERA: level\nPEOPLE: {reply}\nACTIONS: standing", "j", STATES).people == expected
+
+
+def test_a_judge_echoing_the_question_template_is_not_a_usable_answer():
+    echoed = parse_judge_text(read_prompt(STATES), "j", STATES)
+    assert not echoed.ok and echoed.camera is None and echoed.people is None and echoed.actions == []
+
+
+def test_reread_of_one_person_takes_that_persons_word_from_a_full_list():
+    from engine.original.judges import item_value
+
+    full = JudgeAnswer(judge="j", ok=True, actions=["striking", "falling"])
+    assert item_value(full, "action", 1, reread=True) == "falling"
+    assert item_value(JudgeAnswer(judge="j", ok=True, actions=["blocking"]), "action", 1, reread=True) == "blocking"
+    assert item_value(full, "action", 2, reread=True) is None

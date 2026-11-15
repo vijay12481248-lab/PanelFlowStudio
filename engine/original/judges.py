@@ -20,11 +20,15 @@ Topic = Literal["camera", "people", "action"]
 NUMBER_WORDS = {"zero": 0, "no": 0, "none": 0, "nobody": 0, "one": 1, "single": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8,
                 "nine": 9, "ten": 10}
 FILLER = {"the", "a", "an", "is", "are", "was", "his", "her", "their", "both", "person", "man", "woman"}
+TEMPLATE_MARKERS = ("<", ">", "|", "separated by", "one word from")  # a judge that echoes the question gave no answer
+NEGATIONS = {"not", "no", "never", "without", "isn't", "isnt", "aren't", "arent"}
+STOP_WORDS = FILLER | {"left", "right", "center", "centre", "middle", "first", "second", "third", "person", "people", "for", "each", "from", "to", "and", "or", "with",
+                      "of", "in", "on", "at", "it", "he", "she", "they", "this", "that", "body", "doing", "who", "while"}
 CAMERA_PATTERNS = (
-    ("tilted", r"tilt|dutch|slant"),
-    ("looks_up", r"looks_up|look\w*\s+up|from\s+below|upward|\bup\b|low[- ]angle"),
-    ("looks_down", r"looks_down|look\w*\s+down|from\s+above|downward|\bdown\b|high[- ]angle|overhead|bird"),
-    ("level", r"level|eye[- ]level|straight|even"),
+    ("tilted", r"tilted|dutch|slanted"),
+    ("looks_up", r"looks_up|look\w*\s+up|from\s+below|upward|(?<![-\w])up(?![-\w])|low[- ]angle"),
+    ("looks_down", r"looks_down|look\w*\s+down|from\s+above|downward|(?<![-\w])down(?![-\w])|high[- ]angle|overhead"),
+    ("level", r"(?<![\w])level(?![\w])|horizontal"),
 )
 
 
@@ -38,45 +42,60 @@ class JudgeAnswer(BaseModel):
     raw: str = ""
 
 
-def _field(text: str, name: str) -> str | None:
+def _field(text: str, name: str, answer: bool = True) -> str | None:
     m = re.search(rf"(?ims)^\s*{name}\s*:\s*(.*?)\s*(?=^\s*(?:CAMERA|PEOPLE|ACTIONS|EVIDENCE)\s*:|\Z)", text)
-    return m.group(1).strip() if m else None
+    value = m.group(1).strip() if m else None
+    if value and answer and any(t in value.lower() for t in TEMPLATE_MARKERS):
+        return None
+    return value
+
+
+def _negated(value: str, start: int) -> bool:
+    return bool(re.search(r"\b(not|no|never|without|isn't|isnt)\s+(\w+\s+)?$", value[:start]))
 
 
 def _camera(value: str | None) -> str | None:
+    """One clear angle or None: a match inside another word ("close-up") or after a negation ("not looking up") does not count, and a reply that names
+    two different angles is ambiguous."""
     if not value:
         return None
-    best = None
+    v = value.lower()
+    found: set[str] = set()
     for name, pattern in CAMERA_PATTERNS:
-        m = re.search(pattern, value.lower())
-        if m and (best is None or m.start() < best[0]):
-            best = (m.start(), name)
-    return best[1] if best else None
+        for m in re.finditer(pattern, v):
+            if not _negated(v, m.start()):
+                found.add(name)
+    return found.pop() if len(found) == 1 else None
 
 
 def _people(value: str | None) -> int | None:
+    """One clear number or None ("1 woman and 2 men", "no more than two" are not counts)."""
     if not value:
         return None
-    m = re.search(r"\d+", value)
-    if m:
-        return int(m.group())
-    for word in re.findall(r"[a-z]+", value.lower()):
-        if word in NUMBER_WORDS:
-            return NUMBER_WORDS[word]
-    return None
+    nums = {int(x) for x in re.findall(r"\d+", value)} | {NUMBER_WORDS[w] for w in re.findall(r"[a-z]+", value.lower()) if w in NUMBER_WORDS}
+    return nums.pop() if len(nums) == 1 else None
 
 
 def _actions(value: str | None, states: list[str]) -> list[str]:
+    """One word per person: an allowed state found anywhere in the segment wins; a negated segment is "unclear"; otherwise the first content word."""
     if not value:
         return []
     cleaned = re.sub(r"(?im)\b(left|right|centre|center|middle)\s*:|\bperson\s*\d+\s*:|^\s*\d+[.)]\s*", "|", value)
-    out = []
+    out: list[str] = []
     for seg in re.split(r"[|;\n,.]", cleaned):
-        words = [w for w in re.findall(r"[a-z]+", seg.lower()) if w not in FILLER]
+        words = re.findall(r"[a-z']+", seg.lower())
         if not words:
             continue
-        word = words[0]
-        out.append(next((s for s in states if word == s or (len(word) >= 5 and word[:5] == s[:5])), word))
+        if any(w in NEGATIONS or w.endswith("n't") for w in words):
+            out.append("unclear")
+            continue
+        hit = next((s for w in words for s in states if w == s or (len(w) >= 5 and w[:5] == s[:5])), None)
+        if hit:
+            out.append(hit)
+            continue
+        rest = [w for w in words if w not in STOP_WORDS]
+        if rest:
+            out.append(rest[0])
     return out
 
 
@@ -85,7 +104,7 @@ def parse_judge_text(text: str, judge: str, states: list[str]) -> JudgeAnswer:
     camera, people = _camera(_field(text, "CAMERA")), _people(_field(text, "PEOPLE"))
     actions = _actions(_field(text, "ACTIONS"), states)
     return JudgeAnswer(judge=judge, ok=camera is not None or people is not None or bool(actions), camera=camera, people=people,
-                       actions=actions, evidence=_field(text, "EVIDENCE") or "", raw=text[:600])
+                       actions=actions, evidence=_field(text, "EVIDENCE", answer=False) or "", raw=text[:600])
 
 
 def read_prompt(states: list[str]) -> str:
@@ -115,8 +134,11 @@ def item_value(answer: JudgeAnswer, topic: Topic, index: int | None = None, rere
         return answer.camera
     if topic == "people":
         return None if answer.people is None else str(answer.people)
-    if reread:
-        return answer.actions[0] if answer.actions else None
+    if reread:  # a re-look about one person normally holds one word; a full list is read at that person's position
+        if not answer.actions:
+            return None
+        if len(answer.actions) == 1:
+            return answer.actions[0]
     return answer.actions[index] if index is not None and index < len(answer.actions) else None
 
 

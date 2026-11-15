@@ -7,24 +7,24 @@ import { ownerCanSubmit, TAGS } from "./sceneView";
 const toggle = (list: string[], tag: string) => (list.includes(tag) ? list.filter((t) => t !== tag) : [...list, tag]);
 
 /** The owner's side: how much they liked it, whether they agree with the AI review, what was good, what went wrong, and their own words. */
-export const OwnerPanel: React.FC<{ run: SceneRun; onSaved: (run: SceneRun) => void; onDismissed: () => void }> = ({ run, onSaved, onDismissed }) => {
+export const OwnerPanel: React.FC<{ run: SceneRun; choices: Record<string, string>; usable: boolean; onSaved: (run: SceneRun) => void; onDismissed: () => void }> = ({ run, choices, usable, onSaved, onDismissed }) => {
   const fb = run.feedback ?? null;
   const [liked, setLiked] = React.useState<number | null>(fb ? fb.liked : null);
-  const [agrees, setAgrees] = React.useState(fb?.agrees_with_ai ?? false);
+  const [agrees, setAgrees] = React.useState(usable && (fb?.agrees_with_ai ?? false));
   const [goodTags, setGoodTags] = React.useState<string[]>(fb?.good_tags ?? []);
   const [wrongTags, setWrongTags] = React.useState<string[]>(fb?.wrong_tags ?? []);
   const [note, setNote] = React.useState(fb?.note ?? "");
   const [busy, setBusy] = React.useState(false);
   const [saved, setSaved] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-  const ok = ownerCanSubmit({ liked, agrees, note, goodTags, wrongTags });
+  const ok = ownerCanSubmit({ liked, agrees: usable && agrees, note, goodTags, wrongTags, choices });
 
   const submit = async () => {
     if (!ok || busy || liked === null) return;
     setBusy(true);
     setError(null);
     try {
-      const updated = await api.submitSceneFeedback(run.id, { liked, agrees_with_ai: agrees, good_tags: goodTags, wrong_tags: wrongTags, note: note.trim() });
+      const updated = await api.submitSceneFeedback(run.id, { liked, agrees_with_ai: usable && agrees, good_tags: goodTags, wrong_tags: wrongTags, item_verdicts: choices, note: note.trim() });
       setSaved(true);
       onSaved(updated);
     } catch (e) {
@@ -66,7 +66,7 @@ export const OwnerPanel: React.FC<{ run: SceneRun; onSaved: (run: SceneRun) => v
           onClick={(e) => setLiked(Number((e.currentTarget as HTMLInputElement).value))}
         />
       </label>
-      <Switch checked={agrees} onCheckedChange={setAgrees} label="I agree with the AI review" />
+      {usable ? <Switch checked={agrees} onCheckedChange={setAgrees} label="I agree with the AI review" /> : <p className="text-sm text-fg-dim">There is no AI review to agree with, so your own words are what counts.</p>}
       <div className="grid gap-2">
         <span className="text-sm text-fg">What was good</span>
         <div className="flex flex-wrap gap-2">{TAGS.map((t) => chip("good", t, goodTags.includes(t), () => setGoodTags(toggle(goodTags, t))))}</div>
@@ -78,7 +78,7 @@ export const OwnerPanel: React.FC<{ run: SceneRun; onSaved: (run: SceneRun) => v
         placeholder="Anything the AI missed or got wrong? Your own words help the most."
         className="w-full rounded-ctl border border-edge bg-glass px-3 py-2 text-sm text-fg placeholder:text-fg-faint"
       />
-      {error && <p className="text-sm text-bad">{error}</p>}
+      {error && <p className="text-sm text-bad" role="alert">{error}</p>}
       {saved && <p className="text-sm text-ok" role="status">Thanks, your review is saved.</p>}
       <div className="flex gap-2">
         <Button disabled={!ok || busy} onClick={() => void submit()}>Save my review</Button>

@@ -397,10 +397,11 @@ ollama_pull_manager = OllamaModelPullManager()
 # 5. ComfyUI Process & Dependency Auto-Launcher
 # ---------------------------------------------------------------------------
 
-def comfyui_launch_command(py_exe: Path, main_py: Path, host: str, port: int) -> List[str]:
+def comfyui_launch_command(py_exe: Path, main_py: Path, host: str, port: int, disable_dynamic_vram: bool = True) -> List[str]:
     """How the app starts ComfyUI. `--disable-dynamic-vram` is needed by the second vision judge (Qwen3-VL 8B through the TextGenerate node fails inside ComfyUI
     with dynamic VRAM on; measured 2026-11-14) and does not slow Qwen drawing (6 s per 1344x768 picture)."""
-    return [str(py_exe), str(main_py), "--listen", host, "--port", str(port), "--disable-auto-launch", "--enable-cors-header", "*", "--disable-dynamic-vram"]
+    cmd = [str(py_exe), str(main_py), "--listen", host, "--port", str(port), "--disable-auto-launch", "--enable-cors-header", "*"]
+    return cmd + ["--disable-dynamic-vram"] if disable_dynamic_vram else cmd
 
 
 class ComfyUIManager:
@@ -415,6 +416,7 @@ class ComfyUIManager:
     def __init__(self):
         self._lock = threading.Lock()
         self._proc: Optional[subprocess.Popen] = None
+        self._plain_launch = False  # set when a ComfyUI build rejected --disable-dynamic-vram: later launches leave it out
         self._cached_install: Optional[Dict[str, Any]] = None
 
     def locate(self) -> Dict[str, Any]:
@@ -507,7 +509,7 @@ class ComfyUIManager:
             if sys.platform == "win32":
                 creation_flags = 0x08000000 | 0x00000200  # CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP
 
-            cmd = comfyui_launch_command(py_exe, main_py, host, port)
+            cmd = comfyui_launch_command(py_exe, main_py, host, port, disable_dynamic_vram=not self._plain_launch)
 
             env = dict(os.environ)
             workflow_dir = root / "workflow"
@@ -576,6 +578,11 @@ class ComfyUIManager:
                     "message": f"ComfyUI started successfully on http://{host}:{port}",
                     "endpoint": f"http://{host}:{port}",
                 }
+            if self._proc is not None and self._proc.poll() is not None and not self._plain_launch:
+                # ComfyUI exited at start: a build that does not know --disable-dynamic-vram would stop all art, so try once more without it
+                logger.warning("ComfyUI exited at start with --disable-dynamic-vram; retrying without it")
+                self._plain_launch = True
+                self.start(host, port)
             time.sleep(0.5)
 
         return {

@@ -130,3 +130,20 @@ Baseline (the measure of "does it match what I imagined"): `.venv\Scripts\python
 Tables (app SQLite database): `scene_runs`, `scene_analyses`, `scene_feedback`, FTS5 `scene_fts`. No vector database yet: the data is structured and small; add `sqlite-vec` plus an embedding model (needs the owner's approval to download) when "find similar scenes" is a real need.
 
 Still true: the owner has not rated the 24 baseline pictures, so there is no "% matches what I imagined" yet; the cross-check's numbers rest on the agent's own labels. Weaknesses: judge evidence text is long; the page needs scrolling on small windows; the action-state lists in the page are a copy of the playbooks; OS toast notifications need a Tauri plugin (new dependency, the owner's call); resolved items are less reliable (~67% in the bake-off) than agreed ones.
+
+## Two judges, re-measured after the final review (parser hardened) - the earlier PASS did not hold
+
+The final reviewer found the judge-reply parser accepted sentence fragments as answers ("The second person is blocking" -> "second", "left person striking" -> "left", "1 woman and 2 men" -> 1, "close-up at eye level" -> looks_up) and let a judge that copied the other judge's evidence count as having settled a dispute. All of that is fixed (tests in `tests/unit/test_judges.py`, `test_crosscheck.py`). Re-running the same 16 labelled pictures:
+
+| method | answered | wrong | accuracy of answered |
+|---|---|---|---|
+| judge A `qwen3.5:9b` alone | 48/48 | 9 | 0.81 |
+| judge B Qwen3-VL 8B alone | 32/48 | 3 | 0.91 |
+| plain vote (abstain when they differ) | 31/48 | 2 | 0.94 |
+| cross-check | 48/48 | 10 | 0.79 |
+
+- **The gate now FAILS** by the rule agreed in the plan (strictly fewer wrong answers than each judge alone): the earlier PASS (5 wrong) came partly from parser artifacts in judge B's answers (it "answered" every item, 11 of them wrong, and some disputes were "resolved" by garbage).
+- By item status: **agreed 31 items, 94% correct**; **single 16 items (one judge had no usable answer for that item), 56% correct**; **resolved 1 item, wrong**. So the useful signal is "both judges agree" (confidence 0.9 matches the measured 94%) and "only one judge" (confidence 0.5 matches 56%); the re-look rarely fires now and its reliability (confidence 0.7) is unmeasured (1 item).
+- Ruling (the agent's, for the owner to overturn): both judges stay ON in the app. The owner asked for both; nothing automatic depends on the cross-check (it only labels the review page, and every item shows its honest confidence); the single-judge option is `SCENE_CROSSCHECK=0`. If the owner prefers the plain rule, set that and the page shows one judge.
+- Seconds per picture now: judge A 1.9, judge B 3.6, re-looks 3.8 (about 9 s of judging).
+- Still the agent's own labels on 48 items; do not read these as the owner's measure.

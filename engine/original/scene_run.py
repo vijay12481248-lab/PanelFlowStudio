@@ -40,6 +40,7 @@ class SceneResult(BaseModel):
     escalated: bool = False
     seconds: float = 0.0
     iterations: list[dict] = Field(default_factory=list)
+    final: dict = Field(default_factory=dict)  # prompt, seed and lessons of the DELIVERED picture: feedback must be tied to what produced it
 
 
 class _OutOfTime(Exception):
@@ -76,6 +77,7 @@ def generate_scene(art_engine, provider, plan: ScenePlan, *, ws: Path, key: str,
         res = refine_image(generate=generate, review=look, record=lambda data, **meta: record_candidate(ws, key, iters, data, **meta),
                            budget=Budget(max_attempts=budget.max_attempts), is_cancelled=is_cancelled)
         png, review, status, history = res.png, res.review, res.status, res.iterations
+        chosen = next((i for i in history if i.get("n") == res.selected), {})
     except (_OutOfTime, RuntimeError) as exc:
         best = best_iteration(iters)
         if best is None:
@@ -83,6 +85,7 @@ def generate_scene(art_engine, provider, plan: ScenePlan, *, ws: Path, key: str,
         # a ComfyUI failure after a reviewed candidate exists must not throw that candidate away
         reason = "time budget used" if isinstance(exc, _OutOfTime) else "cancelled" if is_cancelled() else f"draw failed: {type(exc).__name__}: {exc}"[:160]
         png, review, status, history = (ws / best["file"]).read_bytes(), reviews.get(best["sha256"]), "needs_review", iters
+        chosen = best
         extra.append(reason)
 
     first = reviews.get(iters[0]["sha256"]) if iters else None
@@ -97,6 +100,7 @@ def generate_scene(art_engine, provider, plan: ScenePlan, *, ws: Path, key: str,
         image_path=f"panels/{key}.png", plan=plan, review=review, status=status, unmet=unmet + extra,
         unverified=review is None or any("unverified" in r for r in review.reasons), seconds=round(time.monotonic() - t0, 1),
         iterations=[{k: i.get(k) for k in ("n", "kind", "file", "sha256", "seed", "review")} for i in history],
+        final={"prompt": chosen.get("prompt", ""), "seed": chosen.get("seed"), "lessons": lessons},
     )
     (ws / "panels" / f"{key}.json").write_text(json.dumps(result.model_dump(), indent=2, default=str), encoding="utf-8")
     return result

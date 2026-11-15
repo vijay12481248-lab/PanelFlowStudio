@@ -103,6 +103,7 @@ class FeedbackRequest(BaseModel):
     agrees_with_ai: bool
     good_tags: list[str] = Field(default_factory=list, max_length=12)
     wrong_tags: list[str] = Field(default_factory=list, max_length=12)
+    item_verdicts: dict[str, str] = Field(default_factory=dict, max_length=20)  # the owner's answer for items the judges disputed
     note: str = Field(default="", max_length=4000)
 
 
@@ -135,7 +136,7 @@ def run_image(run_id: str, db: Session = Depends(get_db)):
 @router.post("/runs/{run_id}/feedback")
 def submit_feedback(run_id: str, req: FeedbackRequest, db: Session = Depends(get_db)):
     try:
-        return scene_store.submit_feedback(db, run_id, liked=req.liked, agrees_with_ai=req.agrees_with_ai, good_tags=req.good_tags, wrong_tags=req.wrong_tags, note=req.note)
+        return scene_store.submit_feedback(db, run_id, liked=req.liked, agrees_with_ai=req.agrees_with_ai, good_tags=req.good_tags, wrong_tags=req.wrong_tags, note=req.note, item_verdicts=req.item_verdicts)
     except KeyError:
         raise HTTPException(status_code=404, detail="run not found")
     except ValueError as e:

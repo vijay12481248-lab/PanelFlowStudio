@@ -123,7 +123,7 @@ test("submit sends liked, agree, tags and note, then shows thanks", async () => 
   await tick();
   button(view.document, "Save my review")!.click();
   await tick(100);
-  assert.deepEqual(calls.feedback[0], ["run-1", { liked: 80, agrees_with_ai: false, good_tags: ["pose"], wrong_tags: ["camera"], note: "the angle is too flat" }]);
+  assert.deepEqual(calls.feedback[0], ["run-1", { liked: 80, agrees_with_ai: false, good_tags: ["pose"], wrong_tags: ["camera"], item_verdicts: {}, note: "the angle is too flat" }]);
   assert.match(text(view.document), /Thanks, your review is saved/);
   await view.cleanup();
 });
@@ -177,5 +177,52 @@ test("with nothing waiting and no run open the page invites a brief", async () =
   await view.settle();
   assert.match(text(view.document), /Describe the picture/);
   assert.match(text(view.document), /Nothing is waiting for your review/);
+  await view.cleanup();
+});
+
+
+test("the plan is shown and each row says whether it matches what the plan asked for", async () => {
+  stub(makeRun());
+  const view = await mountPage(<ScenePage pollMs={20} />, "/page?run=run-1");
+  await view.settle();
+  assert.match(text(view.document), /The plan asked for: eye-level view, medium shot, hero on the left striking/);
+  const people = view.document.querySelector('[data-status="agreed"]') as HTMLElement;
+  assert.equal(people.getAttribute("data-plan-match"), "yes");
+  await view.cleanup();
+});
+
+test("the owner can settle a disputed item and the choice is sent", async () => {
+  const calls = stub(makeRun());
+  const view = await mountPage(<ScenePage pollMs={20} />, "/page?run=run-1");
+  await view.settle();
+  (view.document.querySelector('[aria-label="Choose looks_up for Camera angle"]') as HTMLElement).click();
+  await tick();
+  assert.equal((view.document.querySelector('[aria-label="Choose looks_up for Camera angle"]') as HTMLElement).getAttribute("aria-pressed"), "true");
+  setValue(view.document, byLabel(view.document, "How much did you like it"), "60");
+  await tick();
+  button(view.document, "Save my review")!.click();
+  await tick(100);
+  assert.deepEqual(calls.feedback[0][1].item_verdicts, { camera: "looks_up" });
+  await view.cleanup();
+});
+
+test("without a usable AI review there is nothing to agree with", async () => {
+  const run = makeRun();
+  run.analysis = { id: "a1", judges: [], single_judge: false, seconds: 0, error: "RuntimeError: judges exploded", created_at: null, crosscheck: {} };
+  stub(run);
+  const view = await mountPage(<ScenePage pollMs={20} />, "/page?run=run-1");
+  await view.settle();
+  assert.equal(view.document.querySelector('[role="switch"]'), null);
+  assert.match(text(view.document), /no AI review to agree with/i);
+  await view.cleanup();
+});
+
+test("a run whose judges never reported says the review was not made instead of waiting forever", async () => {
+  const run = makeRun({ created_at: "2020-01-01T00:00:00", analysis: null });
+  stub(run);
+  const view = await mountPage(<ScenePage pollMs={20} />, "/page?run=run-1");
+  await view.settle();
+  assert.match(text(view.document), /The AI review was not made/);
+  assert.doesNotMatch(text(view.document), /still looking at this picture/);
   await view.cleanup();
 });

@@ -164,3 +164,12 @@ def test_an_unverified_first_review_teaches_nothing(tmp_path, monkeypatch):
         script(monkeypatch, review("accept_low", 0.5, [STRIKE], confidence=0.0, reasons=["unverified: the reviewer could not judge any item"]))
         generate_scene(FakeEngine(), None, fight_plan(), ws=tmp_path / f"w{n}", key="k", seed=7, ledger=led)
     assert led.load_mistakes("scene:qwen_image_21:fight") == []
+
+
+def test_the_result_records_the_prompt_seed_and_lessons_of_the_delivered_picture(tmp_path, monkeypatch):
+    # review finding I7: feedback could not be tied back to the prompt that produced the picture
+    script(monkeypatch, review("regenerate", 0.3, [STRIKE]), review("accept", 1.0))
+    eng = FakeEngine()
+    r = generate_scene(eng, None, fight_plan(), ws=tmp_path, key="kf", seed=7, lessons="Both fighters stand on opposite sides.")
+    assert r.final["prompt"] == eng.calls[1]["prompt"] and r.final["seed"] == eng.calls[1]["seed"]
+    assert "Both fighters stand on opposite sides." in r.final["lessons"]

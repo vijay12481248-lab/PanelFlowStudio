@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import type { SceneCrossCheck, SceneRun } from "@panelflow/api-client";
-import { confidenceLabel, humanValue, itemRows, ownerCanSubmit, planSummary, waitingFirst } from "../sceneView";
+import { analysisOverdue, choiceOptions, confidenceLabel, humanValue, itemRows, ownerCanSubmit, planMatch, planSummary, waitingFirst } from "../sceneView";
 
 const cc: SceneCrossCheck = {
   judges: ["qwen3.5:9b", "qwen3-vl-8b"], single_judge: false, seconds: 9,
@@ -58,7 +58,7 @@ test("camera values read as plain words", () => {
 });
 
 test("the owner can submit once liked is chosen and there is a reason", () => {
-  const base = { liked: null as number | null, agrees: false, note: "", goodTags: [] as string[], wrongTags: [] as string[] };
+  const base = { liked: null as number | null, agrees: false, note: "", goodTags: [] as string[], wrongTags: [] as string[], choices: {} as Record<string, string> };
   assert.equal(ownerCanSubmit(base), false);
   assert.equal(ownerCanSubmit({ ...base, liked: 70 }), false); // chosen but no reason yet
   assert.equal(ownerCanSubmit({ ...base, liked: 70, agrees: true }), true);
@@ -79,4 +79,45 @@ test("the first waiting run is the first pending one", () => {
   const run = (id: string, review_state: SceneRun["review_state"]) => ({ id, review_state } as SceneRun);
   assert.equal(waitingFirst([run("a", "reviewed"), run("b", "pending"), run("c", "pending")])?.id, "b");
   assert.equal(waitingFirst([run("a", "reviewed")]), null);
+});
+
+
+const PLAN = { scene_type: "fight", camera: { angle: "low", distance: "medium" }, actors: [
+  { id: "villain", side: "right", action_state: "blocking" }, { id: "hero", side: "left", action_state: "striking" }] };
+
+test("the plan is compared with what the judges saw, person by person from the left", () => {
+  assert.deepEqual(planMatch(PLAN, "camera", "looks_up"), { expected: "low angle (looking up)", match: true });
+  assert.equal(planMatch(PLAN, "camera", "level").match, false);
+  assert.deepEqual(planMatch(PLAN, "people", "2"), { expected: "2", match: true });
+  assert.equal(planMatch(PLAN, "people", "3").match, false);
+  assert.deepEqual(planMatch(PLAN, "action:0", "striking"), { expected: "striking", match: true }); // the hero stands on the left, the plan lists him second
+  assert.equal(planMatch(PLAN, "action:1", "striking").match, false);
+  assert.equal(planMatch(PLAN, "action:5", "x").match, null);
+  assert.equal(planMatch(PLAN, "camera", null).match, null);
+  assert.equal(planMatch({}, "camera", "level").match, null);
+});
+
+test("feelings of the same family count as the planned state", () => {
+  const plan = { scene_type: "emotion", camera: { angle: "eye_level" }, actors: [{ id: "girl", side: "center", action_state: "grieving" }] };
+  assert.equal(planMatch(plan, "action:0", "lost").match, true);
+  assert.equal(planMatch(plan, "action:0", "joyful").match, false);
+});
+
+test("a review request is overdue when the judges never reported in ten minutes", () => {
+  const run = (created_at: string, analysis: unknown) => ({ created_at, analysis } as unknown as SceneRun);
+  const now = Date.parse("2026-11-14T12:00:00Z");
+  assert.equal(analysisOverdue(run("2026-11-14T11:49:00", null), now), true); // stored without a zone: UTC
+  assert.equal(analysisOverdue(run("2026-11-14T11:55:00", null), now), false);
+  assert.equal(analysisOverdue(run("2026-11-14T11:00:00", { id: "a" }), now), false); // it has an analysis
+});
+
+test("disputed rows offer each judge's distinct answer as a choice", () => {
+  const rows = itemRows(cc);
+  assert.deepEqual(choiceOptions(rows[0]).map((c) => c.value), ["level", "looks_up"]);
+  assert.deepEqual(choiceOptions(rows[1]), []); // agreed: nothing to settle
+});
+
+test("choosing an answer for a disputed item counts as a reason to submit", () => {
+  const base = { liked: 40, agrees: false, note: "", goodTags: [] as string[], wrongTags: [] as string[], choices: { camera: "level" } };
+  assert.equal(ownerCanSubmit(base), true);
 });

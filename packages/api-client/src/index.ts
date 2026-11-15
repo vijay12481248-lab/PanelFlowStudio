@@ -331,6 +331,7 @@ export interface SceneFeedback {
   agrees_with_ai: boolean;
   good_tags: string[];
   wrong_tags: string[];
+  item_verdicts?: Record<string, string>;
   note: string;
   created_at: string | null;
 }
@@ -371,6 +372,7 @@ export interface SceneFeedbackInput {
   agrees_with_ai: boolean;
   good_tags: string[];
   wrong_tags: string[];
+  item_verdicts?: Record<string, string>; // the owner's own answer for items the judges disputed
   note: string;
 }
 

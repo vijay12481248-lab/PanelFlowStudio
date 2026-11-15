@@ -8,7 +8,7 @@ import { useEngine } from "../../app/providers";
 import { AiReviewPanel } from "./AiReviewPanel";
 import { OwnerPanel } from "./OwnerPanel";
 import { sceneKeys } from "./sceneQueries";
-import { ANGLES, STATES } from "./sceneView";
+import { analysisOverdue, ANGLES, itemRows, STATES } from "./sceneView";
 
 const PROJECT_TITLE = "Scene Director";
 const TERMINAL = new Set(["SUCCEEDED", "FAILED", "CANCELLED"]);
@@ -106,6 +106,29 @@ const CreatePanel: React.FC<{ pollMs: number; onDone: (runId: string) => void }>
   );
 };
 
+/** One picture with the AI review and the owner's verdict; remounted per run so the owner's choices never leak from one picture to the next. */
+const RunView: React.FC<{ run: SceneRun; onSaved: (run: SceneRun) => void; onDismissed: () => void }> = ({ run, onSaved, onDismissed }) => {
+  const [choices, setChoices] = React.useState<Record<string, string>>(run.feedback?.item_verdicts ?? {});
+  const onChoose = (key: string, value: string) =>
+    setChoices((c) => {
+      const next = { ...c };
+      if (next[key] === value) delete next[key];
+      else next[key] = value;
+      return next;
+    });
+  const usable = Boolean(run.analysis) && !run.analysis?.error && itemRows(run.analysis?.crosscheck as never).length > 0;
+  return (
+    <div className="grid gap-5">
+      <GlassPanel className="grid gap-2 p-3">
+        <img src={api.sceneRunImageUrl(run.id)} alt="Generated picture" className="max-h-[32rem] w-full rounded-ctl object-contain" />
+        <p className="px-1 text-xs text-fg-dim">{run.brief}</p>
+      </GlassPanel>
+      <AiReviewPanel run={run} choices={choices} onChoose={onChoose} overdue={analysisOverdue(run)} />
+      <OwnerPanel run={run} choices={choices} usable={usable} onSaved={onSaved} onDismissed={onDismissed} />
+    </div>
+  );
+};
+
 export const ScenePage: React.FC<{ pollMs?: number }> = ({ pollMs = 3000 }) => {
   const engine = useEngine();
   const client = useQueryClient();
@@ -117,7 +140,7 @@ export const ScenePage: React.FC<{ pollMs?: number }> = ({ pollMs = 3000 }) => {
     queryKey: sceneKeys.run(runId ?? ""),
     queryFn: () => api.getSceneRun(runId as string),
     enabled: Boolean(runId) && engine.connected,
-    refetchInterval: (q) => (q.state.data && !q.state.data.analysis ? pollMs : false), // the judges are still working: keep looking
+    refetchInterval: (q) => (q.state.data && !q.state.data.analysis && !analysisOverdue(q.state.data) ? pollMs : false), // the judges are still working: keep looking, but not forever
     retry: false,
   });
 
@@ -138,14 +161,7 @@ export const ScenePage: React.FC<{ pollMs?: number }> = ({ pollMs = 3000 }) => {
           {runId && run.isLoading && <Skeleton className="h-64 w-full" />}
           {runId && run.isError && <ErrorState title="This picture could not be loaded" description="It may have been removed." onBack={() => open(null)} />}
           {run.data && (
-            <div className="grid gap-5" key={run.data.id}>
-              <GlassPanel className="grid gap-2 p-3">
-                <img src={api.sceneRunImageUrl(run.data.id)} alt="Generated picture" className="max-h-[32rem] w-full rounded-ctl object-contain" />
-                <p className="px-1 text-xs text-fg-dim">{run.data.brief}</p>
-              </GlassPanel>
-              <AiReviewPanel run={run.data} />
-              <OwnerPanel run={run.data} onSaved={afterSaved} onDismissed={() => { refresh(); const next = waiting[0]?.id ?? null; open(next); }} />
-            </div>
+            <RunView key={run.data.id} run={run.data} onSaved={afterSaved} onDismissed={() => { refresh(); const next = waiting[0]?.id ?? null; open(next); }} />
           )}
           {!runId && waiting.length === 0 && !queue.isLoading && (
             <EmptyState title="Nothing is waiting for your review." description="New pictures show up here, and as a banner on every screen, as soon as they are made." />

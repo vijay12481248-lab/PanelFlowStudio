@@ -15,6 +15,14 @@ CAMERA_FIX = {
     "eye_level": "Camera at the subjects' eye height with a perfectly level horizon.",
     "dutch": "Camera tilted so the horizon is clearly slanted.",
 }
+# A second, different way to ask for the same angle: used only when the owner has marked this angle wrong at least twice (unmeasured; the sentence above is
+# already in every prompt, so repeating it as a "lesson" would change nothing).
+CAMERA_EXTRA = {
+    "low": "The horizon sits below the people's chests and the sky or the ceiling fills the top of the frame.",
+    "high": "The floor or the ground fills most of the frame and the tops of the heads are seen from above.",
+    "dutch": "Every vertical line leans the same way and the horizon cuts the frame at a steep slant.",
+    "eye_level": "The camera is exactly as high as the people's eyes and the horizon crosses the frame at eye height.",
+}
 _LIGHT = {"front": "the front", "back": "behind the subjects", "left": "the left", "right": "the right", "top": "above", "below": "below"}
 _CAMERA = {
     "eye_level": "the view is at eye level",

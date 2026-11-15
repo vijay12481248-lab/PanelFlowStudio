@@ -121,6 +121,12 @@ def run_sqlite_migrations(db_engine):
                         conn.exec_driver_sql(f"ALTER TABLE assets ADD COLUMN {col_name} {col_type}")
                         conn.commit()
 
+            # 4b. Scene feedback: the owner's per-item answers (added after the first version of the table)
+            existing_fb_cols = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(scene_feedback)").fetchall()}
+            if existing_fb_cols and "item_verdicts" not in existing_fb_cols:
+                conn.exec_driver_sql("ALTER TABLE scene_feedback ADD COLUMN item_verdicts JSON DEFAULT '{}'")
+                conn.commit()
+
             # 5. Characters columns
             res_chars = conn.exec_driver_sql("PRAGMA table_info(characters)").fetchall()
             existing_char_cols = {row[1] for row in res_chars}
