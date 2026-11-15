@@ -1,6 +1,7 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import { ArrowLeft, RefreshCw, AlertCircle } from "lucide-react";
 import { api } from "@panelflow/api-client";
+import { ImageEditorModal, type ImageEditorTarget } from "../components/ImageEditorModal";
 import type { Project } from "@panelflow/shared-types";
 
 interface ChronoFlowScreenProps {
@@ -21,11 +22,23 @@ export const ChronoFlowScreen: React.FC<ChronoFlowScreenProps> = ({ onBack, proj
   const [loadTimedOut, setLoadTimedOut] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
+  // A picture the embedded studio asked to edit: it opens in the full-screen Image Studio (AI inpaint, cut, effects, colour, deliver).
+  const [editing, setEditing] = useState<{ name: string; url: string } | null>(null);
+  // The picture the next AI inpaint starts from: it moves to the newest result after each run, so edits chain.
+  const baseName = useRef("");
+
   // Listen for navigation messages from the embedded studio header
   useEffect(() => {
     const handleMsg = (e: MessageEvent) => {
       if (e.data?.type === "panelflow_back_to_dashboard") {
         onBack();
+      } else if (e.data?.type === "chronoflow_edit_image" && e.source === iframeRef.current?.contentWindow) {
+        const name = String(e.data.filename || "");
+        // only a bare file name in ComfyUI's input folder is accepted from the page
+        if (name && !/[\\/]/.test(name)) {
+          baseName.current = name;
+          setEditing({ name, url: String(e.data.url || `/chronoflow/inputs/${name}`) });
+        }
       }
     };
     window.addEventListener("message", handleMsg);
@@ -51,6 +64,32 @@ export const ChronoFlowScreen: React.FC<ChronoFlowScreenProps> = ({ onBack, proj
     };
     fetchToken();
   }, []);
+
+  const ENGINE = "http://127.0.0.1:8765";
+  const withToken = (path: string) => `${ENGINE}${path}${token ? `${path.includes("?") ? "&" : "?"}token=${encodeURIComponent(token)}` : ""}`;
+  const editTarget: ImageEditorTarget | undefined = useMemo(
+    () =>
+      editing
+        ? {
+            mode: "file",
+            name: editing.name,
+            imageSrc: withToken(editing.url),
+            inpaint: async ({ maskData, prompt, seed }) => {
+              const res = await fetch(`${ENGINE}/api/chronoflow/inpaint_image`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", ...(token ? { "X-PanelFlow-Token": token } : {}) },
+                body: JSON.stringify({ image_filename: baseName.current, mask_data: maskData, prompt, denoise: 0.85, steps: 4, seed }),
+              });
+              const data = await res.json().catch(() => ({}));
+              if (!res.ok || !data.success) throw new Error(typeof data.detail === "string" ? data.detail : "Inpainting failed in the engine.");
+              baseName.current = data.filename;
+              return withToken(data.url);
+            },
+          }
+        : undefined,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [editing, token],
+  );
 
   // Compute studio URL passing embedded=1 and project name for the unified single bar
   const extraParams = `${tab ? `&tab=${encodeURIComponent(tab)}` : ""}${story ? `&story=${encodeURIComponent(story)}` : ""}`;
@@ -156,6 +195,8 @@ export const ChronoFlowScreen: React.FC<ChronoFlowScreenProps> = ({ onBack, proj
           </button>
         )}
       </main>
+      {/* mounted only while open: the modal returns before its hooks when closed, so it must not stay mounted and re-open */}
+      {editing && <ImageEditorModal isOpen onClose={() => setEditing(null)} target={editTarget} />}
     </div>
   );
 };

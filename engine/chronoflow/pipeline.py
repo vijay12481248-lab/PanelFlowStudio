@@ -9,7 +9,7 @@ from pathlib import Path
 
 from urllib.parse import urlsplit
 
-from engine.comfyui.art import ArtEngine
+from engine.comfyui.art import ART_WORKFLOW_ID, ArtEngine
 
 def _resolve_comfy_base_dir() -> Path:
     env_dir = os.environ.get("PANELFLOW_COMFYUI_DIR") or os.environ.get("COMFYUI_DIR")
@@ -349,7 +349,7 @@ class ChronoFlowPipeline:
         return (await self.generate_art_image_ex(prompt, negative_prompt, width, height, seed, refine, ref_images))[0]
 
     async def generate_art_image_ex(self, prompt, negative_prompt, width=1024, height=1024, seed=None, refine: bool = False,
-                                    ref_images: list | None = None) -> tuple[str, dict | None]:
+                                    ref_images: list | None = None, workflow_id: str = ART_WORKFLOW_ID) -> tuple[str, dict | None]:
         """One keyframe / reference image from the central ArtEngine, saved into ComfyUI's input/ folder (Character Vault, MiniMax H3).
 
         There is exactly one text-to-image workflow in PanelFlow (see engine/comfyui/art.py); ChronoFlow does not carry its own graphs.
@@ -357,6 +357,8 @@ class ChronoFlowPipeline:
         base64 data URL) bound to the art workflow's reference conditioning so generated faces follow the approved sheets.
         """
         resolved_refs = self._resolve_reference_inputs(ref_images) if ref_images else []
+        if refine and workflow_id != ART_WORKFLOW_ID:
+            raise ValueError("Auto-refine is built on Qwen Image; turn it off or pick Qwen Image 2.1 Turbo")
         if refine:  # opt-in: review -> plan -> repair/redraw; candidates are kept under output/chronoflow/refine
             from engine.original.refine import refine_art_image
 
@@ -369,7 +371,7 @@ class ChronoFlowPipeline:
             info = None
             art = await asyncio.to_thread(
                 ArtEngine().generate, prompt, negative_prompt, int(width), int(height), seed, "chronoflow_art",
-                reference_images=resolved_refs or None)
+                reference_images=resolved_refs or None, workflow_id=workflow_id)
         filename = f"art_{uuid.uuid4().hex[:8]}.png"
         (COMFY_INPUT_DIR / filename).write_bytes(art.png)
         return filename, info

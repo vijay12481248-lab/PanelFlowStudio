@@ -3578,6 +3578,8 @@
 
         <!-- Top Row: 38% Media Pool / Bins | 62% Cinema Program Monitor -->
         <div class="davinci-top-row">
+          <div class="cf-split" data-split="l" role="separator" aria-orientation="vertical" tabindex="0" aria-label="Resize left panel (drag, or use arrow keys; double-click to reset)" title="Drag to resize · double-click to reset"></div>
+          <div class="cf-split" data-split="r" role="separator" aria-orientation="vertical" tabindex="0" aria-label="Resize right panel (drag, or use arrow keys; double-click to reset)" title="Drag to resize · double-click to reset"></div>
           <!-- Color Gallery (Left on Color page) -->
           <div class="deliver-settings" id="deliverSettings"></div>
           <div class="color-gallery" id="colorGallery"></div>
@@ -3672,6 +3674,7 @@
           <div class="fusion-inspector" id="fusionInspector"></div>
         </div>
 
+        <div class="cf-split-h" id="cfSplitH" data-split="h" role="separator" aria-orientation="horizontal" tabindex="0" aria-label="Resize timeline (drag, or use arrow keys; double-click to reset)" title="Drag to resize · double-click to reset"></div>
         <!-- Multi-track NLE timeline (built by static/nle/nle.js) -->
         <div id="nleTimeline"></div>
 
@@ -3698,14 +3701,14 @@
             <div class="img-landing-card" onclick="openImageStudio('generate')" role="button" tabindex="0">
               <div class="img-landing-icon img-landing-icon-generate">✨</div>
               <div class="img-landing-name">Generate New Image</div>
-              <div class="img-landing-desc">Create art from a text prompt with Qwen Image 2.1 Turbo — characters, scenes, turnaround sheets — with optional 🔒 Character Lock.</div>
+              <div class="img-landing-desc">Create art from a text prompt — choose Qwen Image 2.1 Turbo (fast) or MiniMax H3-Image (painted look) — characters, scenes, turnaround sheets, with optional 🔒 Character Lock.</div>
               <div class="img-landing-cta">Start generating →</div>
             </div>
             <div class="img-landing-card" onclick="openImageStudio('edit')" role="button" tabindex="0">
               <div class="img-landing-icon img-landing-icon-edit">🖌️</div>
               <div class="img-landing-name">Edit Existing Image</div>
-              <div class="img-landing-desc">Open an image on the inpainting canvas — paint a region, refine it, and send results back to shots or the vault.</div>
-              <div class="img-landing-cta">Open canvas →</div>
+              <div class="img-landing-desc">Open a picture in Image Studio — AI inpaint, crop and rotate, effects and colour grade, then export it.</div>
+              <div class="img-landing-cta">Choose a picture →</div>
             </div>
             <div class="img-landing-card" onclick="openImageStudio('timeline')" role="button" tabindex="0">
               <div class="img-landing-icon img-landing-icon-timeline">🎞️</div>
@@ -3717,19 +3720,43 @@
         </div>
       </div>
 
+      <!-- Edit Existing Image (inside the desktop app): choose a picture, then it opens in the new Image Studio -->
+      <div id="imgEditPicker" class="img-landing" style="display:none">
+        <div class="img-landing-inner">
+          <div class="img-landing-head">
+            <div class="img-landing-badge">🖌️</div>
+            <div class="img-landing-title">Choose a picture to edit</div>
+            <div class="img-landing-sub">It opens in Image Studio: AI inpaint, crop and rotate, effects, colour grade.</div>
+          </div>
+          <div class="img-pick-actions">
+            <button type="button" class="cfx-primary" onclick="document.getElementById('imgPickFile').click()">📄 Choose from your computer…</button>
+            <input type="file" id="imgPickFile" accept="image/png,image/jpeg,image/webp" style="display:none" onchange="onPickEditFile(this)">
+            <button type="button" class="cfx-btn" onclick="showImageStudioLanding()">⬅ Back</button>
+          </div>
+          <div class="cf-label" style="margin:14px 0 6px">Recent pictures</div>
+          <div class="img-pick-grid" id="imgPickGrid"></div>
+          <div class="img-pick-note" id="imgPickNote" role="status"></div>
+        </div>
+      </div>
+
       <!-- Image Studio Workspace (after choosing a mode) -->
       <div id="imgStudioWorkspace" style="display: none;">
         <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 14px; padding: 10px 14px; background: #0c1433; border: 1px solid var(--card-border); border-radius: var(--radius-md);">
           <button type="button" class="btn-tool" onclick="showImageStudioLanding()">⬅ Options</button>
           <span id="imgStudioModeTitle"></span>
-          <span style="margin-left: auto; font-size: 0.72rem; color: #6a76a3;">Qwen Image 2.1 Turbo · PanelFlow single art workflow</span>
+          <span style="margin-left: auto; font-size: 0.72rem; color: #6a76a3;" id="imgModelHeaderLabel">Qwen Image 2.1 Turbo</span>
         </div>
       <div class="img-studio-grid">
         <!-- Left: Image Generation Form -->
         <div class="card" id="imgGenCard">
           <div class="card-header">
             <div class="card-title"><span>🎨</span> Generate New Image</div>
-            <div style="font-size: 0.72rem; color: #6a76a3; text-align: right;">Qwen Image 2.1 Turbo<br>PanelFlow's single art workflow</div>
+            <div style="font-size: 0.72rem; color: #6a76a3; text-align: right;" id="imgModelCardLabel">Qwen Image 2.1 Turbo</div>
+          </div>
+
+          <div class="form-group">
+            <label>Image model <span class="cf-label-hint">which AI draws the picture</span></label>
+            <div class="img-model-grid" id="imgModelPicker" role="radiogroup" aria-label="Image model"></div>
           </div>
 
           <div class="form-group">
@@ -6695,7 +6722,53 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
     /* --- Image Studio mode landing (§15) --- */
     let imgStudioMode = null;
 
+    /* Inside the desktop app, editing a picture happens in the new React Image Studio (a full-screen editor owned by the app). */
+    const embeddedStudio = () => _isEmbedded && window.parent !== window;
+    function openInNewImageStudio(url, filename) {
+      if (!embeddedStudio()) return false;
+      window.parent.postMessage({ type: 'chronoflow_edit_image', url, filename }, '*');
+      return true;
+    }
+    async function ensureInInputs(url, filename) {   // inpainting reads ComfyUI's input folder; copy the picture there if it lives elsewhere
+      if (String(url).includes('/inputs/')) return { url, filename };
+      const blob = await (await fetch(mediaSrc(url))).blob();
+      const up = await fetch(`${API_BASE}/upload_image`, { method: 'POST', headers: { 'x-filename': filename || 'picture.png' }, body: blob });
+      const d = await up.json();
+      if (!d.success) throw new Error(d.detail || 'Could not copy the picture');
+      return { url: d.url, filename: d.filename };
+    }
+    async function showImageEditPicker() {
+      ['imgStudioLanding', 'imgStudioWorkspace', 'imgStoryTimelineWorkspace'].forEach(id => { const e = document.getElementById(id); if (e) e.style.display = 'none'; });
+      const box = document.getElementById('imgEditPicker'); if (box) box.style.display = '';
+      const grid = document.getElementById('imgPickGrid'), note = document.getElementById('imgPickNote');
+      note.textContent = 'Loading pictures…'; grid.innerHTML = '';
+      try {
+        const d = await (await fetch(`${API_BASE}/gallery`)).json();
+        const imgs = (d.images || []).slice(0, 60);
+        note.textContent = imgs.length ? '' : 'No pictures yet. Generate one, or choose a file from your computer.';
+        grid.innerHTML = imgs.map((i, n) => `<button type="button" class="img-pick-card" data-n="${n}" title="${escHtml(i.filename)}"><img loading="lazy" src="${mediaSrc(i.url)}" alt=""><span>${escHtml(i.filename)}</span></button>`).join('');
+        grid.onclick = async (e) => {
+          const c = e.target.closest('.img-pick-card'); if (!c) return;
+          const i = imgs[+c.dataset.n]; note.textContent = 'Opening…';
+          try { const f = await ensureInInputs(i.url, i.filename); openInNewImageStudio(f.url, f.filename); note.textContent = ''; }
+          catch (err) { note.textContent = `Could not open that picture: ${err.message}`; }
+        };
+      } catch (err) { note.textContent = `Could not load pictures: ${err.message}`; }
+    }
+    async function onPickEditFile(input) {
+      const f = input.files && input.files[0]; if (!f) return;
+      const note = document.getElementById('imgPickNote'); note.textContent = 'Opening…';
+      try {
+        const up = await fetch(`${API_BASE}/upload_image`, { method: 'POST', headers: { 'x-filename': f.name }, body: f });
+        const d = await up.json();
+        if (!d.success) throw new Error(d.detail || 'upload failed');
+        openInNewImageStudio(d.url, d.filename); note.textContent = '';
+      } catch (err) { note.textContent = `Could not open that file: ${err.message}`; }
+      input.value = '';
+    }
+
     function showImageStudioLanding() {
+      const pk = document.getElementById('imgEditPicker'); if (pk) pk.style.display = 'none';
       imgStudioMode = null;
       const landing = document.getElementById('imgStudioLanding');
       const ws = document.getElementById('imgStudioWorkspace');
@@ -6712,6 +6785,8 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
     }
 
     function showImageStudioMode(mode) {
+      const pk = document.getElementById('imgEditPicker'); if (pk) pk.style.display = 'none';
+      if (mode === 'edit' && embeddedStudio()) { imgStudioMode = mode; showImageEditPicker(); return; }
       imgStudioMode = mode;
       const landing = document.getElementById('imgStudioLanding');
       const ws = document.getElementById('imgStudioWorkspace');
@@ -6744,7 +6819,7 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
       const canvasCard = document.getElementById('imgCanvasCard');
       if (genCard) genCard.style.display = mode === 'generate' ? '' : 'none';
       if (canvasCard) canvasCard.style.display = mode === 'edit' ? '' : 'none';
-      if (mode === 'generate') { loadLockPicker(); setGenType(genType || 'text2img'); }
+      if (mode === 'generate') { loadLockPicker(); setGenType(genType || 'text2img'); loadImageModels(); }
       loadStorageLocations();
       initCanvas();
     }
@@ -7591,6 +7666,7 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
     }
 
     function openImageStudioEdit(url, filename) {
+      if (embeddedStudio()) { ensureInInputs(url, filename).then(f => openInNewImageStudio(f.url, f.filename)).catch(e => alert(`Could not open the picture: ${e.message}`)); return; }
       switchTab('image-studio');
       showImageStudioMode('edit');
       loadCanvasImage(mediaSrc(url), filename);
@@ -7861,6 +7937,45 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
       if (badge) badge.textContent = lockSelection.length ? `(${lockSelection.length} locked)` : '(off)';
     }
 
+    /* --- Image model picker: Qwen (default) or H3-Image. The last choice is remembered; Qwen is used until you change it. --- */
+    let imageModels = [{ id: 'qwen_image_21', label: 'Qwen Image 2.1 Turbo', speed: 'about 15 s', summary: 'Fast and photographic. Works with Character Lock, reference images and auto-refine.', missing_models: null }];
+    let imageModel = (() => { try { return localStorage.getItem('cf.imageModel') || 'qwen_image_21'; } catch (e) { return 'qwen_image_21'; } })();
+    const currentImageModel = () => imageModels.find(m => m.id === imageModel) || imageModels[0];
+
+    async function loadImageModels() {
+      try {
+        const r = await fetch(`${API_BASE}/image_models`);
+        if (r.ok) imageModels = (await r.json()).models || imageModels;
+      } catch (e) { /* keep the built-in Qwen entry: generating still works */ }
+      const m = imageModels.find(x => x.id === imageModel);
+      if (!m || (m.missing_models && m.missing_models.length)) imageModel = 'qwen_image_21';
+      renderImageModels();
+    }
+
+    function setImageModel(id) {
+      imageModel = id;
+      try { localStorage.setItem('cf.imageModel', id); } catch (e) { /* remembered only for this session */ }
+      renderImageModels();
+    }
+
+    function renderImageModels() {
+      const box = document.getElementById('imgModelPicker');
+      if (!box) return;
+      box.innerHTML = imageModels.map(m => {
+        const off = m.missing_models && m.missing_models.length;
+        const on = m.id === imageModel;
+        return `<button type="button" class="img-model-card${on ? ' active' : ''}" role="radio" aria-checked="${on}" ${off ? 'disabled' : ''} onclick="setImageModel('${m.id}')">
+            <span class="img-model-top"><b>${escHtml(m.label)}</b><i>${escHtml(m.speed || '')}</i></span>
+            <span class="img-model-desc">${escHtml(m.summary || '')}</span>
+            ${off ? `<span class="img-model-warn">Not installed in ComfyUI: ${escHtml(m.missing_models.join(', '))}</span>` : (m.id === 'qwen_image_21' ? '<span class="img-model-tag">Default</span>' : '')}
+          </button>`;
+      }).join('');
+      const label = currentImageModel().label;
+      ['imgModelHeaderLabel', 'imgModelCardLabel'].forEach(id => { const el = document.getElementById(id); if (el) el.textContent = label; });
+      const refine = document.getElementById('imgRefineToggle');   // auto-refine is built on Qwen
+      if (refine) { const q = imageModel === 'qwen_image_21'; refine.disabled = !q; if (!q) refine.checked = false; if (refine.parentElement) refine.parentElement.style.opacity = q ? '' : '.5'; }
+    }
+
     async function generateImage() {
       const btn = document.getElementById('btnGenerateImage');
       const prompt = document.getElementById('imgPrompt').value;
@@ -7890,7 +8005,7 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
       }
 
       btn.disabled = true;
-      btn.innerHTML = `<span class="spinner"></span> Generating with Qwen Image 2.1...`;
+      btn.innerHTML = `<span class="spinner"></span> Generating with ${escHtml(currentImageModel().label)}...`;
 
       const locSelect = document.getElementById('imgSaveLocationSelect');
       const location_id = locSelect ? locSelect.value : null;
@@ -7906,6 +8021,7 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
             height: height,
             seed: seed,
             refine: refine,
+            workflow_id: imageModel,
             ref_images: ref_images,
             character_ids: character_ids,
             location_id: location_id || undefined,
@@ -7922,8 +8038,8 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
           thumb.innerHTML = `<img src="${mediaSrc(data.url)}" alt="Gen Asset">`;
           strip.prepend(thumb);
 
-          loadCanvasImage(data.url, data.filename);
-          showImageStudioMode('edit'); // reveal the canvas so the fresh result is visible
+          if (embeddedStudio()) { openInNewImageStudio(data.url, data.filename); }   // the new Image Studio shows the fresh result
+          else { loadCanvasImage(data.url, data.filename); showImageStudioMode('edit'); } // standalone browser: reveal the old canvas
           let lockNote = '';
           if (data.character_lock) {
             const names = (data.character_lock.characters || []).map(c => c.name).filter(Boolean);
@@ -7935,7 +8051,8 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
             saveNote = `\n📁 Saved to folder: ${data.saved_location.folder} (${data.saved_location.filename})`;
             loadStorageLocations();
           }
-          alert(`✓ Image generated successfully with Qwen Image 2.1!${lockNote}${saveNote}\nLoaded onto canvas.`);
+          if (!embeddedStudio()) alert(`✓ Image generated with ${data.model || currentImageModel().label}.${lockNote}${saveNote}\nLoaded onto canvas.`);
+          else if (lockNote || saveNote) alert(`✓ Image generated with ${data.model || currentImageModel().label}.${lockNote}${saveNote}`);
         } else {
           alert(`Image generation error: ${data.error || data.detail || 'Unknown error'}`);
         }
@@ -11663,6 +11780,7 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
       if (page === 'color' && window.NLEColor) NLEColor.open();
       if (page === 'fusion' && window.NLEFusion) NLEFusion.open();
       if (page === 'deliver' && window.NLEDeliver) NLEDeliver.open();   // has its own settings + render queue; "Bake Master Cut" stays the quick export
+      if (window.CFPanels) CFPanels.apply(page);
       if (page !== 'media' && typeof initTimeline === 'function') initTimeline();
     }
 
@@ -11676,7 +11794,7 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
         css.rel = 'stylesheet'; css.href = `${STATIC_BASE}/nle/${sheet}?${tq}`; document.head.appendChild(css);
       });
       const load = (f) => new Promise((res, rej) => { const s = document.createElement('script'); s.src = `${STATIC_BASE}/nle/${f}?${tq}`; s.onload = res; s.onerror = () => rej(new Error(`could not load ${f}`)); document.head.appendChild(s); });
-      return ['model.js', 'nle.js', 'frame-edit.js', 'grade.js', 'color.js', 'fusion-graph.js', 'fusion.js', 'deliver.js', 'library.js'].reduce((p, f) => p.then(() => load(f)), Promise.resolve());
+      return ['model.js', 'nle.js', 'frame-edit.js', 'grade.js', 'color.js', 'fusion-graph.js', 'fusion.js', 'deliver.js', 'library.js', 'panels.js'].reduce((p, f) => p.then(() => load(f)), Promise.resolve());
     }
 
     async function initApp() {

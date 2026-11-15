@@ -387,3 +387,46 @@ def test_import_scene_to_studio(client):
 
 
 
+
+
+def _fake_art(tmp_path, monkeypatch, seen):
+    monkeypatch.setattr(chronoflow, "COMFY_INPUT_DIR", tmp_path / "input")
+    (tmp_path / "input").mkdir(exist_ok=True)
+
+    async def fake_gen(*args, **kwargs):
+        seen.append(args)
+        (tmp_path / "input" / "art_pick.png").write_bytes(b"x")
+        return "art_pick.png", None
+
+    monkeypatch.setattr(chronoflow.pipeline, "generate_art_image_ex", fake_gen)
+
+
+def test_image_model_defaults_to_qwen_and_the_choice_reaches_the_engine(client, tmp_path, monkeypatch):
+    seen: list = []
+    _fake_art(tmp_path, monkeypatch, seen)
+    r = client.post("/api/chronoflow/generate_image", json={"prompt": "a cat"}).json()
+    assert r["workflow_id"] == "qwen_image_21" and r["model"] == "Qwen Image 2.1 Turbo" and seen[-1][-1] == "qwen_image_21"
+    r = client.post("/api/chronoflow/generate_image", json={"prompt": "a cat", "workflow_id": "minimax_h3_image_edit"}).json()
+    assert r["workflow_id"] == "minimax_h3_image_edit" and r["model"] == "MiniMax H3-Image" and seen[-1][-1] == "minimax_h3_image_edit"
+
+
+def test_unknown_image_model_and_refine_on_h3_are_refused_before_any_gpu_time(client, tmp_path, monkeypatch):
+    seen: list = []
+    _fake_art(tmp_path, monkeypatch, seen)
+    bad = client.post("/api/chronoflow/generate_image", json={"prompt": "x", "workflow_id": "sdxl_whatever"})
+    assert bad.status_code == 400 and "Unknown image model" in bad.json()["detail"]
+    refine = client.post("/api/chronoflow/generate_image", json={"prompt": "x", "workflow_id": "minimax_h3_image_edit", "refine": True})
+    assert refine.status_code == 400 and "Qwen" in refine.json()["detail"]
+    assert not seen, "a refused request must never reach the engine"
+
+
+def test_image_models_lists_both_with_qwen_default_even_when_comfyui_is_offline(client, monkeypatch):
+    class Offline:
+        class registry:
+            @staticmethod
+            def preflight(_id):
+                return {"comfy_online": False}
+    monkeypatch.setattr(chronoflow, "ArtEngine", Offline)
+    body = client.get("/api/chronoflow/image_models").json()
+    assert [m["id"] for m in body["models"]] == ["qwen_image_21", "minimax_h3_image_edit"] and body["default"] == "qwen_image_21"
+    assert all(m["missing_models"] is None for m in body["models"]), "offline: nothing is disabled, the picker still works"

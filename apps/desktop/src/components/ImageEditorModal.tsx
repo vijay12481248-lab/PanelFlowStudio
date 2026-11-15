@@ -25,7 +25,11 @@ import { useImageSource } from "./image-studio/color/useImageSource";
 
 export type ImageEditorTarget =
   | { mode: 'project'; projectId: string; asset: GeneratedAsset; onAssetUpdated?: (newAsset: GeneratedAsset) => void }
-  | { mode: 'story'; storySlug: string; episodeSlug?: string; panelId: string; imageSrc: string; onPanelUpdated?: (newImagePath: string) => void };
+  | { mode: 'story'; storySlug: string; episodeSlug?: string; panelId: string; imageSrc: string; onPanelUpdated?: (newImagePath: string) => void }
+  /** a plain picture (e.g. one made in ChronoFlow). The host supplies the AI inpaint call and returns the new picture's URL. */
+  | { mode: 'file'; name: string; imageSrc: string;
+      inpaint: (req: { maskData: string; prompt: string; negativePrompt: string; seed: number }) => Promise<string>;
+      onImageUpdated?: (newSrc: string) => void };
 
 export interface ImageEditorModalProps {
   isOpen: boolean;
@@ -81,7 +85,7 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   );
   const [previousAsset, setPreviousAsset] = useState<GeneratedAsset | null>(null);
   const [currentImageSrc, setCurrentImageSrc] = useState<string>(
-    effectiveTarget.mode === 'story' ? effectiveTarget.imageSrc : ''
+    effectiveTarget.mode !== 'project' ? effectiveTarget.imageSrc : ''
   );
   const [previousImageSrc, setPreviousImageSrc] = useState<string | null>(null);
   const [isComparing, setIsComparing] = useState(false);
@@ -163,6 +167,8 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
     const sessionKey =
       effectiveTarget.mode === "story"
         ? `story:${effectiveTarget.storySlug}:${effectiveTarget.panelId}`
+        : effectiveTarget.mode === "file"
+        ? `file:${effectiveTarget.name}:${effectiveTarget.imageSrc}`
         : `project:${effectiveTarget.projectId}:${effectiveTarget.asset.id}`;
 
     // Already tracking this session; keep current inpaint/compare state
@@ -183,7 +189,7 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
     }
 
     activeSessionKeyRef.current = sessionKey;
-    if (effectiveTarget.mode === "story") {
+    if (effectiveTarget.mode !== "project") {
       setCurrentImageSrc(effectiveTarget.imageSrc);
       setPreviousImageSrc(null);
     } else {
@@ -201,6 +207,8 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
     effectiveTarget?.mode,
     effectiveTarget?.mode === "story"
       ? effectiveTarget.panelId
+      : effectiveTarget?.mode === "file"
+      ? effectiveTarget.imageSrc
       : effectiveTarget?.mode === "project"
       ? effectiveTarget.asset.id
       : undefined,
@@ -460,6 +468,15 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
           if (effectiveTarget.onAssetUpdated) effectiveTarget.onAssetUpdated(newest);
           showToast("✨ Inpainting complete! New asset created.");
         }
+      } else if (effectiveTarget.mode === 'file') {
+        setInpaintStatusText("Inpainting the picture in ComfyUI...");
+        setInpaintProgress(0.3);
+        const newSrc = await effectiveTarget.inpaint({ maskData, prompt: prompt.trim(), negativePrompt: negativePrompt.trim(), seed });
+        setInpaintProgress(0.95);
+        setPreviousImageSrc(currentImageSrc);
+        setCurrentImageSrc(newSrc);
+        if (effectiveTarget.onImageUpdated) effectiveTarget.onImageUpdated(newSrc);
+        showToast("✨ Inpainting complete!");
       } else {
         setInpaintStatusText("Inpainting story panel with Qwen 2.1 inpaint workflow...");
         setInpaintProgress(0.3);
@@ -589,7 +606,7 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   const copyShaToClipboard = () => {
     const sha = effectiveTarget.mode === 'project'
       ? (currentAsset || effectiveTarget.asset).sha256
-      : effectiveTarget.panelId;
+      : effectiveTarget.mode === 'file' ? effectiveTarget.name : effectiveTarget.panelId;
     if (sha) {
       navigator.clipboard.writeText(sha);
       setCopiedSha(true);
@@ -609,10 +626,10 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   const displayHeight = currentAsset?.height ?? imageNaturalSize.height;
   const displayFilename = effectiveTarget.mode === 'project'
     ? (currentAsset?.filename || "asset.png")
-    : `story-panel-${effectiveTarget.panelId}.png`;
+    : effectiveTarget.mode === 'file' ? effectiveTarget.name : `story-panel-${effectiveTarget.panelId}.png`;
   const displaySubtext = effectiveTarget.mode === 'project'
     ? (currentAsset ? `${(currentAsset.byte_size / 1024).toFixed(1)} KB` : "")
-    : `Panel ${effectiveTarget.panelId}`;
+    : effectiveTarget.mode === 'file' ? "Picture" : `Panel ${effectiveTarget.panelId}`;
   const hasInpainted = effectiveTarget.mode === 'project' ? !!previousAsset : !!previousImageSrc;
 
   const grade = gradeHistory.present;

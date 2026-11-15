@@ -22,23 +22,23 @@ body:not([data-tab="director"]) .resolve-bottom-rail { display: none; }
 .resolve-rail-item { min-width: 92px; }
 .resolve-rail-item.active { color: #a9c1ff; border-top-color: #3b6bf5; background: #101a3d; }
 
-#cfWorkspace { --cf-l: 300px; --cf-r: 320px; --cf-tl: 250px; flex: 1; min-height: 0; overflow: hidden; }
+#cfWorkspace { --cf-gut: 10px; --cf-l: 300px; --cf-r: 320px; --cf-tl: 250px; flex: 1; min-height: 0; overflow: hidden; }
 #cfWorkspace[data-page="media"] { display: none; }
 #cfWorkspace[data-page="fusion"] { --cf-l: 260px; --cf-r: 320px; }
 #cfWorkspace[data-page="color"] { --cf-l: 240px; --cf-r: 320px; --cf-tl: 190px; }
 #cfWorkspace[data-page="deliver"] { --cf-l: 340px; --cf-r: 320px; --cf-tl: 190px; }
 
-#cfWorkspace .davinci-top-row { flex: 1 1 0; min-height: 0; max-height: none; height: auto; grid-template-columns: var(--cf-l) minmax(0, 1fr) var(--cf-r); grid-template-rows: minmax(0, 1fr); }
+#cfWorkspace .davinci-top-row { flex: 1 1 0; min-height: 0; max-height: none; height: auto; grid-template-columns: var(--cf-l) var(--cf-gut) minmax(0, 1fr) var(--cf-gut) var(--cf-r); grid-template-rows: minmax(0, 1fr); gap: 0; }
 #cfWorkspace .davinci-top-row > * { display: none; grid-row: 1; min-width: 0; min-height: 0; }
-#cfWorkspace .davinci-top-row > .davinci-cinema-monitor { display: flex; grid-column: 2; }
+#cfWorkspace .davinci-top-row > .davinci-cinema-monitor { display: flex; grid-column: 3; }
 #cfWorkspace[data-page="edit"] .davinci-media-pool,
 #cfWorkspace[data-page="fusion"] .davinci-media-pool { display: flex; grid-column: 1; }
-#cfWorkspace[data-page="edit"] .cf-ai { display: flex; grid-column: 3; }
-#cfWorkspace[data-page="fusion"] .fusion-inspector { display: flex; grid-column: 3; }
+#cfWorkspace[data-page="edit"] .cf-ai { display: flex; grid-column: 5; }
+#cfWorkspace[data-page="fusion"] .fusion-inspector { display: flex; grid-column: 5; }
 #cfWorkspace[data-page="color"] .color-gallery { display: flex; grid-column: 1; }
-#cfWorkspace[data-page="color"] .color-scopes { display: flex; grid-column: 3; }
+#cfWorkspace[data-page="color"] .color-scopes { display: flex; grid-column: 5; }
 #cfWorkspace[data-page="deliver"] .deliver-settings { display: flex; grid-column: 1; }
-#cfWorkspace[data-page="deliver"] .deliver-queue { display: flex; grid-column: 3; }
+#cfWorkspace[data-page="deliver"] .deliver-queue { display: flex; grid-column: 5; }
 
 /* bottom row: the timeline is a fixed-height strip, Color / Fusion put their own panel under it */
 #cfWorkspace #nleTimeline { flex: 0 0 var(--cf-tl); min-height: 0; overflow: auto; }
@@ -49,10 +49,12 @@ body:not([data-tab="director"]) .resolve-bottom-rail { display: none; }
 
 @media (max-width: 1200px) { #cfWorkspace { --cf-l: 250px; --cf-r: 280px; } #cfWorkspace[data-page="deliver"] { --cf-l: 300px; } }
 @media (max-width: 1000px) {
-  #cfWorkspace .davinci-top-row { grid-template-columns: minmax(0, 1fr) var(--cf-r); }
+  #cfWorkspace .davinci-top-row { grid-template-columns: minmax(0, 1fr) var(--cf-gut) var(--cf-r); }
+  #cfWorkspace .cf-split[data-split="l"] { display: none !important; }
   #cfWorkspace .davinci-top-row > .davinci-cinema-monitor { grid-column: 1; }
+  #cfWorkspace .cf-split[data-split="r"] { grid-column: 2; }
   #cfWorkspace .davinci-top-row > [class*="davinci-media-pool"], #cfWorkspace .davinci-top-row > .color-gallery, #cfWorkspace .davinci-top-row > .deliver-settings { display: none !important; }
-  #cfWorkspace .davinci-top-row > .cf-ai, #cfWorkspace .davinci-top-row > .color-scopes, #cfWorkspace .davinci-top-row > .deliver-queue, #cfWorkspace .davinci-top-row > .fusion-inspector { grid-column: 2; }
+  #cfWorkspace .davinci-top-row > .cf-ai, #cfWorkspace .davinci-top-row > .color-scopes, #cfWorkspace .davinci-top-row > .deliver-queue, #cfWorkspace .davinci-top-row > .fusion-inspector { grid-column: 3; }
 }
 
 /* ---------- monitor header: title + project picker only ---------- */
@@ -101,3 +103,49 @@ body:not([data-tab="director"]) .resolve-bottom-rail { display: none; }
 /* ---------- header ---------- */
 header .cfx-primary { padding: 6px 14px; }
 .nav-tab { text-transform: none; font-size: .78rem; letter-spacing: 0; padding: 5px 14px; }
+
+/* ---------- resizable panels (drag, or focus a handle and use the arrow keys; double-click resets; sizes are remembered per page) ---------- */
+#cfWorkspace .davinci-top-row > .cf-split { display: block; grid-row: 1; }
+#cfWorkspace .cf-split[data-split="l"] { grid-column: 2; }
+#cfWorkspace .cf-split[data-split="r"] { grid-column: 4; }
+.cf-split, .cf-split-h { position: relative; background: transparent; touch-action: none; }
+.cf-split { cursor: col-resize; }
+.cf-split-h { flex: none; height: 10px; cursor: row-resize; }
+.cf-split::after, .cf-split-h::after { content: ''; position: absolute; border-radius: 2px; background: #1f2a5c; transition: background .12s; }
+.cf-split::after { top: 0; bottom: 0; left: 4px; width: 2px; }
+.cf-split-h::after { left: 0; right: 0; top: 4px; height: 2px; }
+.cf-split:hover::after, .cf-split-h:hover::after, .cf-split.drag::after, .cf-split-h.drag::after, .cf-split:focus-visible::after, .cf-split-h:focus-visible::after { background: #3b6bf5; }
+.cf-split:focus-visible, .cf-split-h:focus-visible { outline: none; }
+body.cf-resizing { user-select: none; }
+body.cf-resizing iframe, body.cf-resizing video { pointer-events: none; }
+#cfWorkspace[data-page="media"] .cf-split-h { display: none; }
+#cfWorkspace[data-page="fusion"] .cf-split-h { display: none; }
+
+/* the bin tabs ("All / Chunks / Audio ...") wrap instead of showing a horizontal scrollbar inside a narrow panel */
+.pool-bins-tabs { flex-wrap: wrap; overflow: visible; white-space: normal; }
+@media (max-width: 1000px) { #cfWorkspace .cf-split[data-split="r"] { grid-column: 2; } }
+
+/* ---------- image model picker (Image Studio > Generate) ---------- */
+.cf-label-hint { font-size: .68rem; font-weight: 400; color: #6a76a3; margin-left: 6px; text-transform: none; letter-spacing: 0; }
+.img-model-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; }
+.img-model-card { display: flex; flex-direction: column; gap: 4px; text-align: left; padding: 10px 12px; border-radius: 8px; border: 1px solid #222d5e; background: #0e1638; color: #d5dcf5; font: inherit; cursor: pointer; position: relative; }
+.img-model-card:hover:not(:disabled) { border-color: #3a4a95; }
+.img-model-card.active { border-color: #3b6bf5; box-shadow: 0 0 0 1px #3b6bf5; background: rgba(59,107,245,.14); }
+.img-model-card:disabled { opacity: .5; cursor: not-allowed; }
+.img-model-card:focus-visible { outline: 2px solid #7aa2ff; outline-offset: 2px; }
+.img-model-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.img-model-top b { font-size: .82rem; color: #eef1ff; }
+.img-model-top i { font-style: normal; font-size: .68rem; color: #9aa6d0; }
+.img-model-desc { font-size: .72rem; line-height: 1.4; color: #9aa6d0; }
+.img-model-tag { align-self: flex-start; font-size: .62rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: #46d6a3; }
+.img-model-warn { font-size: .68rem; color: #f2a0ab; }
+
+/* ---------- Edit Existing Image: picture picker (desktop app) ---------- */
+.img-pick-actions { display: flex; gap: 8px; justify-content: center; margin-top: 4px; }
+.img-pick-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; grid-auto-rows: max-content; max-height: 52vh; overflow-y: auto; padding: 2px; }
+.img-pick-card { display: flex; flex-direction: column; gap: 4px; padding: 6px; background: #0e1638; border: 1px solid #1a2350; border-radius: 8px; cursor: pointer; color: #9aa6d0; font: inherit; font-size: .68rem; text-align: left; }
+.img-pick-card:hover { border-color: #3b6bf5; }
+.img-pick-card:focus-visible { outline: 2px solid #7aa2ff; outline-offset: 2px; }
+.img-pick-card img { width: 100%; aspect-ratio: 16 / 10; object-fit: cover; border-radius: 4px; background: #000; }
+.img-pick-card span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.img-pick-note { text-align: center; font-size: .76rem; color: #9aa6d0; min-height: 1.2em; margin-top: 8px; }

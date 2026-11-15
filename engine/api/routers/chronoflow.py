@@ -33,6 +33,7 @@ from engine.chronoflow.pipeline import (
 from engine.chronoflow import deliver as deliver_mod
 from engine.chronoflow import media_tools
 from engine.chronoflow.folder_dialog import pick_native_folder
+from engine.comfyui.art import ART_WORKFLOW_ID, IMAGE_WORKFLOW_IDS, ArtEngine
 from engine.chronoflow.reviewer import analyze_video_chunk
 from engine.chronoflow.supervisor import VAULT_DIR, JobSupervisor
 
@@ -197,6 +198,32 @@ class GenerateImageRequest(BaseModel):
     character_ids: list[str] = Field(default_factory=list)  # character lock: Character Vault ids resolved to their sheets
     location_id: str | None = None
     destination_path: str | None = None
+    workflow_id: str = ART_WORKFLOW_ID  # which image model: qwen_image_21 (default) or minimax_h3_image_edit (text to image, no picture bound)
+
+
+# What the Image Studio's model picker shows. Timings/looks are what docs/H3_IMAGE_EDIT.md measured on the RTX 5060 Ti.
+IMAGE_MODELS = [
+    {"id": "qwen_image_21", "label": "Qwen Image 2.1 Turbo", "default": True, "speed": "about 15 s",
+     "summary": "Fast and photographic. Works with Character Lock, reference images and auto-refine."},
+    {"id": "minimax_h3_image_edit", "label": "MiniMax H3-Image", "default": False, "speed": "about 50 s",
+     "summary": "Slower, painted / illustrated look. No auto-refine; Character Lock is not proven on it."},
+]
+
+
+@router.get("/image_models")
+def list_image_models() -> dict[str, Any]:
+    """The image models the studio can run, with what is missing from ComfyUI when it is online (None when it is offline)."""
+    out = []
+    for m in IMAGE_MODELS:
+        item = dict(m, missing_models=None)
+        try:
+            pre = ArtEngine().registry.preflight(m["id"])
+            if pre.get("comfy_online"):
+                item["missing_models"] = pre.get("missing_models", []) + pre.get("missing_nodes", [])
+        except Exception as e:  # a registry problem must not hide the picker
+            logger.warning("image model preflight failed for %s: %s", m["id"], e)
+        out.append(item)
+    return {"models": out, "default": ART_WORKFLOW_ID}
 
 
 class InpaintRequest(BaseModel):
@@ -1192,11 +1219,16 @@ async def generate_image(req: GenerateImageRequest) -> dict[str, Any]:
                 if image not in refs:
                     refs.append(image)
                 locked_characters.append({"id": c.get("id"), "name": c.get("name"), "image": image})
+        if req.workflow_id not in IMAGE_WORKFLOW_IDS:
+            raise HTTPException(status_code=400, detail=f"Unknown image model '{req.workflow_id}'. Choose one of: {', '.join(IMAGE_WORKFLOW_IDS)}")
+        if req.refine and req.workflow_id != ART_WORKFLOW_ID:
+            raise HTTPException(status_code=400, detail="Auto-refine is built on Qwen Image; turn it off or pick Qwen Image 2.1 Turbo")
         MAX_REFS = 4  # the approved workflow declares four reference patch slots
         if len(refs) > MAX_REFS:
             raise HTTPException(status_code=400, detail=f"Character lock supports at most {MAX_REFS} reference images (got {len(refs)})")
-        filename, refine = await pipeline.generate_art_image_ex(req.prompt, req.negative_prompt, req.width or 1024, req.height or 1024, req.seed, req.refine, refs)
-        out: dict[str, Any] = {"success": True, "filename": filename, "url": f"/chronoflow/inputs/{filename}"}
+        filename, refine = await pipeline.generate_art_image_ex(req.prompt, req.negative_prompt, req.width or 1024, req.height or 1024, req.seed, req.refine, refs, req.workflow_id)
+        out: dict[str, Any] = {"success": True, "filename": filename, "url": f"/chronoflow/inputs/{filename}", "workflow_id": req.workflow_id,
+                               "model": next(m["label"] for m in IMAGE_MODELS if m["id"] == req.workflow_id)}
         if refs:
             out["character_lock"] = {"ref_images": refs, "characters": locked_characters}
         if refine:
@@ -1327,7 +1359,9 @@ def media_waveform(file: str, bins: int = 200) -> dict[str, Any]:
 @router.post("/upload_image")
 async def upload_image(request: Request) -> dict[str, Any]:
     try:
-        filename = request.headers.get("x-filename") or f"chronoflow_{uuid.uuid4().hex[:8]}.png"
+        filename = Path((request.headers.get("x-filename") or "").replace("\\", "/")).name   # a bare name: never a path out of the input folder
+        if not filename or filename.startswith("."):
+            filename = f"chronoflow_{uuid.uuid4().hex[:8]}.png"
         filepath = COMFY_INPUT_DIR / filename
         body = await request.body()
         with open(filepath, "wb") as f:
