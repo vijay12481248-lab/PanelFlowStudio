@@ -42,7 +42,7 @@ test("the banner is hidden with zero waiting", async () => {
   stub(waiting(0));
   const view = await mountPage(<ReviewRequestBanner />);
   await view.settle();
-  assert.equal(view.document.querySelector('[data-testid="review-banner"]'), null);
+  assert.equal(view.document.querySelector('[data-testid="review-alert"]'), null);
   await view.cleanup();
 });
 
@@ -50,7 +50,7 @@ test("the banner survives a failing request and stays hidden", async () => {
   stub(new Error("engine offline"));
   const view = await mountPage(<ReviewRequestBanner />);
   await view.settle();
-  assert.equal(view.document.querySelector('[data-testid="review-banner"]'), null);
+  assert.equal(view.document.querySelector('[data-testid="review-alert"]'), null);
   await view.cleanup();
 });
 
@@ -62,14 +62,26 @@ test("the banner does not poll while the engine is disconnected", async () => {
   await view.cleanup();
 });
 
+test("the alert can be closed, and comes back only when more pictures arrive", async () => {
+  stub(waiting(40));
+  const view = await mountPage(<ReviewRequestBanner />);
+  await view.settle();
+  const close = view.document.querySelector('[data-testid="review-alert"] button[aria-label="Dismiss"]') as HTMLButtonElement | null;
+  assert.ok(close, "a close button");
+  close.click();
+  await view.settle();
+  assert.equal(view.document.querySelector('[data-testid="review-alert"]'), null);
+  await view.cleanup();
+});
+
 test("the banner view is hidden on the Scene page itself", async () => {
   const view = await mountPage(<div><ReviewRequestBannerView count={4} firstRunId="r1" pathname="/create/scene" /><span id="after" /></div>);
   await view.settle();
-  assert.equal(view.document.querySelector('[data-testid="review-banner"]'), null);
+  assert.equal(view.document.querySelector('[data-testid="review-alert"]'), null);
   await view.cleanup();
   const other = await mountPage(<ReviewRequestBannerView count={4} firstRunId="r1" pathname="/jobs" />);
   await other.settle();
-  assert.ok(other.document.querySelector('[data-testid="review-banner"]'));
+  assert.ok(other.document.querySelector('[data-testid="review-alert"]'));
   await other.cleanup();
 });
 
