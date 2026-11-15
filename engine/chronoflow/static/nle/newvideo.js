@@ -22,7 +22,7 @@
   function canRender(scenes, i) {
     const s = scenes[i];
     if (!chained(s)) return { ok: true, reason: '' };
-    if (i === 0) return { ok: false, reason: 'Nothing to continue from: add a first frame to this shot.' };
+    if (i === 0) return s.start_mode === 'text' ? { ok: true, reason: '' } : { ok: false, reason: 'Nothing to continue from: add a first frame to this shot.' }; // a text card first renders as text
     if (scenes[i - 1].approved) return { ok: true, reason: '' };
     return { ok: false, reason: `Approve Shot ${scenes[i - 1].shot_index || i} first: this shot continues from its last frame.` };
   }
@@ -36,6 +36,28 @@
   function markRedo(scenes, i) {
     Object.assign(scenes[i], { approved: false, state: 'ready', rendered_video: '', tail_frame: '' });
     for (let j = i + 1; j < scenes.length && chained(scenes[j]); j++) Object.assign(scenes[j], { approved: false, state: 'stale' }); // their start frame came from the old clip
+  }
+
+  // Who continues from whom depends on order: recompute after a delete, move or insert. A rendered card whose start frame changes is stale.
+  function relink(scenes) {
+    scenes.forEach((s, i) => {
+      if (!s.start_mode) return;
+      const want = i >= 1 && ['text', 'first', 'from_video'].includes(s.start_mode);
+      if (!!s.inherits_tail !== want) {
+        s.inherits_tail = want;
+        if (s.rendered_video) Object.assign(s, { state: 'stale', approved: false });
+      }
+    });
+  }
+  function newCard(scenes) {
+    const last = scenes[scenes.length - 1] || {}, n = scenes.length, mode = last.start_mode || 'text';
+    return { shot_index: n + 1, title: `Shot ${n + 1}`, shot_type: 'Medium Tracking', duration: SEG_SECONDS, start_mode: mode,
+      workflow: { reference: 'reference', first_last: 'flf2v' }[mode] || 'sliding_window', prompt: '', first_frame: '', last_frame: '', ref_images: [], first_prompt: '', last_prompt: '',
+      state: 'empty', approved: false, inherits_tail: n >= 1 && ['text', 'first', 'from_video'].includes(mode), width: last.width || 1344, height: last.height || 768, lora_choice: last.lora_choice || '4step', folder_id: null };
+  }
+  function chainKeyframe(scenes, i) {  // the end picture of a first+last card is offered as the start of the next one (never over a picture the user chose)
+    const s = scenes[i], n = scenes[i + 1];
+    if (s && n && s.start_mode === 'first_last' && s.last_frame && n.start_mode === 'first_last' && !n.first_frame) n.first_frame = s.last_frame;
   }
 
   // ---- card helpers (mirror engine/chronoflow/start_modes.py so a card can say what it still needs before the server is asked)
@@ -133,10 +155,32 @@
 
   // ---- storyboard cards for wizard plans (browser only; mount() stores the page's helpers in ctx)
   let ctx = null, pending = null;
+  const activeRenders = new Set(); // 'rendering' is only true while this page is rendering it; a saved 'rendering' (reload, crash) is shown as ready
   const STATE_LABEL = { empty: 'Needs a prompt', ready: 'Ready', rendering: 'Rendering…', review: 'Review', approved: 'Approved', stale: 'Redo needed' };
   const PROMPT_KEY = { first: 'first_prompt', last: 'last_prompt', ref1: 'ref1_prompt', ref2: 'ref2_prompt' };
   const scenesNow = () => ctx.scenes();
-  const touch = async () => { await ctx.save(); ctx.rerender(); };
+  function displayState(s) {
+    if (s.state === 'rendering') return activeRenders.has(s) ? 'rendering' : 'ready';
+    return Object.prototype.hasOwnProperty.call(STATE_LABEL, s.state) ? s.state : 'ready';
+  }
+  // Save, then redraw the grid. Text typed in a prompt box (even if not yet committed) must survive the redraw.
+  const touch = async () => {
+    await ctx.save();
+    const a = document.activeElement;
+    const snap = a && a.classList && a.classList.contains('nv-prompt') ? { i: +a.dataset.i, v: a.value, s: a.selectionStart, e: a.selectionEnd } : null;
+    if (snap && scenesNow()[snap.i]) { const sc = scenesNow()[snap.i]; sc.prompt = snap.v; if (sc.state === 'empty' && snap.v.trim()) sc.state = 'ready'; }
+    ctx.rerender();
+    if (snap) {
+      const ta = document.querySelector(`.nv-prompt[data-i="${snap.i}"]`);
+      if (ta) { ta.focus(); ta.setSelectionRange(snap.s, snap.e); }
+      ctx.save();
+    }
+  };
+  function setSlotChained(s, slot, name) {
+    setSlot(s, slot, name);
+    const sc = scenesNow(), i = sc.indexOf(s);
+    if (slot === 'last' && i >= 0) chainKeyframe(sc, i);
+  }
 
   function slotWidget(s, i, slot) {
     const name = getSlot(s, slot), e = ctx.esc;
@@ -157,28 +201,30 @@
     const chain = s.inherits_tail && !s.first_frame && s.start_mode !== 'from_video' ? `<div class="nv-note">Continues from the last frame of Shot ${i}</div>` : '';
     const warn = sizeWarning(s, i), miss = missingInputs(s, i).filter((k) => k !== 'prompt');
     return `<div class="nv-card">
-      <div class="nv-row"><select onchange="NewVideo.onMode(${i}, this.value)" title="Start mode of this shot">${opts}</select><span class="nv-state nv-${s.state}">${STATE_LABEL[s.state] || s.state}</span></div>
+      <div class="nv-row"><select onchange="NewVideo.onMode(${i}, this.value)" title="Start mode of this shot">${opts}</select><span class="nv-state nv-${displayState(s)}">${STATE_LABEL[displayState(s)]}</span></div>
       ${chain}${warn ? `<div class="nv-warn">${e(warn)}</div>` : ''}${slots}
-      <textarea class="nv-prompt" rows="3" placeholder="What happens in this shot?" onchange="NewVideo.onPrompt(${i}, this.value)">${e(s.prompt || '')}</textarea>
+      <textarea class="nv-prompt" data-i="${i}" rows="3" placeholder="What happens in this shot?" onchange="NewVideo.onPrompt(${i}, this.value)">${e(s.prompt || '')}</textarea>
       ${miss.length ? `<div class="nv-note">Still needs: ${miss.map((k) => SLOT_LABEL[k]).join(', ')}</div>` : ''}
       ${s.error ? `<div class="nv-error">${e(s.error)}</div>` : ''}</div>`;
   }
 
   function actionsHtml(scenes, i) {
     const s = scenes[i], gate = canRender(scenes, i), miss = missingInputs(s, i);
-    if (s.state === 'rendering') return '<button type="button" class="btn-primary" disabled style="flex:1;padding:4px 10px;font-size:.72rem"><span><span class="spinner"></span> Rendering…</span></button>';
-    if (s.state === 'review') return `<button type="button" class="btn-primary" style="flex:1;padding:4px 10px;font-size:.72rem;background:rgba(70,214,163,.85);border-color:#46d6a3" onclick="NewVideo.approveCard(${i})">✓ Approve</button>
+    const st = displayState(s);
+    if (st === 'rendering') return '<button type="button" class="btn-primary" disabled style="flex:1;padding:4px 10px;font-size:.72rem"><span><span class="spinner"></span> Rendering…</span></button>';
+    if (st === 'review') return `<button type="button" class="btn-primary" style="flex:1;padding:4px 10px;font-size:.72rem;background:rgba(70,214,163,.85);border-color:#46d6a3" onclick="NewVideo.approveCard(${i})">✓ Approve</button>
       <button type="button" class="btn-tool" onclick="NewVideo.redo(${i})">🔄 Redo</button>`;
-    if (s.state === 'approved') return `<span style="flex:1;color:#46d6a3;font-size:.78rem;font-weight:700">✓ Approved</span><button type="button" class="btn-tool" onclick="NewVideo.redo(${i})">🔄 Redo</button>`;
+    if (st === 'approved') return `<span style="flex:1;color:#46d6a3;font-size:.78rem;font-weight:700">✓ Approved</span><button type="button" class="btn-tool" onclick="NewVideo.redo(${i})">🔄 Redo</button>`;
     const blocked = !gate.ok ? gate.reason : (miss.length ? `Needs: ${miss.map((k) => SLOT_LABEL[k] || k).join(', ')}` : '');
     return `<button type="button" class="btn-primary" style="flex:1;padding:4px 10px;font-size:.72rem" ${blocked ? 'disabled' : ''} title="${ctx.esc(blocked || 'Render this shot')}" onclick="NewVideo.render(${i})">▶ Render</button>`;
   }
 
   async function render(i) {
     const sc = scenesNow(), s = sc[i];
-    if (sc.some((c) => c.state === 'rendering')) { s.error = 'Another shot is rendering. Wait for it to finish.'; return ctx.rerender(); }
+    if (activeRenders.size) { s.error = 'Another shot is rendering. Wait for it to finish.'; return ctx.rerender(); }
     s.error = '';
     s.state = 'rendering';
+    activeRenders.add(s);
     ctx.rerender();
     try {
       const res = await ctx.post('/storyboard/render_shot', { scene: { ...s, prev_tail: prevTail(sc, i) }, shot_index: i + 1, width: s.width || 1344, height: s.height || 768,
@@ -189,6 +235,7 @@
       s.state = 'ready';
       s.error = err.message || String(err);
     }
+    activeRenders.delete(s);
     await touch();
   }
 
@@ -214,7 +261,7 @@
       input.type = 'file'; input.accept = 'image/*';
       input.onchange = async () => {
         if (!input.files[0]) return;
-        try { setSlot(scenesNow()[i], slot, await ctx.upload(input.files[0])); } catch (err) { scenesNow()[i].error = err.message; }
+        try { setSlotChained(scenesNow()[i], slot, await ctx.upload(input.files[0])); } catch (err) { scenesNow()[i].error = err.message; }
         touch();
       };
       input.click();
@@ -242,7 +289,7 @@
       if (!s) return;
       try {
         const name = clip ? (await ctx.post('/storyboard/tail_frame', { video: btn.dataset.name })).filename : btn.dataset.name;
-        setSlot(s, slot, name);
+        setSlotChained(s, slot, name);
         closePanel();
         touch();
       } catch (err) { document.getElementById('nvPick').textContent = err.message; }
@@ -270,7 +317,7 @@
     acceptGenerated() {
       const { s, slot, key, pic, prompt } = pending;
       s[key] = prompt;
-      setSlot(s, slot, pic);
+      setSlotChained(s, slot, pic);
       closePanel();
       touch();
     },
@@ -278,6 +325,6 @@
   };
 
   const api = { SEG_SECONDS, MAX_SECONDS, slotsFor, segmentCount, lengthLabel, canRender, prevTail, markRendered, approve, markRedo, mount,
-    getSlot, setSlot, effectiveMode, missingInputs, sizeWarning, setMode, modeLabel: (s, i) => MODE_LABEL[effectiveMode(s, i)], ...cardApi };
+    getSlot, setSlot, relink, newCard, chainKeyframe, displayState, effectiveMode, missingInputs, sizeWarning, setMode, modeLabel: (s, i) => MODE_LABEL[effectiveMode(s, i)], ...cardApi };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.NewVideo = api;
 })(typeof window !== 'undefined' ? window : globalThis);

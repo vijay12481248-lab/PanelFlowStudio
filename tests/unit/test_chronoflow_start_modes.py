@@ -103,3 +103,13 @@ def test_draft_prompts_does_not_pad_a_short_reply():
 
     with pytest.raises(ValueError):
         asyncio.run(sm.draft_prompts("idea", 4, fake))
+
+
+# ---- review fixes
+def test_default_cards_are_one_h3_clip_not_a_longer_one():
+    from engine.original.film import snap_frames
+
+    scenes = sm.build_plan("first", 300)["scenes"]
+    assert all(snap_frames(s["duration"]) == 124 for s in scenes[:-1])  # 5.2 s would snap up to 141 frames (+14% GPU per clip)
+    short = sm.build_plan("first", 20)["scenes"]
+    assert short[-1]["duration"] == pytest.approx(20 - 3 * sm.SEG_SECONDS, abs=0.01)  # the remainder keeps its own length

@@ -1724,17 +1724,10 @@ async def render_storyboard_shot(req: RenderShotRequest) -> dict[str, Any]:
     last_frame = scene.get("last_frame")
     ref_images = scene.get("ref_images", [])
 
-    # Validate image files exist in COMFY_INPUT_DIR to avoid ComfyUI LoadImage validation error
-    if first_frame and not (COMFY_INPUT_DIR / first_frame).exists():
-        logger.warning("First frame '%s' not found in ComfyUI input dir, generating text-to-video instead.", first_frame)
-        first_frame = None
-
-    if last_frame and not (COMFY_INPUT_DIR / last_frame).exists():
-        logger.warning("Last frame '%s' not found in ComfyUI input dir, ignoring.", last_frame)
-        last_frame = None
-
-    if ref_images:
-        ref_images = [img for img in ref_images if (COMFY_INPUT_DIR / img).exists()]
+    # A named picture that is not in the ComfyUI input folder is an error, never a silent switch to text-to-video.
+    for what, name in [("first frame", first_frame), ("last frame", last_frame), *[("reference", r) for r in ref_images]]:
+        if name and not (COMFY_INPUT_DIR / name).exists():
+            raise HTTPException(status_code=400, detail=f"Shot {shot_num} {what}: picture '{name}' is not in the ComfyUI input folder")
 
     workflow_mode = "reference" if ref_images else ("flf2v" if (first_frame and last_frame) else ("sliding_window" if first_frame else "sliding_window"))
     lora_name = resolve_h3_lora_name(req.lora_choice)

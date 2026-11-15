@@ -129,3 +129,56 @@ test('changing a rendered card to another mode invalidates it and its chained fo
   assert.equal(s[1].inherits_tail, false);
   assert.equal(s[1].start_mode, 'first_last');
 });
+
+// ---- review fixes
+test('a text card that ends up first can render (the server renders it as text)', () => {
+  const s = [wiz('text', 1)];
+  assert.equal(NV.canRender(s, 0).ok, true);
+});
+
+test('relink recomputes who continues from whom after delete, move or insert', () => {
+  const s = [wiz('text', 0), wiz('text', 1), wiz('first', 2)];
+  s.splice(0, 1); // delete card 1
+  NV.relink(s);
+  assert.deepEqual(s.map((c) => c.inherits_tail), [false, true]);
+  const t = [wiz('first_last', 0), wiz('first', 1)];
+  t.reverse();
+  NV.relink(t);
+  assert.deepEqual(t.map((c) => c.inherits_tail), [false, false]); // first_last never chains; the first card never chains
+  const r = [wiz('first', 0, { first_frame: 'a.png' }), wiz('first', 1, { rendered_video: 'v.mp4', state: 'approved', approved: true })];
+  r.reverse();
+  NV.relink(r);
+  assert.equal(r[0].state, 'stale'); // its start frame changed, so the old clip no longer matches
+  assert.equal(r[0].approved, false);
+});
+
+test('a new card in a wizard plan has the same shape as a planned one', () => {
+  const s = [wiz('first', 0, { width: 768, height: 1344, lora_choice: '8step' })];
+  const c = NV.newCard(s);
+  s.push(c);
+  assert.equal(c.start_mode, 'first');
+  assert.equal(c.inherits_tail, true);
+  assert.equal(c.state, 'empty');
+  assert.equal(c.approved, false);
+  assert.deepEqual([c.width, c.height, c.lora_choice], [768, 1344, '8step']);
+  assert.equal(c.shot_index, 2);
+  assert.ok(c.duration > 5 && c.duration < 5.2);
+});
+
+test('the last frame of a first+last card is offered as the next card\'s first frame', () => {
+  const s = [wiz('first_last', 0, { last_frame: 'end1.png' }), wiz('first_last', 1), wiz('first_last', 2, { first_frame: 'mine.png' })];
+  NV.chainKeyframe(s, 0);
+  assert.equal(s[1].first_frame, 'end1.png');
+  s[1].last_frame = 'end2.png';
+  NV.chainKeyframe(s, 1);
+  assert.equal(s[2].first_frame, 'mine.png'); // never overwrite a picture the user chose
+  const t = [wiz('first_last', 0, { last_frame: 'x.png' }), wiz('text', 1)];
+  NV.chainKeyframe(t, 0);
+  assert.equal(t[1].first_frame, ''); // only into another first+last card
+});
+
+test('a render that was in flight before a reload is shown as ready, unknown states too', () => {
+  assert.equal(NV.displayState({ state: 'rendering' }), 'ready');
+  assert.equal(NV.displayState({ state: '"><img src=x>' }), 'ready');
+  assert.equal(NV.displayState({ state: 'review' }), 'review');
+});

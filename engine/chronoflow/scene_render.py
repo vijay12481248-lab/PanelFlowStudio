@@ -27,7 +27,7 @@ def _bad(detail: str) -> HTTPException:
 
 
 def _frame(input_dir: Path, name: str, what: str) -> Path:
-    if not name or Path(name).name != name:
+    if not name or name in (".", "..") or Path(name).name != name:
         raise _bad(f"{what}: '{name}' is not a picture name")
     path = input_dir / name
     if not path.exists():
@@ -35,23 +35,31 @@ def _frame(input_dir: Path, name: str, what: str) -> Path:
     return path
 
 
+CAMERA = "exactly what the shot description says; if it describes no camera movement the camera stays still"  # h3_modes' default would contradict a written push-in
+REF_STYLE = "The target video keeps the visual style of the reference pictures."  # h3_modes' default is "clean anime film style"
+
+
 def _wrap(mode: str, prompt: str, seconds: float, n_refs: int) -> str:
     if any(m in prompt for m in OFFICIAL_MARKERS):
         return prompt
     if mode == "t2va":  # t2va_prompt() wants a scene + an action; the card holds one description
-        return h3_modes._fields(h3_modes._body(prompt, h3_modes.STATIC_CAMERA), h3_modes.QUIET, "none")
+        return h3_modes._fields(h3_modes._body(prompt, CAMERA), h3_modes.QUIET, "none")
     if mode == "fl2va":
-        return h3_modes.fl2va_prompt(prompt, seconds)
+        return h3_modes.fl2va_prompt(prompt, seconds, camera=CAMERA)
     if mode == "l2va":
-        return h3_modes.l2va_prompt(prompt, seconds)
-    subjects = [("the subject shown in the reference picture", n, "fully_preserved", "face, hair, outfit colours") for n in range(1, n_refs + 1)]
-    return h3_modes.ref2va_prompt(subjects, prompt)
+        return h3_modes.l2va_prompt(prompt, seconds, camera=CAMERA)
+    subjects = [("the subject shown in the reference picture", n, "fully_preserved", "appearance, face and clothing") for n in range(1, n_refs + 1)]
+    return h3_modes.ref2va_prompt(subjects, prompt, style=REF_STYLE, camera=CAMERA)
 
 
 async def render_scene(pipeline, scene: dict[str, Any], index: int, *, width: int, height: int, steps: int, lora_name: str,
                        out_dir: Path, input_dir: Path, tail_name: str) -> tuple[Path, str | None]:
     """Returns (mp4 in out_dir, tail-frame filename written to input_dir or None)."""
     label = f"Shot {index + 1}"
+    try:
+        start_modes.slots_for(scene.get("start_mode"))
+    except ValueError as e:
+        raise _bad(f"{label}: {e}")
     mode = start_modes.effective_mode(scene, index)
     missing = start_modes.missing_inputs(scene, index)
     if missing:
@@ -67,8 +75,9 @@ async def render_scene(pipeline, scene: dict[str, Any], index: int, *, width: in
             _frame(input_dir, first, f"{label} first frame")
         else:  # chained card: continue from the previous approved clip
             first = scene.get("prev_tail") or ""
-            if not first or not (input_dir / Path(first).name).exists():
+            if not first:
                 raise _bad(f"{label} continues from the previous shot, but the previous shot has no tail frame yet (render and approve it first)")
+            _frame(input_dir, first, f"{label} previous tail frame")
         graph = pipeline.build_h3_prompt(prompt=prompt, width=width, height=height, length=snap_frames(seconds), steps=steps, lora_name=lora_name,
                                          workflow_mode="sliding_window", first_frame_filename=first)
         shutil.copy2(await pipeline.execute_prompt(graph), dest)

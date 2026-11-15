@@ -175,3 +175,48 @@ def test_legacy_cards_without_start_mode_skip_render_scene(monkeypatch):
     monkeypatch.setattr(router.pipeline, "execute_prompt", boom)
     r = client.post("/api/chronoflow/storyboard/render_shot", json={"scene": {"prompt": "old card"}, "shot_index": 1})
     assert r.status_code == 500 and "legacy path reached ComfyUI" in r.json()["detail"]
+
+
+# ---- review fixes
+def test_reference_prompt_is_not_forced_into_anime_style(env):
+    run(env, scene("reference", ref_images=["a.png"]))
+    p = env["calls"][0]["prompt"]
+    assert "anime" not in p.lower() and "reference picture" in p
+
+
+def test_written_camera_motion_is_not_contradicted_by_a_static_shot_line(env):
+    run(env, scene("text", prompt="A fox trots through snow while the camera slowly pushes in."))
+    assert "Static Shot" not in env["calls"][0]["prompt"]
+    for mode, kw in (("first_last", {"first_frame": "a.png", "last_frame": "b.png"}), ("last", {"last_frame": "b.png"}), ("reference", {"ref_images": ["a.png"]})):
+        run(env, scene(mode, prompt="A fox walks.", **kw))
+    assert all("Static Shot" not in c["prompt"] for c in env["calls"])
+
+
+@pytest.mark.parametrize("bad", ["../x.png", "..", "a/b.png"])
+def test_unsafe_picture_names_are_400(env, bad):
+    for s in (scene("first", first_frame=bad), scene("first", inherits_tail=True, prev_tail=bad)):
+        with pytest.raises(HTTPException) as e:
+            run(env, s, index=1 if s["inherits_tail"] else 0)
+        assert e.value.status_code == 400
+
+
+def test_unknown_start_mode_is_400_not_a_500(env):
+    with pytest.raises(HTTPException) as e:
+        run(env, scene("sideways"))
+    assert e.value.status_code == 400 and "sideways" in e.value.detail
+
+
+def test_legacy_card_with_a_missing_frame_is_400_not_a_silent_text_video(monkeypatch, tmp_path):
+    from fastapi.testclient import TestClient
+
+    from engine.api.app import app
+    from engine.api.routers import chronoflow as router
+
+    monkeypatch.setattr(router, "COMFY_INPUT_DIR", tmp_path)
+
+    async def boom(graph, on_step=None):
+        raise AssertionError("must not render")
+
+    monkeypatch.setattr(router.pipeline, "execute_prompt", boom)
+    r = TestClient(app).post("/api/chronoflow/storyboard/render_shot", json={"scene": {"prompt": "old card", "first_frame": "gone.png"}, "shot_index": 1})
+    assert r.status_code == 400 and "gone.png" in r.json()["detail"]

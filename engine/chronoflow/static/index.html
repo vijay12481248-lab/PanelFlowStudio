@@ -11032,7 +11032,7 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
           previewContent = `
             <div class="shot-preview-empty" style="width: 100%; height: 100%; background: linear-gradient(135deg, #070c20 0%, #111a2e 100%); display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 4px;">
               <span style="font-size: 0.72rem; font-weight: 800; color: #7aa2ff;">SHOT #${shotNum}</span>
-              <span class="shot-awaiting-badge">${scene.state === 'rendering' ? '⏳ RENDERING' : (scene.state === 'stale' ? '↻ REDO NEEDED' : '⏳ AWAITING RENDER')}</span>
+              <span class="shot-awaiting-badge">${NewVideo.displayState(scene) === 'rendering' ? '⏳ RENDERING' : (NewVideo.displayState(scene) === 'stale' ? '↻ REDO NEEDED' : '⏳ AWAITING RENDER')}</span>
             </div>
           `;
         } else {
@@ -11224,6 +11224,13 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
       addTerminalLog("STORYBOARD", `Updated Scene Beat #${editingBeatIndex + 1}: ${scene.title}.`, true);
     }
 
+    // New Video plans: who continues from whom depends on order, so recompute after a delete or move, and keep the saved plan in step.
+    function relinkNewVideoCards() {
+      if (!window.NewVideo || !storyboardScenes.some(s => s.start_mode)) return;
+      NewVideo.relink(storyboardScenes);
+      saveCurrentStoryboard(true);
+    }
+
     function deleteBeat(idx) {
       if (idx < 0 || idx >= storyboardScenes.length) return;
       if (!confirm(`Delete Shot #${idx + 1} "${storyboardScenes[idx].title}" from storyboard?`)) return;
@@ -11235,6 +11242,7 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
         }
       });
       storyboardScenes.forEach((s, i) => { s.shot_index = i + 1; });
+      relinkNewVideoCards();
       renderStoryboardUI();
     }
 
@@ -11245,6 +11253,7 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
       storyboardScenes[idx] = storyboardScenes[targetIdx];
       storyboardScenes[targetIdx] = temp;
       storyboardScenes.forEach((s, i) => { s.shot_index = i + 1; });
+      relinkNewVideoCards();
       renderStoryboardUI();
     }
 
@@ -11252,7 +11261,8 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
       const shotNum = storyboardScenes.length + 1;
       const defaultDesc = `camera_movement: Cinematic smooth tracking push. subject_description: The protagonist advances with sharp visual focus. environmental_details: Highly detailed cinematic set with atmospheric volumetric lighting. overall_soundscape: Ambient environmental tone. non_diegetic_music: Cinematic orchestral drone.`;
 
-      const newScene = {
+      const wizard = !!window.NewVideo && storyboardScenes.some(s => s.start_mode);  // a New Video plan: the new shot is a New Video card too
+      const newScene = wizard ? Object.assign(NewVideo.newCard(storyboardScenes), { folder_id: activeStoryboardFolderId || null }) : {
         shot_index: shotNum,
         folder_id: activeStoryboardFolderId || null,
         title: `Shot ${shotNum}: Scene Continuation`,
@@ -11277,7 +11287,7 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
       }
 
       renderStoryboardUI();
-      openBeatEditor(storyboardScenes.length - 1);
+      if (wizard) saveCurrentStoryboard(true); else openBeatEditor(storyboardScenes.length - 1);
     }
 
     function openAIDirectorModal() {

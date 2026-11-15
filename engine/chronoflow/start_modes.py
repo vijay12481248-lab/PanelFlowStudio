@@ -32,7 +32,7 @@ def build_plan(mode: str, length_seconds: float, title: str = "Untitled Video") 
     scenes = []
     for i in range(n):
         last_left = length_seconds - (n - 1) * SEG_SECONDS
-        duration = round(min(5.2, max(1.0, last_left)), 1) if i == n - 1 else 5.2
+        duration = round(min(SEG_SECONDS, max(1.0, last_left)), 2) if i == n - 1 else SEG_SECONDS  # 5.2 would snap up to 141 frames, 5.17 is the 124-frame clip
         scenes.append({
             "shot_index": i + 1, "title": f"Shot {i + 1}", "shot_type": "Medium Tracking", "duration": duration,
             "start_mode": mode, "workflow": {"reference": "reference", "first_last": "flf2v"}.get(mode, "sliding_window"),
