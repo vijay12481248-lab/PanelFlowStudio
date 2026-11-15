@@ -51,6 +51,7 @@ class CreateBody(BaseModel):
 
 class PutBody(BaseModel):
     cues: list[dict[str, Any]] | None = None
+    remove_cues: list[str] | None = None
     tracks: list[dict[str, Any]] | None = None
     mode: Literal["auto", "ask"] | None = None
     allow_cc_by: bool | None = None
@@ -106,23 +107,27 @@ def get_plan(plan_id: str, engine: AudioEngine = Depends(get_engine)) -> dict[st
 def put_plan(plan_id: str, body: PutBody, engine: AudioEngine = Depends(get_engine)) -> dict[str, Any]:
     with _errors():
         plan = engine.store.load(plan_id)
-        if body.cues is not None:
-            existing = {c.id: c for c in plan.cues}
-            merged, seen = [], set()
-            for raw in body.cues:
+        if body.cues is not None or body.remove_cues:
+            by_id = {c.id: c for c in plan.cues}  # upsert: cues the body does not mention stay as they are
+            for cid in body.remove_cues or []:
+                if cid not in by_id:
+                    raise ValueError(f"cannot remove: no cue {cid!r}")
+                del by_id[cid]
+            seen = set()
+            for raw in body.cues or []:
                 cid = check_id(raw.get("id"))
                 if cid in seen:
                     raise ValueError(f"duplicate cue id {cid!r}")
                 seen.add(cid)
-                cue = Cue.model_validate({**(existing[cid].model_dump() if cid in existing else {}), **raw})
+                cue = Cue.model_validate({**(by_id[cid].model_dump() if cid in by_id else {}), **raw})
                 if cue.hit_t is not None:
                     if cue.hit_t < 0:
                         raise ValueError(f"cue {cid!r}: hit_t must be 0 or more")
                     cue.hit_t = snap(cue.hit_t, plan.fps)
                 if cue.t_out is not None and cue.t_out < cue.t_in:
                     raise ValueError(f"cue {cid!r}: t_out is before t_in")
-                merged.append(cue)
-            plan.cues = merged
+                by_id[cid] = cue
+            plan.cues = list(by_id.values())
         if body.tracks is not None:
             have = {t.id: t for t in plan.tracks}
             plan.tracks = [Track.model_validate({**(have[r["id"]].model_dump() if r.get("id") in have else {}), **r}) for r in body.tracks]

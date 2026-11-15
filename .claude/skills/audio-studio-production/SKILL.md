@@ -20,7 +20,7 @@ You drive the Audio Studio through MCP tools named `panelflow_audio_studio_*` (p
 1. `providers` - what works now.
 2. `create_plan {video_path}` - probes fps and duration; the video's own audio is the dialogue unless you pass `dialogue_path` (e.g. the narration wav).
 3. `spot` - finds picture cuts (ffmpeg scene score) and drafts one whoosh per cut plus one underscore. Low-contrast cuts can be missed: add hits yourself with `put_plan`.
-4. Write the cues with `put_plan` (see below). Send only what changed; cues merge by id.
+4. Write the cues with `put_plan` (see below). Send only what changed: cues merge by id and unlisted cues stay; delete with `remove_cues` (e.g. drop the draft `music_1` if you will not use it, because `export` refuses draft cues).
 5. `source_cue` per cue. `auto` picks and marks `ready`; `ask` leaves `candidates` with `status: needs_pick` for the owner, then `pick`. Use `ask` when taste matters (the signature sound, the main music), `auto` for fillers.
 6. `qa` - fix every `error` (missing take, clipping, silent, placement over 40 ms); read each `warn`.
 7. `mix` - preview master (dialogue + music ducked under it + effects, limiter, loudness). Check `integrated_lufs` and `true_peak_db`.

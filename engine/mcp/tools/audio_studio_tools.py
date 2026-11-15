@@ -53,15 +53,15 @@ async def get_plan(plan_id: str) -> dict[str, Any]:
 
 @registry.tool(
     name="panelflow_audio_studio_put_plan",
-    description=("Edit a sound plan. cues: a list of cue objects; each is merged over the existing cue with the same id, so send only what changed. "
+    description=("Edit a sound plan. cues: cue objects to add or change; each is merged over the existing cue with the same id and cues you do not mention are kept, so send only what changed; remove_cues: ids to delete. "
                  "Cue fields: id, track (dialogue|music|sfx|ambience|foley), kind (whoosh, impact, click, pop, ding, riser, drop, noise_bed, music, or any word for a library search), "
                  "intent (plain words describing the sound), hit_t (seconds the sound must land on; snapped to the frame), anchor (onset|peak), t_in, t_out, gain_db, fade_in, fade_out, mode, hints {bpm, key_scale}."),
-    input_schema=_schema({"plan_id": _PLAN, "cues": {"type": "array", "items": {"type": "object"}}, "tracks": {"type": "array", "items": {"type": "object"}},
+    input_schema=_schema({"plan_id": _PLAN, "cues": {"type": "array", "items": {"type": "object"}}, "remove_cues": {"type": "array", "items": {"type": "string"}}, "tracks": {"type": "array", "items": {"type": "object"}},
                           "mode": _MODE, "allow_cc_by": {"type": "boolean"}, "dialogue_path": {"type": "string"}, "note": {"type": "string"}}, ["plan_id"]),
     domain="chronoflow")
-async def put_plan(plan_id: str, cues: list | None = None, tracks: list | None = None, mode: str | None = None,
+async def put_plan(plan_id: str, cues: list | None = None, remove_cues: list | None = None, tracks: list | None = None, mode: str | None = None,
                    allow_cc_by: bool | None = None, dialogue_path: str | None = None, note: str | None = None) -> dict[str, Any]:
-    return await bridge.put(f"{_BASE}/plans/{plan_id}", _body(cues=cues, tracks=tracks, mode=mode, allow_cc_by=allow_cc_by,
+    return await bridge.put(f"{_BASE}/plans/{plan_id}", _body(cues=cues, remove_cues=remove_cues, tracks=tracks, mode=mode, allow_cc_by=allow_cc_by,
                                                               dialogue_path=dialogue_path, note=note))
 
 

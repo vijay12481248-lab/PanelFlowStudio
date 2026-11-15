@@ -96,14 +96,25 @@ def test_providers_report_shape(client):
 def test_spot_qa_mix_export_files(client, video):
     pid = _create(client, video)["id"]
     plan = client.post(f"/api/audio/studio/plans/{pid}/spot").json()
-    assert [c["track"] for c in plan["cues"]] == ["music"]
-    client.put(f"/api/audio/studio/plans/{pid}", json={"cues": [{"id": "c1", "track": "sfx", "kind": "impact", "hit_t": 1.0}]})
+    assert [c["track"] for c in plan["cues"]] == ["music"]  # a flat black video has no cuts
+    client.put(f"/api/audio/studio/plans/{pid}", json={"cues": [{"id": "c1", "track": "sfx", "kind": "impact", "hit_t": 1.0}], "remove_cues": ["music_1"]})
     client.post(f"/api/audio/studio/plans/{pid}/cues/c1/source", json={})
     qa = client.post(f"/api/audio/studio/plans/{pid}/qa").json()
     assert qa["errors"] == 0
-    assert client.get(f"/api/audio/studio/plans/{pid}").json()["cues"][0]["placement_error_ms"] is not None
+    assert next(c for c in client.get(f"/api/audio/studio/plans/{pid}").json()["cues"] if c["id"] == "c1")["placement_error_ms"] is not None
     mix = client.post(f"/api/audio/studio/plans/{pid}/mix", json={"target_lufs": -14}).json()
     assert mix["file"] == "renders/master.wav" and "integrated_lufs" in mix["loudness"]
     assert client.get(f"/api/audio/studio/plans/{pid}/files/{mix['file']}").status_code == 200
     exp = client.post(f"/api/audio/studio/plans/{pid}/export", json={"mux": True}).json()
     assert "master.mp4" in exp["files"] and "me.wav" in exp["files"]
+
+
+def test_put_cues_upserts_and_keeps_unlisted_cues_until_removed(client, video):
+    pid = _create(client, video)["id"]
+    put = lambda **b: client.put(f"/api/audio/studio/plans/{pid}", json=b)  # noqa: E731
+    put(cues=[{"id": "a", "track": "sfx", "kind": "click"}, {"id": "b", "track": "sfx", "kind": "pop"}])
+    got = put(cues=[{"id": "b", "intent": "changed"}, {"id": "c", "track": "sfx", "kind": "ding"}]).json()
+    assert [c["id"] for c in got["cues"]] == ["a", "b", "c"] and got["cues"][1]["intent"] == "changed"
+    got = put(remove_cues=["a", "c"]).json()
+    assert [c["id"] for c in got["cues"]] == ["b"]
+    assert put(remove_cues=["nope"]).status_code == 400
