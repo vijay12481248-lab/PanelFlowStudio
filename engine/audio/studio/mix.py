@@ -140,13 +140,14 @@ def measure_loudness(path: Path) -> dict:
 
 
 def render_master(plan: SoundPlan, out_wav: Path, target_lufs: float = -14.0, video_in: Path | None = None,
-                  out_video: Path | None = None) -> dict:
-    """Premix -> limiter -> two-pass loudnorm (same filter the Deliver page uses) -> optional mux onto the video."""
+                  out_video: Path | None = None, roles: dict[str, Path] | None = None) -> dict:
+    """Premix -> limiter -> two-pass loudnorm (same filter the Deliver page uses) -> optional mux onto the video.
+    Pass `roles` (from render_roles) to reuse already rendered stems."""
     from engine.chronoflow.deliver import loudnorm_filter
     out_wav = Path(out_wav)
     out_wav.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="audiostudio-") as tmp:
-        premix = render_roles(plan, Path(tmp))["premix"]
+        premix = (roles or render_roles(plan, Path(tmp)))["premix"]
         limit = "alimiter=limit=0.89"
         first = _run([_FFMPEG, "-hide_banner", "-nostats", "-i", str(premix), "-af",
                       f"{limit},{loudnorm_filter(target_lufs, None)}:print_format=json", "-f", "null", "-"])
