@@ -36,6 +36,7 @@ from engine.chronoflow import timeline_ops
 from engine.chronoflow.folder_dialog import pick_native_folder
 from engine.comfyui.art import ART_WORKFLOW_ID, IMAGE_WORKFLOW_IDS, ArtEngine
 from engine.chronoflow.reviewer import analyze_video_chunk
+from engine.chronoflow.scene_render import render_scene
 from engine.chronoflow.supervisor import VAULT_DIR, JobSupervisor
 
 logger = logging.getLogger("panelflow.chronoflow")
@@ -1701,9 +1702,20 @@ def import_scene_to_studio(req: ImportSceneToStudioRequest) -> dict[str, Any]:
 
 @router.post("/storyboard/render_shot")
 async def render_storyboard_shot(req: RenderShotRequest) -> dict[str, Any]:
-    """Render a single shot directly from a storyboard card."""
-    scene = req.scene
+    """Render a single shot directly from a storyboard card. Cards made by the New Video wizard carry `start_mode` and render in that mode; older cards keep the legacy path."""
     shot_num = req.shot_index
+    if "start_mode" in req.scene:
+        tail_name = f"chronoflow_tail_sb_{shot_num}_{uuid.uuid4().hex[:6]}.png"
+        try:
+            dest, tail = await render_scene(pipeline, req.scene, shot_num - 1, width=req.width, height=req.height, steps=req.steps,
+                                            lora_name=resolve_h3_lora_name(req.lora_choice), out_dir=STUDIO_OUTPUT_DIR, input_dir=COMFY_INPUT_DIR, tail_name=tail_name)
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error("Failed to render storyboard shot %d: %s", shot_num, e)
+            raise HTTPException(status_code=500, detail=f"Shot render failed: {e}")
+        return {"success": True, "shot_index": shot_num, "video_url": f"/chronoflow/outputs/{dest.name}", "filename": dest.name, "tail_frame": tail}
+    scene = req.scene
     prompt = scene.get("prompt", "Cinematic action scene.")
     first_frame = req.first_frame or scene.get("first_frame")
     last_frame = scene.get("last_frame")
