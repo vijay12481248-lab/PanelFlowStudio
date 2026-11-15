@@ -102,7 +102,7 @@ class SoundPlan(BaseModel):
         raise KeyError(f"no cue {cue_id!r} in plan {self.id}")
 
 
-def _check_id(value: str) -> str:
+def check_id(value: str) -> str:
     if not isinstance(value, str) or not _ID.match(value):
         raise ValueError("ids may only contain letters, digits, '-' and '_' (max 64)")
     return value
@@ -113,7 +113,10 @@ class PlanStore:
         self.root = Path(root) if root else settings.app_data_dir / "audio_studio" / "plans"
 
     def _dir(self, plan_id: str) -> Path:
-        return self.root / _check_id(plan_id)
+        return self.root / check_id(plan_id)
+
+    def plan_dir(self, plan_id: str) -> Path:
+        return self._dir(plan_id)
 
     def take_dir(self, plan_id: str) -> Path:
         d = self._dir(plan_id) / "takes"
