@@ -12,6 +12,7 @@ import base64
 import json
 import logging
 import os
+import re
 import shutil
 import threading
 import time
@@ -33,6 +34,7 @@ from engine.chronoflow.pipeline import (
 )
 from engine.chronoflow import deliver as deliver_mod
 from engine.chronoflow import media_tools
+from engine.chronoflow import plan_check, plan_import
 from engine.chronoflow import start_modes
 from engine.chronoflow import timeline_ops
 from engine.chronoflow.folder_dialog import pick_native_folder
@@ -1886,6 +1888,120 @@ async def storyboard_tail_frame(req: TailFrameRequest) -> dict[str, Any]:
     if not await asyncio.to_thread(pipeline.extract_tail_frame, src, COMFY_INPUT_DIR / name):
         raise HTTPException(status_code=500, detail="could not extract the last frame")
     return {"success": True, "filename": name}
+
+
+# =====================================================================
+# Video Plan: the kit a chatbot fills in, and the import that turns its answer into a storyboard
+# =====================================================================
+
+PLAN_KIT_DIR = Path(plan_check.__file__).parent / "plan_kit"
+PLAN_JOBS: dict[str, dict[str, Any]] = {}  # slug -> picture job state (see plan_import.new_job_state)
+_PLAN_TASKS: dict[str, Any] = {}
+
+
+class PlanTextRequest(BaseModel):
+    text: str = ""
+
+
+class PlanSlugRequest(BaseModel):
+    slug: str
+
+
+def _download(text: str, filename: str, media_type: str) -> Response:
+    return Response(content=text, media_type=media_type, headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+
+def _read_and_check_plan(text: str) -> tuple[dict[str, Any] | None, list[str]]:
+    """(plan, []) for a good plan, else (plan or None, the problems in plain words): the chatbot's answer is untrusted text."""
+    try:
+        plan = plan_check.read_plan(text)
+    except ValueError as e:
+        return None, [str(e)]
+    return plan, plan_check.check(plan)
+
+
+@router.get("/plan/kit")
+def plan_kit() -> Response:
+    """The one file the owner hands to a chatbot or coding agent: it interviews them, then writes the plan."""
+    return _download((PLAN_KIT_DIR / "PANELFLOW_VIDEO_PLAN_KIT.md").read_text(encoding="utf-8"), "PANELFLOW_VIDEO_PLAN_KIT.md", "text/markdown; charset=utf-8")
+
+
+@router.get("/plan/checker")
+def plan_checker() -> Response:
+    """The same checker the app runs, as a standalone script (`python check_plan.py plan.json`)."""
+    return _download(Path(plan_check.__file__).read_text(encoding="utf-8"), "check_plan.py", "text/x-python; charset=utf-8")
+
+
+@router.post("/plan/validate")
+def plan_validate(req: PlanTextRequest) -> dict[str, Any]:
+    plan, problems = _read_and_check_plan(req.text)
+    if problems:
+        return {"ok": False, "problems": problems, "summary": None, "warnings": []}
+    built = plan_import.plan_to_cards(plan)
+    meta = built["screenplay"]["anchor_images"]["plan"]
+    summary = {"title": plan["title"], "target": plan["target"], "takes": meta["takes"], "pictures": meta["pictures"], "seconds": float(sum(t["seconds"] for t in plan["takes"])),
+               "format": plan["format"], "clip_seconds": plan["production"]["clip_seconds"], "narration": plan["production"]["narration"]}
+    return {"ok": True, "problems": [], "summary": summary, "warnings": built["warnings"]}
+
+
+@router.post("/plan/import")
+def plan_import_route(req: PlanTextRequest) -> Any:
+    plan, problems = _read_and_check_plan(req.text)
+    if problems:
+        return JSONResponse(status_code=400, content={"detail": "The plan has problems.", "problems": problems})
+    try:
+        built = plan_import.plan_to_cards(plan)
+        plan_import.save_workspace(plan, plan_import.OUTPUT_ROOT)
+    except Exception as e:  # noqa: BLE001
+        logger.exception("Plan import failed: %s", e)
+        return JSONResponse(status_code=400, content={"detail": "The plan could not be converted.", "problems": [str(e)]})
+    return {"success": True, "slug": plan_import.plan_slug(plan), "screenplay": built["screenplay"], "warnings": built["warnings"]}
+
+
+def _draw_fn(story: Any, ws: Path):
+    """The real picture drawing: storyboard.draw with the art engine and the local vision model (tests replace this)."""
+    def draw(progress):
+        async def go():
+            from engine.llm.registry import llm_registry
+            from engine.original import art as art_mod
+            from engine.original import storyboard
+
+            return await storyboard.draw(story, ws, art_mod.ComfyRunner(), llm_registry.get_ollama_provider(), progress=progress)
+
+        return asyncio.run(go())  # its own event loop in a worker thread: drawing blocks for minutes
+
+    return draw
+
+
+def _plan_slug_dir(slug: str) -> Path:
+    if not re.fullmatch(r"[a-z0-9_]{1,60}", slug or ""):
+        raise HTTPException(status_code=400, detail="Invalid plan name")
+    return plan_import.OUTPUT_ROOT / slug
+
+
+@router.post("/plan/pictures/start")
+async def plan_pictures_start(req: PlanSlugRequest) -> dict[str, Any]:
+    """Draw and check every start and end picture of an imported plan (storyboard.draw) in the background."""
+    ws = _plan_slug_dir(req.slug)
+    if not (ws / "story.json").exists():
+        raise HTTPException(status_code=404, detail="Plan not found: import it first")
+    if PLAN_JOBS.get(req.slug, {}).get("status") == "running":
+        raise HTTPException(status_code=409, detail="The pictures of this plan are already being drawn")
+    story = plan_import.load_story(ws)
+    state = plan_import.new_job_state(req.slug, story)
+    PLAN_JOBS[req.slug] = state
+    COMFY_INPUT_DIR.mkdir(parents=True, exist_ok=True)
+    _PLAN_TASKS[req.slug] = asyncio.create_task(plan_import.run_pictures(story, ws, COMFY_INPUT_DIR, state, _draw_fn(story, ws)))
+    state["status"] = "running"
+    return {"success": True, "slug": req.slug}
+
+
+@router.get("/plan/pictures/status")
+def plan_pictures_status(slug: str) -> dict[str, Any]:
+    _plan_slug_dir(slug)
+    if slug not in PLAN_JOBS:
+        raise HTTPException(status_code=404, detail="No picture job for this plan yet")
+    return PLAN_JOBS[slug]
 
 
 @router.post("/timeline/export")
