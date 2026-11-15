@@ -125,3 +125,23 @@ def test_kit_short_example_has_exactly_the_keys_of_a_shipped_reel():
 def test_checker_v2_rules(fn, expect):
     found = mutate(fn)
     assert any(expect.lower() in m.lower() for m in found), (expect, found)
+
+
+# ---- one character per clause (a clause naming two keeps the second one in the first one's description: the picture model drew two cats)
+@pytest.mark.parametrize("field", ["start_picture", "end_picture"])
+def test_a_clause_naming_two_characters_is_caught(field):
+    text = "Wide view of the meadow, Mira stands on the left side of the frame with Pip sitting beside her under grey clouds."
+    found = mutate(lambda p: p["takes"][0].update({field: text}))
+    assert any("own clause" in m and field in m for m in found), found
+
+
+def test_each_character_in_its_own_clause_is_fine():
+    text = "Wide view of the meadow; Mira stands on the left side of the frame; Pip sits beside her; grey clouds above."
+    assert mutate(lambda p: p["takes"][0].update(start_picture=text)) == []
+
+
+def test_the_example_pictures_follow_the_one_character_per_clause_rule():
+    for t in EXAMPLE["takes"]:
+        for field in ("start_picture", "end_picture"):
+            for clause in re.split(r"\s*;\s*", t.get(field, "")):
+                assert sum(c["name"].lower() in clause.lower() for c in EXAMPLE["cast"]) <= 1, clause

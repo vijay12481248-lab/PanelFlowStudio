@@ -78,6 +78,7 @@ Evidence tags: **[official]** from the model's documentation, **[measured]** obs
 - **The video model fills the motion between two pictures and lands on the end picture.** [measured] It cannot be trusted to follow a written plan alone: told to "walk to the right", a guide walked at the camera. So movement must be *drawn* in the two pictures (left side to right side). [measured]
 - **One take = one shot = one continuous action.** Longer clips fill the extra time with invented things. [measured]
 - **The system writes the picture and video prompts itself** from your fields: the closed-cast sentence ("exactly one woman (Mira) and exactly one cat (Pip), no other people or animals"), the camera sentence, the style. **You never write prompts or prompt syntax.** [design]
+- **The video prompt is built from the two pictures** (where everyone stands at the start and at the end, the closed cast, the camera). The story text is deliberately *not* sent, because the video model acts out every event it is told. `motion` is checked and kept with the shot, but **the pictures decide the movement**: draw what should happen. [design, measured]
 - **The camera is fixed** unless you ask for one of three slow moves. A push-in sentence in every shot zoomed clips by 38% on average. [measured]
 - **Not possible:** characters speaking on screen or lip-sync, readable text, signs, numbers or speech bubbles in pictures, crowds, more than 3 visible characters per take, a character who is not in the start picture appearing later. [design, measured]
 - **Clip lengths:** 4-15 s [official]. 124 frames (about 5.2 s) per clip is the usual length; times snap to a 17-frame grid. [design]
@@ -90,6 +91,7 @@ Evidence tags: **[official]** from the model's documentation, **[measured]** obs
 
 1. **One take = one continuous shot with one action.** No cuts inside a take. The camera does not change framing mid-take.
 2. **Describe each character once.** Their look lives only in `cast[].look`, as **comma-separated visual tags** (age, face, hair, clothes with colours, what they carry), not a sentence. In pictures and motion refer to them **by name only**; PanelFlow adds their look. Repeating a character's description makes faces melt or doubles them. [measured]
+   **Write each character in its own clause, separated by a semicolon**: `Mira stands on the left side of the frame; Pip sits beside her`. A clause that names two characters (`Mira stands on the left with Pip sitting beside her`) keeps the second one inside the first one's description *and* in their own, so the picture model draws them twice (two cats were drawn). The checker rejects it. [measured]
 3. **Closed cast.** `take.cast` lists every character visible in the *start* picture. Nobody new may appear later in that take. No "others", "a crowd", "some people", "a few birds".
 4. **Say where everyone stands in the frame**: left, center or right side, and what they are doing. Describe only what is visible in that single frame.
 5. **Never name what must not appear.** No "no", "not", "without", "never", "nothing" in `start_picture`, `motion`, `end_picture`. The video model draws every word you give it, even a negated one ("no smoke, no dust" produced smoke and dust in 8 of 8 shots). Say only what *is* there. [measured]
@@ -179,9 +181,9 @@ Write **one JSON object** exactly like the example below (every key, same spelli
       "framing": "wide",
       "cast": ["mira", "pip"],
       "start_from": "new_picture",
-      "start_picture": "Wide view of a green meadow after rain, Mira stands on the left side of the frame with Pip sitting beside her, grey rain clouds above and pale sunlight breaking through on the right.",
+      "start_picture": "Wide view of a green meadow after rain; Mira stands on the left side of the frame; Pip sits beside her; grey rain clouds above and pale sunlight breaking through on the right.",
       "motion": "Mira looks up at the clouds while the light slowly grows brighter and Pip looks up too.",
-      "end_picture": "The same meadow, Mira stands in the center of the frame pointing up at the sky with Pip sitting at her feet looking up, the clouds thinner and the sunlight brighter on the right.",
+      "end_picture": "The same meadow; Mira stands in the center of the frame pointing up at the sky; Pip sits at her feet looking up; the clouds are thinner and the sunlight brighter on the right.",
       "shows": "bright sunlight breaking through thinning rain clouds over a wet green meadow",
       "camera": "",
       "atmosphere": "grey clouds thinning, pale sunlight growing stronger",
@@ -195,7 +197,7 @@ Write **one JSON object** exactly like the example below (every key, same spelli
       "cast": ["mira", "pip"],
       "start_from": "previous_end",
       "motion": "Mira walks to the right across the meadow while Pip follows, and tiny water drops in the air glow in the sunlight.",
-      "end_picture": "Mira stands on the right side of the frame with Pip standing beside her, both facing a faint arc of colored light that begins to appear over the hills on the left.",
+      "end_picture": "Mira stands on the right side of the frame; Pip stands beside her; a faint arc of colored light begins to appear over the hills on the left.",
       "shows": "tiny glowing water drops hanging in the sunlit air over the meadow",
       "camera": "",
       "atmosphere": "bright sunlight, clearing sky, glowing mist",
@@ -208,9 +210,9 @@ Write **one JSON object** exactly like the example below (every key, same spelli
       "framing": "wide",
       "cast": ["mira", "pip"],
       "start_from": "new_picture",
-      "start_picture": "Wide view from a grassy hilltop at golden hour, Mira stands on the left side of the frame holding up a small glass prism with Pip sitting on the right side, a bright sun low behind them.",
+      "start_picture": "Wide view from a grassy hilltop at golden hour; Mira stands on the left side of the frame holding up a small glass prism; Pip sits on the right side; a bright sun hangs low behind them.",
       "motion": "Mira turns the prism slowly and a band of colored light spreads across the grass in front of her.",
-      "end_picture": "The same hilltop, Mira holds the prism steady in the center of the frame while a wide band of rainbow colors lies on the grass between her and Pip.",
+      "end_picture": "The same hilltop; Mira holds the prism steady in the center of the frame; Pip sits on the right side; a wide band of rainbow colors lies on the grass between them.",
       "shows": "a prism splitting white sunlight into a band of rainbow colors on the grass",
       "camera": "",
       "atmosphere": "low golden sunlight, clear sky",
@@ -224,7 +226,7 @@ Write **one JSON object** exactly like the example below (every key, same spelli
       "cast": ["mira", "pip"],
       "start_from": "previous_end",
       "motion": "Mira lifts her hand toward the sky and a full rainbow slowly appears in the clouds above the hills while Pip watches.",
-      "end_picture": "The same hilltop, Mira stands on the left side of the frame and Pip sits on the right side, both looking at a bright full rainbow arching over the hills behind them.",
+      "end_picture": "The same hilltop; Mira stands on the left side of the frame; Pip sits on the right side; a bright full rainbow arches over the hills behind them.",
       "shows": "a bright full rainbow arching over green hills after the rain",
       "camera": "slow push-in",
       "atmosphere": "golden light, clear sky with a bright rainbow",
@@ -256,7 +258,7 @@ Write **one JSON object** exactly like the example below (every key, same spelli
 | `takes[].scene`, `seconds`, `framing` | A scene id; length in seconds (at most `clip_seconds`); `"wide"`, `"medium"` or `"close"`. |
 | `takes[].cast` | Character ids visible in the start picture (rule 3). |
 | `takes[].start_from` | `"new_picture"` or `"previous_end"` (rule 13). |
-| `takes[].start_picture` | What the first frame shows (rule 4). **Only** when `start_from` is `"new_picture"`; at least 8 words. |
+| `takes[].start_picture` | What the first frame shows (rule 4), **one character per clause, clauses separated by `;`** (rule 2). **Only** when `start_from` is `"new_picture"`; at least 8 words. |
 | `takes[].motion` | The one continuous action, at least 6 words, with direction for travellers (rule 7). |
 | `takes[].end_picture` | What the last frame shows, same framing, at least 8 words. **Required for every take**: the video model animates between the start picture and the end picture. |
 | `takes[].shows`, `narration` | Rules 15 and 16. Both `""` when there is no narrator. |
@@ -380,6 +382,7 @@ STACK = re.compile(r"\b(on (his|her|their|the) (shoulder|back|head|lap)|in (his|
 SPEECH = re.compile(r"\b(says|said|speaks|speaking|talks|talking|asks|replies|whispers|shouts)\b", re.I)
 CURLY = {0x201C: '"', 0x201D: '"', 0x2018: "'", 0x2019: "'"}  # curly quotes to straight ones (str.translate takes code points)
 TRAIL = re.compile(r",(\s*[}\]])")  # a comma before a closing bracket
+CLAUSE = re.compile(r"\s*(?:;|,\s*while\s+|\s+while\s+|,\s*as\s+|\s+as\s+|\.\s+)\s*", re.I)  # how PanelFlow's picture prompt splits a description into clauses
 GENRES = {"bedtime", "horror", "mystery", "fantasy", "anime_adventure", "mythology", "vox", "explainer", "custom"}
 
 
@@ -525,6 +528,11 @@ def check(p):
             for field in ("start_picture", "end_picture"):
                 if nm.lower() in str(t.get(field, "")).lower() and next(k for k, v in cast.items() if v.get("name") == nm) not in tc:
                     add_t(f"{nm} appears in {field} but is not in this take's cast")
+        for field in ("start_picture", "end_picture"):
+            for clause in CLAUSE.split(str(t.get(field, ""))):
+                named = [nm for nm in names if re.search(r"\b" + re.escape(nm) + r"\b", clause, re.I)]
+                if len(named) > 1:
+                    add_t(f"{field}: one clause names {' and '.join(named)}; write each character in its own clause separated by ';' (otherwise the picture model draws the second one twice)")
         bt = t.get("beats")
         if bt is not None:
             if clip < 8:

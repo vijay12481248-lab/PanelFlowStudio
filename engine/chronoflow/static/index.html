@@ -4506,6 +4506,7 @@
       </div>
 
       <!-- Storyboard Interactive Cards Grid -->
+      <div id="nvPlanBar" style="display: none;"></div>
       <div class="storyboard-grid" id="storyboardGrid" style="display: none;">
         <div style="grid-column: 1 / -1; padding: 40px; text-align: center; color: #9aa6d0; font-size: 0.85rem;">
           Loading master storyboard scene beats...
@@ -4809,6 +4810,12 @@
     .nv-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
     .nv-label { font-size: 0.8rem; font-weight: 700; color: #d5dcf5; margin-bottom: 6px; display: block; }
     #nvError { color: #f2667a; font-size: 0.8rem; min-height: 1.1em; margin-top: 8px; }
+    .nv-big { font-size: 0.82rem; line-height: 1.5; color: #c4cff0; margin: 4px 0 10px; }
+    .nv-bar { background: #0b1231; border: 1px solid rgba(122,162,255,.35); border-radius: 10px; padding: 10px 14px; margin: 8px 0 12px; display: flex; flex-direction: column; gap: 6px; font-size: 0.82rem; }
+    .nv-bar .btn-primary { margin: 0; }
+    .nv-plan-bad { border: 1px solid rgba(242,102,122,.5); border-radius: 8px; padding: 8px 12px; font-size: 0.8rem; }
+    .nv-plan-bad ul { margin: 6px 0 8px 18px; padding: 0; color: #f6b1bb; }
+    .nv-plan-ok { border: 1px solid rgba(70,214,163,.5); border-radius: 8px; padding: 8px 12px; font-size: 0.82rem; }
     .nv-card { display: flex; flex-direction: column; gap: 6px; margin: 6px 0; }
     .nv-card select { font-size: 0.72rem; padding: 2px 6px; max-width: 150px; }
     .nv-state { font-size: 0.66rem; font-weight: 700; padding: 2px 8px; border-radius: 10px; background: rgba(154,166,208,.18); color: #b8c3ea; }
@@ -4839,7 +4846,27 @@
         <button type="button" class="btn-close" onclick="closeNewVideoWizard()" title="Close">&times;</button>
       </div>
       <div class="modal-scroll-body" style="max-height: 75vh; overflow-y: auto; padding-right: 4px;">
-        <div id="nvStep1">
+        <div id="nvStep0">
+          <span class="nv-label">How do you want to start?</span>
+          <div class="nv-modes">
+            <button type="button" class="nv-mode" data-nv-start="plan"><b>&#128196; Start from a plan file (JSON)</b><span>Download the kit and give it to ChatGPT, Gemini, Claude or any agent. It interviews you and returns a plan. Upload it here: PanelFlow draws the pictures, you review them, then it makes the videos.</span></button>
+            <button type="button" class="nv-mode" data-nv-start="steps"><b>&#129513; Build it step by step</b><span>Choose how the video starts and how long it is, then fill in each shot yourself, or let the local AI draft the prompts.</span></button>
+          </div>
+        </div>
+        <div id="nvStepPlan" style="display: none;">
+          <span class="nv-label">1. Get a plan from an assistant</span>
+          <p class="nv-big">Download the kit and give it to ChatGPT, Gemini, Claude, or a coding agent (Claude Code, Codex, Antigravity). Say: <i>"Read this kit and follow it. Interview me first, then write my plan."</i> It asks you questions (which workflow, how long a clip your graphics card makes, how scenes connect) and returns one JSON file.</p>
+          <div class="nv-row"><button type="button" class="btn-primary" id="nvKitBtn" style="width:auto;padding:8px 18px">&#11015; Download the kit</button><button type="button" class="btn-tool" id="nvCheckerBtn" title="A script that checks a plan on your own computer before you upload it">&#11015; Plan checker (optional)</button></div>
+          <span class="nv-label" style="margin-top: 14px;">2. Upload the plan, or paste it</span>
+          <div class="nv-row" style="margin-bottom: 6px;"><input type="file" id="nvPlanFile" accept=".json,.txt,application/json,text/plain"></div>
+          <textarea id="nvPlanText" rows="6" style="font-size: 0.8rem;" placeholder="...or paste the JSON the assistant gave you here"></textarea>
+          <div class="nv-row" style="justify-content: space-between; margin-top: 8px;">
+            <button type="button" class="btn-tool" data-nv-back="0">&larr; Back</button>
+            <button type="button" class="btn-primary" id="nvPlanCheck" style="width: auto; padding: 8px 22px;">Check the plan</button>
+          </div>
+          <div id="nvPlanResult" style="margin-top: 10px;"></div>
+        </div>
+        <div id="nvStep1" style="display: none;">
           <span class="nv-label">1. How do you want to start?</span>
           <div class="nv-modes" id="nvModeCards">
             <button type="button" class="nv-mode" data-mode="text"><b>Text only</b><span>Describe the video. No pictures needed.</span></button>
@@ -4849,6 +4876,7 @@
             <button type="button" class="nv-mode" data-mode="reference"><b>Reference images</b><span>Keep a character or place consistent (1-2 pictures).</span></button>
             <button type="button" class="nv-mode" data-mode="from_video"><b>From a video</b><span>Continue from the end of a clip you already have.</span></button>
           </div>
+          <div class="nv-row" style="margin-top: 10px;"><button type="button" class="btn-tool" data-nv-back="0">&larr; Back</button></div>
         </div>
         <div id="nvStep2" style="display: none;">
           <span class="nv-label">2. How long is the video?</span>
@@ -5374,6 +5402,23 @@
       switchTab('storyboard');
       setStoryboardViewMode('flat');
       addTerminalLog('NEW_VIDEO', `Planned "${plan.title}": ${plan.scenes.length} segments, first card ready.`, true);
+    }
+
+    // An imported plan becomes the open storyboard: one card per take, the plan bar on top. The vault file is named after the plan, so importing the same plan again reuses it.
+    async function onNewVideoPlanImported(res) {
+      currentScreenplay = res.screenplay;
+      currentScreenplayFilename = `screenplay_plan_${res.slug}.json`;
+      storyboardScenes = res.screenplay.scenes;
+      storyboardFolders = res.screenplay.folders || [];
+      storyboardProtagonist = null;
+      activeStoryboardFolderId = null;
+      await saveCurrentStoryboard(true);
+      closeNewVideoWizard();
+      switchTab('storyboard');
+      setStoryboardViewMode('flat');
+      const meta = res.screenplay.anchor_images.plan;
+      addTerminalLog('NEW_VIDEO', `Imported plan "${meta.title}": ${meta.takes} shots, ${meta.pictures} pictures to draw. Click "Draw the pictures".`, true);
+      (res.warnings || []).forEach((w) => addTerminalLog('NEW_VIDEO', w, true));
     }
 
     function closePromptModal() {
@@ -9911,6 +9956,7 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
     }
 
     function renderStoryboardUI() {
+      if (window.NewVideo && NewVideo.renderPlanBar) NewVideo.renderPlanBar();
       const titleEl = document.getElementById('sbTitleDisplay');
       const durEl = document.getElementById('sbDurationBadge');
       const countEl = document.getElementById('sbCountBadge');
@@ -11989,6 +12035,17 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
               if (!res.ok || !data.filename) throw new Error(data.detail || `Upload failed (HTTP ${res.status})`);
               return data.filename;
             },
+            download: async (path, filename) => {
+              const res = await fetch(`${API_BASE}${path}`);
+              if (!res.ok) throw new Error(`Download failed (HTTP ${res.status})`);
+              const url = URL.createObjectURL(await res.blob());
+              const a = document.createElement('a');
+              a.href = url; a.download = filename;
+              document.body.appendChild(a); a.click(); a.remove();
+              setTimeout(() => URL.revokeObjectURL(url), 2000);
+            },
+            screenplay: () => currentScreenplay,
+            onPlanImported: onNewVideoPlanImported,
             scenes: () => storyboardScenes,
             save: () => saveCurrentStoryboard(true),
             rerender: () => renderStoryboardUI(),

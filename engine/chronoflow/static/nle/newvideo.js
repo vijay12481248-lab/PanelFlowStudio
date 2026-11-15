@@ -60,6 +60,32 @@
     if (s && n && s.start_mode === 'first_last' && s.last_frame && n.start_mode === 'first_last' && !n.first_frame) n.first_frame = s.last_frame;
   }
 
+  // ---- plan import: pictures from the picture job and the Render all queue
+  function applyPictureItems(scenes, items, slug) {
+    let changed = false;
+    const mine = (v) => !v || String(v).startsWith(slug + '_'); // empty, or an earlier plan picture: never the owner's own file
+    for (const it of items) {
+      const s = scenes.find((c) => c.take_id === it.take_id);
+      if (!s) continue;
+      if (it.start && it.start !== s.first_frame && mine(s.first_frame)) { s.first_frame = it.start; changed = true; }
+      if (it.end && it.end !== s.last_frame && mine(s.last_frame)) { s.last_frame = it.end; changed = true; }
+      const probs = it.problems || [];
+      if (JSON.stringify(s.picture_problems || []) !== JSON.stringify(probs)) { s.picture_problems = probs; changed = true; }
+    }
+    return changed;
+  }
+  const pictureCounts = (scenes) => ({ takes: scenes.length, ready: scenes.filter((s) => s.first_frame && s.last_frame).length });
+  function renderAllQueue(scenes) {
+    const run = [], waiting = [];
+    scenes.forEach((s, i) => {
+      if (!['ready', 'stale', 'empty'].includes(displayState(s))) return; // rendering, in review or approved
+      const gate = canRender(scenes, i), miss = missingInputs(s, i);
+      if (!gate.ok || miss.length) waiting.push({ i, reason: gate.reason || `Needs: ${miss.map((k) => SLOT_LABEL[k] || k).join(', ')}` });
+      else run.push(i);
+    });
+    return { run, waiting };
+  }
+
   // ---- card helpers (mirror engine/chronoflow/start_modes.py so a card can say what it still needs before the server is asked)
   const CHAINED_MODES = ['text', 'first', 'from_video'];
   const MODE_LABEL = { text: 'Text only', first: 'First frame', first_last: 'First + last', last: 'Last frame only', reference: 'Reference', from_video: 'From a video' };
@@ -111,7 +137,8 @@
     ctx = cfg;
     const $ = (id) => document.getElementById(id);
     const st = { mode: 'text', seconds: 300, portrait: false };
-    const showStep = (n) => [1, 2, 3].forEach((k) => { $(`nvStep${k}`).style.display = k === n ? '' : 'none'; });
+    const STEPS = { 0: 'nvStep0', 1: 'nvStep1', 2: 'nvStep2', 3: 'nvStep3', plan: 'nvStepPlan' };
+    const showStep = (n) => Object.entries(STEPS).forEach(([k, id]) => { $(id).style.display = String(k) === String(n) ? '' : 'none'; });
     const err = (msg) => { $('nvError').textContent = msg || ''; };
     const refreshLength = () => {
       const v = $('nvLengthPreset').value;
@@ -150,7 +177,55 @@
         btn.disabled = false; btn.textContent = 'Create storyboard';
       }
     });
-    return { open() { err(''); showStep(1); refreshLength(); } };
+
+    // ---- start from a plan file: download the kit, paste or upload the plan, check it, import it
+    const NL = String.fromCharCode(10);
+    const e = (v) => cfg.esc(v);
+    let lastProblems = [];
+    const planResult = (html) => { $('nvPlanResult').innerHTML = html; };
+    document.querySelectorAll('[data-nv-start]').forEach((b) => b.addEventListener('click', () => { err(''); showStep(b.dataset.nvStart === 'plan' ? 'plan' : 1); }));
+    $('nvKitBtn').addEventListener('click', async () => { try { await cfg.download('/plan/kit', 'PANELFLOW_VIDEO_PLAN_KIT.md'); } catch (x) { err(x.message || String(x)); } });
+    $('nvCheckerBtn').addEventListener('click', async () => { try { await cfg.download('/plan/checker', 'check_plan.py'); } catch (x) { err(x.message || String(x)); } });
+    async function planCheck() {
+      const text = $('nvPlanText').value;
+      err('');
+      if (!text.trim()) return planResult('<div class="nv-warn">Paste the plan, or choose the file, first.</div>');
+      planResult('Checking the plan…');
+      try {
+        const r = await cfg.post('/plan/validate', { text });
+        if (!r.ok) {
+          lastProblems = r.problems;
+          return planResult(`<div class="nv-plan-bad"><b>${r.problems.length} problem${r.problems.length === 1 ? '' : 's'} in this plan</b><ul>${r.problems.map((m) => `<li>${e(m)}</li>`).join('')}</ul>
+            <button type="button" class="btn-tool" data-nv-act="copy">Copy for the assistant</button> <span class="nv-note">Paste this to the assistant and ask for the whole corrected plan.</span></div>`);
+        }
+        const m = r.summary;
+        planResult(`<div class="nv-plan-ok"><b>${e(m.title)}</b><div>${m.takes} shots &middot; ${m.seconds} s &middot; ${e(m.format)} &middot; ${m.pictures} pictures to draw &middot; ${m.clip_seconds} s clips${m.narration === 'narrator' ? ' &middot; narrated' : ''}</div>
+          ${r.warnings.map((w) => `<div class="nv-warn">${e(w)}</div>`).join('')}
+          <button type="button" class="btn-primary" data-nv-act="import" style="width:auto;padding:8px 22px;margin-top:8px">Import plan</button></div>`);
+      } catch (x) { planResult(`<div class="nv-error">${e(x.message || String(x))}</div>`); }
+    }
+    $('nvPlanCheck').addEventListener('click', planCheck);
+    $('nvPlanText').addEventListener('paste', () => setTimeout(planCheck, 60));
+    $('nvPlanFile').addEventListener('change', async () => {
+      const f = $('nvPlanFile').files[0];
+      if (!f) return;
+      if (f.size > 2000000) return err('That file is too big to be a plan (over 2 MB).');
+      $('nvPlanText').value = await f.text();
+      $('nvPlanFile').value = '';
+      planCheck();
+    });
+    $('nvPlanResult').addEventListener('click', async (ev) => {
+      const act = ev.target.closest('[data-nv-act]');
+      if (!act) return;
+      if (act.dataset.nvAct === 'copy') {
+        const text = ['Please fix these problems in the plan, then send me the whole corrected JSON again (only the JSON):'].concat(lastProblems.map((m) => '- ' + m)).join(NL);
+        try { await navigator.clipboard.writeText(text); act.textContent = 'Copied'; } catch (x) { $('nvPlanText').focus(); err('Could not copy automatically. Select the problems above and copy them.'); }
+      } else if (act.dataset.nvAct === 'import') {
+        act.disabled = true; err('');
+        try { await cfg.onPlanImported(await cfg.post('/plan/import', { text: $('nvPlanText').value })); } catch (x) { err(x.message || String(x)); act.disabled = false; }
+      }
+    });
+    return { open() { err(''); showStep(0); refreshLength(); planResult(''); $('nvPlanText').value = ''; } };
   }
 
   // ---- storyboard cards for wizard plans (browser only; mount() stores the page's helpers in ctx)
@@ -200,9 +275,11 @@
     const slots = slotsFor(s.start_mode).filter((k) => k !== 'ref2' || getSlot(s, 'ref1')).map((k) => slotWidget(s, i, k)).join('');
     const chain = s.inherits_tail && !s.first_frame && s.start_mode !== 'from_video' ? `<div class="nv-note">Continues from the last frame of Shot ${i}</div>` : '';
     const warn = sizeWarning(s, i), miss = missingInputs(s, i).filter((k) => k !== 'prompt');
+    const probs = (s.picture_problems || []).length ? `<div class="nv-warn">Picture check: ${e(s.picture_problems.join('; '))}</div>` : '';
+    const narr = s.narration ? `<div class="nv-note" title="The narration for this shot is kept; voice-over is not produced from here yet">🎙 ${e(s.narration)}</div>` : '';
     return `<div class="nv-card">
       <div class="nv-row"><select onchange="NewVideo.onMode(${i}, this.value)" title="Start mode of this shot">${opts}</select><span class="nv-state nv-${displayState(s)}">${STATE_LABEL[displayState(s)]}</span></div>
-      ${chain}${warn ? `<div class="nv-warn">${e(warn)}</div>` : ''}${slots}
+      ${chain}${warn ? `<div class="nv-warn">${e(warn)}</div>` : ''}${narr}${probs}${slots}
       <textarea class="nv-prompt" data-i="${i}" rows="3" placeholder="What happens in this shot?" onchange="NewVideo.onPrompt(${i}, this.value)">${e(s.prompt || '')}</textarea>
       ${miss.length ? `<div class="nv-note">Still needs: ${miss.map((k) => SLOT_LABEL[k]).join(', ')}</div>` : ''}
       ${s.error ? `<div class="nv-error">${e(s.error)}</div>` : ''}</div>`;
@@ -324,7 +401,87 @@
     closePanel,
   };
 
+  // ---- the plan bar above the storyboard: draw the pictures, look at them, then render all the videos
+  const plan = { state: null, timer: null, primed: new Set(), renderingAll: false, stop: false };
+  const planMeta = () => { const sp = ctx && ctx.screenplay && ctx.screenplay(); return (sp && sp.anchor_images && sp.anchor_images.plan) || null; };
+  function planBarHtml(meta, scenes) {
+    const e = ctx.esc, c = pictureCounts(scenes), q = renderAllQueue(scenes), job = plan.state || {};
+    const drawing = job.status === 'running';
+    const videos = scenes.filter((s) => ['review', 'approved'].includes(displayState(s))).length;
+    const draw = `<button type="button" class="btn-primary" ${drawing || plan.renderingAll ? 'disabled' : ''} onclick="NewVideo.planDraw()" style="width:auto;padding:5px 14px;font-size:.78rem">${drawing ? '⏳ Drawing…' : (c.ready ? '↻ Draw the pictures again' : '🎨 Draw the pictures')}</button>`;
+    const good = c.ready === c.takes && !meta.pictures_ok && !drawing ? `<button type="button" class="btn-tool" onclick="NewVideo.planApprovePictures()">✓ Pictures look good</button>` : '';
+    const all = plan.renderingAll
+      ? `<button type="button" class="btn-tool" onclick="NewVideo.planStop()">⏹ Stop after this shot</button>`
+      : `<button type="button" class="btn-primary" ${meta.pictures_ok && q.run.length && !drawing ? '' : 'disabled'} onclick="NewVideo.planRenderAll()" style="width:auto;padding:5px 14px;font-size:.78rem" title="${meta.pictures_ok ? 'Render every shot that is ready, one after another' : 'Look at the pictures and approve them first'}">▶ Render all videos${q.run.length ? ` (${q.run.length})` : ''}</button>`;
+    const waiting = q.waiting.length ? `<div class="nv-note">${q.waiting.length} shot${q.waiting.length === 1 ? '' : 's'} not ready: ${q.waiting.slice(0, 3).map((w) => `Shot ${w.i + 1} (${e(w.reason)})`).join('; ')}${q.waiting.length > 3 ? '…' : ''}</div>` : '';
+    return `<div class="nv-bar"><div><b>📜 ${e(meta.title)}</b> &middot; ${meta.takes} shots &middot; ${meta.pictures} pictures &middot; ${meta.total_seconds} s &middot; ${e(meta.format)}</div>
+      <div class="nv-row"><span>Pictures <b>${c.ready}/${c.takes}</b> shots &middot; videos <b>${videos}/${c.takes}</b></span>${draw}${good}${all}</div>
+      ${drawing ? `<div class="nv-note">${e(job.message || '')} (${job.done_takes || 0}/${job.total_takes || c.takes} shots drawn)</div>` : ''}
+      ${job.status === 'failed' ? `<div class="nv-error">Drawing the pictures failed: ${e(job.error || '')}</div>` : ''}${waiting}
+      ${meta.narration === 'narrator' ? '<div class="nv-note">The narration text stays with each shot. Voice-over, captions and music are not produced from here yet.</div>' : ''}</div>`;
+  }
+  function renderPlanBar() {
+    const el = document.getElementById('nvPlanBar');
+    if (!el) return;
+    const meta = planMeta();
+    if (!meta) { el.style.display = 'none'; el.innerHTML = ''; return; }
+    el.style.display = '';
+    el.innerHTML = planBarHtml(meta, scenesNow());
+    if (!plan.primed.has(meta.slug)) {  // after a reload: is the picture job still running, and did pictures arrive that were never saved?
+      plan.primed.add(meta.slug);
+      ctx.get('/plan/pictures/status?slug=' + encodeURIComponent(meta.slug)).then(async (s) => {
+        plan.state = s;
+        if (s.status === 'running') pollPlan(meta.slug);
+        else if (applyPictureItems(scenesNow(), s.items || [], meta.slug)) await touch();
+        else renderPlanBar();
+      }).catch(() => {});
+    }
+  }
+  function pollPlan(slug) {
+    clearInterval(plan.timer);
+    const tick = async () => {
+      try {
+        const s = await ctx.get('/plan/pictures/status?slug=' + encodeURIComponent(slug));
+        plan.state = s;
+        if (s.status !== 'running') clearInterval(plan.timer);
+        if (applyPictureItems(scenesNow(), s.items || [], slug)) await touch(); else renderPlanBar();
+      } catch (x) {
+        clearInterval(plan.timer);
+        plan.state = { status: 'failed', error: x.message || String(x), message: '', items: [] };
+        renderPlanBar();
+      }
+    };
+    plan.timer = setInterval(tick, 3000);
+    tick();
+  }
+  async function planDraw() {
+    const meta = planMeta();
+    if (!meta) return;
+    meta.pictures_ok = false;
+    try {
+      await ctx.post('/plan/pictures/start', { slug: meta.slug });
+      plan.state = { status: 'running', message: 'Starting…', items: [], done_takes: 0, total_takes: meta.takes };
+      pollPlan(meta.slug);
+    } catch (x) { plan.state = { status: 'failed', error: x.message || String(x), message: '', items: [] }; }
+    renderPlanBar();
+  }
+  function planApprovePictures() { const meta = planMeta(); if (meta) { meta.pictures_ok = true; touch(); } }
+  async function planRenderAll() {
+    if (plan.renderingAll) return;
+    plan.renderingAll = true; plan.stop = false;
+    renderPlanBar();
+    try {
+      for (;;) {
+        const q = renderAllQueue(scenesNow());
+        if (!q.run.length || plan.stop) break;
+        const s = scenesNow()[q.run[0]];
+        await render(q.run[0]);
+        if (s.error) break; // a failed render stops the run: the same failure would repeat on every shot
+      }
+    } finally { plan.renderingAll = false; ctx.rerender(); }
+  }
+
   const api = { SEG_SECONDS, MAX_SECONDS, slotsFor, segmentCount, lengthLabel, canRender, prevTail, markRendered, approve, markRedo, mount,
-    getSlot, setSlot, relink, newCard, chainKeyframe, displayState, effectiveMode, missingInputs, sizeWarning, setMode, modeLabel: (s, i) => MODE_LABEL[effectiveMode(s, i)], ...cardApi };
+    applyPictureItems, pictureCounts, renderAllQueue, planDraw, planApprovePictures, planRenderAll, planStop() { plan.stop = true; }, renderPlanBar, getSlot, setSlot, relink, newCard, chainKeyframe, displayState, effectiveMode, missingInputs, sizeWarning, setMode, modeLabel: (s, i) => MODE_LABEL[effectiveMode(s, i)], ...cardApi };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.NewVideo = api;
 })(typeof window !== 'undefined' ? window : globalThis);

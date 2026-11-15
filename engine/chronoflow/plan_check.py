@@ -15,6 +15,7 @@ STACK = re.compile(r"\b(on (his|her|their|the) (shoulder|back|head|lap)|in (his|
 SPEECH = re.compile(r"\b(says|said|speaks|speaking|talks|talking|asks|replies|whispers|shouts)\b", re.I)
 CURLY = {0x201C: '"', 0x201D: '"', 0x2018: "'", 0x2019: "'"}  # curly quotes to straight ones (str.translate takes code points)
 TRAIL = re.compile(r",(\s*[}\]])")  # a comma before a closing bracket
+CLAUSE = re.compile(r"\s*(?:;|,\s*while\s+|\s+while\s+|,\s*as\s+|\s+as\s+|\.\s+)\s*", re.I)  # how PanelFlow's picture prompt splits a description into clauses
 GENRES = {"bedtime", "horror", "mystery", "fantasy", "anime_adventure", "mythology", "vox", "explainer", "custom"}
 
 
@@ -160,6 +161,11 @@ def check(p):
             for field in ("start_picture", "end_picture"):
                 if nm.lower() in str(t.get(field, "")).lower() and next(k for k, v in cast.items() if v.get("name") == nm) not in tc:
                     add_t(f"{nm} appears in {field} but is not in this take's cast")
+        for field in ("start_picture", "end_picture"):
+            for clause in CLAUSE.split(str(t.get(field, ""))):
+                named = [nm for nm in names if re.search(r"\b" + re.escape(nm) + r"\b", clause, re.I)]
+                if len(named) > 1:
+                    add_t(f"{field}: one clause names {' and '.join(named)}; write each character in its own clause separated by ';' (otherwise the picture model draws the second one twice)")
         bt = t.get("beats")
         if bt is not None:
             if clip < 8:

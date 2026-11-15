@@ -182,3 +182,37 @@ test('a render that was in flight before a reload is shown as ready, unknown sta
   assert.equal(NV.displayState({ state: '"><img src=x>' }), 'ready');
   assert.equal(NV.displayState({ state: 'review' }), 'review');
 });
+
+// ---- plan import: pictures arriving from the picture job, and the Render all queue
+const planCard = (i, extra = {}) => ({ start_mode: 'first_last', take_id: `t0${i + 1}`, inherits_tail: false, first_frame: '', last_frame: '', ref_images: [], prompt: 'FL2VA prompt', state: 'ready', approved: false, width: 1344, height: 768, ...extra });
+
+test('pictures from the job fill empty slots and never overwrite the owner\'s own picture', () => {
+  const s = [planCard(0), planCard(1, { first_frame: 'my_own_upload.png' }), planCard(2, { first_frame: 'slug_x_t03_start.png' })];
+  const items = [
+    { take_id: 't01', start: 'slug_x_t01_start.png', end: 'slug_x_t01_end.png', problems: [] },
+    { take_id: 't02', start: 'slug_x_t02_start.png', end: 'slug_x_t02_end.png', problems: ['end: cat: counted 2, planned 1'] },
+    { take_id: 't03', start: 'slug_x_t03_start2.png', end: 'slug_x_t03_end.png', problems: [] },
+  ];
+  assert.equal(NV.applyPictureItems(s, items, 'slug_x'), true);
+  assert.deepEqual([s[0].first_frame, s[0].last_frame], ['slug_x_t01_start.png', 'slug_x_t01_end.png']);
+  assert.equal(s[1].first_frame, 'my_own_upload.png'); // the owner's file stays
+  assert.equal(s[1].last_frame, 'slug_x_t02_end.png');
+  assert.equal(s[2].first_frame, 'slug_x_t03_start2.png'); // a redrawn plan picture replaces the older plan picture
+  assert.deepEqual(s[1].picture_problems, ['end: cat: counted 2, planned 1']);
+  assert.equal(NV.applyPictureItems(s, items, 'slug_x'), false); // nothing new
+});
+
+test('picture counts say how many takes have both pictures', () => {
+  const s = [planCard(0, { first_frame: 'a', last_frame: 'b' }), planCard(1, { first_frame: 'a' }), planCard(2)];
+  assert.deepEqual(NV.pictureCounts(s), { takes: 3, ready: 1 });
+});
+
+test('Render all runs what can run now and says what waits', () => {
+  const s = [planCard(0, { first_frame: 'a', last_frame: 'b' }), planCard(1, { first_frame: 'b', last_frame: 'c', state: 'approved', approved: true }), planCard(2, { first_frame: 'c', last_frame: 'd', state: 'review' }),
+    planCard(3, { first_frame: 'd' }), planCard(4, { first_frame: 'e', last_frame: 'f', state: 'stale' }), planCard(5, { first_frame: 'f', last_frame: 'g', prompt: ' ' })];
+  const q = NV.renderAllQueue(s);
+  assert.deepEqual(q.run, [0, 4]); // ready and stale cards with everything they need
+  assert.deepEqual(q.waiting.map((w) => w.i), [3, 5]);
+  assert.match(q.waiting[0].reason, /Last frame/);
+  assert.match(q.waiting[1].reason, /prompt/i);
+});

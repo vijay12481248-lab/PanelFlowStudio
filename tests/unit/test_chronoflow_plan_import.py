@@ -92,7 +92,7 @@ def test_seamless_chain_imports_as_matched_pictures_and_says_so():
 def test_pictures_needed_counts_what_will_be_drawn():
     assert pi.pictures_needed(good()) == 6  # t01 start+end, t02 end, t03 start+end (new scene), t04 end
     p = good()
-    p["takes"][1].update(start_from="new_picture", start_picture="Mira stands on the right side of the frame with Pip beside her under the clearing sky.")
+    p["takes"][1].update(start_from="new_picture", start_picture="Mira stands on the right side of the frame; Pip stands beside her; the clearing sky above them.")
     assert pi.pictures_needed(p) == 6  # storyboard.draw starts a same-place, same-cast take from the previous end picture anyway
     assert any("t02" in w and "previous end picture" in w for w in pi.plan_to_cards(p)["warnings"])
 
