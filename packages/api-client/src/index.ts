@@ -2712,7 +2712,7 @@ export class PanelFlowApiClient {
   }
 
   sceneRunImageUrl(runId: string): string {
-    return `${this.baseUrl}/api/original/scene/runs/${encodeURIComponent(runId)}/image`;
+    return this.resourceUrl(`/api/original/scene/runs/${encodeURIComponent(runId)}/image`); // an <img> cannot send the token header
   }
 
   async submitSceneFeedback(runId: string, body: SceneFeedbackInput): Promise<SceneRun> {

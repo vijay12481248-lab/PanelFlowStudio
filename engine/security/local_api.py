@@ -148,5 +148,6 @@ class LocalApiSecurityMiddleware(BaseHTTPMiddleware):
             or "/samples/" in path
             or "/chronoflow/" in path
             or path.startswith(("/outputs/", "/inputs/"))
+            or (path.startswith("/api/original/scene/runs/") and path.endswith("/image"))  # the Scene review picture, shown by an <img> tag
             or path == "/api/render/events"
         )

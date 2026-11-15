@@ -127,3 +127,8 @@ test("the image edit request names the picture and the instruction", async () =>
     globalThis.fetch = originalFetch;
   }
 });
+
+test("the Scene review picture URL carries the access token, since an image tag cannot send a header", () => {
+  const client = new PanelFlowApiClient("http://127.0.0.1:8765", "resource-token");
+  assert.equal(client.sceneRunImageUrl("run 1"), "http://127.0.0.1:8765/api/original/scene/runs/run%201/image;pf-token=resource-token");
+});
