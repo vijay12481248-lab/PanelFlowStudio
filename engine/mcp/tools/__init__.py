@@ -12,6 +12,7 @@ from engine.mcp.tools import (
     autopilot_tools,
     youtube_tools,
     creative_agent_tools,
+    audio_studio_tools,
 )
 
 __all__ = [
@@ -26,4 +27,5 @@ __all__ = [
     "autopilot_tools",
     "youtube_tools",
     "creative_agent_tools",
+    "audio_studio_tools",
 ]
