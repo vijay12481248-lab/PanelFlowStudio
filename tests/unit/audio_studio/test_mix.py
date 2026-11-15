@@ -132,3 +132,14 @@ def test_master_hits_loudness_target(tmp_path):
     assert res["integrated_lufs"] == pytest.approx(-14.0, abs=1.0) and res["true_peak_db"] <= -1.0
     again = measure_loudness(tmp_path / "master.wav")
     assert again["integrated_lufs"] == pytest.approx(res["integrated_lufs"], abs=0.2)
+
+
+def test_ducked_music_stem_keeps_full_length_and_tail(tmp_path):
+    dlg = _write(tmp_path / "dlg.wav", np.concatenate([np.zeros(SR), _tone(1.0, 0.4, 500), np.zeros(2 * SR)]))
+    mus = _take(tmp_path, "mus", _tone(4.0, 0.2))
+    for i in range(4):  # ffmpeg's sidechain output length varied from run to run
+        plan = _plan(tmp_path, dialogue=dlg)
+        _add(plan, tmp_path, Cue(id="m", track="music", kind="music", t_in=0, t_out=4.0), mus)
+        x = _read(render_roles(plan, tmp_path / f"s{i}")["music"])
+        assert len(x) == int(4.0 * SR)
+        assert 20 * np.log10(np.sqrt(np.mean(x[-int(0.1 * SR):] ** 2)) + 1e-9) > -30

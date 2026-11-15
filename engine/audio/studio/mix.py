@@ -85,7 +85,9 @@ def _sum(out: Path, items: list[tuple[Path, float]], duration: float, sidechain:
     last = "m"
     if sidechain is not None:
         cmd += ["-i", str(sidechain)]
-        parts.append(f"[m][{len(items)}:a]{_DUCK}[d]")
+        # sidechaincompress drops the last frames when its inputs end together (a different amount every run): pad both, trim after
+        parts += [f"[m]apad=whole_dur={duration + 1:.6f}[mp]", f"[{len(items)}:a]apad=whole_dur={duration + 1:.6f}[sp]",
+                  f"[mp][sp]{_DUCK}[d]"]
         last = "d"
     parts.append(f"[{last}]atrim=duration={duration:.6f}[o]")
     _run(cmd + ["-filter_complex", ";".join(parts), "-map", "[o]", "-ac", "2", "-ar", str(SR), "-c:a", "pcm_f32le", str(out)])
