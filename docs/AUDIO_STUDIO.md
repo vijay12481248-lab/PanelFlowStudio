@@ -40,3 +40,29 @@ Plans live in `<app data>/audio_studio/plans/<plan id>/` (`plan.json`, `takes/`,
 - ACE-Step defaults to 85 BPM / D Minor unless the cue has `hints`; `engine/audio/providers/ace_step.py` is unchanged.
 - The local vision pass that would describe each scene is not built; the calling agent writes the intents.
 - `Track.pan` is stored but not applied.
+
+## Measured (Phase 1, 2026-11-15, driven through the MCP tools on real videos)
+
+Run through a router-only server on port 8766 (the owner's live engine on 8765 runs older code and was not restarted).
+
+| | Mosquito reel (66.4 s, 1080x1920, 30 fps) | Dawn Gate draft (565.7 s, 1080p, 24 fps) |
+|---|---|---|
+| Spotting | 14 picture cuts | 139 cuts in 14 s |
+| Cues sourced | 14 whooshes + 1 slap from Openverse CC0 (all `CC0 1.0`, Freesound), music take reused | 10 whooshes + 1 door from Openverse CC0 |
+| Placement error (rendered hit vs its frame) | 15 hit cues, **max 6.9 ms, all under 40 ms** | 11 hit cues, max 6.9 ms |
+| QA | 0 errors, 3 warnings (takes peaking at -0.3, -0.8, -1.0 dBFS) | 1 error (a failed cue, below), 2 warnings |
+| Master | -14.1 LUFS, -1.5 dBTP, LRA 4.7; master, stems and video all 66.37 s | -14.3 LUFS, -1.5 dBTP, LRA 13.1; mix took 25 s |
+| Music under narration | ducked by 5.5 dB on average (11.9 dB at most); the narration track had no pauses, so no un-ducked comparison exists | no music |
+| Export | stems, M&E, master wav + mp4, cue sheet, credits written | not exported |
+
+Looked at: a spectrogram and waveform of the reel master (speech bursts, one whoosh swell at the 9.4 s cut, no clipping). Not listened to.
+
+What the real runs found (all fixed with a failing test first, see git history): `put_plan` replaced the cue list; the providers report called a missing ACE-Step "ok"; mp3 clips were measured by a different decoder than the mixer used (about 25 ms) and the "peak" of a two-lobed whoosh flipped lobes (about 150 ms, now an energy centroid measured at 48 kHz); Auto gave every cut the same clip (now prefers an unused one); the ducked music stem lost up to 0.16 s of tail.
+
+Not exercised: ACE-Step itself (not installed at `C:\Tools\ACE-Step-1.5`, GPU 15.8/16.3 GB busy; the reel reuses a music take it had made earlier), cue "no match" cases for `mosquito buzz` and `night room tone` (they failed with a stated reason, which is the intended behaviour).
+
+## More limits found
+
+- **Openverse's anonymous API rate-limits.** After roughly a hundred requests in one day it answered HTTP 403 and the cue failed with that reason. A free Openverse API key would raise the limit; creating one is the owner's account action, so it is not wired in yet.
+- Auto fetches three candidates per cue, so at most three different library clips exist per intent; vary the intent wording across cues for more variety.
+- Two cues in the reel (`buzz`, `night`) found no CC0 match at all; the CC0-only default is strict by design.
