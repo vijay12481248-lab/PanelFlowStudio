@@ -17,7 +17,7 @@ Cue-sheet audio for PanelFlow videos: music, sound effects and a loudness-correc
 | REST | `engine/api/routers/audio_studio.py` (`/api/audio/studio/*`) |
 | MCP | `engine/mcp/tools/audio_studio_tools.py` (`panelflow_chronoflow_audio_*`, profiles `chronoflow`, `all`) |
 
-Plans live in `<app data>/audio_studio/plans/<plan id>/` (`plan.json`, `takes/`, `renders/`, `exports/v<N>/`). No UI yet (Phase 4).
+Plans live in `<app data>/audio_studio/plans/<plan id>/` (`plan.json`, `takes/`, `renders/`, `exports/v<N>/`). The Audio page (Phase 4) is described below.
 
 ## Licences (checked 2026-11-15 from the primary files)
 
@@ -70,3 +70,20 @@ Not exercised: ACE-Step itself (not installed at `C:\Tools\ACE-Step-1.5`, GPU 15
 ## Final review (2026-11-15)
 
 A fresh whole-branch review found no critical issues and five important ones, all fixed with a failing test first: lost updates when two calls changed one plan (per-plan lock, slow work outside it, long runs write back only what they measured); the `peak` anchor could land in silence between two far-apart sounds (now the loudest cluster, merging lobes under 0.5 s apart); the music GPU slot used a private resource manager instead of the shared one the job manager uses; `put_plan` could attach any file with any licence to a cue (server-owned cue fields are now refused); a plan with nothing to mix crashed ffmpeg (now a clear error). A malformed Openverse id can no longer reach a file name. Seven minor findings were deferred (negative t_in gives a 502, hit_t is not clamped, a new cut can reuse a sourced cue id, dialogue-track cues are never mixed, credits have no title, provider error text is shared across threads, take paths are not re-checked in the renderer).
+
+## Audio page (Phase 4, 2026-11-16)
+
+A sixth rail page in the ChronoFlow Video Studio (between Color and Deliver). Files: `engine/chronoflow/static/nle/audio.js` (page), `audio-model.js` (pure logic, `node --test tests/js/audio_model.test.js`), `audio.css`, `data-page="audio"` rules in `layout.css`, a rail button and panels in `index.html`, "Open in Audio" in `library.js`.
+
+- **Open a video**: Media -> select one video -> Open in Audio, or Audio -> Open video... A plan is reused when one exists for that file.
+- **Left**: plan switcher, Auto / Ask-me sourcing, CC-BY switch, Spot / Source all / QA, the cue list with status chips (placement error shown), QA findings (click one to jump to its cue).
+- **Centre**: the video (muted) with frame-accurate time code and transport (Space, Home/End, `,` `.`).
+- **Right**: the selected cue: words, kind, lane, hit time with one-frame nudges, what it lands on (start or swell), gain, fades, sourcing mode, provenance and licence with a link, candidates with audition (play on their own, waveform) and Pick, Source / Delete.
+- **Bottom**: ruler with picture cuts, five lanes with waveforms, hit markers and the dialogue waveform in DX; drag a block to move its hit (frame snap, snaps to a cut within 8 px), arrow keys nudge a frame, wheel zooms at the cursor, Shift+wheel scrolls. Mixer: Dialogue / Music / Effects faders, mute and solo, level meters, Preview mix (renders the three stems as m4a), Master (measures LUFS / true peak / LRA), Export.
+- **How playback works**: the engine renders dialogue, music and effects (the same code as the export), the page plays them through Web Audio gain nodes in step with the video (re-seeked when more than 60 ms apart). A fader is a live trim relative to the gains the stems were rendered with and is saved on the plan (`tracks[].gain_db`); the preview then reads "out of date" until you press Preview mix again.
+- **API added for it**: `GET /plans`, `GET /plans/{id}/video` (Range), `GET /plans/{id}/takes/{id}/peaks`, `GET|POST /plans/{id}/preview`, `plan.cuts` stored by Spot; `put_plan` now upserts tracks like cues.
+- **Checks**: `tests/ui/audio_page_check.py <4..8|all>` drives the real page in headless Chromium against an isolated engine on port 8767 (temporary data folder). See its docstring.
+
+Limits: browser playback is not sample accurate (judge the mix by ear, then use Master); the effects fader sets sfx, ambience and foley together; with a dialogue fader move the exact ducking changes only after Preview mix; no loudness meter in the browser (Master measures on the server); no library search box; no live timeline audio in Edit.
+
+Final review of the Audio page (2026-11-16): no critical findings; five important ones fixed with UI checks (`audio_page_check.py 9`): one shared busy flag (now a counter), slow results landing on whichever plan was open (now dropped unless the plan is still open, and the newest plan load wins), "Open in Audio" racing the page's own load, the inspector rebuilding under typed text (now kept, focus follows Tab), and the Effects fader flattening sfx / ambience / foley (now moves them together). Also fixed: seeking while playing resyncs the stems at once, the video is not reloaded when you return to the page, source links are http(s) only. Deferred minors: two simultaneous `POST /preview` calls can collide, held arrow keys lose nudges, a failed drag stays drawn until the next redraw, a cue with both a hit and an end is drawn from `t_in`, shift-wheel can scroll past the end, the meter timer never stops, Space does not play right after clicking a cue row, Delete cue has no undo, the "To" field cannot be cleared, the page layout below 1000 px width is untested.

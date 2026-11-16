@@ -36,6 +36,7 @@ You drive the Audio Studio through MCP tools named `panelflow_chronoflow_audio_*
 - Gain: `gain_db` per cue, `tracks[].gain_db` per track. Music already ducks under dialogue; do not also turn it down by hand without a reason.
 
 ## Gotchas
+- The owner sees and edits the same plan on the **Audio page** of the ChronoFlow studio (rail: Audio). Cue and track edits through `put_plan` appear there within a few seconds (the page polls); `put_plan` upserts both cues and tracks, so send only what changed.
 - `put_plan` refuses `takes`, `chosen_take`, `status`, `reason`, `candidates` and `placement_error_ms`: sounds only enter a plan through `source_cue` / `pick`, so every take has a verified licence. Importing your own audio file is not supported in Phase 1.
 - Parallel calls on one plan are safe (per-plan lock; slow work runs outside it), but two agents editing the same cue still means the last write wins for that cue.
 - Generation is slow for music (ACE-Step); it holds the single GPU audio slot. If `providers` says "GPU busy", wait for the running job.

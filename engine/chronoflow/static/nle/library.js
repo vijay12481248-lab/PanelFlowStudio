@@ -42,6 +42,7 @@
           <span id="libSelCount"></span>
           <span class="grow"></span>
           <button type="button" class="cfx-btn" id="libClear">Clear</button>
+          <button type="button" class="cfx-btn" id="libAudio" style="display:none" title="Make music and sound effects for this video">Open in Audio</button>
           <button type="button" class="cfx-btn" id="libAppend" title="Add to the imported project that is open now">Add to open project</button>
           <button type="button" class="cfx-primary" id="libNew">Import as new project</button>
         </footer>
@@ -53,6 +54,7 @@
     $('#libMore').onclick = () => load(false);
     $('#libClear').onclick = () => { S.sel.clear(); renderGrid(); };
     $('#libNew').onclick = () => doImport(null);
+    $('#libAudio').onclick = () => { const p = [...S.sel.keys()][0]; if (p && typeof switchResolvePage === 'function') { switchResolvePage('audio'); if (window.NLEAudio) NLEAudio.openVideo(p); } };
     $('#libAppend').onclick = () => doImport(currentJobData && currentJobData.workflow_mode === 'imported' ? currentJobData.id : null);
     $('#libGrid').addEventListener('click', onCard);
     $('#libGrid').addEventListener('mouseover', (e) => { const v = e.target.closest('.lib-card') && e.target.closest('.lib-card').querySelector('video'); if (v) v.play().catch(() => {}); });
@@ -88,6 +90,7 @@
     const n = S.sel.size;
     $('#libFooter').style.display = n ? 'flex' : 'none';
     $('#libSelCount').textContent = `${n} selected`;
+    $('#libAudio').style.display = n === 1 ? '' : 'none';
     $('#libAppend').style.display = currentJobData && currentJobData.workflow_mode === 'imported' ? '' : 'none';
   }
 
@@ -101,6 +104,7 @@
     const n = S.sel.size;
     $('#libFooter').style.display = n ? 'flex' : 'none';
     $('#libSelCount').textContent = `${n} selected`;
+    $('#libAudio').style.display = n === 1 ? '' : 'none';
   }
 
   async function load(reset) {

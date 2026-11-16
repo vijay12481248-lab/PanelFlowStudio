@@ -103,6 +103,7 @@ class SoundPlan(BaseModel):
     allow_cc_by: bool = False
     tracks: list[Track] = Field(default_factory=list)
     cues: list[Cue] = Field(default_factory=list)
+    cuts: list[float] = Field(default_factory=list)  # picture cuts found by spot, for the Audio page
     version: int = 0
     note: str = ""
 
@@ -132,6 +133,16 @@ class PlanStore:
 
     def _dir(self, plan_id: str) -> Path:
         return self.root / check_id(plan_id)
+
+    def list(self) -> list[SoundPlan]:
+        """Every readable plan, most recently saved first."""
+        found = []
+        for p in self.root.glob("*/plan.json") if self.root.is_dir() else []:
+            try:
+                found.append((p.stat().st_mtime, SoundPlan.model_validate_json(p.read_text(encoding="utf-8"))))
+            except (OSError, ValueError):
+                continue  # a half-written or foreign file must not hide the other plans
+        return [plan for _, plan in sorted(found, key=lambda x: x[0], reverse=True)]
 
     def plan_dir(self, plan_id: str) -> Path:
         return self._dir(plan_id)

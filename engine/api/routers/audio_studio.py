@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import asyncio
+import json
+import shutil
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Literal
@@ -13,7 +15,9 @@ from pydantic import BaseModel
 
 from engine.audio.studio import mix as mixer
 from engine.audio.studio.engine import AudioEngine
+from engine.audio.studio.peaks import file_peaks
 from engine.audio.studio.plan import Cue, PlanStore, SoundPlan, Track, check_id, snap
+from engine.audio.studio.preview import audio_signature, build_preview
 from engine.audio.studio.qa import check_plan
 from engine.audio.studio.sources import music as music_source
 from engine.audio.studio.sources.foley_synth import FoleySynthProvider
@@ -134,6 +138,12 @@ def create_plan(body: CreateBody, engine: AudioEngine = Depends(get_engine)) -> 
         return engine.store.save(plan, "created").model_dump()
 
 
+@router.get("/plans")
+def list_plans(engine: AudioEngine = Depends(get_engine)) -> list[dict[str, Any]]:
+    return [{"id": p.id, "video_name": Path(p.video_path).name, "video_path": p.video_path, "version": p.version, "cues": len(p.cues),
+             "duration": p.duration, "fps": p.fps} for p in engine.store.list()]
+
+
 @router.get("/plans/{plan_id}")
 def get_plan(plan_id: str, engine: AudioEngine = Depends(get_engine)) -> dict[str, Any]:
     with _errors():
@@ -170,8 +180,11 @@ def put_plan(plan_id: str, body: PutBody, engine: AudioEngine = Depends(get_engi
                 by_id[cid] = cue
             plan.cues = list(by_id.values())
         if body.tracks is not None:
-            have = {t.id: t for t in plan.tracks}
-            plan.tracks = [Track.model_validate({**(have[r["id"]].model_dump() if r.get("id") in have else {}), **r}) for r in body.tracks]
+            have = {t.id: t for t in plan.tracks}  # upsert, like cues: tracks the body does not mention stay as they are
+            for r in body.tracks:
+                tr = Track.model_validate({**(have[r["id"]].model_dump() if r.get("id") in have else {}), **r})
+                have[tr.id] = tr
+            plan.tracks = list(have.values())
         if body.dialogue_path is not None and not Path(body.dialogue_path).is_file():
             raise ValueError(f"dialogue file not found: {body.dialogue_path}")
         for field in ("mode", "allow_cc_by", "dialogue_path"):
@@ -289,6 +302,7 @@ def spot(plan_id: str, body: SpotBody | None = None, engine: AudioEngine = Depen
             taken = {c.id for c in keep}
             use_v = bool(body and body.use_vision)
             plan.cues = keep + [c for c in draft_cues(plan, cuts, use_vision=use_v, video_path=video_p) if c.id not in taken]
+            plan.cuts = [round(c, 4) for c in cuts]
             return engine.store.save(plan, "spotted").model_dump()
 
 
@@ -436,6 +450,63 @@ def get_cue_waveform(plan_id: str, cue_id: str, bins: int = 100, engine: AudioEn
             return {"peaks": []}
         peaks = waveform(Path(take.path), bins=max(10, min(bins, 1000)))
         return {"peaks": peaks}
+
+
+@router.get("/plans/{plan_id}/preview")
+def get_preview(plan_id: str, engine: AudioEngine = Depends(get_engine)) -> dict[str, Any]:
+    """The preview that matches the plan's sound; else the last one marked stale (still playable); else {"stale": true}."""
+    with _errors():
+        plan = engine.store.load(plan_id)
+        sig = audio_signature(plan)
+        root = engine.store.plan_dir(plan_id) / "preview"
+        meta = root / sig / "preview.json"
+        if meta.is_file():
+            return {**json.loads(meta.read_text(encoding="utf-8")), "stale": False, "dir": f"preview/{sig}"}
+        older = sorted(root.glob("*/preview.json"), key=lambda m: m.stat().st_mtime, reverse=True) if root.is_dir() else []
+        if not older:
+            return {"stale": True}
+        return {**json.loads(older[0].read_text(encoding="utf-8")), "stale": True, "dir": f"preview/{older[0].parent.name}"}  # still playable
+
+
+@router.post("/plans/{plan_id}/preview")
+def make_preview(plan_id: str, engine: AudioEngine = Depends(get_engine)) -> dict[str, Any]:
+    with _errors():
+        plan = engine.store.load(plan_id)
+        root = engine.store.plan_dir(plan_id) / "preview"
+        sig = audio_signature(plan)
+        res = build_preview(plan, root / sig)
+        old = sorted((d for d in root.iterdir() if d.is_dir() and d.name != sig), key=lambda d: d.stat().st_mtime, reverse=True)
+        for d in old[1:]:  # keep the previous one: a page may still be playing it
+            shutil.rmtree(d, ignore_errors=True)
+        return {**res, "stale": False, "dir": f"preview/{sig}"}
+
+
+@router.get("/plans/{plan_id}/video")
+def get_video(plan_id: str, engine: AudioEngine = Depends(get_engine)):
+    with _errors():
+        video = Path(engine.store.load(plan_id).video_path)
+        if not video.is_file():
+            raise FileNotFoundError(f"the video file is gone: {video}")
+        return FileResponse(video)  # Starlette answers Range requests, which <video> seeking needs
+
+
+@router.get("/plans/{plan_id}/takes/{take_id}/peaks")
+def take_peaks(plan_id: str, take_id: str, bins: int = 400, engine: AudioEngine = Depends(get_engine)) -> dict[str, Any]:
+    with _errors():
+        check_id(take_id)
+        bins = max(16, min(int(bins), 4000))
+        plan = engine.store.load(plan_id)
+        take = next((t for c in plan.cues for t in [*c.takes, *c.candidates] if t.id == take_id), None)
+        if take is None:
+            raise FileNotFoundError(f"no take {take_id!r} in plan {plan_id}")
+        cache = engine.store.plan_dir(plan_id) / "peaks" / f"{take_id}_{bins}.json"
+        if cache.is_file():
+            return json.loads(cache.read_text(encoding="utf-8"))
+        peaks, dur = file_peaks(Path(take.path), bins)
+        out = {"peaks": peaks, "duration": dur}
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        cache.write_text(json.dumps(out), encoding="utf-8")
+        return out
 
 
 @router.get("/plans/{plan_id}/files/{name:path}")
