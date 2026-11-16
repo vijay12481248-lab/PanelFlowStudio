@@ -68,6 +68,72 @@ async def panelflow_chronoflow_save_character(
 
 
 @registry.tool(
+    name="panelflow_chronoflow_generate_model_sheet",
+    description="Generate a canonical 4-view character turnaround model sheet using FLUX.2 Klein (flux2_klein_4b), slice views, and extract face embeddings.",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "character_id": {"type": "string", "description": "Character ID in Character Vault (e.g. 'char_c16d64')"},
+            "seed": {"type": "integer", "description": "Optional random seed for generation"},
+        },
+        "required": ["character_id"],
+    },
+    domain="chronoflow",
+)
+async def panelflow_chronoflow_generate_model_sheet(character_id: str, seed: int | None = None) -> dict[str, Any]:
+    url = f"/api/chronoflow/characters/{character_id}/model_sheet"
+    if seed is not None:
+        url += f"?seed={seed}"
+    return await bridge.post(url, {})
+
+
+@registry.tool(
+    name="panelflow_chronoflow_verify_face",
+    description="Verify face identity match between a generated shot image and a character reference image using local 512-dim ArcFace embeddings.",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "query_image": {"type": "string", "description": "Filename of query/generated image"},
+            "reference_image": {"type": "string", "description": "Filename of canonical character reference image"},
+            "threshold": {"type": "number", "description": "Cosine similarity match threshold (default 0.72)"},
+        },
+        "required": ["query_image", "reference_image"],
+    },
+    domain="chronoflow",
+)
+async def panelflow_chronoflow_verify_face(
+    query_image: str,
+    reference_image: str,
+    threshold: float = 0.72,
+) -> dict[str, Any]:
+    return await bridge.post(
+        "/api/chronoflow/characters/verify_face",
+        {"query_image": query_image, "reference_image": reference_image, "threshold": threshold},
+    )
+
+
+@registry.tool(
+    name="panelflow_chronoflow_pin_references",
+    description="Automatically select and bind up to 4 character turnaround views for a shot to prevent character face drift in flux2_klein_4b_ref.",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "scene": {"type": "object", "description": "Storyboard scene or shot object containing prompt, title, or character_ids"},
+            "max_references": {"type": "integer", "description": "Maximum references to bind (default 4)"},
+        },
+        "required": ["scene"],
+    },
+    domain="chronoflow",
+)
+async def panelflow_chronoflow_pin_references(scene: dict[str, Any], max_references: int = 4) -> dict[str, Any]:
+    return await bridge.post(
+        "/api/chronoflow/characters/pin_references",
+        {"scene": scene, "max_references": max_references},
+    )
+
+
+
+@registry.tool(
     name="panelflow_chronoflow_ai_director_plan",
     description=(
         "Generate a multi-scene storyboard breakdown from a high-level story idea, automatically compiling native 6-heading MiniMax H3 prompts. "
@@ -532,3 +598,47 @@ async def panelflow_chronoflow_fusion_add(job_id: str, effect: str, clip: int | 
 )
 async def panelflow_chronoflow_fusion_clear(job_id: str, clip: int | str | None = None) -> dict[str, Any]:
     return await _op(job_id, "fusion_clear", {"clip": clip})
+
+
+@registry.tool(
+    name="panelflow_chronoflow_assemble_storyboard",
+    description=(
+        "Concatenate rendered storyboard shots into a unified master timeline video. "
+        "Normalizes mixed-aspect-ratio and mixed-resolution clips with letterbox/pillarbox padding to a uniform canvas, "
+        "and auto-creates an Audio Studio Sound Plan populated with dialogue/foley cues for immediate scoring."
+    ),
+    input_schema={
+        "type": "object",
+        "properties": {
+            "scenes": {"type": "array", "description": "List of storyboard scenes/shots to assemble"},
+            "title": {"type": "string", "description": "Sequence title (e.g. 'Opening Scene Master')"},
+            "target_width": {"type": "integer", "description": "Target video width (default 1920)"},
+            "target_height": {"type": "integer", "description": "Target video height (default 1080)"},
+            "fps": {"type": "number", "description": "Target frame rate (default 24.0)"},
+            "approved_only": {"type": "boolean", "description": "Assemble only cards marked approved=True"},
+            "create_sound_plan": {"type": "boolean", "description": "Auto-create Audio Studio Sound Plan (default true)"},
+        },
+        "required": ["scenes"],
+    },
+    domain="chronoflow",
+)
+async def panelflow_chronoflow_assemble_storyboard(
+    scenes: list[dict[str, Any]],
+    title: str = "Assembled Sequence",
+    target_width: int = 1920,
+    target_height: int = 1080,
+    fps: float = 24.0,
+    approved_only: bool = False,
+    create_sound_plan: bool = True,
+) -> dict[str, Any]:
+    payload = {
+        "scenes": scenes,
+        "title": title,
+        "target_width": target_width,
+        "target_height": target_height,
+        "fps": fps,
+        "approved_only": approved_only,
+        "create_sound_plan": create_sound_plan,
+    }
+    return await bridge.post("/api/chronoflow/storyboard/assemble", payload)
+

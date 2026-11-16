@@ -6,6 +6,8 @@ of the prompt. A failure is a rule after two sightings; the rules the owner-chec
 """
 from __future__ import annotations
 
+import re
+
 from engine.creative.mistakes import MistakeLedger
 from engine.creative.schema import MistakeSeverity
 from engine.original.anatomy.review import AnatomyReport
@@ -13,9 +15,8 @@ from engine.original.anatomy.rules import pose_asks
 
 RULES = {
     "extra_hands|any": "Exactly two arms and two hands per person, no extra arms or hands anywhere, and nothing but the legs in the lap.",
-    "extra_feet|any": "Each person has exactly two legs and two feet.",
     "stray_text|any": "No letters, numbers or writing anywhere in the picture.",
-    "duplicate_object|any": "Every object appears once: exactly one sword with exactly one blade.",
+    "duplicate_object|any": "Each held object is drawn exactly once, nothing doubled.",
     "merged_bodies|any": "Each person's body is clearly separate, and every arm and leg can be traced to its owner.",
     "pose_missing|cross_legged": "The person sits on the floor with both legs crossed in front of them.",
     "pose_missing|hands_on_knees": "Both hands rest on the person's own knees and nothing lies in their lap.",
@@ -23,6 +24,9 @@ RULES = {
     "pose_missing|raised_leg": "One leg is raised high off the ground.",
     "pose_missing|two_hands": "Both hands grip the object together.",
 }
+# A rule that talks about held objects is only added when the prompt names one: the first wording ("exactly one sword") made klein draw a sword into calm sitting
+# pictures (real end-to-end run, 2026-11-16).
+ONLY_WHEN = {"duplicate_object|any": re.compile(r"\b(sword|blade|weapon|staff|spear|knife|dagger|axe|bow|katana)\b", re.I)}
 SEED_MARK = "agent-labelled 2026-11-16 audit"
 SEEDED = ("extra_hands|any", "duplicate_object|any")  # klein: four arms in cross-legged seeds 101 and 103; a ghost second blade in sword seeds 101 and 103
 DEFAULT_MODEL = "flux2_klein_4b"
@@ -53,8 +57,9 @@ def rules_for(ledger: MistakeLedger, model: str, prompt: str, min_recurrence: in
     try:
         asked = {k for k, _ in pose_asks(prompt)[0]}
         rows = [r for r in ledger.load_mistakes(domain(model)) if r.recurrence_count >= min_recurrence
-                and (not r.flawed_pattern.startswith("pose_missing|") or r.flawed_pattern.split("|", 1)[1] in asked)]
-        return " ".join(r.prevention_rule for r in sorted(rows, key=lambda r: -r.recurrence_count))
+                and (not r.flawed_pattern.startswith("pose_missing|") or r.flawed_pattern.split("|", 1)[1] in asked)
+                and (r.flawed_pattern not in ONLY_WHEN or ONLY_WHEN[r.flawed_pattern].search(prompt or ""))]
+        return " ".join(RULES.get(r.flawed_pattern, r.prevention_rule) for r in sorted(rows, key=lambda r: -r.recurrence_count))
     except Exception:
         return ""
 

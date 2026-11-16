@@ -64,6 +64,66 @@ def missing_inputs(scene: dict[str, Any], index: int) -> list[str]:
     return out
 
 
+def invalidate_downstream(scenes: list[dict[str, Any]], modified_index: int) -> list[int]:
+    """When a scene card at `modified_index` is redone, changed, or deleted, invalidate downstream chained cards.
+
+    A downstream card is chained if it has `inherits_tail` set to True and does NOT have an explicit `first_frame` override.
+    For each contiguous chained card:
+    - `approved` is reset to False.
+    - `state` is set to 'stale' (if previously rendered or approved) or 'ready'.
+    - `prev_tail` is cleared.
+    The chain stops at the first card that has its own explicit `first_frame` or does not inherit tail.
+    Returns the list of scene indices that were invalidated.
+    """
+    invalidated: list[int] = []
+    for j in range(modified_index + 1, len(scenes)):
+        s = scenes[j]
+        if s.get("inherits_tail") and not s.get("first_frame"):
+            s["approved"] = False
+            if s.get("rendered_video") or s.get("state") in ("approved", "review", "stale"):
+                s["state"] = "stale"
+            elif s.get("state") != "empty":
+                s["state"] = "ready"
+            s["prev_tail"] = ""
+            invalidated.append(j)
+        else:
+            break
+    return invalidated
+
+
+def check_assembly_readiness(scenes: list[dict[str, Any]], approved_only: bool = False) -> tuple[bool, list[str]]:
+    """Check if shots in `scenes` are ready for timeline concatenation.
+
+    Returns (is_ready, problems).
+    If `approved_only` is True, only evaluates cards where approved=True (at least 1 approved card required).
+    Otherwise evaluates all scenes in the list.
+    """
+    problems: list[str] = []
+    if not scenes:
+        return False, ["Storyboard contains no shots to assemble."]
+
+    target_scenes = [s for s in scenes if s.get("approved")] if approved_only else scenes
+    if not target_scenes:
+        return False, ["No approved shots found to assemble."]
+
+    for idx, s in enumerate(target_scenes):
+        shot_num = s.get("shot_index", idx + 1)
+        video = (
+            s.get("rendered_video_filename")
+            or s.get("filename")
+            or s.get("video_file")
+            or s.get("rendered_video")
+            or s.get("video_url")
+        )
+        if not video:
+            problems.append(f"Shot {shot_num} has not been rendered yet.")
+        elif not approved_only and s.get("state") == "stale":
+            problems.append(f"Shot {shot_num} has stale video from an upstream redo.")
+
+    return len(problems) == 0, problems
+
+
+
 DRAFT_BATCH = 10  # a 2048-token reply holds about this many shot descriptions
 DRAFT_SYSTEM = ("You write shot lists for an AI video generator. Each item is one plain-language description of what happens in ONE five-second shot: "
                 "the subject, the setting, the motion and the camera. Items continue the story in order, never repeat each other, contain no dialogue and no numbering. "

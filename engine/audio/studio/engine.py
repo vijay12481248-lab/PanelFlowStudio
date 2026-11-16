@@ -1,6 +1,7 @@
 """AudioEngine: the one place that asks sound sources for candidates, measures them and records the choice."""
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Literal
 
 from engine.audio.studio.measure import measure_take
@@ -38,6 +39,35 @@ def _auto_choice(cue: Cue, cands: list[Candidate], used: set[str] = frozenset())
 class AudioEngine:
     def __init__(self, store: PlanStore, providers: list[Provider]):
         self.store, self.providers = store, providers
+
+    def create_plan(
+        self,
+        video_path: Path | str,
+        fps: float = 24.0,
+        duration: float = 10.0,
+        mode: Literal["auto", "ask"] = "auto",
+        allow_cc_by: bool = False,
+        dialogue_path: Path | str | None = None,
+    ) -> SoundPlan:
+        from engine.chronoflow.media_tools import probe
+        v = Path(video_path)
+        try:
+            info = probe(v)
+            fps = info.get("fps", fps)
+            duration = info.get("duration", duration)
+            if not dialogue_path and info.get("has_audio"):
+                dialogue_path = str(v)
+        except Exception:
+            pass
+        p = self.store.create(
+            str(v),
+            fps=fps,
+            duration=duration,
+            mode=mode,
+            allow_cc_by=allow_cc_by,
+            dialogue_path=str(dialogue_path) if dialogue_path else None,
+        )
+        return self.store.save(p, "created")
 
     def providers_report(self) -> dict[str, Availability]:
         return {p.name: p.availability() for p in self.providers}

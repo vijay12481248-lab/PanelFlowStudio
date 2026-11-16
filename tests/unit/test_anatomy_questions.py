@@ -4,24 +4,22 @@ from engine.original.anatomy.questions import (ENUM_PROMPT, TILE_FLAGS_PROMPT, W
 FOUR_HANDS = """HAND 1: left side, resting on the left knee
 HAND 2: right side, resting on the right knee
 HAND 3: centre-left, between the legs
-HAND 4: centre-right, between the legs
-FOOT 1: left, on the floor
-FOOT 2: right, on the floor"""
+HAND 4: centre-right, between the legs"""
 
 
-def test_hands_and_feet_are_counted_from_the_list_not_from_a_number():
-    assert parse_enum_reply(FOUR_HANDS) == (4, 2)
-    assert parse_enum_reply("HAND 1: a\nHAND 1: a again\nHAND 2: b") == (2, None)  # distinct numbers only
+def test_hands_are_counted_from_the_list_not_from_a_number():
+    assert parse_enum_reply(FOUR_HANDS) == 4
+    assert parse_enum_reply("HAND 1: a\nHAND 1: a again\nHAND 2: b") == 2  # distinct numbers only
 
 
 def test_no_hands_is_zero_and_nothing_usable_is_none():
-    assert parse_enum_reply("NO HANDS\nNO FEET") == (0, 0)
-    assert parse_enum_reply("I think it looks nice") == (None, None)
-    assert parse_enum_reply("") == (None, None)
+    assert parse_enum_reply("NO HANDS") == 0
+    assert parse_enum_reply("I think it looks nice") is None
+    assert parse_enum_reply("") is None
 
 
 def test_an_echoed_template_is_not_an_answer():
-    assert parse_enum_reply(ENUM_PROMPT) == (None, None)
+    assert parse_enum_reply(ENUM_PROMPT) is None
     assert parse_flags_reply(WHOLE_FLAGS_PROMPT, "j", "whole").ok is False
     assert parse_flags_reply(TILE_FLAGS_PROMPT, "j", "upper").ok is False
 

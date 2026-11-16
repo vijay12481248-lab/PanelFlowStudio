@@ -2906,6 +2906,355 @@ export class PanelFlowApiClient {
       body: JSON.stringify(req),
     });
   }
+
+  // Audio Studio & Sound Library
+  async listAudioLibraryFiles(): Promise<AudioLibraryFileItem[]> {
+    return this.request<AudioLibraryFileItem[]>("/api/audio/studio/library/files");
+  }
+
+  async uploadAudioLibraryFile(file: File): Promise<AudioLibraryFileItem> {
+    const formData = new FormData();
+    formData.append("file", file);
+    return this.request<AudioLibraryFileItem>("/api/audio/studio/library/upload", {
+      method: "POST",
+      body: formData,
+    });
+  }
+
+  async searchAudioCatalog(query: string, track = "sfx", limit = 12): Promise<AudioCatalogSearchResult[]> {
+    return this.request<AudioCatalogSearchResult[]>("/api/audio/studio/search", {
+      method: "POST",
+      body: JSON.stringify({ query, track, limit }),
+    });
+  }
+
+  async getAudioStudioPlan(planId: string): Promise<AudioStudioPlanResponse> {
+    return this.request<AudioStudioPlanResponse>(`/api/audio/studio/plans/${encodeURIComponent(planId)}`);
+  }
+
+  async getAudioCueWaveform(planId: string, cueId: string, bins = 80): Promise<{ peaks: number[] }> {
+    return this.request<{ peaks: number[] }>(
+      `/api/audio/studio/plans/${encodeURIComponent(planId)}/cues/${encodeURIComponent(cueId)}/waveform?bins=${bins}`
+    );
+  }
+
+  async importAudioCueFile(planId: string, cueId: string, filePath: string, label = ""): Promise<AudioStudioPlanResponse> {
+    return this.request<AudioStudioPlanResponse>(
+      `/api/audio/studio/plans/${encodeURIComponent(planId)}/cues/${encodeURIComponent(cueId)}/import_file`,
+      {
+        method: "POST",
+        body: JSON.stringify({ file_path: filePath, label }),
+      }
+    );
+  }
+
+  async critiqueAudioStudioPlan(planId: string): Promise<AudioCritiqueReportResponse> {
+    return this.request<AudioCritiqueReportResponse>(
+      `/api/audio/studio/plans/${encodeURIComponent(planId)}/critique`,
+      { method: "POST" }
+    );
+  }
+
+  async applyAudioStudioRemediations(planId: string, remediationIds: string[]): Promise<{ plan: AudioStudioPlanResponse; applied_ids: string[] }> {
+    return this.request<{ plan: AudioStudioPlanResponse; applied_ids: string[] }>(
+      `/api/audio/studio/plans/${encodeURIComponent(planId)}/critique/apply`,
+      {
+        method: "POST",
+        body: JSON.stringify({ remediation_ids: remediationIds }),
+      }
+    );
+  }
+
+  async loopAudioCue(planId: string, cueId: string, crossfadeSec = 1.5): Promise<{ plan: AudioStudioPlanResponse; loop_path: string; duration_s: number }> {
+    return this.request<{ plan: AudioStudioPlanResponse; loop_path: string; duration_s: number }>(
+      `/api/audio/studio/plans/${encodeURIComponent(planId)}/cues/${encodeURIComponent(cueId)}/loop?crossfade_sec=${crossfadeSec}`,
+      { method: "POST" }
+    );
+  }
+
+  async isolateAudioCueStems(planId: string, cueId: string): Promise<{ stems: Record<string, string> }> {
+    return this.request<{ stems: Record<string, string> }>(
+      `/api/audio/studio/plans/${encodeURIComponent(planId)}/cues/${encodeURIComponent(cueId)}/stems`,
+      { method: "POST" }
+    );
+  }
+
+  async masterBroadcastPlan(
+    planId: string,
+    options?: { standard?: "youtube" | "ebu_r128" | "custom"; target_lufs?: number; mux?: boolean }
+  ): Promise<{ out_wav: string; out_video?: string | null; loudness: Record<string, any>; compliance: Record<string, any> }> {
+    return this.request<{ out_wav: string; out_video?: string | null; loudness: Record<string, any>; compliance: Record<string, any> }>(
+      `/api/audio/studio/plans/${encodeURIComponent(planId)}/master`,
+      {
+        method: "POST",
+        body: JSON.stringify(options || {}),
+      }
+    );
+  }
+
+  async exportDawPackage(
+    planId: string,
+    options?: { standard?: "youtube" | "ebu_r128" | "custom"; target_lufs?: number; make_zip?: boolean }
+  ): Promise<{ out_dir: string; zip_path?: string | null; manifest: Record<string, any>; files: string[] }> {
+    return this.request<{ out_dir: string; zip_path?: string | null; manifest: Record<string, any>; files: string[] }>(
+      `/api/audio/studio/plans/${encodeURIComponent(planId)}/export_daw`,
+      {
+        method: "POST",
+        body: JSON.stringify(options || {}),
+      }
+    );
+  }
+
+  async autoFoleySoundPlan(
+    planId: string,
+    scenes: Array<Record<string, any>>,
+    autoSource = true
+  ): Promise<{ success: boolean; plan_id: string; cue_count: number; note: string; plan: AudioStudioPlanResponse }> {
+    return this.request<{ success: boolean; plan_id: string; cue_count: number; note: string; plan: AudioStudioPlanResponse }>(
+      `/api/audio/studio/plans/${encodeURIComponent(planId)}/auto_foley`,
+      {
+        method: "POST",
+        body: JSON.stringify({ scenes, auto_source: autoSource }),
+      }
+    );
+  }
+
+  async assembleChronoFlowStoryboard(request: ChronoFlowStoryboardAssembleRequest): Promise<ChronoFlowStoryboardAssembleResponse> {
+    return this.request<ChronoFlowStoryboardAssembleResponse>("/api/chronoflow/storyboard/assemble", {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
+  }
+
+  async checkChronoFlowAssemblyReadiness(scenes: Array<Record<string, any>>, approvedOnly = false): Promise<{ success: boolean; is_ready: boolean; problems: string[] }> {
+    return this.request<{ success: boolean; is_ready: boolean; problems: string[] }>("/api/chronoflow/storyboard/check_readiness", {
+      method: "POST",
+      body: JSON.stringify({ scenes, approved_only: approvedOnly }),
+    });
+  }
+
+  async invalidateDownstreamStoryboardCards(scenes: Array<Record<string, any>>, modifiedIndex: number): Promise<{ success: boolean; invalidated_indices: number[]; scenes: Array<Record<string, any>> }> {
+    return this.request<{ success: boolean; invalidated_indices: number[]; scenes: Array<Record<string, any>> }>("/api/chronoflow/storyboard/invalidate_downstream", {
+      method: "POST",
+      body: JSON.stringify({ scenes, modified_index: modifiedIndex }),
+    });
+  }
+
+  async generateCharacterModelSheet(characterId: string, seed?: number): Promise<{ success: boolean; character: any; model_sheet: string; views: Record<string, string>; has_embedding: boolean }> {
+    const url = `/api/chronoflow/characters/${encodeURIComponent(characterId)}/model_sheet${seed !== undefined ? `?seed=${seed}` : ""}`;
+    return this.request<{ success: boolean; character: any; model_sheet: string; views: Record<string, string>; has_embedding: boolean }>(url, {
+      method: "POST",
+    });
+  }
+
+  async verifyCharacterFace(queryImage: string, referenceImage: string, threshold = 0.72): Promise<FaceVerificationReportResponse> {
+    return this.request<FaceVerificationReportResponse>("/api/chronoflow/characters/verify_face", {
+      method: "POST",
+      body: JSON.stringify({ query_image: queryImage, reference_image: referenceImage, threshold }),
+    });
+  }
+
+  async pinCharacterReferences(scene: Record<string, any>, maxReferences = 4): Promise<{ success: boolean; references: string[] }> {
+    return this.request<{ success: boolean; references: string[] }>("/api/chronoflow/characters/pin_references", {
+      method: "POST",
+      body: JSON.stringify({ scene, max_references: maxReferences }),
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // YouTube Shorts & Reels 9:16 Auto-Cut Engine (Milestone 8)
+  // ---------------------------------------------------------------------------
+  async autocutReel(req: ReelAutoCutApiRequest): Promise<ReelAutoCutApiResponse> {
+    return this.request<ReelAutoCutApiResponse>("/api/reels/autocut", {
+      method: "POST",
+      body: JSON.stringify(req),
+    });
+  }
+
+  async previewReelReframing(req: PreviewReframingRequest): Promise<PreviewReframingResponse> {
+    return this.request<PreviewReframingResponse>("/api/reels/preview_reframing", {
+      method: "POST",
+      body: JSON.stringify(req),
+    });
+  }
+
+  async generateReelSubtitles(req: GenerateSubtitlesRequest): Promise<GenerateSubtitlesResponse> {
+    return this.request<GenerateSubtitlesResponse>("/api/reels/generate_subtitles", {
+      method: "POST",
+      body: JSON.stringify(req),
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Production Readiness & Preflight Health Auditor (Milestone 10)
+  // ---------------------------------------------------------------------------
+  async checkProductionReadiness(): Promise<ProductionReadinessReportResponse> {
+    return this.request<ProductionReadinessReportResponse>("/api/system/readiness");
+  }
+}
+
+export interface CapabilityCheckResponse {
+  name: string;
+  category: "model" | "vision" | "audio" | "hardware" | "tool";
+  status: "ok" | "warning" | "error";
+  available: boolean;
+  details: string;
+  recommendation?: string | null;
+}
+
+export interface ProductionReadinessReportResponse {
+  ready: boolean;
+  all_ok: boolean;
+  summary: string;
+  recommendations: string[];
+  checks: Record<string, CapabilityCheckResponse>;
+}
+
+export interface ReelAutoCutApiRequest {
+  input_video_path: string;
+  output_path?: string;
+  hook_text?: string;
+  transcript?: string;
+  audio_path?: string;
+  shot_cuts?: number[];
+  burn_subtitles?: boolean;
+  target_duration?: number;
+  reframing_mode?: "shot_stable" | "smooth_pan" | "center";
+  title?: string;
+  tags?: string;
+}
+
+export interface ReelAutoCutApiResponse {
+  success: boolean;
+  output_video_path: string;
+  duration_sec: number;
+  aspect_ratio: string;
+  resolution: number[];
+  publish_meta_path: string;
+  subtitles_ass_path?: string;
+  crop_filter_expr: string;
+  message: string;
+}
+
+export interface PreviewReframingRequest {
+  video_path: string;
+  shot_cuts?: number[];
+  reframing_mode?: "shot_stable" | "smooth_pan" | "center";
+}
+
+export interface PreviewReframingResponse {
+  source_width: number;
+  source_height: number;
+  crop_width: number;
+  crop_height: number;
+  target_width: number;
+  target_height: number;
+  ffmpeg_filter: string;
+  crop_expression: string;
+  shot_crops: Array<{
+    shot_index: number;
+    start_t: number;
+    end_t: number;
+    crop_x: number;
+  }>;
+}
+
+export interface GenerateSubtitlesRequest {
+  transcript: string;
+  hook?: string;
+  audio_path?: string;
+  duration_sec?: number;
+}
+
+export interface GenerateSubtitlesResponse {
+  ass_content: string;
+  word_count: number;
+}
+
+export interface FaceVerificationReportResponse {
+  success: boolean;
+  matched: boolean;
+  similarity: number;
+  status: "match" | "plausible" | "drift" | "no_face_detected";
+  reference_detected: boolean;
+  generated_detected: boolean;
+  message: string;
+}
+
+
+export interface ChronoFlowStoryboardAssembleRequest {
+  scenes: Array<Record<string, any>>;
+  title?: string;
+  target_width?: number;
+  target_height?: number;
+  fps?: number;
+  approved_only?: boolean;
+  create_sound_plan?: boolean;
+}
+
+export interface ChronoFlowStoryboardAssembleResponse {
+  success: boolean;
+  master_video: string;
+  filename: string;
+  duration: number;
+  fps: number;
+  width: number;
+  height: number;
+  shot_count: number;
+  sound_plan_id: string | null;
+}
+
+
+export interface AudioLibraryFileItem {
+  name: string;
+  path: string;
+  size: number;
+}
+
+export interface AudioCatalogSearchResult {
+  id: string;
+  name: string;
+  type: string;
+  duration_sec: number;
+  file_url: string;
+  license: string;
+  source: string;
+}
+
+export interface AudioStudioPlanResponse {
+  id: string;
+  video_path: string;
+  fps: number;
+  duration: number;
+  tracks: any[];
+  cues: any[];
+  version: number;
+}
+
+export interface AudioRemediation {
+  id: string;
+  cue_id: string;
+  action: "hpf" | "lpf" | "ducking" | "pan" | "gain";
+  value: number;
+  reason: string;
+}
+
+export interface AudioCritiqueIssue {
+  id: string;
+  cue_id: string;
+  track: string;
+  rule: string;
+  severity: "error" | "warn" | "info";
+  message: string;
+  remediation?: AudioRemediation;
+}
+
+export interface AudioCritiqueReportResponse {
+  plan_id: string;
+  overall_quality_score: number;
+  spectral_balance: Record<string, { sub_ratio: number; mud_ratio: number; presence_ratio: number; harsh_ratio: number; air_ratio: number }>;
+  issues: AudioCritiqueIssue[];
+  remediations: AudioRemediation[];
 }
 
 export const api = new PanelFlowApiClient();

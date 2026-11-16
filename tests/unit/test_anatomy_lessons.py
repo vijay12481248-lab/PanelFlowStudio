@@ -49,7 +49,7 @@ def test_seeded_rules_are_active_at_once_and_seeding_twice_adds_nothing(tmp_path
     n = seed_known_rules(ledger)
     assert n >= 2 and seed_known_rules(ledger) == 0
     text = rules_for(ledger, MODEL, "any prompt")
-    assert "two arms" in text and "once" in text.lower()
+    assert "two arms" in text
     assert all("agent-labelled" in r.example_good for r in ledger.load_mistakes(domain(MODEL)))
 
 
@@ -58,3 +58,13 @@ def test_a_corrupt_ledger_file_gives_no_rules_instead_of_an_error(tmp_path):
     ledger = MistakeLedger(file_path=path)
     path.write_text("{not json", encoding="utf-8")
     assert rules_for(ledger, MODEL, "a girl") == ""
+
+
+def test_the_doubled_object_rule_names_no_object_and_applies_only_to_prompts_with_a_held_object(tmp_path):
+    # real run 2026-11-16: the rule "exactly one sword" made klein draw a sword into calm sitting pictures
+    ledger = MistakeLedger(file_path=tmp_path / "l.json")
+    seed_known_rules(ledger)
+    assert "sword" not in rules_for(ledger, MODEL, "a swordsman holding a sword overhead").lower().replace("swordsman", "")
+    assert "nothing doubled" in rules_for(ledger, MODEL, "a swordsman holding a sword overhead")
+    assert "doubled" not in rules_for(ledger, MODEL, "a young woman sitting cross-legged on the floor")
+    assert "two arms" in rules_for(ledger, MODEL, "a young woman sitting cross-legged on the floor")  # the general hand rule still applies

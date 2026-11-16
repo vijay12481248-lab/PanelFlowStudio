@@ -14,7 +14,7 @@ def png():
 
 
 def hands(n):
-    return "\n".join([f"HAND {i + 1}: somewhere" for i in range(n)] + ["FOOT 1: left", "FOOT 2: right"])
+    return "\n".join(f"HAND {i + 1}: somewhere" for i in range(n))
 
 
 class Fake:
@@ -96,3 +96,9 @@ def test_two_people_get_half_tiles_so_more_questions_are_asked():
     run([one])
     run([two])
     assert two.calls == one.calls + 4  # two more tiles, two questions each
+
+
+def test_a_judge_with_no_usable_whole_picture_answer_is_not_asked_every_tile():
+    dead = Fake("a", usable=False)
+    r = run([dead])
+    assert r.status == "unverified" and dead.calls == 2  # the flags question and the hand list for the whole picture, nothing more

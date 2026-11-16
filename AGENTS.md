@@ -11,12 +11,13 @@ episodes and original stories into narrated YouTube videos. Everything runs on t
 - Local LLM: Ollama `qwen3.5:9b` (text + vision) on `:11434`. Local-first: never fall back silently to cloud or mock.
 - Images: ComfyUI in `E:\VIJAY SEKAR\ComfyUI` (own venv), start with `venv\Scripts\python.exe main.py --listen 127.0.0.1 --port 8188`;
   set `PANELFLOW_COMFYUI_WORKFLOW_DIR=E:\VIJAY SEKAR\ComfyUI\workflow` so PanelFlow finds the models.
-- **One art workflow: `qwen_image_21` (Qwen Image 2.1 Turbo), run only by `engine/comfyui/art.py` (`ArtEngine`).** Original Stories,
-  ChronoFlow, the Comfy image screen, YouTube thumbnails and autopilot all call it; do not add a second text-to-image workflow or a
-  private submit/poll loop - extend `ArtEngine`. `tests/unit/test_art_engine.py` fails if the registry gains another `text_to_image`
+- **One art workflow: `flux2_klein_4b` (FLUX.2 klein 4B, Apache-2.0; with reference pictures `flux2_klein_4b_ref`), run only by `engine/comfyui/art.py` (`ArtEngine`).**
+  Qwen Image 2.1 was retired on 2026-11-16 because its licence is non-commercial (`qwen_image_21` stays in the registry as `retired_text_to_image`; auto-refine and
+  Image Studio's Qwen inpaint are off with it). Original Stories, ChronoFlow, the Comfy image screen, YouTube thumbnails and autopilot all call `ArtEngine`; do not add a
+  second text-to-image workflow or a private submit/poll loop - extend `ArtEngine`. `tests/unit/test_art_engine.py` fails if the registry gains another `text_to_image`
   workflow. The owner's one exception (2026-11-13): an image job may name `minimax_h3_image_edit` as its `workflow_id`; that same registered
-  H3-Image graph with no picture bound is text to image (`IMAGE_WORKFLOW_IDS` in `art.py`). Qwen stays the default everywhere; only the AI Game
-  Studio's image model picker selects H3-Image. The SDXL entries (`purpose: sdxl_conditioning`, `inpaint`, `matting`) are the legacy substrate of the ControlNet / IP-Adapter /
+  H3-Image graph with no picture bound is text to image (`IMAGE_WORKFLOW_IDS` in `art.py`); its licence excludes the US, EU, UK and South Korea, so check it before
+  publishing. klein is the default everywhere; only the AI Game Studio's image model picker selects H3-Image. The SDXL entries (`purpose: sdxl_conditioning`, `inpaint`, `matting`) are the legacy substrate of the ControlNet / IP-Adapter /
   inpaint / matting tools, not art workflows. `PANELFLOW_IMAGE_ENGINE` is `qwen` (default) or `sdxl` (for those tools' tests).
 - ComfyUI and Ollama together use ~13 GB of VRAM; the job manager holds GPU jobs back when memory is not free (by design).
 
@@ -29,6 +30,7 @@ episodes and original stories into narrated YouTube videos. Everything runs on t
   MiniMax-H3-Image, FastH3, ffmpeg), thumbnails, upload copy, gotchas. Any agent making short-form content reads it first (the file is plain Markdown);
   H3 clip prompting lives in `.claude/skills/minimax-h3-video-production/`.
 - `docs/SCENE_DIRECTOR.md` - brief -> scene plan (who stands where, what each body does, camera, light, depth) -> Qwen -> check against the plan -> correct; `engine/original/scene_*.py`, MCP `panelflow_scene_*`. Measured there: the Qwen workflow ignores negative prompts (state everything positively), the 9B vision model's yes/no check is too agreeable (use a blind classification read), and pictures must not be shrunk before the check. Pictures are then judged by two vision models that cross-check each other (`engine/original/judges.py`, `crosscheck.py`; Qwen3-VL 8B runs through ComfyUI `TextGenerate`, which needs ComfyUI started with `--disable-dynamic-vram`), saved in the app database with the owner's feedback from the Scene page (`scene_store.py`, desktop `features/scene/`), and queryable through `/api/original/scene/knowledge/*` and the `panelflow_scene_knowledge_*` MCP tools.
+- `docs/ANATOMY_REVIEW.md` - checks a picture for extra hands, doubled objects, stray text and missing poses with zoomed tiles and the two judges, redraws on confirmed defects and learns prompt rules (`engine/original/anatomy/`, `tools/anatomy/`, `REEL_ANATOMY_CHECK=1`, MCP `panelflow_anatomy_*`). Measured there: asking a judge for a NUMBER of arms is wrong (it said 2 for four); make it LIST each hand and count the lines; never judge anatomy from thumbnails.
 - `docs/ONE_SERVER.md` - one engine (port 8765) serves PanelFlow and ChronoFlow (API + studio UI), and one MCP server (`scripts/run_mcp_server.py`, profiles `all`
   / `creative` / `chronoflow`) drives both. The old standalone ChronoFlow server (7860) and its two extra MCP servers are gone; do not bring them back.
 - `docs/superpowers/specs/2026-11-15-video-start-modes-design.md` - ChronoFlow "New Video": wizard (text / first / first+last / last / reference / from a video) -> storyboard of N cards -> each card renders in its own mode, approve or redo before the next continues from its tail frame (`engine/chronoflow/start_modes.py`, `scene_render.py`, `static/nle/newvideo.js`). Real clips per mode were NOT yet rendered (page-file limit); see its Measured section.

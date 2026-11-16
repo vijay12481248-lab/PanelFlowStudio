@@ -18,6 +18,7 @@
     for (const c of kids.flat()) if (c != null) e.append(c.nodeType ? c : document.createTextNode(String(c)));
     return e;
   };
+
   const $ = (s, r) => (r || document).querySelector(s);
   const token = () => (window.NLE && window.NLE.cfg && window.NLE.cfg.token) || '';
   const withToken = (u) => (token() ? `${u}${u.includes('?') ? '&' : '?'}token=${encodeURIComponent(token())}` : u);
@@ -86,6 +87,32 @@
     const id = S.plan.id, p = await guard('Spot', () => call('POST', `/plans/${id}/spot`));
     if (p && isCurrent(id)) { S.plan = p; S.seen = p.version; paintAll(); say(`Found ${p.cuts.length} picture cut(s); drafted ${p.cues.filter((c) => c.status === 'draft').length} cue(s). Rewrite the intents, then Source.`); }
   }
+  async function runAutoFoley() {
+    if (!S.plan) return;
+    const id = S.plan.id;
+    let scenes = [];
+    if (window._newVideo && typeof window._newVideo.scenesNow === 'function') {
+      scenes = window._newVideo.scenesNow();
+    } else if (window.scenes) {
+      scenes = window.scenes;
+    }
+    if (!scenes || !scenes.length) {
+      const cuts = S.plan.cuts && S.plan.cuts.length ? S.plan.cuts : [0.0];
+      const dur = S.plan.duration || 10.0;
+      const b = [...cuts, dur];
+      for (let i = 0; i < b.length - 1; i++) {
+        scenes.push({ prompt: `Scene ${i + 1}`, duration: Math.max(1.0, b[i + 1] - b[i]) });
+      }
+    }
+    const res = await guard('Auto-design foley', () => call('POST', `/plans/${id}/auto_foley`, { scenes, auto_source: true }));
+    if (res && res.plan && isCurrent(id)) {
+      S.plan = res.plan;
+      S.seen = res.plan.version;
+      paintAll();
+      say(`🪄 Auto-designed ${res.cue_count} soundscape and foley cue(s)!`);
+      previewSoon();
+    }
+  }
   async function sourceOne(id, mode) {
     const pid = S.plan.id, p = await call('POST', `/plans/${pid}/cues/${id}/source`, mode ? { mode } : {});
     if (!isCurrent(pid)) return;
@@ -108,6 +135,85 @@
   async function runQa() {
     const id = S.plan.id, q = await guard('QA', () => call('POST', `/plans/${id}/qa`));
     if (q && isCurrent(id)) { S.qa = q; await reload(); say(`QA: ${q.errors} error(s), ${q.warnings} warning(s).`, q.errors > 0); }
+  }
+
+  // ---------- critique ----------
+  async function runCritique() {
+    if (!S.plan) return;
+    const id = S.plan.id, rep = await guard('Critique', () => call('POST', `/plans/${id}/critique`));
+    if (rep && isCurrent(id)) {
+      showCritiqueModal(rep);
+    }
+  }
+  async function applyCritiqueRemediations(ids) {
+    if (!S.plan || !ids || !ids.length) return;
+    const id = S.plan.id;
+    const res = await guard('Apply remediations', () => call('POST', `/plans/${id}/critique/apply`, { remediation_ids: ids }));
+    if (res && isCurrent(id)) {
+      S.plan = res.plan; S.seen = res.plan.version; paintAll();
+      const rep = await call('POST', `/plans/${id}/critique`);
+      showCritiqueModal(rep);
+      say(`Applied ${res.applied_ids.length} acoustic remediation(s).`);
+    }
+  }
+  function showCritiqueModal(report) {
+    const existing = document.getElementById('audioCritiqueModalBackdrop');
+    if (existing) existing.remove();
+    const score = report.overall_quality_score != null ? report.overall_quality_score : 100;
+    const scoreClass = score >= 85 ? 'critique-score-good' : (score >= 60 ? 'critique-score-warn' : 'critique-score-poor');
+    const issues = report.issues || [];
+    const remediations = report.remediations || [];
+    const backdrop = h('div', { class: 'audio-modal-backdrop', id: 'audioCritiqueModalBackdrop' },
+      h('div', { class: 'audio-critique-modal' },
+        h('div', { class: 'audio-critique-header' },
+          h('div', { class: 'audio-critique-title' },
+            '🔬 Acoustic Quality Critique',
+            h('span', { class: `critique-score-badge ${scoreClass}` }, `${score}/100 Score`)
+          ),
+          h('button', { class: 'dl-btn', onclick: () => backdrop.remove() }, '✕')
+        ),
+        h('div', { class: 'audio-critique-body' },
+          issues.length === 0
+            ? h('div', { style: 'text-align: center; color: #46d6a3; padding: 24px;' }, '✓ Perfect acoustic balance: no spectral mud, masking, or transient collisions detected!')
+            : issues.map(iss => {
+                const rem = iss.remediation;
+                return h('div', { class: `critique-issue-card ${iss.severity}` },
+                  h('div', { class: 'critique-issue-info' },
+                    h('span', { class: 'critique-issue-title' }, `[${iss.track.toUpperCase()}] ${iss.message}`),
+                    rem ? h('span', { class: 'critique-issue-msg' }, `Suggested Fix: ${rem.reason}`) : null
+                  ),
+                  rem ? h('div', { class: 'critique-issue-action' },
+                    h('button', {
+                      class: 'critique-fix-btn',
+                      onclick: () => applyCritiqueRemediations([rem.id])
+                    }, `Fix ${rem.action.toUpperCase()} (${rem.value})`)
+                  ) : null
+                );
+              })
+        ),
+        h('div', { class: 'audio-critique-footer' },
+          h('span', { style: 'font-size: 0.74rem; color: #9aa6d0;' },
+            `${issues.length} acoustic issues found · ${remediations.length} auto-fixes available`
+          ),
+          h('div', { style: 'display: flex; gap: 8px;' },
+            remediations.length > 0 ? h('button', {
+              class: 'dl-btn accent',
+              onclick: () => applyCritiqueRemediations(remediations.map(r => r.id))
+            }, `⚡ Auto-Fix All (${remediations.length})`) : null,
+            h('button', { class: 'dl-btn', onclick: () => backdrop.remove() }, 'Close')
+          )
+        )
+      )
+    );
+    document.body.appendChild(backdrop);
+  }
+  async function makeCueLoop(cueId) {
+    if (!S.plan || !cueId) return;
+    const r = await guard('Make Loop', () => call('POST', `/plans/${S.plan.id}/cues/${cueId}/loop`));
+    if (r) {
+      await reload();
+      say(`Loop created for ${cueId}: ${r.duration_s ? r.duration_s.toFixed(2) : ''} s.`);
+    }
   }
 
   // poll: an agent may change the plan while the page is open
@@ -226,14 +332,18 @@
     call('GET', `/plans/${S.plan.id}/takes/${item.id}/peaks?bins=120`).then((r) => drawMini(cv, r.peaks)).catch(() => { /* no waveform: the row still works */ });
     return cv;
   }
-  function provenanceBlock(t) {
+  function provenanceBlock(t, cue) {
     const pv = t.provenance || {};
+    const canLoop = cue && (cue.track === 'music' || cue.track === 'ambience');
     return h('div', { class: 'au-prov' },
       h('div', {}, h('b', {}, pv.source || 'unknown source'), pv.model ? ` · ${pv.model}` : '', pv.seed != null ? ` · seed ${pv.seed}` : ''),
       h('div', {}, `Licence: ${pv.licence || 'unknown'}`, pv.author ? ` · by ${pv.author}` : ''),
       M.safeUrl(pv.url) ? h('a', { href: M.safeUrl(pv.url), target: '_blank', rel: 'noopener noreferrer', class: 'au-link' }, 'Open the source page') : null,
       h('div', { class: 'dl-hint' }, `${t.duration_s.toFixed(2)} s · peak ${t.peak_db.toFixed(1)} dBFS · hit at ${t.onset_s.toFixed(2)} s`),
-      h('div', { class: 'au-cand' }, h('button', { type: 'button', class: 'dl-btn au-play', id: 'auListenTake', onclick: () => toggleAudition(t), title: 'Listen to this sound on its own' }, AU.id === t.id ? '■' : '▶'), miniWave(t)));
+      h('div', { class: 'au-cand' },
+        h('button', { type: 'button', class: 'dl-btn au-play', id: 'auListenTake', onclick: () => toggleAudition(t), title: 'Listen to this sound on its own' }, AU.id === t.id ? '■' : '▶'),
+        canLoop ? h('button', { type: 'button', class: 'dl-btn', title: 'Convert into seamless infinite loop', onclick: () => makeCueLoop(cue.id) }, 'Loop') : null,
+        miniWave(t)));
   }
   function candidateRow(c, cueId) {
     return h('div', { class: 'au-cand', 'data-cand': c.id },
@@ -291,7 +401,7 @@
       field('Sourcing for this cue', h('select', { class: 'dl-in', 'data-f': 'mode', onchange: (e) => patchCue(c.id, { mode: e.target.value || null }) },
         h('option', { value: '', selected: !c.mode }, 'Same as the plan'), h('option', { value: 'auto', selected: c.mode === 'auto' }, 'Auto: the engine picks'), h('option', { value: 'ask', selected: c.mode === 'ask' }, 'Ask me: I pick'))),
       h('div', { class: 'dl-sub' }, 'Sound'),
-      take ? provenanceBlock(take) : h('div', { class: 'au-empty' }, c.status === 'needs_pick' ? 'Candidates are waiting for your pick.' : 'No sound yet.'),
+      take ? provenanceBlock(take, c) : h('div', { class: 'au-empty' }, c.status === 'needs_pick' ? 'Candidates are waiting for your pick.' : 'No sound yet.'),
       c.candidates && c.candidates.length ? h('div', { class: 'au-cands' }, ...c.candidates.map((cd) => candidateRow(cd, c.id))) : null,
       h('div', { class: 'au-actions' },
         h('button', { type: 'button', class: 'dl-btn accent', id: 'auSourceCue', onclick: () => sourceSel(c.id), disabled: !!S.busy }, take || c.candidates.length ? 'Source again' : 'Source'),
@@ -557,13 +667,27 @@
     say('Preview ready. Press Play (Space).');
   }
   async function mixMaster() {
-    const id = S.plan.id, r = await guard('Mixing the master', () => call('POST', `/plans/${id}/mix`, { target_lufs: -14, mux: false }));
-    if (r && isCurrent(id)) { P.master_info = r.loudness; paintMixer(); say(`Master: ${r.loudness.integrated_lufs.toFixed(1)} LUFS, ${r.loudness.true_peak_db.toFixed(1)} dBTP.`); }
+    const id = S.plan.id, std = (el.masterStd && el.masterStd.value) || 'youtube';
+    const r = await guard('Mastering broadcast mix', () => call('POST', `/plans/${id}/master`, { standard: std, mux: !!(el.muxBox && el.muxBox.checked) }));
+    if (r && isCurrent(id)) {
+      P.master_info = r.loudness;
+      paintMixer();
+      const comp = r.compliance || {};
+      const status = comp.compliant ? '✓ Compliant' : '⚠ Non-compliant';
+      say(`Master (${std.toUpperCase()}): ${r.loudness.integrated_lufs.toFixed(1)} LUFS, ${r.loudness.true_peak_db.toFixed(1)} dBTP · ${status}.`);
+    }
   }
   async function exportAll() {
     const mux = !!(el.muxBox && el.muxBox.checked);
     const id = S.plan.id, r = await guard('Exporting', () => call('POST', `/plans/${id}/export`, { target_lufs: -14, mux }));
     if (r && isCurrent(id)) { P.master_info = r.loudness; paintMixer(); const f = r.findings || { errors: 0, warnings: 0 }; say(`Exported ${r.files.length} files to ${r.out_dir} (${f.errors} QA error(s), ${f.warnings} warning(s)).`, f.errors > 0); }
+  }
+  async function exportDaw() {
+    const id = S.plan.id, std = (el.masterStd && el.masterStd.value) || 'youtube';
+    const r = await guard('Exporting DAW Package', () => call('POST', `/plans/${id}/export_daw`, { standard: std, make_zip: true }));
+    if (r && isCurrent(id)) {
+      say(`DAW Package exported to ${r.out_dir} (${r.files.length} files, FCPXML, EDL, Stems).`);
+    }
   }
 
   function commitFader(stem, db) {
@@ -591,6 +715,9 @@
       el.strips[st] = { fader, db, mute, solo }; el.meters[st] = meter;
       return h('div', { class: 'au-strip', 'data-stem': st }, h('div', { class: 'au-ms-row' }, mute, solo), h('div', { class: 'au-fader-row' }, fader, meter), db, h('div', { class: 'au-strip-name' }, STEM_LABEL[st]));
     };
+    el.masterStd = h('select', { class: 'dl-in', id: 'auMasterStd', style: 'width:auto;padding:2px 6px;font-size:0.68rem;', title: 'Broadcast Loudness Standard' },
+      h('option', { value: 'youtube' }, 'YouTube (-14 LUFS)'),
+      h('option', { value: 'ebu_r128' }, 'EBU R128 (-23 LUFS)'));
     el.masterMeter = h('div', { class: 'au-meter', title: 'Master level (peak, dBFS)' }, h('i', {}));
     el.masterInfo = h('div', { class: 'au-master-info' });
     el.pvState = h('span', { class: 'au-pvstate' });
@@ -599,8 +726,11 @@
     el.mixerHost.append(
       h('div', { class: 'au-mixhead' }, el.pvBtn, el.pvState),
       h('div', { class: 'au-strips' }, ...M.STEMS.map(strip), h('div', { class: 'au-strip master' }, h('div', { class: 'au-fader-row' }, el.masterMeter), el.masterInfo, h('div', { class: 'au-strip-name' }, 'Master'))),
-      h('div', { class: 'au-mixfoot' }, h('button', { type: 'button', class: 'dl-btn', id: 'auMaster', title: 'Render the final mix at -14 LUFS and measure it', onclick: mixMaster }, 'Master'),
+      h('div', { class: 'au-mixfoot' },
+        el.masterStd,
+        h('button', { type: 'button', class: 'dl-btn', id: 'auMaster', title: 'Master broadcast audio with True-Peak lookahead limiter', onclick: mixMaster }, 'Master'),
         h('button', { type: 'button', class: 'dl-btn', id: 'auExport', title: 'Write stems, master, cue sheet and credits', onclick: exportAll }, 'Export'),
+        h('button', { type: 'button', class: 'dl-btn', id: 'auExportDaw', title: 'Export FCPXML, EDL, and stem package for DaVinci Resolve or Final Cut Pro', onclick: exportDaw }, 'DAW Export'),
         h('label', { class: 'dl-check', title: 'Also write master.mp4: the video with this mix' }, el.muxBox, 'with video')));
     el.meterTimer = null; P.meterTimer = setInterval(paintMeters, 70);
   }
@@ -650,8 +780,10 @@
     el.ccby = h('input', { type: 'checkbox', onchange: (e) => edit({ allow_cc_by: e.target.checked }, 'Licence') });
     el.actions = [
       h('button', { type: 'button', class: 'dl-btn', id: 'auSpot', title: 'Find the picture cuts and draft cues', onclick: spot }, 'Spot'),
+      h('button', { type: 'button', class: 'dl-btn', id: 'auAutoFoley', title: 'Auto-design layered atmospheric soundscapes and foley cues', onclick: runAutoFoley }, '🪄 Foley'),
       h('button', { type: 'button', class: 'dl-btn', id: 'auSourceAll', title: 'Find a sound for every cue that has none', onclick: sourceAll }, 'Source all'),
       h('button', { type: 'button', class: 'dl-btn', id: 'auQa', title: 'Check clipping, silence and how close each hit lands to its frame', onclick: runQa }, 'QA'),
+      h('button', { type: 'button', class: 'dl-btn', id: 'auCritique', title: 'Analyze acoustic quality, masking, and apply remediations', onclick: runCritique }, 'Critique'),
     ];
     el.cueHead = h('div', { class: 'dl-sub' }, 'Cues'); el.qaBox = h('div', { class: 'au-qa', id: 'auQaBox' });
     el.cueList = h('div', { class: 'au-cues' });
@@ -691,5 +823,5 @@
   }
   function close() { S.open = false; clearTimeout(S.timer); if (AU.el) AU.el.pause(); if (el.video && P.playing) pause(); else if (el.video) el.video.pause(); }
 
-  window.NLEAudio = { mount, open, close, openVideo, get state() { return S; }, selectCue, reload, call, edit, sourceOne, guard, say, get audition() { return AU; }, addCueAtPlayhead, fit, zoom, seek, play, pause, renderPreview, mixMaster, exportAll, get mixer() { return P; }, get view() { return L.view; }, get peaks() { return L.peaks; } };
+  window.NLEAudio = { mount, open, close, openVideo, get state() { return S; }, selectCue, reload, call, edit, sourceOne, guard, say, get audition() { return AU; }, addCueAtPlayhead, fit, zoom, seek, play, pause, renderPreview, mixMaster, exportAll, exportDaw, runCritique, showCritiqueModal, makeCueLoop, runAutoFoley, get mixer() { return P; }, get view() { return L.view; }, get peaks() { return L.peaks; } };
 })();

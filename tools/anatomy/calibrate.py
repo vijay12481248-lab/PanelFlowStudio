@@ -26,6 +26,7 @@ from engine.original.judges import default_judges  # noqa: E402
 LABELS = ROOT / "tests" / "data" / "anatomy_labels.json"
 PICTURES = ROOT / "output" / "anatomy_labels"
 GATE_RECALL, GATE_FALSE_ALARMS_PER_10 = 0.8, 1.0
+GATED_KINDS = ("extra_hands", "duplicate_object")  # the spec's gate: the known extra-limb and ghost-object defects; other kinds are reported but not trusted
 
 
 def key_of(defect) -> str:
@@ -40,11 +41,23 @@ def metrics(rows: list[dict]) -> dict:
             expected_n += 1
             found_c += k in r["confirmed"]
             found_any += k in r["confirmed"] or k in r["suspected"]
+    by_kind: dict[str, dict[str, int]] = {}
+    for r in rows:
+        for k in r["expected"]:
+            kind = k.split("|")[0]
+            c = by_kind.setdefault(kind, {"expected": 0, "confirmed": 0, "suspected": 0})
+            c["expected"] += 1
+            c["confirmed"] += k in r["confirmed"]
+            c["suspected"] += k in r["suspected"]
+    gated = [by_kind[k] for k in GATED_KINDS if k in by_kind]
+    gated_expected = sum(g["expected"] for g in gated)
+    recall_gated = round(sum(g["confirmed"] for g in gated) / gated_expected, 3) if gated_expected else None
     false_alarm_pictures = sum(1 for r in clean_rows if r["confirmed"])
     judged = [r for r in rows if r["status"] != "unverified"]
     return {"pictures": len(rows), "expected_defects": expected_n, "recall_confirmed": round(found_c / expected_n, 3) if expected_n else None,
             "recall_confirmed_or_suspected": round(found_any / expected_n, 3) if expected_n else None, "clean_pictures": len(clean_rows),
-            "false_alarm_pictures": false_alarm_pictures,
+            "by_kind": by_kind, "recall_gated": recall_gated, "gated_expected": gated_expected,
+            "suspected_on_clean": sum(1 for r in clean_rows if r["suspected"]), "false_alarm_pictures": false_alarm_pictures,
             "false_alarms_per_10_clean": round(10 * false_alarm_pictures / len(clean_rows), 2) if clean_rows else None,
             "unverified_share": round(1 - len(judged) / len(rows), 3) if rows else None}
 
@@ -74,9 +87,9 @@ def main() -> None:
         print(f"[{i}/{len(todo)}] {e['id']}: expected {e['expected']} -> confirmed {row['confirmed']} suspected {row['suspected']} ({row['status']}, {row['seconds']} s)", flush=True)
         Path(args.out).write_text(json.dumps({"rows": rows, "metrics": metrics(rows), "judges": [j.name for j in judges]}, indent=1), encoding="utf-8")
     m = metrics(rows)
-    ok = (m["recall_confirmed"] or 0) >= GATE_RECALL and (m["false_alarms_per_10_clean"] if m["false_alarms_per_10_clean"] is not None else 99) <= GATE_FALSE_ALARMS_PER_10
+    ok = (m["recall_gated"] or 0) >= GATE_RECALL and (m["false_alarms_per_10_clean"] if m["false_alarms_per_10_clean"] is not None else 99) <= GATE_FALSE_ALARMS_PER_10
     print(json.dumps(m, indent=1))
-    print("GATE:", "PASS" if ok else "FAIL", f"(recall >= {GATE_RECALL}, false alarms per 10 clean <= {GATE_FALSE_ALARMS_PER_10})")
+    print("GATE:", "PASS" if ok else "FAIL", f"(recall on {GATED_KINDS} >= {GATE_RECALL}, false alarms per 10 clean <= {GATE_FALSE_ALARMS_PER_10})")
 
 
 if __name__ == "__main__":

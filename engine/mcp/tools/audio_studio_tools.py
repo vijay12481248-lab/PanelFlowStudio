@@ -67,10 +67,19 @@ async def put_plan(plan_id: str, cues: list | None = None, remove_cues: list | N
 
 @registry.tool(
     name="panelflow_chronoflow_audio_spot",
-    description="Find the picture cuts in the video and draft cues: one transition whoosh per cut plus one underscore. Replaces earlier draft cues, keeps sourced ones. Intents are placeholders: rewrite them.",
-    input_schema=_schema({"plan_id": _PLAN}, ["plan_id"]), domain="chronoflow")
-async def spot(plan_id: str) -> dict[str, Any]:
-    return await bridge.post(f"{_BASE}/plans/{plan_id}/spot", {})
+    description="Find picture cuts in the video and draft cues (one transition whoosh per cut plus underscore). If use_vision is true, analyzes keyframes with Ollama Qwen 3.5 9B vision to draft context-aware scene sounds (footsteps, explosions, rain, impacts).",
+    input_schema=_schema({"plan_id": _PLAN, "use_vision": {"type": "boolean", "description": "Inspect keyframes with local vision model"}}, ["plan_id"]), domain="chronoflow")
+async def spot(plan_id: str, use_vision: bool | None = None) -> dict[str, Any]:
+    return await bridge.post(f"{_BASE}/plans/{plan_id}/spot", _body(use_vision=use_vision))
+
+
+@registry.tool(
+    name="panelflow_chronoflow_audio_import_cue",
+    description="Import a local audio file (WAV, MP3, FLAC, OGG) as a candidate take for a cue, measuring its onset and peak and marking the cue ready.",
+    input_schema=_schema({"plan_id": _PLAN, "cue_id": {"type": "string"}, "file_path": {"type": "string", "description": "Absolute path to local audio file"}, "label": {"type": "string", "description": "Optional human-readable label"}}, ["plan_id", "cue_id", "file_path"]),
+    domain="chronoflow")
+async def import_cue(plan_id: str, cue_id: str, file_path: str, label: str | None = None) -> dict[str, Any]:
+    return await bridge.post(f"{_BASE}/plans/{plan_id}/cues/{cue_id}/import_file", _body(file_path=file_path, label=label))
 
 
 @registry.tool(
@@ -92,11 +101,34 @@ async def pick(plan_id: str, cue_id: str, candidate_id: str) -> dict[str, Any]:
 
 
 @registry.tool(
+    name="panelflow_chronoflow_audio_loop_cue",
+    description="Convert a chosen musical score take into an infinite seamless loop using equal-power phase-aligned crossfading.",
+    input_schema=_schema({"plan_id": _PLAN, "cue_id": {"type": "string"}, "crossfade_sec": {"type": "number", "description": "Crossfade blend duration in seconds (default 1.5s)"}}, ["plan_id", "cue_id"]),
+    domain="chronoflow")
+async def loop_cue(plan_id: str, cue_id: str, crossfade_sec: float | None = None) -> dict[str, Any]:
+    return await bridge.post(f"{_BASE}/plans/{plan_id}/cues/{cue_id}/loop", _body(crossfade_sec=crossfade_sec))
+
+
+@registry.tool(
     name="panelflow_chronoflow_audio_qa",
     description="Check the plan: missing/clipped/silent takes and the rendered placement error (ms between each hit and its frame; over 40 ms is an error). Fix every error before exporting.",
     input_schema=_schema({"plan_id": _PLAN}, ["plan_id"]), domain="chronoflow")
 async def qa(plan_id: str) -> dict[str, Any]:
     return await bridge.post(f"{_BASE}/plans/{plan_id}/qa", {})
+
+
+@registry.tool(
+    name="panelflow_chronoflow_audio_critique",
+    description="Acoustically critique a sound plan: inspects spectral mud (200-500 Hz), speech masking (dialogue buried by music/SFX), and transient collisions. If apply_fixes is true, automatically updates the plan with recommended DSP fixes.",
+    input_schema=_schema({"plan_id": _PLAN, "apply_fixes": {"type": "boolean", "description": "Automatically apply recommended DSP remediations (HPF, gain, ducking, pan)"}}, ["plan_id"]),
+    domain="chronoflow")
+async def critique(plan_id: str, apply_fixes: bool | None = None) -> dict[str, Any]:
+    res = await bridge.post(f"{_BASE}/plans/{plan_id}/critique", {})
+    if apply_fixes and res.get("remediations"):
+        rids = [r["id"] for r in res["remediations"]]
+        applied_res = await bridge.post(f"{_BASE}/plans/{plan_id}/critique/apply", {"remediation_ids": rids})
+        return {"critique": res, "applied": applied_res}
+    return res
 
 
 @registry.tool(
@@ -115,3 +147,42 @@ async def mix(plan_id: str, target_lufs: float | None = None, mux: bool | None =
     domain="chronoflow")
 async def export(plan_id: str, target_lufs: float | None = None, mux: bool | None = None, allow_incomplete: bool | None = None) -> dict[str, Any]:
     return await bridge.post(f"{_BASE}/plans/{plan_id}/export", _body(target_lufs=target_lufs, mux=mux, allow_incomplete=allow_incomplete), timeout_s=900.0)
+
+
+@registry.tool(
+    name="panelflow_chronoflow_audio_master",
+    description="Broadcast Loudness Master: normalizes soundtrack to -14 LUFS (YouTube/Streaming) or -23 LUFS (EBU R128 Broadcast) with lookahead true-peak limiting (-1.0 dBFS ceiling) and compliance verification.",
+    input_schema=_schema({"plan_id": _PLAN, "standard": {"type": "string", "enum": ["youtube", "ebu_r128", "custom"], "description": "Loudness standard (youtube -14 LUFS, ebu_r128 -23 LUFS)"},
+                          "target_lufs": _LUFS, "mux": {"type": "boolean", "description": "Mux finished master audio onto the video"}}, ["plan_id"]),
+    domain="chronoflow")
+async def master_broadcast(plan_id: str, standard: str | None = None, target_lufs: float | None = None, mux: bool | None = None) -> dict[str, Any]:
+    return await bridge.post(f"{_BASE}/plans/{plan_id}/master", _body(standard=standard or "youtube", target_lufs=target_lufs, mux=mux), timeout_s=900.0)
+
+
+@registry.tool(
+    name="panelflow_chronoflow_audio_export_daw",
+    description="DAW Timeline Interchange: exports FCPXML (Final Cut Pro / DaVinci Resolve Fairlight), CMX 3600 Audio EDL, and complete stems package (DX, MX, SFX, ME, Master, cuesheets, manifest, and zip archive).",
+    input_schema=_schema({"plan_id": _PLAN, "standard": {"type": "string", "enum": ["youtube", "ebu_r128", "custom"]}, "target_lufs": _LUFS,
+                          "make_zip": {"type": "boolean", "description": "Create a unified daw_delivery.zip archive"}}, ["plan_id"]),
+    domain="chronoflow")
+async def export_daw(plan_id: str, standard: str | None = None, target_lufs: float | None = None, make_zip: bool | None = None) -> dict[str, Any]:
+    return await bridge.post(f"{_BASE}/plans/{plan_id}/export_daw", _body(standard=standard or "youtube", target_lufs=target_lufs, make_zip=make_zip if make_zip is not None else True), timeout_s=900.0)
+
+
+@registry.tool(
+    name="panelflow_chronoflow_audio_auto_foley",
+    description="Analyze visual prompts, action directions, and narration in ChronoFlow storyboard scenes to automatically design and populate multi-track atmospheric soundscapes and foley cues with zero-VRAM procedural synthesis.",
+    input_schema=_schema({
+        "plan_id": _PLAN,
+        "scenes": {"type": "array", "items": {"type": "object"}, "description": "Storyboard scene list with prompt, narration, and duration"},
+        "auto_source": {"type": "boolean", "description": "Immediately synthesize and source takes (default: true)"},
+    }, ["plan_id", "scenes"]),
+    domain="chronoflow",
+)
+async def auto_foley(plan_id: str, scenes: list[dict[str, Any]], auto_source: bool | None = None) -> dict[str, Any]:
+    return await bridge.post(
+        f"{_BASE}/plans/{plan_id}/auto_foley",
+        _body(scenes=scenes, auto_source=auto_source if auto_source is not None else True),
+        timeout_s=300.0,
+    )
+

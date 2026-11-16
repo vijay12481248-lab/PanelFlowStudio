@@ -19,8 +19,8 @@
     "prevention_rule": "Never state the emotion as an adjective; evoke the emotion through autonomic body responses (cold sweat, trembling grip on bow, hollow ache in throat, breath catching).",
     "example_bad": "Arjuna was deeply saddened as he looked at Bhishma.",
     "example_good": "A hot, suffocating knot tightened in Arjuna's throat as his fingers slipped against the taut silk of the Gandiva.",
-    "recurrence_count": 80,
-    "last_detected": "2026-11-16T09:18:31.491118",
+    "recurrence_count": 83,
+    "last_detected": "2026-11-16T10:53:08.883609",
     "severity": "critical"
   },
   {

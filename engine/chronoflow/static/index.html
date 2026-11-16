@@ -4475,6 +4475,9 @@
           <button type="button" class="btn-tool" onclick="exportStoryboardToNLE()" style="background: rgba(70,214,163, 0.15); border-color: rgba(70,214,163, 0.4); color: #8fe6c6; font-weight: 600;" title="Export all shots to Multi-Track NLE Timeline">
             <span>🎬 To NLE</span>
           </button>
+          <button type="button" class="btn-primary" onclick="NewVideo.assembleSequence()" style="background: linear-gradient(135deg, #4f46e5, #7c3aed); border: none; color: #fff; font-weight: 700; width: auto; padding: 4px 12px; font-size: 0.74rem;" title="Assemble storyboard shots into a master timeline video and create Audio Studio sound plan">
+            <span>🎬 Assemble Video</span>
+          </button>
         </div>
       </div>
 
@@ -6652,8 +6655,11 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
               </div>
               <div style="font-size: 0.74rem; color: #7aa2ff; font-weight: 600;">${c.role}</div>
               <div style="font-size: 0.76rem; color: #6a76a3; margin-top: 4px;">${c.description}</div>
-              <div style="margin-top: 8px;">
+              <div style="margin-top: 8px; display: flex; flex-direction: column; gap: 4px;">
                 <button type="button" class="btn-tool" style="width: 100%; justify-content: center; font-size: 0.7rem;" onclick="openImageStudioEdit('/inputs/${c.image}', '${c.image}')">🎨 Open in Image Studio</button>
+                <button type="button" class="btn-tool" style="width: 100%; justify-content: center; font-size: 0.7rem; background: rgba(99,102,241,0.18); border-color: rgba(99,102,241,0.4); color: #c7d2fe;" onclick="generateModelSheetForChar('${c.id}')">🎭 ${c.model_sheet ? '↻ Regenerate Model Sheet' : '✨ Generate 4-View Model Sheet'}</button>
+                ${c.model_sheet ? `<div style="font-size:0.68rem; color:#46d6a3; font-weight:700;">✓ 4-View Model Sheet Linked</div>` : ''}
+                ${c.face_embedding ? `<div style="font-size:0.68rem; color:#7aa2ff;">🔒 ArcFace 512-D Pinned</div>` : ''}
               </div>
             </div>
           
@@ -6661,6 +6667,29 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
           grid.appendChild(card);
         });
       } catch (e) {}
+    }
+
+    async function generateModelSheetForChar(charId) {
+      if (!confirm("Generate a canonical 4-view turnaround model sheet using FLUX.2 Klein (flux2_klein_4b)? This will slice front, profile, 3/4 views and extract 512-D face embeddings.")) return;
+      addTerminalLog("CHARACTERS", `Generating 4-view model sheet for character ${charId}...`, true);
+      try {
+        const res = await fetch(`${API_BASE}/characters/${encodeURIComponent(charId)}/model_sheet`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({})
+        });
+        const data = await res.json();
+        if (data.success) {
+          addTerminalLog("CHARACTERS", `Successfully generated model sheet "${data.model_sheet}" with 4 sliced views!`, true);
+          alert(`🎉 Model sheet generated successfully!\nViews created: ${Object.keys(data.views || {}).join(', ')}`);
+          await loadCharacters();
+          if (typeof loadLockPicker === 'function') await loadLockPicker();
+        } else {
+          alert(`Model sheet generation failed: ${data.detail || 'Unknown error'}`);
+        }
+      } catch (err) {
+        alert(`Failed to generate model sheet: ${err.message}`);
+      }
     }
 
     /* ========================================================= */
@@ -12032,6 +12061,9 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
         if (window.NLEFusion && typeof NLEFusion.mount === 'function') {
           NLEFusion.mount();
         }
+        if (window.NLEAudio && typeof NLEAudio.mount === 'function') {
+          NLEAudio.mount();
+        }
         if (window.NewVideo) {
           window._newVideo = NewVideo.mount({
             post: async (path, body) => {
@@ -12123,7 +12155,7 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><line x1="12" y1="3" x2="12" y2="8"/><line x1="12" y1="16" x2="12" y2="21"/><line x1="3" y1="12" x2="8" y2="12"/><line x1="16" y1="12" x2="21" y2="12"/></svg>
       <span>Color</span>
     </button>
-    <button type="button" class="resolve-rail-item" id="railAudio" onclick="switchResolvePage('audio')" title="Audio: music, sound effects and the mix for a finished video">
+    <button type="button" class="resolve-rail-item" id="railAudio" onclick="switchResolvePage('audio')" title="Audio: Multitrack cue sheet, mixer strips, Foley & music studio">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="9" x2="4" y2="15"/><line x1="8" y1="5" x2="8" y2="19"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="16" y1="3" x2="16" y2="21"/><line x1="20" y1="9" x2="20" y2="15"/></svg>
       <span>Audio</span>
     </button>

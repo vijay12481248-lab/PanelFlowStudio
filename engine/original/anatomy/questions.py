@@ -1,8 +1,9 @@
 """The questions the two judges are asked about a picture and its zoomed tiles, and a strict parser for their replies.
 
 Same rules as `engine/original/judges.py`: the judge is never told what to expect, a reply that echoes the template is not an answer, and nothing is guessed.
-Counting by number is unreliable (measured 2026-11-16: "ARMS: 2" for a picture with four), so the judge LISTS every hand and every foot, one per line, and the code counts
-the lines. The flags (people, writing, doubled object, merged bodies) are a second, short question so a small judge's reply is never cut off.
+Counting by number is unreliable (measured 2026-11-16: "ARMS: 2" for a picture with four), so the judge LISTS every hand, one per line, and the code counts the lines.
+Feet are not checked in v1: a joint hands-and-feet question made the 9B judge miss the extra hands on the whole picture. The flags (people, writing, doubled object,
+merged bodies) are a second, short question so a small judge's reply is never cut off.
 """
 from __future__ import annotations
 
@@ -12,13 +13,11 @@ from dataclasses import dataclass
 from engine.original.judges import TEMPLATE_MARKERS, _people as _count
 
 ENUM_PROMPT = (
-    "Look at this picture and list the body parts of every person, one per line, exactly like this:\n"
+    "Look at this picture. List every HAND you can see, one per line, exactly like this:\n"
     "HAND 1: <which side of the picture, and what the hand is touching or doing>\n"
     "HAND 2: <...>\n"
-    "FOOT 1: <which side of the picture, and what the foot is touching>\n"
-    "FOOT 2: <...>\n"
-    "Write one line for each separate hand and one line for each separate foot, counting a part once even if it is partly hidden, and look at every part of the "
-    "picture including the lap and between the legs. Write NO HANDS or NO FEET when you can see none.")
+    "and so on, one line for each separate hand. Count a hand once even if it is partly hidden, and look at every part of the picture including the lap and between "
+    "the legs. If you can see no hands write: NO HANDS.")
 
 WHOLE_FLAGS_PROMPT = (
     "Look at the whole picture and answer exactly in this format, nothing else:\n"
@@ -47,7 +46,6 @@ class Answer:
     ok: bool = False
     people: int | None = None
     hands: int | None = None
-    feet: int | None = None
     text: bool | None = None
     double: bool | None = None
     merged: bool | None = None
@@ -77,20 +75,14 @@ def parse_yes_no(text: str | None) -> bool | None:
     return None
 
 
-def _listed(text: str, part: str) -> int | None:
-    """How many `PART n: description` lines the judge wrote (distinct numbers, template echoes skipped); 0 for NO <PART>S; None when it listed nothing usable."""
-    numbers = {m.group(1) for m in re.finditer(rf"(?im)^\s*{part}\s*(\d+)\s*:[ \t]*(?!.*[<>])\S", text or "")}
+def parse_enum_reply(text: str) -> int | None:
+    """How many `HAND n: description` lines the judge wrote (distinct numbers); 0 for NO HANDS; None when it listed nothing usable or echoed the template."""
+    if re.search(r"(?im)^\s*HAND\s*\d+\s*:[^\n]*<", text or ""):
+        return None
+    numbers = {m.group(1) for m in re.finditer(r"(?im)^\s*HAND\s*(\d+)\s*:[ \t]*\S", text or "")}
     if numbers:
         return len(numbers)
-    plural = {"HAND": r"hands?", "FOOT": r"(?:foot|feet)"}[part]
-    return 0 if re.search(rf"(?i)\bno\s+{plural}\b", text or "") else None
-
-
-def parse_enum_reply(text: str) -> tuple[int | None, int | None]:
-    """(hands, feet) counted from the judge's list; (None, None) when it echoed the question's template instead of answering."""
-    if re.search(r"(?im)^\s*(HAND|FOOT)\s*\d+\s*:[^\n]*<", text or ""):
-        return None, None
-    return _listed(text, "HAND"), _listed(text, "FOOT")
+    return 0 if re.search(r"(?i)\bno\s+hands?\b", text or "") else None
 
 
 def parse_flags_reply(text: str, judge: str, tile: str) -> Answer:

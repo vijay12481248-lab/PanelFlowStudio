@@ -41,6 +41,7 @@ from engine.chronoflow.folder_dialog import pick_native_folder
 from engine.comfyui.art import ART_WORKFLOW_ID, IMAGE_WORKFLOW_IDS, REFINE_RETIRED, ArtEngine
 from engine.chronoflow.reviewer import analyze_video_chunk
 from engine.chronoflow.scene_render import render_scene
+from engine.chronoflow.timeline_assemble import assemble_storyboard_sequence
 from engine.chronoflow.supervisor import VAULT_DIR, JobSupervisor
 
 logger = logging.getLogger("panelflow.chronoflow")
@@ -132,6 +133,21 @@ class CharacterPayload(BaseModel):
     image: str = Field(default="")
     description: str = Field(default="")
     tag: str | None = None
+    model_sheet: str | None = None
+    views: dict[str, str] = Field(default_factory=dict)
+    face_embedding: list[float] | None = None
+
+
+class VerifyFaceRequest(BaseModel):
+    query_image: str
+    reference_image: str
+    threshold: float = 0.72
+
+
+class PinReferencesRequest(BaseModel):
+    scene: dict[str, Any]
+    max_references: int = 4
+
 
 
 class GenerateRequest(BaseModel):
@@ -1191,6 +1207,9 @@ def save_character(payload: CharacterPayload) -> dict[str, Any]:
         "image": payload.image,
         "description": payload.description,
         "tag": payload.tag or f"<Picture {len(chars) + 1}>",
+        "model_sheet": payload.model_sheet or "",
+        "views": payload.views or {},
+        "face_embedding": payload.face_embedding,
     }
     existing = [i for i, c in enumerate(chars) if c.get("id") == char_id]
     if existing:
@@ -1207,6 +1226,86 @@ def delete_character(char_id: str) -> dict[str, Any]:
     chars = [c for c in chars if c.get("id") != char_id]
     save_characters(chars)
     return {"success": True}
+
+
+@router.post("/characters/{char_id}/model_sheet")
+async def generate_character_model_sheet_endpoint(char_id: str, seed: int | None = None) -> dict[str, Any]:
+    """Generate a canonical 4-view turnaround model sheet for a character using FLUX.2 Klein (flux2_klein_4b)."""
+    from engine.characters.modelsheet import generate_character_model_sheet
+    chars = load_characters()
+    char_entry = next((c for c in chars if c.get("id") == char_id), None)
+    if not char_entry:
+        raise HTTPException(status_code=404, detail=f"Character '{char_id}' not found in Character Vault")
+
+    name = char_entry.get("name", "Character")
+    description = char_entry.get("description", "")
+    role = char_entry.get("role", "Protagonist")
+
+    try:
+        res = await asyncio.to_thread(
+            generate_character_model_sheet,
+            character_id=char_id,
+            name=name,
+            look=description,
+            role=role,
+            seed=seed,
+            out_dir=COMFY_INPUT_DIR,
+        )
+        # Update character entry
+        char_entry["model_sheet"] = res["model_sheet_filename"]
+        char_entry["views"] = res["views"]
+        if res.get("face_embedding"):
+            char_entry["face_embedding"] = res["face_embedding"]
+        save_characters(chars)
+
+        return {
+            "success": True,
+            "character": char_entry,
+            "model_sheet": res["model_sheet_filename"],
+            "views": res["views"],
+            "has_embedding": bool(res.get("face_embedding")),
+        }
+    except Exception as exc:
+        logger.error("Failed to generate model sheet for character %s: %s", char_id, exc)
+        raise HTTPException(status_code=500, detail=f"Model sheet generation failed: {exc}")
+
+
+@router.post("/characters/verify_face")
+def verify_face_endpoint(req: VerifyFaceRequest) -> dict[str, Any]:
+    """Verify facial identity match between a query image and a character reference image."""
+    from engine.characters.face_verify import FaceIdentityVerifier
+    query_p = COMFY_INPUT_DIR / req.query_image if (COMFY_INPUT_DIR / req.query_image).is_file() else Path(req.query_image)
+    if not query_p.is_file() and (STUDIO_OUTPUT_DIR / req.query_image).is_file():
+        query_p = STUDIO_OUTPUT_DIR / req.query_image
+
+    ref_p = COMFY_INPUT_DIR / req.reference_image if (COMFY_INPUT_DIR / req.reference_image).is_file() else Path(req.reference_image)
+
+    if not query_p.is_file():
+        raise HTTPException(status_code=404, detail=f"Query image '{req.query_image}' not found")
+    if not ref_p.is_file():
+        raise HTTPException(status_code=404, detail=f"Reference image '{req.reference_image}' not found")
+
+    verifier = FaceIdentityVerifier()
+    rep = verifier.verify_face_match(query_p, ref_p, threshold=req.threshold)
+    return {
+        "success": True,
+        "matched": rep.matched,
+        "similarity": rep.similarity,
+        "status": rep.status,
+        "reference_detected": rep.reference_detected,
+        "generated_detected": rep.generated_detected,
+        "message": rep.message,
+    }
+
+
+@router.post("/characters/pin_references")
+def pin_references_endpoint(req: PinReferencesRequest) -> dict[str, Any]:
+    """Retrieve up to max_references pinning reference images for a shot based on character appearances."""
+    from engine.characters.pinning import bind_character_references_for_shot
+    chars = load_characters()
+    refs = bind_character_references_for_shot(req.scene, chars, max_references=req.max_references)
+    return {"success": True, "references": refs}
+
 
 
 # =====================================================================
@@ -1888,6 +1987,67 @@ async def storyboard_tail_frame(req: TailFrameRequest) -> dict[str, Any]:
     if not await asyncio.to_thread(pipeline.extract_tail_frame, src, COMFY_INPUT_DIR / name):
         raise HTTPException(status_code=500, detail="could not extract the last frame")
     return {"success": True, "filename": name}
+
+
+class StoryboardAssembleRequest(BaseModel):
+    scenes: list[dict[str, Any]]
+    title: str = "Assembled Sequence"
+    target_width: int = 1920
+    target_height: int = 1080
+    fps: float = 24.0
+    approved_only: bool = False
+    create_sound_plan: bool = True
+
+
+class InvalidateDownstreamRequest(BaseModel):
+    scenes: list[dict[str, Any]]
+    modified_index: int
+
+
+class CheckReadinessRequest(BaseModel):
+    scenes: list[dict[str, Any]]
+    approved_only: bool = False
+
+
+@router.post("/storyboard/assemble")
+async def storyboard_assemble(req: StoryboardAssembleRequest) -> dict[str, Any]:
+    """Concatenate storyboard scenes into a single timeline video with mixed-size letterbox scaling and auto-generate an Audio Studio Sound Plan."""
+    out_id = uuid.uuid4().hex[:8]
+    out_name = f"chronoflow_assembled_{out_id}.mp4"
+    out_path = STUDIO_OUTPUT_DIR / out_name
+    try:
+        res = await asyncio.to_thread(
+            assemble_storyboard_sequence,
+            scenes=req.scenes,
+            out_path=out_path,
+            target_width=req.target_width,
+            target_height=req.target_height,
+            fps=req.fps,
+            approved_only=req.approved_only,
+            create_sound_plan=req.create_sound_plan,
+            sound_plan_title=req.title,
+        )
+        return res
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Storyboard assembly failed: %s", e)
+        raise HTTPException(status_code=500, detail=f"Storyboard assembly failed: {e}")
+
+
+@router.post("/storyboard/invalidate_downstream")
+def storyboard_invalidate_downstream(req: InvalidateDownstreamRequest) -> dict[str, Any]:
+    """Invalidate chained downstream cards when an upstream card is redone or modified."""
+    invalidated = start_modes.invalidate_downstream(req.scenes, req.modified_index)
+    return {"success": True, "invalidated_indices": invalidated, "scenes": req.scenes}
+
+
+@router.post("/storyboard/check_readiness")
+def storyboard_check_readiness(req: CheckReadinessRequest) -> dict[str, Any]:
+    """Check whether storyboard shots are ready for timeline concatenation."""
+    is_ready, problems = start_modes.check_assembly_readiness(req.scenes, req.approved_only)
+    return {"success": True, "is_ready": is_ready, "problems": problems}
+
 
 
 # =====================================================================
