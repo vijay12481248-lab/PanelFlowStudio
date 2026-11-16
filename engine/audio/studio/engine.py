@@ -8,6 +8,10 @@ from engine.audio.studio.plan import Candidate, Cue, PlanStore, SoundPlan, Take
 from engine.audio.studio.sources.base import Availability, Provider
 
 
+def _words(cue: Cue) -> tuple:
+    return (cue.text, cue.voice, cue.provider, cue.speed) if cue.kind == "narration" else ()
+
+
 def _why(p: Provider, cue: Cue) -> str:
     a = p.availability_for(cue) if hasattr(p, "availability_for") else p.availability()
     return f"{p.name}: {a.reason or 'no match'}"
@@ -53,6 +57,7 @@ class AudioEngine:
         mode = mode or cue.mode or plan.mode
         limit = 1 if (mode == "auto" and cue.kind in ("music", "narration")) else 3
         out_dir = self.store.take_dir(plan_id)
+        words = _words(cue)
         cands: list[Candidate] = []
         for p in self.providers:  # slow (network, GPU): done without holding the plan lock
             cands = p.find(cue, out_dir, plan, limit=limit)
@@ -63,6 +68,9 @@ class AudioEngine:
         with self.store.lock(plan_id):  # re-read: other calls may have changed the plan meanwhile
             plan = self.store.load(plan_id)
             cue = plan.cue(cue_id)
+            if _words(cue) != words:   # the line was edited while it was being spoken: the speech is for the old words
+                cue.candidates, cue.chosen_take, cue.status, cue.reason = [], None, "draft", "the words changed while speaking; speak again"
+                return self.store.save(plan, note=f"{cue_id}: words changed while speaking")
             cue.candidates, cue.chosen_take = [], None
             if not cands:
                 cue.status, cue.reason = "failed", "; ".join(reasons) if reasons else f"no provider serves kind {cue.kind!r}"

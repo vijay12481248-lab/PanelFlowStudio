@@ -21,7 +21,7 @@ def split_script(text: str) -> list[str]:
 def place_lines(lines: list[str], *, mode: Literal["sequential", "per_cut"], start: float, gap: float, cuts: list[float], speed: float) -> list[tuple[str, float]]:
     """(line, start time) pairs. sequential: back to back from `start`. per_cut: line i starts on picture cut i, and any lines beyond the cuts follow the last one."""
     out: list[tuple[str, float]] = []
-    anchors = [start] + sorted(cuts) if mode == "per_cut" else [start]
+    anchors = [start] + sorted(c for c in cuts if c > start) if mode == "per_cut" else [start]
     t = start
     for i, line in enumerate(lines):
         if mode == "per_cut" and i < len(anchors):

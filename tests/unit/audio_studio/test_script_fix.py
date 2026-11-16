@@ -117,3 +117,29 @@ def test_fix_reports_what_it_could_not_fix(tmp_path):
     eng.source_cue(plan.id, "v1")   # 3 + 4 = 7 s: past the 6 s video, and nothing can move it earlier
     res = fix_plan(eng, plan.id, render_cue=_no_render)
     assert res["fixed"] == [] and [f["rule"] for f in res["remaining"]] == ["narration_past_end"]
+
+
+def test_per_cut_from_a_later_start_ignores_the_cuts_before_it():
+    got = place_lines(["one two", "three four", "five six"], mode="per_cut", start=5.0, gap=0.4, cuts=[2.0, 6.0, 9.0], speed=1.0)
+    assert [t for _, t in got] == [5.0, 6.0, 9.0]
+
+
+def test_fix_keeps_an_edit_made_during_its_final_check(tmp_path):
+    store = PlanStore(tmp_path)
+    plan = store.create("v.mp4", 24.0, 10.0)
+    plan.cues = [Cue(id="c1", track="sfx", kind="impact", intent="hit", hit_t=1.0)]
+    store.save(plan)
+    eng = AudioEngine(store, [Fake([(0.5, 1.0)])])
+    eng.source_cue(plan.id, "c1", mode="auto")
+    seen = []
+
+    def render(p, cue, out):   # the owner changes the gain while the final check (the second render) runs
+        seen.append(1)
+        if len(seen) == 2:
+            with store.lock(plan.id):
+                q = store.load(plan.id)
+                q.cue("c1").gain_db = -7.0
+                store.save(q)
+        return _no_render(p, cue, out)
+    fix_plan(eng, plan.id, render_cue=render)
+    assert store.load(plan.id).cue("c1").gain_db == -7.0

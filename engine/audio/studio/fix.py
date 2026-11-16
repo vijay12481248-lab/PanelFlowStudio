@@ -50,5 +50,11 @@ def fix_plan(engine: AudioEngine, plan_id: str, render_cue: Callable[[SoundPlan,
     after = engine.store.load(plan_id)
     remaining = check_plan(after, render_cue)
     fixed_ok = [x for x in fixed if not (x["action"] == "sourced again" and any(r.cue_id == x["cue_id"] and r.rule == x["rule"] for r in remaining))]
-    engine.store.save(after, "fix: checked")   # keeps the placement errors the final check measured
+    with engine.store.lock(plan_id):   # keep the placement errors the final check measured, on top of any edit made meanwhile
+        cur = engine.store.load(plan_id)
+        errs = {c.id: c.placement_error_ms for c in after.cues}
+        for c in cur.cues:
+            if c.id in errs:
+                c.placement_error_ms = errs[c.id]
+        engine.store.save(cur, "fix: checked")
     return {"fixed": fixed_ok, "remaining": [r.model_dump() for r in remaining]}

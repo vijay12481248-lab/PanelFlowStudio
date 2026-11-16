@@ -203,3 +203,47 @@ def test_qa_lets_a_line_run_across_a_picture_cut_and_warns_when_it_is_too_fast(t
     _ready(plan, tmp_path, _vo("v1", text=" ".join(["word"] * 40), t_in=1.0), 4.0)
     rules = _qa(plan, tmp_path)
     assert not any(r[1] in ("narration_overrun", "narration_past_end") for r in rules) and ("v1", "narration_too_fast", "warn") in rules
+
+
+def test_a_slot_that_raises_does_not_leak_the_gpu_lock(tmp_path, monkeypatch):
+    from engine.audio.studio.sources import narration as nar
+    from engine.audio.studio.sources.music import _ONE_AT_A_TIME
+
+    class BadSlot:
+        def acquire(self, job):
+            raise RuntimeError("resource manager down")
+
+        def release(self, job):
+            raise AssertionError("never acquired, never released")
+    prov = NarrationProvider(slot=BadSlot(), voices={"kokoro": ["af_heart"], "qwen3_tts": ["aria"]})
+    assert prov.find(_vo("v1", voice="aria", provider="qwen3_tts"), tmp_path / "t", _plan(tmp_path)) == []
+    assert "resource manager down" in prov.availability_for(_vo("v1", voice="aria", provider="qwen3_tts")).reason
+    assert _ONE_AT_A_TIME.acquire(blocking=False), "the GPU lock is free again"
+    _ONE_AT_A_TIME.release()
+
+
+def test_words_changed_while_speaking_are_not_saved_as_the_new_speech(tmp_path):
+    store = PlanStore(tmp_path / "store")
+    plan = store.create("v.mp4", fps=24.0, duration=10.0)
+    plan.cues = [_vo("v1", text="Old words.")]
+    store.save(plan)
+    inner = fake_synth()
+
+    def slow(text, voice, speed, provider, language, out):   # the owner edits the line while the model speaks the old one
+        with store.lock(plan.id):
+            p = store.load(plan.id)
+            p.cue("v1").text = "New words."
+            store.save(p)
+        inner(text, voice, speed, provider, language, out)
+    got = AudioEngine(store, [NarrationProvider(synth=slow)]).source_cue(plan.id, "v1", mode="auto").cue("v1")
+    assert got.text == "New words." and got.status == "draft" and got.chosen_take is None and "changed" in got.reason
+
+
+def test_kokoro_voices_are_the_ones_on_disk(tmp_path):
+    from engine.audio.studio.sources.narration import kokoro_voices_on_disk
+    d = tmp_path / "models--hexgrad--Kokoro-82M" / "snapshots" / "abc" / "voices"
+    d.mkdir(parents=True)
+    for v in ("am_adam", "af_heart", "bm_george"):
+        (d / f"{v}.pt").write_bytes(b"x")
+    assert kokoro_voices_on_disk(tmp_path) == ["af_heart", "am_adam", "bm_george"], "af_heart (the default) first, then by name"
+    assert kokoro_voices_on_disk(tmp_path / "nothing") == []

@@ -20,7 +20,6 @@ from engine.audio.studio.sources.base import Availability
 from engine.audio.studio.sources.music import _ONE_AT_A_TIME, ResourceSlot
 
 PROVIDERS = ("kokoro", "qwen3_tts")
-KOKORO_VOICES = ["af_heart", "af_bella", "af_nicole", "af_sarah", "af_sky", "am_adam", "am_michael", "bf_emma", "bf_isabella", "bm_george", "bm_lewis"]
 _MODEL = {"kokoro": ("Apache-2.0", "kokoro-82m"), "qwen3_tts": ("Apache-2.0", "qwen3-tts-12hz-1.7b-base")}
 WORDS_PER_SECOND = 3.0   # measured 2026-11-16 on one 15-word line: Kokoro af_heart 4.97 s, Qwen3-TTS aria_female 5.68 s (n=2, re-measure with more lines)
 _QWEN_PY = Path(os.environ.get("PANELFLOW_QWEN3_TTS_PYTHON", r"D:\Tools\Qwen3-TTS\.venv\Scripts\python.exe"))
@@ -37,14 +36,26 @@ def estimate_seconds(text: str, speed: float = 1.0) -> float:
     return round((words / WORDS_PER_SECOND + pauses) / max(speed, 0.1), 2)
 
 
+def kokoro_voices_on_disk(cache: Path | None = None) -> list[str]:
+    """Kokoro voices whose weights are already in the Hugging Face cache (af_heart first): a voice not on disk would need a download."""
+    if cache is None:
+        try:
+            from huggingface_hub import constants
+            cache = Path(constants.HF_HUB_CACHE)
+        except Exception:
+            return []
+    names = {p.stem for p in Path(cache).glob("models--hexgrad--Kokoro-82M/snapshots/*/voices/*.pt")}
+    return sorted(names, key=lambda v: (v != "af_heart", v))
+
+
 def list_voices() -> dict[str, list[str]]:
-    """Kokoro voice names plus the reference recordings Qwen3-TTS can clone."""
+    """Kokoro voices on disk plus the reference recordings Qwen3-TTS can clone."""
     try:
         from engine.studio_audio import qwen3_voices
         ref = sorted(qwen3_voices())
     except Exception:
         ref = []
-    return {"kokoro": list(KOKORO_VOICES), "qwen3_tts": ref}
+    return {"kokoro": kokoro_voices_on_disk(), "qwen3_tts": ref}
 
 
 def _kokoro(text: str, voice: str, speed: float, out: Path) -> None:
@@ -52,6 +63,8 @@ def _kokoro(text: str, voice: str, speed: float, out: Path) -> None:
     import soundfile as sf
     os.environ.setdefault("HF_HUB_OFFLINE", "1")   # a missing weight is an error, never a silent download
     os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+    from huggingface_hub import constants
+    constants.HF_HUB_OFFLINE = True   # the env var is read at import; huggingface_hub may already be imported
     from kokoro import KPipeline
     lang = voice[0]
     if lang not in _pipes:
@@ -141,9 +154,15 @@ class NarrationProvider:
                 self._errors[cue.id] = "GPU busy: another audio job is running"
                 return []
             slot, job = self._slot or ResourceSlot(), f"job_audiostudio_{cue.id}"
-            if not slot.acquire(job):
+            try:
+                got = slot.acquire(job)
+            except Exception as e:
+                got, why = False, f"GPU slot error: {e}"
+            else:
+                why = "GPU busy: the resource manager has no free slot"
+            if not got:
                 _ONE_AT_A_TIME.release()
-                self._errors[cue.id] = "GPU busy: the resource manager has no free slot"
+                self._errors[cue.id] = why
                 return []
         try:
             cands = []
