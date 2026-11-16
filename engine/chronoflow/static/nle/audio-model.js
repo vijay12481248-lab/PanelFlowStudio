@@ -113,7 +113,21 @@
   /** A link from a third-party catalogue is only used when it is http(s); anything else (javascript:, data:, file:) is dropped. */
   const safeUrl = (u) => (typeof u === 'string' && /^https?:\/\//i.test(u) ? u : null);
 
-  const api = { LANES, STEMS, stemOf, fmtTC, snapFrame, timeToX, xToTime, zoomAt, rulerStep, rulerTicks, chosenTake, cueSpan, dragCue, dbToGain, gainToDb,
+  /** How long a spoken line takes: the same rule as the engine (engine/audio/studio/sources/narration.py estimate_seconds). A guide until the real length is known. */
+  function estimateSeconds(text, speed) {
+    const words = String(text || '').trim().split(/\s+/).filter(Boolean).length;
+    if (!words) return 0;
+    const count = (re) => (String(text).match(re) || []).length, pauses = count(/[.!?]/g) * 0.35 + count(/[,;:]/g) * 0.15;
+    return Math.round(((words / 3.0 + pauses) / Math.max(speed || 1, 0.1)) * 100) / 100;
+  }
+  const LOUDNESS = [
+    { id: 'youtube', label: 'YouTube', lufs: -14, hint: 'Normal videos on YouTube and Instagram' },
+    { id: 'shorts', label: 'Shorts / Reels', lufs: -14, hint: 'Vertical clips on phones' },
+    { id: 'podcast', label: 'Voice only', lufs: -16, hint: 'Talking videos and podcasts' },
+    { id: 'cinema', label: 'Cinema', lufs: -23, hint: 'Quiet, wide dynamic range (broadcast style)' },
+  ];
+
+  const api = { estimateSeconds, LOUDNESS, LANES, STEMS, stemOf, fmtTC, snapFrame, timeToX, xToTime, zoomAt, rulerStep, rulerTicks, chosenTake, cueSpan, dragCue, dbToGain, gainToDb,
     effectiveGains, driftAction, statusChip, peaksToBars, needsRefresh, safeUrl };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.AudioModel = api;

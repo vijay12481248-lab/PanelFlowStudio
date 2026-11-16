@@ -130,3 +130,17 @@ test('safeUrl lets only http(s) links through (a source page link comes from a t
   assert.equal(A.safeUrl('HTTP://example.com/a'), 'HTTP://example.com/a');
   for (const bad of ['javascript:alert(1)', ' javascript:alert(1)', 'data:text/html,<script>', 'file:///C:/x', '//evil.example/x', '', null, undefined, 42]) assert.equal(A.safeUrl(bad), null, String(bad));
 });
+
+test('estimateSeconds matches the engine: words at 3 per second plus pauses for punctuation, divided by speed', () => {
+  const w26 = Array(26).fill('word').join(' ');
+  near(A.estimateSeconds(w26, 1), 26 / 3, 0.01);
+  near(A.estimateSeconds(w26, 2), 13 / 3, 0.01);
+  assert.ok(A.estimateSeconds('One. Two. Three.', 1) > A.estimateSeconds('One Two Three', 1));
+  near(A.estimateSeconds('At dawn, the gate opened, and a small cat followed the pilot into the clouds.', 1), 15 / 3 + 0.35 + 0.15 * 2, 0.01);
+  assert.equal(A.estimateSeconds('   ', 1), 0);
+});
+
+test('loudness presets are the targets creators use', () => {
+  assert.deepEqual(A.LOUDNESS.map((p) => p.lufs), [-14, -14, -16, -23]);
+  assert.ok(A.LOUDNESS.every((p) => p.id && p.label && p.hint));
+});
