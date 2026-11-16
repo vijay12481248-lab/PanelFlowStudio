@@ -42,6 +42,8 @@ async def _one_judge(judge: Judge, image: bytes, asks: list[tuple[str, str]]) ->
     whole_tile = make_tiles(image)[0]
     whole = await _view(judge, whole_tile.png, "whole", WHOLE_FLAGS_PROMPT)
     answers = [whole]
+    if not whole.ok:  # a judge that gave nothing usable for the whole picture is not asked ten more questions
+        return answers, {}
     for tile in make_tiles(image, people=whole.people)[1:]:
         answers.append(await _view(judge, tile.png, tile.name, TILE_FLAGS_PROMPT))
     poses = {key: parse_yes_no(await judge.ask(whole_tile.png, pose_prompt(question))) for key, question in asks}
