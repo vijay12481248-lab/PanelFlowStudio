@@ -24,9 +24,9 @@ PEOPLE = {"handshake": 2, "hug": 2}
 
 def expected(model: str, pose: str, seed: int) -> list[str] | None:
     """Defect keys ("kind" or "kind|pose") the agent counted in this picture; [] = clean as far as the audit could tell; None = not sure."""
-    if pose == "cross_legged":  # klein 101 and 103 have four arms; klein 102/104 and every Z-Image picture clasp the hands in the lap instead of resting them on the knees
+    if pose == "cross_legged":  # klein 101 and 103 have four hands; klein 102/104 and every Z-Image picture clasp the hands in the lap instead of resting them on the knees
         if model == "klein":
-            return {101: ["extra_arms", "extra_hands"], 103: ["extra_arms", "extra_hands"], 102: ["pose_missing|hands_on_knees"], 104: ["pose_missing|hands_on_knees"]}[seed]
+            return {101: ["extra_hands"], 103: ["extra_hands"], 102: ["pose_missing|hands_on_knees"], 104: ["pose_missing|hands_on_knees"]}[seed]
         return ["pose_missing|hands_on_knees"]
     if pose == "sword_overhead":  # klein: a ghost second blade (101, 103); one hand holds a loose fist instead of the grip (102, 103)
         if model == "klein":

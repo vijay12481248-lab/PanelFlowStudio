@@ -12,10 +12,8 @@ from engine.original.anatomy.review import AnatomyReport
 from engine.original.anatomy.rules import pose_asks
 
 RULES = {
-    "extra_arms|any": "Exactly two arms per person, no extra arms or hands anywhere.",
-    "extra_hands|any": "Each person has exactly two hands, no extra hands.",
-    "extra_legs|any": "Each person has exactly two legs.",
-    "extra_feet|any": "Each person has exactly two feet.",
+    "extra_hands|any": "Exactly two arms and two hands per person, no extra arms or hands anywhere, and nothing but the legs in the lap.",
+    "extra_feet|any": "Each person has exactly two legs and two feet.",
     "stray_text|any": "No letters, numbers or writing anywhere in the picture.",
     "duplicate_object|any": "Every object appears once: exactly one sword with exactly one blade.",
     "merged_bodies|any": "Each person's body is clearly separate, and every arm and leg can be traced to its owner.",
@@ -26,7 +24,7 @@ RULES = {
     "pose_missing|two_hands": "Both hands grip the object together.",
 }
 SEED_MARK = "agent-labelled 2026-11-16 audit"
-SEEDED = ("extra_arms|any", "duplicate_object|any")  # klein: four arms in cross-legged seeds 101 and 103; a ghost second blade in sword seeds 101 and 103
+SEEDED = ("extra_hands|any", "duplicate_object|any")  # klein: four arms in cross-legged seeds 101 and 103; a ghost second blade in sword seeds 101 and 103
 DEFAULT_MODEL = "flux2_klein_4b"
 
 

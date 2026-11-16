@@ -10,28 +10,29 @@ def kinds(ds):
     return sorted(d.kind for d in ds)
 
 
-def test_whole_picture_per_person_maxima_above_two_are_extra_limbs():
-    ds = judge_defects([A(people=1, arms=4, hands=4, legs=2, feet=2)], people=1, pose_answers={})
-    assert kinds(ds) == ["extra_arms", "extra_hands"] and all(isinstance(d, Defect) and d.judge == "j1" and d.tile == "whole" for d in ds)
-    assert judge_defects([A(arms=2, hands=2, legs=2, feet=2)], people=1, pose_answers={}) == []
+def test_more_than_two_hands_per_person_is_an_extra_hand_defect_on_any_view():
+    ds = judge_defects([A("whole", hands=4), A("lower", hands=4)], people=1, pose_answers={})
+    assert kinds(ds) == ["extra_hands", "extra_hands"] and {d.tile for d in ds} == {"whole", "lower"} and all(isinstance(d, Defect) and d.judge == "j1" for d in ds)
+    assert judge_defects([A(hands=2, feet=2)], people=1, pose_answers={}) == []
 
 
-def test_tile_totals_are_compared_with_two_per_person_and_never_summed():
-    two_tiles = [A("upper", hands=1), A("middle", hands=1)]
-    assert judge_defects(two_tiles, people=1, pose_answers={}) == []  # overlapping bands: 1 + 1 is not 2 hands
-    assert kinds(judge_defects([A("middle", hands=4)], people=1, pose_answers={})) == ["extra_hands"]
-    assert judge_defects([A("left", arms=4, hands=4)], people=2, pose_answers={}) == []  # four arms are fine for two people
-    assert kinds(judge_defects([A("left", arms=5)], people=2, pose_answers={})) == ["extra_arms"]
+def test_views_are_compared_with_two_per_person_and_never_summed():
+    assert judge_defects([A("upper", hands=1), A("middle", hands=1)], people=1, pose_answers={}) == []  # overlapping bands: 1 + 1 is not 2 hands
+    assert judge_defects([A("left", hands=4)], people=2, pose_answers={}) == []  # four hands are fine for two people
+    assert kinds(judge_defects([A("left", hands=5, feet=5)], people=2, pose_answers={})) == ["extra_feet", "extra_hands"]
 
 
-def test_unknown_people_skips_tile_count_rules_but_not_whole_picture_ones():
-    assert judge_defects([A("middle", hands=9)], people=None, pose_answers={}) == []
-    assert kinds(judge_defects([A("whole", legs=3)], people=None, pose_answers={})) == ["extra_legs"]
+def test_unknown_people_means_no_count_is_judged():
+    assert judge_defects([A("whole", hands=9, feet=9)], people=None, pose_answers={}) == []
 
 
 def test_text_double_and_merged_flags():
     assert kinds(judge_defects([A(text=True, double=True, merged=True)], people=2, pose_answers={})) == ["duplicate_object", "merged_bodies", "stray_text"]
     assert judge_defects([A(text=True)], people=1, pose_answers={}, text_asked=True) == []
+
+
+def test_an_unusable_answer_produces_no_defects():
+    assert judge_defects([Answer(tile="whole", judge="j1", ok=False, hands=9, text=True)], people=1, pose_answers={}) == []
 
 
 def test_pose_answers_false_is_missing_none_is_nothing():

@@ -6,7 +6,6 @@
   "prompt": "An anime style full color illustration with soft shading. A young woman with long hair sitting cross-legged on the floor, both hands resting on her knees, smiling. Full body visible from head to feet, plain light background, eye-level wide shot.",
   "people": 1,
   "expected": [
-   "extra_arms",
    "extra_hands"
   ],
   "source": "agent-2026-11-16"
@@ -29,7 +28,6 @@
   "prompt": "An anime style full color illustration with soft shading. A young woman with long hair sitting cross-legged on the floor, both hands resting on her knees, smiling. Full body visible from head to feet, plain light background, eye-level wide shot.",
   "people": 1,
   "expected": [
-   "extra_arms",
    "extra_hands"
   ],
   "source": "agent-2026-11-16"

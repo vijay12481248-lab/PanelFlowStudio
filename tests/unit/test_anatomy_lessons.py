@@ -16,16 +16,16 @@ def D(kind, pose=None):
 
 def test_one_sighting_is_recorded_but_not_yet_a_rule_the_second_activates_it(tmp_path):
     ledger = MistakeLedger(file_path=tmp_path / "l.json")
-    assert record_report(ledger, MODEL, report(D("extra_arms"))) == 1
+    assert record_report(ledger, MODEL, report(D("extra_hands"))) == 1
     assert rules_for(ledger, MODEL, "a girl sitting") == ""
-    record_report(ledger, MODEL, report(D("extra_arms")))
+    record_report(ledger, MODEL, report(D("extra_hands")))
     assert "two arms" in rules_for(ledger, MODEL, "a girl sitting")
     assert ledger.load_mistakes(domain(MODEL))[0].recurrence_count == 2
 
 
 def test_only_confirmed_defects_are_recorded(tmp_path):
     ledger = MistakeLedger(file_path=tmp_path / "l.json")
-    r = AnatomyReport(status="clean", suspected=[D("extra_arms")])
+    r = AnatomyReport(status="clean", suspected=[D("extra_hands")])
     assert record_report(ledger, MODEL, r) == 0 and ledger.load_mistakes(domain(MODEL)) == []
 
 
@@ -40,7 +40,7 @@ def test_a_pose_rule_applies_only_to_prompts_that_ask_for_that_pose(tmp_path):
 def test_rules_are_per_model(tmp_path):
     ledger = MistakeLedger(file_path=tmp_path / "l.json")
     for _ in range(2):
-        record_report(ledger, MODEL, report(D("extra_arms")))
+        record_report(ledger, MODEL, report(D("extra_hands")))
     assert rules_for(ledger, "zimage", "a girl") == ""
 
 

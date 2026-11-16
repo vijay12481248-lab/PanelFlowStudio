@@ -1,7 +1,7 @@
 """Deterministic rules: one judge's answers about a picture and its tiles -> defects. Pure functions, no model calls.
 
-Counts are never added across tiles (the bands overlap, one hand can be in two tiles): the whole-picture answer is a per-person maximum and is compared with two;
-a tile answer is a total for that crop and is compared with two per person, which needs the number of people.
+Counts are never added across tiles (the bands overlap, one hand can be in two tiles): every view's list of hands or feet is a total for that view and is compared
+with two per person, which needs the number of people; without it no count is judged.
 """
 from __future__ import annotations
 
@@ -11,8 +11,9 @@ from pydantic import BaseModel
 
 from engine.original.anatomy.questions import Answer
 
-DEFECT_KINDS = ("extra_arms", "extra_hands", "extra_legs", "extra_feet", "stray_text", "duplicate_object", "pose_missing", "merged_bodies")
-LIMBS = (("arms", "extra_arms"), ("hands", "extra_hands"), ("legs", "extra_legs"), ("feet", "extra_feet"))
+DEFECT_KINDS = ("extra_hands", "extra_feet", "stray_text", "duplicate_object", "pose_missing", "merged_bodies")
+COUNT_KINDS = ("extra_hands", "extra_feet")  # judged from the judge's own list of hands and feet
+LIMBS = (("hands", "extra_hands"), ("feet", "extra_feet"))
 
 # pose key, regex over the prompt, yes/no question. A pose the prompt asks for but the picture does not show is a defect (a woman asked to rest her hands on her knees
 # but drawn with them clasped in her lap is wrong even when she has two arms).
@@ -53,12 +54,8 @@ def judge_defects(answers: list[Answer], people: int | None, pose_answers: dict[
             continue
         for attr, kind in LIMBS:
             n = getattr(a, attr)
-            if n is None:
-                continue
-            if a.tile == "whole" and n > 2:
-                out.append(Defect(kind=kind, judge=a.judge, tile=a.tile, detail=f"one person has {n} {attr}: {a.evidence}"))
-            elif a.tile != "whole" and people is not None and n > 2 * people:
-                out.append(Defect(kind=kind, judge=a.judge, tile=a.tile, detail=f"{n} {attr} for {people} people in this crop: {a.evidence}"))
+            if n is not None and people is not None and n > 2 * people:
+                out.append(Defect(kind=kind, judge=a.judge, tile=a.tile, detail=f"{n} {attr} listed for {people} people ({a.tile}): {a.evidence}"))
         if a.text and not text_asked:
             out.append(Defect(kind="stray_text", judge=a.judge, tile=a.tile, detail=f"letters or writing drawn: {a.evidence}"))
         if a.double:

@@ -15,7 +15,7 @@ UNVERIFIED = AnatomyReport(status="unverified")
 
 
 def defects(n=1, pose=None):
-    ds = [Defect(kind="extra_arms", judge="a", tile="whole", detail="x") for _ in range(n)]
+    ds = [Defect(kind="extra_hands", judge="a", tile="whole", detail="x") for _ in range(n)]
     return AnatomyReport(status="defects", confirmed=ds, judges=["a", "b"])
 
 
