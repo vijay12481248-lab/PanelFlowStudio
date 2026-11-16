@@ -110,8 +110,11 @@
 
   const needsRefresh = (seen, current) => seen == null || current > seen;
 
+  /** A link from a third-party catalogue is only used when it is http(s); anything else (javascript:, data:, file:) is dropped. */
+  const safeUrl = (u) => (typeof u === 'string' && /^https?:\/\//i.test(u) ? u : null);
+
   const api = { LANES, STEMS, stemOf, fmtTC, snapFrame, timeToX, xToTime, zoomAt, rulerStep, rulerTicks, chosenTake, cueSpan, dragCue, dbToGain, gainToDb,
-    effectiveGains, driftAction, statusChip, peaksToBars, needsRefresh };
+    effectiveGains, driftAction, statusChip, peaksToBars, needsRefresh, safeUrl };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.AudioModel = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

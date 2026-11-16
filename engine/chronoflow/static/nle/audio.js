@@ -211,7 +211,7 @@
     return h('div', { class: 'au-prov' },
       h('div', {}, h('b', {}, pv.source || 'unknown source'), pv.model ? ` · ${pv.model}` : '', pv.seed != null ? ` · seed ${pv.seed}` : ''),
       h('div', {}, `Licence: ${pv.licence || 'unknown'}`, pv.author ? ` · by ${pv.author}` : ''),
-      pv.url ? h('a', { href: pv.url, target: '_blank', rel: 'noopener noreferrer', class: 'au-link' }, 'Open the source page') : null,
+      M.safeUrl(pv.url) ? h('a', { href: M.safeUrl(pv.url), target: '_blank', rel: 'noopener noreferrer', class: 'au-link' }, 'Open the source page') : null,
       h('div', { class: 'dl-hint' }, `${t.duration_s.toFixed(2)} s · peak ${t.peak_db.toFixed(1)} dBFS · hit at ${t.onset_s.toFixed(2)} s`),
       h('div', { class: 'au-cand' }, h('button', { type: 'button', class: 'dl-btn au-play', id: 'auListenTake', onclick: () => toggleAudition(t), title: 'Listen to this sound on its own' }, AU.id === t.id ? '■' : '▶'), miniWave(t)));
   }

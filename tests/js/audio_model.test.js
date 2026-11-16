@@ -124,3 +124,9 @@ test('nextVersionSeen: a newer plan version from the server means refresh', () =
   assert.equal(A.needsRefresh(3, 4), true);
   assert.equal(A.needsRefresh(null, 1), true);
 });
+
+test('safeUrl lets only http(s) links through (a source page link comes from a third-party catalogue)', () => {
+  assert.equal(A.safeUrl('https://freesound.org/people/x/sounds/1'), 'https://freesound.org/people/x/sounds/1');
+  assert.equal(A.safeUrl('HTTP://example.com/a'), 'HTTP://example.com/a');
+  for (const bad of ['javascript:alert(1)', ' javascript:alert(1)', 'data:text/html,<script>', 'file:///C:/x', '//evil.example/x', '', null, undefined, 42]) assert.equal(A.safeUrl(bad), null, String(bad));
+});
