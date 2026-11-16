@@ -8,6 +8,11 @@ from engine.audio.studio.plan import Candidate, Cue, PlanStore, SoundPlan, Take
 from engine.audio.studio.sources.base import Availability, Provider
 
 
+def _why(p: Provider, cue: Cue) -> str:
+    a = p.availability_for(cue) if hasattr(p, "availability_for") else p.availability()
+    return f"{p.name}: {a.reason or 'no match'}"
+
+
 def _measured(c: Candidate) -> Candidate:
     m = measure_take(c.path)
     return c.model_copy(update=dict(onset_s=m.onset_s, peak_s=m.peak_s, duration_s=m.duration_s, peak_db=m.peak_db,
@@ -54,7 +59,7 @@ class AudioEngine:
             if cands:
                 break
         cands = [_measured(c) for c in cands]
-        reasons = [f"{p.name}: {p.availability().reason or 'no match'}" for p in self.providers]
+        reasons = [_why(p, cue) for p in self.providers]
         with self.store.lock(plan_id):  # re-read: other calls may have changed the plan meanwhile
             plan = self.store.load(plan_id)
             cue = plan.cue(cue_id)
@@ -71,6 +76,16 @@ class AudioEngine:
                     cue.takes.append(_to_take(chosen))
                     cue.chosen_take, cue.status = chosen.id, "ready"
             return self.store.save(plan, note=f"sourced {cue_id}")
+
+    def sample(self, plan_id: str, cue: Cue, limit: int = 1) -> list[Candidate]:
+        """Make candidates for a cue that is not in the plan (a voice sample, a trial): files go under the plan's samples folder, nothing is saved on the plan."""
+        plan = self.store.load(plan_id)
+        out_dir = self.store.plan_dir(plan_id) / "samples"
+        for p in self.providers:
+            cands = p.find(cue, out_dir, plan, limit=limit)
+            if cands:
+                return [_measured(c) for c in cands]
+        raise ValueError("; ".join(_why(p, cue) for p in self.providers))
 
     def pick(self, plan_id: str, cue_id: str, candidate_id: str) -> SoundPlan:
         with self.store.lock(plan_id):

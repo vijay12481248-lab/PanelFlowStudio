@@ -15,13 +15,16 @@ from pydantic import BaseModel
 
 from engine.audio.studio import mix as mixer
 from engine.audio.studio.engine import AudioEngine
+from engine.audio.studio.fix import fix_plan
+from engine.audio.studio.script import add_script
 from engine.audio.studio.peaks import file_peaks
 from engine.audio.studio.plan import Cue, PlanStore, Track, check_id, snap
 from engine.audio.studio.preview import audio_signature, build_preview
 from engine.audio.studio.qa import check_plan
 from engine.audio.studio.sources import music as music_source
 from engine.audio.studio.sources.music import MusicProvider
-from engine.audio.studio.sources.narration import NarrationProvider
+from engine.audio.studio.sources.narration import PROVIDERS as SPEECH_PROVIDERS
+from engine.audio.studio.sources.narration import NarrationProvider, list_voices
 from engine.audio.studio.sources.openverse import OpenverseProvider
 from engine.audio.studio.sources.synth import SynthProvider
 from engine.audio.studio.spot import detect_cuts, draft_cues
@@ -60,6 +63,7 @@ class CreateBody(BaseModel):
 
 
 class PutBody(BaseModel):
+    keep_original_audio: bool | None = None
     cues: list[dict[str, Any]] | None = None
     remove_cues: list[str] | None = None
     tracks: list[dict[str, Any]] | None = None
@@ -67,6 +71,42 @@ class PutBody(BaseModel):
     allow_cc_by: bool | None = None
     dialogue_path: str | None = None
     note: str = ""
+
+
+class SampleBody(BaseModel):
+    text: str
+    voice: str = ""
+    provider: str = "kokoro"
+    speed: float = 1.0
+    language: str = "English"
+
+
+class AddSoundBody(BaseModel):
+    intent: str
+    kind: str = "whoosh"
+    track: Literal["music", "sfx", "ambience", "foley"] = "sfx"
+    hit_t: float | None = None
+    t_in: float = 0.0
+    t_out: float | None = None
+    mode: Literal["auto", "ask"] | None = "ask"
+
+
+class ScriptBody(BaseModel):
+    text: str
+    mode: Literal["sequential", "per_cut"] = "sequential"
+    start: float = 0.0
+    gap: float = 0.4
+    voice: str = ""
+    provider: str = ""
+    speed: float = 1.0
+
+
+class TimelineBody(BaseModel):
+    clips: list[dict[str, Any]]
+    overlays: list[dict[str, Any]] = []
+    luts: dict[str, Any] = {}
+    cuts: list[float] = []
+    job_id: str | None = None
 
 
 class SourceBody(BaseModel):
@@ -94,6 +134,41 @@ def _save_measured(engine: AudioEngine, plan_id: str, measured: Any, note: str):
         return engine.store.save(fresh, note)
 
 
+def get_timeline_renderer():
+    """Renders the Video Studio timeline (the same EDL renderer the export uses) to a picture file; tests replace it."""
+    def render(clips, overlays, luts, out_dir=None):
+        import uuid
+        from engine.api.routers import chronoflow as cf
+        target = (Path(out_dir) if out_dir else cf.STUDIO_OUTPUT_DIR) / f"audio_picture_{uuid.uuid4().hex[:8]}.mp4"
+        done = cf.pipeline.render_timeline_edl(clips, target, overlays, luts)
+        if not (done and target.exists()):
+            raise RuntimeError("the timeline could not be rendered to a picture")
+        return target
+    return render
+
+
+def _new_plan(engine: AudioEngine, video_path: str, **kw) -> Any:
+    from engine.chronoflow.media_tools import probe
+    video = Path(video_path)
+    if not video.is_file():
+        raise ValueError(f"video not found: {video_path}")
+    try:
+        info = probe(video)
+    except Exception as e:
+        raise ValueError(f"cannot read the video: {e}")
+    dialogue = kw.pop("dialogue_path", None) or (str(video) if info["has_audio"] else None)
+    if dialogue and not Path(dialogue).is_file():
+        raise ValueError(f"dialogue file not found: {dialogue}")
+    return engine.store.create(str(video), fps=info["fps"], duration=info["duration"], dialogue_path=dialogue, **kw)
+
+
+def _next_id(plan, prefix: str) -> str:
+    n, taken = 1, {c.id for c in plan.cues}
+    while f"{prefix}_{n:02d}" in taken:
+        n += 1
+    return f"{prefix}_{n:02d}"
+
+
 @router.get("/providers")
 def providers(engine: AudioEngine = Depends(get_engine)) -> dict[str, Any]:
     return {n: {"ok": a.ok, "reason": a.reason} for n, a in engine.providers_report().items()}
@@ -102,20 +177,26 @@ def providers(engine: AudioEngine = Depends(get_engine)) -> dict[str, Any]:
 @router.post("/plans")
 def create_plan(body: CreateBody, engine: AudioEngine = Depends(get_engine)) -> dict[str, Any]:
     with _errors():
-        from engine.chronoflow.media_tools import probe
-        video = Path(body.video_path)
-        if not video.is_file():
-            raise ValueError(f"video not found: {body.video_path}")
-        try:
-            info = probe(video)
-        except Exception as e:
-            raise ValueError(f"cannot read the video: {e}")
-        dialogue = body.dialogue_path or (str(video) if info["has_audio"] else None)
-        if dialogue and not Path(dialogue).is_file():
-            raise ValueError(f"dialogue file not found: {dialogue}")
-        plan = engine.store.create(str(video), fps=info["fps"], duration=info["duration"], mode=body.mode,
-                                   allow_cc_by=body.allow_cc_by, dialogue_path=dialogue)
+        plan = _new_plan(engine, body.video_path, mode=body.mode, allow_cc_by=body.allow_cc_by, dialogue_path=body.dialogue_path, source={"kind": "file"})
         return engine.store.save(plan, "created").model_dump()
+
+
+@router.post("/plans/from_timeline")
+def plan_from_timeline(body: TimelineBody, engine: AudioEngine = Depends(get_engine), render=Depends(get_timeline_renderer)) -> dict[str, Any]:
+    """Video Studio -> Audio Studio: render the timeline to a picture and keep its clip boundaries as the picture cuts."""
+    with _errors():
+        if not body.clips:
+            raise ValueError("the timeline has no clips: add clips in the Video Studio first")
+        try:
+            picture = render(body.clips, body.overlays, body.luts, None)
+        except ValueError:
+            raise
+        except Exception as e:
+            raise RuntimeError(f"timeline render failed: {e}")
+        plan = _new_plan(engine, str(picture), source={"kind": "timeline", "job_id": body.job_id})
+        cuts = sorted({snap(c, plan.fps) for c in body.cuts if 0 < c < plan.duration})
+        plan.cuts = [round(c, 4) for c in cuts]
+        return engine.store.save(plan, "created from the timeline").model_dump()
 
 
 @router.get("/plans")
@@ -151,6 +232,9 @@ def put_plan(plan_id: str, body: PutBody, engine: AudioEngine = Depends(get_engi
                     raise ValueError(f"duplicate cue id {cid!r}")
                 seen.add(cid)
                 cue = Cue.model_validate({**(by_id[cid].model_dump() if cid in by_id else {}), **raw})
+                old = by_id.get(cid)
+                if old is not None and cue.kind == "narration" and cue.chosen_take and any(getattr(old, f) != getattr(cue, f) for f in ("text", "voice", "provider", "speed")):
+                    cue.chosen_take, cue.status, cue.reason, cue.placement_error_ms = None, "draft", None, None   # new words or voice need new speech
                 if cue.hit_t is not None:
                     if cue.hit_t < 0:
                         raise ValueError(f"cue {cid!r}: hit_t must be 0 or more")
@@ -167,7 +251,7 @@ def put_plan(plan_id: str, body: PutBody, engine: AudioEngine = Depends(get_engi
             plan.tracks = list(have.values())
         if body.dialogue_path is not None and not Path(body.dialogue_path).is_file():
             raise ValueError(f"dialogue file not found: {body.dialogue_path}")
-        for field in ("mode", "allow_cc_by", "dialogue_path"):
+        for field in ("mode", "allow_cc_by", "dialogue_path", "keep_original_audio"):
             if getattr(body, field) is not None:
                 setattr(plan, field, getattr(body, field))
         return engine.store.save(plan, body.note or "edited").model_dump()
@@ -193,6 +277,67 @@ async def source_cue(plan_id: str, cue_id: str, body: SourceBody | None = None, 
     def work() -> dict[str, Any]:
         with _errors():
             return engine.source_cue(plan_id, check_id(cue_id), (body.mode if body else None)).model_dump()
+    return await run_in_threadpool(work)
+
+
+@router.get("/voices")
+def voices() -> dict[str, Any]:
+    nar = NarrationProvider()
+    ok = nar.availability()
+    return {"voices": list_voices(), "providers": {p: {"ok": ok.ok, "reason": ok.reason} for p in SPEECH_PROVIDERS}}
+
+
+@router.post("/plans/{plan_id}/narration/sample")
+async def narration_sample(plan_id: str, body: SampleBody, engine: AudioEngine = Depends(get_engine)) -> dict[str, Any]:
+    """Hear a voice on your own words before adding the line: nothing is added to the plan."""
+    music_source.bind_loop(asyncio.get_running_loop())
+
+    def work() -> dict[str, Any]:
+        with _errors():
+            cue = Cue(id="sample", track="dialogue", kind="narration", text=body.text, voice=body.voice, provider=body.provider, speed=body.speed, hints={"language": body.language})
+            got = engine.sample(plan_id, cue, limit=1)[0]
+            return {"file": f"samples/{Path(got.path).name}", "seconds": got.duration_s, "voice": body.voice, "provider": body.provider}
+    return await run_in_threadpool(work)
+
+
+@router.post("/plans/{plan_id}/script")
+def script(plan_id: str, body: ScriptBody, engine: AudioEngine = Depends(get_engine)) -> dict[str, Any]:
+    with _errors(), engine.store.lock(plan_id):
+        plan = engine.store.load(plan_id)
+        new = add_script(plan, body.text, mode=body.mode, start=body.start, gap=body.gap, voice=body.voice, provider=body.provider, speed=body.speed)
+        if not new:
+            raise ValueError("the script has no lines")
+        plan.cues += new
+        return engine.store.save(plan, f"script: {len(new)} line(s)").model_dump()
+
+
+@router.post("/plans/{plan_id}/add_sound")
+async def add_sound(plan_id: str, body: AddSoundBody, engine: AudioEngine = Depends(get_engine)) -> dict[str, Any]:
+    """Describe a sound and where it goes: the cue is created and sourced in one step (Ask me by default, so you hear the candidates)."""
+    music_source.bind_loop(asyncio.get_running_loop())
+
+    def work() -> dict[str, Any]:
+        with _errors():
+            with engine.store.lock(plan_id):
+                plan = engine.store.load(plan_id)
+                cid = _next_id(plan, "snd")
+                hit = snap(max(0.0, body.hit_t), plan.fps) if body.hit_t is not None else None
+                kind = "music" if body.track == "music" else body.kind
+                plan.cues.append(Cue(id=cid, track=body.track, kind=kind, intent=body.intent, hit_t=hit, t_in=body.t_in, t_out=body.t_out, mode=body.mode,
+                                     anchor="peak" if kind in ("whoosh", "riser") else "onset"))
+                engine.store.save(plan, f"added {cid}")
+            return engine.source_cue(plan_id, cid, body.mode).model_dump()
+    return await run_in_threadpool(work)
+
+
+@router.post("/plans/{plan_id}/fix")
+async def fix(plan_id: str, engine: AudioEngine = Depends(get_engine)) -> dict[str, Any]:
+    """Mechanical repairs for what QA finds (re-source clipped or silent sounds, push overrunning narration later); the rest is returned."""
+    music_source.bind_loop(asyncio.get_running_loop())
+
+    def work() -> dict[str, Any]:
+        with _errors():
+            return fix_plan(engine, plan_id, mixer.render_cue)
     return await run_in_threadpool(work)
 
 
