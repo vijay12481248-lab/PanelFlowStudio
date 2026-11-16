@@ -295,6 +295,12 @@ def check_7(tmp):
         lufs = float(s.ev("document.querySelector('.au-master-info').innerText").split()[0])
         assert abs(lufs + 14) < 1.0, lufs
         s.page.click("#auExport")
+        s.page.wait_for_function("document.querySelector('.au-status').innerText.includes('cues not finished')", timeout=60000)  # the failed music cue blocks the export, and the page says so
+        assert s.ev("document.querySelector('.au-status').className").endswith("bad")
+        s.errors[:] = [e for e in s.errors if "status of 400" not in e]  # the browser logs that expected refusal
+        s.ev("NLEAudio.edit({remove_cues: ['music_1']})")
+        s.page.wait_for_function("!NLEAudio.state.plan.cues.some(c => c.id === 'music_1')")
+        s.page.click("#auExport")
         s.page.wait_for_function("document.querySelector('.au-status').innerText.startsWith('Exported')", timeout=300000)
         s.shot("task7_mixer")
         s.finish()
