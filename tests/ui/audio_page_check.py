@@ -172,7 +172,7 @@ def check_5(tmp):
         s.page.wait_for_function("NLEAudio.state.plan.cues.find(c => c.id === 'cut_03').status === 'needs_pick'", timeout=120000)
         assert s.ev("document.querySelectorAll('.au-cand').length") >= 1
         s.shot("task5_ask")
-        s.page.click(".au-cand .dl-btn >> nth=0")
+        s.page.click(".au-cand .dl-btn.accent >> nth=0")
         s.page.wait_for_function("NLEAudio.state.plan.cues.find(c => c.id === 'cut_03').status === 'ready'")
         s.page.click(".au-cue[data-cue=cut_01]")
         s.shot("task5_ready")
