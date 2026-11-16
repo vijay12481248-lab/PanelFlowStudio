@@ -27,3 +27,11 @@ def test_the_committed_labels_are_well_formed_and_mark_their_source():
     assert len(labels) >= 64 and all({"id", "file", "model", "prompt", "people", "expected", "source"} <= set(e) for e in labels)
     assert any(e["expected"] for e in labels) and any(e["expected"] == [] for e in labels) and any(e["expected"] is None for e in labels)
     assert all(e["source"].startswith(("agent-", "owner-")) for e in labels)
+
+
+def test_metrics_break_recall_down_by_defect_kind():
+    rows = [row(["extra_hands"], confirmed=["extra_hands"], status="defects"), row(["extra_hands"], suspected=["extra_hands"]),
+            row(["pose_missing|hands_on_knees"]), row(["pose_missing|two_hands"], suspected=["pose_missing|two_hands"])]
+    k = cal.metrics(rows)["by_kind"]
+    assert k["extra_hands"] == {"expected": 2, "confirmed": 1, "suspected": 1}
+    assert k["pose_missing"] == {"expected": 2, "confirmed": 0, "suspected": 1}

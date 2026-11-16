@@ -40,11 +40,19 @@ def metrics(rows: list[dict]) -> dict:
             expected_n += 1
             found_c += k in r["confirmed"]
             found_any += k in r["confirmed"] or k in r["suspected"]
+    by_kind: dict[str, dict[str, int]] = {}
+    for r in rows:
+        for k in r["expected"]:
+            kind = k.split("|")[0]
+            c = by_kind.setdefault(kind, {"expected": 0, "confirmed": 0, "suspected": 0})
+            c["expected"] += 1
+            c["confirmed"] += k in r["confirmed"]
+            c["suspected"] += k in r["suspected"]
     false_alarm_pictures = sum(1 for r in clean_rows if r["confirmed"])
     judged = [r for r in rows if r["status"] != "unverified"]
     return {"pictures": len(rows), "expected_defects": expected_n, "recall_confirmed": round(found_c / expected_n, 3) if expected_n else None,
             "recall_confirmed_or_suspected": round(found_any / expected_n, 3) if expected_n else None, "clean_pictures": len(clean_rows),
-            "false_alarm_pictures": false_alarm_pictures,
+            "by_kind": by_kind, "false_alarm_pictures": false_alarm_pictures,
             "false_alarms_per_10_clean": round(10 * false_alarm_pictures / len(clean_rows), 2) if clean_rows else None,
             "unverified_share": round(1 - len(judged) / len(rows), 3) if rows else None}
 
