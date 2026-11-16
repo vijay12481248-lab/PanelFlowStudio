@@ -1,0 +1,32 @@
+/* ChronoFlow Audio page. Same tokens as Deliver (#0b1230 panels, #1a2350 borders, #3b6bf5 accent); .dl-* controls come from deliver.css. */
+.audio-plan-pane, .audio-monitor, .audio-inspector, .audio-panel { display: none; flex-direction: column; background: #0b1230; border: 1px solid #1a2350; border-radius: 6px;
+  overflow: hidden; min-height: 0; color: #d5dcf5; font-size: .76rem; }
+.au-pane { flex: 1; min-height: 0; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 9px; }
+.au-actions { display: flex; gap: 6px; }
+.au-actions .dl-btn { flex: 1; }
+.au-cues { flex: 1 1 auto; min-height: 90px; overflow-y: auto; display: flex; flex-direction: column; gap: 3px; }
+.au-empty { color: #6a76a3; font-size: .72rem; line-height: 1.45; padding: 8px 2px; }
+.au-status { flex: none; min-height: 1.3em; color: #9aa6d0; font-size: .7rem; line-height: 1.35; word-break: break-word; }
+.au-status.bad { color: #f2667a; }
+.au-cue { display: grid; grid-template-columns: auto 34px minmax(0, 1fr) auto; gap: 7px; align-items: center; text-align: left; background: #101a3d; border: 1px solid #222d5e;
+  border-radius: 8px; padding: 5px 8px; color: #d5dcf5; font: inherit; cursor: pointer; }
+.au-cue:hover { background: #162049; }
+.au-cue.sel { border-color: #3b6bf5; background: rgba(59, 107, 245, .2); }
+.au-cue:focus-visible { outline: 2px solid #7aa2ff; outline-offset: 1px; }
+.au-cue-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.au-lane { color: #7aa2ff; font-weight: 800; font-size: .66rem; letter-spacing: .05em; }
+.au-tc { font: .66rem monospace; color: #6a76a3; }
+.au-chip { border-radius: 999px; padding: 1px 8px; font-size: .64rem; font-weight: 700; white-space: nowrap; border: 1px solid transparent; }
+.au-chip.ok { background: rgba(70, 214, 163, .15); color: #46d6a3; border-color: rgba(70, 214, 163, .4); }
+.au-chip.warn { background: rgba(240, 177, 74, .15); color: #f0b14a; border-color: rgba(240, 177, 74, .4); }
+.au-chip.bad { background: rgba(242, 102, 122, .15); color: #f2667a; border-color: rgba(242, 102, 122, .45); }
+.au-chip.muted { background: #141c3d; color: #8590bb; border-color: #222d5e; }
+
+.au-monhead { flex: none; display: flex; align-items: center; gap: 10px; padding: 7px 12px; background: #0f1740; border-bottom: 1px solid #1a2350; min-width: 0; }
+.au-title { color: #eef1ff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.au-badge { color: #8590bb; font: .68rem monospace; white-space: nowrap; }
+.au-videowrap { flex: 1; min-height: 0; background: #000; display: flex; align-items: center; justify-content: center; }
+.au-video { max-width: 100%; max-height: 100%; background: #000; }
+.au-transport { flex: none; display: flex; align-items: center; justify-content: center; gap: 10px; padding: 6px 10px; background: #0a1128; border-top: 1px solid #1a2350; }
+.au-tcbig { font: 700 1.05rem monospace; color: #eef1ff; letter-spacing: .04em; }
+.au-lanes { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }

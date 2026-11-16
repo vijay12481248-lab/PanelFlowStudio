@@ -162,3 +162,12 @@ body.cf-resizing iframe, body.cf-resizing video { pointer-events: none; }
 #cfWorkspace[data-page="color"] .color-panel { flex: 0 0 var(--cf-cp); overflow: hidden; }
 #cfWorkspace[data-page="color"] .cf-body { overflow-x: hidden; }
 #cfWorkspace[data-page="deliver"] { --cf-tl: 210px; }   /* the full timeline (with in/out marks) fits without a scrollbar */
+
+/* ---------- Audio page: plan + cues | video | cue inspector, lanes + mixer underneath ---------- */
+#cfWorkspace[data-page="audio"] { --cf-l: 300px; --cf-r: 340px; --cf-tl: 330px; }
+#cfWorkspace[data-page="audio"] .davinci-top-row > .davinci-cinema-monitor { display: none; }
+#cfWorkspace[data-page="audio"] .audio-plan-pane { display: flex; grid-column: 1; }
+#cfWorkspace[data-page="audio"] .audio-monitor { display: flex; grid-column: 3; }
+#cfWorkspace[data-page="audio"] .audio-inspector { display: flex; grid-column: 5; }
+#cfWorkspace[data-page="audio"] #nleTimeline { display: none; }
+#cfWorkspace[data-page="audio"] .audio-panel { display: flex; flex: 0 0 var(--cf-tl); }

@@ -4,8 +4,8 @@
   const KEY = 'cf.layout.v1', MIN_MONITOR = 360, GUT = 10;
   const VAR = { l: '--cf-l', r: '--cf-r', h: '--cf-tl' };
   // On the Color page the bottom divider sizes the grade panel (the clip strip there has a fixed height)
-  const hVar = () => (page === 'color' ? '--cf-cp' : '--cf-tl');
-  const hEl = () => document.querySelector(page === 'color' ? '#cfWorkspace .color-panel' : '#nleTimeline');
+  const hVar = () => (page === 'color' ? '--cf-cp' : '--cf-tl');   // on the Audio page the divider sizes the lanes + mixer panel
+  const hEl = () => document.querySelector(page === 'color' ? '#cfWorkspace .color-panel' : page === 'audio' ? '#cfWorkspace .audio-panel' : '#nleTimeline');
   const MIN = { l: 200, r: 240, h: 110 };
   let saved = {};
   try { saved = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { saved = {}; }
