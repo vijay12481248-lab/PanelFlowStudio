@@ -21,6 +21,19 @@ async def panelflow_system_health() -> dict[str, Any]:
 
 
 @registry.tool(
+    name="panelflow_system_readiness",
+    description="Run full production readiness audit: checks local Ollama (qwen3.5:9b), ComfyUI (:8188), FLUX.2 Klein 4B workflows, InsightFace ArcFace 512-D, FFmpeg, Audio Studio engines, Reels 9:16 auto-cut, and VRAM/disk headroom.",
+    input_schema={
+        "type": "object",
+        "properties": {},
+    },
+    domain="system",
+)
+async def panelflow_system_readiness() -> dict[str, Any]:
+    return await bridge.get("/api/system/readiness")
+
+
+@registry.tool(
     name="panelflow_system_resources",
     description="Check local host hardware metrics: RTX 5060 Ti GPU VRAM free/total, system RAM, CPU load, and workspace disk space.",
     input_schema={

@@ -3084,6 +3084,30 @@ export class PanelFlowApiClient {
       body: JSON.stringify(req),
     });
   }
+
+  // ---------------------------------------------------------------------------
+  // Production Readiness & Preflight Health Auditor (Milestone 10)
+  // ---------------------------------------------------------------------------
+  async checkProductionReadiness(): Promise<ProductionReadinessReportResponse> {
+    return this.request<ProductionReadinessReportResponse>("/api/system/readiness");
+  }
+}
+
+export interface CapabilityCheckResponse {
+  name: string;
+  category: "model" | "vision" | "audio" | "hardware" | "tool";
+  status: "ok" | "warning" | "error";
+  available: boolean;
+  details: string;
+  recommendation?: string | null;
+}
+
+export interface ProductionReadinessReportResponse {
+  ready: boolean;
+  all_ok: boolean;
+  summary: string;
+  recommendations: string[];
+  checks: Record<string, CapabilityCheckResponse>;
 }
 
 export interface ReelAutoCutApiRequest {
