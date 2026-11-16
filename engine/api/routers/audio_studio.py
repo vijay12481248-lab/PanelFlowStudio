@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import shutil
 from contextlib import contextmanager
 from pathlib import Path
@@ -89,6 +90,7 @@ class AddSoundBody(BaseModel):
     t_in: float = 0.0
     t_out: float | None = None
     mode: Literal["auto", "ask"] | None = "ask"
+    hints: dict[str, Any] = {}   # music: bpm, key_scale
 
 
 class ScriptBody(BaseModel):
@@ -139,7 +141,9 @@ def get_timeline_renderer():
     def render(clips, overlays, luts, out_dir=None):
         import uuid
         from engine.api.routers import chronoflow as cf
-        target = (Path(out_dir) if out_dir else cf.STUDIO_OUTPUT_DIR) / f"audio_picture_{uuid.uuid4().hex[:8]}.mp4"
+        folder = Path(out_dir or os.environ.get("PANELFLOW_AUDIO_PICTURE_DIR") or cf.STUDIO_OUTPUT_DIR)   # tests point it at a temp folder
+        folder.mkdir(parents=True, exist_ok=True)
+        target = folder / f"audio_picture_{uuid.uuid4().hex[:8]}.mp4"
         done = cf.pipeline.render_timeline_edl(clips, target, overlays, luts)
         if not (done and target.exists()):
             raise RuntimeError("the timeline could not be rendered to a picture")
@@ -323,7 +327,7 @@ async def add_sound(plan_id: str, body: AddSoundBody, engine: AudioEngine = Depe
                 cid = _next_id(plan, "snd")
                 hit = snap(max(0.0, body.hit_t), plan.fps) if body.hit_t is not None else None
                 kind = "music" if body.track == "music" else body.kind
-                plan.cues.append(Cue(id=cid, track=body.track, kind=kind, intent=body.intent, hit_t=hit, t_in=body.t_in, t_out=body.t_out, mode=body.mode,
+                plan.cues.append(Cue(id=cid, track=body.track, kind=kind, intent=body.intent, hit_t=hit, t_in=body.t_in, t_out=body.t_out, mode=body.mode, hints=body.hints,
                                      anchor="peak" if kind in ("whoosh", "riser") else "onset"))
                 engine.store.save(plan, f"added {cid}")
             return engine.source_cue(plan_id, cid, body.mode).model_dump()

@@ -104,3 +104,9 @@ def test_a_plan_from_the_video_studio_timeline_keeps_its_cuts_and_job(client, vi
     assert r["source"] == {"kind": "timeline", "job_id": "job123"} and r["fps"] == 24.0
     assert r["cuts"] == [4.0, pytest.approx(9.0, abs=1 / 24)], "cuts are snapped to frames and the ones outside the picture are dropped"
     assert client.post(f"{B}/plans/from_timeline", json={"clips": [], "overlays": [], "luts": {}, "cuts": [], "job_id": "j"}).status_code == 400
+
+
+def test_add_sound_keeps_music_hints_for_the_cue(client, video):
+    pid = _plan(client, video)["id"]
+    c = client.post(f"{B}/plans/{pid}/add_sound", json={"intent": "a click", "kind": "click", "hit_t": 1.0, "hints": {"bpm": 90, "key_scale": "A Minor"}}).json()["cues"][0]
+    assert c["hints"] == {"bpm": 90, "key_scale": "A Minor"}

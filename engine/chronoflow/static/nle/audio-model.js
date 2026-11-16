@@ -6,7 +6,7 @@
   const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
   const r6 = (v) => Math.round(v * 1e6) / 1e6;
   const LANES = [
-    { id: 'dialogue', label: 'DX', stem: 'dialogue' }, { id: 'music', label: 'MX', stem: 'music' }, { id: 'sfx', label: 'SFX', stem: 'effects' },
+    { id: 'dialogue', label: 'VO', stem: 'dialogue' }, { id: 'music', label: 'MX', stem: 'music' }, { id: 'sfx', label: 'SFX', stem: 'effects' },
     { id: 'ambience', label: 'AMB', stem: 'effects' }, { id: 'foley', label: 'FOL', stem: 'effects' },
   ];
   const STEMS = ['dialogue', 'music', 'effects'];
@@ -53,7 +53,7 @@
       return { start: r6(start), end: r6(start + take.duration_s - (start - raw)) };
     }
     const s = cue.t_in || 0;
-    return { start: s, end: r6(s + (take ? take.duration_s : 1)) };
+    return { start: s, end: r6(s + (take ? take.duration_s : cue.kind === 'narration' ? Math.max(0.5, estimateSeconds(cue.text, cue.speed)) : 1)) };
   }
 
   /** The patch to send to put_plan after dragging a cue block dt seconds. Frame-snapped; a hit snaps to a picture cut within tol seconds. */
@@ -127,7 +127,13 @@
     { id: 'cinema', label: 'Cinema', lufs: -23, hint: 'Quiet, wide dynamic range (broadcast style)' },
   ];
 
-  const api = { estimateSeconds, LOUDNESS, LANES, STEMS, stemOf, fmtTC, snapFrame, timeToX, xToTime, zoomAt, rulerStep, rulerTicks, chosenTake, cueSpan, dragCue, dbToGain, gainToDb,
+  /** Lines of a script: paragraphs (blank lines) are lines; a single paragraph is split into sentences. Same rule as the engine (script.py split_script). */
+  function splitScript(text) {
+    const paras = String(text || '').trim().split(/\n\s*\n/).map((x) => x.split(/\s+/).filter(Boolean).join(' ')).filter(Boolean);
+    return paras.length === 1 ? paras[0].split(/(?<=[.!?])\s+/).map((x) => x.trim()).filter(Boolean) : paras;
+  }
+
+  const api = { splitScript, estimateSeconds, LOUDNESS, LANES, STEMS, stemOf, fmtTC, snapFrame, timeToX, xToTime, zoomAt, rulerStep, rulerTicks, chosenTake, cueSpan, dragCue, dbToGain, gainToDb,
     effectiveGains, driftAction, statusChip, peaksToBars, needsRefresh, safeUrl };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.AudioModel = api;

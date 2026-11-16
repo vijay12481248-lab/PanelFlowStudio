@@ -144,3 +144,22 @@ test('loudness presets are the targets creators use', () => {
   assert.deepEqual(A.LOUDNESS.map((p) => p.lufs), [-14, -14, -16, -23]);
   assert.ok(A.LOUDNESS.every((p) => p.id && p.label && p.hint));
 });
+
+test('splitScript: paragraphs are lines, one paragraph is split into sentences (same rule as the engine)', () => {
+  assert.deepEqual(A.splitScript('First line here.\n\nSecond line here.\n\n\nThird.'), ['First line here.', 'Second line here.', 'Third.']);
+  assert.deepEqual(A.splitScript('One. Two? Three! Four'), ['One.', 'Two?', 'Three!', 'Four']);
+  assert.deepEqual(A.splitScript('A single paragraph\nthat wraps over two lines, with one sentence.'), ['A single paragraph that wraps over two lines, with one sentence.']);
+  assert.deepEqual(A.splitScript('  \n \n'), []);
+});
+
+test('an unspoken narration cue is drawn as long as its estimated speech; a spoken one as long as its take', () => {
+  const words = Array(30).fill('word').join(' ');
+  const draft = { id: 'v', track: 'dialogue', kind: 'narration', text: words, speed: 1, t_in: 5, t_out: null, hit_t: null, takes: [], status: 'draft' };
+  near(A.cueSpan(draft, plan()).end - 5, 30 / 3, 0.01);
+  const spoken = { ...draft, takes: [take({ duration_s: 4.2 })], chosen_take: 't', status: 'ready' };
+  near(A.cueSpan(spoken, plan()).end - 5, 4.2, 0.001);
+});
+
+test('the voice lane is labelled VO', () => {
+  assert.equal(A.LANES.find((l) => l.id === 'dialogue').label, 'VO');
+});

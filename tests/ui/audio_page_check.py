@@ -42,7 +42,7 @@ def api(method, path, body=None):
 
 
 class Session:
-    def __init__(self, pw, width=1600, height=900):
+    def __init__(self, pw, width=1600, height=900, tab=False):
         self.browser = pw.chromium.launch(headless=True, args=["--autoplay-policy=no-user-gesture-required"])
         self.page = self.browser.new_page(viewport={"width": width, "height": height})
         self.errors = []
@@ -50,8 +50,8 @@ class Session:
         self.page.on("pageerror", lambda e: self.errors.append(str(e)))
         self.page.on("console", lambda m: self.errors.append(f"console.error: {m.text}") if m.type == "error" else None)
         self.page.goto(f"{BASE}/chronoflow/ui", wait_until="networkidle")
-        self.page.wait_for_function("window.NLEAudio && window.AudioModel")
-        self.page.evaluate("switchResolvePage('audio')")
+        self.page.wait_for_function("window.NLEAudio && window.AudioModel && window.AudioStudio")
+        self.page.evaluate("switchTab('audio')" if tab else "switchResolvePage('audio')")
         self.page.wait_for_timeout(500)
 
     def shot(self, name):
@@ -482,7 +482,123 @@ def check_9(tmp):
     print("task 9 OK")
 
 
-CHECKS = {"4": check_4, "5": check_5, "6": check_6, "7": check_7, "8": check_8, "9": check_9}
+# ---------------------------------------------------------------- task 10: the Audio Studio tab (narration, music, effects, mix, hand-offs)
+def check_10(tmp):
+    video = make_video(tmp / "screen.mp4")
+    with sync_playwright() as pw:
+        s = Session(pw, tab=True)
+        assert s.ev("[...document.querySelectorAll('.nav-tab')].map(b => b.innerText.trim())") == ["Video Studio", "Image Studio", "Audio Studio", "Gallery", "Storyboard", "Organizer"]
+        assert "active" in s.ev("document.querySelector('.nav-tab[data-tab=audio]').className") and s.ev("document.body.dataset.tab") == "audio"
+        box = lambda sel: s.ev("sel => { const r = document.querySelector(sel).getBoundingClientRect(); return [r.x, r.y, r.width, r.height]; }", sel)
+        head, create, mon, insp, bottom = (box(x) for x in ("#asHeader", "#asCreate", "#asMonitor", "#asInspector", "#asBottom"))
+        assert head[3] > 60 and create[2] > 250 and mon[2] > 400 and insp[2] > 250 and bottom[3] > 200, (head, create, mon, insp, bottom)
+        assert create[0] < mon[0] < insp[0] and bottom[1] > mon[1] + mon[3] - 5 and head[1] < create[1]
+        steps = s.ev("[...document.querySelectorAll('.as-step')].map(x => x.className + '|' + x.innerText.trim())")
+        assert len(steps) == 3 and "current" in steps[0] and "Open a video" in steps[0], steps
+        assert [t.strip() for t in s.ev("[...document.querySelectorAll('.as-tab')].map(t => t.innerText)")] == ["Narration", "Music", "Effects", "Cues"]
+        assert "Speak a script over your video" in s.ev("document.querySelector('.as-tabpane[data-tab=narration]').innerText")
+        s.shot("task10_empty")
+        print("step: open", flush=True)
+        s.ev("p => { AudioStudio.openVideo(p); return 1; }", str(video))
+        s.page.wait_for_function("AudioStudio.state.plan && AudioStudio.state.plan.id", timeout=30000)
+        s.page.wait_for_timeout(600)
+        steps = s.ev("[...document.querySelectorAll('.as-step')].map(x => x.className)")
+        assert "done" in steps[0] and "current" in steps[1], steps
+        s.page.wait_for_function("document.querySelectorAll('#asVoice option').length > 5")
+
+        print("step: narration", flush=True)
+        s.page.fill("#asScript", "At dawn the gate opened.\n\nA small cat followed the pilot into the clouds.\n\nNobody saw them leave.")
+        s.page.select_option("#asVoice", "kokoro:af_heart")
+        assert "3 line(s)" in s.ev("document.querySelector('.as-tabpane[data-tab=narration] .dl-hint').innerText")
+        s.page.click("#asSample")
+        s.page.wait_for_function("document.querySelector('#asCreate .au-status').innerText.startsWith('Sample:')", timeout=240000)
+        s.page.click("#asAddScript")
+        s.page.wait_for_function("AudioStudio.state.plan.cues.filter(c => c.kind === 'narration').length === 3", timeout=30000)
+        cues = s.ev("AudioStudio.state.plan.cues.filter(c => c.kind === 'narration').map(c => [c.id, c.status, c.t_in])")
+        assert all(c[1] == "draft" for c in cues) and cues[0][2] < cues[1][2] < cues[2][2], cues
+        s.page.click("#asSpeakAll")
+        s.page.wait_for_function("AudioStudio.state.plan.cues.filter(c => c.kind === 'narration').every(c => c.status === 'ready')", timeout=600000)
+        s.page.wait_for_function("document.querySelector('#asCreate .au-status').innerText.startsWith('Spoke 3 line')", timeout=60000)
+        lens = s.ev("AudioStudio.state.plan.cues.filter(c => c.kind === 'narration').map(c => c.takes.find(t => t.id === c.chosen_take).duration_s)")
+        assert all(1.0 < x < 8 for x in lens), lens
+        s.page.wait_for_function("AudioStudio.state.plan.cues.filter(c => c.kind === 'narration').every(c => (AudioStudio.peaks[c.chosen_take] || []).length > 0)", timeout=30000)
+        s.page.wait_for_timeout(400)
+        vo = s.ev("(() => { const cv = document.querySelector('#asBottom .au-cv[data-lane=dialogue]'); const d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data; let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i] > 150 && d[i + 2] > 200) n++; return n; })()")
+        assert vo > 300, f"speech waveforms are drawn on the voice lane ({vo})"
+        s.shot("task10_narration")
+
+        print("step: inspector", flush=True)
+        s.page.click("#asCreate .au-cue[data-cue=vo_01]") if s.ev("!!document.querySelector('#asCreate .au-cue[data-cue=vo_01]') && document.querySelector('#asCreate .au-cue[data-cue=vo_01]').offsetParent") else s.ev("AudioStudio.selectCue('vo_01', false)")
+        assert s.ev("document.querySelector('#asInspector .au-intent').dataset.f") == "text"
+        s.page.fill("#asInspector .au-intent", "At dawn the great gate slowly opened.")
+        s.page.press("#asInspector .au-intent", "Tab")
+        s.page.wait_for_function("AudioStudio.state.plan.cues.find(c => c.id === 'vo_01').status === 'draft'", timeout=15000)
+        s.page.click("#asSourceCue")
+        s.page.wait_for_function("AudioStudio.state.plan.cues.find(c => c.id === 'vo_01').status === 'ready'", timeout=300000)
+        s.page.uncheck("#asKeepOrig")
+        s.page.wait_for_function("AudioStudio.state.plan.keep_original_audio === false", timeout=15000)
+
+        print("step: effects", flush=True)
+        s.page.click("#asTab_effects")
+        s.page.fill("#asFxText", "a short click")
+        s.page.click("#asCreate .as-chip >> text=Click")
+        s.page.click("#asAddFx")
+        s.page.wait_for_function("AudioStudio.state.plan.cues.some(c => c.id.startsWith('snd_') && c.status === 'needs_pick')", timeout=120000)
+        s.page.click("#asInspector .au-cand .dl-btn.accent >> nth=0")
+        s.page.wait_for_function("AudioStudio.state.plan.cues.find(c => c.id.startsWith('snd_')).status === 'ready'", timeout=30000)
+
+        print("step: music", flush=True)
+        s.page.click("#asTab_music")
+        s.page.fill("#asMusicText", "soft piano, slow and sad")
+        s.page.click("#asCreate .as-chip >> text=calm")
+        assert "calm" in s.ev("document.querySelector('#asMusicText').value")
+        s.page.click("#asMakeMusic")
+        s.page.wait_for_function("AudioStudio.state.plan.cues.some(c => c.kind === 'music' && c.status !== 'draft')", timeout=900000)
+        mus = s.ev("AudioStudio.state.plan.cues.find(c => c.kind === 'music')")
+        print("music cue:", mus["status"], mus.get("reason"), flush=True)
+        assert mus["track"] == "music" and (mus["status"] == "needs_pick" or "ACE-Step" in (mus["reason"] or "")), mus
+        s.ev("(() => { AudioStudio.edit({remove_cues: AudioStudio.state.plan.cues.filter(c => c.kind === 'music').map(c => c.id)}); return 1; })()")
+        s.page.wait_for_function("!AudioStudio.state.plan.cues.some(c => c.kind === 'music')")
+
+        print("step: mix", flush=True)
+        s.page.click("#asPreview")
+        s.page.wait_for_function("document.querySelector('#asBottom .au-pvstate').innerText === 'up to date'", timeout=300000)
+        s.page.click("#asPlay")
+        s.page.wait_for_function("AudioStudio.mixer.playing === true", timeout=20000)
+        s.page.wait_for_timeout(2000)
+        lvl = s.ev("AudioStudio.mixer.lvl")
+        assert lvl.get("dialogue", -90) > -60, ("the voice strip meter moves", lvl)
+        s.shot("task10_mix")
+        s.page.click("#asPlay")
+        s.page.select_option("#asBottom .as-mixopts select", "podcast")
+        s.page.click("#asMaster")
+        s.page.wait_for_function("document.querySelector('#asBottom .au-master-info').innerText.includes('LUFS')", timeout=300000)
+        lufs = float(s.ev("document.querySelector('#asBottom .au-master-info').innerText").split()[0])
+        assert abs(lufs + 16) < 1.2, ("the Voice only preset targets -16 LUFS", lufs)
+        steps = s.ev("[...document.querySelectorAll('.as-step')].map(x => x.className)")
+        assert all("done" in x for x in steps), steps
+
+        print("step: fix and hand-offs", flush=True)
+        s.page.click("#asFix")
+        s.page.wait_for_function("document.querySelector('#asCreate .au-status').innerText.includes('fixed')", timeout=300000)
+        s.ev("AudioStudio.selectCue('vo_02', false)")
+        s.page.click("#asShowVideo")
+        assert s.ev("document.getElementById('cfWorkspace').dataset.page") == "edit", "Show in Video Studio switches to the Edit page"
+        s.page.evaluate("switchTab('audio')")
+        s.page.wait_for_timeout(600)
+        s.ev("(() => { window.__imports = []; const f = window.fetch; window.fetch = async (u, o) => { if (String(u).includes('/library/import')) { window.__imports.push(JSON.parse(o.body)); return new Response(JSON.stringify({job_id: 'job_x', added: []}), {status: 200, headers: {'Content-Type': 'application/json'}}); } return f(u, o); }; window.onSelectProjectJob = (j) => { window.__opened = j; }; return 1; })()")
+        s.page.click("#asSend")
+        s.page.wait_for_function("window.__imports.length === 1", timeout=300000)
+        imp = s.ev("window.__imports[0]")
+        assert imp["paths"][0].endswith("master.mp4") and "(with sound)" in imp["title"], imp
+        s.page.wait_for_function("window.__opened === 'job_x'")
+        s.page.evaluate("switchTab('audio')")
+        s.shot("task10_sent")
+        s.finish()
+    print("task 10 OK")
+
+
+CHECKS = {"4": check_4, "5": check_5, "6": check_6, "7": check_7, "8": check_8, "9": check_9, "10": check_10}
 
 if __name__ == "__main__":
     which = sys.argv[1] if len(sys.argv) > 1 else "all"

@@ -22,7 +22,7 @@ from engine.audio.studio.sources.music import _ONE_AT_A_TIME, ResourceSlot
 PROVIDERS = ("kokoro", "qwen3_tts")
 KOKORO_VOICES = ["af_heart", "af_bella", "af_nicole", "af_sarah", "af_sky", "am_adam", "am_michael", "bf_emma", "bf_isabella", "bm_george", "bm_lewis"]
 _MODEL = {"kokoro": ("Apache-2.0", "kokoro-82m"), "qwen3_tts": ("Apache-2.0", "qwen3-tts-12hz-1.7b-base")}
-WORDS_PER_SECOND = 3.0   # measured 2026-11-16 on one 14-word line: Kokoro af_heart 4.97 s, Qwen3-TTS aria_female 5.68 s (n=2, re-measure with more lines)
+WORDS_PER_SECOND = 3.0   # measured 2026-11-16 on one 15-word line: Kokoro af_heart 4.97 s, Qwen3-TTS aria_female 5.68 s (n=2, re-measure with more lines)
 _QWEN_PY = Path(os.environ.get("PANELFLOW_QWEN3_TTS_PYTHON", r"D:\Tools\Qwen3-TTS\.venv\Scripts\python.exe"))
 _QWEN_RUNNER = Path(os.environ.get("PANELFLOW_QWEN3_TTS_RUNNER", r"D:\Tools\Qwen3-TTS\runner.py"))
 _pipes: dict[str, Any] = {}
