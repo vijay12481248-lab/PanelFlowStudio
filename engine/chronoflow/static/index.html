@@ -11964,7 +11964,7 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
 
     // Video Studio pages. ONE source of truth: the rail highlight, the layout (data-page, see layout.css) and the
     // Color / Fusion / Deliver / Library modules all follow cfPage. Nothing else may highlight the rail.
-    const CF_PAGES = ['media', 'edit', 'fusion', 'color', 'deliver'];
+    const CF_PAGES = ['media', 'edit', 'fusion', 'color', 'audio', 'deliver'];
     let cfPage = 'edit';
     function switchResolvePage(page) {
       if (!CF_PAGES.includes(page)) page = 'edit';
@@ -11980,9 +11980,11 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
       if (window.NLEColor && page !== 'color') NLEColor.close();
       if (window.NLEFusion && page !== 'fusion') NLEFusion.close();
       if (window.NLEDeliver && page !== 'deliver') NLEDeliver.close();
+      if (window.NLEAudio && page !== 'audio') NLEAudio.close();
       if (window.CFLibrary) { if (page === 'media') CFLibrary.open(); else CFLibrary.close(); }
       if (page === 'color' && window.NLEColor) NLEColor.open();
       if (page === 'fusion' && window.NLEFusion) NLEFusion.open();
+      if (page === 'audio' && window.NLEAudio) NLEAudio.open();
       if (page === 'deliver' && window.NLEDeliver) NLEDeliver.open();   // has its own settings + render queue; "Bake Master Cut" stays the quick export
       if (window.CFPanels) CFPanels.apply(page);
       if (page !== 'media' && typeof initTimeline === 'function') initTimeline();
@@ -11993,12 +11995,12 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
     function loadNLEAssets() {
       const v = Date.now();
       const tq = ENGINE_TOKEN ? `token=${encodeURIComponent(ENGINE_TOKEN)}&v=${v}` : `v=${v}`;
-      ['nle.css', 'color.css', 'fusion.css', 'deliver.css', 'library.css', 'layout.css'].forEach(sheet => {
+      ['nle.css', 'color.css', 'fusion.css', 'deliver.css', 'audio.css', 'library.css', 'layout.css'].forEach(sheet => {
         const css = document.createElement('link');
         css.rel = 'stylesheet'; css.href = `${STATIC_BASE}/nle/${sheet}?${tq}`; document.head.appendChild(css);
       });
       const load = (f) => new Promise((res, rej) => { const s = document.createElement('script'); s.src = `${STATIC_BASE}/nle/${f}?${tq}`; s.onload = res; s.onerror = () => rej(new Error(`could not load ${f}`)); document.head.appendChild(s); });
-      return ['model.js', 'nle.js', 'frame-edit.js', 'grade.js', 'color.js', 'fusion-graph.js', 'fusion.js', 'deliver.js', 'library.js', 'panels.js', 'newvideo.js'].reduce((p, f) => p.then(() => load(f)), Promise.resolve());
+      return ['model.js', 'nle.js', 'frame-edit.js', 'grade.js', 'color.js', 'fusion-graph.js', 'fusion.js', 'deliver.js', 'audio.js', 'library.js', 'panels.js', 'newvideo.js'].reduce((p, f) => p.then(() => load(f)), Promise.resolve());
     }
 
     async function initApp() {
@@ -12018,6 +12020,9 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
         }
         if (window.NLEFusion && typeof NLEFusion.mount === 'function') {
           NLEFusion.mount();
+        }
+        if (window.NLEAudio && typeof NLEAudio.mount === 'function') {
+          NLEAudio.mount();
         }
         if (window.NewVideo) {
           window._newVideo = NewVideo.mount({
@@ -12109,6 +12114,10 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
     <button type="button" class="resolve-rail-item" id="railColor" onclick="switchResolvePage('color')" title="Color: grade the look of your clips">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><line x1="12" y1="3" x2="12" y2="8"/><line x1="12" y1="16" x2="12" y2="21"/><line x1="3" y1="12" x2="8" y2="12"/><line x1="16" y1="12" x2="21" y2="12"/></svg>
       <span>Color</span>
+    </button>
+    <button type="button" class="resolve-rail-item" id="railAudio" onclick="switchResolvePage('audio')" title="Audio: Multitrack cue sheet, mixer strips, Foley & music studio">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5v14M7 9v6M22 10v4M2 10v4"/></svg>
+      <span>Audio</span>
     </button>
     <button type="button" class="resolve-rail-item" id="railDeliver" onclick="switchResolvePage('deliver')" title="Deliver: export the finished video">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>

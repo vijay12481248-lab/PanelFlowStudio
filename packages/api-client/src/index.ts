@@ -2906,6 +2906,130 @@ export class PanelFlowApiClient {
       body: JSON.stringify(req),
     });
   }
+
+  // Audio Studio & Sound Library
+  async listAudioLibraryFiles(): Promise<AudioLibraryFileItem[]> {
+    return this.request<AudioLibraryFileItem[]>("/api/audio/studio/library/files");
+  }
+
+  async uploadAudioLibraryFile(file: File): Promise<AudioLibraryFileItem> {
+    const formData = new FormData();
+    formData.append("file", file);
+    return this.request<AudioLibraryFileItem>("/api/audio/studio/library/upload", {
+      method: "POST",
+      body: formData,
+    });
+  }
+
+  async searchAudioCatalog(query: string, track = "sfx", limit = 12): Promise<AudioCatalogSearchResult[]> {
+    return this.request<AudioCatalogSearchResult[]>("/api/audio/studio/search", {
+      method: "POST",
+      body: JSON.stringify({ query, track, limit }),
+    });
+  }
+
+  async getAudioStudioPlan(planId: string): Promise<AudioStudioPlanResponse> {
+    return this.request<AudioStudioPlanResponse>(`/api/audio/studio/plans/${encodeURIComponent(planId)}`);
+  }
+
+  async getAudioCueWaveform(planId: string, cueId: string, bins = 80): Promise<{ peaks: number[] }> {
+    return this.request<{ peaks: number[] }>(
+      `/api/audio/studio/plans/${encodeURIComponent(planId)}/cues/${encodeURIComponent(cueId)}/waveform?bins=${bins}`
+    );
+  }
+
+  async importAudioCueFile(planId: string, cueId: string, filePath: string, label = ""): Promise<AudioStudioPlanResponse> {
+    return this.request<AudioStudioPlanResponse>(
+      `/api/audio/studio/plans/${encodeURIComponent(planId)}/cues/${encodeURIComponent(cueId)}/import_file`,
+      {
+        method: "POST",
+        body: JSON.stringify({ file_path: filePath, label }),
+      }
+    );
+  }
+
+  async critiqueAudioStudioPlan(planId: string): Promise<AudioCritiqueReportResponse> {
+    return this.request<AudioCritiqueReportResponse>(
+      `/api/audio/studio/plans/${encodeURIComponent(planId)}/critique`,
+      { method: "POST" }
+    );
+  }
+
+  async applyAudioStudioRemediations(planId: string, remediationIds: string[]): Promise<{ plan: AudioStudioPlanResponse; applied_ids: string[] }> {
+    return this.request<{ plan: AudioStudioPlanResponse; applied_ids: string[] }>(
+      `/api/audio/studio/plans/${encodeURIComponent(planId)}/critique/apply`,
+      {
+        method: "POST",
+        body: JSON.stringify({ remediation_ids: remediationIds }),
+      }
+    );
+  }
+
+  async loopAudioCue(planId: string, cueId: string, crossfadeSec = 1.5): Promise<{ plan: AudioStudioPlanResponse; loop_path: string; duration_s: number }> {
+    return this.request<{ plan: AudioStudioPlanResponse; loop_path: string; duration_s: number }>(
+      `/api/audio/studio/plans/${encodeURIComponent(planId)}/cues/${encodeURIComponent(cueId)}/loop?crossfade_sec=${crossfadeSec}`,
+      { method: "POST" }
+    );
+  }
+
+  async isolateAudioCueStems(planId: string, cueId: string): Promise<{ stems: Record<string, string> }> {
+    return this.request<{ stems: Record<string, string> }>(
+      `/api/audio/studio/plans/${encodeURIComponent(planId)}/cues/${encodeURIComponent(cueId)}/stems`,
+      { method: "POST" }
+    );
+  }
+}
+
+export interface AudioLibraryFileItem {
+  name: string;
+  path: string;
+  size: number;
+}
+
+export interface AudioCatalogSearchResult {
+  id: string;
+  name: string;
+  type: string;
+  duration_sec: number;
+  file_url: string;
+  license: string;
+  source: string;
+}
+
+export interface AudioStudioPlanResponse {
+  id: string;
+  video_path: string;
+  fps: number;
+  duration: number;
+  tracks: any[];
+  cues: any[];
+  version: number;
+}
+
+export interface AudioRemediation {
+  id: string;
+  cue_id: string;
+  action: "hpf" | "lpf" | "ducking" | "pan" | "gain";
+  value: number;
+  reason: string;
+}
+
+export interface AudioCritiqueIssue {
+  id: string;
+  cue_id: string;
+  track: string;
+  rule: string;
+  severity: "error" | "warn" | "info";
+  message: string;
+  remediation?: AudioRemediation;
+}
+
+export interface AudioCritiqueReportResponse {
+  plan_id: string;
+  overall_quality_score: number;
+  spectral_balance: Record<string, { sub_ratio: number; mud_ratio: number; presence_ratio: number; harsh_ratio: number; air_ratio: number }>;
+  issues: AudioCritiqueIssue[];
+  remediations: AudioRemediation[];
 }
 
 export const api = new PanelFlowApiClient();
