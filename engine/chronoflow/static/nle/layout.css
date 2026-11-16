@@ -43,10 +43,6 @@ body:not([data-tab="director"]) .resolve-bottom-rail { display: none; }
 /* bottom row: the timeline is a fixed-height strip, Color / Fusion put their own panel under it */
 #cfWorkspace #nleTimeline { flex: 0 0 var(--cf-tl); min-height: 0; overflow: auto; }
 #cfWorkspace[data-page="fusion"] #nleTimeline { display: none; }
-#cfWorkspace[data-page="audio"] .davinci-top-row,
-#cfWorkspace[data-page="audio"] #nleTimeline { display: none !important; }
-#cfWorkspace[data-page="audio"] #audioStudioMount { display: flex !important; flex: 1; height: 100%; min-height: 0; }
-#cfWorkspace:not([data-page="audio"]) #audioStudioMount { display: none !important; }
 #cfWorkspace[data-page="color"] .color-panel { flex: 0 0 270px; min-height: 0; overflow: auto; }
 #cfWorkspace[data-page="fusion"] .fusion-panel { flex: 0 0 300px; min-height: 0; }
 #cfWorkspace .progress-box { flex: none; }
