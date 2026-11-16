@@ -82,3 +82,13 @@
 .au-strip-name { font-size: .62rem; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: #7aa2ff; }
 .au-master-info { font: .68rem monospace; color: #eef1ff; text-align: center; line-height: 1.5; min-height: 4.5em; }
 .au-mixfoot { flex: none; display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-top: 1px solid #1a2350; background: #0f1740; }
+
+.au-play { padding: 4px 9px; min-width: 30px; }
+.au-mini-wave { width: 120px; height: 26px; max-width: 100%; opacity: .9; }
+.au-cand .au-mini-wave { align-self: center; }
+.au-qa { flex: none; max-height: 170px; overflow-y: auto; display: flex; flex-direction: column; gap: 3px; }
+.au-find { display: grid; grid-template-columns: auto auto minmax(0, 1fr); gap: 6px; align-items: center; text-align: left; background: #101a3d; border: 1px solid #222d5e; border-radius: 8px; padding: 4px 8px; color: #d5dcf5; font: inherit; cursor: pointer; }
+.au-find:hover { background: #162049; }
+.au-find-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #9aa6d0; }
+.au-dot { width: 8px; height: 8px; border-radius: 50%; background: #f0b14a; }
+.au-find.error .au-dot { background: #f2667a; }

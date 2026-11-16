@@ -307,7 +307,73 @@ def check_7(tmp):
     print("task 7 OK")
 
 
-CHECKS = {"4": check_4, "5": check_5, "6": check_6, "7": check_7}
+# ---------------------------------------------------------------- task 8: audition, QA panel, Open in Audio from Media
+def check_8(tmp):
+    video = make_video(tmp / "cuts8.mp4")
+    with sync_playwright() as pw:
+        s = Session(pw)
+        open_video(s, video)
+        s.page.click("#auSpot")
+        s.page.wait_for_function("document.querySelectorAll('.au-cue').length === 4", timeout=60000)
+        s.ev("NLEAudio.edit({cues: [{id: 'cut_01', mode: 'ask'}]})")
+        s.page.wait_for_function("NLEAudio.state.plan.cues.find(c => c.id === 'cut_01').mode === 'ask'")
+        s.page.click(".au-cue[data-cue=cut_01]")
+        s.page.click("#auSourceCue")
+        s.page.wait_for_function("NLEAudio.state.plan.cues.find(c => c.id === 'cut_01').status === 'needs_pick'", timeout=120000)
+        s.page.wait_for_function("[...document.querySelectorAll('.au-mini-wave')].some(c => { const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; for (let i = 3; i < d.length; i += 4) if (d[i] > 0) return true; return false; })", timeout=20000)
+        s.page.click(".au-cand .au-play >> nth=0")
+        s.page.wait_for_function("NLEAudio.audition.id !== null")
+        s.page.wait_for_timeout(500)
+        playing = s.ev("({paused: NLEAudio.audition.el.paused, t: NLEAudio.audition.el.currentTime})")
+        assert playing["paused"] is False and playing["t"] > 0.1, playing
+        s.page.click(".au-cand .au-play >> nth=0")
+        assert s.ev("NLEAudio.audition.id") is None and s.ev("NLEAudio.audition.el.paused") is True
+        s.shot("task8_candidates")
+        s.page.click(".au-cand .dl-btn.accent >> nth=0")
+        s.page.wait_for_function("NLEAudio.state.plan.cues.find(c => c.id === 'cut_01').status === 'ready'")
+        s.page.click("#auListenTake")
+        s.page.wait_for_function("NLEAudio.audition.id !== null")
+        s.page.click(".au-cue[data-cue=cut_02]")
+        assert s.ev("NLEAudio.audition.id") is None, "selecting another cue stops the audition"
+        # QA panel: a cue nothing can serve is an error; clicking its finding selects it
+        s.page.click("#auAddCue")
+        s.page.wait_for_function("NLEAudio.state.plan.cues.length === 5")
+        s.page.fill("input[list=auKinds]", "zzzqq")
+        s.page.press("input[list=auKinds]", "Tab")
+        s.page.wait_for_function("NLEAudio.state.plan.cues.find(c => c.id === 'cue_01').kind === 'zzzqq'")
+        s.page.fill(".au-intent", "zzzqqxxyy")
+        s.page.press(".au-intent", "Tab")
+        s.page.click("#auSourceCue")
+        s.page.wait_for_function("NLEAudio.state.plan.cues.find(c => c.id === 'cue_01').status === 'failed'", timeout=120000)
+        s.page.click("#auQa")
+        s.page.wait_for_function("document.querySelectorAll('.au-find').length >= 1", timeout=60000)
+        assert s.ev("document.querySelector('.au-find.error') !== null") and "no_take" not in "", "an error finding is listed"
+        s.page.click(".au-find.error")
+        assert s.ev("NLEAudio.state.sel") == "cue_01"
+        s.shot("task8_qa")
+        # Media -> Open in Audio, on a real video from the library (read-only scan of the owner's outputs)
+        s.page.evaluate("switchResolvePage('media')")
+        try:
+            s.page.wait_for_selector("#libGrid .lib-card", timeout=30000)
+        except Exception:
+            print("task 8: the Media library is empty here; skipped the Open in Audio check")
+            s.finish(); print("task 8 OK (without the Media step)"); return
+        assert s.ev("getComputedStyle(document.querySelector('#libAudio')).display") == "none", "no selection, no button"
+        s.page.click("#libGrid .lib-card >> nth=0")
+        path = s.ev("document.querySelector('#libGrid .lib-card').dataset.path")
+        assert s.ev("getComputedStyle(document.querySelector('#libAudio')).display") != "none"
+        s.page.click("#libAudio")
+        s.page.wait_for_function("p => NLEAudio.state.plan && NLEAudio.state.plan.video_path === p", arg=path, timeout=60000)
+        s.page.wait_for_timeout(800)
+        assert s.ev("document.querySelector('.audio-plan-pane select').selectedOptions[0].innerText").startswith(path.split("\\")[-1].split("/")[-1]), "the plan switcher names the opened video"
+        assert "QA:" not in s.ev("document.querySelector('.au-status').innerText"), "no stale message from the previous plan"
+        assert s.ev("document.getElementById('cfWorkspace').dataset.page") == "audio"
+        s.shot("task8_from_media")
+        s.finish()
+    print("task 8 OK")
+
+
+CHECKS = {"4": check_4, "5": check_5, "6": check_6, "7": check_7, "8": check_8}
 
 if __name__ == "__main__":
     which = sys.argv[1] if len(sys.argv) > 1 else "all"

@@ -38,10 +38,13 @@
   const remembered = () => { try { return (JSON.parse(localStorage.getItem(LS) || '{}') || {}).planId || null; } catch (e) { return null; } };
 
   // ---------- data ----------
-  async function refreshPlans() { S.plans = await call('GET', '/plans'); paintPlanSelect(); }
+  async function refreshPlans() {   // the newest answer wins: two refreshes can overlap (open + openVideo) and the older one must not overwrite the newer
+    const seq = (S.plansSeq = (S.plansSeq || 0) + 1), rows = await call('GET', '/plans');
+    if (seq === S.plansSeq) { S.plans = rows; paintPlanSelect(); }
+  }
   async function loadPlan(id) {
     const prev = S.plan && S.plan.id; S.plan = await call('GET', `/plans/${id}`); S.seen = S.plan.version; save();
-    if (prev !== id) { if (P.playing) pause(); P.preview = null; P.stale = true; for (const st of M.STEMS) { P.els[st].removeAttribute('src'); delete P.els[st].dataset.url; } }
+    if (prev !== id) { S.qa = null; S.msg = ''; S.bad = false; if (P.playing) pause(); P.preview = null; P.stale = true; for (const st of M.STEMS) { P.els[st].removeAttribute('src'); delete P.els[st].dataset.url; } }
     if (S.sel && !S.plan.cues.some((c) => c.id === S.sel)) S.sel = null;
     el.video.src = withToken(`${BASE}/plans/${id}/video`);
     paintAll();
@@ -131,6 +134,17 @@
       list.append(row);
     }
   }
+  function paintQa() {
+    const q = S.qa, box = el.qaBox; if (!box) return;
+    box.replaceChildren();
+    if (!q || !S.plan) return;
+    box.append(h('div', { class: 'dl-sub' }, `QA · ${q.errors} error(s), ${q.warnings} warning(s)`));
+    if (!q.findings.length) { box.append(h('div', { class: 'au-empty' }, 'Nothing to fix.')); return; }
+    for (const f of q.findings) {
+      box.append(h('button', { type: 'button', class: `au-find ${f.severity}`, 'data-cue': f.cue_id, title: f.message, onclick: () => selectCue(f.cue_id, true) },
+        h('span', { class: 'au-dot' }), h('b', {}, f.cue_id), h('span', { class: 'au-find-text' }, f.message)));
+    }
+  }
   function paintHeader() {
     const p = S.plan;
     el.title.textContent = p ? p.video_path.split(/[\\/]/).pop() : 'No video open';
@@ -139,8 +153,9 @@
     if (el.ccby) { el.ccby.checked = !!(p && p.allow_cc_by); el.ccby.disabled = !p; }
     paintBusy();
   }
-  function paintAll() { paintPlanSelect(); paintHeader(); paintCues(); renderInspector(); renderLanes(); paintMixer(); previewSoon(); }
+  function paintAll() { paintPlanSelect(); paintHeader(); paintCues(); paintQa(); renderInspector(); renderLanes(); paintMixer(); previewSoon(); }
   function selectCue(id, seek) {
+    if (AU && AU.el) { AU.el.pause(); AU.id = null; }
     S.sel = id; paintCues(); renderInspector(); renderLanes();
     const c = S.plan.cues.find((x) => x.id === id);
     if (seek && c && el.video) { const t = c.hit_t != null ? c.hit_t : c.t_in || 0; try { el.video.currentTime = Math.max(0, t - 0.5); } catch (e) { /* not loaded yet */ } }
@@ -170,17 +185,40 @@
   }
   async function pickCandidate(id, candId) { const p = await guard('Pick', () => call('POST', `/plans/${S.plan.id}/cues/${id}/pick`, { candidate_id: candId })); if (p) { S.plan = p; S.seen = p.version; paintAll(); say(`${id}: picked.`); } }
 
+  // audition: play one candidate (or the chosen sound) on its own, outside the video
+  const AU = { el: null, id: null };
+  function stopAudition() { if (AU.el) AU.el.pause(); if (AU.id) { AU.id = null; renderInspector(); } }
+  function toggleAudition(item) {
+    if (!AU.el) { AU.el = document.createElement('audio'); AU.el.addEventListener('ended', () => { AU.id = null; renderInspector(); }); }
+    if (AU.id === item.id) { stopAudition(); return; }
+    if (P.playing) pause();
+    AU.el.src = fileUrl(`takes/${encodeURIComponent(item.path.split(/[\\/]/).pop())}`); AU.el.currentTime = 0; AU.id = item.id;
+    AU.el.play().catch((e) => { AU.id = null; say(`Could not play this sound: ${e.message}`, true); renderInspector(); });
+    renderInspector();
+  }
+  function drawMini(cv, peaks) {
+    const w = cv.width = 120, hh = cv.height = 26, g = cv.getContext('2d'); g.clearRect(0, 0, w, hh); g.fillStyle = '#a9c7ff';
+    const bars = M.peaksToBars(peaks, w, 0, 1);
+    for (let x = 0; x < w; x++) { const b = Math.max(1, bars[x] * (hh - 4)); g.fillRect(x, hh / 2 - b / 2, 1, b); }
+  }
+  function miniWave(item) {
+    const cv = h('canvas', { class: 'au-mini-wave', width: 120, height: 26 });
+    call('GET', `/plans/${S.plan.id}/takes/${item.id}/peaks?bins=120`).then((r) => drawMini(cv, r.peaks)).catch(() => { /* no waveform: the row still works */ });
+    return cv;
+  }
   function provenanceBlock(t) {
     const pv = t.provenance || {};
     return h('div', { class: 'au-prov' },
       h('div', {}, h('b', {}, pv.source || 'unknown source'), pv.model ? ` · ${pv.model}` : '', pv.seed != null ? ` · seed ${pv.seed}` : ''),
       h('div', {}, `Licence: ${pv.licence || 'unknown'}`, pv.author ? ` · by ${pv.author}` : ''),
       pv.url ? h('a', { href: pv.url, target: '_blank', rel: 'noopener noreferrer', class: 'au-link' }, 'Open the source page') : null,
-      h('div', { class: 'dl-hint' }, `${t.duration_s.toFixed(2)} s · peak ${t.peak_db.toFixed(1)} dBFS · hit at ${t.onset_s.toFixed(2)} s`));
+      h('div', { class: 'dl-hint' }, `${t.duration_s.toFixed(2)} s · peak ${t.peak_db.toFixed(1)} dBFS · hit at ${t.onset_s.toFixed(2)} s`),
+      h('div', { class: 'au-cand' }, h('button', { type: 'button', class: 'dl-btn au-play', id: 'auListenTake', onclick: () => toggleAudition(t), title: 'Listen to this sound on its own' }, AU.id === t.id ? '■' : '▶'), miniWave(t)));
   }
   function candidateRow(c, cueId) {
     return h('div', { class: 'au-cand', 'data-cand': c.id },
-      h('div', { class: 'au-cand-info' }, h('b', {}, c.label || c.id), h('span', { class: 'dl-hint' }, `${c.provenance.source} · ${c.provenance.licence} · ${c.duration_s.toFixed(1)} s`)),
+      h('button', { type: 'button', class: 'dl-btn au-play', title: 'Listen to this candidate', onclick: () => toggleAudition(c) }, AU.id === c.id ? '■' : '▶'),
+      h('div', { class: 'au-cand-info' }, h('b', {}, c.label || c.id), h('span', { class: 'dl-hint' }, `${c.provenance.source} · ${c.provenance.licence} · ${c.duration_s.toFixed(1)} s`), miniWave(c)),
       h('button', { type: 'button', class: 'dl-btn accent', onclick: () => pickCandidate(cueId, c.id) }, 'Pick'));
   }
 
@@ -437,6 +475,7 @@
   }
   async function play() {
     if (!S.plan) return;
+    if (AU.el) { AU.el.pause(); AU.id = null; }
     if (!P.preview) { say('Nothing to hear yet: press “Preview mix” to render the sound.', true); return; }
     try {
       ensureGraph(); await P.ctx.resume(); applyGains(); syncStems(true);
@@ -564,7 +603,7 @@
       h('button', { type: 'button', class: 'dl-btn', id: 'auSourceAll', title: 'Find a sound for every cue that has none', onclick: sourceAll }, 'Source all'),
       h('button', { type: 'button', class: 'dl-btn', id: 'auQa', title: 'Check clipping, silence and how close each hit lands to its frame', onclick: runQa }, 'QA'),
     ];
-    el.cueHead = h('div', { class: 'dl-sub' }, 'Cues');
+    el.cueHead = h('div', { class: 'dl-sub' }, 'Cues'); el.qaBox = h('div', { class: 'au-qa', id: 'auQaBox' });
     el.cueList = h('div', { class: 'au-cues' });
     el.status = h('div', { class: 'au-status', role: 'status' });
     el.left.append(h('div', { class: 'cf-panel-head' }, 'Sound plan'),
@@ -573,7 +612,7 @@
           h('button', { type: 'button', class: 'dl-btn', id: 'auOpen', onclick: pickVideo, title: 'Choose a finished video file' }, 'Open video…')),
         h('div', { class: 'dl-field' }, h('span', { class: 'dl-lab' }, 'Sourcing'), el.mode,
           h('label', { class: 'dl-check', title: 'Also accept CC-BY clips; credits are written to credits.txt' }, el.ccby, 'Allow CC-BY (needs credits)')),
-        h('div', { class: 'au-actions' }, ...el.actions), el.cueHead, el.cueList, el.status));
+        h('div', { class: 'au-actions' }, ...el.actions), el.cueHead, el.cueList, el.qaBox, el.status));
     el.title = h('b', { class: 'au-title' }, 'No video open'); el.badge = h('span', { class: 'au-badge' });
     el.video = h('video', { class: 'au-video', muted: true, playsinline: true, preload: 'auto' });
     el.video.muted = true;
@@ -598,7 +637,7 @@
     });
     poll();
   }
-  function close() { S.open = false; clearTimeout(S.timer); if (el.video && P.playing) pause(); else if (el.video) el.video.pause(); }
+  function close() { S.open = false; clearTimeout(S.timer); if (AU.el) AU.el.pause(); if (el.video && P.playing) pause(); else if (el.video) el.video.pause(); }
 
-  window.NLEAudio = { mount, open, close, openVideo, get state() { return S; }, selectCue, reload, call, edit, sourceOne, guard, say, addCueAtPlayhead, fit, zoom, seek, play, pause, renderPreview, mixMaster, exportAll, get mixer() { return P; }, get view() { return L.view; }, get peaks() { return L.peaks; } };
+  window.NLEAudio = { mount, open, close, openVideo, get state() { return S; }, selectCue, reload, call, edit, sourceOne, guard, say, get audition() { return AU; }, addCueAtPlayhead, fit, zoom, seek, play, pause, renderPreview, mixMaster, exportAll, get mixer() { return P; }, get view() { return L.view; }, get peaks() { return L.peaks; } };
 })();
