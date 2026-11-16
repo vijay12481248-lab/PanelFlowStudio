@@ -3005,6 +3005,20 @@ export class PanelFlowApiClient {
     );
   }
 
+  async autoFoleySoundPlan(
+    planId: string,
+    scenes: Array<Record<string, any>>,
+    autoSource = true
+  ): Promise<{ success: boolean; plan_id: string; cue_count: number; note: string; plan: AudioStudioPlanResponse }> {
+    return this.request<{ success: boolean; plan_id: string; cue_count: number; note: string; plan: AudioStudioPlanResponse }>(
+      `/api/audio/studio/plans/${encodeURIComponent(planId)}/auto_foley`,
+      {
+        method: "POST",
+        body: JSON.stringify({ scenes, auto_source: autoSource }),
+      }
+    );
+  }
+
   async assembleChronoFlowStoryboard(request: ChronoFlowStoryboardAssembleRequest): Promise<ChronoFlowStoryboardAssembleResponse> {
     return this.request<ChronoFlowStoryboardAssembleResponse>("/api/chronoflow/storyboard/assemble", {
       method: "POST",

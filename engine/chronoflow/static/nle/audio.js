@@ -87,6 +87,32 @@
     const id = S.plan.id, p = await guard('Spot', () => call('POST', `/plans/${id}/spot`));
     if (p && isCurrent(id)) { S.plan = p; S.seen = p.version; paintAll(); say(`Found ${p.cuts.length} picture cut(s); drafted ${p.cues.filter((c) => c.status === 'draft').length} cue(s). Rewrite the intents, then Source.`); }
   }
+  async function runAutoFoley() {
+    if (!S.plan) return;
+    const id = S.plan.id;
+    let scenes = [];
+    if (window._newVideo && typeof window._newVideo.scenesNow === 'function') {
+      scenes = window._newVideo.scenesNow();
+    } else if (window.scenes) {
+      scenes = window.scenes;
+    }
+    if (!scenes || !scenes.length) {
+      const cuts = S.plan.cuts && S.plan.cuts.length ? S.plan.cuts : [0.0];
+      const dur = S.plan.duration || 10.0;
+      const b = [...cuts, dur];
+      for (let i = 0; i < b.length - 1; i++) {
+        scenes.push({ prompt: `Scene ${i + 1}`, duration: Math.max(1.0, b[i + 1] - b[i]) });
+      }
+    }
+    const res = await guard('Auto-design foley', () => call('POST', `/plans/${id}/auto_foley`, { scenes, auto_source: true }));
+    if (res && res.plan && isCurrent(id)) {
+      S.plan = res.plan;
+      S.seen = res.plan.version;
+      paintAll();
+      say(`🪄 Auto-designed ${res.cue_count} soundscape and foley cue(s)!`);
+      previewSoon();
+    }
+  }
   async function sourceOne(id, mode) {
     const pid = S.plan.id, p = await call('POST', `/plans/${pid}/cues/${id}/source`, mode ? { mode } : {});
     if (!isCurrent(pid)) return;
@@ -754,6 +780,7 @@
     el.ccby = h('input', { type: 'checkbox', onchange: (e) => edit({ allow_cc_by: e.target.checked }, 'Licence') });
     el.actions = [
       h('button', { type: 'button', class: 'dl-btn', id: 'auSpot', title: 'Find the picture cuts and draft cues', onclick: spot }, 'Spot'),
+      h('button', { type: 'button', class: 'dl-btn', id: 'auAutoFoley', title: 'Auto-design layered atmospheric soundscapes and foley cues', onclick: runAutoFoley }, '🪄 Foley'),
       h('button', { type: 'button', class: 'dl-btn', id: 'auSourceAll', title: 'Find a sound for every cue that has none', onclick: sourceAll }, 'Source all'),
       h('button', { type: 'button', class: 'dl-btn', id: 'auQa', title: 'Check clipping, silence and how close each hit lands to its frame', onclick: runQa }, 'QA'),
       h('button', { type: 'button', class: 'dl-btn', id: 'auCritique', title: 'Analyze acoustic quality, masking, and apply remediations', onclick: runCritique }, 'Critique'),
@@ -796,5 +823,5 @@
   }
   function close() { S.open = false; clearTimeout(S.timer); if (AU.el) AU.el.pause(); if (el.video && P.playing) pause(); else if (el.video) el.video.pause(); }
 
-  window.NLEAudio = { mount, open, close, openVideo, get state() { return S; }, selectCue, reload, call, edit, sourceOne, guard, say, get audition() { return AU; }, addCueAtPlayhead, fit, zoom, seek, play, pause, renderPreview, mixMaster, exportAll, exportDaw, runCritique, showCritiqueModal, makeCueLoop, get mixer() { return P; }, get view() { return L.view; }, get peaks() { return L.peaks; } };
+  window.NLEAudio = { mount, open, close, openVideo, get state() { return S; }, selectCue, reload, call, edit, sourceOne, guard, say, get audition() { return AU; }, addCueAtPlayhead, fit, zoom, seek, play, pause, renderPreview, mixMaster, exportAll, exportDaw, runCritique, showCritiqueModal, makeCueLoop, runAutoFoley, get mixer() { return P; }, get view() { return L.view; }, get peaks() { return L.peaks; } };
 })();

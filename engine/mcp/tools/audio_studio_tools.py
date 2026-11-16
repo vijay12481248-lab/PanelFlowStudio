@@ -168,3 +168,21 @@ async def master_broadcast(plan_id: str, standard: str | None = None, target_luf
 async def export_daw(plan_id: str, standard: str | None = None, target_lufs: float | None = None, make_zip: bool | None = None) -> dict[str, Any]:
     return await bridge.post(f"{_BASE}/plans/{plan_id}/export_daw", _body(standard=standard or "youtube", target_lufs=target_lufs, make_zip=make_zip if make_zip is not None else True), timeout_s=900.0)
 
+
+@registry.tool(
+    name="panelflow_chronoflow_audio_auto_foley",
+    description="Analyze visual prompts, action directions, and narration in ChronoFlow storyboard scenes to automatically design and populate multi-track atmospheric soundscapes and foley cues with zero-VRAM procedural synthesis.",
+    input_schema=_schema({
+        "plan_id": _PLAN,
+        "scenes": {"type": "array", "items": {"type": "object"}, "description": "Storyboard scene list with prompt, narration, and duration"},
+        "auto_source": {"type": "boolean", "description": "Immediately synthesize and source takes (default: true)"},
+    }, ["plan_id", "scenes"]),
+    domain="chronoflow",
+)
+async def auto_foley(plan_id: str, scenes: list[dict[str, Any]], auto_source: bool | None = None) -> dict[str, Any]:
+    return await bridge.post(
+        f"{_BASE}/plans/{plan_id}/auto_foley",
+        _body(scenes=scenes, auto_source=auto_source if auto_source is not None else True),
+        timeout_s=300.0,
+    )
+

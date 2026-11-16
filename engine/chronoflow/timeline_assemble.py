@@ -206,48 +206,30 @@ def assemble_storyboard_sequence(
             else:
                 plan.note = f"Soundtrack - {out_path.stem}"
 
-            # Populate initial shot-aligned cues and picture cuts
+            # Populate picture cuts and record scene list
             curr_t = 0.0
             cuts: list[float] = [0.0]
+            scenes_list: list[dict] = []
             for idx, (_, scene, _) in enumerate(clip_entries):
                 shot_dur = float(scene.get("duration") or start_modes.SEG_SECONDS)
                 t_in = snap(curr_t, fps)
-                t_out = snap(curr_t + shot_dur, fps)
                 if curr_t > 0.0:
                     cuts.append(t_in)
-
-                narration = (scene.get("narration") or "").strip()
-                if narration:
-                    cue_dlg = Cue(
-                        id=f"cue_dlg_{idx + 1}",
-                        track="dialogue",
-                        kind="speech",
-                        intent=narration,
-                        t_in=t_in,
-                        t_out=t_out,
-                        mode="auto",
-                    )
-                    plan.cues.append(cue_dlg)
-
-                prompt = (scene.get("prompt") or "").strip()
-                if prompt:
-                    cue_foley = Cue(
-                        id=f"cue_foley_{idx + 1}",
-                        track="foley",
-                        kind="foley",
-                        intent=prompt[:80],
-                        t_in=t_in,
-                        t_out=t_out,
-                        mode="auto",
-                    )
-                    plan.cues.append(cue_foley)
-
+                scenes_list.append(scene)
                 curr_t += shot_dur
 
             plan.cuts = cuts
             audio_engine.store.save(plan)
+
+            # Auto-design atmospheric soundscapes and foley cues from scene visual semantics
+            try:
+                from engine.audio.studio.foley_generator import auto_populate_sound_plan
+                plan = auto_populate_sound_plan(plan.id, scenes_list, auto_source=True)
+            except Exception as auto_exc:
+                logger.warning("Foley auto-population exception: %s", auto_exc)
+
             sound_plan_id = plan.id
-            logger.info("Created Audio Studio Sound Plan %s for assembled storyboard", sound_plan_id)
+            logger.info("Created and auto-designed Audio Studio Sound Plan %s for assembled storyboard", sound_plan_id)
         except Exception as exc:
             logger.warning("Failed to auto-create Audio Studio Sound Plan: %s", exc)
 

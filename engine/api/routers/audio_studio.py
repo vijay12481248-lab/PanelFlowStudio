@@ -20,6 +20,7 @@ from engine.audio.studio.plan import Cue, PlanStore, SoundPlan, Track, check_id,
 from engine.audio.studio.preview import audio_signature, build_preview
 from engine.audio.studio.qa import check_plan
 from engine.audio.studio.sources import music as music_source
+from engine.audio.studio.sources.ambient_synth import AmbientSynthProvider
 from engine.audio.studio.sources.foley_synth import FoleySynthProvider
 from engine.audio.studio.sources.local_bank import LocalBankProvider
 from engine.audio.studio.sources.music import MusicProvider
@@ -37,7 +38,7 @@ _engine: AudioEngine | None = None
 def get_engine() -> AudioEngine:
     global _engine
     if _engine is None:
-        _engine = AudioEngine(PlanStore(), [LocalBankProvider(), FoleySynthProvider(), OpenverseProvider(), SynthProvider(), MusicProvider()])
+        _engine = AudioEngine(PlanStore(), [LocalBankProvider(), FoleySynthProvider(), AmbientSynthProvider(), SynthProvider(), OpenverseProvider(), MusicProvider()])
     return _engine
 
 
@@ -616,4 +617,24 @@ def pipeline_story_auto(plan_id: str, body: AutoStoryBody | None = None, engine:
             use_vision=b.use_vision,
             standard=b.standard,
         )
+
+
+class AutoFoleyBody(BaseModel):
+    scenes: list[dict[str, Any]]
+    auto_source: bool = True
+
+
+@router.post("/plans/{plan_id}/auto_foley")
+def auto_foley_plan(plan_id: str, body: AutoFoleyBody, engine: AudioEngine = Depends(get_engine)) -> dict[str, Any]:
+    """Analyze storyboard scene visual prompts and auto-populate atmospheric soundscapes and foley cues."""
+    with _errors():
+        from engine.audio.studio.foley_generator import auto_populate_sound_plan
+        plan = auto_populate_sound_plan(plan_id, body.scenes, auto_source=body.auto_source)
+        return {
+            "success": True,
+            "plan_id": plan.id,
+            "cue_count": len(plan.cues),
+            "note": plan.note,
+            "plan": plan.model_dump(),
+        }
 
