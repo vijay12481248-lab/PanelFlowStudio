@@ -3025,7 +3025,39 @@ export class PanelFlowApiClient {
       body: JSON.stringify({ scenes, modified_index: modifiedIndex }),
     });
   }
+
+  async generateCharacterModelSheet(characterId: string, seed?: number): Promise<{ success: boolean; character: any; model_sheet: string; views: Record<string, string>; has_embedding: boolean }> {
+    const url = `/api/chronoflow/characters/${encodeURIComponent(characterId)}/model_sheet${seed !== undefined ? `?seed=${seed}` : ""}`;
+    return this.request<{ success: boolean; character: any; model_sheet: string; views: Record<string, string>; has_embedding: boolean }>(url, {
+      method: "POST",
+    });
+  }
+
+  async verifyCharacterFace(queryImage: string, referenceImage: string, threshold = 0.72): Promise<FaceVerificationReportResponse> {
+    return this.request<FaceVerificationReportResponse>("/api/chronoflow/characters/verify_face", {
+      method: "POST",
+      body: JSON.stringify({ query_image: queryImage, reference_image: referenceImage, threshold }),
+    });
+  }
+
+  async pinCharacterReferences(scene: Record<string, any>, maxReferences = 4): Promise<{ success: boolean; references: string[] }> {
+    return this.request<{ success: boolean; references: string[] }>("/api/chronoflow/characters/pin_references", {
+      method: "POST",
+      body: JSON.stringify({ scene, max_references: maxReferences }),
+    });
+  }
 }
+
+export interface FaceVerificationReportResponse {
+  success: boolean;
+  matched: boolean;
+  similarity: number;
+  status: "match" | "plausible" | "drift" | "no_face_detected";
+  reference_detected: boolean;
+  generated_detected: boolean;
+  message: string;
+}
+
 
 export interface ChronoFlowStoryboardAssembleRequest {
   scenes: Array<Record<string, any>>;

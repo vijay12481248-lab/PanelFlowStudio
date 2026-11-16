@@ -68,6 +68,72 @@ async def panelflow_chronoflow_save_character(
 
 
 @registry.tool(
+    name="panelflow_chronoflow_generate_model_sheet",
+    description="Generate a canonical 4-view character turnaround model sheet using FLUX.2 Klein (flux2_klein_4b), slice views, and extract face embeddings.",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "character_id": {"type": "string", "description": "Character ID in Character Vault (e.g. 'char_c16d64')"},
+            "seed": {"type": "integer", "description": "Optional random seed for generation"},
+        },
+        "required": ["character_id"],
+    },
+    domain="chronoflow",
+)
+async def panelflow_chronoflow_generate_model_sheet(character_id: str, seed: int | None = None) -> dict[str, Any]:
+    url = f"/api/chronoflow/characters/{character_id}/model_sheet"
+    if seed is not None:
+        url += f"?seed={seed}"
+    return await bridge.post(url, {})
+
+
+@registry.tool(
+    name="panelflow_chronoflow_verify_face",
+    description="Verify face identity match between a generated shot image and a character reference image using local 512-dim ArcFace embeddings.",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "query_image": {"type": "string", "description": "Filename of query/generated image"},
+            "reference_image": {"type": "string", "description": "Filename of canonical character reference image"},
+            "threshold": {"type": "number", "description": "Cosine similarity match threshold (default 0.72)"},
+        },
+        "required": ["query_image", "reference_image"],
+    },
+    domain="chronoflow",
+)
+async def panelflow_chronoflow_verify_face(
+    query_image: str,
+    reference_image: str,
+    threshold: float = 0.72,
+) -> dict[str, Any]:
+    return await bridge.post(
+        "/api/chronoflow/characters/verify_face",
+        {"query_image": query_image, "reference_image": reference_image, "threshold": threshold},
+    )
+
+
+@registry.tool(
+    name="panelflow_chronoflow_pin_references",
+    description="Automatically select and bind up to 4 character turnaround views for a shot to prevent character face drift in flux2_klein_4b_ref.",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "scene": {"type": "object", "description": "Storyboard scene or shot object containing prompt, title, or character_ids"},
+            "max_references": {"type": "integer", "description": "Maximum references to bind (default 4)"},
+        },
+        "required": ["scene"],
+    },
+    domain="chronoflow",
+)
+async def panelflow_chronoflow_pin_references(scene: dict[str, Any], max_references: int = 4) -> dict[str, Any]:
+    return await bridge.post(
+        "/api/chronoflow/characters/pin_references",
+        {"scene": scene, "max_references": max_references},
+    )
+
+
+
+@registry.tool(
     name="panelflow_chronoflow_ai_director_plan",
     description=(
         "Generate a multi-scene storyboard breakdown from a high-level story idea, automatically compiling native 6-heading MiniMax H3 prompts. "
