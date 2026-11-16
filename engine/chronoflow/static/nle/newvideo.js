@@ -478,6 +478,9 @@
             <button type="button" class="btn-tool" onclick="NewVideo.closePanel()">Close</button>
             <div class="nv-row" style="gap:8px">
               <a href="${ctx.esc(res.master_video)}" download="${ctx.esc(res.filename)}" class="btn-tool" style="text-decoration:none;display:inline-flex;align-items:center;padding:6px 14px">⬇ Download</a>
+              <button type="button" class="btn-primary" style="width:auto;padding:6px 14px;background:linear-gradient(135deg, #ec4899, #f43f5e);border:none" onclick="NewVideo.promptExportReel('${ctx.esc(res.master_video)}', '${ctx.esc(title)}')">
+                📱 Export 9:16 Reel
+              </button>
               ${res.sound_plan_id ? `
                 <button type="button" class="btn-primary" style="width:auto;padding:6px 18px;background:linear-gradient(135deg, #4f46e5, #7c3aed);border:none" onclick="NewVideo.openInAudioStudio('${ctx.esc(res.master_video)}', '${ctx.esc(res.sound_plan_id)}')">
                   🎙 Open in Audio Studio
@@ -507,6 +510,105 @@
         } else if (typeof window.NLEAudio.openVideo === 'function') {
           window.NLEAudio.openVideo(videoUrl, planId);
         }
+      }
+    },
+    promptExportReel(videoUrl, title) {
+      const sp = (ctx.screenplay && ctx.screenplay()) || {};
+      const hookDefault = sp.hook || title || 'An Epic Story';
+      const transcript = (scenesNow() || []).map((s) => (s.narration || '').trim()).filter(Boolean).join(' ');
+      panel(`
+        <h4 style="margin:0 0 8px;color:#f6f8ff">📱 Export as 9:16 YouTube Short / Reel</h4>
+        <div style="font-size:.82rem;color:#9aa6d0;margin-bottom:14px">
+          Auto-crop horizontal video into vertical 1080×1920 with focal tracking, glowing karaoke subtitles, and -14 LUFS mastering.
+        </div>
+        <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:16px;text-align:left">
+          <div>
+            <label style="display:block;font-size:.76rem;color:#cbd5e1;margin-bottom:4px">Top Hook Banner (First 2.5s)</label>
+            <input type="text" id="nvReelHook" value="${ctx.esc(hookDefault)}" style="width:100%;padding:6px 10px;background:#1e293b;border:1px solid #334155;border-radius:4px;color:#fff;font-size:.82rem" />
+          </div>
+          <div style="display:flex;gap:12px">
+            <div style="flex:1">
+              <label style="display:block;font-size:.76rem;color:#cbd5e1;margin-bottom:4px">Reframing Camera</label>
+              <select id="nvReelMode" style="width:100%;padding:6px;background:#1e293b;border:1px solid #334155;border-radius:4px;color:#fff;font-size:.82rem">
+                <option value="shot_stable" selected>Shot Stable (Focal lock per shot)</option>
+                <option value="smooth_pan">Smooth Pan (Continuous tracking)</option>
+                <option value="center">Center Crop (Static)</option>
+              </select>
+            </div>
+            <div style="flex:1;display:flex;align-items:flex-end;padding-bottom:4px">
+              <label style="font-size:.8rem;color:#cbd5e1;display:flex;align-items:center;gap:6px;cursor:pointer">
+                <input type="checkbox" id="nvReelSubs" checked /> Burn Karaoke Subtitles
+              </label>
+            </div>
+          </div>
+        </div>
+        <div class="nv-row" style="justify-content:space-between">
+          <button type="button" class="btn-tool" onclick="NewVideo.closePanel()">Cancel</button>
+          <button type="button" class="btn-primary" style="width:auto;padding:6px 18px;background:linear-gradient(135deg, #ec4899, #f43f5e);border:none" onclick="NewVideo.executeExportReel('${ctx.esc(videoUrl)}', '${ctx.esc(title)}')">
+            🚀 Render 9:16 Reel
+          </button>
+        </div>
+      `);
+    },
+    async executeExportReel(videoUrl, title) {
+      const hookInput = document.getElementById('nvReelHook');
+      const modeSelect = document.getElementById('nvReelMode');
+      const subsCheck = document.getElementById('nvReelSubs');
+
+      const hookText = hookInput ? hookInput.value : '';
+      const reframingMode = modeSelect ? modeSelect.value : 'shot_stable';
+      const burnSubs = subsCheck ? subsCheck.checked : true;
+      const transcript = (scenesNow() || []).map((s) => (s.narration || '').trim()).filter(Boolean).join(' ');
+
+      panel(`
+        <h4 style="margin:0 0 8px;color:#f6f8ff">🚀 Rendering 9:16 Reel</h4>
+        <div style="font-size:.82rem;color:#9aa6d0;margin-bottom:12px">
+          Tracking visual focus, formatting karaoke timing, and mastering audio…
+        </div>
+        <div class="spinner" style="margin:20px auto"></div>
+      `);
+
+      try {
+        const res = await ctx.post('/reels/autocut', {
+          input_video_path: videoUrl,
+          hook_text: hookText,
+          transcript: transcript,
+          burn_subtitles: burnSubs,
+          reframing_mode: reframingMode,
+          title: title,
+        });
+
+        // Determine accessible web URL
+        let reelWebUrl = res.output_video_path;
+        if (reelWebUrl.includes('outputs')) {
+          const fn = reelWebUrl.split(/[\\\\/]/).pop();
+          reelWebUrl = `/chronoflow/outputs/${fn}`;
+        }
+
+        panel(`
+          <h4 style="margin:0 0 8px;color:#f6f8ff">📱 9:16 Reel Ready</h4>
+          <div style="font-size:.82rem;color:#46d6a3;margin-bottom:12px">
+            ✓ 1080×1920 (9:16) &middot; ${res.duration_sec} s &middot; -14.0 LUFS mastered audio
+          </div>
+          <video src="${ctx.esc(reelWebUrl)}" controls autoplay style="width:100%;max-height:360px;border-radius:6px;background:#000;margin-bottom:14px"></video>
+          <div style="font-size:.76rem;color:#94a3b8;margin-bottom:14px;background:#0f172a;padding:8px 12px;border-radius:4px;text-align:left">
+            ✓ <b>PUBLISH.md</b> created with viral title, description, and AI disclosure tags.
+          </div>
+          <div class="nv-row" style="justify-content:space-between">
+            <button type="button" class="btn-tool" onclick="NewVideo.closePanel()">Close</button>
+            <a href="${ctx.esc(reelWebUrl)}" download="${ctx.esc(res.output_video_path.split(/[\\\\/]/).pop())}" class="btn-primary" style="width:auto;text-decoration:none;display:inline-flex;align-items:center;padding:6px 18px;background:linear-gradient(135deg, #ec4899, #f43f5e);border:none">
+              ⬇ Download Reel
+            </a>
+          </div>
+        `);
+      } catch (err) {
+        panel(`
+          <h4 style="margin:0 0 8px;color:#f6f8ff">Reel Export Failed</h4>
+          <div class="nv-error" style="margin-bottom:16px">${ctx.esc(err.message || String(err))}</div>
+          <div class="nv-row" style="justify-content:flex-end">
+            <button type="button" class="btn-tool" onclick="NewVideo.closePanel()">Close</button>
+          </div>
+        `);
       }
     },
   };

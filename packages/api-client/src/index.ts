@@ -3046,6 +3046,91 @@ export class PanelFlowApiClient {
       body: JSON.stringify({ scene, max_references: maxReferences }),
     });
   }
+
+  // ---------------------------------------------------------------------------
+  // YouTube Shorts & Reels 9:16 Auto-Cut Engine (Milestone 8)
+  // ---------------------------------------------------------------------------
+  async autocutReel(req: ReelAutoCutApiRequest): Promise<ReelAutoCutApiResponse> {
+    return this.request<ReelAutoCutApiResponse>("/api/reels/autocut", {
+      method: "POST",
+      body: JSON.stringify(req),
+    });
+  }
+
+  async previewReelReframing(req: PreviewReframingRequest): Promise<PreviewReframingResponse> {
+    return this.request<PreviewReframingResponse>("/api/reels/preview_reframing", {
+      method: "POST",
+      body: JSON.stringify(req),
+    });
+  }
+
+  async generateReelSubtitles(req: GenerateSubtitlesRequest): Promise<GenerateSubtitlesResponse> {
+    return this.request<GenerateSubtitlesResponse>("/api/reels/generate_subtitles", {
+      method: "POST",
+      body: JSON.stringify(req),
+    });
+  }
+}
+
+export interface ReelAutoCutApiRequest {
+  input_video_path: string;
+  output_path?: string;
+  hook_text?: string;
+  transcript?: string;
+  audio_path?: string;
+  shot_cuts?: number[];
+  burn_subtitles?: boolean;
+  target_duration?: number;
+  reframing_mode?: "shot_stable" | "smooth_pan" | "center";
+  title?: string;
+  tags?: string;
+}
+
+export interface ReelAutoCutApiResponse {
+  success: boolean;
+  output_video_path: string;
+  duration_sec: number;
+  aspect_ratio: string;
+  resolution: number[];
+  publish_meta_path: string;
+  subtitles_ass_path?: string;
+  crop_filter_expr: string;
+  message: string;
+}
+
+export interface PreviewReframingRequest {
+  video_path: string;
+  shot_cuts?: number[];
+  reframing_mode?: "shot_stable" | "smooth_pan" | "center";
+}
+
+export interface PreviewReframingResponse {
+  source_width: number;
+  source_height: number;
+  crop_width: number;
+  crop_height: number;
+  target_width: number;
+  target_height: number;
+  ffmpeg_filter: string;
+  crop_expression: string;
+  shot_crops: Array<{
+    shot_index: number;
+    start_t: number;
+    end_t: number;
+    crop_x: number;
+  }>;
+}
+
+export interface GenerateSubtitlesRequest {
+  transcript: string;
+  hook?: string;
+  audio_path?: string;
+  duration_sec?: number;
+}
+
+export interface GenerateSubtitlesResponse {
+  ass_content: string;
+  word_count: number;
 }
 
 export interface FaceVerificationReportResponse {

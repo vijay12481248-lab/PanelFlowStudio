@@ -261,4 +261,5 @@ def assemble_storyboard_sequence(
         "height": target_height,
         "shot_count": len(clip_entries),
         "sound_plan_id": sound_plan_id,
+        "local_path": str(out_path),
     }

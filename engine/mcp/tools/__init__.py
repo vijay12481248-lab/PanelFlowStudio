@@ -13,6 +13,7 @@ from engine.mcp.tools import (
     youtube_tools,
     creative_agent_tools,
     audio_studio_tools,
+    reels_tools,
 )
 
 __all__ = [
@@ -28,4 +29,5 @@ __all__ = [
     "youtube_tools",
     "creative_agent_tools",
     "audio_studio_tools",
+    "reels_tools",
 ]
