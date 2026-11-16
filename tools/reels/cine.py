@@ -151,9 +151,42 @@ def sfx_zap(d=0.35):
     return _st(x / np.abs(x).max() * 0.6)
 
 
+def sfx_whistle(d=0.9):
+    t = _t(d)
+    f = 2900 + 120 * np.sin(2 * np.pi * 38 * t)  # the pea in the whistle
+    x = np.sin(2 * np.pi * np.cumsum(f) / SR) * np.clip(t * 40, 0, 1) * np.exp(-np.maximum(t - 0.55, 0) * 9)
+    return _st(x * 0.5)
+
+
+def sfx_powerdown(d=1.0):
+    t = _t(d)
+    x = np.sin(2 * np.pi * np.cumsum(900 * np.exp(-t * 4.5) + 40) / SR) * np.exp(-t * 3) + _lp(rng.standard_normal(t.size), 400) * 0.3 * np.exp(-t * 8)
+    return _st(x * 0.7)
+
+
+def sfx_crowd(d=2.2):
+    t = _t(d)
+    x = _bp(rng.standard_normal(t.size), 300, 2500) * (np.sin(np.pi * np.clip(t / d, 0, 1)) ** 1.2) * (1 + 0.4 * np.sin(2 * np.pi * 5 * t))
+    return _st(x / np.abs(x).max() * 0.35)
+
+
+def sfx_scratch(d=0.6):
+    t = _t(d)
+    x = _bp(rng.standard_normal(t.size), 800, 5000) * np.sin(2 * np.pi * (6 + 20 * t) * t) ** 2 * np.exp(-t * 3)
+    return _st(x / np.abs(x).max() * 0.6)
+
+
+def sfx_drumroll(d=1.6):
+    t = _t(d)
+    gate = (np.sin(2 * np.pi * (14 + 12 * t / d) * t) > 0) * (t / d) ** 1.2
+    x = _bp(rng.standard_normal(t.size), 1500, 6000) * gate
+    return _st(x / np.abs(x).max() * 0.5)
+
+
 SFX = dict(buzz=sfx_buzz, swarm=sfx_swarm, boom=sfx_boom, thud=sfx_thud, whoosh=sfx_whoosh, swoosh=lambda: sfx_whoosh(0.25, 0.7),
            slap=sfx_slap, click=sfx_click, stinger=sfx_stinger, ding=sfx_ding, heart=sfx_heart, riser=sfx_riser, tada=sfx_tada,
-           birds=sfx_birds, crash=sfx_crash, zap=sfx_zap)
+           birds=sfx_birds, crash=sfx_crash, zap=sfx_zap, whistle=sfx_whistle, powerdown=sfx_powerdown, crowd=sfx_crowd, scratch=sfx_scratch,
+           drumroll=sfx_drumroll)
 _cache: dict = {}
 
 
@@ -234,6 +267,7 @@ def cam(scene, t):
 GRADES = dict(  # (R, G, B gain), contrast, saturation, gamma, vignette
     night=((0.85, 0.95, 1.15), 1.15, 1.10, 0.92, 0.50), alarm=((1.25, 0.80, 0.78), 1.20, 1.15, 0.95, 0.60),
     day=((1.05, 1.0, 0.95), 1.05, 1.15, 1.0, 0.25), warm=((1.12, 1.0, 0.85), 1.10, 1.10, 0.97, 0.35),
+    replay=((1.1, 1.0, 0.8), 1.10, 0.25, 1.0, 0.5),
     cold=((0.85, 1.0, 1.2), 1.20, 0.95, 0.9, 0.55), calm=((0.95, 1.0, 1.1), 0.95, 0.9, 1.05, 0.35))
 _lut: dict = {}
 _vig: dict = {}
@@ -261,7 +295,8 @@ class Source:
 
     def __init__(self, scene, d, allow_stills):
         self.frames, self.fps = None, 24.0
-        clip, panel = d / "clips" / f"s{scene['i']}.mp4", d / "panels" / f"s{scene['i']}.png"
+        ri = scene.get("reuse", scene["i"])
+        clip, panel = d / "clips" / f"s{ri}.mp4", d / "panels" / f"s{ri}.png"
         if not scene.get("still") and mr.have(clip):
             cap = cv2.VideoCapture(str(clip))
             self.fps = cap.get(cv2.CAP_PROP_FPS) or 24.0
@@ -286,7 +321,7 @@ class Source:
 def render_scene(scene, src, t, W, H, k):
     """One graded frame of a scene at local time t (may be <0 or > duration while a transition overlaps)."""
     z, f, rot, sx, sy, st, flash = cam(scene, t)
-    fr = src.at(st)
+    fr = src.at(scene.get("t0", 0.0) + st * scene.get("speed", 1.0))  # t0 / speed: instant replays start later in the clip and run slow
     sh, sw = fr.shape[:2]
     s = max(W / sw, H / sh) * z
     hw, hh = W / 2 / s, H / 2 / s
@@ -354,6 +389,8 @@ def build_ass(r, plan):
             "[Events]\nFormat: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text\n")
     ev = [f"Dialogue: 1,{mr.ass_time(0.25)},{mr.ass_time(2.6)},Hook,,0,0,0,,{{\\fad(120,200)\\t(0,150,\\fscx108\\fscy108)}}{r['hook'].upper()}"]
     for sc in plan:
+        if sc.get("tag"):
+            ev.append(f"Dialogue: 1,{mr.ass_time(sc['start'] + 0.1)},{mr.ass_time(sc['start'] + sc['d'])},Hook,,0,0,0,,{{\\c&H002020FF&\\fad(80,80)}}{sc['tag']}")
         if not sc.get("words"):
             continue
         words, tms = sc["line"].upper().replace('"', "").split(), sc["words"]
