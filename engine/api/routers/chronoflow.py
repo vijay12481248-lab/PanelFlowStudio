@@ -2191,6 +2191,7 @@ def timeline_export(req: TimelineExportRequest) -> dict[str, Any]:
             "success": True,
             "master_video": f"/chronoflow/outputs/{master_name}",
             "filename": master_name,
+            "local_path": str(master_path),   # the Audio page opens its sound plan on this file
         }
     raise HTTPException(status_code=500, detail="Timeline render failed")
 

@@ -1274,19 +1274,31 @@
     return { dataUrl: c.toDataURL('image/png'), width: w, height: h };
   }
 
-  async function exportCut() {
-    if (!tl.clips.length) return;
+  let lastBake = null;   // {body, data}: the same timeline baked twice reuses the file (the Audio page makes one sound plan per file)
+  /** Bake the timeline to one master video (throws on failure). withSounds:false leaves A2-A4 out: the Audio page plans those itself. */
+  async function bakeCut({ withSounds = true } = {}) {
+    if (!tl.clips.length) throw new Error('the timeline has no clips');
     const graded = window.NLEColor ? window.NLEColor.gradedCount() : 0;
     const fxCount = window.NLEFusion ? tl.clips.filter((c) => window.NLEFusion.hasFusion(c)).length : 0;
     let exportMsg = 'Baking master cut with FFmpeg…';
     if (graded && fxCount) exportMsg = `Baking master cut with FFmpeg (${graded} graded, ${fxCount} Fusion FX)…`;
     else if (graded) exportMsg = `Baking master cut with FFmpeg (${graded} graded clip${graded === 1 ? '' : 's'})…`;
     else if (fxCount) exportMsg = `Baking master cut with FFmpeg (${fxCount} Fusion FX clip${fxCount === 1 ? '' : 's'})…`;
+    const edl = M.toEdl(tl, window.NLEColor && window.NLEColor.lutFor);
+    if (!withSounds) edl.audio = [];
+    const body = JSON.stringify(edl);
+    if (lastBake && lastBake.body === body) return lastBake.data;
     status(exportMsg);
+    const res = await fetch(`${cfg.api}/timeline/export`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+    const data = await res.json();
+    if (!res.ok || !data.success) throw new Error(data.detail || data.error || res.status);
+    lastBake = { body, data };
+    return data;
+  }
+
+  async function exportCut() {
     try {
-      const res = await fetch(`${cfg.api}/timeline/export`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(M.toEdl(tl, window.NLEColor && window.NLEColor.lutFor)) });
-      const data = await res.json();
-      if (!res.ok || !data.success) throw new Error(data.detail || data.error || res.status);
+      const data = await bakeCut();
       const url = q(data.master_video.replace(/^\/outputs\//, `${cfg.out}/`));
       status('Master cut ready — downloading.');
       const a = document.createElement('a'); a.href = url; a.download = data.filename || 'chronoflow_master.mp4'; document.body.appendChild(a); a.click(); a.remove();
@@ -1422,7 +1434,7 @@
   }
 
   const api = {
-    mount, loadJob, refreshSource, syncFromServer, get tlVersion() { return ui.tlVersion || 0; }, addShotToTimeline, seek, play, pause, step, captureFrame, select, edit, status, exportCut,
+    mount, loadJob, refreshSource, syncFromServer, get tlVersion() { return ui.tlVersion || 0; }, addShotToTimeline, seek, play, pause, step, captureFrame, select, edit, status, exportCut, bakeCut,
     markIn, markOut, clearRange, total, fps, mergeSelectedFrames, persist, deleteSelection, checkpoint: () => hist.checkpoint(), decks: () => decks,
     selectedClips: () => tl.clips.filter((c) => ui.selIds && ui.selIds.has(c.id)),
     on: (n, f) => (listeners[n] = listeners[n] || []).push(f),

@@ -70,6 +70,11 @@
       say(have ? 'Opened the existing sound plan for this video.' : 'New sound plan created. Next: Spot to find the picture cuts.');
     }).finally(() => { S.openingVideo = false; });
   }
+  const timelineClips = () => (window.NLE && typeof window.NLE.poolItems === 'function' ? window.NLE.poolItems().length : 0);
+  async function useTimeline() {   // the Edit page's cut becomes the video this page works on
+    const d = await guard('Baking the timeline', () => window.NLE.bakeCut({ withSounds: false }));
+    if (d && d.local_path) await openVideo(d.local_path);
+  }
   async function pickVideo() {
     const r = await guard('Choose video', () => fetch('/api/chronoflow/library/pick_files', { method: 'POST' }).then((x) => x.json()));
     if (r && r.paths && r.paths[0]) openVideo(r.paths[0]);
@@ -237,6 +242,7 @@
   function paintBusy() {
     paintStatus();
     for (const b of el.actions || []) b.disabled = !!S.busy || !S.plan;
+    if (el.useTl) { el.useTl.disabled = !!S.busy || !timelineClips(); el.useTl.title = timelineClips() ? 'Bake the cut from the Edit page and plan its sound' : 'The Edit timeline has no clips yet'; }
     if (el.inspBody) for (const b of el.inspBody.querySelectorAll('button')) b.disabled = !!S.busy;   // the inspector is drawn while a call may be in flight
   }
   function paintPlanSelect() {
@@ -248,7 +254,7 @@
     const list = el.cueList, p = S.plan;
     list.replaceChildren();
     el.cueHead.textContent = p ? `Cues (${p.cues.length})` : 'Cues';
-    if (!p) { list.append(h('div', { class: 'au-empty' }, 'Open a finished video to start.', h('br'), 'Use “Open video…”, or “Open in Audio” on a video in Media.')); return; }
+    if (!p) { list.append(h('div', { class: 'au-empty' }, 'Press “Use the Edit timeline” to work on the cut you made in Edit,', h('br'), 'or “Open video…” for a finished video file.')); return; }
     if (!p.cues.length) { list.append(h('div', { class: 'au-empty' }, 'No cues yet. “Spot” finds the picture cuts and drafts whooshes and an underscore.')); return; }
     const order = [...p.cues].sort((a, b) => (a.hit_t != null ? a.hit_t : a.t_in || 0) - (b.hit_t != null ? b.hit_t : b.t_in || 0));
     for (const c of order) {
@@ -806,6 +812,7 @@
     el.left.append(h('div', { class: 'cf-panel-head' }, 'Sound plan'),
       h('div', { class: 'au-pane' },
         h('div', { class: 'dl-field' }, h('span', { class: 'dl-lab' }, 'Plan'), el.planSel,
+          (el.useTl = h('button', { type: 'button', class: 'dl-btn accent', id: 'auUseTimeline', onclick: useTimeline, title: 'Bake the cut from the Edit page and plan its sound' }, 'Use the Edit timeline')),
           h('button', { type: 'button', class: 'dl-btn', id: 'auOpen', onclick: pickVideo, title: 'Choose a finished video file' }, 'Open video…')),
         h('div', { class: 'dl-field' }, h('span', { class: 'dl-lab' }, 'Sourcing'), el.mode,
           h('label', { class: 'dl-check', title: 'Also accept CC-BY clips; credits are written to credits.txt' }, el.ccby, 'Allow CC-BY (needs credits)')),
@@ -834,6 +841,7 @@
       else if (!S.openingVideo && want && S.plans.some((p) => p.id === want)) await loadPlan(want);
       else paintAll();
     });
+    paintBusy();   // the timeline may have gained clips since the last visit
     poll();
   }
   function close() { S.open = false; clearTimeout(S.timer); if (AU.el) AU.el.pause(); if (el.video && P.playing) pause(); else if (el.video) el.video.pause(); }
