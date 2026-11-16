@@ -36,7 +36,7 @@ class OpenverseProvider:
         return Availability(self._error is None, self._error)
 
     def find(self, cue: Cue, out_dir: Path, plan: SoundPlan, limit: int = 3) -> list[Candidate]:
-        if cue.kind == "music":
+        if cue.kind in ("music", "narration"):   # music and spoken lines are never library searches
             return []
         q = {"q": cue.intent or cue.kind, "page_size": 10, "license_type": "commercial"}
         if not plan.allow_cc_by:

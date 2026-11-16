@@ -65,7 +65,11 @@ class Cue(BaseModel):
     gain_db: float = 0.0
     fade_in: float = 0.0
     fade_out: float = 0.0
-    hints: dict = Field(default_factory=dict)  # optional music hints: bpm, key_scale
+    hints: dict = Field(default_factory=dict)  # optional music hints: bpm, key_scale; narration: language
+    text: str = ""        # narration: the words to speak
+    voice: str = ""       # narration: a Kokoro voice or a Qwen3-TTS reference voice
+    provider: str = ""    # narration: kokoro (default) or qwen3_tts
+    speed: float = 1.0    # narration pace
     status: Literal["draft", "needs_pick", "ready", "failed"] = "draft"
     reason: str | None = None
     placement_error_ms: float | None = None
@@ -89,6 +93,8 @@ class SoundPlan(BaseModel):
     fps: float
     duration: float
     dialogue_path: str | None = None
+    keep_original_audio: bool = True   # the video's own sound is part of the dialogue stem; switch off when narration replaces it
+    source: dict = Field(default_factory=dict)   # where the picture came from: {kind: file|timeline, job_id}
     mode: Literal["auto", "ask"] = "auto"
     allow_cc_by: bool = False
     tracks: list[Track] = Field(default_factory=list)

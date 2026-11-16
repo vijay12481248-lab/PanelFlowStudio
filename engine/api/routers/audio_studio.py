@@ -21,6 +21,7 @@ from engine.audio.studio.preview import audio_signature, build_preview
 from engine.audio.studio.qa import check_plan
 from engine.audio.studio.sources import music as music_source
 from engine.audio.studio.sources.music import MusicProvider
+from engine.audio.studio.sources.narration import NarrationProvider
 from engine.audio.studio.sources.openverse import OpenverseProvider
 from engine.audio.studio.sources.synth import SynthProvider
 from engine.audio.studio.spot import detect_cuts, draft_cues
@@ -35,7 +36,7 @@ _engine: AudioEngine | None = None
 def get_engine() -> AudioEngine:
     global _engine
     if _engine is None:
-        _engine = AudioEngine(PlanStore(), [OpenverseProvider(), SynthProvider(), MusicProvider()])
+        _engine = AudioEngine(PlanStore(), [OpenverseProvider(), SynthProvider(), MusicProvider(), NarrationProvider()])
     return _engine
 
 

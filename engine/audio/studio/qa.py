@@ -11,6 +11,7 @@ from engine.audio.studio.measure import measure_take
 from engine.audio.studio.plan import Cue, SoundPlan
 
 ERROR_MS, WARN_MS = 40.0, 20.0
+OVERRUN_S, MAX_WORDS_PER_SECOND = 0.15, 4.2
 
 
 class Finding(BaseModel):
@@ -23,6 +24,23 @@ class Finding(BaseModel):
 
 def _f(cue: Cue, rule: str, sev: str, msg: str, value: float | None = None) -> Finding:
     return Finding(cue_id=cue.id, rule=rule, severity=sev, value=value, message=msg)
+
+
+def _narration_findings(plan: SoundPlan) -> list[Finding]:
+    """A spoken line must not run into the next one or past the end of the video, and should not be rushed. Running across a picture cut is normal."""
+    lines = sorted((c for c in plan.cues if c.kind == "narration" and c.chosen() is not None), key=lambda c: c.t_in)
+    out: list[Finding] = []
+    for i, c in enumerate(lines):
+        take = c.chosen()
+        end = c.t_in + take.duration_s
+        if i + 1 < len(lines) and end > lines[i + 1].t_in + OVERRUN_S:
+            out.append(_f(c, "narration_overrun", "error", f"this line runs {end - lines[i + 1].t_in:.1f} s into the next line ({lines[i + 1].id})", end - lines[i + 1].t_in))
+        elif end > plan.duration + OVERRUN_S:
+            out.append(_f(c, "narration_past_end", "error", f"this line runs {end - plan.duration:.1f} s past the end of the video", end - plan.duration))
+        words = len(c.text.split())
+        if take.duration_s > 0 and words / take.duration_s > MAX_WORDS_PER_SECOND:
+            out.append(_f(c, "narration_too_fast", "warn", f"{words / take.duration_s:.1f} words a second is rushed; slow it down or shorten the line", words / take.duration_s))
+    return out
 
 
 def check_plan(plan: SoundPlan, render_cue: Callable[[SoundPlan, Cue, Path], Path]) -> list[Finding]:
@@ -54,4 +72,5 @@ def check_plan(plan: SoundPlan, render_cue: Callable[[SoundPlan, Cue, Path], Pat
                 out.append(_f(cue, "placement_error", "error", f"hit lands {err:.0f} ms from its frame", err))
             elif err > WARN_MS:
                 out.append(_f(cue, "placement_error", "warn", f"hit lands {err:.0f} ms from its frame", err))
+    out += _narration_findings(plan)
     return out

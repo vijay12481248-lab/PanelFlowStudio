@@ -108,23 +108,24 @@ def render_roles(plan: SoundPlan, out_dir: Path) -> dict[str, Path]:
     cue_dir = out_dir / "cues"
     cue_dir.mkdir(parents=True, exist_ok=True)
     D = plan.duration
-    placed: dict[str, list[tuple[Path, float]]] = {"music": [], "effects": []}
+    placed: dict[str, list[tuple[Path, float]]] = {"music": [], "effects": [], "voice": []}
     for cue in plan.cues:
         t = _track(plan, cue.track)
-        if cue.chosen() is None or t.mute or cue.track == "dialogue":
+        if cue.chosen() is None or t.mute:
             continue
-        group = "music" if cue.track == "music" else "effects"
+        group = "voice" if cue.track == "dialogue" else "music" if cue.track == "music" else "effects"
         placed[group].append((render_cue(plan, cue, cue_dir / f"{cue.id}.wav"), t.gain_db))
 
     dlg_track = _track(plan, "dialogue")
     dialogue = out_dir / "dialogue.wav"
-    has_dialogue = _has_audio(plan.dialogue_path) and not dlg_track.mute
-    if has_dialogue:
+    items = list(placed["voice"])   # narration lines
+    if plan.keep_original_audio and _has_audio(plan.dialogue_path) and not dlg_track.mute:
+        orig = out_dir / "original.wav"
         _run([_FFMPEG, "-v", "error", "-y", "-i", plan.dialogue_path, "-vn",
-              "-af", f"aresample={SR},volume={dlg_track.gain_db:g}dB,apad=whole_dur={D:.6f},atrim=duration={D:.6f}",
-              "-ac", "2", "-ar", str(SR), "-c:a", "pcm_f32le", str(dialogue)])
-    else:
-        _sum(dialogue, [], D)
+              "-af", f"aresample={SR},apad=whole_dur={D:.6f},atrim=duration={D:.6f}", "-ac", "2", "-ar", str(SR), "-c:a", "pcm_f32le", str(orig)])
+        items.insert(0, (orig, dlg_track.gain_db))
+    _sum(dialogue, items, D)
+    has_dialogue = bool(items)
     duck = dialogue if has_dialogue and _track(plan, "music").duck_under == "dialogue" else None
     music = _sum(out_dir / "music.wav", placed["music"], D, sidechain=duck)
     effects = _sum(out_dir / "effects.wav", placed["effects"], D)

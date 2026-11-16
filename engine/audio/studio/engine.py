@@ -27,7 +27,7 @@ def _auto_choice(cue: Cue, cands: list[Candidate], used: set[str] = frozenset())
     usable = [c for c in cands if c.peak_db > -30]
     clean = [c for c in usable if c.clipped_samples == 0] or usable or cands
     clean = [c for c in clean if _key(c) not in used] or clean  # a different clip than the other cues use, when there is one
-    if cue.kind == "music":
+    if cue.kind in ("music", "narration"):
         return clean[0]
     if cue.t_out is not None and cue.track == "ambience":  # a bed: closest to the span it must fill
         span = cue.t_out - cue.t_in
@@ -46,7 +46,7 @@ class AudioEngine:
         plan = self.store.load(plan_id)
         cue = plan.cue(cue_id)
         mode = mode or cue.mode or plan.mode
-        limit = 1 if (mode == "auto" and cue.kind == "music") else 3
+        limit = 1 if (mode == "auto" and cue.kind in ("music", "narration")) else 3
         out_dir = self.store.take_dir(plan_id)
         cands: list[Candidate] = []
         for p in self.providers:  # slow (network, GPU): done without holding the plan lock
