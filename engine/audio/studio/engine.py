@@ -66,7 +66,7 @@ class AudioEngine:
                 if mode == "ask":
                     cue.status, cue.candidates = "needs_pick", cands
                 else:
-                    used = {_key(t) for other in plan.cues if other.id != cue.id for t in [other.chosen()] if t}
+                    used = {_key(t) for other in plan.cues for t in [other.chosen()] if t}   # includes this cue's own current sound: sourcing again gives a different one
                     chosen = _auto_choice(cue, cands, used)
                     cue.takes.append(_to_take(chosen))
                     cue.chosen_take, cue.status = chosen.id, "ready"
