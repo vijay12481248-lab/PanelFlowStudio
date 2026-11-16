@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Literal
@@ -13,6 +14,7 @@ from pydantic import BaseModel
 
 from engine.audio.studio import mix as mixer
 from engine.audio.studio.engine import AudioEngine
+from engine.audio.studio.peaks import file_peaks
 from engine.audio.studio.plan import Cue, PlanStore, Track, check_id, snap
 from engine.audio.studio.qa import check_plan
 from engine.audio.studio.sources import music as music_source
@@ -113,6 +115,12 @@ def create_plan(body: CreateBody, engine: AudioEngine = Depends(get_engine)) -> 
         return engine.store.save(plan, "created").model_dump()
 
 
+@router.get("/plans")
+def list_plans(engine: AudioEngine = Depends(get_engine)) -> list[dict[str, Any]]:
+    return [{"id": p.id, "video_name": Path(p.video_path).name, "video_path": p.video_path, "version": p.version, "cues": len(p.cues),
+             "duration": p.duration, "fps": p.fps} for p in engine.store.list()]
+
+
 @router.get("/plans/{plan_id}")
 def get_plan(plan_id: str, engine: AudioEngine = Depends(get_engine)) -> dict[str, Any]:
     with _errors():
@@ -168,6 +176,7 @@ def spot(plan_id: str, engine: AudioEngine = Depends(get_engine)) -> dict[str, A
             keep = [c for c in plan.cues if c.status != "draft"]
             taken = {c.id for c in keep}
             plan.cues = keep + [c for c in draft_cues(plan, cuts) if c.id not in taken]
+            plan.cuts = [round(c, 4) for c in cuts]
             return engine.store.save(plan, "spotted").model_dump()
 
 
@@ -218,6 +227,34 @@ def export(plan_id: str, body: RenderBody | None = None, engine: AudioEngine = D
         res = export_plan(plan, out, body.target_lufs, Path(plan.video_path) if body.mux else None, body.allow_incomplete)
         _save_measured(engine, plan_id, plan, "exported")  # keeps the placement errors the export measured
         return {**res, "dir": f"exports/v{plan.version}"}
+
+
+@router.get("/plans/{plan_id}/video")
+def get_video(plan_id: str, engine: AudioEngine = Depends(get_engine)):
+    with _errors():
+        video = Path(engine.store.load(plan_id).video_path)
+        if not video.is_file():
+            raise FileNotFoundError(f"the video file is gone: {video}")
+        return FileResponse(video)  # Starlette answers Range requests, which <video> seeking needs
+
+
+@router.get("/plans/{plan_id}/takes/{take_id}/peaks")
+def take_peaks(plan_id: str, take_id: str, bins: int = 400, engine: AudioEngine = Depends(get_engine)) -> dict[str, Any]:
+    with _errors():
+        check_id(take_id)
+        bins = max(16, min(int(bins), 4000))
+        plan = engine.store.load(plan_id)
+        take = next((t for c in plan.cues for t in [*c.takes, *c.candidates] if t.id == take_id), None)
+        if take is None:
+            raise FileNotFoundError(f"no take {take_id!r} in plan {plan_id}")
+        cache = engine.store.plan_dir(plan_id) / "peaks" / f"{take_id}_{bins}.json"
+        if cache.is_file():
+            return json.loads(cache.read_text(encoding="utf-8"))
+        peaks, dur = file_peaks(Path(take.path), bins)
+        out = {"peaks": peaks, "duration": dur}
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        cache.write_text(json.dumps(out), encoding="utf-8")
+        return out
 
 
 @router.get("/plans/{plan_id}/files/{name:path}")
