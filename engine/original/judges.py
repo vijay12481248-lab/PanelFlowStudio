@@ -145,6 +145,8 @@ def item_value(answer: JudgeAnswer, topic: Topic, index: int | None = None, rere
 class Judge(Protocol):
     name: str
 
+    async def ask(self, image: Path | bytes, prompt: str) -> str: ...
+
     async def read(self, image: Path | bytes, states: list[str]) -> JudgeAnswer: ...
 
     async def reread(self, image: Path | bytes, topic: Topic, index: int | None, other: JudgeAnswer, states: list[str]) -> JudgeAnswer: ...
@@ -161,6 +163,13 @@ class _Base:
             return parse_judge_text(await self._ask(image, prompt), self.name, states)
         except Exception as exc:  # a judge never raises: the cross-check treats it as absent
             return JudgeAnswer(judge=self.name, ok=False, raw=f"error: {type(exc).__name__}: {exc}"[:300])
+
+    async def ask(self, image, prompt: str) -> str:
+        """Any plain-text question about a picture (the anatomy review's tiles); "" when the judge is unreachable, never an exception."""
+        try:
+            return str(await self._ask(image, prompt))
+        except Exception:
+            return ""
 
     async def read(self, image, states):
         return await self._answer(image, read_prompt(states), states)
