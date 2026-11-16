@@ -159,8 +159,11 @@ def put_plan(plan_id: str, body: PutBody, engine: AudioEngine = Depends(get_engi
                 by_id[cid] = cue
             plan.cues = list(by_id.values())
         if body.tracks is not None:
-            have = {t.id: t for t in plan.tracks}
-            plan.tracks = [Track.model_validate({**(have[r["id"]].model_dump() if r.get("id") in have else {}), **r}) for r in body.tracks]
+            have = {t.id: t for t in plan.tracks}  # upsert, like cues: tracks the body does not mention stay as they are
+            for r in body.tracks:
+                tr = Track.model_validate({**(have[r["id"]].model_dump() if r.get("id") in have else {}), **r})
+                have[tr.id] = tr
+            plan.tracks = list(have.values())
         if body.dialogue_path is not None and not Path(body.dialogue_path).is_file():
             raise ValueError(f"dialogue file not found: {body.dialogue_path}")
         for field in ("mode", "allow_cc_by", "dialogue_path"):
@@ -233,14 +236,18 @@ def export(plan_id: str, body: RenderBody | None = None, engine: AudioEngine = D
 
 @router.get("/plans/{plan_id}/preview")
 def get_preview(plan_id: str, engine: AudioEngine = Depends(get_engine)) -> dict[str, Any]:
-    """The current preview if it matches the plan's sound, else {"stale": true}."""
+    """The preview that matches the plan's sound; else the last one marked stale (still playable); else {"stale": true}."""
     with _errors():
         plan = engine.store.load(plan_id)
         sig = audio_signature(plan)
-        meta = engine.store.plan_dir(plan_id) / "preview" / sig / "preview.json"
-        if not meta.is_file():
+        root = engine.store.plan_dir(plan_id) / "preview"
+        meta = root / sig / "preview.json"
+        if meta.is_file():
+            return {**json.loads(meta.read_text(encoding="utf-8")), "stale": False, "dir": f"preview/{sig}"}
+        older = sorted(root.glob("*/preview.json"), key=lambda m: m.stat().st_mtime, reverse=True) if root.is_dir() else []
+        if not older:
             return {"stale": True}
-        return {**json.loads(meta.read_text(encoding="utf-8")), "stale": False, "dir": f"preview/{sig}"}
+        return {**json.loads(older[0].read_text(encoding="utf-8")), "stale": True, "dir": f"preview/{older[0].parent.name}"}  # still playable
 
 
 @router.post("/plans/{plan_id}/preview")

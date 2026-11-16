@@ -240,7 +240,68 @@ def check_6(tmp):
     print("task 6 OK")
 
 
-CHECKS = {"4": check_4, "5": check_5, "6": check_6}
+# ---------------------------------------------------------------- task 7: playback, mixer, meters
+def check_7(tmp):
+    video = make_video(tmp / "cuts7.mp4")
+    with sync_playwright() as pw:
+        s = Session(pw)
+        open_video(s, video)
+        s.page.click("#auSpot")
+        s.page.wait_for_function("document.querySelectorAll('.au-cue').length === 4", timeout=60000)
+        s.page.click("#auSourceAll")
+        s.page.wait_for_function("NLEAudio.state.plan.cues.every(c => c.status !== 'draft')", timeout=240000)
+        assert s.ev("document.querySelector('.au-pvstate').innerText") == "not rendered"
+        s.page.click("#auPlay")
+        assert "Preview mix" in s.ev("document.querySelector('.au-status').innerText"), "Play before rendering tells you what to do"
+        s.page.click("#auPreview")
+        s.page.wait_for_function("document.querySelector('.au-pvstate').innerText === 'up to date'", timeout=240000)
+        s.page.wait_for_timeout(400)
+        dx = s.ev("(() => { const cv = document.querySelector('.au-cv[data-lane=dialogue]'); const g = cv.getContext('2d'); const d = g.getImageData(0, 0, cv.width, cv.height).data; let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i + 1] > 120 && d[i] < 110 && d[i + 2] > 100 && d[i + 2] < 190) n++; return n; })()")
+        assert dx > 200, f"the dialogue waveform is drawn in the DX lane ({dx} green pixels)"
+        s.page.click("#auPlay")
+        s.page.wait_for_function("NLEAudio.mixer.playing === true", timeout=15000)
+        s.page.wait_for_timeout(2200)
+        sync = s.ev("({v: document.querySelector('.au-video').currentTime, a: Object.values(NLEAudio.mixer.els).map(e => e.currentTime), state: NLEAudio.mixer.ctx.state})")
+        assert sync["state"] == "running" and sync["v"] > 1.5, sync
+        assert all(abs(x - sync["v"]) < 0.15 for x in sync["a"]), ("stems follow the video", sync)
+        lvl = s.ev("NLEAudio.mixer.lvl")
+        assert lvl.get("dialogue", -90) > -60 and lvl.get("master", -90) > -60, ("the meters move", lvl)
+        s.shot("task7_playing")
+        # mute / solo act on the gain nodes immediately
+        s.page.click(".au-strip[data-stem=music] .au-ms >> nth=0")
+        assert s.ev("NLEAudio.mixer.nodes.music.gain.gain.value") == 0 and s.ev("NLEAudio.mixer.nodes.dialogue.gain.gain.value") > 0.9
+        s.page.click(".au-strip[data-stem=music] .au-ms >> nth=0")
+        s.page.click(".au-strip[data-stem=dialogue] .au-ms.solo")
+        assert s.ev("NLEAudio.mixer.nodes.effects.gain.gain.value") == 0 and s.ev("NLEAudio.mixer.nodes.dialogue.gain.gain.value") > 0.9
+        s.page.click(".au-strip[data-stem=dialogue] .au-ms.solo")
+        # a fader move is a live trim and is saved on the plan; the preview then reads 'out of date'
+        s.ev("(() => { const f = document.querySelector('.au-strip[data-stem=music] .au-fader'); f.value = -6; f.dispatchEvent(new Event('input')); })()")
+        assert abs(s.ev("NLEAudio.mixer.nodes.music.gain.gain.value") - 0.501) < 0.01
+        s.ev("document.querySelector('.au-strip[data-stem=music] .au-fader').dispatchEvent(new Event('change'))")
+        s.page.wait_for_function("NLEAudio.state.plan.tracks.find(t => t.id === 'music').gain_db === -6", timeout=15000)
+        assert server_plan(s)["tracks"][1]["gain_db"] == -6
+        s.page.wait_for_function("document.querySelector('.au-pvstate').innerText === 'out of date'", timeout=15000)
+        assert abs(s.ev("NLEAudio.mixer.nodes.music.gain.gain.value") - 0.501) < 0.01, "the trim stays after the save"
+        # seeking while playing resyncs the stems
+        box = s.ev("(() => { const r = document.querySelector('.au-rulercv').getBoundingClientRect(); return [r.x, r.y, r.width, r.height]; })()")
+        s.page.mouse.click(box[0] + box[2] * 0.75, box[1] + 10)
+        s.page.wait_for_timeout(700)
+        sync = s.ev("({v: document.querySelector('.au-video').currentTime, a: Object.values(NLEAudio.mixer.els).map(e => e.currentTime)})")
+        assert 5.5 < sync["v"] < 7.5 and all(abs(x - sync["v"]) < 0.25 for x in sync["a"]), sync
+        s.page.click("#auPlay")
+        s.page.wait_for_function("NLEAudio.mixer.playing === false")
+        s.page.click("#auMaster")
+        s.page.wait_for_function("document.querySelector('.au-master-info').innerText.includes('LUFS')", timeout=240000)
+        lufs = float(s.ev("document.querySelector('.au-master-info').innerText").split()[0])
+        assert abs(lufs + 14) < 1.0, lufs
+        s.page.click("#auExport")
+        s.page.wait_for_function("document.querySelector('.au-status').innerText.startsWith('Exported')", timeout=300000)
+        s.shot("task7_mixer")
+        s.finish()
+    print("task 7 OK")
+
+
+CHECKS = {"4": check_4, "5": check_5, "6": check_6, "7": check_7}
 
 if __name__ == "__main__":
     which = sys.argv[1] if len(sys.argv) > 1 else "all"

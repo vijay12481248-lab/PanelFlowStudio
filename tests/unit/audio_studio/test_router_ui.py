@@ -89,3 +89,12 @@ def test_take_peaks_rejects_unknown_and_path_like_ids(client, video):
     assert client.get(f"{B}/plans/{pid}/takes/nope/peaks").status_code == 404
     assert client.get(f"{B}/plans/{pid}/takes/..%5Cx/peaks").status_code in (400, 404)
     assert client.get(f"{B}/plans/{pid}/takes/a.b/peaks").status_code == 400
+
+
+def test_put_tracks_upserts_by_id_and_keeps_the_others(client, video):
+    """Found by the Audio page: saving one fader used to delete the other four tracks."""
+    pid = _create(client, video)["id"]
+    got = client.put(f"{B}/plans/{pid}", json={"tracks": [{"id": "music", "gain_db": -6.0}]}).json()
+    assert [t["id"] for t in got["tracks"]] == ["dialogue", "music", "sfx", "ambience", "foley"]
+    assert {t["id"]: t["gain_db"] for t in got["tracks"]}["music"] == -6.0 and got["tracks"][1]["duck_under"] == "dialogue"
+    assert client.put(f"{B}/plans/{pid}", json={"tracks": [{"id": "nope", "gain_db": 1}]}).status_code == 400

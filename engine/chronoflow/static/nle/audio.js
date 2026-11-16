@@ -40,7 +40,8 @@
   // ---------- data ----------
   async function refreshPlans() { S.plans = await call('GET', '/plans'); paintPlanSelect(); }
   async function loadPlan(id) {
-    S.plan = await call('GET', `/plans/${id}`); S.seen = S.plan.version; save();
+    const prev = S.plan && S.plan.id; S.plan = await call('GET', `/plans/${id}`); S.seen = S.plan.version; save();
+    if (prev !== id) { if (P.playing) pause(); P.preview = null; P.stale = true; for (const st of M.STEMS) { P.els[st].removeAttribute('src'); delete P.els[st].dataset.url; } }
     if (S.sel && !S.plan.cues.some((c) => c.id === S.sel)) S.sel = null;
     el.video.src = withToken(`${BASE}/plans/${id}/video`);
     paintAll();
@@ -138,7 +139,7 @@
     if (el.ccby) { el.ccby.checked = !!(p && p.allow_cc_by); el.ccby.disabled = !p; }
     paintBusy();
   }
-  function paintAll() { paintPlanSelect(); paintHeader(); paintCues(); renderInspector(); renderLanes(); }
+  function paintAll() { paintPlanSelect(); paintHeader(); paintCues(); renderInspector(); renderLanes(); paintMixer(); previewSoon(); }
   function selectCue(id, seek) {
     S.sel = id; paintCues(); renderInspector(); renderLanes();
     const c = S.plan.cues.find((x) => x.id === id);
@@ -346,10 +347,18 @@
     }
     for (const c of S.plan.cuts || []) { const x = M.timeToX(c, L.view); if (x >= 0 && x <= w) { g.fillStyle = '#7aa2ff'; g.fillRect(Math.round(x) - 1, RULER_H - 5, 3, 5); } }
   }
+  function drawDialogue(g, w) {
+    const pk = P.preview && P.preview.stems.dialogue.peaks, v = L.view, dur = S.plan.duration;
+    if (!pk || !pk.length) { g.fillStyle = '#4b5686'; g.font = '10px sans-serif'; g.textBaseline = 'middle'; g.fillText(S.plan.dialogue_path ? 'Press Preview mix to see the dialogue' : 'This video has no dialogue track', 8, LANE_H / 2); return; }
+    g.fillStyle = '#4fb08c'; g.globalAlpha = P.stale ? 0.4 : 0.75;
+    for (let x = 0; x < w; x++) { const a = M.xToTime(x, v) / dur, b = M.xToTime(x + 1, v) / dur; if (b < 0 || a > 1) continue; const f = Math.max(...pk.slice(Math.max(0, Math.floor(a * pk.length)), Math.max(1, Math.ceil(b * pk.length))), 0), hh = Math.max(1, f * (LANE_H - 12)); g.fillRect(x, LANE_H / 2 - hh / 2, 1, hh); }
+    g.globalAlpha = 1;
+  }
   function drawLane(lane) {
     const { g, w } = sizeCanvas(L.cv[lane.id], LANE_H), p = S.plan, v = L.view, fps = p.fps;
     g.fillStyle = COL.bg; g.fillRect(0, 0, w, LANE_H);
     for (const k of M.rulerTicks(v, w, fps)) if (k.major) { g.fillStyle = COL.grid; g.fillRect(Math.round(M.timeToX(k.t, v)), 0, 1, LANE_H); }
+    if (lane.id === 'dialogue') drawDialogue(g, w);
     g.fillStyle = COL.cut; for (const c of p.cuts || []) { const x = M.timeToX(c, v); if (x >= -1 && x <= w + 1) g.fillRect(Math.round(x), 0, 1, LANE_H); }
     for (const raw of p.cues) {
       if (raw.track !== lane.id) continue;
@@ -388,6 +397,159 @@
   }
   function renderLanes() { if (!el.lanes) return; if (S.plan) for (const c of S.plan.cues) ensurePeaks(c); scheduleDraw(); }
 
+  // ---------- playback and mixer ----------
+  // The video element is the clock (muted). The preview's three stems (dialogue / music / effects, rendered by the engine with the same code as the
+  // export) play through Web Audio gain nodes, so faders, mute and solo are instant. A fader is a trim relative to the gains the stems were rendered
+  // with, until "Preview mix" renders them again.
+  const P = { ctx: null, nodes: null, master: null, anM: null, preview: null, stale: true, mute: new Set(), solo: new Set(), live: {}, els: {}, playing: false,
+    syncTimer: 0, meterTimer: 0, previewTimer: 0, lvl: {}, master_info: null };
+  const STEM_LABEL = { dialogue: 'Dialogue', music: 'Music', effects: 'Effects' };
+  const trackDb = (id) => { const t = S.plan && S.plan.tracks.find((x) => x.id === id); return t ? t.gain_db : 0; };
+  const planDb = (stem) => (stem === 'effects' ? trackDb('sfx') : trackDb(stem));
+  const bakedDb = (stem) => { const g = (P.preview && P.preview.gains) || {}; return (stem === 'effects' ? g.sfx : g[stem]) || 0; };
+  const faderDb = (stem) => (P.live[stem] != null ? P.live[stem] : planDb(stem));
+
+  function applyGains() {
+    if (!P.nodes) return;
+    const d = {}; for (const st of M.STEMS) d[st] = faderDb(st) - bakedDb(st);
+    const g = M.effectiveGains(d, P.mute, P.solo);
+    for (const st of M.STEMS) P.nodes[st].gain.gain.value = g[st];
+  }
+  function ensureGraph() {
+    if (P.ctx) return;
+    const Ctx = window.AudioContext || window.webkitAudioContext; if (!Ctx) throw new Error('This browser has no Web Audio');
+    P.ctx = new Ctx(); P.master = P.ctx.createGain(); P.anM = P.ctx.createAnalyser(); P.anM.fftSize = 1024;
+    P.master.connect(P.anM); P.anM.connect(P.ctx.destination); P.nodes = {};
+    for (const st of M.STEMS) {
+      const src = P.ctx.createMediaElementSource(P.els[st]), gain = P.ctx.createGain(), an = P.ctx.createAnalyser(); an.fftSize = 1024;
+      src.connect(gain); gain.connect(an); an.connect(P.master); P.nodes[st] = { src, gain, an };
+    }
+    applyGains();
+  }
+  function loadStemAudio() {
+    if (!P.preview) return;
+    for (const st of M.STEMS) { const a = P.els[st], url = fileUrl(`${P.preview.dir}/${P.preview.stems[st].file}`); if (a.dataset.url !== url) { a.dataset.url = url; a.src = url; a.load(); } }
+    syncStems(true);
+  }
+  function syncStems(force) {
+    const t = el.video.currentTime;
+    for (const st of M.STEMS) { const a = P.els[st]; if (!a.src) continue; const act = force ? t : M.driftAction(t, a.currentTime, 0.06); if (act != null) { try { a.currentTime = act; } catch (e) { /* not loaded */ } } }
+  }
+  async function play() {
+    if (!S.plan) return;
+    if (!P.preview) { say('Nothing to hear yet: press “Preview mix” to render the sound.', true); return; }
+    try {
+      ensureGraph(); await P.ctx.resume(); applyGains(); syncStems(true);
+      await Promise.all([el.video.play(), ...M.STEMS.map((st) => P.els[st].play())]);
+      P.playing = true; clearInterval(P.syncTimer); P.syncTimer = setInterval(() => { if (el.video.ended || el.video.paused) { if (P.playing) pause(); return; } syncStems(false); }, 250);
+    } catch (e) { say(`Could not play: ${e.message}`, true); pause(); }
+    paintTransport();
+  }
+  function pause() { el.video.pause(); for (const st of M.STEMS) P.els[st].pause(); P.playing = false; clearInterval(P.syncTimer); paintTransport(); }
+  const toggle = () => (P.playing ? pause() : play());
+  function step(dt) { if (S.plan) { seek(el.video.currentTime + dt); syncStems(true); } }
+
+  function previewSoon() { clearTimeout(P.previewTimer); P.previewTimer = setTimeout(refreshPreview, 500); }
+  async function refreshPreview() {
+    if (!S.plan) { P.preview = null; paintMixer(); return; }
+    const id = S.plan.id;
+    try {
+      const r = await call('GET', `/plans/${id}/preview`);
+      if (!S.plan || S.plan.id !== id) return;
+      if (r.stems) { const changed = !P.preview || P.preview.dir !== r.dir; P.preview = r; if (changed) loadStemAudio(); } else P.preview = null;
+      P.stale = !!r.stale;
+    } catch (e) { /* engine busy */ }
+    applyGains(); paintMixer(); scheduleDraw();
+  }
+  async function renderPreview() {
+    const r = await guard('Rendering the preview', () => call('POST', `/plans/${S.plan.id}/preview`));
+    if (!r) return;
+    P.preview = r; P.stale = false; loadStemAudio(); applyGains(); paintMixer(); scheduleDraw();
+    say('Preview ready. Press Play (Space).');
+  }
+  async function mixMaster() {
+    const r = await guard('Mixing the master', () => call('POST', `/plans/${S.plan.id}/mix`, { target_lufs: -14, mux: false }));
+    if (r) { P.master_info = r.loudness; paintMixer(); say(`Master: ${r.loudness.integrated_lufs.toFixed(1)} LUFS, ${r.loudness.true_peak_db.toFixed(1)} dBTP.`); }
+  }
+  async function exportAll() {
+    const mux = !!(el.muxBox && el.muxBox.checked);
+    const r = await guard('Exporting', () => call('POST', `/plans/${S.plan.id}/export`, { target_lufs: -14, mux }));
+    if (r) { P.master_info = r.loudness; paintMixer(); const f = r.findings || { errors: 0, warnings: 0 }; say(`Exported ${r.files.length} files to ${r.out_dir} (${f.errors} QA error(s), ${f.warnings} warning(s)).`, f.errors > 0); }
+  }
+
+  function commitFader(stem, db) {
+    const ids = stem === 'effects' ? ['sfx', 'ambience', 'foley'] : [stem];
+    return edit({ tracks: ids.map((id) => ({ id, gain_db: db })) }, 'Fader').finally(() => { delete P.live[stem]; applyGains(); paintMixer(); });
+  }
+  function buildTransport() {
+    const b = (t, f, title, id) => h('button', { type: 'button', class: 'dl-btn au-mini', id, title, onclick: f }, t);
+    el.playBtn = b('Play', toggle, 'Play / pause (Space)', 'auPlay');
+    el.transport.replaceChildren(b('Start', () => { seek(0); syncStems(true); }, 'Go to the start (Home)', 'auStart'), b('−1f', () => step(-1 / S.plan.fps), 'One frame back (,)'), el.playBtn,
+      b('+1f', () => step(1 / S.plan.fps), 'One frame forward (.)'), b('End', () => { seek(S.plan.duration); syncStems(true); }, 'Go to the end (End)'), el.tc);
+  }
+  function paintTransport() { if (el.playBtn) el.playBtn.textContent = P.playing ? 'Pause' : 'Play'; }
+
+  function buildMixer() {
+    for (const st of M.STEMS) { const a = document.createElement('audio'); a.preload = 'auto'; a.crossOrigin = 'anonymous'; P.els[st] = a; }
+    el.strips = {}; el.meters = {};
+    const strip = (st) => {
+      const meter = h('div', { class: 'au-meter', title: 'Level (peak, dBFS)' }, h('i', {})), db = h('div', { class: 'au-db' }, '0.0');
+      const fader = h('input', { type: 'range', class: 'au-fader', min: '-30', max: '12', step: '0.5', value: '0', 'aria-label': `${STEM_LABEL[st]} level in dB`,
+        oninput: (e) => { P.live[st] = +e.target.value; db.textContent = (+e.target.value).toFixed(1); applyGains(); },
+        onchange: (e) => commitFader(st, +e.target.value), ondblclick: () => commitFader(st, 0) });
+      const mute = h('button', { type: 'button', class: 'au-ms', title: 'Mute (preview only)', onclick: () => { P.mute.has(st) ? P.mute.delete(st) : P.mute.add(st); applyGains(); paintMixer(); } }, 'M');
+      const solo = h('button', { type: 'button', class: 'au-ms solo', title: 'Solo (preview only)', onclick: () => { P.solo.has(st) ? P.solo.delete(st) : P.solo.add(st); applyGains(); paintMixer(); } }, 'S');
+      el.strips[st] = { fader, db, mute, solo }; el.meters[st] = meter;
+      return h('div', { class: 'au-strip', 'data-stem': st }, h('div', { class: 'au-ms-row' }, mute, solo), h('div', { class: 'au-fader-row' }, fader, meter), db, h('div', { class: 'au-strip-name' }, STEM_LABEL[st]));
+    };
+    el.masterMeter = h('div', { class: 'au-meter', title: 'Master level (peak, dBFS)' }, h('i', {}));
+    el.masterInfo = h('div', { class: 'au-master-info' });
+    el.pvState = h('span', { class: 'au-pvstate' });
+    el.muxBox = h('input', { type: 'checkbox', id: 'auMux' });
+    el.pvBtn = h('button', { type: 'button', class: 'dl-btn accent', id: 'auPreview', title: 'Render the three stems so you can play the mix', onclick: renderPreview }, 'Preview mix');
+    el.mixerHost.append(
+      h('div', { class: 'au-mixhead' }, el.pvBtn, el.pvState),
+      h('div', { class: 'au-strips' }, ...M.STEMS.map(strip), h('div', { class: 'au-strip master' }, h('div', { class: 'au-fader-row' }, el.masterMeter), el.masterInfo, h('div', { class: 'au-strip-name' }, 'Master'))),
+      h('div', { class: 'au-mixfoot' }, h('button', { type: 'button', class: 'dl-btn', id: 'auMaster', title: 'Render the final mix at -14 LUFS and measure it', onclick: mixMaster }, 'Master'),
+        h('button', { type: 'button', class: 'dl-btn', id: 'auExport', title: 'Write stems, master, cue sheet and credits', onclick: exportAll }, 'Export'),
+        h('label', { class: 'dl-check', title: 'Also write master.mp4: the video with this mix' }, el.muxBox, 'with video')));
+    el.meterTimer = null; P.meterTimer = setInterval(paintMeters, 70);
+  }
+  function paintMixer() {
+    if (!el.strips) return;
+    for (const st of M.STEMS) {
+      const e = el.strips[st], db = faderDb(st);
+      e.fader.value = db; e.db.textContent = db.toFixed(1);
+      e.mute.classList.toggle('on', P.mute.has(st)); e.solo.classList.toggle('on', P.solo.has(st));
+    }
+    el.pvState.textContent = !P.preview ? 'not rendered' : P.stale ? 'out of date' : 'up to date';
+    el.pvState.className = 'au-pvstate ' + (!P.preview ? 'muted' : P.stale ? 'warn' : 'ok');
+    el.pvBtn.disabled = !S.plan || !!S.busy;
+    const m = P.master_info;
+    el.masterInfo.replaceChildren(...(m ? [h('div', {}, `${m.integrated_lufs.toFixed(1)} LUFS`), h('div', {}, `${m.true_peak_db.toFixed(1)} dBTP`), h('div', { class: 'dl-hint' }, `LRA ${m.lra.toFixed(1)}`)]
+      : [h('div', { class: 'dl-hint' }, 'Press Master to measure')]));
+  }
+  const peakDb = (an, buf) => { an.getFloatTimeDomainData(buf); let m = 0; for (let i = 0; i < buf.length; i++) { const v = Math.abs(buf[i]); if (v > m) m = v; } return m > 0 ? 20 * Math.log10(m) : -90; };
+  const meterBuf = new Float32Array(1024);
+  function paintMeters() {
+    if (!P.nodes || !el.meters) return;
+    const set = (key, node, an) => {
+      const db = P.playing ? peakDb(an, meterBuf) : -90, prev = P.lvl[key] == null ? -90 : P.lvl[key], v = Math.max(db, prev - 3);   // falls back smoothly
+      P.lvl[key] = v; const i = node.firstChild; i.style.height = `${Math.max(0, Math.min(100, ((v + 60) / 60) * 100))}%`; node.classList.toggle('hot', v > -1);
+    };
+    for (const st of M.STEMS) set(st, el.meters[st], P.nodes[st].an);
+    set('master', el.masterMeter, P.anM);
+  }
+  document.addEventListener('keydown', (e) => {
+    if (!S.open || !S.plan || e.ctrlKey || e.metaKey || e.altKey) return;
+    const tag = (e.target && e.target.tagName) || '';
+    if (['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON', 'OPTION'].includes(tag) && !(tag === 'INPUT' && e.target.type === 'checkbox' && false)) return;
+    if (e.key === ' ') { e.preventDefault(); toggle(); }
+    else if (e.key === 'Home') { e.preventDefault(); seek(0); syncStems(true); }
+    else if (e.key === 'End') { e.preventDefault(); seek(S.plan.duration); syncStems(true); }
+    else if (e.key === ',') step(-1 / S.plan.fps); else if (e.key === '.') step(1 / S.plan.fps);
+  });
+
   // ---------- mount / open / close ----------
   function mount() {
     if (S.mounted) return;
@@ -416,12 +578,14 @@
     el.video = h('video', { class: 'au-video', muted: true, playsinline: true, preload: 'auto' });
     el.video.muted = true;
     el.tc = h('span', { class: 'au-tcbig' }, '00:00:00:00');
-    el.mon.append(h('div', { class: 'au-monhead' }, el.title, el.badge), h('div', { class: 'au-videowrap' }, el.video),
-      h('div', { class: 'au-transport' }, el.tc));
+    el.transport = h('div', { class: 'au-transport' });
+    el.mon.append(h('div', { class: 'au-monhead' }, el.title, el.badge), h('div', { class: 'au-videowrap' }, el.video), el.transport);
     el.video.addEventListener('timeupdate', () => { if (S.plan) { el.tc.textContent = M.fmtTC(el.video.currentTime, S.plan.fps); movePlayhead(); } });
     el.video.addEventListener('seeked', () => movePlayhead());
     el.insp.append(h('div', { class: 'cf-panel-head' }, 'Cue'), (el.inspBody = h('div', { class: 'au-pane' })));
-    buildLanes();
+    buildLanes(); buildMixer(); buildTransport();
+    el.video.addEventListener('seeked', () => { if (!P.playing) syncStems(true); });
+    el.video.addEventListener('ended', () => { if (P.playing) pause(); });
     S.mounted = true; paintAll();
   }
   async function open() {
@@ -434,7 +598,7 @@
     });
     poll();
   }
-  function close() { S.open = false; clearTimeout(S.timer); if (el.video) el.video.pause(); }
+  function close() { S.open = false; clearTimeout(S.timer); if (el.video && P.playing) pause(); else if (el.video) el.video.pause(); }
 
-  window.NLEAudio = { mount, open, close, openVideo, get state() { return S; }, selectCue, reload, call, edit, sourceOne, guard, say, addCueAtPlayhead, fit, zoom, seek, get view() { return L.view; }, get peaks() { return L.peaks; } };
+  window.NLEAudio = { mount, open, close, openVideo, get state() { return S; }, selectCue, reload, call, edit, sourceOne, guard, say, addCueAtPlayhead, fit, zoom, seek, play, pause, renderPreview, mixMaster, exportAll, get mixer() { return P; }, get view() { return L.view; }, get peaks() { return L.peaks; } };
 })();

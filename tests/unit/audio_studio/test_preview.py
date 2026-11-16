@@ -97,3 +97,27 @@ def test_preview_endpoints_report_stale_then_current(tmp_path):
     assert c.get(f"{B}/plans/{pid}/preview").json()["stale"] is False  # a draft cue has no sound yet
     c.post(f"{B}/plans/{pid}/cues/x/source", json={})
     assert c.get(f"{B}/plans/{pid}/preview").json()["stale"] is True
+
+
+def test_preview_records_the_track_gains_it_was_rendered_with(tmp_path):
+    plan = _plan(tmp_path)
+    plan.tracks[1].gain_db = -4.0
+    res = build_preview(plan, tmp_path / "pv")
+    assert res["gains"]["music"] == -4.0 and res["gains"]["dialogue"] == 0.0 and set(res["gains"]) == {"dialogue", "music", "sfx", "ambience", "foley"}
+
+
+def test_get_preview_returns_the_last_render_marked_stale_after_an_audio_edit(tmp_path):
+    video = tmp_path / "v.mp4"
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "color=c=black:s=160x120:d=3:r=24", "-f", "lavfi", "-i", "sine=frequency=300:duration=3",
+                    "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", str(video)], check=True)
+    engine = AudioEngine(PlanStore(tmp_path / "store"), [SynthProvider()])
+    app = FastAPI()
+    app.include_router(mod.router)
+    app.dependency_overrides[mod.get_engine] = lambda: engine
+    c = TestClient(app)
+    B = "/api/audio/studio"
+    pid = c.post(f"{B}/plans", json={"video_path": str(video)}).json()["id"]
+    made = c.post(f"{B}/plans/{pid}/preview").json()
+    c.put(f"{B}/plans/{pid}", json={"tracks": [{"id": "music", "gain_db": -6.0}]})
+    stale = c.get(f"{B}/plans/{pid}/preview").json()
+    assert stale["stale"] is True and stale["dir"] == made["dir"] and set(stale["stems"]) == {"dialogue", "music", "effects"} and stale["gains"]["music"] == 0.0

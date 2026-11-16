@@ -49,6 +49,7 @@ def build_preview(plan: SoundPlan, out_dir: Path) -> dict:
             if p.returncode != 0:
                 raise RuntimeError(f"ffmpeg failed encoding the {name} preview: {p.stderr.strip()[-200:]}")
             stems[name] = {"file": m4a.name, "peaks": file_peaks(roles[name], 1200)[0]}
-    result = {"signature": sig, "duration": plan.duration, "stems": stems}
+    # the stems have these track gains baked in; the page plays a fader move as a trim relative to them until the next render
+    result = {"signature": sig, "duration": plan.duration, "stems": stems, "gains": {t.id: t.gain_db for t in plan.tracks}}
     meta.write_text(json.dumps(result), encoding="utf-8")
     return result
