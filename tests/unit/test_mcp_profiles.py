@@ -389,7 +389,7 @@ async def test_the_creative_profile_is_exactly_the_old_creative_server():
 async def test_the_chronoflow_profile_has_the_video_studio_and_nothing_else():
     server = MCPServer(profile="chronoflow")
     names = {t["name"] for t in server.exposed_tools()}
-    assert names and all(n.startswith(("panelflow_chronoflow_", "panelflow_audio_library_")) for n in names)   # the sound library is part of the Video Studio
+    assert names and all(n.startswith(("panelflow_chronoflow_", "panelflow_audio_library_", "panelflow_reels_")) for n in names)   # the sound library and the reels tools are part of the Video Studio
     # everything the old standalone ChronoFlow MCP offered is here, and cancel reaches the ChronoFlow supervisor
     for needed in ("status", "list_characters", "save_character", "ai_director_plan", "generate_video", "get_job", "generate_image", "cancel_job"):
         assert f"panelflow_chronoflow_{needed}" in names, needed
