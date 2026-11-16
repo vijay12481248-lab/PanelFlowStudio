@@ -789,7 +789,7 @@ class ChronoFlowPipeline:
         return (f"scale=in_range=tv:in_color_matrix=bt709:flags={flags},format=rgb24,lut3d=file={cube_name}:interp=tetrahedral,"
                 f"scale=out_range=tv:out_color_matrix=bt709:flags={flags},format=yuv420p,")
 
-    def render_timeline_edl(self, clips, output_master_path, overlays=None, luts=None):
+    def render_timeline_edl(self, clips, output_master_path, overlays=None, luts=None, audio=None):
         """Renders an NLE timeline Edit Decision List (V1 clips + V2 still overlays) into a final mastered video.
         luts: {grade id: .cube text}; a clip with "lut": <id> is colour graded by that LUT before scaling."""
         if not clips:
@@ -895,6 +895,9 @@ class ChronoFlowPipeline:
                 stitched = self.stitch_chunks(processed_chunks, output_master_path)
             if stitched and overlays:
                 self._apply_overlays(output_master_path, overlays, out_w, out_h)
+            if stitched and audio:   # A2-A4: library sounds mixed with the clip sound (music ducked under voice), normalised
+                from engine.audio.library.timeline_mix import mix_onto_video
+                mix_onto_video(Path(output_master_path), audio)
             return stitched
         finally:
             import shutil

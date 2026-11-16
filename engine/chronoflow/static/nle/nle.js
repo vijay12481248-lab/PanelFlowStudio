@@ -6,7 +6,9 @@
   const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
   const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
   const ZOOM_MIN = 3, ZOOM_MAX = 1800, HEAD_W = 112;
-  const H = { v2: 34, v1: 66, a1: 46 };
+  const H = { v2: 34, v1: 66, a1: 46, snd: 30 };
+  const SND = [{ track: 'voice', name: 'A2', label: 'Voice', color: '#46d6a3' }, { track: 'music', name: 'A3', label: 'Music', color: '#b07cf7' }, { track: 'effect', name: 'A4', label: 'Effects', color: '#f0b14a' }];
+  const LIB = '/api/audio/library';
 
   const cfg = { api: '/api/chronoflow', out: '/chronoflow/outputs', inp: '/chronoflow/inputs', token: '' };
   const tl = M.create(24);
@@ -28,6 +30,7 @@
   const total = () => M.total(tl);
   const selClip = () => (ui.sel && ui.sel.type === 'clip' ? M.byId(tl, ui.sel.id) : null);
   const selOvl = () => (ui.sel && ui.sel.type === 'ovl' ? tl.overlays.find((o) => o.id === ui.sel.id) : null);
+  const selSnd = () => (ui.sel && ui.sel.type === 'snd' ? (tl.audio || []).find((a) => a.id === ui.sel.id) : null);
   const fps = () => tl.fps;
   const tToX = (t) => t * ui.pps;
   const xToT = (x) => x / ui.pps;
@@ -368,7 +371,7 @@
     if (ui.playing && !keepPlaying) pause();
     await show(ui.t);
     paintTime();
-    if (ui.playing) { clockT0 = performance.now(); clockBase = ui.t; }
+    if (ui.playing) { clockT0 = performance.now(); clockBase = ui.t; scheduleSounds(ui.t); }
   }
   const refreshAt = () => { ui.t = clamp(ui.t, 0, total()); show(ui.t).then(paintTime); };
   const step = (n) => seek(M.frame(ui.t, fps()) + n / fps());
@@ -386,10 +389,12 @@
       if (hit.blend && ui.rate > 0) { const o = decks[standby()].el; o.playbackRate = clamp(hit.blend.from.speed * ui.rate, 0.0625, 16); o.play().catch(() => {}); }
     });
     cancelAnimationFrame(raf); raf = requestAnimationFrame(tick);
+    scheduleSounds(ui.t);
     root.playBtn.textContent = '⏸'; root.playBtn.classList.add('on');
   }
   function pause() {
     ui.playing = false; cancelAnimationFrame(raf);
+    stopSounds();
     decks.forEach((d) => d.el.pause());
     root.playBtn.textContent = '▶'; root.playBtn.classList.remove('on');
     paintTime(); meterTick();
@@ -397,7 +402,7 @@
   const togglePlay = () => (ui.playing ? pause() : play(1));
   function shuttle(dir) { // J / K / L like Resolve & Premiere: repeated press speeds up
     if (!ui.playing || Math.sign(ui.rate) !== dir) return play(dir);
-    ui.rate = clamp(ui.rate * 2, -8, 8); clockT0 = performance.now(); clockBase = ui.t;
+    ui.rate = clamp(ui.rate * 2, -8, 8); clockT0 = performance.now(); clockBase = ui.t; scheduleSounds(ui.t);
     const v = decks[active].el; const hit = M.locate(tl, ui.t); if (hit && dir > 0) v.playbackRate = clamp(hit.clip.speed * ui.rate, 0.0625, 16);
   }
 
@@ -549,8 +554,154 @@
     });
   }
 
+
+  // ---------- A2-A4: library sounds (Audio Studio) on the timeline ----------
+  const sndPeaks = {}, sndBufs = {};
+  let sndNodes = [];
+  async function ensureSndPeaks(a) {
+    const k = `${a.sound}:${a.version}`;
+    if (sndPeaks[k]) return;
+    sndPeaks[k] = { peaks: [], dur: a.srcDur };
+    try { const p = await (await fetch(`${LIB}/sounds/${encodeURIComponent(a.sound)}/peaks?v=${a.version}&bins=2000`)).json(); sndPeaks[k] = { peaks: p.peaks || [], dur: p.duration || a.srcDur }; renderSounds(); }
+    catch (e) { /* drawn without a waveform */ }
+  }
+  function drawSndWave(cv, a, color) {
+    const w = Math.max(1, Math.round(cv.clientWidth)), hh = Math.max(1, Math.round(cv.clientHeight)); cv.width = w; cv.height = hh;
+    const p = sndPeaks[`${a.sound}:${a.version}`], g = cv.getContext('2d'); g.clearRect(0, 0, w, hh);
+    if (!p || !p.peaks.length || !window.AudioModel) return;
+    const bars = window.AudioModel.peaksToBars(p.peaks, w, a.in / p.dur, a.out / p.dur), gain = Math.pow(10, a.gain_db / 20), mid = hh / 2;
+    g.fillStyle = color; g.globalAlpha = 0.85;
+    for (let i = 0; i < w; i++) { const t = (i / w) * (a.out - a.in), f = Math.min(1, a.fadeIn ? t / a.fadeIn : 1, a.fadeOut ? (a.out - a.in - t) / a.fadeOut : 1); const v = Math.max(0.5, Math.min(1, bars[i] * gain * f) * mid * 0.9); g.fillRect(i, mid - v, 1, v * 2); }
+  }
+  function renderSounds() {
+    if (!root.snd) return;
+    const muted = tl.mutedTracks || [];
+    SND.forEach((T) => {
+      const lane = root.snd[T.track]; lane.innerHTML = '';
+      lane.classList.toggle('muted', muted.includes(T.track));
+      const btn = root.sndMute[T.track]; if (btn) btn.classList.toggle('on', muted.includes(T.track));
+      (tl.audio || []).filter((a) => a.track === T.track).forEach((a) => {
+        const d = el('div', `nle-clip snd${ui.sel && ui.sel.id === a.id ? ' sel' : ''}`);
+        d.dataset.id = a.id; d.style.setProperty('--sc', T.color);
+        Object.assign(d.style, { left: `${tToX(a.start)}px`, width: `${Math.max(4, tToX(a.out - a.in))}px` });
+        d.innerHTML = `<canvas></canvas><div class="lbl"></div><div class="nle-handle l" data-edge="l"></div><div class="nle-handle r" data-edge="r"></div>`;
+        d.querySelector('.lbl').textContent = `${a.label}${a.gain_db ? ` · ${a.gain_db > 0 ? '+' : ''}${a.gain_db} dB` : ''}`;
+        lane.appendChild(d); drawSndWave(d.firstChild, a, T.color); ensureSndPeaks(a);
+      });
+    });
+  }
+  function bindSounds() {
+    SND.forEach((T) => root.snd[T.track].addEventListener('pointerdown', (e) => {
+      const node = e.target.closest('.nle-clip');
+      if (!node) { if (!e.ctrlKey && !e.metaKey) select(null); return; }
+      const a = (tl.audio || []).find((x) => x.id === node.dataset.id);
+      if (!a) return;
+      e.preventDefault();
+      if (ui.tool === 'blade') { const t = M.frame(timeAtEvent(e), fps()); edit(() => M.splitSound(tl, a.id, t)); return; }
+      ui.sel = { type: 'snd', id: a.id }; ui.selIds.clear(); ui.selIds.add(a.id); renderAll();
+      hist.checkpoint();
+      const edge = e.target.dataset.edge, t0 = timeAtEvent(e), s0 = a.start, end0 = M.soundEnd(a), out0 = a.out;
+      drag(e, (ev) => {
+        const dt = timeAtEvent(ev) - t0;
+        if (edge === 'r') M.updateSound(tl, a.id, { out: out0 + (snapT(end0 + dt, [end0]) - end0) });
+        else if (edge === 'l') M.trimSoundStart(tl, a.id, snapT(s0 + dt, [s0]));
+        else {   // move: snap the start, or the end if that is the one near an edit point
+          const ns = Math.max(0, s0 + dt), len = a.out - a.in, ss = snapT(ns, [s0]), se = snapT(ns + len, [end0]) - len;
+          M.updateSound(tl, a.id, { start: M.frame(ss !== ns ? ss : se, fps()) });
+        }
+        renderAll();
+      }, () => { persist(); if (ui.playing) scheduleSounds(ui.t); });
+    }));
+  }
+  function bindSoundDrops() {   // a sound dragged from the Media Pool Sounds bin lands on the lane under the pointer, at the pointer's time
+    SND.forEach((T) => {
+      const lane = root.snd[T.track];
+      lane.addEventListener('dragover', (e) => { if (e.dataTransfer.types.includes('application/x-pf-sound')) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; lane.classList.add('drop'); } });
+      lane.addEventListener('dragleave', () => lane.classList.remove('drop'));
+      lane.addEventListener('drop', (e) => {
+        lane.classList.remove('drop');
+        const raw = e.dataTransfer.getData('application/x-pf-sound'); if (!raw) return;
+        e.preventDefault();
+        let spec; try { spec = JSON.parse(raw); } catch (err) { return; }
+        const r = addSound(spec, { start: snapT(Math.max(0, timeAtEvent(e))), track: T.track });
+        if (r && r.error) status(r.error);
+      });
+    });
+  }
+  function toggleTrackMute(track) {
+    edit(() => { const m = new Set(tl.mutedTracks || []); if (m.has(track)) m.delete(track); else m.add(track); tl.mutedTracks = [...m]; });
+    if (ui.playing) scheduleSounds(ui.t);
+  }
+
+  // playback: each sound decoded once into an AudioBuffer, scheduled on the shared context at the playhead; music ducks under voice (-10 dB)
+  async function sndBuffer(a) {
+    const k = `${a.sound}:${a.version}`;
+    if (!sndBufs[k]) sndBufs[k] = fetch(`${LIB}/sounds/${encodeURIComponent(a.sound)}/file?v=${a.version}`).then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.arrayBuffer(); }).then((b) => ensureAudio().ctx.decodeAudioData(b)).catch((e) => { delete sndBufs[k]; throw e; });
+    return sndBufs[k];
+  }
+  function stopSounds() { sndNodes.forEach((n) => { try { n.src.stop(); } catch (e) { /* not started */ } n.src.disconnect(); n.g.disconnect(); }); sndNodes = []; }
+  let schedTok = 0;
+  async function scheduleSounds(t) {
+    stopSounds();
+    const tok = ++schedTok;
+    if (!ui.playing || ui.rate !== 1 || !(tl.audio || []).length) return;
+    const A = ensureAudio(), muted = tl.mutedTracks || [];
+    const items = tl.audio.filter((a) => !muted.includes(a.track) && M.soundEnd(a) > t);
+    const voice = items.filter((a) => a.track === 'voice').map((a) => [a.start, M.soundEnd(a)]);
+    const bufs = await Promise.all(items.map((a) => sndBuffer(a).catch(() => null)));
+    if (tok !== schedTok || !ui.playing) return;
+    const now = A.ctx.currentTime + 0.03, t1 = clockBase + ((performance.now() - clockT0) / 1000) * ui.rate + 0.03;   // where the picture will be when these start
+    items.forEach((a, i) => {
+      const buf = bufs[i]; if (!buf) return;
+      const len = a.out - a.in, from = Math.max(t1, a.start), off = a.in + (from - a.start), when = now + (from - t1), base = Math.pow(10, a.gain_db / 20);
+      if (off >= a.out) return;
+      const src = A.ctx.createBufferSource(), g = A.ctx.createGain(); src.buffer = buf; src.connect(g); g.connect(A.master);
+      const at = (tt) => when + (tt - from);   // timeline time -> context time
+      const env = (tt) => { const x = tt - a.start; return Math.max(0, Math.min(1, a.fadeIn ? x / a.fadeIn : 1, a.fadeOut ? (len - x) / a.fadeOut : 1)); };
+      g.gain.setValueAtTime(base * env(from), when);
+      if (a.fadeIn && from < a.start + a.fadeIn) g.gain.linearRampToValueAtTime(base, at(a.start + a.fadeIn));
+      if (a.track === 'music') voice.forEach(([v0, v1]) => {   // duck under each voice line, 0.15 s ramps
+        if (v1 <= from || v0 >= a.start + len) return;
+        g.gain.setValueAtTime(base, Math.max(when, at(v0 - 0.15))); g.gain.linearRampToValueAtTime(base * 0.316, Math.max(when, at(v0)));
+        g.gain.setValueAtTime(base * 0.316, Math.max(when, at(v1))); g.gain.linearRampToValueAtTime(base, Math.max(when, at(v1 + 0.15)));
+      });
+      if (a.fadeOut) { const fs = a.start + len - a.fadeOut; if (fs > from) g.gain.setValueAtTime(base, at(fs)); g.gain.linearRampToValueAtTime(0, at(a.start + len)); }
+      src.start(when, off, a.out - off);
+      sndNodes.push({ src, g });
+    });
+  }
+
+  /** Quick Audio page -> timeline: replace the sounds an earlier send from the same plan put there, then place each item. */
+  function placeSounds(origin, items) {
+    if (!ui.jobId || !tl.clips.length) return { error: 'Open a project with clips in the Video Studio first.' };
+    edit(() => {
+      tl.audio = (tl.audio || []).filter((a) => a.origin !== origin);
+      items.forEach((it) => {
+        const track = it.kind === 'voice' || it.kind === 'music' ? it.kind : 'effect';
+        const a = M.addSound(tl, { sound: it.sound, version: it.version, label: it.label, track, duration: it.duration, start: it.start, origin });
+        M.updateSound(tl, a.id, { in: it.in, out: it.out, gain_db: it.gain_db, fadeIn: it.fade_in, fadeOut: it.fade_out });
+        a.start = Math.max(0, it.start);   // the mixer's exact place (hit frame minus the take's onset), not frame-rounded
+      });
+      ui.sel = null;
+    });
+    status(`Placed ${items.length} sound(s) from the Audio page on A2-A4. Sending again replaces them.`);
+    return { count: items.length };
+  }
+
+  /** Audio Studio -> Video Studio: put a library sound on its track at the playhead. */
+  function addSound(spec, where) {
+    if (!ui.jobId || !tl.clips.length) return { error: 'Open a project with clips in the Video Studio first, then send the sound again.' };
+    const track = (where && where.track) || (spec.kind === 'voice' || spec.kind === 'music' ? spec.kind : 'effect');
+    const start = where && where.start != null ? where.start : ui.t;
+    let a;
+    edit(() => { a = M.addSound(tl, { sound: spec.sound, version: spec.version, label: spec.label, track, duration: spec.duration, start, url: spec.url }); ui.sel = { type: 'snd', id: a.id }; });
+    status(`Added "${a.label}" to ${SND.find((x) => x.track === track).name} ${SND.find((x) => x.track === track).label} at ${M.toTimecode(a.start, fps())}.`);
+    return { item: a };
+  }
+
   function renderAll() {
-    const T = total();
+    if (!Array.isArray(tl.audio)) tl.audio = [];   // timelines saved before the sound tracks
+    const T = Math.max(total(), ...tl.audio.map((a) => M.soundEnd(a)));
     const w = Math.max(root.scroll.clientWidth, tToX(T) + 160);
     root.content.style.width = `${w}px`;
     renderRuler(); renderInOut();
@@ -587,7 +738,7 @@
       Object.assign(d.style, { left: `${tToX(o.start)}px`, width: `${Math.max(6, tToX(o.dur))}px`, backgroundImage: `url("${mediaUrl({ src: o.src, kind: 'image' })}")` });
       d.dataset.id = o.id; root.v2.appendChild(d);
     });
-    renderAudio(); paintTime(); renderInspector();
+    renderAudio(); renderSounds(); paintTime(); renderInspector();
     root.zoom.value = Math.log(ui.pps / ZOOM_MIN) / Math.log(ZOOM_MAX / ZOOM_MIN) * 1000;
     root.undo.disabled = !hist.canUndo; root.redo.disabled = !hist.canRedo;
     root.tl.classList.toggle('blade', ui.tool === 'blade');
@@ -602,7 +753,27 @@
   }
 
   function renderInspector() {
-    const c = selClip(), o = selOvl(), i = root.insp;
+    const c = selClip(), o = selOvl(), snd = selSnd(), i = root.insp;
+    if (snd) {
+      const T = SND.find((x) => x.track === snd.track), len = snd.out - snd.in;
+      i.innerHTML = `<span><b></b> · ${T.name} ${T.label} · ${M.toTimecode(snd.start, fps())} · ${len.toFixed(2)} s</span>
+        <label>Gain <input type="range" id="inspSG" min="-40" max="12" step="0.5" value="${snd.gain_db}"> <span id="inspSGL">${snd.gain_db} dB</span></label>
+        <label>Fade in <input type="number" id="inspSFI" min="0" max="${(len / 2).toFixed(2)}" step="0.1" value="${snd.fadeIn}"> s</label>
+        <label>Fade out <input type="number" id="inspSFO" min="0" max="${(len / 2).toFixed(2)}" step="0.1" value="${snd.fadeOut}"> s</label>
+        <span class="grow" style="flex:1"></span>
+        <button class="nle-btn" id="inspSEdit" title="Open this sound in the Audio Studio editor">Edit in Audio Studio</button>
+        <button class="nle-btn" id="inspSDel">🗑 Remove</button>`;
+      i.querySelector('b').textContent = snd.label;
+      const g = $('#inspSG', i);
+      g.onpointerdown = () => hist.checkpoint();
+      g.oninput = () => { M.updateSound(tl, snd.id, { gain_db: +g.value }); $('#inspSGL', i).textContent = `${snd.gain_db} dB`; renderSounds(); };
+      g.onchange = () => { persist(); if (ui.playing) scheduleSounds(ui.t); };
+      $('#inspSFI', i).onchange = (e) => edit(() => M.updateSound(tl, snd.id, { fadeIn: +e.target.value }));
+      $('#inspSFO', i).onchange = (e) => edit(() => M.updateSound(tl, snd.id, { fadeOut: +e.target.value }));
+      $('#inspSDel', i).onclick = () => edit(() => { M.removeSound(tl, snd.id); ui.sel = null; });
+      $('#inspSEdit', i).onclick = () => { if (typeof window.switchTab === 'function') window.switchTab('audio'); if (window.SoundEditor) window.SoundEditor.open().then(() => window.SoundEditor.openSound(snd.sound)); };
+      return;
+    }
     if (!c && !o) { i.innerHTML = `<span>Select a clip · <b>${tl.clips.length}</b> clips · ${M.toTimecode(total(), fps())} · ${fps()} fps</span>`; return; }
     if (o) { i.innerHTML = `<span>Edited-frame overlay <b>${o.label}</b> · start ${M.toTimecode(o.start, fps())} · ${o.dur.toFixed(2)} s</span><button class="nle-btn" id="inspDel">🗑 Remove overlay</button>`; $('#inspDel', i).onclick = () => edit(() => { M.removeOverlay(tl, o.id); ui.sel = null; }); return; }
     const dur = M.clipDur(c);
@@ -942,7 +1113,7 @@
   }
 
   // ---------- actions ----------
-  function splitAtPlayhead() { const t = M.frame(ui.t, fps()); const clip = (M.locate(tl, t) || {}).clip; if (!clip) return; edit(() => M.splitAt(tl, t)); }
+  function splitAtPlayhead() { const t = M.frame(ui.t, fps()); const snd = selSnd(); if (snd) { edit(() => M.splitSound(tl, snd.id, t)); return; } const clip = (M.locate(tl, t) || {}).clip; if (!clip) return; edit(() => M.splitAt(tl, t)); }
   function deleteSelection() {
     if (ui.selIds && ui.selIds.size > 1) {
       edit(() => {
@@ -960,7 +1131,8 @@
       status('Deleted selected items');
       return;
     }
-    const c = selClip(), o = selOvl();
+    const c = selClip(), o = selOvl(), snd = selSnd();
+    if (snd) { edit(() => { M.removeSound(tl, snd.id); ui.sel = null; ui.selIds.delete(snd.id); }); return; }
     if (c) {
       if (tl.clips.length <= 1) return status('At least one clip must remain on V1.');
       const shotIndex = c.shot != null ? c.shot : (typeof c.label === 'string' && c.label.startsWith('Shot ') ? parseInt(c.label.replace('Shot ', ''), 10) - 1 : null);
@@ -1182,13 +1354,15 @@
           <div class="nle-head" style="height:26px"></div>
           <div class="nle-head" style="height:${H.v2}px"><i class="strip" style="background:#a855f7"></i><b>V2</b> Frames</div>
           <div class="nle-head" style="height:${H.v1}px"><i class="strip" style="background:#3b82f6"></i><b>V1</b> Video</div>
-          <div class="nle-head" style="height:${H.a1}px"><i class="strip" style="background:#46d6a3"></i><b>A1</b> Voice<span class="tb"><button data-t="amute" title="Mute audio">M</button></span></div>
+          <div class="nle-head" style="height:${H.a1}px"><i class="strip" style="background:#5b6b9a"></i><b>A1</b> Clip<span class="tb"><button data-t="amute" title="Mute all sound">M</button></span></div>
+          ${SND.map((T) => `<div class="nle-head" style="height:${H.snd}px"><i class="strip" style="background:${T.color}"></i><b>${T.name}</b> ${T.label}<span class="tb"><button data-smute="${T.track}" title="Mute ${T.label} (also left out of the export)">M</button></span></div>`).join('')}
         </div>
         <div class="nle-scroll"><div class="nle-content">
           <div class="nle-ruler"></div>
           <div class="nle-lane" style="height:${H.v2}px" data-lane="v2"></div>
           <div class="nle-lane" style="height:${H.v1}px" data-lane="v1"></div>
           <div class="nle-lane" style="height:${H.a1}px" data-lane="a1"></div>
+          ${SND.map((T) => `<div class="nle-lane snd-lane" style="height:${H.snd}px" data-lane="${T.track}" title="${T.label}: send sounds here from the Audio Studio"></div>`).join('')}
           <div class="nle-inout"></div><div class="nle-drop"></div><div class="nle-blade"></div>
           <div class="nle-play"><i style="position:absolute;top:0;left:-8px;width:16px;height:14px;pointer-events:auto;cursor:ew-resize"></i></div>
         </div></div>
@@ -1200,6 +1374,7 @@
       meter: [...tlMount.ownerDocument.querySelectorAll('.nle-meter i')], tc: $('#nleTc'), tcTotal: $('#nleTcTotal'), playBtn: $('[data-a=play]', body),
       scroll: $('.nle-scroll', tlMount), content: $('.nle-content', tlMount), ruler: $('.nle-ruler', tlMount), playhead: $('.nle-play', tlMount),
       v2: $('[data-lane=v2]', tlMount), v1: $('[data-lane=v1]', tlMount), a1: $('[data-lane=a1]', tlMount), inout: $('.nle-inout', tlMount),
+      snd: Object.fromEntries(SND.map((T) => [T.track, $(`[data-lane=${T.track}]`, tlMount)])), sndMute: Object.fromEntries(SND.map((T) => [T.track, $(`[data-smute=${T.track}]`, tlMount)])),
       drop: $('.nle-drop', tlMount), blade: $('.nle-blade', tlMount), zoom: $('.nle-zoom', tlMount),
       undo: $('[data-t=undo]', tlMount), redo: $('[data-t=redo]', tlMount), toolSel: $('[data-t=select]', tlMount), toolBlade: $('[data-t=blade]', tlMount),
       mergeBtn: $('[data-t=merge]', tlMount),
@@ -1214,9 +1389,9 @@
     const tools = { select: () => setTool('select'), blade: () => setTool('blade'), split: splitAtPlayhead, dup: duplicateSel, merge: mergeSelectedFrames, dissolve: toggleDissolve, del: deleteSelection, undo, redo, in: markIn, out: markOut, clr: clearRange, mk: addMarker,
       snap: () => { ui.snap = !ui.snap; renderAll(); }, zin: () => setZoom(ui.pps * 1.4), zout: () => setZoom(ui.pps / 1.4), fit: () => zoomFit(), frames: () => setZoom(fps() * 40),
       export: exportCut, amute: () => act.mute($('[data-a=mute]', body)) };
-    tlMount.addEventListener('click', (e) => { const b = e.target.closest('[data-t]'); if (b && tools[b.dataset.t]) tools[b.dataset.t](); });
+    tlMount.addEventListener('click', (e) => { const b = e.target.closest('[data-t]'); if (b && tools[b.dataset.t]) tools[b.dataset.t](); const m = e.target.closest('[data-smute]'); if (m) toggleTrackMute(m.dataset.smute); });
     root.zoom.oninput = () => setZoom(ZOOM_MIN * Math.pow(ZOOM_MAX / ZOOM_MIN, root.zoom.value / 1000));
-    bindTimeline();
+    bindTimeline(); bindSounds(); bindSoundDrops();
     document.addEventListener('keydown', onKey);
     new ResizeObserver(() => { if (tl.clips.length) renderAll(); }).observe(root.scroll);
     if (window.NLEFrameEdit) window.NLEFrameEdit.mount(api);
@@ -1229,7 +1404,7 @@
     selectedClips: () => tl.clips.filter((c) => ui.selIds && ui.selIds.has(c.id)),
     on: (n, f) => (listeners[n] = listeners[n] || []).push(f),
     get tl() { return tl; }, get ui() { return ui; }, get root() { return root; }, cfg, mediaUrl, apiUrl, q, info, selectedClip: selClip,
-    clipAtPlayhead: () => M.locate(tl, ui.t), poolItems: () => tl.clips.map((c, i) => ({ clip: c, index: i })), renderAll, refreshAt,
+    addSound, placeSounds, clipAtPlayhead: () => M.locate(tl, ui.t), poolItems: () => tl.clips.map((c, i) => ({ clip: c, index: i })), renderAll, refreshAt,
   };
   window.NLE = api;
 })();

@@ -1,4 +1,5 @@
-/* ChronoFlow NLE - pure timeline model (no DOM). V1 is a gapless, ripple sequence of clips; V2 holds free-placed still overlays.
+/* ChronoFlow NLE - pure timeline model (no DOM). V1 is a gapless, ripple sequence of clips; V2 holds free-placed still overlays;
+   A2 voice / A3 music / A4 effects hold free-placed library sounds (tl.audio).
    Every time is in seconds; clip duration on the timeline = (out - in) / speed. */
 (function (root) {
   'use strict';
@@ -11,7 +12,7 @@
   const r6 = (v) => Math.round(v * 1e6) / 1e6;
 
   function create(fps) {
-    return { fps: fps || 24, clips: [], overlays: [], markers: [], dismissedSrcs: [], inPoint: null, outPoint: null, nextId: 1 };
+    return { fps: fps || 24, clips: [], overlays: [], audio: [], markers: [], dismissedSrcs: [], inPoint: null, outPoint: null, nextId: 1 };
   }
   const newId = (tl, p) => `${p}${tl.nextId++}`;
   const clipDur = (c) => (c.out - c.in) / c.speed;
@@ -217,6 +218,7 @@
     const pts = new Set([0]);
     layout(tl).forEach((l) => { pts.add(l.start); pts.add(l.end); });
     tl.overlays.forEach((o) => { pts.add(o.start); pts.add(r6(o.start + o.dur)); });
+    (tl.audio || []).forEach((a) => { pts.add(a.start); pts.add(soundEnd(a)); });
     tl.markers.forEach((m) => pts.add(m.t));
     if (tl.inPoint != null) pts.add(tl.inPoint);
     if (tl.outPoint != null) pts.add(tl.outPoint);
@@ -249,6 +251,58 @@
     return o;
   }
   const removeOverlay = (tl, id) => { const n = tl.overlays.length; tl.overlays = tl.overlays.filter((o) => o.id !== id); return tl.overlays.length < n; };
+
+  // ---------- A2-A4: library sounds, free-placed (no ripple). Item: {id, sound, version, url, label, track, start, in, out, srcDur, gain_db, fadeIn, fadeOut}
+  const SOUND_TRACKS = ['voice', 'music', 'effect'];
+  const soundEnd = (a) => r6(a.start + (a.out - a.in));
+  function addSound(tl, spec) {
+    if (!Array.isArray(tl.audio)) tl.audio = [];
+    const dur = Math.max(minDur(tl), +spec.duration || 1);
+    const a = { id: newId(tl, 'a'), sound: spec.sound, version: spec.version || 1, url: spec.url || '', label: spec.label || 'Sound',
+      track: SOUND_TRACKS.includes(spec.track) ? spec.track : 'effect', start: r6(frame(Math.max(0, +spec.start || 0), tl.fps)), in: 0, out: r6(dur), srcDur: r6(dur),
+      gain_db: 0, fadeIn: 0, fadeOut: 0 };
+    if (spec.origin) a.origin = spec.origin;   // e.g. the Sound Plan it came from, so sending again replaces instead of duplicating
+    tl.audio.push(a);
+    return a;
+  }
+  /** patch: start (moves), in / out (trim inside the sound), gain_db, fadeIn, fadeOut, track. Values are clamped; the item keeps at least MIN_FRAMES. */
+  function updateSound(tl, id, patch) {
+    const a = (tl.audio || []).find((x) => x.id === id);
+    if (!a) return null;
+    const md = minDur(tl);
+    if (patch.start != null) a.start = r6(Math.max(0, patch.start));
+    if (patch.in != null) a.in = r6(clamp(patch.in, 0, a.out - md));
+    if (patch.out != null) a.out = r6(clamp(patch.out, a.in + md, a.srcDur));
+    if (patch.gain_db != null) a.gain_db = r6(clamp(+patch.gain_db, -40, 12));
+    const len = a.out - a.in;
+    if (patch.fadeIn != null) a.fadeIn = r6(clamp(+patch.fadeIn, 0, len / 2));
+    if (patch.fadeOut != null) a.fadeOut = r6(clamp(+patch.fadeOut, 0, len / 2));
+    a.fadeIn = Math.min(a.fadeIn, len / 2); a.fadeOut = Math.min(a.fadeOut, len / 2);
+    if (patch.track != null && SOUND_TRACKS.includes(patch.track)) a.track = patch.track;
+    return a;
+  }
+  /** Trim from the left edge to timeline time t: the start moves and the sound's in point moves with it. */
+  function trimSoundStart(tl, id, t) {
+    const a = (tl.audio || []).find((x) => x.id === id);
+    if (!a) return null;
+    const nin = clamp(a.in + (t - a.start), 0, a.out - minDur(tl));
+    a.start = r6(a.start + (nin - a.in)); a.in = r6(nin);
+    a.fadeIn = Math.min(a.fadeIn, (a.out - a.in) / 2);
+    return a;
+  }
+  const removeSound = (tl, id) => { const n = (tl.audio || []).length; tl.audio = (tl.audio || []).filter((a) => a.id !== id); return tl.audio.length < n; };
+  /** Split the sound under t into two items; returns the new right-hand item or null. */
+  function splitSound(tl, id, t) {
+    const a = (tl.audio || []).find((x) => x.id === id);
+    if (!a || t <= a.start + minDur(tl) || t >= soundEnd(a) - minDur(tl)) return null;
+    const cut = r6(a.in + (t - a.start));
+    const b = { ...a, id: newId(tl, 'a'), start: r6(t), in: cut, fadeIn: 0 };
+    a.out = cut; a.fadeOut = 0;
+    tl.audio.push(b);
+    return b;
+  }
+  /** What the timeline is playing on the sound tracks at t: [{item, offset}] (offset into the sound file). */
+  const soundsAt = (tl, t) => (tl.audio || []).filter((a) => t >= a.start && t < soundEnd(a)).map((a) => ({ item: a, offset: r6(a.in + (t - a.start)) }));
 
   function addMarker(tl, t, label) {
     const m = { id: newId(tl, 'm'), t: r6(t), label: label || '' };
@@ -296,6 +350,7 @@
     return {
       clips: clips,
       overlays: tl.overlays.map((o) => ({ filename: o.src, start: o.start, duration: o.dur })),
+      audio: (tl.audio || []).filter((a) => !(tl.mutedTracks || []).includes(a.track)).map((a) => ({ sound: a.sound, version: a.version, track: a.track, start: a.start, in: a.in, out: a.out, gain_db: a.gain_db, fade_in: a.fadeIn, fade_out: a.fadeOut })),
       luts: luts,
     };
   }
@@ -319,7 +374,7 @@
   const api = {
     SPEED_MIN, SPEED_MAX, TRANSITIONS, DEFAULT_TRANS, overlapAt, setTransition, create, clipDur, minDur, frame, layout, total, locate, addClip, byId, splitAt, trimEdge, moveClip,
     removeClip, setSpeed, setVolume, duplicateClip, mergeClips, mergeOverlays, snapPoints, snap, neighbour, addOverlay, updateOverlay, removeOverlay,
-    addMarker, removeMarker, toTimecode, toEdl, createHistory,
+    addMarker, removeMarker, toTimecode, toEdl, createHistory, SOUND_TRACKS, addSound, updateSound, trimSoundStart, removeSound, splitSound, soundsAt, soundEnd,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.NLEModel = api;

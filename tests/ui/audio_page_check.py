@@ -4,9 +4,10 @@ Start the engine from the worktree with a throwaway data folder, then run:
 
     set PANELFLOW_APP_DATA=<tmp> PANELFLOW_ALLOW_INSECURE_LOCAL_API=1 ...
     python -m uvicorn engine.api.app:app --port 8767
-    python tests/ui/audio_page_check.py <task> [shots_dir]      # task: 4 | 5 | 6 | 7 | 8 | all
+    python tests/ui/audio_page_check.py <task> [shots_dir]      # task: 4 ... 11 | all
 
 Each check drives the real page, asserts, and saves a screenshot you should open and look at.
+Check 11 imports a project and deletes its files afterwards; there is no API to delete the project record, so run 11 last (or on a fresh data folder).
 """
 import json
 import subprocess
@@ -583,7 +584,125 @@ def check_10(tmp):
     print("task 10 OK")
 
 
-CHECKS = {"4": check_4, "5": check_5, "6": check_6, "7": check_7, "8": check_8, "9": check_9, "10": check_10}
+# ---------------------------------------------------------------- task 11: library sounds on the Video Studio timeline (A2-A4), playback, export
+def check_11(tmp):
+    import numpy as np
+    import soundfile as sf
+    out_dir = Path(r"E:\VIJAY SEKAR\PanelFlow Studio\output\chronoflow")   # the engine's shared output folder: this check removes what it puts there
+    made = []
+    video = make_video(tmp / "tl_pic.mp4")   # 8 s, cuts at 2/4/6, a 300 Hz tone
+    t = np.arange(48000 * 2) / 48000
+    sf.write(str(tmp / "line.wav"), (0.4 * np.sin(2 * np.pi * 1200 * t)).astype(np.float32), 48000)
+    voice = api("POST", "/api/audio/library/sounds/import", {"path": str(tmp / "line.wav"), "name": "Test line", "kind": "voice"})
+    imp = api("POST", "/api/chronoflow/library/import", {"paths": [str(video)], "title": "sound tracks check"})
+    job = imp["job_id"]
+    made += list(out_dir.glob(f"{job}_*"))
+    try:
+        with sync_playwright() as pw:
+            s = Session(pw, tab=True)
+            s.ev("j => { switchResolvePage('edit'); onSelectProjectJob(j); return 1; }", job)
+            s.page.wait_for_function("j => NLE.ui.jobId === j && NLE.tl.clips.length === 1", arg=job, timeout=30000)
+            heads = s.ev("[...document.querySelectorAll('.nle-head')].map(h => h.innerText.replace(/\s+/g, ' ').trim())")
+            assert any(h.startswith("A2 Voice") for h in heads) and any(h.startswith("A3 Music") for h in heads) and any(h.startswith("A4 Effects") for h in heads), heads
+
+            print("step: send from the Audio Studio", flush=True)
+            s.ev("NLE.seek(3)")
+            s.page.evaluate("switchTab('audio')")
+            s.page.wait_for_function("SoundEditor.state.sounds.length > 0", timeout=20000)
+            s.ev("id => SoundEditor.openSound(id)", voice["id"])
+            s.page.wait_for_function("id => SoundEditor.state.sound && SoundEditor.state.sound.id === id", arg=voice["id"])
+            s.page.click("#seSend")
+            s.page.wait_for_function("NLE.tl.audio.length === 1", timeout=10000)
+            assert s.ev("document.getElementById('cfWorkspace').dataset.page") == "edit"
+            item = s.ev("NLE.tl.audio[0]")
+            assert item["track"] == "voice" and abs(item["start"] - 3.0) < 1e-6 and abs(item["out"] - 2.0) < 0.01, item
+            s.page.wait_for_function("document.querySelectorAll('.nle-lane[data-lane=voice] .nle-clip.snd').length === 1")
+            s.page.wait_for_timeout(500)
+            wave = s.ev("(() => { const cv = document.querySelector('.nle-lane[data-lane=voice] .nle-clip.snd canvas'); const d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data; let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 100) n++; return n; })()")
+            assert wave > 200, f"the waveform is drawn on A2 ({wave})"
+
+            print("step: drag and trim on the lane", flush=True)
+            b = s.ev("(() => { const r = document.querySelector('.nle-lane[data-lane=voice] .nle-clip.snd').getBoundingClientRect(); return [r.x, r.y, r.width, r.height]; })()")
+            pps = s.ev("NLE.ui.pps")
+            s.page.mouse.move(b[0] + b[2] / 2, b[1] + b[3] / 2); s.page.mouse.down(); s.page.mouse.move(b[0] + b[2] / 2 - pps * 1.0, b[1] + b[3] / 2, steps=6); s.page.mouse.up()
+            st = s.ev("NLE.tl.audio[0].start")
+            assert abs(st - 2.0) < 0.1, ("moved about a second earlier, snapping to the cut at 2 s", st)
+            b = s.ev("(() => { const r = document.querySelector('.nle-lane[data-lane=voice] .nle-clip.snd').getBoundingClientRect(); return [r.x, r.y, r.width, r.height]; })()")
+            s.page.mouse.move(b[0] + b[2] - 2, b[1] + b[3] / 2); s.page.mouse.down(); s.page.mouse.move(b[0] + b[2] - 2 - pps * 0.5, b[1] + b[3] / 2, steps=5); s.page.mouse.up()
+            it = s.ev("NLE.tl.audio[0]")
+            assert abs((it["out"] - it["in"]) - 1.5) < 0.1, it
+            s.page.fill("#inspSFO", "0.3"); s.page.press("#inspSFO", "Tab")
+            assert abs(s.ev("NLE.tl.audio[0].fadeOut") - 0.3) < 1e-6
+            s.shot("task11_timeline")
+
+            print("step: playback reaches the speakers", flush=True)
+            s.ev("NLE.seek(1.8)")
+            s.ev("(() => { NLE.play(1); return 1; })()")
+            s.page.wait_for_timeout(1200)
+            lvl = s.ev("(() => { const a = document.querySelectorAll('.nle-meter i'); return [...a].map(x => parseFloat(x.style.height) || 0); })()")
+            s.ev("NLE.pause()")
+            assert max(lvl) > 30, ("the master meter moves while the sound plays", lvl)
+
+            print("step: mute leaves it out of the export, unmute and export", flush=True)
+            s.page.click("[data-smute=voice]")
+            assert s.ev("NLEModel.toEdl(NLE.tl).audio.length") == 0
+            s.page.click("[data-smute=voice]")
+            edl = s.ev("NLEModel.toEdl(NLE.tl)")
+            assert len(edl["audio"]) == 1
+            res = api("POST", "/api/chronoflow/timeline/export", edl)
+            master = out_dir / res["filename"]
+            made.append(master)
+            wav = tmp / "master.wav"
+            subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(master), "-vn", "-ac", "1", "-ar", "48000", "-c:a", "pcm_f32le", str(wav)], check=True)
+            x, _ = sf.read(str(wav), dtype="float32")
+            def band(a, b, f):
+                seg = x[int(a * 48000):int(b * 48000)]
+                sp = np.abs(np.fft.rfft(seg * np.hanning(len(seg)))); k = int(round(f * len(seg) / 48000)); return float(sp[k - 3:k + 4].max())
+            assert band(2.1, 3.1, 1200) > 20 * band(4.5, 5.5, 1200), "the line is in the export at 2.0-3.5 s only"
+            assert band(4.5, 5.5, 300) > 0, "the clip sound is kept"
+
+            print("step: the Media Pool Sounds bin adds and drags sounds", flush=True)
+            s.ev("selectMediaBin('audio')")
+            row = f".pool-snd[data-id='{voice['id']}']"
+            s.page.wait_for_selector(row, timeout=10000)
+            s.ev("NLE.seek(6)")
+            s.page.click(f"{row} .pool-snd-add")
+            s.page.wait_for_function("NLE.tl.audio.length === 2")
+            assert abs(s.ev("NLE.tl.audio[1].start") - 6.0) < 1e-6 and s.ev("NLE.tl.audio[1].track") == "voice"
+            s.page.drag_and_drop(row, ".nle-lane[data-lane=music]", target_position={"x": int(pps * 1.0) + 2, "y": 10})
+            s.page.wait_for_function("NLE.tl.audio.length === 3", timeout=10000)
+            dropped = s.ev("NLE.tl.audio[2]")
+            assert dropped["track"] == "music" and abs(dropped["start"] - 1.0) < 0.1, dropped
+            s.shot("task11_bin")
+
+            print("step: the quick Audio page sends its placed cues to the timeline", flush=True)
+            s.ev("p => { switchResolvePage('audio'); return NLEAudio.openVideo(p).then(() => 1); }", str(video))
+            s.page.wait_for_function("NLEAudio.state.plan && NLEAudio.state.plan.id", timeout=30000)
+            pid = s.ev("NLEAudio.state.plan.id")
+            api("PUT", f"/api/audio/studio/plans/{pid}", {"cues": [{"id": "c_hit", "track": "sfx", "kind": "impact", "intent": "hit", "hit_t": 4.0}]})
+            api("POST", f"/api/audio/studio/plans/{pid}/cues/c_hit/source", {"mode": "auto"})
+            s.ev("NLEAudio.reload().then(() => 1)")
+            s.page.click("#auSendTl")
+            s.page.wait_for_function("NLE.tl.audio.some(a => a.origin && a.track === 'effect')", timeout=30000)
+            assert s.ev("document.getElementById('cfWorkspace').dataset.page") == "edit"
+            n_before = s.ev("NLE.tl.audio.length")
+            hit = s.ev("NLE.tl.audio.find(a => a.origin)")
+            assert 3.5 < hit["start"] <= 4.0 and hit["track"] == "effect", hit
+            s.ev("switchResolvePage('audio')")
+            s.page.click("#auSendTl")
+            s.page.wait_for_timeout(1500)
+            assert s.ev("NLE.tl.audio.length") == n_before and s.ev("NLE.tl.audio.filter(a => a.origin).length") == 1, "sending again replaces, never duplicates"
+            s.finish()
+    finally:
+        for f in made:
+            try:
+                f.unlink()
+            except OSError:
+                pass
+    print("task 11 OK")
+
+
+CHECKS = {"4": check_4, "5": check_5, "6": check_6, "7": check_7, "8": check_8, "9": check_9, "10": check_10, "11": check_11}
 
 if __name__ == "__main__":
     which = sys.argv[1] if len(sys.argv) > 1 else "all"

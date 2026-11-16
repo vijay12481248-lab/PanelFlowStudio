@@ -118,7 +118,7 @@
     S.busy = true; summary();
     try {
       const edl = window.NLEModel.toEdl(N.tl, window.NLEColor && window.NLEColor.lutFor);
-      const rec = await api('/deliver/render', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clips: edl.clips, overlays: edl.overlays, luts: edl.luts, settings: request() }) });
+      const rec = await api('/deliver/render', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clips: edl.clips, overlays: edl.overlays, luts: edl.luts, audio: edl.audio || [], settings: request() }) });
       say(`Queued "${rec.file}"${nodes ? ` (${nodes} graded clip${nodes === 1 ? '' : 's'})` : ''}.`);
       await refresh(); poll();
     } catch (err) { S.error = err.message; el.error.textContent = err.message; say(`Could not queue the render: ${err.message}`); }

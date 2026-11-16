@@ -22,7 +22,7 @@ body:not([data-tab="director"]) .resolve-bottom-rail { display: none; }
 .resolve-rail-item { min-width: 92px; }
 .resolve-rail-item.active { color: #a9c1ff; border-top-color: #3b6bf5; background: #101a3d; }
 
-#cfWorkspace { --cf-gut: 10px; --cf-l: 300px; --cf-r: 320px; --cf-tl: 250px; flex: 1; min-height: 0; overflow: hidden; }
+#cfWorkspace { --cf-gut: 10px; --cf-l: 300px; --cf-r: 320px; --cf-tl: 330px; flex: 1; min-height: 0; overflow: hidden; }
 #cfWorkspace[data-page="media"] { display: none; }
 #cfWorkspace[data-page="fusion"] { --cf-l: 260px; --cf-r: 320px; }
 #cfWorkspace[data-page="color"] { --cf-l: 240px; --cf-r: 320px; --cf-tl: 190px; }

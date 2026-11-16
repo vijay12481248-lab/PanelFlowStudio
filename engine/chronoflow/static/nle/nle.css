@@ -105,3 +105,25 @@
 .nle-trans { position: absolute; left: 0; top: 0; bottom: 0; display: none; z-index: 2; pointer-events: none; border-right: 1px solid rgba(255,255,255,.7);
   background: linear-gradient(135deg, rgba(255,255,255,.55) 0 50%, rgba(255,255,255,.12) 50% 100%); }
 .nle-trans.dip { background: linear-gradient(90deg, rgba(0,0,0,.85), rgba(0,0,0,.2)); }
+
+/* A2-A4: library sounds (colour = the sound's kind, same as the Audio Studio) */
+.nle-clip.snd { --sc: #46d6a3; border-color: color-mix(in srgb, var(--sc) 55%, transparent); background: color-mix(in srgb, var(--sc) 12%, #0a1024); cursor: grab; }
+.nle-clip.snd canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.nle-clip.snd .lbl { background: rgba(8, 14, 34, .78); color: var(--sc); }
+.nle-clip.snd.sel { border-color: #fff; box-shadow: 0 0 0 1px var(--sc) inset; }
+.nle-lane.snd-lane.muted { opacity: .4; }
+.nle-lane.snd-lane.drop { background: rgba(122, 162, 255, .14); }
+
+/* Media Pool: Sounds bin */
+.pool-snd-top { display: flex; align-items: center; gap: 8px; justify-content: space-between; padding: 4px 2px 8px; color: #8590bb; font-size: .72rem; }
+.pool-snd { --k: #7aa2ff; display: grid; grid-template-columns: 4px minmax(0, 1fr) auto auto; grid-template-rows: auto auto; column-gap: 8px; align-items: center;
+  padding: 6px 8px; margin-bottom: 4px; border: 1px solid #1d2650; border-radius: 6px; background: #0b1230; cursor: grab; }
+.pool-snd.k-voice { --k: #46d6a3; } .pool-snd.k-music { --k: #b07cf7; } .pool-snd.k-effect { --k: #f0b14a; }
+.pool-snd:hover { border-color: var(--k); }
+.pool-snd > i { grid-row: 1 / 3; width: 4px; height: 26px; border-radius: 2px; background: var(--k); }
+.pool-snd b { color: #eef1ff; font-weight: 600; font-size: .76rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pool-snd .len { color: #8590bb; font-size: .7rem; font-variant-numeric: tabular-nums; }
+.pool-snd .src { grid-column: 2; color: #6a76a3; font-size: .66rem; }
+.pool-snd-add { grid-column: 4; grid-row: 1 / 3; background: #101a3d; border: 1px solid #222d5e; color: #c9d2f2; border-radius: 5px; padding: 3px 8px; font-size: .7rem; cursor: pointer; }
+.pool-snd-add:hover { border-color: var(--k); color: #fff; }
+.pool-snd, .pool-snd-top { grid-column: 1 / -1; }

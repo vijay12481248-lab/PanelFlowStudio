@@ -36,7 +36,7 @@ def source(tmp_path_factory):
 
 @pytest.fixture()
 def queue(tmp_path, source):
-    def fake_master(clips, path, overlays=None, luts=None):          # stands in for the EDL renderer
+    def fake_master(clips, path, overlays=None, luts=None, audio=None):   # stands in for the EDL renderer
         if clips[0].get("filename") == "missing.mp4":
             return None
         path.parent.mkdir(parents=True, exist_ok=True)

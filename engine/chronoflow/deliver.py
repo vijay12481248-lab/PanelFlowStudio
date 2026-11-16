@@ -335,7 +335,7 @@ class DeliverQueue:
         self._update(rid, status="rendering", stage="timeline", progress=0.0, started=time.time())
         try:
             master = work / "master.mp4"
-            self.render_master(payload["clips"], master, payload.get("overlays"), payload.get("luts"))
+            self.render_master(payload["clips"], master, payload.get("overlays"), payload.get("luts"), payload.get("audio"))
             self._check_cancel(rid)
             if not master.exists():
                 raise RuntimeError("The timeline render produced no video (a clip may be missing on disk).")

@@ -156,3 +156,35 @@ test('splitting a clip leaves a plain cut between its halves, and the EDL carrie
   assert.equal(edl.clips[1].trans_dur, 1);
   assert.equal(edl.clips[2].transition, 'cut');
 });
+
+// ---------- A2-A4 library sounds
+test('sounds: add at a frame, move, trim both edges, fades and gain are clamped', () => {
+  const tl = M.create(24);
+  const a = M.addSound(tl, { sound: 'snd_1', version: 2, label: 'Line', track: 'voice', duration: 3, start: 1.01 });
+  assert.equal(a.start, 1); assert.equal(a.out, 3); assert.equal(a.track, 'voice');
+  assert.equal(M.addSound(tl, { sound: 'x', track: 'drums', duration: 1 }).track, 'effect');
+  M.updateSound(tl, a.id, { out: 99 }); assert.equal(a.out, 3, 'out stays inside the sound');
+  M.updateSound(tl, a.id, { out: 2 }); assert.equal(M.soundEnd(a), 3);
+  M.trimSoundStart(tl, a.id, 1.5); assert.equal(a.start, 1.5); assert.equal(a.in, 0.5);
+  M.trimSoundStart(tl, a.id, 0); assert.equal(a.start, 1); assert.equal(a.in, 0, 'the left edge cannot go before the sound starts');
+  M.updateSound(tl, a.id, { gain_db: 40, fadeIn: 5, fadeOut: 0.3 }); assert.equal(a.gain_db, 12); assert.equal(a.fadeIn, 1); assert.equal(a.fadeOut, 0.3);
+  M.updateSound(tl, a.id, { start: -4 }); assert.equal(a.start, 0);
+});
+
+test('sounds: split, what plays at a time, snapping, removal, EDL with muted tracks left out', () => {
+  const tl = M.create(24);
+  const a = M.addSound(tl, { sound: 's', track: 'music', duration: 4, start: 2 });
+  const b = M.splitSound(tl, a.id, 3);
+  assert.equal(a.out, 1); assert.equal(b.start, 3); assert.equal(b.in, 1); assert.equal(b.out, 4);
+  assert.equal(M.splitSound(tl, a.id, 2.01), null, 'too close to the edge');
+  assert.deepEqual(M.soundsAt(tl, 3.5).map((x) => [x.item.id, x.offset]), [[b.id, 1.5]]);
+  assert.ok(M.snapPoints(tl).includes(6));
+  const v = M.addSound(tl, { sound: 'v', track: 'voice', duration: 1 });
+  tl.mutedTracks = ['music'];
+  const edl = M.toEdl(tl);
+  assert.deepEqual(edl.audio.map((x) => x.sound), ['v']);
+  assert.deepEqual(Object.keys(edl.audio[0]).sort(), ['fade_in', 'fade_out', 'gain_db', 'in', 'out', 'sound', 'start', 'track', 'version']);
+  assert.ok(M.removeSound(tl, v.id)); assert.equal(tl.audio.length, 2);
+  const old = { fps: 24, clips: [], overlays: [], markers: [] };
+  assert.deepEqual(M.toEdl(old).audio, [], 'an old timeline without audio still exports');
+});

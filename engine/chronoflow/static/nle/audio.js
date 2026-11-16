@@ -560,6 +560,20 @@
     const id = S.plan.id, r = await guard('Mixing the master', () => call('POST', `/plans/${id}/mix`, { target_lufs: -14, mux: false }));
     if (r && isCurrent(id)) { P.master_info = r.loudness; paintMixer(); say(`Master: ${r.loudness.integrated_lufs.toFixed(1)} LUFS, ${r.loudness.true_peak_db.toFixed(1)} dBTP.`); }
   }
+  async function sendToTimeline() {
+    if (!S.plan) return say('Open a video first.', true);
+    if (!window.NLE || typeof window.NLE.placeSounds !== 'function') return say('The Video Studio timeline is not available here.', true);
+    const id = S.plan.id;
+    const r = await guard('Sending to the timeline', async () => {
+      const x = await fetch('/api/audio/library/from_plan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ plan_id: id }) });
+      const d = await x.json().catch(() => ({})); if (!x.ok) throw new Error(d.detail || `HTTP ${x.status}`); return d;
+    });
+    if (!r) return;
+    const placed = window.NLE.placeSounds(`plan:${id}`, r.items);
+    if (placed.error) return say(placed.error, true);
+    if (typeof window.switchResolvePage === 'function') window.switchResolvePage('edit');
+  }
+
   async function exportAll() {
     const mux = !!(el.muxBox && el.muxBox.checked);
     const id = S.plan.id, r = await guard('Exporting', () => call('POST', `/plans/${id}/export`, { target_lufs: -14, mux }));
@@ -601,6 +615,7 @@
       h('div', { class: 'au-strips' }, ...M.STEMS.map(strip), h('div', { class: 'au-strip master' }, h('div', { class: 'au-fader-row' }, el.masterMeter), el.masterInfo, h('div', { class: 'au-strip-name' }, 'Master'))),
       h('div', { class: 'au-mixfoot' }, h('button', { type: 'button', class: 'dl-btn', id: 'auMaster', title: 'Render the final mix at -14 LUFS and measure it', onclick: mixMaster }, 'Master'),
         h('button', { type: 'button', class: 'dl-btn', id: 'auExport', title: 'Write stems, master, cue sheet and credits', onclick: exportAll }, 'Export'),
+        h('button', { type: 'button', class: 'dl-btn accent', id: 'auSendTl', title: 'Put every ready cue on the Video Studio timeline (A2 voice, A3 music, A4 effects) and into the Audio Studio library', onclick: sendToTimeline }, 'Send to timeline'),
         h('label', { class: 'dl-check', title: 'Also write master.mp4: the video with this mix' }, el.muxBox, 'with video')));
     el.meterTimer = null; P.meterTimer = setInterval(paintMeters, 70);
   }

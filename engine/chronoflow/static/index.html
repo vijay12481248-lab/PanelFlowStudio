@@ -3603,7 +3603,7 @@
             <div class="pool-bins-tabs">
               <button type="button" class="pool-bin-btn active" id="binTabAll" onclick="selectMediaBin('all')">All</button>
               <button type="button" class="pool-bin-btn" id="binTabChunks" onclick="selectMediaBin('chunks')">🎬 Chunks</button>
-              <button type="button" class="pool-bin-btn" id="binTabAudio" onclick="selectMediaBin('audio')">🎵 Audio</button>
+              <button type="button" class="pool-bin-btn" id="binTabAudio" onclick="selectMediaBin('audio')" title="Sounds from the Audio Studio: add at the playhead or drag onto A2-A4">🎵 Sounds</button>
               <button type="button" class="pool-bin-btn" id="binTabInpaint" onclick="selectMediaBin('inpaint')">🎨 Inpaint</button>
               <button type="button" class="pool-bin-btn" id="binTabPrompts" onclick="selectMediaBin('prompts')">💬 Prompts</button>
             </div>
@@ -9556,6 +9556,7 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
         renderPromptsView(grid, badge);
         return;
       }
+      if (currentMediaBin === 'audio') { renderSoundsBin(grid, badge); return; }
 
       grid.classList.remove('prompts-mode');
       const seen = new Set();
@@ -9820,6 +9821,38 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
     }
     let _poolTimer = null;
     function refreshMediaPool() { clearTimeout(_poolTimer); _poolTimer = setTimeout(renderMediaPool, 150); }
+    // Sounds bin: the Audio Studio library. "+ Add" puts a sound on its track at the playhead; dragging drops it on the lane under the pointer.
+    let soundsBinCache = { at: 0, list: [] };
+    async function renderSoundsBin(grid, badge) {
+      const q = (mediaPoolSearchQuery || '').toLowerCase();
+      if (Date.now() - soundsBinCache.at > 3000) {
+        try { soundsBinCache = { at: Date.now(), list: await (await fetch('/api/audio/library/sounds')).json() }; } catch (e) { soundsBinCache = { at: Date.now(), list: [] }; }
+        if (currentMediaBin !== 'audio') return;
+      }
+      const list = soundsBinCache.list.filter((s) => !q || s.name.toLowerCase().includes(q));
+      if (badge) badge.textContent = `${list.length} Sounds`;
+      const kindName = { voice: 'Voice', music: 'Music', effect: 'Effect' };
+      const fmt = (t) => `${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, '0')}`;
+      grid.replaceChildren();
+      const top = document.createElement('div'); top.className = 'pool-snd-top';
+      top.innerHTML = '<span>Make and edit sounds in the Audio Studio.</span><button type="button" class="cfx-btn">Open Audio Studio</button>';
+      top.querySelector('button').onclick = () => switchTab('audio');
+      grid.appendChild(top);
+      if (!list.length) { const e = document.createElement('div'); e.className = 'cf-empty-note'; e.textContent = q ? 'No sound matches.' : 'No sounds yet: speak a line, make music or find an effect in the Audio Studio.'; grid.appendChild(e); return; }
+      list.forEach((s) => {
+        const row = document.createElement('div');
+        row.className = `pool-snd k-${s.kind}`; row.draggable = true; row.dataset.id = s.id;
+        row.innerHTML = '<i></i><b></b><span class="len"></span><span class="src"></span><button type="button" class="pool-snd-add" title="Put it on its track at the playhead">+ Add</button>';
+        row.querySelector('b').textContent = s.name;
+        row.querySelector('.len').textContent = fmt(s.duration_s);
+        row.querySelector('.src').textContent = `${kindName[s.kind]} · v${s.current}`;
+        const spec = { sound: s.id, version: s.current, label: s.name, kind: s.kind, duration: s.duration_s };
+        row.querySelector('button').onclick = () => { const r = NLE.addSound(spec); if (r && r.error) NLE.status(r.error); };
+        row.ondragstart = (e) => { e.dataTransfer.setData('application/x-pf-sound', JSON.stringify(spec)); e.dataTransfer.effectAllowed = 'copy'; };
+        grid.appendChild(row);
+      });
+    }
+
     function selectMediaBin(bin) {
       currentMediaBin = bin;
       ['all', 'chunks', 'audio', 'inpaint', 'prompts'].forEach(b => {

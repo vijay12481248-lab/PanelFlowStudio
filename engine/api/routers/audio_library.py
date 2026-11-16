@@ -32,6 +32,12 @@ def get_store() -> SoundStore:
     return _store
 
 
+def get_plans():
+    """The quick Audio page's Sound Plans (tests replace the store)."""
+    from engine.api.routers.audio_studio import get_engine
+    return get_engine().store
+
+
 def get_makers() -> dict[str, Any]:
     """The sources that make sounds; tests replace them with fakes."""
     return {"narration": None, "music": None, "effects": None}
@@ -82,6 +88,10 @@ class ImportBody(BaseModel):
     path: str
     name: str = ""
     kind: Kind = "effect"
+
+
+class FromPlanBody(BaseModel):
+    plan_id: str
 
 
 class EditBody(BaseModel):
@@ -195,6 +205,18 @@ async def upload(file: UploadFile = File(...), name: str = Form(""), kind: Kind 
                 default = "Recording " + secrets.token_hex(2) if source == "recording" else Path(file.filename or "Imported").stem
                 return _out(store.create_from_file(dst, name or default, kind, Provenance(source=source, licence="owner")))
         return await run_in_threadpool(work)
+
+
+@router.post("/from_plan")
+async def from_plan(body: FromPlanBody, store: SoundStore = Depends(get_store), plans=Depends(get_plans)) -> dict[str, Any]:
+    """Quick Audio page -> Video Studio timeline: the plan's ready cues as library sounds plus timeline items (A2 voice, A3 music, A4 effects)."""
+    def work():
+        with _errors():
+            items = make.sounds_from_plan(store, plans.load(body.plan_id))
+            if not items:
+                raise ValueError("no cue has a sound yet: source the cues first")
+            return {"plan_id": body.plan_id, "items": items}
+    return await run_in_threadpool(work)
 
 
 @router.post("/sounds/{sid}/edit")

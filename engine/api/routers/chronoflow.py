@@ -263,6 +263,7 @@ class TimelineExportRequest(BaseModel):
     clips: list[dict[str, Any]] = Field(default_factory=list)
     overlays: list[dict[str, Any]] = Field(default_factory=list)  # V2 still frames: {filename, start, duration}
     luts: dict[str, str] = Field(default_factory=dict)  # colour grades: {grade id: baked .cube text}; clips name theirs in "lut"
+    audio: list[dict[str, Any]] = Field(default_factory=list)  # A2-A4 library sounds: {sound, version, track, start, in, out, gain_db, fade_in, fade_out}
 
 
 class AIDirectorPlanRequest(BaseModel):
@@ -2020,9 +2021,11 @@ def timeline_export(req: TimelineExportRequest) -> dict[str, Any]:
     master_path = STUDIO_OUTPUT_DIR / master_name
 
     try:
-        rendered_path = pipeline.render_timeline_edl(req.clips, master_path, req.overlays, req.luts)
-    except ValueError as exc:   # a malformed colour grade is the client's fault, not a render failure
+        rendered_path = pipeline.render_timeline_edl(req.clips, master_path, req.overlays, req.luts, req.audio)
+    except ValueError as exc:   # a malformed colour grade or sound item is the client's fault, not a render failure
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=f"Mixing the timeline sounds failed: {exc}") from exc
     if rendered_path and master_path.exists():
         return {
             "success": True,
@@ -2049,6 +2052,7 @@ class DeliverRenderRequest(BaseModel):
     clips: list[dict[str, Any]] = Field(default_factory=list)
     overlays: list[dict[str, Any]] = Field(default_factory=list)
     luts: dict[str, str] = Field(default_factory=dict)
+    audio: list[dict[str, Any]] = Field(default_factory=list)
     settings: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -2060,7 +2064,7 @@ def deliver_presets() -> dict[str, Any]:
 @router.post("/deliver/render")
 def deliver_render(req: DeliverRenderRequest) -> dict[str, Any]:
     try:
-        return get_deliver_queue().submit({"clips": req.clips, "overlays": req.overlays, "luts": req.luts}, req.settings)
+        return get_deliver_queue().submit({"clips": req.clips, "overlays": req.overlays, "luts": req.luts, "audio": req.audio}, req.settings)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
