@@ -41,6 +41,7 @@ from engine.chronoflow.folder_dialog import pick_native_folder
 from engine.comfyui.art import ART_WORKFLOW_ID, IMAGE_WORKFLOW_IDS, REFINE_RETIRED, ArtEngine
 from engine.chronoflow.reviewer import analyze_video_chunk
 from engine.chronoflow.scene_render import render_scene
+from engine.chronoflow.timeline_assemble import assemble_storyboard_sequence
 from engine.chronoflow.supervisor import VAULT_DIR, JobSupervisor
 
 logger = logging.getLogger("panelflow.chronoflow")
@@ -1888,6 +1889,67 @@ async def storyboard_tail_frame(req: TailFrameRequest) -> dict[str, Any]:
     if not await asyncio.to_thread(pipeline.extract_tail_frame, src, COMFY_INPUT_DIR / name):
         raise HTTPException(status_code=500, detail="could not extract the last frame")
     return {"success": True, "filename": name}
+
+
+class StoryboardAssembleRequest(BaseModel):
+    scenes: list[dict[str, Any]]
+    title: str = "Assembled Sequence"
+    target_width: int = 1920
+    target_height: int = 1080
+    fps: float = 24.0
+    approved_only: bool = False
+    create_sound_plan: bool = True
+
+
+class InvalidateDownstreamRequest(BaseModel):
+    scenes: list[dict[str, Any]]
+    modified_index: int
+
+
+class CheckReadinessRequest(BaseModel):
+    scenes: list[dict[str, Any]]
+    approved_only: bool = False
+
+
+@router.post("/storyboard/assemble")
+async def storyboard_assemble(req: StoryboardAssembleRequest) -> dict[str, Any]:
+    """Concatenate storyboard scenes into a single timeline video with mixed-size letterbox scaling and auto-generate an Audio Studio Sound Plan."""
+    out_id = uuid.uuid4().hex[:8]
+    out_name = f"chronoflow_assembled_{out_id}.mp4"
+    out_path = STUDIO_OUTPUT_DIR / out_name
+    try:
+        res = await asyncio.to_thread(
+            assemble_storyboard_sequence,
+            scenes=req.scenes,
+            out_path=out_path,
+            target_width=req.target_width,
+            target_height=req.target_height,
+            fps=req.fps,
+            approved_only=req.approved_only,
+            create_sound_plan=req.create_sound_plan,
+            sound_plan_title=req.title,
+        )
+        return res
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Storyboard assembly failed: %s", e)
+        raise HTTPException(status_code=500, detail=f"Storyboard assembly failed: {e}")
+
+
+@router.post("/storyboard/invalidate_downstream")
+def storyboard_invalidate_downstream(req: InvalidateDownstreamRequest) -> dict[str, Any]:
+    """Invalidate chained downstream cards when an upstream card is redone or modified."""
+    invalidated = start_modes.invalidate_downstream(req.scenes, req.modified_index)
+    return {"success": True, "invalidated_indices": invalidated, "scenes": req.scenes}
+
+
+@router.post("/storyboard/check_readiness")
+def storyboard_check_readiness(req: CheckReadinessRequest) -> dict[str, Any]:
+    """Check whether storyboard shots are ready for timeline concatenation."""
+    is_ready, problems = start_modes.check_assembly_readiness(req.scenes, req.approved_only)
+    return {"success": True, "is_ready": is_ready, "problems": problems}
+
 
 
 # =====================================================================

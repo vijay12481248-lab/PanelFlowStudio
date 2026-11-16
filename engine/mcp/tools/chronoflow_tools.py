@@ -532,3 +532,47 @@ async def panelflow_chronoflow_fusion_add(job_id: str, effect: str, clip: int | 
 )
 async def panelflow_chronoflow_fusion_clear(job_id: str, clip: int | str | None = None) -> dict[str, Any]:
     return await _op(job_id, "fusion_clear", {"clip": clip})
+
+
+@registry.tool(
+    name="panelflow_chronoflow_assemble_storyboard",
+    description=(
+        "Concatenate rendered storyboard shots into a unified master timeline video. "
+        "Normalizes mixed-aspect-ratio and mixed-resolution clips with letterbox/pillarbox padding to a uniform canvas, "
+        "and auto-creates an Audio Studio Sound Plan populated with dialogue/foley cues for immediate scoring."
+    ),
+    input_schema={
+        "type": "object",
+        "properties": {
+            "scenes": {"type": "array", "description": "List of storyboard scenes/shots to assemble"},
+            "title": {"type": "string", "description": "Sequence title (e.g. 'Opening Scene Master')"},
+            "target_width": {"type": "integer", "description": "Target video width (default 1920)"},
+            "target_height": {"type": "integer", "description": "Target video height (default 1080)"},
+            "fps": {"type": "number", "description": "Target frame rate (default 24.0)"},
+            "approved_only": {"type": "boolean", "description": "Assemble only cards marked approved=True"},
+            "create_sound_plan": {"type": "boolean", "description": "Auto-create Audio Studio Sound Plan (default true)"},
+        },
+        "required": ["scenes"],
+    },
+    domain="chronoflow",
+)
+async def panelflow_chronoflow_assemble_storyboard(
+    scenes: list[dict[str, Any]],
+    title: str = "Assembled Sequence",
+    target_width: int = 1920,
+    target_height: int = 1080,
+    fps: float = 24.0,
+    approved_only: bool = False,
+    create_sound_plan: bool = True,
+) -> dict[str, Any]:
+    payload = {
+        "scenes": scenes,
+        "title": title,
+        "target_width": target_width,
+        "target_height": target_height,
+        "fps": fps,
+        "approved_only": approved_only,
+        "create_sound_plan": create_sound_plan,
+    }
+    return await bridge.post("/api/chronoflow/storyboard/assemble", payload)
+

@@ -250,3 +250,29 @@ test('with auto-fix off, problems offer a manual Auto-fix and the copy button; w
   assert.match(auto, /could not be repaired safely/i);
   assert.match(auto, /data-nv-act="copy"/);
 });
+
+test('markRedo clears prev_tail and marks followers stale', () => {
+  const s = [
+    card({ approved: true, state: 'approved', rendered_video: 'a.mp4', tail_frame: 'tail_a.png', prev_tail: 'old.png' }),
+    chained({ approved: true, state: 'approved', prev_tail: 'tail_a.png' }),
+    chained({ approved: true, state: 'approved', prev_tail: 'tail_b.png' }),
+  ];
+  NV.markRedo(s, 0);
+  assert.equal(s[0].prev_tail, '');
+  assert.equal(s[1].prev_tail, '');
+  assert.equal(s[1].state, 'stale');
+  assert.equal(s[2].prev_tail, '');
+  assert.equal(s[2].state, 'stale');
+});
+
+test('planBarHtml includes assemble button when videos are rendered', () => {
+  const meta = { title: 'Test Plan', takes: 2, pictures: 2, total_seconds: 10, format: '16:9', pictures_ok: true };
+  const scenes = [
+    card({ state: 'approved', rendered_video: 'a.mp4' }),
+    card({ state: 'approved', rendered_video: 'b.mp4' }),
+  ];
+  const html = NV.planBarHtml(meta, scenes);
+  assert.match(html, /Assemble Video/);
+  assert.doesNotMatch(html, /disabled[^>]*Assemble Video/);
+});
+

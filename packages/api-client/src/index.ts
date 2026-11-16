@@ -3004,7 +3004,51 @@ export class PanelFlowApiClient {
       }
     );
   }
+
+  async assembleChronoFlowStoryboard(request: ChronoFlowStoryboardAssembleRequest): Promise<ChronoFlowStoryboardAssembleResponse> {
+    return this.request<ChronoFlowStoryboardAssembleResponse>("/api/chronoflow/storyboard/assemble", {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
+  }
+
+  async checkChronoFlowAssemblyReadiness(scenes: Array<Record<string, any>>, approvedOnly = false): Promise<{ success: boolean; is_ready: boolean; problems: string[] }> {
+    return this.request<{ success: boolean; is_ready: boolean; problems: string[] }>("/api/chronoflow/storyboard/check_readiness", {
+      method: "POST",
+      body: JSON.stringify({ scenes, approved_only: approvedOnly }),
+    });
+  }
+
+  async invalidateDownstreamStoryboardCards(scenes: Array<Record<string, any>>, modifiedIndex: number): Promise<{ success: boolean; invalidated_indices: number[]; scenes: Array<Record<string, any>> }> {
+    return this.request<{ success: boolean; invalidated_indices: number[]; scenes: Array<Record<string, any>> }>("/api/chronoflow/storyboard/invalidate_downstream", {
+      method: "POST",
+      body: JSON.stringify({ scenes, modified_index: modifiedIndex }),
+    });
+  }
 }
+
+export interface ChronoFlowStoryboardAssembleRequest {
+  scenes: Array<Record<string, any>>;
+  title?: string;
+  target_width?: number;
+  target_height?: number;
+  fps?: number;
+  approved_only?: boolean;
+  create_sound_plan?: boolean;
+}
+
+export interface ChronoFlowStoryboardAssembleResponse {
+  success: boolean;
+  master_video: string;
+  filename: string;
+  duration: number;
+  fps: number;
+  width: number;
+  height: number;
+  shot_count: number;
+  sound_plan_id: string | null;
+}
+
 
 export interface AudioLibraryFileItem {
   name: string;
