@@ -98,3 +98,33 @@ def test_put_tracks_upserts_by_id_and_keeps_the_others(client, video):
     assert [t["id"] for t in got["tracks"]] == ["dialogue", "music", "sfx", "ambience", "foley"]
     assert {t["id"]: t["gain_db"] for t in got["tracks"]}["music"] == -6.0 and got["tracks"][1]["duck_under"] == "dialogue"
     assert client.put(f"{B}/plans/{pid}", json={"tracks": [{"id": "nope", "gain_db": 1}]}).status_code == 400
+
+
+def test_master_broadcast_endpoint(client, video):
+    pid, _ = _sourced(client, video)
+    r = client.post(f"{B}/plans/{pid}/master", json={"standard": "youtube"}).json()
+    assert "out_wav" in r
+    assert r["standard"] == "youtube"
+    assert "loudness" in r
+    assert r["compliance"]["compliant"] is True
+
+
+def test_export_daw_endpoint_and_streams(client, video):
+    pid, _ = _sourced(client, video)
+    # DAW Package
+    r = client.post(f"{B}/plans/{pid}/export_daw", json={"standard": "youtube", "make_zip": True}).json()
+    assert "out_dir" in r
+    assert "timeline.fcpxml" in r["files"]
+    assert "timeline.edl" in r["files"]
+
+    # FCPXML stream
+    r_xml = client.get(f"{B}/plans/{pid}/export_daw/fcpxml")
+    assert r_xml.status_code == 200
+    assert r_xml.headers["content-type"].startswith("application/xml")
+    assert "<fcpxml" in r_xml.text
+
+    # EDL stream
+    r_edl = client.get(f"{B}/plans/{pid}/export_daw/edl")
+    assert r_edl.status_code == 200
+    assert "TITLE:" in r_edl.text
+

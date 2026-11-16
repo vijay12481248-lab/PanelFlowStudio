@@ -641,13 +641,27 @@
     say('Preview ready. Press Play (Space).');
   }
   async function mixMaster() {
-    const id = S.plan.id, r = await guard('Mixing the master', () => call('POST', `/plans/${id}/mix`, { target_lufs: -14, mux: false }));
-    if (r && isCurrent(id)) { P.master_info = r.loudness; paintMixer(); say(`Master: ${r.loudness.integrated_lufs.toFixed(1)} LUFS, ${r.loudness.true_peak_db.toFixed(1)} dBTP.`); }
+    const id = S.plan.id, std = (el.masterStd && el.masterStd.value) || 'youtube';
+    const r = await guard('Mastering broadcast mix', () => call('POST', `/plans/${id}/master`, { standard: std, mux: !!(el.muxBox && el.muxBox.checked) }));
+    if (r && isCurrent(id)) {
+      P.master_info = r.loudness;
+      paintMixer();
+      const comp = r.compliance || {};
+      const status = comp.compliant ? '✓ Compliant' : '⚠ Non-compliant';
+      say(`Master (${std.toUpperCase()}): ${r.loudness.integrated_lufs.toFixed(1)} LUFS, ${r.loudness.true_peak_db.toFixed(1)} dBTP · ${status}.`);
+    }
   }
   async function exportAll() {
     const mux = !!(el.muxBox && el.muxBox.checked);
     const id = S.plan.id, r = await guard('Exporting', () => call('POST', `/plans/${id}/export`, { target_lufs: -14, mux }));
     if (r && isCurrent(id)) { P.master_info = r.loudness; paintMixer(); const f = r.findings || { errors: 0, warnings: 0 }; say(`Exported ${r.files.length} files to ${r.out_dir} (${f.errors} QA error(s), ${f.warnings} warning(s)).`, f.errors > 0); }
+  }
+  async function exportDaw() {
+    const id = S.plan.id, std = (el.masterStd && el.masterStd.value) || 'youtube';
+    const r = await guard('Exporting DAW Package', () => call('POST', `/plans/${id}/export_daw`, { standard: std, make_zip: true }));
+    if (r && isCurrent(id)) {
+      say(`DAW Package exported to ${r.out_dir} (${r.files.length} files, FCPXML, EDL, Stems).`);
+    }
   }
 
   function commitFader(stem, db) {
@@ -675,6 +689,9 @@
       el.strips[st] = { fader, db, mute, solo }; el.meters[st] = meter;
       return h('div', { class: 'au-strip', 'data-stem': st }, h('div', { class: 'au-ms-row' }, mute, solo), h('div', { class: 'au-fader-row' }, fader, meter), db, h('div', { class: 'au-strip-name' }, STEM_LABEL[st]));
     };
+    el.masterStd = h('select', { class: 'dl-in', id: 'auMasterStd', style: 'width:auto;padding:2px 6px;font-size:0.68rem;', title: 'Broadcast Loudness Standard' },
+      h('option', { value: 'youtube' }, 'YouTube (-14 LUFS)'),
+      h('option', { value: 'ebu_r128' }, 'EBU R128 (-23 LUFS)'));
     el.masterMeter = h('div', { class: 'au-meter', title: 'Master level (peak, dBFS)' }, h('i', {}));
     el.masterInfo = h('div', { class: 'au-master-info' });
     el.pvState = h('span', { class: 'au-pvstate' });
@@ -683,8 +700,11 @@
     el.mixerHost.append(
       h('div', { class: 'au-mixhead' }, el.pvBtn, el.pvState),
       h('div', { class: 'au-strips' }, ...M.STEMS.map(strip), h('div', { class: 'au-strip master' }, h('div', { class: 'au-fader-row' }, el.masterMeter), el.masterInfo, h('div', { class: 'au-strip-name' }, 'Master'))),
-      h('div', { class: 'au-mixfoot' }, h('button', { type: 'button', class: 'dl-btn', id: 'auMaster', title: 'Render the final mix at -14 LUFS and measure it', onclick: mixMaster }, 'Master'),
+      h('div', { class: 'au-mixfoot' },
+        el.masterStd,
+        h('button', { type: 'button', class: 'dl-btn', id: 'auMaster', title: 'Master broadcast audio with True-Peak lookahead limiter', onclick: mixMaster }, 'Master'),
         h('button', { type: 'button', class: 'dl-btn', id: 'auExport', title: 'Write stems, master, cue sheet and credits', onclick: exportAll }, 'Export'),
+        h('button', { type: 'button', class: 'dl-btn', id: 'auExportDaw', title: 'Export FCPXML, EDL, and stem package for DaVinci Resolve or Final Cut Pro', onclick: exportDaw }, 'DAW Export'),
         h('label', { class: 'dl-check', title: 'Also write master.mp4: the video with this mix' }, el.muxBox, 'with video')));
     el.meterTimer = null; P.meterTimer = setInterval(paintMeters, 70);
   }
@@ -776,5 +796,5 @@
   }
   function close() { S.open = false; clearTimeout(S.timer); if (AU.el) AU.el.pause(); if (el.video && P.playing) pause(); else if (el.video) el.video.pause(); }
 
-  window.NLEAudio = { mount, open, close, openVideo, get state() { return S; }, selectCue, reload, call, edit, sourceOne, guard, say, get audition() { return AU; }, addCueAtPlayhead, fit, zoom, seek, play, pause, renderPreview, mixMaster, exportAll, runCritique, showCritiqueModal, makeCueLoop, get mixer() { return P; }, get view() { return L.view; }, get peaks() { return L.peaks; } };
+  window.NLEAudio = { mount, open, close, openVideo, get state() { return S; }, selectCue, reload, call, edit, sourceOne, guard, say, get audition() { return AU; }, addCueAtPlayhead, fit, zoom, seek, play, pause, renderPreview, mixMaster, exportAll, exportDaw, runCritique, showCritiqueModal, makeCueLoop, get mixer() { return P; }, get view() { return L.view; }, get peaks() { return L.peaks; } };
 })();

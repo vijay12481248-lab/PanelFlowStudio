@@ -8,7 +8,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -101,6 +101,25 @@ class RenderBody(BaseModel):
 
 class ApplyRemediationsBody(BaseModel):
     remediation_ids: list[str] = []
+
+
+class MasterBody(BaseModel):
+    standard: Literal["youtube", "ebu_r128", "custom"] = "youtube"
+    target_lufs: float | None = None
+    mux: bool = False
+
+
+class ExportDawBody(BaseModel):
+    standard: Literal["youtube", "ebu_r128", "custom"] = "youtube"
+    target_lufs: float | None = None
+    make_zip: bool = True
+
+
+class AutoStoryBody(BaseModel):
+    narration_path: str | None = None
+    story_title: str = "Story"
+    use_vision: bool = False
+    standard: Literal["youtube", "ebu_r128", "custom"] = "youtube"
 
 
 def _save_measured(engine: AudioEngine, plan_id: str, measured: Any, note: str):
@@ -519,3 +538,82 @@ def get_file(plan_id: str, name: str, engine: AudioEngine = Depends(get_engine))
         if not target.is_file():
             raise FileNotFoundError(f"no file {name!r} in plan {plan_id}")
         return FileResponse(target)
+
+
+@router.post("/plans/{plan_id}/master")
+def master_broadcast(plan_id: str, body: MasterBody | None = None, engine: AudioEngine = Depends(get_engine)) -> dict[str, Any]:
+    with _errors():
+        from engine.audio.studio.master import master_plan
+        b = body or MasterBody()
+        plan = engine.store.load(plan_id)
+        out_wav = engine.store.plan_dir(plan_id) / "exports" / f"master_{b.standard}.wav"
+        out_video = engine.store.plan_dir(plan_id) / "exports" / f"master_{b.standard}.mp4" if b.mux and plan.video_path else None
+        res = master_plan(
+            plan,
+            out_wav,
+            standard=b.standard,
+            custom_target_lufs=b.target_lufs,
+            video_in=Path(plan.video_path) if out_video else None,
+            out_video=out_video,
+        )
+        return res
+
+
+@router.post("/plans/{plan_id}/export_daw")
+def export_daw(plan_id: str, body: ExportDawBody | None = None, engine: AudioEngine = Depends(get_engine)) -> dict[str, Any]:
+    with _errors():
+        from engine.audio.studio.export_daw import package_daw_delivery
+        b = body or ExportDawBody()
+        plan = engine.store.load(plan_id)
+        out_dir = engine.store.plan_dir(plan_id) / "daw_delivery"
+        res = package_daw_delivery(
+            plan,
+            out_dir,
+            standard=b.standard,
+            custom_target_lufs=b.target_lufs,
+            make_zip=b.make_zip,
+        )
+        return res
+
+
+@router.get("/plans/{plan_id}/export_daw/fcpxml")
+def export_fcpxml_stream(plan_id: str, engine: AudioEngine = Depends(get_engine)) -> Response:
+    with _errors():
+        from engine.audio.studio.export_daw import generate_fcpxml
+        plan = engine.store.load(plan_id)
+        xml_content = generate_fcpxml(plan)
+        return Response(
+            content=xml_content,
+            media_type="application/xml",
+            headers={"Content-Disposition": f'attachment; filename="timeline_{plan_id}.fcpxml"'},
+        )
+
+
+@router.get("/plans/{plan_id}/export_daw/edl")
+def export_edl_stream(plan_id: str, engine: AudioEngine = Depends(get_engine)) -> Response:
+    with _errors():
+        from engine.audio.studio.export_daw import generate_cmx3600_edl
+        plan = engine.store.load(plan_id)
+        edl_content = generate_cmx3600_edl(plan)
+        return Response(
+            content=edl_content,
+            media_type="text/plain",
+            headers={"Content-Disposition": f'attachment; filename="timeline_{plan_id}.edl"'},
+        )
+
+
+@router.post("/plans/{plan_id}/pipeline/story_auto")
+def pipeline_story_auto(plan_id: str, body: AutoStoryBody | None = None, engine: AudioEngine = Depends(get_engine)) -> dict[str, Any]:
+    with _errors():
+        from engine.audio.studio.pipeline_hooks import auto_soundtrack_original_story
+        b = body or AutoStoryBody()
+        plan = engine.store.load(plan_id)
+        return auto_soundtrack_original_story(
+            engine,
+            video_path=Path(plan.video_path),
+            narration_path=Path(b.narration_path) if b.narration_path else None,
+            story_title=b.story_title,
+            use_vision=b.use_vision,
+            standard=b.standard,
+        )
+

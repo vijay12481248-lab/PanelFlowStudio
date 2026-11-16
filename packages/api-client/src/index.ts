@@ -2978,6 +2978,32 @@ export class PanelFlowApiClient {
       { method: "POST" }
     );
   }
+
+  async masterBroadcastPlan(
+    planId: string,
+    options?: { standard?: "youtube" | "ebu_r128" | "custom"; target_lufs?: number; mux?: boolean }
+  ): Promise<{ out_wav: string; out_video?: string | null; loudness: Record<string, any>; compliance: Record<string, any> }> {
+    return this.request<{ out_wav: string; out_video?: string | null; loudness: Record<string, any>; compliance: Record<string, any> }>(
+      `/api/audio/studio/plans/${encodeURIComponent(planId)}/master`,
+      {
+        method: "POST",
+        body: JSON.stringify(options || {}),
+      }
+    );
+  }
+
+  async exportDawPackage(
+    planId: string,
+    options?: { standard?: "youtube" | "ebu_r128" | "custom"; target_lufs?: number; make_zip?: boolean }
+  ): Promise<{ out_dir: string; zip_path?: string | null; manifest: Record<string, any>; files: string[] }> {
+    return this.request<{ out_dir: string; zip_path?: string | null; manifest: Record<string, any>; files: string[] }>(
+      `/api/audio/studio/plans/${encodeURIComponent(planId)}/export_daw`,
+      {
+        method: "POST",
+        body: JSON.stringify(options || {}),
+      }
+    );
+  }
 }
 
 export interface AudioLibraryFileItem {
