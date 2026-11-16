@@ -4,18 +4,14 @@
    Pure maths is in audio-model.js. Reuses the Deliver page's .dl-* control styles. */
 (function () {
   'use strict';
-  function createAudioStudio(hosts, opts) {
-  opts = opts || {};
   const M = window.AudioModel;
-  const ID = (x) => (opts.full && typeof x === 'string' ? x.replace(/^au/, 'as') : x);   // the tab's ids start with "as" so both instances can live in one page
   const BASE = '/api/audio/studio', LS = 'nle:audio:v1';
-  const S = { tab: 'narration', voices: null, lufs: -14, lufsId: 'youtube', draft: {}, busyN: 0, loadSeq: 0, openingVideo: false, open: false, mounted: false, plans: [], plan: null, sel: null, busy: '', msg: '', bad: false, seen: null, timer: 0, qa: null, lastErr: '' };
+  const S = { busyN: 0, loadSeq: 0, openingVideo: false, open: false, mounted: false, plans: [], plan: null, sel: null, busy: '', msg: '', bad: false, seen: null, timer: 0, qa: null, lastErr: '' };
   const el = {};
 
   const h = (tag, attrs, ...kids) => {
     const e = document.createElement(tag);
-    for (let [k, v] of Object.entries(attrs || {})) {
-      if (k === 'id' || k === 'list') v = ID(v);
+    for (const [k, v] of Object.entries(attrs || {})) {
       if (k === 'class') e.className = v; else if (k === 'style') e.style.cssText = v;
       else if (k.startsWith('on')) e.addEventListener(k.slice(2), v); else if (v !== false && v != null) e.setAttribute(k, v === true ? '' : v);
     }
@@ -135,8 +131,7 @@
   function paintBusy() {
     paintStatus();
     for (const b of el.actions || []) b.disabled = !!S.busy || !S.plan;
-    if (el.inspBody) for (const b of el.inspBody.querySelectorAll('button')) b.disabled = !!S.busy;
-    if (opts.full) paintCreate();   // the Create panel and header buttons follow the busy state too   // the inspector is drawn while a call may be in flight
+    if (el.inspBody) for (const b of el.inspBody.querySelectorAll('button')) b.disabled = !!S.busy;   // the inspector is drawn while a call may be in flight
   }
   function paintPlanSelect() {
     if (!el.planSel) return;
@@ -178,7 +173,7 @@
     if (el.ccby) { el.ccby.checked = !!(p && p.allow_cc_by); el.ccby.disabled = !p; }
     paintBusy();
   }
-  function paintAll() { paintPlanSelect(); paintHeader(); paintCues(); paintQa(); renderInspector(); renderLanes(); paintMixer(); if (opts.full) { paintSteps(); paintCreate(); } previewSoon(); }
+  function paintAll() { paintPlanSelect(); paintHeader(); paintCues(); paintQa(); renderInspector(); renderLanes(); paintMixer(); previewSoon(); }
   function selectCue(id, seek) {
     if (AU && AU.el) { AU.el.pause(); AU.id = null; }
     S.sel = id; paintCues(); renderInspector(); renderLanes();
@@ -268,7 +263,6 @@
     box.append(h('button', { type: 'button', class: 'dl-btn', id: 'auAddCue', onclick: addCueAtPlayhead, title: 'Add a sound effect cue at the video position' }, '+ Cue at playhead'));
     if (!c) { box.append(h('div', { class: 'au-empty' }, 'Select a cue in the list or on a lane to edit it.')); return; }
     const chip = M.statusChip(c), isHit = c.hit_t != null, fps = p.fps, take = M.chosenTake(c);
-    if (c.kind === 'narration') { buildNarrationInspector(box, c, chip, take); return; }
     box.append(
       h('div', { class: 'au-insp-top' }, h('span', { class: `au-chip ${chip.tone}` }, chip.text), h('b', {}, c.id), h('span', { class: 'au-tc' }, isHit ? M.fmtTC(c.hit_t, fps) : `${M.fmtTC(c.t_in || 0, fps)} – ${c.t_out != null ? M.fmtTC(c.t_out, fps) : 'end of sound'}`)),
       c.reason ? h('div', { class: 'dl-error' }, c.reason) : null,
@@ -497,7 +491,7 @@
   // with, until "Preview mix" renders them again.
   const P = { ctx: null, nodes: null, master: null, anM: null, preview: null, stale: true, mute: new Set(), solo: new Set(), live: {}, els: {}, playing: false,
     syncTimer: 0, meterTimer: 0, previewTimer: 0, lvl: {}, master_info: null };
-  const STEM_LABEL = { dialogue: 'Voice', music: 'Music', effects: 'Effects' };
+  const STEM_LABEL = { dialogue: 'Dialogue', music: 'Music', effects: 'Effects' };
   const trackDb = (id) => { const t = S.plan && S.plan.tracks.find((x) => x.id === id); return t ? t.gain_db : 0; };
   const planDb = (stem) => (stem === 'effects' ? trackDb('sfx') : trackDb(stem));
   const bakedDb = (stem) => { const g = (P.preview && P.preview.gains) || {}; return (stem === 'effects' ? g.sfx : g[stem]) || 0; };
@@ -563,12 +557,12 @@
     say('Preview ready. Press Play (Space).');
   }
   async function mixMaster() {
-    const id = S.plan.id, r = await guard('Mixing the master', () => call('POST', `/plans/${id}/mix`, { target_lufs: S.lufs, mux: false }));
+    const id = S.plan.id, r = await guard('Mixing the master', () => call('POST', `/plans/${id}/mix`, { target_lufs: -14, mux: false }));
     if (r && isCurrent(id)) { P.master_info = r.loudness; paintMixer(); say(`Master: ${r.loudness.integrated_lufs.toFixed(1)} LUFS, ${r.loudness.true_peak_db.toFixed(1)} dBTP.`); }
   }
   async function exportAll() {
     const mux = !!(el.muxBox && el.muxBox.checked);
-    const id = S.plan.id, r = await guard('Exporting', () => call('POST', `/plans/${id}/export`, { target_lufs: S.lufs, mux }));
+    const id = S.plan.id, r = await guard('Exporting', () => call('POST', `/plans/${id}/export`, { target_lufs: -14, mux }));
     if (r && isCurrent(id)) { P.master_info = r.loudness; paintMixer(); const f = r.findings || { errors: 0, warnings: 0 }; say(`Exported ${r.files.length} files to ${r.out_dir} (${f.errors} QA error(s), ${f.warnings} warning(s)).`, f.errors > 0); }
   }
 
@@ -612,7 +606,6 @@
   }
   function paintMixer() {
     if (!el.strips) return;
-    if (opts.full) paintSteps();
     for (const st of M.STEMS) {
       const e = el.strips[st], db = faderDb(st);
       e.fader.value = db; e.db.textContent = db.toFixed(1);
@@ -646,271 +639,11 @@
     else if (e.key === ',') step(-1 / S.plan.fps); else if (e.key === '.') step(1 / S.plan.fps);
   });
 
-  // ---------- voices, narration, music, effects, header: the full Audio Studio screen ----------
-  const MOODS = ['calm', 'sad', 'happy', 'tense', 'epic', 'mysterious', 'hopeful', 'dark'];
-  const FX_KINDS = [['whoosh', 'sfx', 'Whoosh'], ['impact', 'sfx', 'Hit'], ['click', 'sfx', 'Click'], ['pop', 'sfx', 'Pop'], ['ding', 'sfx', 'Ding'], ['riser', 'sfx', 'Riser'], ['drop', 'sfx', 'Drop'], ['noise_bed', 'ambience', 'Room tone']];
-  const KEYS = ['', 'C Major', 'G Major', 'D Major', 'A Major', 'A Minor', 'E Minor', 'D Minor', 'B Minor'];
-  const playhead = () => (S.plan && el.video ? M.snapFrame(el.video.currentTime || 0, S.plan.fps) : 0);
-  const voiceLabel = (v) => v.replace(/_/g, ' ');
-  async function loadVoices() {
-    try { const r = await call('GET', '/voices'); S.voices = r.voices; S.speech = r.providers; } catch (e) { S.voices = { kokoro: [], qwen3_tts: [] }; }
-    if (!S.draft.voice) { const q = (S.voices.qwen3_tts || [])[0]; S.draft.voice = q ? `qwen3_tts:${q}` : 'kokoro:af_heart'; }
-    paintCreate(); renderInspector();
-  }
-  /** A voice picker: "Your recorded voices" (Qwen3-TTS clones them) and "Built-in voices" (Kokoro). Values are provider:voice. */
-  function voiceSelect(value, onchange, attrs) {
-    const v = S.voices || { kokoro: [], qwen3_tts: [] };
-    return h('select', { class: 'dl-in', onchange: (e) => onchange(e.target.value), ...(attrs || {}) },
-      v.qwen3_tts.length ? h('optgroup', { label: 'Your recorded voices (cloned, slower)' }, ...v.qwen3_tts.map((n) => h('option', { value: `qwen3_tts:${n}`, selected: value === `qwen3_tts:${n}` }, voiceLabel(n)))) : null,
-      h('optgroup', { label: 'Built-in voices (fast)' }, ...v.kokoro.map((n) => h('option', { value: `kokoro:${n}`, selected: value === `kokoro:${n}` }, voiceLabel(n)))));
-  }
-  const splitVoice = (pv) => { const i = (pv || '').indexOf(':'); return i < 0 ? { provider: 'kokoro', voice: pv || '' } : { provider: pv.slice(0, i), voice: pv.slice(i + 1) }; };
-
-  function buildHeader() {
-    el.autoBtn = h('button', { type: 'button', class: 'dl-btn accent as-auto', id: 'auAuto', title: 'Finds the picture cuts, gives each a sound, renders the mix and checks it: one click', onclick: autoDesign }, 'Auto sound design');
-    el.fixBtn = h('button', { type: 'button', class: 'dl-btn', id: 'auFix', title: 'Re-source clipped or silent sounds and push overrunning narration later', onclick: fixProblems }, 'Fix problems');
-    el.tlBtn = h('button', { type: 'button', class: 'dl-btn', id: 'auTimeline', title: 'Use the timeline you are editing in the Video Studio: its clip boundaries become the picture cuts', onclick: openTimeline }, 'Use Video Studio timeline');
-    el.steps = h('div', { class: 'as-steps', 'aria-label': 'Progress' });
-    el.header.append(
-      h('div', { class: 'as-headrow' },
-        h('div', { class: 'as-brand' }, h('b', {}, 'Audio Studio'), h('span', { class: 'as-sub' }, 'Narration, music and sound effects for a video')),
-        h('div', { class: 'as-field' }, h('span', { class: 'dl-lab' }, 'Video'), el.planSel, h('button', { type: 'button', class: 'dl-btn', id: 'auOpen', onclick: pickVideo, title: 'Choose a finished video file' }, 'Open video…'), el.tlBtn),
-        h('div', { class: 'as-field', title: 'Auto: the engine picks a sound for every cue. Ask me: you hear the candidates and pick.' }, h('span', { class: 'dl-lab' }, 'Sounds are chosen'), el.mode,
-          h('label', { class: 'dl-check', title: 'Also accept CC-BY clips; the credits are written to credits.txt' }, el.ccby, 'Allow CC-BY')),
-        h('div', { class: 'as-go' }, el.autoBtn, el.fixBtn)),
-      el.steps);
-  }
-  function paintSteps() {
-    if (!el.steps) return;
-    const p = S.plan, ready = !!(p && p.cues.some((c) => c.status === 'ready')), done = !!(P.master_info), flags = [!!p, ready, done];
-    const cur = flags.findIndex((f) => !f);
-    const defs = [['1', 'Open a video', 'Pick the finished video you want to add sound to'], ['2', 'Add sound', 'Write narration, create music, add effects'], ['3', 'Mix and export', 'Press Master, then Export or send it back to the Video Studio']];
-    el.steps.replaceChildren(...defs.map(([n, t, hint], i) => h('div', { class: `as-step ${flags[i] ? 'done' : i === cur ? 'current' : ''}`, title: hint }, h('span', { class: 'as-stepn' }, flags[i] ? '✓' : n), h('span', {}, t))));
-  }
-
-  function chip(label, onclick, on) { return h('button', { type: 'button', class: 'as-chip' + (on ? ' on' : ''), onclick }, label); }
-  function pane(id, title, purpose, ...kids) { return h('div', { class: 'as-tabpane', 'data-tab': id }, h('div', { class: 'as-purpose' }, h('b', {}, title), h('span', {}, purpose)), ...kids); }
-  function buildFullLeft() {
-    const D = S.draft;
-    // --- Narration
-    const nar = (el.nar = {});
-    nar.text = h('textarea', { class: 'dl-in as-script', id: 'auScript', rows: 7, placeholder: 'Paste or type what the narrator should say.\nA blank line starts a new line of speech.', oninput: (e) => { D.script = e.target.value; paintCreate(); } });
-    nar.voice = h('div', { class: 'as-voicebox' });
-    nar.speed = h('input', { type: 'range', min: '0.7', max: '1.3', step: '0.05', value: '1', oninput: (e) => { D.speed = +e.target.value; paintCreate(); } });
-    nar.speedL = h('span', { class: 'as-val' }, '1.00×');
-    nar.place = h('select', { class: 'dl-in', onchange: (e) => { D.place = e.target.value; } }, h('option', { value: 'sequential' }, 'Back to back, starting at the playhead'), h('option', { value: 'per_cut' }, 'One line on each picture cut'));
-    nar.gap = h('input', { type: 'range', min: '0', max: '2', step: '0.1', value: '0.4', oninput: (e) => { D.gap = +e.target.value; paintCreate(); } });
-    nar.gapL = h('span', { class: 'as-val' }, '0.4 s');
-    nar.est = h('div', { class: 'dl-hint' });
-    nar.sample = h('button', { type: 'button', class: 'dl-btn', id: 'auSample', onclick: sampleVoice, title: 'Hear the voice on your first sentence. Nothing is added to the plan.' }, 'Hear a sample');
-    nar.add = h('button', { type: 'button', class: 'dl-btn accent', id: 'auAddScript', onclick: addScript, title: 'Make one narration line for each paragraph (or sentence) and place them on the Voice lane' }, 'Add lines to the plan');
-    nar.speak = h('button', { type: 'button', class: 'dl-btn', id: 'auSpeakAll', onclick: speakAll, title: 'Turn every written line into speech' }, 'Speak all lines');
-    nar.audio = document.createElement('audio');
-    const narPane = pane('narration', 'Narration', 'Speak a script over your video.',
-      h('div', { class: 'dl-field' }, h('span', { class: 'dl-lab' }, 'Script'), nar.text),
-      h('div', { class: 'dl-field' }, h('span', { class: 'dl-lab' }, 'Voice'), nar.voice),
-      h('div', { class: 'au-two' }, h('div', { class: 'dl-field' }, h('span', { class: 'dl-lab' }, 'Speed'), h('div', { class: 'as-slide' }, nar.speed, nar.speedL)),
-        h('div', { class: 'dl-field' }, h('span', { class: 'dl-lab' }, 'Pause between lines'), h('div', { class: 'as-slide' }, nar.gap, nar.gapL))),
-      h('div', { class: 'dl-field' }, h('span', { class: 'dl-lab' }, 'Where the lines go'), nar.place), nar.est,
-      h('div', { class: 'au-actions' }, nar.sample, nar.add), h('div', { class: 'au-actions' }, nar.speak));
-    // --- Music
-    const mu = (el.mu = {});
-    mu.text = h('textarea', { class: 'dl-in', id: 'auMusicText', rows: 4, placeholder: 'Describe the music: for example, soft piano, slow and sad, with a little strings.', oninput: (e) => { D.music = e.target.value; paintCreate(); } });
-    mu.bpm = h('input', { class: 'dl-in', type: 'number', min: '40', max: '200', placeholder: 'let the model choose', oninput: (e) => { D.bpm = e.target.value; } });
-    mu.key = h('select', { class: 'dl-in', onchange: (e) => { D.key = e.target.value; } }, ...KEYS.map((k) => h('option', { value: k }, k || 'let the model choose')));
-    mu.len = h('select', { class: 'dl-in', onchange: (e) => { D.len = e.target.value; } }, h('option', { value: 'whole' }, 'The whole video'), h('option', { value: 'rest' }, 'From the playhead to the end'), h('option', { value: 'custom' }, 'From the playhead, for…'));
-    mu.secs = h('input', { class: 'dl-in', type: 'number', min: '5', max: '180', value: '30', oninput: (e) => { D.secs = +e.target.value; } });
-    mu.btn = h('button', { type: 'button', class: 'dl-btn accent', id: 'auMakeMusic', onclick: makeMusic, title: 'ACE-Step writes the music on this computer; it can take a few minutes' }, 'Create music');
-    const muPane = pane('music', 'Music', 'Describe the music you want and hear the takes.',
-      h('div', { class: 'dl-field' }, h('span', { class: 'dl-lab' }, 'What should it sound like?'), mu.text),
-      h('div', { class: 'as-chips' }, ...MOODS.map((m) => chip(m, () => { mu.text.value = (mu.text.value.trim() ? `${mu.text.value.trim()}, ` : '') + m; D.music = mu.text.value; paintCreate(); }))),
-      h('div', { class: 'au-two' }, h('div', { class: 'dl-field' }, h('span', { class: 'dl-lab' }, 'Tempo (BPM)'), mu.bpm), h('div', { class: 'dl-field' }, h('span', { class: 'dl-lab' }, 'Key'), mu.key)),
-      h('div', { class: 'au-two' }, h('div', { class: 'dl-field' }, h('span', { class: 'dl-lab' }, 'How long'), mu.len), h('div', { class: 'dl-field' }, h('span', { class: 'dl-lab' }, 'Seconds'), mu.secs)),
-      h('div', { class: 'dl-hint' }, 'You get a few takes to choose from. Music dips automatically under narration.'), h('div', { class: 'au-actions' }, mu.btn));
-    // --- Effects
-    const fx = (el.fx = {});
-    fx.text = h('textarea', { class: 'dl-in', id: 'auFxText', rows: 3, placeholder: 'What does it sound like? For example: heavy wooden door slam.', oninput: (e) => { D.fx = e.target.value; paintCreate(); } });
-    fx.chips = h('div', { class: 'as-chips' });
-    fx.add = h('button', { type: 'button', class: 'dl-btn accent', id: 'auAddFx', onclick: () => addFx(false), title: 'Add this sound where the playhead is and listen to the candidates' }, 'Add at the playhead');
-    fx.cuts = h('button', { type: 'button', class: 'dl-btn', id: 'auAddFxCuts', onclick: () => addFx(true), title: 'Put this sound on every picture cut' }, 'Add on every picture cut');
-    const fxPane = pane('effects', 'Sound effects', 'Add a sound at a moment in the video.',
-      h('div', { class: 'dl-field' }, h('span', { class: 'dl-lab' }, 'Describe the sound'), fx.text),
-      h('div', { class: 'dl-field' }, h('span', { class: 'dl-lab' }, 'Kind'), fx.chips),
-      h('div', { class: 'dl-hint' }, 'The playhead is the red line. Free CC0 recordings come first; a code-made sound is the fallback.'), h('div', { class: 'au-actions' }, fx.add), h('div', { class: 'au-actions' }, fx.cuts));
-    // --- Cues
-    el.cueHead = el.cueHead || h('div', { class: 'dl-sub' }, 'Cues');
-    const cuePane = pane('cues', 'Everything in this mix', 'Every narration line, music and sound, in time order.',
-      h('div', { class: 'au-actions' }, ...el.actions), el.cueList, el.qaBox);
-    el.left.append(h('div', { class: 'cf-panel-head' }, 'Create'),
-      h('div', { class: 'as-tabs', role: 'tablist' }, ...[['narration', 'Narration'], ['music', 'Music'], ['effects', 'Effects'], ['cues', 'Cues']].map(([id, label]) =>
-        h('button', { type: 'button', role: 'tab', class: 'as-tab', id: `auTab_${id}`, 'data-tab': id, onclick: () => { S.tab = id; paintCreate(); } }, label))),
-      h('div', { class: 'au-pane as-panes' }, narPane, muPane, fxPane, cuePane), el.status);
-  }
-  function paintCreate() {
-    if (!el.nar) return;
-    const D = S.draft, p = S.plan;
-    for (const t of el.left.querySelectorAll('.as-tab')) { t.classList.toggle('on', t.dataset.tab === S.tab); t.setAttribute('aria-selected', t.dataset.tab === S.tab); }
-    for (const t of el.left.querySelectorAll('.as-tabpane')) t.style.display = t.dataset.tab === S.tab ? '' : 'none';
-    // narration
-    if (!el.nar.voice.firstChild && S.voices) el.nar.voice.append(voiceSelect(D.voice, (v) => { D.voice = v; }, { id: 'auVoice' }));
-    if (document.activeElement !== el.nar.text && el.nar.text.value !== (D.script || '')) el.nar.text.value = D.script || '';
-    el.nar.speedL.textContent = `${(D.speed || 1).toFixed(2)}×`; el.nar.gapL.textContent = `${(D.gap == null ? 0.4 : D.gap).toFixed(1)} s`;
-    const lines = M.splitScript ? M.splitScript(D.script || '') : [], total = lines.reduce((a, l) => a + M.estimateSeconds(l, D.speed || 1), 0);
-    el.nar.est.textContent = lines.length ? `${lines.length} line(s), about ${total.toFixed(1)} s of speech${p ? ` · the video is ${p.duration.toFixed(1)} s` : ''}` : 'Each paragraph becomes one line of speech.';
-    const nobusy = !S.busy && !!p;
-    el.nar.sample.disabled = !nobusy || !(D.script || '').trim(); el.nar.add.disabled = !nobusy || !lines.length;
-    el.nar.speak.disabled = !nobusy || !p || !p.cues.some((c) => c.kind === 'narration' && (c.status === 'draft' || c.status === 'failed'));
-    // effects chips
-    const cur = D.fxKind || 'whoosh';
-    el.fx.chips.replaceChildren(...FX_KINDS.map(([k, , label]) => chip(label, () => { D.fxKind = k; paintCreate(); }, cur === k)));
-    el.fx.add.disabled = !nobusy || !(D.fx || '').trim(); el.fx.cuts.disabled = !nobusy || !(D.fx || '').trim() || !(p && p.cuts && p.cuts.length);
-    el.mu.btn.disabled = !nobusy || !(D.music || '').trim();
-    if (el.mu.text.value !== (D.music || '') && document.activeElement !== el.mu.text) el.mu.text.value = D.music || '';
-    if (el.fx.text.value !== (D.fx || '') && document.activeElement !== el.fx.text) el.fx.text.value = D.fx || '';
-    for (const b of [el.autoBtn, el.fixBtn, el.tlBtn]) if (b) b.disabled = b === el.tlBtn ? !!S.busy : !nobusy;
-  }
-
-  async function sampleVoice() {
-    const D = S.draft, { provider, voice } = splitVoice(D.voice), text = (M.splitScript(D.script || '')[0] || '').slice(0, 240);
-    if (!S.plan || !text) { say('Open a video and write a line first.', true); return; }
-    const id = S.plan.id, r = await guard('Voice sample', () => call('POST', `/plans/${id}/narration/sample`, { text, voice, provider, speed: D.speed || 1 }));
-    if (r && isCurrent(id)) { el.nar.audio.src = fileUrl(r.file); el.nar.audio.play().catch(() => {}); say(`Sample: ${r.seconds.toFixed(1)} s with ${voiceLabel(voice)}.`); }
-  }
-  async function addScript() {
-    const D = S.draft, { provider, voice } = splitVoice(D.voice), id = S.plan.id;
-    const body = { text: D.script || '', mode: D.place || 'sequential', start: playhead(), gap: D.gap == null ? 0.4 : D.gap, voice, provider, speed: D.speed || 1 };
-    const p = await guard('Adding lines', () => call('POST', `/plans/${id}/script`, body));
-    if (p && isCurrent(id)) {
-      S.plan = p; S.seen = p.version; paintAll();
-      const n = p.cues.filter((c) => c.kind === 'narration' && c.status === 'draft').length;
-      say(`${n} line(s) are on the Voice lane. Press “Speak all lines” to turn them into speech.`); D.script = ''; paintCreate();
-    }
-  }
-  async function speakAll() {
-    const id = S.plan.id, todo = S.plan.cues.filter((c) => c.kind === 'narration' && (c.status === 'draft' || c.status === 'failed')).map((c) => c.id);
-    if (!todo.length) { say('Every narration line already has speech.'); return; }
-    let ok = 0, bad = 0, last = '';
-    await guard('Speaking', async () => {
-      for (let i = 0; i < todo.length; i++) {
-        if (!isCurrent(id)) break;
-        S.busy = `Speaking line ${i + 1} of ${todo.length}`; paintBusy();
-        try { await sourceOne(todo[i], 'auto'); const c = cueById(todo[i]); if (c && c.status === 'ready') ok++; else { bad++; last = (c && c.reason) || ''; } } catch (e) { bad++; last = e.message; }
-      }
-    });
-    if (isCurrent(id)) { await runQa(); say(`Spoke ${ok} line(s)${bad ? `; ${bad} failed (${last})` : ''}. ${S.qa ? `QA: ${S.qa.errors} error(s), ${S.qa.warnings} warning(s).` : ''}`, !!bad || (S.qa && S.qa.errors > 0)); }
-  }
-  async function addFx(everyCut) {
-    const D = S.draft, kind = D.fxKind || 'whoosh', track = (FX_KINDS.find((k) => k[0] === kind) || [0, 'sfx'])[1], id = S.plan.id, words = (D.fx || '').trim();
-    if (!everyCut) {
-      const before = new Set(S.plan.cues.map((c) => c.id));
-      const p = await guard('Adding the sound', () => call('POST', `/plans/${id}/add_sound`, { intent: words, kind, track, hit_t: track === 'ambience' ? null : playhead(), t_in: track === 'ambience' ? playhead() : 0, t_out: track === 'ambience' ? S.plan.duration : null, mode: 'ask' }));
-      if (p && isCurrent(id)) { S.plan = p; S.seen = p.version; paintAll(); const n = p.cues.find((c) => !before.has(c.id)); if (n) { selectCue(n.id, false); say(`${n.id}: ${n.candidates.length} candidate(s). Listen in the Cue panel and press Pick.`); } }
-      return;
-    }
-    const cues = S.plan.cuts.map((t, i) => ({ id: `fx_${String(i + 1).padStart(2, '0')}_${kind}`.slice(0, 40), track, kind, intent: words, hit_t: t, anchor: kind === 'whoosh' || kind === 'riser' ? 'peak' : 'onset', mode: 'auto' }));
-    const saved = await edit({ cues }, 'Adding the sound on every cut');
-    if (saved && isCurrent(id)) { await sourceAll(); }
-  }
-  async function makeMusic() {
-    const D = S.draft, id = S.plan.id, t0 = D.len === 'whole' || !D.len ? 0 : playhead(), dur = S.plan.duration;
-    const t1 = D.len === 'custom' ? Math.min(dur, t0 + (D.secs || 30)) : dur, hints = {};
-    if (D.bpm) hints.bpm = +D.bpm; if (D.key) hints.key_scale = D.key;
-    const before = new Set(S.plan.cues.map((c) => c.id));
-    const p = await guard('Creating music: this can take a few minutes', () => call('POST', `/plans/${id}/add_sound`, { intent: D.music.trim(), kind: 'music', track: 'music', t_in: t0, t_out: t1, mode: 'ask', hints }));
-    if (p && isCurrent(id)) {
-      S.plan = p; S.seen = p.version; paintAll(); const n = p.cues.find((c) => !before.has(c.id));
-      if (n) { selectCue(n.id, false); say(n.status === 'failed' ? `Music: ${n.reason}` : `${n.candidates.length} take(s) of music. Listen in the Cue panel and press Pick.`, n.status === 'failed'); }
-    }
-  }
-  async function autoDesign() {
-    const id = S.plan.id;
-    await guard('Auto sound design', async () => {
-      if (!S.plan.cues.length) { S.busy = 'Finding the picture cuts'; paintBusy(); const p = await call('POST', `/plans/${id}/spot`); if (!isCurrent(id)) return; S.plan = p; S.seen = p.version; paintAll(); }
-      const todo = S.plan.cues.filter((c) => c.status === 'draft' || c.status === 'failed').map((c) => c.id);
-      for (let i = 0; i < todo.length && isCurrent(id); i++) { S.busy = `Finding sounds ${i + 1}/${todo.length}`; paintBusy(); try { await sourceOne(todo[i], 'auto'); } catch (e) { S.lastErr = e.message; } }
-      if (!isCurrent(id)) return;
-      S.busy = 'Rendering the preview'; paintBusy(); const r = await call('POST', `/plans/${id}/preview`); if (isCurrent(id)) { P.preview = r; P.stale = false; loadStemAudio(); applyGains(); }
-      S.busy = 'Checking'; paintBusy(); const q = await call('POST', `/plans/${id}/qa`); if (isCurrent(id)) { S.qa = q; await reload(); }
-    });
-    if (isCurrent(id)) {
-      const c = S.plan.cues, ready = c.filter((x) => x.status === 'ready').length, failed = c.filter((x) => x.status === 'failed').length, q = S.qa || { errors: 0, warnings: 0 };
-      say(`Auto sound design: ${ready} of ${c.length} cues have a sound${failed ? `, ${failed} could not be found (open Cues to see why)` : ''}. QA: ${q.errors} error(s), ${q.warnings} warning(s). Press Play, then Master.`, failed > 0 || q.errors > 0);
-      S.tab = 'cues'; paintCreate();
-    }
-  }
-  async function fixProblems() {
-    const id = S.plan.id, r = await guard('Fixing problems', () => call('POST', `/plans/${id}/fix`, {}));
-    if (r && isCurrent(id)) { await reload(); S.qa = { errors: r.remaining.filter((f) => f.severity === 'error').length, warnings: r.remaining.filter((f) => f.severity !== 'error').length, findings: r.remaining }; paintAll();
-      say(`${r.fixed.length} thing(s) fixed${r.fixed.length ? ': ' + r.fixed.map((f) => `${f.cue_id} (${f.action})`).join(', ') : ''}. ${r.remaining.length} problem(s) remain${r.remaining.length ? ' (see Cues)' : ''}.`, r.remaining.some((f) => f.severity === 'error')); }
-  }
-
-  function buildNarrationInspector(box, c, chip, take) {
-    const p = S.plan, fps = p.fps, est = M.estimateSeconds(c.text, c.speed), cur = `${c.provider || 'kokoro'}:${c.voice || ''}`;
-    box.append(
-      h('button', { type: 'button', class: 'dl-btn', id: 'auAddCue', onclick: addCueAtPlayhead, title: 'Add a sound effect cue at the video position' }, '+ Cue at playhead'),
-      h('div', { class: 'au-insp-top' }, h('span', { class: `au-chip ${chip.tone}` }, chip.text), h('b', {}, `Narration ${c.id}`), h('span', { class: 'au-tc' }, M.fmtTC(c.t_in || 0, fps))),
-      c.reason ? h('div', { class: 'dl-error' }, c.reason) : null,
-      field('Words', h('textarea', { class: 'dl-in au-intent', 'data-f': 'text', rows: 4, onchange: (e) => patchCue(c.id, { text: e.target.value }) }, c.text || ''),
-        take ? `Changing the words means the line must be spoken again. About ${est.toFixed(1)} s; it is ${take.duration_s.toFixed(1)} s now.` : `About ${est.toFixed(1)} s when spoken.`),
-      field('Voice', voiceSelect(cur, (v) => { const x = splitVoice(v); patchCue(c.id, { voice: x.voice, provider: x.provider }); }, { 'data-f': 'voice' })),
-      h('div', { class: 'au-two' },
-        field('Speed', numIn(c.speed, '0.05', (e) => { const v = num(e.target.value); if (v != null && v >= 0.5 && v <= 2) patchCue(c.id, { speed: v }); }, { min: 0.5, max: 2, 'data-f': 'speed' })),
-        field('Starts at (s)', h('div', { class: 'au-nudge' },
-          h('button', { type: 'button', class: 'dl-btn', title: 'One frame earlier (Shift: ten)', onclick: (e) => patchCue(c.id, { t_in: Math.max(0, M.snapFrame(c.t_in - (e.shiftKey ? 10 : 1) / fps, fps)) }) }, '◀'),
-          numIn((c.t_in || 0).toFixed(3), '0.001', (e) => { const v = num(e.target.value); if (v != null) patchCue(c.id, { t_in: v }); }, { 'data-f': 'from' }),
-          h('button', { type: 'button', class: 'dl-btn', title: 'One frame later (Shift: ten)', onclick: (e) => patchCue(c.id, { t_in: Math.min(p.duration, M.snapFrame(c.t_in + (e.shiftKey ? 10 : 1) / fps, fps)) }) }, '▶')))),
-      h('div', { class: 'au-three' },
-        field('Level (dB)', numIn(c.gain_db, '0.5', (e) => { const v = num(e.target.value); if (v != null) patchCue(c.id, { gain_db: v }); }, { 'data-f': 'gain' })),
-        field('Fade in (s)', numIn(c.fade_in, '0.05', (e) => { const v = num(e.target.value); if (v != null && v >= 0) patchCue(c.id, { fade_in: v }); }, { min: 0, 'data-f': 'fin' })),
-        field('Fade out (s)', numIn(c.fade_out, '0.05', (e) => { const v = num(e.target.value); if (v != null && v >= 0) patchCue(c.id, { fade_out: v }); }, { min: 0, 'data-f': 'fout' }))),
-      h('div', { class: 'dl-sub' }, 'Speech'),
-      take ? provenanceBlock(take) : h('div', { class: 'au-empty' }, c.status === 'needs_pick' ? 'Takes are waiting for your pick.' : 'Not spoken yet.'),
-      c.candidates && c.candidates.length ? h('div', { class: 'au-cands' }, ...c.candidates.map((cd) => candidateRow(cd, c.id))) : null,
-      h('div', { class: 'au-actions' },
-        h('button', { type: 'button', class: 'dl-btn accent', id: 'auSourceCue', onclick: () => sourceSel(c.id), disabled: !!S.busy }, take || c.candidates.length ? 'Speak again' : 'Speak this line'),
-        h('button', { type: 'button', class: 'dl-btn', id: 'auDeleteCue', onclick: () => deleteCue(c.id), disabled: !!S.busy }, 'Delete line')),
-      opts.full ? h('div', { class: 'au-actions' }, h('button', { type: 'button', class: 'dl-btn', id: 'auShowVideo', onclick: () => showInVideoStudio(c.t_in || 0), title: 'Jump to this moment in the Video Studio timeline' }, 'Show in Video Studio')) : null);
-  }
-
-  function addFullMixerControls() {
-    el.target = h('select', { class: 'dl-in', 'aria-label': 'Loudness target', onchange: (e) => { const x = M.LOUDNESS.find((l) => l.id === e.target.value); S.lufs = x.lufs; S.lufsId = x.id; if (P.master_info) { P.master_info = null; paintMixer(); } } },
-      ...M.LOUDNESS.map((l) => h('option', { value: l.id, title: l.hint, selected: l.id === S.lufsId }, `${l.label} (${l.lufs} LUFS)`)));
-    el.keepOrig = h('input', { type: 'checkbox', id: 'auKeepOrig', checked: true, onchange: (e) => edit({ keep_original_audio: e.target.checked }, 'Original sound') });
-    el.sendBtn = h('button', { type: 'button', class: 'dl-btn accent', id: 'auSend', onclick: sendToVideoStudio, title: 'Export the video with this mix and open it in the Video Studio' }, 'Send mix to Video Studio');
-    const row = h('div', { class: 'as-mixopts' }, h('span', { class: 'dl-lab' }, 'Loudness'), el.target,
-      h('label', { class: 'dl-check', title: 'Off when your narration replaces the voice that is already in the video' }, el.keepOrig, 'Video’s own sound'));
-    el.mixerHost.insertBefore(row, el.mixerHost.querySelector('.au-strips'));
-    el.mixerHost.querySelector('.au-mixfoot').append(el.sendBtn);
-  }
-
-  // ---------- hand-offs with the Video Studio ----------
-  async function openTimeline() {
-    const N = window.NLE, Mo = window.NLEModel;
-    if (!N || !Mo || !N.tl || !N.tl.clips.length) { say('The Video Studio timeline has no clips yet. Open a project and add clips in the Video Studio first.', true); return; }
-    const tl = N.tl, starts = Mo.layout(tl).map((x) => x.start).filter((t) => t > 0.05), edl = Mo.toEdl(tl, window.NLEColor && window.NLEColor.lutFor);
-    const r = await guard('Rendering the timeline as a picture (this can take a minute)', () => call('POST', '/plans/from_timeline', { clips: edl.clips, overlays: edl.overlays || [], luts: edl.luts || {}, cuts: starts, job_id: (N.ui && N.ui.jobId) || null }));
-    if (r) { await refreshPlans(); await loadPlan(r.id); say(`Opened the Video Studio timeline: ${r.cuts.length} picture cut(s) from its clip boundaries.`); }
-  }
-  function showInVideoStudio(t) {
-    if (typeof window.switchResolvePage !== 'function' || !window.NLE) { say('The Video Studio is not available here.', true); return; }
-    window.switchResolvePage('edit');
-    try { window.NLE.seek(t); } catch (e) { /* no timeline loaded */ }
-  }
-  async function sendToVideoStudio() {
-    const id = S.plan.id, r = await guard('Exporting the video with the mix', () => call('POST', `/plans/${id}/export`, { target_lufs: S.lufs, mux: true }));
-    if (!r || !isCurrent(id)) return;
-    P.master_info = r.loudness; paintMixer();
-    const path = `${r.out_dir}\\master.mp4`, imp = await guard('Importing into the Video Studio', () => fetch('/api/chronoflow/library/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ paths: [path], title: `${S.plan.video_path.split(/[\\/]/).pop().replace(/\.[^.]+$/, '')} (with sound)` }) }).then(async (x) => { const d = await x.json().catch(() => ({})); if (!x.ok) throw new Error(d.detail || `HTTP ${x.status}`); return d; }));
-    if (imp && typeof window.onSelectProjectJob === 'function') { window.switchResolvePage('edit'); window.onSelectProjectJob(imp.job_id); say('The mix is in the Video Studio as a new project.'); }
-    else if (imp) say(`Imported as project ${imp.job_id}.`);
-  }
-
   // ---------- mount / open / close ----------
   function mount() {
     if (S.mounted) return;
-    const host = (x) => (typeof x === 'string' ? document.querySelector(x) : x);
-    el.left = host(hosts.left); el.mon = host(hosts.mon); el.insp = host(hosts.insp); el.bottom = host(hosts.bottom); el.header = host(hosts.header);
-    if (!el.left || !el.mon || !el.insp || !el.bottom || !M || (opts.full && !el.header)) return;
+    el.left = $('#audioPlanPane'); el.mon = $('#audioMonitor'); el.insp = $('#audioInspector'); el.bottom = $('#audioPanel');
+    if (!el.left || !el.mon || !el.insp || !el.bottom || !M) return;
     el.planSel = h('select', { class: 'dl-in', 'aria-label': 'Sound plan', onchange: (e) => { if (e.target.value) guard('Open plan', () => loadPlan(e.target.value)); } });
     el.mode = h('select', { class: 'dl-in', 'aria-label': 'How cues are sourced', onchange: (e) => edit({ mode: e.target.value }, 'Mode') },
       h('option', { value: 'auto' }, 'Auto: the engine picks'), h('option', { value: 'ask' }, 'Ask me: I pick'));
@@ -923,14 +656,13 @@
     el.cueHead = h('div', { class: 'dl-sub' }, 'Cues'); el.qaBox = h('div', { class: 'au-qa', id: 'auQaBox' });
     el.cueList = h('div', { class: 'au-cues' });
     el.status = h('div', { class: 'au-status', role: 'status' });
-    if (opts.full) buildFullLeft(); else el.left.append(h('div', { class: 'cf-panel-head' }, 'Sound plan'),
+    el.left.append(h('div', { class: 'cf-panel-head' }, 'Sound plan'),
       h('div', { class: 'au-pane' },
         h('div', { class: 'dl-field' }, h('span', { class: 'dl-lab' }, 'Plan'), el.planSel,
           h('button', { type: 'button', class: 'dl-btn', id: 'auOpen', onclick: pickVideo, title: 'Choose a finished video file' }, 'Open video…')),
         h('div', { class: 'dl-field' }, h('span', { class: 'dl-lab' }, 'Sourcing'), el.mode,
           h('label', { class: 'dl-check', title: 'Also accept CC-BY clips; credits are written to credits.txt' }, el.ccby, 'Allow CC-BY (needs credits)')),
         h('div', { class: 'au-actions' }, ...el.actions), el.cueHead, el.cueList, el.qaBox, el.status));
-    if (opts.full) buildHeader();
     el.title = h('b', { class: 'au-title' }, 'No video open'); el.badge = h('span', { class: 'au-badge' });
     el.video = h('video', { class: 'au-video', muted: true, playsinline: true, preload: 'auto' });
     el.video.muted = true;
@@ -941,7 +673,6 @@
     el.video.addEventListener('seeked', () => movePlayhead());
     el.insp.append(h('div', { class: 'cf-panel-head' }, 'Cue'), (el.inspBody = h('div', { class: 'au-pane' })));
     buildLanes(); buildMixer(); buildTransport();
-    if (opts.full) addFullMixerControls();
     el.video.addEventListener('seeked', () => { if (!P.playing) syncStems(true); });
     el.video.addEventListener('ended', () => { if (P.playing) pause(); });
     S.mounted = true; paintAll();
@@ -949,7 +680,6 @@
   async function open() {
     mount(); if (!S.mounted) return;
     S.open = true;
-    if (!S.voices) loadVoices();
     await guard('Load plans', async () => {
       await refreshPlans();
       const want = (S.plan && S.plan.id) || remembered();
@@ -961,9 +691,5 @@
   }
   function close() { S.open = false; clearTimeout(S.timer); if (AU.el) AU.el.pause(); if (el.video && P.playing) pause(); else if (el.video) el.video.pause(); }
 
-  return { mount, open, close, openVideo, autoDesign, fixProblems, speakAll, openTimeline, showInVideoStudio, sendToVideoStudio, get state() { return S; }, selectCue, reload, call, edit, sourceOne, guard, say, get audition() { return AU; }, addCueAtPlayhead, fit, zoom, seek, play, pause, renderPreview, mixMaster, exportAll, get mixer() { return P; }, get view() { return L.view; }, get peaks() { return L.peaks; } };
-  }
-  window.createAudioStudio = createAudioStudio;
-  window.NLEAudio = createAudioStudio({ left: '#audioPlanPane', mon: '#audioMonitor', insp: '#audioInspector', bottom: '#audioPanel' }, {});
-  window.AudioStudio = createAudioStudio({ header: '#asHeader', left: '#asCreate', mon: '#asMonitor', insp: '#asInspector', bottom: '#asBottom' }, { full: true });
+  window.NLEAudio = { mount, open, close, openVideo, get state() { return S; }, selectCue, reload, call, edit, sourceOne, guard, say, get audition() { return AU; }, addCueAtPlayhead, fit, zoom, seek, play, pause, renderPreview, mixMaster, exportAll, get mixer() { return P; }, get view() { return L.view; }, get peaks() { return L.peaks; } };
 })();

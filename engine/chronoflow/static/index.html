@@ -3538,7 +3538,7 @@
     <div class="nav-tabs">
       <button class="nav-tab active" data-tab="director" onclick="switchResolvePage(cfPage === 'media' ? 'media' : cfPage)" title="Edit, color and deliver videos">Video Studio</button>
       <button class="nav-tab" data-tab="image-studio" onclick="switchTab('image-studio')" title="Generate and edit pictures">Image Studio</button>
-      <button class="nav-tab" data-tab="audio" onclick="switchTab('audio')" title="Narration, music, sound effects and the mix for a video">Audio Studio</button>
+      <button class="nav-tab" data-tab="audio" onclick="switchTab('audio')" title="Make and edit sounds: voice, music, effects">Audio Studio</button>
       <button class="nav-tab" data-tab="vault" onclick="switchTab('vault')" title="Everything ChronoFlow has rendered">Gallery</button>
       <button class="nav-tab" data-tab="storyboard" onclick="switchTab('storyboard')" title="Plan a video shot by shot">Storyboard</button>
       <button class="nav-tab" data-tab="organizer" onclick="switchTab('organizer')" title="Move and tidy your files">Organizer</button>
@@ -3622,7 +3622,6 @@
                 <span class="monitor-badge-tag">1080p24 • Rec.709</span>
               </div>
               <div class="monitor-top-controls">
-                <button type="button" class="cfx-btn" id="soundTimelineBtn" title="Open the Audio Studio with this timeline: its clip boundaries become the picture cuts" onclick="soundThisTimeline()">Sound this timeline</button>
                 <div class="job-select-wrapper">
                   <span class="cf-label">Project</span>
                   <select id="projectJobSelect" onchange="onSelectProjectJob(this.value)" class="monitor-job-select" title="Switch between your projects">
@@ -4346,15 +4345,9 @@
     
 
     <!-- TAB 2: GALLERY (master films, shots, images, characters) -->
-    <!-- TAB: AUDIO STUDIO (built by static/nle/audio.js, instance AudioStudio) -->
+    <!-- TAB: AUDIO STUDIO - a sound editor (built by static/nle/sound-editor.js) -->
     <div class="tab-content" id="tab-audio">
-      <div class="as-root">
-        <div class="as-header" id="asHeader"></div>
-        <div class="as-box as-create" id="asCreate"></div>
-        <div class="as-box as-monitor" id="asMonitor"></div>
-        <div class="as-box as-right" id="asInspector"></div>
-        <div class="as-box as-bottom" id="asBottom"></div>
-      </div>
+      <div class="se-root" id="soundEditor"></div>
     </div>
 
     <div class="tab-content" id="tab-vault">
@@ -5572,14 +5565,9 @@
       if (tabId === 'storyboard') initStoryboard();
       if (tabId === 'organizer') loadOrganizer();
       if (window.NLEAudio && tabId !== 'director') NLEAudio.close();   // the Video Studio's quick Audio page stops when you leave the Video Studio
-      if (window.AudioStudio) { if (tabId === 'audio') AudioStudio.open(); else AudioStudio.close(); }
+      if (window.SoundEditor) { if (tabId === 'audio') SoundEditor.open(); else SoundEditor.close(); }
 
       document.body.dataset.tab = tabId;   // the page rail only shows on 'director' (see layout.css)
-    }
-
-    async function soundThisTimeline() {
-      switchTab('audio');
-      if (window.AudioStudio) { await AudioStudio.open(); AudioStudio.openTimeline(); }
     }
 
     // Dynamic Timeline Renderer
@@ -11970,26 +11958,6 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
       }
     }
 
-    // Hotkeys (Spacebar = Play/Pause, V = Select, C = Razor)
-    window.addEventListener('keydown', (e) => {
-      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-      if (e.code === 'Space') {
-        e.preventDefault();
-        timelineTogglePlay();
-      } else if (e.key === 'v' || e.key === 'V') {
-        setNLETool('select');
-      } else if (e.key === 'c' || e.key === 'C') {
-        setNLETool('razor');
-      } else if (e.key === 's' || e.key === 'S') {
-        toggleSnapping();
-      } else if (e.key === 'Delete' || e.key === 'Backspace') {
-        deleteSelectedClip();
-      }
-    });
-
-    
-    
-
     // Video Studio pages. ONE source of truth: the rail highlight, the layout (data-page, see layout.css) and the
     // Color / Fusion / Deliver / Library modules all follow cfPage. Nothing else may highlight the rail.
     const CF_PAGES = ['media', 'edit', 'fusion', 'color', 'audio', 'deliver'];
@@ -12023,12 +11991,12 @@ The AI Director is adjusting the prompt and rendering in ComfyUI.`);
     function loadNLEAssets() {
       const v = Date.now();
       const tq = ENGINE_TOKEN ? `token=${encodeURIComponent(ENGINE_TOKEN)}&v=${v}` : `v=${v}`;
-      ['nle.css', 'color.css', 'fusion.css', 'deliver.css', 'library.css', 'audio.css', 'layout.css'].forEach(sheet => {
+      ['nle.css', 'color.css', 'fusion.css', 'deliver.css', 'library.css', 'audio.css', 'sound-editor.css', 'layout.css'].forEach(sheet => {
         const css = document.createElement('link');
         css.rel = 'stylesheet'; css.href = `${STATIC_BASE}/nle/${sheet}?${tq}`; document.head.appendChild(css);
       });
       const load = (f) => new Promise((res, rej) => { const s = document.createElement('script'); s.src = `${STATIC_BASE}/nle/${f}?${tq}`; s.onload = res; s.onerror = () => rej(new Error(`could not load ${f}`)); document.head.appendChild(s); });
-      return ['model.js', 'nle.js', 'frame-edit.js', 'grade.js', 'color.js', 'fusion-graph.js', 'fusion.js', 'deliver.js', 'library.js', 'audio-model.js', 'audio.js', 'panels.js', 'newvideo.js'].reduce((p, f) => p.then(() => load(f)), Promise.resolve());
+      return ['model.js', 'nle.js', 'frame-edit.js', 'grade.js', 'color.js', 'fusion-graph.js', 'fusion.js', 'deliver.js', 'library.js', 'audio-model.js', 'audio.js', 'sound-editor.js', 'panels.js', 'newvideo.js'].reduce((p, f) => p.then(() => load(f)), Promise.resolve());
     }
 
     async function initApp() {

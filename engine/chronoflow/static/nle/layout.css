@@ -171,12 +171,3 @@ body.cf-resizing iframe, body.cf-resizing video { pointer-events: none; }
 #cfWorkspace[data-page="audio"] .audio-inspector { display: flex; grid-column: 5; }
 #cfWorkspace[data-page="audio"] #nleTimeline { display: none; }
 #cfWorkspace[data-page="audio"] .audio-panel { display: flex; flex: 0 0 var(--cf-tl); }
-
-/* ---------- Audio Studio tab: header on top, Create | video | Cue, lanes + mixer underneath (no rail on this tab) ---------- */
-body[data-tab="audio"] { height: 100vh; overflow: hidden; }
-body[data-tab="audio"] main { flex: 1; min-height: 0; overflow: hidden; padding: 6px 8px 8px; }
-body[data-tab="audio"] #tab-audio.active { display: flex; flex-direction: column; flex: 1; min-height: 0; }
-#tab-audio .as-root { flex: 1; min-height: 0; display: grid; gap: 8px; grid-template-columns: 370px minmax(0, 1fr) 360px; grid-template-rows: auto minmax(0, 1fr) 345px; }
-#tab-audio .as-header { grid-column: 1 / -1; }
-#tab-audio .as-bottom { grid-column: 1 / -1; }
-@media (max-width: 1250px) { #tab-audio .as-root { grid-template-columns: 320px minmax(0, 1fr) 310px; } }
