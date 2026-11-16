@@ -1,4 +1,4 @@
-"""FLUX.2 klein 4B (Apache-2.0) as an image workflow next to Qwen: registered, checksummed, text to image only."""
+"""FLUX.2 klein 4B (Apache-2.0) is the art model; Qwen Image 2.1 (non-commercial licence) is retired from the image workflows."""
 import hashlib
 import json
 from pathlib import Path
@@ -6,27 +6,28 @@ from pathlib import Path
 import pytest
 
 from engine.comfyui import art as art_mod
-from engine.comfyui.art import OPEN_ART_WORKFLOW_ID, ArtEngine
+from engine.comfyui.art import ART_REF_WORKFLOW_ID, ART_WORKFLOW_ID, LEGACY_QWEN_WORKFLOW_ID, ArtEngine, ComfyImageGenerationError
 
 COMFY = Path(art_mod.__file__).parent
-ENTRY = next(e for e in json.loads((COMFY / "workflow_registry.json").read_text(encoding="utf-8")) if e["id"] == OPEN_ART_WORKFLOW_ID)
-
-
-def test_klein_is_a_selectable_image_workflow_with_a_matching_checksum():
-    assert OPEN_ART_WORKFLOW_ID in art_mod.IMAGE_WORKFLOW_IDS
-    assert ENTRY["purpose"] != "text_to_image"  # the registry keeps exactly one text_to_image entry (see test_art_engine)
-    assert hashlib.sha256((COMFY / "workflows" / ENTRY["filename"]).read_bytes()).hexdigest() == ENTRY["sha256"]
-
-
-def test_klein_slots_point_at_real_nodes_of_its_graph():
-    graph = json.loads((COMFY / "workflows" / ENTRY["filename"]).read_text(encoding="utf-8"))
-    for name, slot in ENTRY["patch_slots"].items():
-        node = graph[slot["node_id"]]
-        assert node["class_type"] == slot["class_type"], name
-        assert slot["input"] in node["inputs"], name
-
-
 REGISTRY = {e["id"]: e for e in json.loads((COMFY / "workflow_registry.json").read_text(encoding="utf-8"))}
+
+
+def test_klein_is_the_one_text_to_image_workflow_and_qwen_is_not_selectable():
+    assert ART_WORKFLOW_ID == "flux2_klein_4b" and REGISTRY[ART_WORKFLOW_ID]["purpose"] == "text_to_image"
+    assert ART_WORKFLOW_ID in art_mod.IMAGE_WORKFLOW_IDS
+    assert LEGACY_QWEN_WORKFLOW_ID not in art_mod.IMAGE_WORKFLOW_IDS
+    assert REGISTRY[LEGACY_QWEN_WORKFLOW_ID]["purpose"] != "text_to_image"
+
+
+@pytest.mark.parametrize("workflow_id", [ART_WORKFLOW_ID, ART_REF_WORKFLOW_ID])
+def test_klein_graphs_have_matching_checksums_and_real_slots(workflow_id):
+    entry = REGISTRY[workflow_id]
+    raw = (COMFY / "workflows" / entry["filename"]).read_bytes()
+    assert hashlib.sha256(raw).hexdigest() == entry["sha256"]
+    graph = json.loads(raw)
+    for name, slot in entry["patch_slots"].items():
+        node = graph[slot["node_id"]]
+        assert node["class_type"] == slot["class_type"] and slot["input"] in node["inputs"], name
 
 
 class _Registry:
@@ -50,23 +51,41 @@ class _Client:
         raise RuntimeError("stop after submit")
 
     def upload_image_bytes(self, data, filename=None):
-        return "ref.png"
+        return f"ref_{data.decode()}.png"
 
 
-def test_klein_with_a_picture_runs_the_reference_graph_with_an_edit_style_prompt():
+def _submit(**kw):
     client = _Client()
-    engine = ArtEngine(client=client, registry=_Registry())
-    assert engine.accepts_reference(OPEN_ART_WORKFLOW_ID)
     with pytest.raises(RuntimeError, match="stop after submit"):
-        engine.generate("the dad whistles", width=768, height=1344, seed=5, workflow_id=OPEN_ART_WORKFLOW_ID, reference_image=b"x")
-    graph = client.submitted[0]
-    assert graph["20"]["inputs"]["image"] == "ref.png"
-    assert graph["4"]["inputs"]["text"].endswith("Show a new moment: the dad whistles")
-    assert (graph["14"]["inputs"]["value"], graph["15"]["inputs"]["value"], graph["9"]["inputs"]["noise_seed"]) == (768, 1344, 5)
+        ArtEngine(client=client, registry=_Registry()).generate("the dad whistles", width=768, height=1344, seed=5, **kw)
+    return client.submitted[0]
 
 
 def test_klein_without_a_picture_runs_the_plain_graph_and_keeps_the_prompt():
-    client = _Client()
-    with pytest.raises(RuntimeError, match="stop after submit"):
-        ArtEngine(client=client, registry=_Registry()).generate("a cat", width=768, height=1344, workflow_id=OPEN_ART_WORKFLOW_ID)
-    assert "20" not in client.submitted[0] and client.submitted[0]["4"]["inputs"]["text"] == "a cat"
+    graph = _submit()
+    assert "20" not in graph and graph["4"]["inputs"]["text"] == "the dad whistles"
+    assert (graph["14"]["inputs"]["value"], graph["15"]["inputs"]["value"], graph["9"]["inputs"]["noise_seed"]) == (768, 1344, 5)
+
+
+def test_klein_with_one_picture_runs_the_reference_graph_with_an_edit_style_prompt():
+    graph = _submit(reference_image=b"a")
+    assert graph["20"]["inputs"]["image"] == "ref_a.png"
+    assert graph["4"]["inputs"]["text"].endswith("Show a new moment: the dad whistles") and "the reference picture." in graph["4"]["inputs"]["text"]
+    assert graph["10"]["inputs"]["positive"] == ["23", 0]
+
+
+def test_klein_chains_up_to_four_pictures_onto_the_guider():
+    graph = _submit(reference_images=[b"a", b"b", b"c"])
+    loads = [n["inputs"]["image"] for n in graph.values() if n["class_type"] == "LoadImage"]
+    assert sorted(loads) == ["ref_a.png", "ref_b.png", "ref_c.png"]
+    assert "the reference pictures." in graph["4"]["inputs"]["text"]
+    pos = graph["10"]["inputs"]["positive"][0]  # walk the positive chain back to the text: three reference latents
+    hops = 0
+    while graph[pos]["class_type"] == "ReferenceLatent":
+        pos, hops = graph[pos]["inputs"]["conditioning"][0], hops + 1
+    assert (hops, graph[pos]["class_type"]) == (3, "CLIPTextEncode")
+
+
+def test_klein_refuses_a_fifth_picture_before_any_gpu_time_is_spent():
+    with pytest.raises(ComfyImageGenerationError, match="at most 4"):
+        ArtEngine(client=_Client(), registry=_Registry()).generate("x", width=768, height=1344, reference_images=[b"1", b"2", b"3", b"4", b"5"])

@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field, model_validator
 from sqlalchemy.orm import Session
 
 from engine.comfyui import ComfyUIClient, ComfyUIError, ComfyWorkflowRegistry, WorkflowRegistryError
-from engine.comfyui.art import ART_WORKFLOW_ID, EDIT_WORKFLOW_ID, IMAGE_WORKFLOW_IDS, ComfyImageGenerationError
+from engine.comfyui.art import ART_WORKFLOW_ID, EDIT_WORKFLOW_ID, IMAGE_WORKFLOW_IDS, REFINE_RETIRED, ComfyImageGenerationError
 from engine.comfyui.service import (
     H3_CLIP_JOB_TYPE, INPAINT_WORKFLOW_ID, edit_image_operation, generate_clip_operation, generate_image_operation,
     inpaint_image_operation, save_pose_reference, save_project_image,
@@ -118,8 +118,8 @@ def submit_comfyui_image_job(project_id: str, request: ComfyImageRequest, db: Se
     try:
         if request.workflow_id not in IMAGE_WORKFLOW_IDS:
             raise WorkflowRegistryError(f"Image workflows are {IMAGE_WORKFLOW_IDS}; got {request.workflow_id!r}")
-        if request.refine and request.workflow_id != ART_WORKFLOW_ID:
-            raise WorkflowRegistryError(f"refine only runs on {ART_WORKFLOW_ID!r}")
+        if request.refine:
+            raise WorkflowRegistryError(REFINE_RETIRED)
         registry = ComfyWorkflowRegistry()
         metadata = registry.metadata(request.workflow_id)
         registry.load(request.workflow_id)

@@ -435,7 +435,7 @@
   },
   {
     "id": "qwen_image_21",
-    "purpose": "text_to_image",
+    "purpose": "retired_text_to_image",
     "filename": "qwen_image_21.api.json",
     "sha256": "fe6ed091d252a15e98caa5f7035f6b78e1cbced8700300a06eb06a7bb7803a54",
     "requires_gpu": true,
@@ -1772,7 +1772,7 @@
   },
   {
     "id": "flux2_klein_4b",
-    "purpose": "image_edit",
+    "purpose": "text_to_image",
     "filename": "flux2_klein_4b.api.json",
     "sha256": "14e7de83fb64785364ff30d371fd19132b4232d16b0a1925f375f99be0b4e088",
     "requires_gpu": true,

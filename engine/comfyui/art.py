@@ -1,9 +1,10 @@
 """The one image-generation engine of PanelFlow Studio.
 
 Every feature that needs a picture (Original Stories, ChronoFlow, the Comfy image screen, YouTube thumbnails, autopilot) calls
-`ArtEngine.generate`, which runs the single approved text-to-image workflow `qwen_image_21` (Qwen Image 2.1 Turbo). There is no
-second text-to-image workflow: do not add one, extend this one. The graph itself lives in `workflows/qwen_image_21.api.json` and is
-registered (checksum, models, patch slots) in `workflow_registry.json`.
+`ArtEngine.generate`, which runs the single approved text-to-image workflow `flux2_klein_4b` (FLUX.2 klein 4B, Apache-2.0; with reference
+pictures it runs `flux2_klein_4b_ref`). There is no second text-to-image workflow: do not add one, extend this one. The graphs live in
+`workflows/flux2_klein_4b*.api.json` and are registered (checksum, models, patch slots) in `workflow_registry.json`. Qwen Image 2.1 was the art
+model until 2026-11-16 and was retired because its licence is non-commercial.
 
 `ArtEngine.run` is the shared submit -> poll -> download step, also used by the image *edit* tools (inpaint, ControlNet, matting).
 The pure helpers below (`_patch_workflow`, `_history_images`, `_validate_output_dimensions`) live here so that neither this module
@@ -24,19 +25,42 @@ from PIL import Image
 
 from engine.comfyui import ComfyUIClient, ComfyWorkflowRegistry
 
-ART_WORKFLOW_ID = "qwen_image_21"
+ART_WORKFLOW_ID = "flux2_klein_4b"  # FLUX.2 klein 4B, Apache-2.0: the one text-to-image model. With reference pictures generate() runs ART_REF_WORKFLOW_ID.
+ART_REF_WORKFLOW_ID = "flux2_klein_4b_ref"
+# Qwen Image 2.1 Turbo is under the non-commercial Qwen Research Licence, so it stopped being the art model on 2026-11-16. Its id survives only so the
+# opt-in refine / inpaint code that was built on its weights can say clearly that it is gone; it is not an image workflow any more.
+LEGACY_QWEN_WORKFLOW_ID = "qwen_image_21"
 EDIT_WORKFLOW_ID = "minimax_h3_image_edit"  # MiniMax-H3-Image: edit an existing picture from a written instruction
-# What an image job may run. Qwen is the default everywhere; the H3-Image graph with no picture bound is text to image
+# What an image job may run. klein is the default everywhere; the H3-Image graph with no picture bound is text to image
 # (the same registered graph as the edit, not a second text_to_image entry), chosen per job by its caller.
-OPEN_ART_WORKFLOW_ID = "flux2_klein_4b"  # FLUX.2 klein 4B (Apache-2.0): the licence-clean replacement being proven for Qwen; text to image only, no picture slots
-OPEN_ART_REF_WORKFLOW_ID = "flux2_klein_4b_ref"  # the same model with one reference picture; generate() switches to it when a picture is given
-IMAGE_WORKFLOW_IDS = (ART_WORKFLOW_ID, EDIT_WORKFLOW_ID, OPEN_ART_WORKFLOW_ID)
+IMAGE_WORKFLOW_IDS = (ART_WORKFLOW_ID, EDIT_WORKFLOW_ID)
+REFINE_RETIRED = ("Auto-refine was built on Qwen Image 2.1, which is retired (non-commercial licence); turn it off. "
+                  "It stays off until the review -> repair loop is rebuilt on FLUX.2 klein.")
+KLEIN_MAX_REFERENCES = 4  # BFL: klein takes up to four reference pictures
 
 
-def _klein_reference_prompt(prompt: str) -> str:
+def _klein_reference_prompt(prompt: str, n: int = 1) -> str:
     """klein copies the reference unless told what to keep and what to change (measured 2026-11-16): state both."""
-    return ("Keep exactly the same characters (same faces, hair and clothes), the same art style and the same setting as in the reference picture. "
+    which = "the reference picture" if n == 1 else "the reference pictures"
+    return (f"Keep exactly the same characters (same faces, hair and clothes), the same art style and the same setting as in {which}. "
             f"Show a new moment: {prompt}")
+
+
+def _add_klein_references(graph: dict[str, Any], names: list[str]) -> None:
+    """Chain further reference pictures (2nd, 3rd, 4th) onto the registered one-reference graph: LoadImage -> scale -> VAEEncode -> ReferenceLatent
+    on the positive and the negative conditioning, then point the guider at the last link."""
+    guider = graph["10"]["inputs"]
+    for k, name in enumerate(names, start=2):
+        base = 30 + 10 * k
+        load, scale, enc, pos, neg = (str(base + i) for i in range(5))
+        graph[load] = {"class_type": "LoadImage", "inputs": {"image": name}}
+        graph[scale] = {"class_type": "ImageScaleToTotalPixels", "inputs": {"image": [load, 0], "upscale_method": "lanczos", "megapixels": 1.05, "resolution_steps": 16}}
+        graph[enc] = {"class_type": "VAEEncode", "inputs": {"pixels": [scale, 0], "vae": ["3", 0]}}
+        graph[pos] = {"class_type": "ReferenceLatent", "inputs": {"conditioning": guider["positive"], "latent": [enc, 0]}}
+        graph[neg] = {"class_type": "ReferenceLatent", "inputs": {"conditioning": guider["negative"], "latent": [enc, 0]}}
+        guider["positive"], guider["negative"] = [pos, 0], [neg, 0]
+
+
 logger = logging.getLogger(__name__)
 POLL_SECONDS = 1.5
 
@@ -313,7 +337,7 @@ class ArtEngine:
 
     def accepts_reference(self, workflow_id: str) -> bool:
         """True when `generate` can bind a reference picture for this image workflow (klein does so through its reference variant)."""
-        return workflow_id == OPEN_ART_WORKFLOW_ID or "reference_image" in self.registry.metadata(workflow_id)["patch_slots"]
+        return workflow_id == ART_WORKFLOW_ID or "reference_image" in self.registry.metadata(workflow_id)["patch_slots"]
 
     def require_ready(self, workflow_id: str = ART_WORKFLOW_ID) -> None:
         if workflow_id in self._ready:
@@ -410,8 +434,14 @@ class ArtEngine:
     ) -> ArtImage:
         if workflow_id not in IMAGE_WORKFLOW_IDS:
             raise ComfyImageGenerationError(f"Image workflows are {IMAGE_WORKFLOW_IDS}; got {workflow_id!r}")
-        if workflow_id == OPEN_ART_WORKFLOW_ID and (reference_image is not None or reference_images is not None):
-            workflow_id, prompt = OPEN_ART_REF_WORKFLOW_ID, _klein_reference_prompt(prompt)
+        klein_extra: list[Path | str | bytes] = []  # klein: the 2nd..4th reference pictures, chained onto the registered one-reference graph
+        if workflow_id == ART_WORKFLOW_ID:
+            given = ([reference_image] if reference_image is not None else []) + list(reference_images or [])
+            if len(given) > KLEIN_MAX_REFERENCES:
+                raise ComfyImageGenerationError(f"{workflow_id} takes at most {KLEIN_MAX_REFERENCES} reference pictures (got {len(given)})")
+            if given:
+                workflow_id, prompt = ART_REF_WORKFLOW_ID, _klein_reference_prompt(prompt, len(given))
+                reference_image, reference_images, klein_extra = given[0], None, given[1:]
         self.require_ready(workflow_id)
         workflow, workflow_sha256 = self.registry.load(workflow_id)
         metadata = self.registry.metadata(workflow_id)
@@ -444,6 +474,8 @@ class ArtEngine:
             reference_image=ref_image_name,
             reference_images=ref_image_names,
         )
+        if klein_extra:
+            _add_klein_references(patched, [self._resolve_reference(item) for item in klein_extra])
         if progress:
             progress(0.05, f"Verified workflow {workflow_id}")
         raw, prompt_id, ref = self.run(patched, timeout=timeout, is_cancelled=is_cancelled, progress=progress, client_id=client_id)

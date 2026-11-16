@@ -21,6 +21,7 @@ import pytest
 from engine.comfyui import art as art_mod
 from engine.comfyui.art import (
     ART_WORKFLOW_ID,
+    LEGACY_QWEN_WORKFLOW_ID,
     ArtEngine,
     ComfyImageGenerationError,
     _patch_workflow,
@@ -96,8 +97,8 @@ class MockClient(ComfyUIClient):
 def test_qwen_image_21_none_reference_image_succeeds_and_cleans_node4():
     """Verify that qwen_image_21 with reference_image=None cleans images.image_1 from node 4."""
     reg = ComfyWorkflowRegistry()
-    wf, _ = reg.load(ART_WORKFLOW_ID)
-    meta = reg.metadata(ART_WORKFLOW_ID)
+    wf, _ = reg.load(LEGACY_QWEN_WORKFLOW_ID)
+    meta = reg.metadata(LEGACY_QWEN_WORKFLOW_ID)
 
     # Base workflow node 4 contains 'images.image_1': None
     assert "images.image_1" in wf["4"]["inputs"]
@@ -126,8 +127,8 @@ def test_qwen_image_21_none_reference_image_succeeds_and_cleans_node4():
 def test_qwen_image_21_supplied_reference_image_injects_load_image_node():
     """Verify that qwen_image_21 with reference_image string injects LoadImage node 13."""
     reg = ComfyWorkflowRegistry()
-    wf, _ = reg.load(ART_WORKFLOW_ID)
-    meta = reg.metadata(ART_WORKFLOW_ID)
+    wf, _ = reg.load(LEGACY_QWEN_WORKFLOW_ID)
+    meta = reg.metadata(LEGACY_QWEN_WORKFLOW_ID)
 
     patched = _patch_workflow(
         wf,
@@ -166,9 +167,8 @@ def test_art_engine_generate_with_reference_image_uploads_file_and_bytes(tmp_pat
     img1 = engine.generate("portrait 1", reference_image=ref_file)
     assert "char_turnaround.png" in client.uploaded_files
     wf1 = client.submitted_workflows[-1]
-    assert "13" in wf1
-    assert wf1["13"]["inputs"]["image"] == "char_turnaround.png"
-    assert wf1["4"]["inputs"]["images.image_1"] == ["13", 0]
+    assert wf1["20"]["inputs"]["image"] == "char_turnaround.png"  # klein's reference graph: LoadImage -> scale -> VAEEncode -> ReferenceLatent
+    assert wf1["10"]["inputs"]["positive"] == ["23", 0]
 
     # 2. Bytes input
     raw_bytes = _make_dummy_png(1536, 768)
@@ -176,21 +176,20 @@ def test_art_engine_generate_with_reference_image_uploads_file_and_bytes(tmp_pat
     assert len(client.uploaded_bytes_list) == 1
     uploaded_name = client.uploaded_bytes_list[0]
     wf2 = client.submitted_workflows[-1]
-    assert wf2["13"]["inputs"]["image"] == uploaded_name
-    assert wf2["4"]["inputs"]["images.image_1"] == ["13", 0]
+    assert wf2["20"]["inputs"]["image"] == uploaded_name
+    assert wf2["10"]["inputs"]["positive"] == ["23", 0]
 
     # 3. None reference image
     img3 = engine.generate("portrait 3", reference_image=None)
     wf3 = client.submitted_workflows[-1]
-    assert "13" not in wf3
-    assert "images.image_1" not in wf3["4"]["inputs"]
+    assert "20" not in wf3 and wf3["10"]["inputs"]["positive"] == ["4", 0]  # no picture: the plain text-to-image graph
 
 
 def test_qwen_image_21_node_id_collision_increments_dynamically():
     """Verify that if node '13' and '14' already exist, LoadImage gets the next free ID ('15')."""
     reg = ComfyWorkflowRegistry()
-    wf, _ = reg.load(ART_WORKFLOW_ID)
-    meta = reg.metadata(ART_WORKFLOW_ID)
+    wf, _ = reg.load(LEGACY_QWEN_WORKFLOW_ID)
+    meta = reg.metadata(LEGACY_QWEN_WORKFLOW_ID)
 
     # Pre-occupy nodes 13 and 14
     wf_collision = deepcopy(wf)
@@ -223,8 +222,8 @@ def test_qwen_image_21_node_id_collision_increments_dynamically():
 def test_qwen_image_21_direct_wiring_tuple_or_list():
     """Verify that passing [node_id, output_idx] directly binds without injecting LoadImage."""
     reg = ComfyWorkflowRegistry()
-    wf, _ = reg.load(ART_WORKFLOW_ID)
-    meta = reg.metadata(ART_WORKFLOW_ID)
+    wf, _ = reg.load(LEGACY_QWEN_WORKFLOW_ID)
+    meta = reg.metadata(LEGACY_QWEN_WORKFLOW_ID)
 
     patched = _patch_workflow(
         wf,
@@ -470,8 +469,8 @@ def test_adversarial_workflow_without_reference_image_slot_rejects_unwanted_refe
 def test_adversarial_qwen_workflow_corrupted_inputs_handled_safely():
     """Verify that when reference_image=None, if node 4 inputs is missing or not a dict, it does not crash unhandled."""
     reg = ComfyWorkflowRegistry()
-    wf, _ = reg.load(ART_WORKFLOW_ID)
-    meta = reg.metadata(ART_WORKFLOW_ID)
+    wf, _ = reg.load(LEGACY_QWEN_WORKFLOW_ID)
+    meta = reg.metadata(LEGACY_QWEN_WORKFLOW_ID)
 
     # 1. Corrupt node 4 inputs to None
     wf_corrupt = deepcopy(wf)
@@ -532,8 +531,8 @@ def test_adversarial_art_engine_generate_invalid_types():
 def test_adversarial_empty_string_reference_image_behavior():
     """Document and verify behavior when reference_image is empty string ''."""
     reg = ComfyWorkflowRegistry()
-    wf, _ = reg.load(ART_WORKFLOW_ID)
-    meta = reg.metadata(ART_WORKFLOW_ID)
+    wf, _ = reg.load(LEGACY_QWEN_WORKFLOW_ID)
+    meta = reg.metadata(LEGACY_QWEN_WORKFLOW_ID)
 
     # In Python, '' is not None.
     # When passed to _patch_workflow, it is treated as a supplied string and injects LoadImage with image=""
@@ -633,11 +632,11 @@ def test_adversarial_dual_reference_workflows_partial_omission():
 
 
 def test_single_art_workflow_invariant_strictly_enforced():
-    """Verify that qwen_image_21 is the sole text_to_image workflow across the entire registry."""
+    """Verify that flux2_klein_4b is the sole text_to_image workflow across the entire registry."""
     with open("engine/comfyui/workflow_registry.json", "r", encoding="utf-8") as f:
         registry_data = json.load(f)
     workflows = registry_data if isinstance(registry_data, list) else registry_data.get("workflows", [])
     t2i = [w["id"] for w in workflows if isinstance(w, dict) and w.get("purpose") == "text_to_image"]
     assert len(t2i) == 1, f"Found {len(t2i)} text_to_image workflows: {t2i}"
-    assert t2i[0] == "qwen_image_21", f"Expected qwen_image_21, found: {t2i[0]}"
+    assert t2i[0] == "flux2_klein_4b", f"Expected flux2_klein_4b, found: {t2i[0]}"
 

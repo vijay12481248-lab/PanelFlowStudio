@@ -42,7 +42,7 @@ def test_registry_entry_matches_the_file_and_is_not_a_second_text_to_image_workf
     assert hashlib.sha256((WF_DIR / "workflows" / ENTRY["filename"]).read_bytes()).hexdigest() == ENTRY["sha256"]
     assert ENTRY["purpose"] == "inpaint"
     assert ENTRY["model_files"] == next(e for e in json.loads((WF_DIR / "workflow_registry.json").read_text(encoding="utf-8"))
-                                        if e["id"] == comfy_art.ART_WORKFLOW_ID)["model_files"]  # the art model's own files: nothing new to download
+                                        if e["id"] == comfy_art.LEGACY_QWEN_WORKFLOW_ID)["model_files"]  # the retired Qwen art model's own files: nothing new to download
     assert {n["class_type"] for n in GRAPH.values()} <= set(ENTRY["required_nodes"])
 
 

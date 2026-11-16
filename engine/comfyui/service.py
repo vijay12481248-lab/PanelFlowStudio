@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from engine.comfyui import ComfyUIClient, ComfyUIError, ComfyWorkflowRegistry, WorkflowRegistryError
 from engine.comfyui.art import (  # noqa: F401  (re-exported: callers and tests import these names from here)
     ART_WORKFLOW_ID,
+    REFINE_RETIRED,
     EDIT_WORKFLOW_ID,
     IMAGE_WORKFLOW_IDS,
     ArtEngine,
@@ -100,8 +101,8 @@ def generate_image_operation(
         raise ComfyImageGenerationError("Project not found")
     if workflow_id not in IMAGE_WORKFLOW_IDS:
         raise ComfyImageGenerationError(f"Image workflows are {IMAGE_WORKFLOW_IDS}; got {workflow_id!r}")
-    if refine and workflow_id != ART_WORKFLOW_ID:
-        raise ComfyImageGenerationError(f"refine only runs on {ART_WORKFLOW_ID!r}")
+    if refine:
+        raise ComfyImageGenerationError(REFINE_RETIRED)
     workspace = Path(str(project.workspace_path))
     output_dir = resolve_contained_path(workspace, Path("generated") / "comfyui")
     output_dir.mkdir(parents=True, exist_ok=True)
