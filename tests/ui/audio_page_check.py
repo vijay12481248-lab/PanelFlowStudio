@@ -4,7 +4,7 @@ Start the engine from the worktree with a throwaway data folder, then run:
 
     set PANELFLOW_APP_DATA=<tmp> PANELFLOW_ALLOW_INSECURE_LOCAL_API=1 ...
     python -m uvicorn engine.api.app:app --port 8767
-    python tests/ui/audio_page_check.py <task> [shots_dir]      # task: 4 ... 11 | all
+    python tests/ui/audio_page_check.py <task> [shots_dir]      # task: 4 ... 12 | all
 
 Each check drives the real page, asserts, and saves a screenshot you should open and look at.
 Check 11 imports a project and deletes its files afterwards; there is no API to delete the project record, so run 11 last (or on a fresh data folder).
@@ -498,7 +498,7 @@ def check_10(tmp):
         box = lambda sel: s.ev("sel => { const r = document.querySelector(sel).getBoundingClientRect(); return [r.x, r.y, r.width, r.height]; }", sel)
         lib, ed, side = box(".se-lib"), box(".se-editor"), box(".se-side")
         assert lib[0] < ed[0] < side[0] and ed[2] > 700 and box("#seWave")[3] > 200, (lib, ed, side, box("#seWave"))
-        assert [x.strip() for x in s.ev("[...document.querySelectorAll('.se-new button')].map(b => b.innerText)")] == ["Speak text", "Make music", "Find an effect", "Import a file", "Record"]
+        assert [x.strip() for x in s.ev("[...document.querySelectorAll('.se-new button')].map(b => b.innerText)")] == ["Speak text", "Speak a script", "Make music", "Find an effect", "Import a file", "Record"]
         s.shot("task10_empty")
         n0 = s.ev("SoundEditor.state.sounds.length")
 
@@ -702,7 +702,56 @@ def check_11(tmp):
     print("task 11 OK")
 
 
-CHECKS = {"4": check_4, "5": check_5, "6": check_6, "7": check_7, "8": check_8, "9": check_9, "10": check_10, "11": check_11}
+def check_12(tmp):
+    """Speak a script in the Audio Studio, place it one line per picture cut, then update a placed line after editing it."""
+    out_dir = Path(r"E:\VIJAY SEKAR\PanelFlow Studio\output\chronoflow")
+    video = make_video(tmp / "script_pic.mp4")   # 8 s, cuts at 2/4/6
+    job = api("POST", "/api/chronoflow/library/import", {"paths": [str(video)], "title": "script narration check"})["job_id"]
+    made = list(out_dir.glob(f"{job}_*"))
+    try:
+        with sync_playwright() as pw:
+            s = Session(pw, tab=True)
+            s.ev("j => { switchResolvePage('edit'); onSelectProjectJob(j); return 1; }", job)
+            s.page.wait_for_function("j => NLE.ui.jobId === j && NLE.tl.clips.length === 1", arg=job, timeout=30000)
+            for t in (2, 4, 6):   # four pictures: the script goes one line per picture
+                s.ev(f"NLE.seek({t})"); s.page.click("[data-t=split]")
+            s.page.wait_for_function("NLE.tl.clips.length === 4", timeout=10000)
+            s.page.evaluate("switchTab('audio')")
+            s.page.wait_for_selector(".se-new button[data-n=script]", timeout=20000)
+            s.page.click(".se-new button[data-n=script]")
+            s.page.fill("#seScriptText", "The gate opened at dawn.\n\nNobody was waiting.\n\nShe walked through anyway.")
+            assert "3 line(s)" in s.ev("document.getElementById('seScriptEst').textContent")
+            s.page.select_option("#seScriptVoice", "kokoro:af_heart")
+            before = s.ev("SoundEditor.state.sounds.filter(x => x.name.startsWith('Line 0')).length")
+            s.page.click("#seMakeScript")
+            s.page.wait_for_function("document.getElementById('seScriptPlace') && !document.getElementById('seScriptPlace').hidden", timeout=300000)
+            lines = s.ev("SoundEditor.state.sounds.filter(x => x.name.startsWith('Line 0')).length")
+            assert lines - before == 3, (before, lines)
+            s.page.click("#seScriptCut")
+            s.page.wait_for_function("NLE.tl.audio.length === 3", timeout=10000)
+            items = s.ev("NLE.tl.audio.map(a => [a.track, a.start, a.label.slice(0, 7)])")
+            assert items == [["voice", 0, "Line 01"], ["voice", 2, "Line 02"], ["voice", 4, "Line 03"]], items
+            s.shot("task12_script_placed")
+
+            print("step: edit a line, then update the placed one", flush=True)
+            first = s.ev("NLE.tl.audio[0].sound")
+            api("POST", f"/api/audio/library/sounds/{first}/edit", {"op": "gain", "params": {"db": -6}})
+            s.page.click(".nle-lane[data-lane=voice] .nle-clip.snd")
+            s.page.wait_for_selector("#inspSNew:not([hidden])", timeout=10000)
+            s.page.click("#inspSNew")
+            s.page.wait_for_function("NLE.tl.audio[0].version === 2", timeout=10000)
+            s.page.wait_for_function("document.getElementById('inspSNew') === null || document.getElementById('inspSNew').hidden", timeout=10000)
+            s.finish()
+    finally:
+        for f in made:
+            try:
+                f.unlink()
+            except OSError:
+                pass
+    print("task 12 OK")
+
+
+CHECKS = {"4": check_4, "5": check_5, "6": check_6, "7": check_7, "8": check_8, "9": check_9, "10": check_10, "11": check_11, "12": check_12}
 
 if __name__ == "__main__":
     which = sys.argv[1] if len(sys.argv) > 1 else "all"

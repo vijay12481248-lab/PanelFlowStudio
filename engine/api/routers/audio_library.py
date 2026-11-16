@@ -64,6 +64,14 @@ class VoiceBody(BaseModel):
     name: str = ""
 
 
+class ScriptBody(BaseModel):
+    text: str
+    voice: str = ""
+    provider: str = "kokoro"
+    speed: float = 1.0
+    language: str = "English"
+
+
 class MusicBody(BaseModel):
     description: str
     seconds: float = 30.0
@@ -143,6 +151,16 @@ async def new_voice(body: VoiceBody, store: SoundStore = Depends(get_store), mak
     def work():
         with _errors():
             return _out(make.make_voice(store, body.text, body.voice, body.provider, body.speed, body.language, body.name, narration=makers["narration"]))
+    return await run_in_threadpool(work)
+
+
+@router.post("/sounds/script")
+async def new_script(body: ScriptBody, store: SoundStore = Depends(get_store), makers=Depends(get_makers)) -> dict[str, Any]:
+    music_source.bind_loop(asyncio.get_running_loop())
+
+    def work():
+        with _errors():
+            return {"sounds": [_out(s) for s in make.make_script(store, body.text, body.voice, body.provider, body.speed, body.language, narration=makers["narration"])]}
     return await run_in_threadpool(work)
 
 

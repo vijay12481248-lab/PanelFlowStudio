@@ -275,22 +275,54 @@
   }
 
   // ---------------------------------------------------------------- new sound
-  const NEW = [{ id: 'voice', label: 'Speak text' }, { id: 'music', label: 'Make music' }, { id: 'effect', label: 'Find an effect' }, { id: 'import', label: 'Import a file' }, { id: 'record', label: 'Record' }];
+  const NEW = [{ id: 'voice', label: 'Speak text' }, { id: 'script', label: 'Speak a script' }, { id: 'music', label: 'Make music' }, { id: 'effect', label: 'Find an effect' }, { id: 'import', label: 'Import a file' }, { id: 'record', label: 'Record' }];
   function showNew(id) { S.panel = id; paintTools(); paintHeadBtns(); }
   function paintNew() {
     const T = el.tools, k = S.panel;
     el.toolsHead.textContent = NEW.find((n) => n.id === k).label;
     const back = h('button', { type: 'button', class: 'dl-btn se-back', onclick: () => { S.panel = 'tools'; stopRec(); paintTools(); paintHeadBtns(); } }, 'Back to tools');
-    const form = { voice: voiceForm, music: musicForm, effect: effectForm, import: importForm, record: recordForm }[k]();
+    const form = { voice: voiceForm, script: scriptForm, music: musicForm, effect: effectForm, import: importForm, record: recordForm }[k]();
     T.replaceChildren(h('div', { class: 'se-newform' }, form, back));
   }
   const field = (label, input, hint) => h('label', { class: 'dl-field' }, h('span', { class: 'dl-lab' }, label), input, hint ? h('span', { class: 'dl-hint' }, hint) : null);
   async function made(s, msg) { if (!s) return; S.filter = 'all'; await loadSounds(); await openSound(s.id); say(msg || `Made "${s.name}".`); }
+  const voiceSelect = (id) => h('select', { class: 'dl-in', id },
+    h('optgroup', { label: 'Kokoro (fast, on the CPU)' }, ...S.voices.kokoro.map((v) => h('option', { value: `kokoro:${v}` }, v))),
+    S.voices.qwen3_tts.length ? h('optgroup', { label: 'Qwen3-TTS (cloned voices, uses the GPU)' }, ...S.voices.qwen3_tts.map((v) => h('option', { value: `qwen3_tts:${v}` }, v))) : null);
+  // A pasted script: one voice sound per paragraph (one paragraph -> per sentence), then placed on A2 Voice back to back or one line per picture cut.
+  function scriptForm() {
+    const text = h('textarea', { class: 'dl-in se-text', id: 'seScriptText', rows: 9, placeholder: 'Paste the narration. A blank line starts a new line of speech; a single paragraph is split into sentences.' });
+    const voice = voiceSelect('seScriptVoice');
+    const speed = h('input', { type: 'range', min: 0.6, max: 1.5, step: 0.05, value: 1, id: 'seScriptSpeed' }), sv = h('output', null, '1.00x');
+    speed.oninput = () => { sv.textContent = `${(+speed.value).toFixed(2)}x`; count(); };
+    const est = h('span', { class: 'dl-hint', id: 'seScriptEst' }, 'No lines yet');
+    const count = () => {
+      const lines = M().splitScript(text.value);
+      est.textContent = lines.length ? `${lines.length} line(s), about ${lines.reduce((t, l) => t + M().estimateSeconds(l, +speed.value), 0).toFixed(1)} s` : 'No lines yet';
+    };
+    text.oninput = count;
+    const placeRow = h('div', { class: 'se-footrow', id: 'seScriptPlace', hidden: true });
+    const place = (mode) => {
+      if (!window.NLE || typeof window.NLE.placeNarration !== 'function' || typeof window.switchResolvePage !== 'function') return say('The Video Studio timeline is not available here.', true);
+      const r = window.NLE.placeNarration(S.script, { mode });
+      if (r.error) return say(r.error, true);
+      window.switchResolvePage('edit');
+    };
+    const go = h('button', { type: 'button', class: 'dl-btn accent', id: 'seMakeScript', onclick: async () => {
+      const [provider, v] = voice.value.split(':');
+      const r = await guard('Speaking the script', () => call('POST', '/sounds/script', { text: text.value, voice: v, provider, speed: +speed.value }));
+      if (!r) { loadSounds(); return; }
+      S.script = r.sounds; S.filter = 'all'; await loadSounds();   // stay on this form: the place buttons are here
+      say(`Made ${r.sounds.length} voice line(s). Place them on the timeline below.`);
+      placeRow.hidden = false;
+    } }, 'Speak all lines');
+    placeRow.append(h('button', { type: 'button', class: 'dl-btn', id: 'seScriptSeq', title: 'A2 Voice, back to back from the playhead', onclick: () => place('sequential') }, 'Place back to back'),
+      h('button', { type: 'button', class: 'dl-btn', id: 'seScriptCut', title: 'Line 1 at the start, each next line on the next picture cut', onclick: () => place('per_cut') }, 'Place one per picture cut'));
+    return h('div', { class: 'se-form' }, field('Script', text), est, field('Voice', voice), h('label', { class: 'se-param' }, h('span', null, 'Pace'), speed, sv), go, placeRow);
+  }
   function voiceForm() {
     const text = h('textarea', { class: 'dl-in se-text', id: 'seVoiceText', rows: 5, placeholder: 'The words to speak' });
-    const voice = h('select', { class: 'dl-in', id: 'seVoice' },
-      h('optgroup', { label: 'Kokoro (fast, on the CPU)' }, ...S.voices.kokoro.map((v) => h('option', { value: `kokoro:${v}` }, v))),
-      S.voices.qwen3_tts.length ? h('optgroup', { label: 'Qwen3-TTS (cloned voices, uses the GPU)' }, ...S.voices.qwen3_tts.map((v) => h('option', { value: `qwen3_tts:${v}` }, v))) : null);
+    const voice = voiceSelect('seVoice');
     const speed = h('input', { type: 'range', min: 0.6, max: 1.5, step: 0.05, value: 1, id: 'seSpeed' }), sv = h('output', null, '1.00x');
     speed.oninput = () => { sv.textContent = `${(+speed.value).toFixed(2)}x`; };
     const est = h('span', { class: 'dl-hint' }, 'About 0 s');
@@ -417,7 +449,7 @@
   function paintBusy() {
     el.root && el.root.classList.toggle('busy', !!S.busy);
     if (el.undo) { el.undo.disabled = el.redo.disabled = !S.sound || !!S.busy; }
-    if (el.tools) el.tools.querySelectorAll('.se-opbtns button, .se-quick button, #seMakeVoice, #seMakeMusic, #seFindFx').forEach((b) => { if (!b.closest('.se-op') || !b.closest('.se-op').querySelector('.se-scope.need')) b.disabled = !!S.busy; });
+    if (el.tools) el.tools.querySelectorAll('.se-opbtns button, .se-quick button, #seMakeVoice, #seMakeScript, #seMakeMusic, #seFindFx').forEach((b) => { if (!b.closest('.se-op') || !b.closest('.se-op').querySelector('.se-scope.need')) b.disabled = !!S.busy; });
   }
   function paintAll() {
     if (!el.root) return;

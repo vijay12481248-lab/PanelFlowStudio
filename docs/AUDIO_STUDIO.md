@@ -111,6 +111,12 @@ noise reduction on that line plus white noise at -34 dBFS needed the noise floor
 12 dB light / 40 dB strong), and the filter's 1200-sample delay is compensated; a timeline export with voice, music and effect put the voice at its second, trimmed the effect to
 its part, ducked the music under the voice and landed within 1.5 LU of -14. Checks: pytest 219 (audio library, studio, deliver), node 88, UI checks 4-11 against an isolated engine.
 
+Speak a script (2026-11-16): Audio Studio -> New sound -> "Speak a script". Paste text; each paragraph (or each sentence of a single paragraph) becomes a voice sound named
+"Line NN: ..." via `POST /api/audio/library/sounds/script` (`make.make_script`; a failing line stops the run and the error names it, earlier lines stay). Then "Place back to back"
+(A2 Voice from the playhead, real lengths + 0.4 s) or "Place one per picture cut" (line i on picture cut i of the timeline; extra lines follow the last). The status line says how
+many lines run into the next one. A placed sound whose library sound was edited since shows "Update to latest (vN)" in the inspector (resets the trim to the new take).
+Measured: 3 real Kokoro lines placed on a 4-picture timeline at 0 / 2 / 4 s, edit -> update to v2 (UI check 12). Not done: lane marker for out-of-date sounds, Qwen3 voice for scripts untested here.
+
 Not verified: listening to anything (only measurements and spectrograms), ACE-Step inside the editor (no ACE-Step server on the test engine), Qwen3-TTS inside the editor, microphone
 recording with a real microphone (the browser path was not exercised headless), Web Audio timing against the picture beyond the meter moving, the Tauri window, drag from the
 Media Pool in a real mouse session (Playwright's drag was used). Known limits: sounds on the timeline only play at 1x (shuttle speeds are silent), the timeline stores a sound's

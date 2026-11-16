@@ -290,6 +290,29 @@
     a.fadeIn = Math.min(a.fadeIn, (a.out - a.in) / 2);
     return a;
   }
+  /** Start times for spoken lines of known lengths. sequential: back to back from `start` with `gap`. per_cut: line i starts on picture cut i (cuts after `start`),
+   *  and lines beyond the cuts follow the last one. `over` = seconds a line runs into the next one (0 when it fits). */
+  function placeLines(durs, o) {
+    const start = +o.start || 0, gap = o.gap == null ? 0.4 : +o.gap;
+    const anchors = o.mode === 'per_cut' ? [start].concat((o.cuts || []).filter((c) => c > start).sort((a, b) => a - b)) : [start];
+    const out = []; let t = start;
+    durs.forEach((d, i) => {
+      if (o.mode === 'per_cut' && i < anchors.length) t = anchors[i];
+      out.push({ start: r6(t), over: 0 });
+      t = t + d + gap;
+    });
+    out.forEach((p, i) => { if (i + 1 < out.length) p.over = r6(Math.max(0, p.start + durs[i] - out[i + 1].start)); });
+    return out;
+  }
+  /** Point a timeline sound at a newer version of the same library sound (whole new take: trim reset, fades kept inside the new length). */
+  function useSoundVersion(tl, id, version, duration) {
+    const a = (tl.audio || []).find((x) => x.id === id);
+    if (!a) return null;
+    const d = Math.max(minDur(tl), +duration || a.srcDur);
+    a.version = version; a.srcDur = r6(d); a.in = 0; a.out = r6(d);
+    a.fadeIn = Math.min(a.fadeIn, d / 2); a.fadeOut = Math.min(a.fadeOut, d / 2);
+    return a;
+  }
   const removeSound = (tl, id) => { const n = (tl.audio || []).length; tl.audio = (tl.audio || []).filter((a) => a.id !== id); return tl.audio.length < n; };
   /** Split the sound under t into two items; returns the new right-hand item or null. */
   function splitSound(tl, id, t) {
@@ -374,7 +397,7 @@
   const api = {
     SPEED_MIN, SPEED_MAX, TRANSITIONS, DEFAULT_TRANS, overlapAt, setTransition, create, clipDur, minDur, frame, layout, total, locate, addClip, byId, splitAt, trimEdge, moveClip,
     removeClip, setSpeed, setVolume, duplicateClip, mergeClips, mergeOverlays, snapPoints, snap, neighbour, addOverlay, updateOverlay, removeOverlay,
-    addMarker, removeMarker, toTimecode, toEdl, createHistory, SOUND_TRACKS, addSound, updateSound, trimSoundStart, removeSound, splitSound, soundsAt, soundEnd,
+    addMarker, removeMarker, toTimecode, toEdl, createHistory, SOUND_TRACKS, addSound, updateSound, placeLines, useSoundVersion, trimSoundStart, removeSound, splitSound, soundsAt, soundEnd,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.NLEModel = api;
