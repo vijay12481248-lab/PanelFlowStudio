@@ -5,7 +5,7 @@ import pytest
 from PIL import Image
 
 from engine.comfyui import art as art_mod
-from engine.comfyui.art import ART_WORKFLOW_ID, EDIT_WORKFLOW_ID, ArtEngine, ArtTimeoutError, ComfyImageGenerationError
+from engine.comfyui.art import ART_WORKFLOW_ID, EDIT_WORKFLOW_ID, LEGACY_QWEN_WORKFLOW_ID, ArtEngine, ArtTimeoutError, ComfyImageGenerationError
 
 WORKFLOW = {
     "4": {"class_type": "TextEncodeQwenImage21", "inputs": {"prompt": "", "negative_prompt": "", "images.image_1": None}},
@@ -233,8 +233,8 @@ def test_generate_without_reference_image_leaves_graph_unconditioned():
 def test_real_qwen_image_21_registry_loads_and_validates_reference_image_slot():
     from engine.comfyui.registry import ComfyWorkflowRegistry
     reg = ComfyWorkflowRegistry()
-    wf, sha = reg.load(ART_WORKFLOW_ID)
-    meta = reg.metadata(ART_WORKFLOW_ID)
+    wf, sha = reg.load(LEGACY_QWEN_WORKFLOW_ID)
+    meta = reg.metadata(LEGACY_QWEN_WORKFLOW_ID)
     assert sha == meta["sha256"]
     assert "reference_image" in meta["patch_slots"]
     slot = meta["patch_slots"]["reference_image"]

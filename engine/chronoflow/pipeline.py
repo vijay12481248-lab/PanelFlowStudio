@@ -9,7 +9,7 @@ from pathlib import Path
 
 from urllib.parse import urlsplit
 
-from engine.comfyui.art import ART_WORKFLOW_ID, ArtEngine
+from engine.comfyui.art import ART_WORKFLOW_ID, REFINE_RETIRED, ArtEngine
 
 def _resolve_comfy_base_dir() -> Path:
     env_dir = os.environ.get("PANELFLOW_COMFYUI_DIR") or os.environ.get("COMFYUI_DIR")
@@ -357,8 +357,8 @@ class ChronoFlowPipeline:
         base64 data URL) bound to the art workflow's reference conditioning so generated faces follow the approved sheets.
         """
         resolved_refs = self._resolve_reference_inputs(ref_images) if ref_images else []
-        if refine and workflow_id != ART_WORKFLOW_ID:
-            raise ValueError("Auto-refine is built on Qwen Image; turn it off or pick Qwen Image 2.1 Turbo")
+        if refine:
+            raise ValueError(REFINE_RETIRED)
         if refine:  # opt-in: review -> plan -> repair/redraw; candidates are kept under output/chronoflow/refine
             from engine.original.refine import refine_art_image
 

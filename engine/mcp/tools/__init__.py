@@ -14,6 +14,7 @@ from engine.mcp.tools import (
     creative_agent_tools,
     audio_studio_tools,
     audio_library_tools,
+    reels_tools,
 )
 
 __all__ = [
@@ -30,4 +31,5 @@ __all__ = [
     "creative_agent_tools",
     "audio_studio_tools",
     "audio_library_tools",
+    "reels_tools",
 ]

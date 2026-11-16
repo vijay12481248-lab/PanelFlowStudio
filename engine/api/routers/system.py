@@ -31,6 +31,14 @@ def health_check():
     }
 
 
+@router.get("/readiness")
+def readiness_check():
+    """Run comprehensive production readiness and capability auditor."""
+    from engine.system.health import check_production_readiness
+    report = check_production_readiness()
+    return report.to_dict()
+
+
 @router.post("/restart", status_code=202)
 def restart_engine(request: Request, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     from engine.database.models import JobRecord, RenderJobRecord

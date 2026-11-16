@@ -339,7 +339,7 @@ def test_adversarial_single_text_to_image_purpose_invariant(repo_root: Path):
     entries = json.loads(reg_file.read_text(encoding="utf-8"))
 
     t2i = [e["id"] for e in entries if e.get("purpose") == "text_to_image"]
-    assert t2i == ["qwen_image_21"], f"Violation of AGENTS.md single text_to_image invariant: {t2i}"
+    assert t2i == ["flux2_klein_4b"], f"Violation of AGENTS.md single text_to_image invariant: {t2i}"
 
     wan = next(e for e in entries if e["id"] == "wan21_14b_i2v")
     assert wan["purpose"] == "image_to_video"

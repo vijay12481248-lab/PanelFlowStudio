@@ -33,7 +33,8 @@ export type AudioLicenseType =
   | "PanelFlow Built-in Royalty-Free"
   | "Creative Commons CC-BY 4.0"
   | "Public Domain (CC0)"
-  | "Custom Commercial License";
+  | "Custom Commercial License"
+  | "User-Supplied";
 
 export interface AudioLicenseMetadata {
   license_type: AudioLicenseType;

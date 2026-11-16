@@ -35,6 +35,7 @@ class Take(BaseModel):
     id: str
     path: str
     provenance: Provenance
+    label: str = ""
     onset_s: float = 0.0
     peak_s: float = 0.0
     duration_s: float = 0.0
@@ -63,6 +64,10 @@ class Cue(BaseModel):
     takes: list[Take] = Field(default_factory=list)
     chosen_take: str | None = None
     gain_db: float = 0.0
+    pan: float = 0.0  # -1.0 (left) to 1.0 (right)
+    pitch_semitones: float = 0.0  # -12.0 to 12.0 semitones
+    hpf_hz: float | None = None  # high-pass filter cutoff in Hz (e.g. 80.0)
+    lpf_hz: float | None = None  # low-pass filter cutoff in Hz (e.g. 6000.0)
     fade_in: float = 0.0
     fade_out: float = 0.0
     hints: dict = Field(default_factory=dict)  # optional music hints: bpm, key_scale; narration: language
@@ -83,8 +88,13 @@ class Track(BaseModel):
     role: Role
     gain_db: float = 0.0
     duck_under: str | None = None
-    pan: float = 0.0
+    ducking_depth_db: float | None = None  # e.g. -8.0 dB
+    ducking_attack_ms: int | None = None  # e.g. 20 ms
+    ducking_release_ms: int | None = None  # e.g. 300 ms
+    pan: float = 0.0  # -1.0 to 1.0
+    hpf_hz: float | None = None  # e.g. 80.0 Hz for dialogue low-cut
     mute: bool = False
+    solo: bool = False
 
 
 class SoundPlan(BaseModel):

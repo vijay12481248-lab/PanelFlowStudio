@@ -1,0 +1,616 @@
+[
+ {
+  "id": "klein/cross_legged/101",
+  "file": "klein_cross_legged_101.png",
+  "model": "flux2_klein_4b",
+  "prompt": "An anime style full color illustration with soft shading. A young woman with long hair sitting cross-legged on the floor, both hands resting on her knees, smiling. Full body visible from head to feet, plain light background, eye-level wide shot.",
+  "people": 1,
+  "expected": [
+   "extra_hands"
+  ],
+  "source": "agent-2026-11-16"
+ },
+ {
+  "id": "klein/cross_legged/102",
+  "file": "klein_cross_legged_102.png",
+  "model": "flux2_klein_4b",
+  "prompt": "An anime style full color illustration with soft shading. A young woman with long hair sitting cross-legged on the floor, both hands resting on her knees, smiling. Full body visible from head to feet, plain light background, eye-level wide shot.",
+  "people": 1,
+  "expected": [
+   "pose_missing|hands_on_knees"
+  ],
+  "source": "agent-2026-11-16"
+ },
+ {
+  "id": "klein/cross_legged/103",
+  "file": "klein_cross_legged_103.png",
+  "model": "flux2_klein_4b",
+  "prompt": "An anime style full color illustration with soft shading. A young woman with long hair sitting cross-legged on the floor, both hands resting on her knees, smiling. Full body visible from head to feet, plain light background, eye-level wide shot.",
+  "people": 1,
+  "expected": [
+   "extra_hands"
+  ],
+  "source": "agent-2026-11-16"
+ },
+ {
+  "id": "klein/cross_legged/104",
+  "file": "klein_cross_legged_104.png",
+  "model": "flux2_klein_4b",
+  "prompt": "An anime style full color illustration with soft shading. A young woman with long hair sitting cross-legged on the floor, both hands resting on her knees, smiling. Full body visible from head to feet, plain light background, eye-level wide shot.",
+  "people": 1,
+  "expected": [
+   "pose_missing|hands_on_knees"
+  ],
+  "source": "agent-2026-11-16"
+ },
+ {
+  "id": "klein/high_kick/101",
+  "file": "klein_high_kick_101.png",
+  "model": "flux2_klein_4b",
+  "prompt": "An anime style full color illustration with soft shading. A young man in a martial arts outfit performing a high side kick, standing on one leg with the other leg fully extended at head height, arms in a guard position, shouting. Full body visible from head to feet, plain light background, eye-level wide shot.",
+  "people": 1,
+  "expected": [],
+  "source": "agent-2026-11-16"
+ },
+ {
+  "id": "klein/high_kick/102",
+  "file": "klein_high_kick_102.png",
+  "model": "flux2_klein_4b",
+  "prompt": "An anime style full color illustration with soft shading. A young man in a martial arts outfit performing a high side kick, standing on one leg with the other leg fully extended at head height, arms in a guard position, shouting. Full body visible from head to feet, plain light background, eye-level wide shot.",
+  "people": 1,
+  "expected": [],
+  "source": "agent-2026-11-16"
+ },
+ {
+  "id": "klein/high_kick/103",
+  "file": "klein_high_kick_103.png",
+  "model": "flux2_klein_4b",
+  "prompt": "An anime style full color illustration with soft shading. A young man in a martial arts outfit performing a high side kick, standing on one leg with the other leg fully extended at head height, arms in a guard position, shouting. Full body visible from head to feet, plain light background, eye-level wide shot.",
+  "people": 1,
+  "expected": [],
+  "source": "agent-2026-11-16"
+ },
+ {
+  "id": "klein/high_kick/104",
+  "file": "klein_high_kick_104.png",
+  "model": "flux2_klein_4b",
+  "prompt": "An anime style full color illustration with soft shading. A young man in a martial arts outfit performing a high side kick, standing on one leg with the other leg fully extended at head height, arms in a guard position, shouting. Full body visible from head to feet, plain light background, eye-level wide shot.",
+  "people": 1,
+  "expected": [],
+  "source": "agent-2026-11-16"
+ },
+ {
+  "id": "klein/running/101",
+  "file": "klein_running_101.png",
+  "model": "flux2_klein_4b",
+  "prompt": "An anime style full color illustration with soft shading. A teenage girl with a ponytail running mid-stride, one leg far forward and one far back, arms swinging, hair flying, determined face. Full body visible from head to feet, plain light background, eye-level wide shot.",
+  "people": 1,
+  "expected": [],
+  "source": "agent-2026-11-16"
+ },
+ {
+  "id": "klein/running/102",
+  "file": "klein_running_102.png",
+  "model": "flux2_klein_4b",
+  "prompt": "An anime style full color illustration with soft shading. A teenage girl with a ponytail running mid-stride, one leg far forward and one far back, arms swinging, hair flying, determined face. Full body visible from head to feet, plain light background, eye-level wide shot.",
+  "people": 1,
+  "expected": [],
+  "source": "agent-2026-11-16"
+ },
+ {
+  "id": "klein/running/103",
+  "file": "klein_running_103.png",
+  "model": "flux2_klein_4b",
+  "prompt": "An anime style full color illustration with soft shading. A teenage girl with a ponytail running mid-stride, one leg far forward and one far back, arms swinging, hair flying, determined face. Full body visible from head to feet, plain light background, eye-level wide shot.",
+  "people": 1,
+  "expected": [],
+  "source": "agent-2026-11-16"
+ },
+ {
+  "id": "klein/running/104",
+  "file": "klein_running_104.png",
+  "model": "flux2_klein_4b",
+  "prompt": "An anime style full color illustration with soft shading. A teenage girl with a ponytail running mid-stride, one leg far forward and one far back, arms swinging, hair flying, determined face. Full body visible from head to feet, plain light background, eye-level wide shot.",
+  "people": 1,
+  "expected": [],
+  "source": "agent-2026-11-16"
+ },
+ {
+  "id": "klein/tie_shoe/101",
+  "file": "klein_tie_shoe_101.png",
+  "model": "flux2_klein_4b",
+  "prompt": "An anime style full color illustration with soft shading. A boy crouching on one knee and tying his shoelace with both hands, looking down at the shoe. Full body visible from head to feet, plain light background, eye-level wide shot.",
+  "people": 1,
+  "expected": [],
+  "source": "agent-2026-11-16"
+ },
+ {
+  "id": "klein/tie_shoe/102",
+  "file": "klein_tie_shoe_102.png",
+  "model": "flux2_klein_4b",
+  "prompt": "An anime style full color illustration with soft shading. A boy crouching on one knee and tying his shoelace with both hands, looking down at the shoe. Full body visible from head to feet, plain light background, eye-level wide shot.",
+  "people": 1,
+  "expected": [],
+  "source": "agent-2026-11-16"
+ },
+ {
+  "id": "klein/tie_shoe/103",
+  "file": "klein_tie_shoe_103.png",
+  "model": "flux2_klein_4b",
+  "prompt": "An anime style full color illustration with soft shading. A boy crouching on one knee and tying his shoelace with both hands, looking down at the shoe. Full body visible from head to feet, plain light background, eye-level wide shot.",
+  "people": 1,
+  "expected": [],
+  "source": "agent-2026-11-16"
+ },
+ {
+  "id": "klein/tie_shoe/104",
+  "file": "klein_tie_shoe_104.png",
+  "model": "flux2_klein_4b",
+  "prompt": "An anime style full color illustration with soft shading. A boy crouching on one knee and tying his shoelace with both hands, looking down at the shoe. Full body visible from head to feet, plain light background, eye-level wide shot.",
+  "people": 1,
+  "expected": [],
+  "source": "agent-2026-11-16"
+ },
+ {
+  "id": "klein/sword_overhead/101",
+  "file": "klein_sword_overhead_101.png",
+  "model": "flux2_klein_4b",
+  "prompt": "An anime style full color illustration with soft shading. A swordsman gripping a long sword with both hands raised high above his head, legs wide apart in a strong stance, shouting. Full body visible from head to feet, plain light background, eye-level wide shot.",
+  "people": 1,
+  "expected": [
+   "duplicate_object"
+  ],
+  "source": "agent-2026-11-16"
+ },
+ {
+  "id": "klein/sword_overhead/102",
+  "file": "klein_sword_overhead_102.png",
+  "model": "flux2_klein_4b",
+  "prompt": "An anime style full color illustration with soft shading. A swordsman gripping a long sword with both hands raised high above his head, legs wide apart in a strong stance, shouting. Full body visible from head to feet, plain light background, eye-level wide shot.",
+  "people": 1,
+  "expected": [
+   "pose_missing|two_hands"
+  ],
+  "source": "agent-2026-11-16"
+ },
+ {
+  "id": "klein/sword_overhead/103",
+  "file": "klein_sword_overhead_103.png",
+  "model": "flux2_klein_4b",
+  "prompt": "An anime style full color illustration with soft shading. A swordsman gripping a long sword with both hands raised high above his head, legs wide apart in a strong stance, shouting. Full body visible from head to feet, plain light background, eye-level wide shot.",
+  "people": 1,
+  "expected": [
+   "duplicate_object",
+   "pose_missing|two_hands"
+  ],
+  "source": "agent-2026-11-16"
+ },
+ {
+  "id": "klein/sword_overhead/104",
+  "file": "klein_sword_overhead_104.png",
+  "model": "flux2_klein_4b",
+  "prompt": "An anime style full color illustration with soft shading. A swordsman gripping a long sword with both hands raised high above his head, legs wide apart in a strong stance, shouting. Full body visible from head to feet, plain light background, eye-level wide shot.",
+  "people": 1,
+  "expected": [],
+  "source": "agent-2026-11-16"
+ },
+ {
+  "id": "klein/handshake/101",
+  "file": "klein_handshake_101.png",
+  "model": "flux2_klein_4b",
+  "prompt": "An anime style full color illustration with soft shading. Two men in suits shaking hands firmly, right hand clasped in right hand, both smiling, standing facing each other. Full body visible from head to feet, plain light background, eye-level wide shot.",
+  "people": 2,
+  "expected": [],
+  "source": "agent-2026-11-16"
+ },
+ {
+  "id": "klein/handshake/102",
+  "file": "klein_handshake_102.png",
+  "model": "flux2_klein_4b",
+  "prompt": "An anime style full color illustration with soft shading. Two men in suits shaking hands firmly, right hand clasped in right hand, both smiling, standing facing each other. Full body visible from head to feet, plain light background, eye-level wide shot.",
+  "people": 2,
+  "expected": [],
+  "source": "agent-2026-11-16"
+ },
+ {
+  "id": "klein/handshake/103",
+  "file": "klein_handshake_103.png",
+  "model": "flux2_klein_4b",
+  "prompt": "An anime style full color illustration with soft shading. Two men in suits shaking hands firmly, right hand clasped in right hand, both smiling, standing facing each other. Full body visible from head to feet, plain light background, eye-level wide shot.",
+  "people": 2,
+  "expected": [],
+  "source": "agent-2026-11-16"
+ },
+ {
+  "id": "klein/handshake/104",
+  "file": "klein_handshake_104.png",
+  "model": "flux2_klein_4b",
+  "prompt": "An anime style full color illustration with soft shading. Two men in suits shaking hands firmly, right hand clasped in right hand, both smiling, standing facing each other. Full body visible from head to feet, plain light background, eye-level wide shot.",
+  "people": 2,
+  "expected": [],
+  "source": "agent-2026-11-16"
+ },
+ {
+  "id": "klein/hug/101",
+  "file": "klein_hug_101.png",
+  "model": "flux2_klein_4b",
+  "prompt": "An anime style full color illustration with soft shading. Two friends hugging tightly, arms wrapped around each other's backs, one laughing and one crying with joy. Full body visible from head to feet, plain light background, eye-level wide shot.",
+  "people": 2,
+  "expected": null,
+  "source": "agent-2026-11-16"
+ },
+ {
+  "id": "klein/hug/102",
+  "file": "klein_hug_102.png",
+  "model": "flux2_klein_4b",
+  "prompt": "An anime style full color illustration with soft shading. Two friends hugging tightly, arms wrapped around each other's backs, one laughing and one crying with joy. Full body visible from head to feet, plain light background, eye-level wide shot.",
+  "people": 2,
+  "expected": null,
+  "source": "agent-2026-11-16"
+ },
+ {
+  "id": "klein/hug/103",
+  "file": "klein_hug_103.png",
+  "model": "flux2_klein_4b",
+  "prompt": "An anime style full color illustration with soft shading. Two friends hugging tightly, arms wrapped around each other's backs, one laughing and one crying with joy. Full body visible from head to feet, plain light background, eye-level wide shot.",
+  "people": 2,
+  "expected": null,
+  "source": "agent-2026-11-16"
+ },
+ {
+  "id": "klein/hug/104",
+  "file": "klein_hug_104.png",
+  "model": "flux2_klein_4b",
+  "prompt": "An anime style full color illustration with soft shading. Two friends hugging tightly, arms wrapped around each other's backs, one laughing and one crying with joy. Full body visible from head to feet, plain light background, eye-level wide shot.",
+  "people": 2,
+  "expected": null,
+  "source": "agent-2026-11-16"
+ },
+ {
+  "id": "klein/fingers/101",
+  "file": "klein_fingers_101.png",
+  "model": "flux2_klein_4b",
+  "prompt": "An anime style full color illustration with soft shading. A cheerful girl holding up exactly three fingers on her left hand and giving a thumbs up with her right hand, smiling at the viewer. Full body visible from head to feet, plain light background, eye-level wide shot.",
+  "people": 1,
+  "expected": [],
+  "source": "agent-2026-11-16"
+ },
+ {
+  "id": "klein/fingers/102",
+  "file": "klein_fingers_102.png",
+  "model": "flux2_klein_4b",
+  "prompt": "An anime style full color illustration with soft shading. A cheerful girl holding up exactly three fingers on her left hand and giving a thumbs up with her right hand, smiling at the viewer. Full body visible from head to feet, plain light background, eye-level wide shot.",
+  "people": 1,
+  "expected": [],
+  "source": "agent-2026-11-16"
+ },
+ {
+  "id": "klein/fingers/103",
+  "file": "klein_fingers_103.png",
+  "model": "flux2_klein_4b",
+  "prompt": "An anime style full color illustration with soft shading. A cheerful girl holding up exactly three fingers on her left hand and giving a thumbs up with her right hand, smiling at the viewer. Full body visible from head to feet, plain light background, eye-level wide shot.",
+  "people": 1,
+  "expected": [],
+  "source": "agent-2026-11-16"
+ },
+ {
+  "id": "klein/fingers/104",
+  "file": "klein_fingers_104.png",
+  "model": "flux2_klein_4b",
+  "prompt": "An anime style full color illustration with soft shading. A cheerful girl holding up exactly three fingers on her left hand and giving a thumbs up with her right hand, smiling at the viewer. Full body visible from head to feet, plain light background, eye-level wide shot.",
+  "people": 1,
+  "expected": [],
+  "source": "agent-2026-11-16"
+ },
+ {
+  "id": "zimage/cross_legged/101",
+  "file": "zimage_cross_legged_101.png",
+  "model": "z_image_turbo",
+  "prompt": "An anime style full color illustration with soft shading. A young woman with long hair sitting cross-legged on the floor, both hands resting on her knees, smiling. Full body visible from head to feet, plain light background, eye-level wide shot.",
+  "people": 1,
+  "expected": [
+   "pose_missing|hands_on_knees"
+  ],
+  "source": "agent-2026-11-16"
+ },
+ {
+  "id": "zimage/cross_legged/102",
+  "file": "zimage_cross_legged_102.png",
+  "model": "z_image_turbo",
+  "prompt": "An anime style full color illustration with soft shading. A young woman with long hair sitting cross-legged on the floor, both hands resting on her knees, smiling. Full body visible from head to feet, plain light background, eye-level wide shot.",
+  "people": 1,
+  "expected": [
+   "pose_missing|hands_on_knees"
+  ],
+  "source": "agent-2026-11-16"
+ },
+ {
+  "id": "zimage/cross_legged/103",
+  "file": "zimage_cross_legged_103.png",
+  "model": "z_image_turbo",
+  "prompt": "An anime style full color illustration with soft shading. A young woman with long hair sitting cross-legged on the floor, both hands resting on her knees, smiling. Full body visible from head to feet, plain light background, eye-level wide shot.",
+  "people": 1,
+  "expected": [
+   "pose_missing|hands_on_knees"
+  ],
+  "source": "agent-2026-11-16"
+ },
+ {
+  "id": "zimage/cross_legged/104",
+  "file": "zimage_cross_legged_104.png",
+  "model": "z_image_turbo",
+  "prompt": "An anime style full color illustration with soft shading. A young woman with long hair sitting cross-legged on the floor, both hands resting on her knees, smiling. Full body visible from head to feet, plain light background, eye-level wide shot.",
+  "people": 1,
+  "expected": [
+   "pose_missing|hands_on_knees"
+  ],
+  "source": "agent-2026-11-16"
+ },
+ {
+  "id": "zimage/high_kick/101",
+  "file": "zimage_high_kick_101.png",
+  "model": "z_image_turbo",
+  "prompt": "An anime style full color illustration with soft shading. A young man in a martial arts outfit performing a high side kick, standing on one leg with the other leg fully extended at head height, arms in a guard position, shouting. Full body visible from head to feet, plain light background, eye-level wide shot.",
+  "people": 1,
+  "expected": [],
+  "source": "agent-2026-11-16"
+ },
+ {
+  "id": "zimage/high_kick/102",
+  "file": "zimage_high_kick_102.png",
+  "model": "z_image_turbo",
+  "prompt": "An anime style full color illustration with soft shading. A young man in a martial arts outfit performing a high side kick, standing on one leg with the other leg fully extended at head height, arms in a guard position, shouting. Full body visible from head to feet, plain light background, eye-level wide shot.",
+  "people": 1,
+  "expected": [],
+  "source": "agent-2026-11-16"
+ },
+ {
+  "id": "zimage/high_kick/103",
+  "file": "zimage_high_kick_103.png",
+  "model": "z_image_turbo",
+  "prompt": "An anime style full color illustration with soft shading. A young man in a martial arts outfit performing a high side kick, standing on one leg with the other leg fully extended at head height, arms in a guard position, shouting. Full body visible from head to feet, plain light background, eye-level wide shot.",
+  "people": 1,
+  "expected": [],
+  "source": "agent-2026-11-16"
+ },
+ {
+  "id": "zimage/high_kick/104",
+  "file": "zimage_high_kick_104.png",
+  "model": "z_image_turbo",
+  "prompt": "An anime style full color illustration with soft shading. A young man in a martial arts outfit performing a high side kick, standing on one leg with the other leg fully extended at head height, arms in a guard position, shouting. Full body visible from head to feet, plain light background, eye-level wide shot.",
+  "people": 1,
+  "expected": [],
+  "source": "agent-2026-11-16"
+ },
+ {
+  "id": "zimage/running/101",
+  "file": "zimage_running_101.png",
+  "model": "z_image_turbo",
+  "prompt": "An anime style full color illustration with soft shading. A teenage girl with a ponytail running mid-stride, one leg far forward and one far back, arms swinging, hair flying, determined face. Full body visible from head to feet, plain light background, eye-level wide shot.",
+  "people": 1,
+  "expected": [],
+  "source": "agent-2026-11-16"
+ },
+ {
+  "id": "zimage/running/102",
+  "file": "zimage_running_102.png",
+  "model": "z_image_turbo",
+  "prompt": "An anime style full color illustration with soft shading. A teenage girl with a ponytail running mid-stride, one leg far forward and one far back, arms swinging, hair flying, determined face. Full body visible from head to feet, plain light background, eye-level wide shot.",
+  "people": 1,
+  "expected": [],
+  "source": "agent-2026-11-16"
+ },
+ {
+  "id": "zimage/running/103",
+  "file": "zimage_running_103.png",
+  "model": "z_image_turbo",
+  "prompt": "An anime style full color illustration with soft shading. A teenage girl with a ponytail running mid-stride, one leg far forward and one far back, arms swinging, hair flying, determined face. Full body visible from head to feet, plain light background, eye-level wide shot.",
+  "people": 1,
+  "expected": [],
+  "source": "agent-2026-11-16"
+ },
+ {
+  "id": "zimage/running/104",
+  "file": "zimage_running_104.png",
+  "model": "z_image_turbo",
+  "prompt": "An anime style full color illustration with soft shading. A teenage girl with a ponytail running mid-stride, one leg far forward and one far back, arms swinging, hair flying, determined face. Full body visible from head to feet, plain light background, eye-level wide shot.",
+  "people": 1,
+  "expected": [],
+  "source": "agent-2026-11-16"
+ },
+ {
+  "id": "zimage/tie_shoe/101",
+  "file": "zimage_tie_shoe_101.png",
+  "model": "z_image_turbo",
+  "prompt": "An anime style full color illustration with soft shading. A boy crouching on one knee and tying his shoelace with both hands, looking down at the shoe. Full body visible from head to feet, plain light background, eye-level wide shot.",
+  "people": 1,
+  "expected": [],
+  "source": "agent-2026-11-16"
+ },
+ {
+  "id": "zimage/tie_shoe/102",
+  "file": "zimage_tie_shoe_102.png",
+  "model": "z_image_turbo",
+  "prompt": "An anime style full color illustration with soft shading. A boy crouching on one knee and tying his shoelace with both hands, looking down at the shoe. Full body visible from head to feet, plain light background, eye-level wide shot.",
+  "people": 1,
+  "expected": [],
+  "source": "agent-2026-11-16"
+ },
+ {
+  "id": "zimage/tie_shoe/103",
+  "file": "zimage_tie_shoe_103.png",
+  "model": "z_image_turbo",
+  "prompt": "An anime style full color illustration with soft shading. A boy crouching on one knee and tying his shoelace with both hands, looking down at the shoe. Full body visible from head to feet, plain light background, eye-level wide shot.",
+  "people": 1,
+  "expected": [],
+  "source": "agent-2026-11-16"
+ },
+ {
+  "id": "zimage/tie_shoe/104",
+  "file": "zimage_tie_shoe_104.png",
+  "model": "z_image_turbo",
+  "prompt": "An anime style full color illustration with soft shading. A boy crouching on one knee and tying his shoelace with both hands, looking down at the shoe. Full body visible from head to feet, plain light background, eye-level wide shot.",
+  "people": 1,
+  "expected": [],
+  "source": "agent-2026-11-16"
+ },
+ {
+  "id": "zimage/sword_overhead/101",
+  "file": "zimage_sword_overhead_101.png",
+  "model": "z_image_turbo",
+  "prompt": "An anime style full color illustration with soft shading. A swordsman gripping a long sword with both hands raised high above his head, legs wide apart in a strong stance, shouting. Full body visible from head to feet, plain light background, eye-level wide shot.",
+  "people": 1,
+  "expected": [],
+  "source": "agent-2026-11-16"
+ },
+ {
+  "id": "zimage/sword_overhead/102",
+  "file": "zimage_sword_overhead_102.png",
+  "model": "z_image_turbo",
+  "prompt": "An anime style full color illustration with soft shading. A swordsman gripping a long sword with both hands raised high above his head, legs wide apart in a strong stance, shouting. Full body visible from head to feet, plain light background, eye-level wide shot.",
+  "people": 1,
+  "expected": [],
+  "source": "agent-2026-11-16"
+ },
+ {
+  "id": "zimage/sword_overhead/103",
+  "file": "zimage_sword_overhead_103.png",
+  "model": "z_image_turbo",
+  "prompt": "An anime style full color illustration with soft shading. A swordsman gripping a long sword with both hands raised high above his head, legs wide apart in a strong stance, shouting. Full body visible from head to feet, plain light background, eye-level wide shot.",
+  "people": 1,
+  "expected": [],
+  "source": "agent-2026-11-16"
+ },
+ {
+  "id": "zimage/sword_overhead/104",
+  "file": "zimage_sword_overhead_104.png",
+  "model": "z_image_turbo",
+  "prompt": "An anime style full color illustration with soft shading. A swordsman gripping a long sword with both hands raised high above his head, legs wide apart in a strong stance, shouting. Full body visible from head to feet, plain light background, eye-level wide shot.",
+  "people": 1,
+  "expected": [],
+  "source": "agent-2026-11-16"
+ },
+ {
+  "id": "zimage/handshake/101",
+  "file": "zimage_handshake_101.png",
+  "model": "z_image_turbo",
+  "prompt": "An anime style full color illustration with soft shading. Two men in suits shaking hands firmly, right hand clasped in right hand, both smiling, standing facing each other. Full body visible from head to feet, plain light background, eye-level wide shot.",
+  "people": 2,
+  "expected": [],
+  "source": "agent-2026-11-16"
+ },
+ {
+  "id": "zimage/handshake/102",
+  "file": "zimage_handshake_102.png",
+  "model": "z_image_turbo",
+  "prompt": "An anime style full color illustration with soft shading. Two men in suits shaking hands firmly, right hand clasped in right hand, both smiling, standing facing each other. Full body visible from head to feet, plain light background, eye-level wide shot.",
+  "people": 2,
+  "expected": [],
+  "source": "agent-2026-11-16"
+ },
+ {
+  "id": "zimage/handshake/103",
+  "file": "zimage_handshake_103.png",
+  "model": "z_image_turbo",
+  "prompt": "An anime style full color illustration with soft shading. Two men in suits shaking hands firmly, right hand clasped in right hand, both smiling, standing facing each other. Full body visible from head to feet, plain light background, eye-level wide shot.",
+  "people": 2,
+  "expected": [],
+  "source": "agent-2026-11-16"
+ },
+ {
+  "id": "zimage/handshake/104",
+  "file": "zimage_handshake_104.png",
+  "model": "z_image_turbo",
+  "prompt": "An anime style full color illustration with soft shading. Two men in suits shaking hands firmly, right hand clasped in right hand, both smiling, standing facing each other. Full body visible from head to feet, plain light background, eye-level wide shot.",
+  "people": 2,
+  "expected": [],
+  "source": "agent-2026-11-16"
+ },
+ {
+  "id": "zimage/hug/101",
+  "file": "zimage_hug_101.png",
+  "model": "z_image_turbo",
+  "prompt": "An anime style full color illustration with soft shading. Two friends hugging tightly, arms wrapped around each other's backs, one laughing and one crying with joy. Full body visible from head to feet, plain light background, eye-level wide shot.",
+  "people": 2,
+  "expected": [
+   "merged_bodies"
+  ],
+  "source": "agent-2026-11-16"
+ },
+ {
+  "id": "zimage/hug/102",
+  "file": "zimage_hug_102.png",
+  "model": "z_image_turbo",
+  "prompt": "An anime style full color illustration with soft shading. Two friends hugging tightly, arms wrapped around each other's backs, one laughing and one crying with joy. Full body visible from head to feet, plain light background, eye-level wide shot.",
+  "people": 2,
+  "expected": null,
+  "source": "agent-2026-11-16"
+ },
+ {
+  "id": "zimage/hug/103",
+  "file": "zimage_hug_103.png",
+  "model": "z_image_turbo",
+  "prompt": "An anime style full color illustration with soft shading. Two friends hugging tightly, arms wrapped around each other's backs, one laughing and one crying with joy. Full body visible from head to feet, plain light background, eye-level wide shot.",
+  "people": 2,
+  "expected": [
+   "merged_bodies"
+  ],
+  "source": "agent-2026-11-16"
+ },
+ {
+  "id": "zimage/hug/104",
+  "file": "zimage_hug_104.png",
+  "model": "z_image_turbo",
+  "prompt": "An anime style full color illustration with soft shading. Two friends hugging tightly, arms wrapped around each other's backs, one laughing and one crying with joy. Full body visible from head to feet, plain light background, eye-level wide shot.",
+  "people": 2,
+  "expected": null,
+  "source": "agent-2026-11-16"
+ },
+ {
+  "id": "zimage/fingers/101",
+  "file": "zimage_fingers_101.png",
+  "model": "z_image_turbo",
+  "prompt": "An anime style full color illustration with soft shading. A cheerful girl holding up exactly three fingers on her left hand and giving a thumbs up with her right hand, smiling at the viewer. Full body visible from head to feet, plain light background, eye-level wide shot.",
+  "people": 1,
+  "expected": [],
+  "source": "agent-2026-11-16"
+ },
+ {
+  "id": "zimage/fingers/102",
+  "file": "zimage_fingers_102.png",
+  "model": "z_image_turbo",
+  "prompt": "An anime style full color illustration with soft shading. A cheerful girl holding up exactly three fingers on her left hand and giving a thumbs up with her right hand, smiling at the viewer. Full body visible from head to feet, plain light background, eye-level wide shot.",
+  "people": 1,
+  "expected": [],
+  "source": "agent-2026-11-16"
+ },
+ {
+  "id": "zimage/fingers/103",
+  "file": "zimage_fingers_103.png",
+  "model": "z_image_turbo",
+  "prompt": "An anime style full color illustration with soft shading. A cheerful girl holding up exactly three fingers on her left hand and giving a thumbs up with her right hand, smiling at the viewer. Full body visible from head to feet, plain light background, eye-level wide shot.",
+  "people": 1,
+  "expected": [],
+  "source": "agent-2026-11-16"
+ },
+ {
+  "id": "zimage/fingers/104",
+  "file": "zimage_fingers_104.png",
+  "model": "z_image_turbo",
+  "prompt": "An anime style full color illustration with soft shading. A cheerful girl holding up exactly three fingers on her left hand and giving a thumbs up with her right hand, smiling at the viewer. Full body visible from head to feet, plain light background, eye-level wide shot.",
+  "people": 1,
+  "expected": [],
+  "source": "agent-2026-11-16"
+ },
+ {
+  "id": "owner/owner_hug_00084.png",
+  "file": "owner_hug_00084.png",
+  "model": "flux2_klein_4b",
+  "prompt": "An anime style full color illustration with soft shading. Two friends hugging tightly, arms wrapped around each other's backs, one laughing and one crying with joy. Full body visible from head to feet, plain light background, eye-level wide shot.",
+  "people": 2,
+  "expected": [
+   "stray_text"
+  ],
+  "source": "owner-pointed 2026-11-16"
+ }
+]

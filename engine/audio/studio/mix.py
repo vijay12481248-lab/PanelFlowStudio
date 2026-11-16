@@ -21,6 +21,18 @@ _EFFECT_ROLES = ("sfx", "ambience", "foley")
 _DUCK = "sidechaincompress=threshold=0.05:ratio=8:attack=20:release=400"
 
 
+def _pan_filter(pan: float) -> str:
+    """Middle pan across stereo space (-1.0 left to 1.0 right) using constant power."""
+    p = max(-1.0, min(1.0, float(pan)))
+    return f"stereotools=mpan={p:.3f}:bmode_out=power"
+
+
+def _duck_filter(depth_db: float = -8.0, attack_ms: int = 20, release_ms: int = 400) -> str:
+    """Generate dynamic sidechain compression filter string with custom depth and timing."""
+    ratio = max(2.0, min(20.0, abs(depth_db)))
+    return f"sidechaincompress=threshold=0.05:ratio={ratio:.1f}:attack={int(attack_ms)}:release={int(release_ms)}"
+
+
 def _run(cmd: list[str], timeout: int = 900) -> str:
     p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
     if p.returncode != 0:
@@ -50,12 +62,21 @@ def _cue_chain(plan: SoundPlan, cue: Cue) -> str:
     if span is not None:
         f.append(f"atrim=duration={span:.6f}")
     length = span if span is not None else avail
+    if cue.pitch_semitones and abs(cue.pitch_semitones) >= 0.05:
+        pitch_factor = 2.0 ** (cue.pitch_semitones / 12.0)
+        f.append(f"rubberband=pitch={pitch_factor:.4f}")
+    if cue.hpf_hz and cue.hpf_hz > 10:
+        f.append(f"highpass=f={cue.hpf_hz:g}")
+    if cue.lpf_hz and cue.lpf_hz < 22000:
+        f.append(f"lowpass=f={cue.lpf_hz:g}")
     if cue.gain_db:
         f.append(f"volume={cue.gain_db:g}dB")
     if cue.fade_in > 0:
         f.append(f"afade=t=in:d={cue.fade_in:.4f}")
     if cue.fade_out > 0:
         f.append(f"afade=t=out:st={max(0.0, length - cue.fade_out):.4f}:d={cue.fade_out:.4f}")
+    if cue.pan and abs(cue.pan) >= 0.01:
+        f.append(_pan_filter(cue.pan))
     f += [f"adelay={pl.start_s * 1000:.3f}:all=1", f"apad=whole_dur={plan.duration:.6f}", f"atrim=duration={plan.duration:.6f}"]
     return ",".join(f)
 
@@ -72,7 +93,8 @@ def render_cue(plan: SoundPlan, cue: Cue, out: Path) -> Path:
     return out
 
 
-def _sum(out: Path, items: list[tuple[Path, float]], duration: float, sidechain: Path | None = None) -> Path:
+def _sum(out: Path, items: list[tuple[Path, float]], duration: float, sidechain: Path | None = None,
+         duck_filter: str | None = None) -> Path:
     """Add wavs (each with a gain in dB) without scaling; optionally duck the sum under `sidechain`."""
     cmd = [_FFMPEG, "-v", "error", "-y"]
     if not items:
@@ -86,9 +108,10 @@ def _sum(out: Path, items: list[tuple[Path, float]], duration: float, sidechain:
     last = "m"
     if sidechain is not None:
         cmd += ["-i", str(sidechain)]
+        duck_cmd = duck_filter or _DUCK
         # sidechaincompress drops the last frames when its inputs end together (a different amount every run): pad both, trim after
         parts += [f"[m]apad=whole_dur={duration + 1:.6f}[mp]", f"[{len(items)}:a]apad=whole_dur={duration + 1:.6f}[sp]",
-                  f"[mp][sp]{_DUCK}[d]"]
+                  f"[mp][sp]{duck_cmd}[d]"]
         last = "d"
     parts.append(f"[{last}]atrim=duration={duration:.6f}[o]")
     _run(cmd + ["-filter_complex", ";".join(parts), "-map", "[o]", "-ac", "2", "-ar", str(SR), "-c:a", "pcm_f32le", str(out)])
@@ -108,26 +131,47 @@ def render_roles(plan: SoundPlan, out_dir: Path) -> dict[str, Path]:
     cue_dir = out_dir / "cues"
     cue_dir.mkdir(parents=True, exist_ok=True)
     D = plan.duration
+    has_solo = any(t.solo for t in plan.tracks)
+
     placed: dict[str, list[tuple[Path, float]]] = {"music": [], "effects": [], "voice": []}
     for cue in plan.cues:
         t = _track(plan, cue.track)
-        if cue.chosen() is None or t.mute:
+        is_muted = t.mute or (has_solo and not t.solo)
+        if cue.chosen() is None or is_muted:
             continue
         group = "voice" if cue.track == "dialogue" else "music" if cue.track == "music" else "effects"
         placed[group].append((render_cue(plan, cue, cue_dir / f"{cue.id}.wav"), t.gain_db))
 
     dlg_track = _track(plan, "dialogue")
     dialogue = out_dir / "dialogue.wav"
+    dlg_muted = dlg_track.mute or (has_solo and not dlg_track.solo)
     items = list(placed["voice"])   # narration lines
-    if plan.keep_original_audio and _has_audio(plan.dialogue_path) and not dlg_track.mute:
+    if plan.keep_original_audio and _has_audio(plan.dialogue_path) and not dlg_muted:
         orig = out_dir / "original.wav"
-        _run([_FFMPEG, "-v", "error", "-y", "-i", plan.dialogue_path, "-vn",
-              "-af", f"aresample={SR},apad=whole_dur={D:.6f},atrim=duration={D:.6f}", "-ac", "2", "-ar", str(SR), "-c:a", "pcm_f32le", str(orig)])
-        items.insert(0, (orig, dlg_track.gain_db))
+        dlg_filters = [f"aresample={SR}", f"volume={dlg_track.gain_db:g}dB"]
+        if dlg_track.hpf_hz and dlg_track.hpf_hz > 10:
+            dlg_filters.append(f"highpass=f={dlg_track.hpf_hz:g}")
+        if dlg_track.pan and abs(dlg_track.pan) >= 0.01:
+            dlg_filters.append(_pan_filter(dlg_track.pan))
+        dlg_filters += [f"apad=whole_dur={D:.6f}", f"atrim=duration={D:.6f}"]
+        _run([_FFMPEG, "-v", "error", "-y", "-i", plan.dialogue_path, "-vn", "-af", ",".join(dlg_filters),
+              "-ac", "2", "-ar", str(SR), "-c:a", "pcm_f32le", str(orig)])
+        items.insert(0, (orig, 0.0))   # its gain is already in the filter chain
     _sum(dialogue, items, D)
     has_dialogue = bool(items)
-    duck = dialogue if has_dialogue and _track(plan, "music").duck_under == "dialogue" else None
-    music = _sum(out_dir / "music.wav", placed["music"], D, sidechain=duck)
+
+    music_track = _track(plan, "music")
+    custom_duck = (music_track.ducking_depth_db is not None or
+                   music_track.ducking_attack_ms is not None or
+                   music_track.ducking_release_ms is not None)
+    duck_str = _duck_filter(
+        depth_db=music_track.ducking_depth_db if music_track.ducking_depth_db is not None else -8.0,
+        attack_ms=music_track.ducking_attack_ms if music_track.ducking_attack_ms is not None else 20,
+        release_ms=music_track.ducking_release_ms if music_track.ducking_release_ms is not None else 400
+    ) if custom_duck else _DUCK
+
+    duck = dialogue if has_dialogue and music_track.duck_under == "dialogue" else None
+    music = _sum(out_dir / "music.wav", placed["music"], D, sidechain=duck, duck_filter=duck_str)
     effects = _sum(out_dir / "effects.wav", placed["effects"], D)
     premix = _sum(out_dir / "premix.wav", [(dialogue, 0.0), (music, 0.0), (effects, 0.0)], D)
     return {"dialogue": dialogue, "music": music, "effects": effects, "premix": premix}
