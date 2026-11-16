@@ -46,6 +46,7 @@ class Session:
         self.browser = pw.chromium.launch(headless=True, args=["--autoplay-policy=no-user-gesture-required"])
         self.page = self.browser.new_page(viewport={"width": width, "height": height})
         self.errors = []
+        self.page.set_default_timeout(int(__import__('os').environ.get('AUDIO_UI_TIMEOUT_MS', '40000')))   # fail fast; slow steps pass their own timeout
         self.page.on("pageerror", lambda e: self.errors.append(str(e)))
         self.page.on("console", lambda m: self.errors.append(f"console.error: {m.text}") if m.type == "error" else None)
         self.page.goto(f"{BASE}/chronoflow/ui", wait_until="networkidle")
@@ -210,7 +211,7 @@ def check_6(tmp):
         # clicking the ruler seeks the video and moves the playhead
         s.page.mouse.click(lane_box[0] + 3.0 * view["pps"], lane_box[1] - 60)
         t = s.ev("document.querySelector('.au-video').currentTime")
-        assert False if abs(t - 3.0) > 0.35 else True, t
+        assert abs(t - 3.0) <= 0.35, t
         # drag the block one second to the right: the hit moves by 1.0 s, snapped to the frame, and is saved
         x0 = lane_box[0] + cue["hit_t"] * view["pps"] + 6
         y0 = lane_box[1] + 26
@@ -356,7 +357,7 @@ def check_8(tmp):
         s.page.wait_for_function("NLEAudio.state.plan.cues.find(c => c.id === 'cue_01').status === 'failed'", timeout=120000)
         s.page.click("#auQa")
         s.page.wait_for_function("document.querySelectorAll('.au-find').length >= 1", timeout=60000)
-        assert s.ev("document.querySelector('.au-find.error') !== null") and "no_take" not in "", "an error finding is listed"
+        assert s.ev("document.querySelector('.au-find.error') !== null"), "an error finding is listed"
         s.page.click(".au-find.error")
         assert s.ev("NLEAudio.state.sel") == "cue_01"
         s.shot("task8_qa")
@@ -382,7 +383,106 @@ def check_8(tmp):
     print("task 8 OK")
 
 
-CHECKS = {"4": check_4, "5": check_5, "6": check_6, "7": check_7, "8": check_8}
+# ---------------------------------------------------------------- task 9: fixes from the final review (races, typing, fader, seek)
+def check_9(tmp):
+    va, vb = make_video(tmp / "plan_a.mp4"), make_video(tmp / "plan_b.mp4")
+    with sync_playwright() as pw:
+        s = Session(pw)
+        open_video(s, va)
+        id_a = s.ev("NLEAudio.state.plan.id")
+        s.ev("NLEAudio.edit({cues: [{id: 'a1', track: 'sfx', kind: 'click', intent: 'a click', hit_t: 1.0}]})")
+        s.page.wait_for_function("NLEAudio.state.plan.cues.length === 1")
+        s.ev("p => NLEAudio.openVideo(p)", str(vb))
+        s.page.wait_for_function("NLEAudio.state.plan.video_path.endsWith('plan_b.mp4')")
+        id_b = s.ev("NLEAudio.state.plan.id")
+        assert id_a != id_b
+        s.page.wait_for_timeout(500)
+
+        print('step', '# 1.', flush=True)
+        if not __import__('os').environ.get('AUDIO_UI_SKIP_STEP1'):
+            # 1. a short edit must not clear the busy state of a long job
+            s.ev("(() => { window._g = NLEAudio.guard('Long job', () => new Promise(r => { window._rel = r; })); return 1; })()")
+            s.page.wait_for_function("NLEAudio.state.busy === 'Long job'")
+            s.ev("(() => { NLEAudio.edit({mode: 'ask'}, 'Mode'); return 1; })()")
+            s.page.wait_for_timeout(900)
+            assert s.ev("NLEAudio.state.busy") == "Long job", "a short call finished but the long one is still running"
+            assert s.ev("document.querySelector('#auSourceAll').disabled") is True
+            s.ev("window._rel()")
+            s.page.wait_for_function("NLEAudio.state.busy === ''")
+            assert s.ev("document.querySelector('#auSourceAll').disabled") is False
+            s.ev("NLEAudio.edit({mode: 'auto'}, 'Mode')")
+            s.page.wait_for_timeout(400)
+
+        print('step', '# 2.', flush=True)
+        # 2. a slow save for plan A must not replace plan B on screen
+        s.ev("p => NLEAudio.openVideo(p)", str(va))
+        s.page.wait_for_function("NLEAudio.state.plan.video_path.endsWith('plan_a.mp4')")
+        s.page.wait_for_timeout(500)
+        s.ev("(() => { const f = window.fetch; window.__realFetch = f; window.fetch = async (u, o) => { if (o && o.method === 'PUT') await new Promise(r => setTimeout(r, 1500)); return f(u, o); }; })()")
+        s.ev("(() => { window._slow = NLEAudio.edit({cues: [{id: 'zz', track: 'sfx', kind: 'click', hit_t: 1.5}]}, 'Slow save'); return 1; })()")
+        s.ev("p => { NLEAudio.openVideo(p); return 1; }", str(vb))
+        s.page.wait_for_function("NLEAudio.state.plan.video_path.endsWith('plan_b.mp4')")
+        s.page.wait_for_timeout(2500)
+        s.ev("window.fetch = window.__realFetch")
+        assert s.ev("NLEAudio.state.plan.id") == id_b and s.ev("NLEAudio.state.plan.cues.every(c => c.id !== 'zz')"), "plan B stays on screen when A's slow save returns"
+        assert s.ev("document.querySelector('.au-title').innerText") == "plan_b.mp4"
+        assert any(c["id"] == "zz" for c in api("GET", f"/api/audio/studio/plans/{id_a}")["cues"]), "the save itself still reached plan A"
+
+        print('step', '# 3.', flush=True)
+        # 3. Open in Audio from another page lands on the opened video, every time
+        for i in range(4):
+            s.page.evaluate("switchResolvePage('edit')")
+            s.ev("p => { switchResolvePage('audio'); NLEAudio.openVideo(p); return 1; }", str(va if i % 2 == 0 else vb))
+            s.page.wait_for_timeout(1800)
+            want = "plan_a.mp4" if i % 2 == 0 else "plan_b.mp4"
+            assert s.ev("NLEAudio.state.plan.video_path").endswith(want), (i, s.ev("NLEAudio.state.plan.video_path"))
+
+        print('step', '# 4.', flush=True)
+        # 4. typing in the inspector survives a refresh, and Tab keeps the keyboard focus
+        s.ev("p => { NLEAudio.openVideo(p); return 1; }", str(va))   # plan A has the cues
+        s.page.wait_for_function("NLEAudio.state.plan.video_path.endsWith('plan_a.mp4') && NLEAudio.state.plan.cues.some(c => c.id === 'a1')")
+        s.page.wait_for_timeout(500)
+        s.page.click(".au-cue[data-cue=a1]")
+        s.page.click(".au-intent")
+        s.page.keyboard.press("Control+A")
+        s.page.keyboard.type("typed but not saved yet")
+        s.ev("(() => { NLEAudio.reload(); return 1; })()")
+        s.page.wait_for_timeout(400)
+        assert s.ev("document.activeElement.className.includes('au-intent')") and "typed but not saved yet" in s.ev("document.querySelector('.au-intent').value"), "a refresh must not throw away what is being typed"
+        s.page.keyboard.press("Tab")
+        s.page.wait_for_function("NLEAudio.state.plan.cues.some(c => c.intent === 'typed but not saved yet')", timeout=15000)
+        s.page.wait_for_timeout(300)
+        assert s.ev("document.activeElement.dataset.f") == "kind", ("focus follows Tab after the save", s.ev("document.activeElement.tagName"))
+
+        print('step', '# 5.', flush=True)
+        # 5. the Effects fader moves the three effect tracks together without flattening their balance
+        s.ev("(() => { NLEAudio.edit({tracks: [{id: 'ambience', gain_db: -6}]}); return 1; })()")
+        s.page.wait_for_function("NLEAudio.state.plan.tracks.find(t => t.id === 'ambience').gain_db === -6")
+        s.ev("(() => { const f = document.querySelector('.au-strip[data-stem=effects] .au-fader'); f.value = 2; f.dispatchEvent(new Event('input')); f.dispatchEvent(new Event('change')); })()")
+        s.page.wait_for_function("NLEAudio.state.plan.tracks.find(t => t.id === 'sfx').gain_db === 2", timeout=15000)
+        gains = {t["id"]: t["gain_db"] for t in server_plan(s)["tracks"]}
+        assert gains["sfx"] == 2 and gains["foley"] == 2 and gains["ambience"] == -4, gains
+
+        print('step', '# 6.', flush=True)
+        # 6. seeking while playing resyncs the stems at once
+        s.ev("(() => { NLEAudio.edit({cues: [{id: 'p1', track: 'sfx', kind: 'click', hit_t: 1.0}]}); return 1; })()")
+        s.page.wait_for_timeout(300)
+        s.page.click("#auSourceAll")
+        s.page.wait_for_function("NLEAudio.state.plan.cues.every(c => c.status !== 'draft')", timeout=240000)
+        s.page.click("#auPreview")
+        s.page.wait_for_function("document.querySelector('.au-pvstate').innerText === 'up to date'", timeout=240000)
+        s.page.click("#auPlay")
+        s.page.wait_for_function("NLEAudio.mixer.playing === true", timeout=15000)
+        s.page.wait_for_timeout(800)
+        s.ev("NLEAudio.seek(5.0)")
+        s.page.wait_for_timeout(60)
+        d = s.ev("Object.values(NLEAudio.mixer.els).map(e => Math.abs(e.currentTime - document.querySelector('.au-video').currentTime))")
+        assert max(d) < 0.2, ("stems follow a seek immediately, not at the next sync tick", d)
+        s.finish()
+    print("task 9 OK")
+
+
+CHECKS = {"4": check_4, "5": check_5, "6": check_6, "7": check_7, "8": check_8, "9": check_9}
 
 if __name__ == "__main__":
     which = sys.argv[1] if len(sys.argv) > 1 else "all"

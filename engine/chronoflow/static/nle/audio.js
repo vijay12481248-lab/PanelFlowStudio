@@ -6,7 +6,7 @@
   'use strict';
   const M = window.AudioModel;
   const BASE = '/api/audio/studio', LS = 'nle:audio:v1';
-  const S = { open: false, mounted: false, plans: [], plan: null, sel: null, busy: '', msg: '', bad: false, seen: null, timer: 0, qa: null, lastErr: '' };
+  const S = { busyN: 0, loadSeq: 0, openingVideo: false, open: false, mounted: false, plans: [], plan: null, sel: null, busy: '', msg: '', bad: false, seen: null, timer: 0, qa: null, lastErr: '' };
   const el = {};
 
   const h = (tag, attrs, ...kids) => {
@@ -31,9 +31,11 @@
     return d;
   }
   async function guard(label, fn) {   // one place where a failed call becomes a visible message
-    S.busy = label; paintBusy();
-    try { return await fn(); } catch (e) { say(`${label}: ${e.message}`, true); return null; } finally { S.busy = ''; paintBusy(); }
+    if (S.busyN++ === 0) S.busy = label;   // the first (longest-running) job names the busy state; later short calls do not replace it
+    paintBusy();
+    try { return await fn(); } catch (e) { say(`${label}: ${e.message}`, true); return null; } finally { if (--S.busyN === 0) S.busy = ''; paintBusy(); }
   }
+  const isCurrent = (id) => !!S.plan && S.plan.id === id;   // a slow answer for a plan that is no longer open is dropped
   const save = () => { try { localStorage.setItem(LS, JSON.stringify({ planId: S.plan && S.plan.id })); } catch (e) { /* private mode */ } };
   const remembered = () => { try { return (JSON.parse(localStorage.getItem(LS) || '{}') || {}).planId || null; } catch (e) { return null; } };
 
@@ -43,51 +45,69 @@
     if (seq === S.plansSeq) { S.plans = rows; paintPlanSelect(); }
   }
   async function loadPlan(id) {
-    const prev = S.plan && S.plan.id; S.plan = await call('GET', `/plans/${id}`); S.seen = S.plan.version; save();
-    if (prev !== id) { S.qa = null; S.msg = ''; S.bad = false; if (P.playing) pause(); P.preview = null; P.stale = true; for (const st of M.STEMS) { P.els[st].removeAttribute('src'); delete P.els[st].dataset.url; } }
+    const seq = ++S.loadSeq, plan = await call('GET', `/plans/${id}`);
+    if (seq !== S.loadSeq) return;   // a newer open/load started meanwhile
+    const prev = S.plan && S.plan.id; S.plan = plan; S.seen = S.plan.version; save();
+    if (prev !== id) { S.qa = null; S.msg = ''; S.bad = false; P.master_info = null; if (P.playing) pause(); P.preview = null; P.stale = true; for (const st of M.STEMS) { P.els[st].removeAttribute('src'); delete P.els[st].dataset.url; } }
     if (S.sel && !S.plan.cues.some((c) => c.id === S.sel)) S.sel = null;
-    el.video.src = withToken(`${BASE}/plans/${id}/video`);
+    const vurl = withToken(`${BASE}/plans/${id}/video`);
+    if (el.video.dataset.url !== vurl) { el.video.dataset.url = vurl; el.video.src = vurl; }   // do not reload (and rewind) the video for the same plan
     paintAll();
   }
-  async function reload() { if (S.plan) { S.plan = await call('GET', `/plans/${S.plan.id}`); S.seen = S.plan.version; paintAll(); } }
+  async function reload() {
+    if (!S.plan) return;
+    const id = S.plan.id, p = await call('GET', `/plans/${id}`);
+    if (isCurrent(id)) { S.plan = p; S.seen = p.version; paintAll(); }
+  }
   async function openVideo(path) {
+    S.openingVideo = true;   // open() must not load the remembered plan over the one being opened here
     return guard('Open video', async () => {
       await refreshPlans();
       const have = S.plans.find((p) => p.video_path === path);
       const plan = have ? { id: have.id } : await call('POST', '/plans', { video_path: path });
       await loadPlan(plan.id); await refreshPlans();
       say(have ? 'Opened the existing sound plan for this video.' : 'New sound plan created. Next: Spot to find the picture cuts.');
-    });
+    }).finally(() => { S.openingVideo = false; });
   }
   async function pickVideo() {
     const r = await guard('Choose video', () => fetch('/api/chronoflow/library/pick_files', { method: 'POST' }).then((x) => x.json()));
     if (r && r.paths && r.paths[0]) openVideo(r.paths[0]);
   }
-  async function edit(body, note) { return guard(note || 'Save', async () => { S.plan = await call('PUT', `/plans/${S.plan.id}`, body); S.seen = S.plan.version; paintAll(); return S.plan; }); }
+  async function edit(body, note) {
+    const id = S.plan && S.plan.id;
+    return guard(note || 'Save', async () => {
+      const p = await call('PUT', `/plans/${id}`, body);
+      if (!isCurrent(id)) return null;   // saved on the server, but another plan is open now: do not paint this one over it
+      S.plan = p; S.seen = p.version; paintAll(); return S.plan;
+    });
+  }
 
   async function spot() {
-    const p = await guard('Spot', () => call('POST', `/plans/${S.plan.id}/spot`));
-    if (p) { S.plan = p; S.seen = p.version; paintAll(); say(`Found ${p.cuts.length} picture cut(s); drafted ${p.cues.filter((c) => c.status === 'draft').length} cue(s). Rewrite the intents, then Source.`); }
+    const id = S.plan.id, p = await guard('Spot', () => call('POST', `/plans/${id}/spot`));
+    if (p && isCurrent(id)) { S.plan = p; S.seen = p.version; paintAll(); say(`Found ${p.cuts.length} picture cut(s); drafted ${p.cues.filter((c) => c.status === 'draft').length} cue(s). Rewrite the intents, then Source.`); }
   }
   async function sourceOne(id, mode) {
-    const p = await call('POST', `/plans/${S.plan.id}/cues/${id}/source`, mode ? { mode } : {});
+    const pid = S.plan.id, p = await call('POST', `/plans/${pid}/cues/${id}/source`, mode ? { mode } : {});
+    if (!isCurrent(pid)) return;
     S.plan = p; S.seen = p.version; paintAll();
   }
   async function sourceAll() {
     const todo = S.plan.cues.filter((c) => c.status === 'draft' || c.status === 'failed').map((c) => c.id);
     if (!todo.length) { say('Nothing to source: every cue already has a sound or is waiting for a pick.'); return; }
     let ok = 0, bad = 0;
+    const planId = S.plan.id;
     await guard('Source all', async () => {
       for (let i = 0; i < todo.length; i++) {
         S.busy = `Sourcing ${i + 1}/${todo.length}`; paintBusy();
+        if (!isCurrent(planId)) break;   // the owner opened another video: stop sourcing this one
         try { await sourceOne(todo[i]); ok++; } catch (e) { bad++; S.lastErr = e.message; }
       }
     });
     say(`Sourced ${ok} cue(s)${bad ? `, ${bad} could not be sourced (${S.lastErr})` : ''}.`, !!bad);
   }
   async function runQa() {
-    const q = await guard('QA', () => call('POST', `/plans/${S.plan.id}/qa`));
-    if (q) { S.qa = q; await reload(); say(`QA: ${q.errors} error(s), ${q.warnings} warning(s).`, q.errors > 0); }
+    const id = S.plan.id, q = await guard('QA', () => call('POST', `/plans/${id}/qa`));
+    if (q && isCurrent(id)) { S.qa = q; await reload(); say(`QA: ${q.errors} error(s), ${q.warnings} warning(s).`, q.errors > 0); }
   }
 
   // poll: an agent may change the plan while the page is open
@@ -183,7 +203,7 @@
     if (n) say(n.status === 'ready' ? `${id}: sound found (${(n.takes.find((t) => t.id === n.chosen_take) || { provenance: {} }).provenance.source}).`
       : n.status === 'needs_pick' ? `${id}: ${n.candidates.length} candidate(s). Pick one in the inspector.` : `${id}: ${n.reason || 'no sound found'}`, n.status === 'failed');
   }
-  async function pickCandidate(id, candId) { const p = await guard('Pick', () => call('POST', `/plans/${S.plan.id}/cues/${id}/pick`, { candidate_id: candId })); if (p) { S.plan = p; S.seen = p.version; paintAll(); say(`${id}: picked.`); } }
+  async function pickCandidate(id, candId) { const pid = S.plan.id, p = await guard('Pick', () => call('POST', `/plans/${pid}/cues/${id}/pick`, { candidate_id: candId })); if (p && isCurrent(pid)) { S.plan = p; S.seen = p.version; paintAll(); say(`${id}: picked.`); } }
 
   // audition: play one candidate (or the chosen sound) on its own, outside the video
   const AU = { el: null, id: null };
@@ -224,6 +244,18 @@
 
   function renderInspector() {
     const box = el.inspBody; if (!box) return;
+    const sig = JSON.stringify([S.plan && S.plan.id, S.sel, cueById(S.sel), AU.id, S.plan && S.plan.fps]), active = document.activeElement, inside = !!(active && box.contains(active));
+    if (inside && sig === el.inspSig) { paintBusy(); return; }   // nothing changed for this cue: keep what is being typed
+    const holder = inside ? active.closest('[data-f]') : null, key = holder ? holder.dataset.f : null, typed = inside && 'value' in active ? active.value : null;
+    const range = inside && active.selectionStart != null ? [active.selectionStart, active.selectionEnd] : null;
+    buildInspector(box); el.inspSig = sig;
+    if (key) {
+      const n = box.querySelector(`[data-f="${key}"]`);
+      if (n) { n.focus({ preventScroll: true }); if (typed != null && 'value' in n && n.value !== typed) n.value = typed; if (range && n.setSelectionRange) { try { n.setSelectionRange(range[0], range[1]); } catch (e) { /* number inputs */ } } }
+    }
+    paintBusy();
+  }
+  function buildInspector(box) {
     box.replaceChildren();
     const p = S.plan;
     if (!p) { box.append(h('div', { class: 'au-empty' }, 'Open a video to see its cues.')); return; }
@@ -234,29 +266,29 @@
     box.append(
       h('div', { class: 'au-insp-top' }, h('span', { class: `au-chip ${chip.tone}` }, chip.text), h('b', {}, c.id), h('span', { class: 'au-tc' }, isHit ? M.fmtTC(c.hit_t, fps) : `${M.fmtTC(c.t_in || 0, fps)} – ${c.t_out != null ? M.fmtTC(c.t_out, fps) : 'end of sound'}`)),
       c.reason ? h('div', { class: 'dl-error' }, c.reason) : null,
-      field('What it should sound like', h('textarea', { class: 'dl-in au-intent', rows: 2, onchange: (e) => patchCue(c.id, { intent: e.target.value }) }, c.intent || ''),
+      field('What it should sound like', h('textarea', { class: 'dl-in au-intent', 'data-f': 'intent', rows: 2, onchange: (e) => patchCue(c.id, { intent: e.target.value }) }, c.intent || ''),
         'Plain words, like searching a sound library. The Openverse search uses this text.'),
       h('div', { class: 'au-two' },
-        field('Kind', h('input', { class: 'dl-in', list: 'auKinds', value: c.kind, onchange: (e) => e.target.value.trim() && patchCue(c.id, { kind: e.target.value.trim() }) }),
+        field('Kind', h('input', { class: 'dl-in', 'data-f': 'kind', list: 'auKinds', value: c.kind, onchange: (e) => e.target.value.trim() && patchCue(c.id, { kind: e.target.value.trim() }) }),
           'Synth knows: whoosh, impact, click, pop, ding, riser, drop, noise_bed. Music goes to ACE-Step.'),
-        field('Lane', h('select', { class: 'dl-in', onchange: (e) => patchCue(c.id, { track: e.target.value }) },
+        field('Lane', h('select', { class: 'dl-in', 'data-f': 'lane', onchange: (e) => patchCue(c.id, { track: e.target.value }) },
           ...M.LANES.filter((l) => l.id !== 'dialogue').map((l) => h('option', { value: l.id, selected: c.track === l.id }, l.label))))),
       h('datalist', { id: 'auKinds' }, ...KINDS.map((k) => h('option', { value: k }))),
       isHit ? h('div', { class: 'au-two' },
         field('Hit time (s)', h('div', { class: 'au-nudge' },
           h('button', { type: 'button', class: 'dl-btn', title: 'One frame earlier (Shift: ten)', onclick: (e) => patchCue(c.id, { hit_t: Math.max(0, M.snapFrame(c.hit_t - (e.shiftKey ? 10 : 1) / fps, fps)) }) }, '◀'),
-          numIn(c.hit_t.toFixed(3), '0.001', (e) => { const v = num(e.target.value); if (v != null) patchCue(c.id, { hit_t: v }); }),
+          numIn(c.hit_t.toFixed(3), '0.001', (e) => { const v = num(e.target.value); if (v != null) patchCue(c.id, { hit_t: v }); }, { 'data-f': 'hit' }),
           h('button', { type: 'button', class: 'dl-btn', title: 'One frame later (Shift: ten)', onclick: (e) => patchCue(c.id, { hit_t: Math.min(p.duration, M.snapFrame(c.hit_t + (e.shiftKey ? 10 : 1) / fps, fps)) }) }, '▶'))),
-        field('Lands on', h('select', { class: 'dl-in', onchange: (e) => patchCue(c.id, { anchor: e.target.value }) },
+        field('Lands on', h('select', { class: 'dl-in', 'data-f': 'anchor', onchange: (e) => patchCue(c.id, { anchor: e.target.value }) },
           h('option', { value: 'onset', selected: c.anchor === 'onset' }, 'the start (hits, clicks)'), h('option', { value: 'peak', selected: c.anchor === 'peak' }, 'the swell (whooshes, risers)'))))
         : h('div', { class: 'au-two' },
-          field('From (s)', numIn((c.t_in || 0).toFixed(3), '0.001', (e) => { const v = num(e.target.value); if (v != null) patchCue(c.id, { t_in: v }); })),
-          field('To (s)', numIn(c.t_out == null ? '' : c.t_out.toFixed(3), '0.001', (e) => { const v = num(e.target.value); if (v != null) patchCue(c.id, { t_out: v }); }, { placeholder: 'sound length' }))),
+          field('From (s)', numIn((c.t_in || 0).toFixed(3), '0.001', (e) => { const v = num(e.target.value); if (v != null) patchCue(c.id, { t_in: v }); }, { 'data-f': 'from' })),
+          field('To (s)', numIn(c.t_out == null ? '' : c.t_out.toFixed(3), '0.001', (e) => { const v = num(e.target.value); if (v != null) patchCue(c.id, { t_out: v }); }, { placeholder: 'sound length', 'data-f': 'to' }))),
       h('div', { class: 'au-three' },
-        field('Gain (dB)', numIn(c.gain_db, '0.5', (e) => { const v = num(e.target.value); if (v != null) patchCue(c.id, { gain_db: v }); })),
-        field('Fade in (s)', numIn(c.fade_in, '0.05', (e) => { const v = num(e.target.value); if (v != null && v >= 0) patchCue(c.id, { fade_in: v }); }, { min: 0 })),
-        field('Fade out (s)', numIn(c.fade_out, '0.05', (e) => { const v = num(e.target.value); if (v != null && v >= 0) patchCue(c.id, { fade_out: v }); }, { min: 0 }))),
-      field('Sourcing for this cue', h('select', { class: 'dl-in', onchange: (e) => patchCue(c.id, { mode: e.target.value || null }) },
+        field('Gain (dB)', numIn(c.gain_db, '0.5', (e) => { const v = num(e.target.value); if (v != null) patchCue(c.id, { gain_db: v }); }, { 'data-f': 'gain' })),
+        field('Fade in (s)', numIn(c.fade_in, '0.05', (e) => { const v = num(e.target.value); if (v != null && v >= 0) patchCue(c.id, { fade_in: v }); }, { min: 0, 'data-f': 'fin' })),
+        field('Fade out (s)', numIn(c.fade_out, '0.05', (e) => { const v = num(e.target.value); if (v != null && v >= 0) patchCue(c.id, { fade_out: v }); }, { min: 0, 'data-f': 'fout' }))),
+      field('Sourcing for this cue', h('select', { class: 'dl-in', 'data-f': 'mode', onchange: (e) => patchCue(c.id, { mode: e.target.value || null }) },
         h('option', { value: '', selected: !c.mode }, 'Same as the plan'), h('option', { value: 'auto', selected: c.mode === 'auto' }, 'Auto: the engine picks'), h('option', { value: 'ask', selected: c.mode === 'ask' }, 'Ask me: I pick'))),
       h('div', { class: 'dl-sub' }, 'Sound'),
       take ? provenanceBlock(take) : h('div', { class: 'au-empty' }, c.status === 'needs_pick' ? 'Candidates are waiting for your pick.' : 'No sound yet.'),
@@ -359,7 +391,7 @@
     };
     cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
   }
-  function seek(t) { if (!S.plan) return; try { el.video.currentTime = Math.min(Math.max(0, t), S.plan.duration); } catch (e) { /* video not ready */ } movePlayhead(); }
+  function seek(t) { if (!S.plan) return; try { el.video.currentTime = Math.min(Math.max(0, t), S.plan.duration); } catch (e) { /* video not ready */ } movePlayhead(); if (P.preview) syncStems(true); }
   function onLaneKey(e) {
     if (!S.plan || !S.sel || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return;
     e.preventDefault();
@@ -519,24 +551,24 @@
     applyGains(); paintMixer(); scheduleDraw();
   }
   async function renderPreview() {
-    const r = await guard('Rendering the preview', () => call('POST', `/plans/${S.plan.id}/preview`));
-    if (!r) return;
+    const id = S.plan.id, r = await guard('Rendering the preview', () => call('POST', `/plans/${id}/preview`));
+    if (!r || !isCurrent(id)) return;
     P.preview = r; P.stale = false; loadStemAudio(); applyGains(); paintMixer(); scheduleDraw();
     say('Preview ready. Press Play (Space).');
   }
   async function mixMaster() {
-    const r = await guard('Mixing the master', () => call('POST', `/plans/${S.plan.id}/mix`, { target_lufs: -14, mux: false }));
-    if (r) { P.master_info = r.loudness; paintMixer(); say(`Master: ${r.loudness.integrated_lufs.toFixed(1)} LUFS, ${r.loudness.true_peak_db.toFixed(1)} dBTP.`); }
+    const id = S.plan.id, r = await guard('Mixing the master', () => call('POST', `/plans/${id}/mix`, { target_lufs: -14, mux: false }));
+    if (r && isCurrent(id)) { P.master_info = r.loudness; paintMixer(); say(`Master: ${r.loudness.integrated_lufs.toFixed(1)} LUFS, ${r.loudness.true_peak_db.toFixed(1)} dBTP.`); }
   }
   async function exportAll() {
     const mux = !!(el.muxBox && el.muxBox.checked);
-    const r = await guard('Exporting', () => call('POST', `/plans/${S.plan.id}/export`, { target_lufs: -14, mux }));
-    if (r) { P.master_info = r.loudness; paintMixer(); const f = r.findings || { errors: 0, warnings: 0 }; say(`Exported ${r.files.length} files to ${r.out_dir} (${f.errors} QA error(s), ${f.warnings} warning(s)).`, f.errors > 0); }
+    const id = S.plan.id, r = await guard('Exporting', () => call('POST', `/plans/${id}/export`, { target_lufs: -14, mux }));
+    if (r && isCurrent(id)) { P.master_info = r.loudness; paintMixer(); const f = r.findings || { errors: 0, warnings: 0 }; say(`Exported ${r.files.length} files to ${r.out_dir} (${f.errors} QA error(s), ${f.warnings} warning(s)).`, f.errors > 0); }
   }
 
   function commitFader(stem, db) {
-    const ids = stem === 'effects' ? ['sfx', 'ambience', 'foley'] : [stem];
-    return edit({ tracks: ids.map((id) => ({ id, gain_db: db })) }, 'Fader').finally(() => { delete P.live[stem]; applyGains(); paintMixer(); });
+    const ids = stem === 'effects' ? ['sfx', 'ambience', 'foley'] : [stem], delta = db - planDb(stem);   // effects: move all three by the same amount
+    return edit({ tracks: ids.map((id) => ({ id, gain_db: stem === 'effects' ? Math.round((trackDb(id) + delta) * 100) / 100 : db })) }, 'Fader').finally(() => { delete P.live[stem]; applyGains(); paintMixer(); });
   }
   function buildTransport() {
     const b = (t, f, title, id) => h('button', { type: 'button', class: 'dl-btn au-mini', id, title, onclick: f }, t);
@@ -651,7 +683,9 @@
     await guard('Load plans', async () => {
       await refreshPlans();
       const want = (S.plan && S.plan.id) || remembered();
-      if (want && S.plans.some((p) => p.id === want)) await loadPlan(want); else paintAll();
+      if (S.plan) await reload();
+      else if (!S.openingVideo && want && S.plans.some((p) => p.id === want)) await loadPlan(want);
+      else paintAll();
     });
     poll();
   }
