@@ -333,6 +333,29 @@ async def panelflow_scene_knowledge_stats() -> dict[str, Any]:
 
 
 @registry.tool(
+    name="panelflow_anatomy_stats",
+    description="The anatomy review in numbers: pictures checked, how often each image model draws wrong bodies (extra arms, hands, legs, ghost objects, stray text, "
+                "a pose that was asked for but not shown, merged bodies), the defect rate with lessons off and on, redraws needed, and the owner's flags of mistakes the "
+                "reviewer missed.",
+    input_schema={"type": "object", "properties": {}},
+    domain="original",
+)
+async def panelflow_anatomy_stats() -> dict[str, Any]:
+    return await bridge.get("/api/original/anatomy/stats")
+
+
+@registry.tool(
+    name="panelflow_anatomy_flag",
+    description="Record that a picture had a body mistake the anatomy reviewer missed (say what it was, e.g. 'four arms'). The picture joins the labelled test set and "
+                "counts against the reviewer's accuracy.",
+    input_schema={"type": "object", "properties": {"picture": {"type": "string"}, "note": {"type": "string"}, "model": {"type": "string"}}, "required": ["picture", "note"]},
+    domain="original",
+)
+async def panelflow_anatomy_flag(picture: str, note: str, model: str = "flux2_klein_4b") -> dict[str, Any]:
+    return await bridge.post("/api/original/anatomy/flag", {"picture": picture, "note": note, "model": model})
+
+
+@registry.tool(
     name="panelflow_scene_knowledge_search",
     description="Full-text search over past Scene Director briefs and the owner's notes and tags (e.g. 'horizon', 'too cartoonish'). Returns the matching pictures.",
     input_schema={"type": "object", "properties": {"q": {"type": "string"}, "limit": {"type": "integer"}}, "required": ["q"]},
