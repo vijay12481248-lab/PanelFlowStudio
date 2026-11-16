@@ -1,7 +1,7 @@
 """The anatomy review of one picture: zoomed tiles and pose questions to each judge, deterministic rules, and honest confidence.
 
-Each judge LISTS the hands and feet it sees on the whole picture and on every tile (the code counts the lines) and answers a short flags question. A defect is
-`confirmed` when two judges both report it. A count defect (extra hands or feet) is also confirmed when ONE judge reports it from two different views, the whole picture
+Each judge LISTS the hands it sees on the whole picture and on every tile (the code counts the lines) and answers a short flags question. A defect is
+`confirmed` when two judges both report it. A count defect (extra hands) is also confirmed when ONE judge reports it from two different views, the whole picture
 and a zoomed tile: measured on real pictures, Qwen3-VL 8B undercounts extra hands while qwen3.5:9b finds them, so requiring both judges would confirm nothing. Anything
 reported once is `suspected` (kept and flagged, never a reason to redraw), and a picture is `unverified` when no judge gave a usable whole-picture answer. `clean`
 therefore always means "a judge looked and nothing was confirmed", never "nobody looked".
@@ -33,8 +33,8 @@ class AnatomyReport(BaseModel):
 
 async def _view(judge: Judge, png: bytes, tile: str, flags_prompt: str) -> Answer:
     answer = parse_flags_reply(await judge.ask(png, flags_prompt), judge.name, tile)
-    answer.hands, answer.feet = parse_enum_reply(await judge.ask(png, ENUM_PROMPT))
-    answer.ok = answer.ok or answer.hands is not None or answer.feet is not None
+    answer.hands = parse_enum_reply(await judge.ask(png, ENUM_PROMPT))
+    answer.ok = answer.ok or answer.hands is not None
     return answer
 
 

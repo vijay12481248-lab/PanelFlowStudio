@@ -13,7 +13,6 @@ from engine.original.anatomy.rules import pose_asks
 
 RULES = {
     "extra_hands|any": "Exactly two arms and two hands per person, no extra arms or hands anywhere, and nothing but the legs in the lap.",
-    "extra_feet|any": "Each person has exactly two legs and two feet.",
     "stray_text|any": "No letters, numbers or writing anywhere in the picture.",
     "duplicate_object|any": "Every object appears once: exactly one sword with exactly one blade.",
     "merged_bodies|any": "Each person's body is clearly separate, and every arm and leg can be traced to its owner.",

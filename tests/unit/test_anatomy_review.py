@@ -14,7 +14,7 @@ def png():
 
 
 def hands(n):
-    return "\n".join([f"HAND {i + 1}: somewhere" for i in range(n)] + ["FOOT 1: left", "FOOT 2: right"])
+    return "\n".join(f"HAND {i + 1}: somewhere" for i in range(n))
 
 
 class Fake:

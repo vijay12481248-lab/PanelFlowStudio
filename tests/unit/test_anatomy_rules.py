@@ -13,17 +13,17 @@ def kinds(ds):
 def test_more_than_two_hands_per_person_is_an_extra_hand_defect_on_any_view():
     ds = judge_defects([A("whole", hands=4), A("lower", hands=4)], people=1, pose_answers={})
     assert kinds(ds) == ["extra_hands", "extra_hands"] and {d.tile for d in ds} == {"whole", "lower"} and all(isinstance(d, Defect) and d.judge == "j1" for d in ds)
-    assert judge_defects([A(hands=2, feet=2)], people=1, pose_answers={}) == []
+    assert judge_defects([A(hands=2)], people=1, pose_answers={}) == []
 
 
 def test_views_are_compared_with_two_per_person_and_never_summed():
     assert judge_defects([A("upper", hands=1), A("middle", hands=1)], people=1, pose_answers={}) == []  # overlapping bands: 1 + 1 is not 2 hands
     assert judge_defects([A("left", hands=4)], people=2, pose_answers={}) == []  # four hands are fine for two people
-    assert kinds(judge_defects([A("left", hands=5, feet=5)], people=2, pose_answers={})) == ["extra_feet", "extra_hands"]
+    assert kinds(judge_defects([A("left", hands=5)], people=2, pose_answers={})) == ["extra_hands"]
 
 
 def test_unknown_people_means_no_count_is_judged():
-    assert judge_defects([A("whole", hands=9, feet=9)], people=None, pose_answers={}) == []
+    assert judge_defects([A("whole", hands=9)], people=None, pose_answers={}) == []
 
 
 def test_text_double_and_merged_flags():
