@@ -6,7 +6,7 @@ from engine.mcp.registry import registry
 from engine.mcp.server import MCPServer
 
 NAMES = {f"panelflow_chronoflow_audio_{n}" for n in
-         ("providers", "create_plan", "get_plan", "put_plan", "spot", "source_cue", "pick", "qa", "mix", "export")}
+         ("providers", "create_plan", "get_plan", "put_plan", "spot", "source_cue", "pick", "qa", "mix", "export", "voices", "script", "narration_sample", "add_sound", "fix")}
 
 
 def _exposed(profile):
@@ -21,7 +21,8 @@ def test_tools_registered_in_chronoflow_and_all_profiles_not_creative():
 @pytest.mark.parametrize("name,required", [
     ("create_plan", {"video_path"}), ("get_plan", {"plan_id"}), ("put_plan", {"plan_id"}), ("spot", {"plan_id"}),
     ("source_cue", {"plan_id", "cue_id"}), ("pick", {"plan_id", "cue_id", "candidate_id"}), ("qa", {"plan_id"}),
-    ("mix", {"plan_id"}), ("export", {"plan_id"}), ("providers", set())])
+    ("mix", {"plan_id"}), ("export", {"plan_id"}), ("providers", set()), ("voices", set()), ("script", {"plan_id", "text"}),
+    ("narration_sample", {"plan_id", "text"}), ("add_sound", {"plan_id", "intent"}), ("fix", {"plan_id"})])
 def test_each_tool_has_required_ids_in_schema(name, required):
     schema = registry.get_tool(f"panelflow_chronoflow_audio_{name}").input_schema
     assert set(schema.get("required", [])) == required

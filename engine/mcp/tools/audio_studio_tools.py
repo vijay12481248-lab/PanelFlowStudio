@@ -115,3 +115,50 @@ async def mix(plan_id: str, target_lufs: float | None = None, mux: bool | None =
     domain="chronoflow")
 async def export(plan_id: str, target_lufs: float | None = None, mux: bool | None = None, allow_incomplete: bool | None = None) -> dict[str, Any]:
     return await bridge.post(f"{_BASE}/plans/{plan_id}/export", _body(target_lufs=target_lufs, mux=mux, allow_incomplete=allow_incomplete), timeout_s=900.0)
+
+
+@registry.tool(
+    name="panelflow_chronoflow_audio_voices",
+    description="Narration voices you can use: Kokoro voices and the Qwen3-TTS reference voices on disk, and whether a speech model is installed.",
+    input_schema=_schema({}), domain="chronoflow")
+async def voices() -> dict[str, Any]:
+    return await bridge.get(f"{_BASE}/voices")
+
+
+@registry.tool(
+    name="panelflow_chronoflow_audio_script",
+    description=("Turn narration text into draft narration cues on the Voice lane. Paragraphs (blank lines) or sentences become lines. mode sequential: back to back from `start` seconds "
+                 "(estimated lengths plus `gap`); per_cut: line i starts on picture cut i. Then call source_cue on each vo_NN cue to speak it, and qa to check overruns."),
+    input_schema=_schema({"plan_id": _PLAN, "text": {"type": "string"}, "mode": {"type": "string", "enum": ["sequential", "per_cut"]}, "start": {"type": "number"}, "gap": {"type": "number"},
+                          "voice": {"type": "string", "description": "A Kokoro voice (af_heart, bm_george ...) or a Qwen3-TTS reference voice (see voices)"},
+                          "provider": {"type": "string", "enum": ["kokoro", "qwen3_tts"]}, "speed": {"type": "number"}}, ["plan_id", "text"]), domain="chronoflow")
+async def script(plan_id: str, text: str, mode: str | None = None, start: float | None = None, gap: float | None = None, voice: str | None = None,
+                 provider: str | None = None, speed: float | None = None) -> dict[str, Any]:
+    return await bridge.post(f"{_BASE}/plans/{plan_id}/script", _body(text=text, mode=mode, start=start, gap=gap, voice=voice, provider=provider, speed=speed))
+
+
+@registry.tool(
+    name="panelflow_chronoflow_audio_narration_sample",
+    description="Speak a line with a voice to hear it before adding it (nothing is added to the plan). Returns a file under the plan and its length in seconds.",
+    input_schema=_schema({"plan_id": _PLAN, "text": {"type": "string"}, "voice": {"type": "string"}, "provider": {"type": "string", "enum": ["kokoro", "qwen3_tts"]}, "speed": {"type": "number"}},
+                         ["plan_id", "text"]), domain="chronoflow")
+async def narration_sample(plan_id: str, text: str, voice: str | None = None, provider: str | None = None, speed: float | None = None) -> dict[str, Any]:
+    return await bridge.post(f"{_BASE}/plans/{plan_id}/narration/sample", _body(text=text, voice=voice, provider=provider, speed=speed))
+
+
+@registry.tool(
+    name="panelflow_chronoflow_audio_add_sound",
+    description="Describe one sound and where it goes: creates the cue and sources it in one step (mode ask by default so candidates wait for a pick). track: sfx, ambience, foley or music.",
+    input_schema=_schema({"plan_id": _PLAN, "intent": {"type": "string"}, "kind": {"type": "string"}, "track": {"type": "string", "enum": ["music", "sfx", "ambience", "foley"]},
+                          "hit_t": {"type": "number"}, "t_in": {"type": "number"}, "t_out": {"type": "number"}, "mode": _MODE}, ["plan_id", "intent"]), domain="chronoflow")
+async def add_sound(plan_id: str, intent: str, kind: str | None = None, track: str | None = None, hit_t: float | None = None, t_in: float | None = None,
+                    t_out: float | None = None, mode: str | None = None) -> dict[str, Any]:
+    return await bridge.post(f"{_BASE}/plans/{plan_id}/add_sound", _body(intent=intent, kind=kind, track=track, hit_t=hit_t, t_in=t_in, t_out=t_out, mode=mode), timeout_s=900.0)
+
+
+@registry.tool(
+    name="panelflow_chronoflow_audio_fix",
+    description="Fix problems: re-source cues with a clipped, silent or too loud sound (a different clip), push overrunning narration later. Returns what was fixed and what remains.",
+    input_schema=_schema({"plan_id": _PLAN}, ["plan_id"]), domain="chronoflow")
+async def fix(plan_id: str) -> dict[str, Any]:
+    return await bridge.post(f"{_BASE}/plans/{plan_id}/fix", {}, timeout_s=900.0)
