@@ -226,7 +226,167 @@
         h('button', { type: 'button', class: 'dl-btn accent', id: 'auSourceCue', onclick: () => sourceSel(c.id), disabled: !!S.busy }, take || c.candidates.length ? 'Source again' : 'Source'),
         h('button', { type: 'button', class: 'dl-btn', id: 'auDeleteCue', onclick: () => deleteCue(c.id), disabled: !!S.busy }, 'Delete cue')));
   }
-  function renderLanes() { /* Task 6 */ }
+  // ---------- lanes: ruler, five lanes of cue blocks with waveforms, picture cuts, playhead ----------
+  const LANE_H = 52, HEAD_W = 64, RULER_H = 24, MIN_PPS = 4, MAX_PPS = 1200;
+  const L = { view: { t0: 0, pps: 40 }, fittedFor: null, peaks: {}, loading: new Set(), drag: null, scrub: false, pending: 0, cv: {} };
+  const COL = { bg: '#0a1128', grid: 'rgba(122,162,255,.08)', cut: 'rgba(122,162,255,.35)', ready: ['#1c3f86', '#4f7be8'], wave: '#a9c7ff', hit: '#ffd166', sel: '#ffffff',
+    draft: '#6a76a3', failed: '#f2667a', pick: '#f0b14a', text: '#eaf0ff' };
+
+  function buildLanes() {
+    el.bottom.replaceChildren();
+    const btn = (t, f, title) => h('button', { type: 'button', class: 'dl-btn au-mini', title, onclick: f }, t);
+    el.zoomLabel = h('span', { class: 'au-hint' });
+    const bar = h('div', { class: 'au-lanebar' }, btn('−', () => zoom(1 / 1.4), 'Zoom out'), btn('+', () => zoom(1.4), 'Zoom in'), btn('Fit', fit, 'Show the whole video'), el.zoomLabel,
+      h('span', { class: 'au-hint au-right' }, 'Wheel: zoom · Shift+wheel: scroll · Drag a block: move its hit · ←/→: one frame'));
+    el.laneRows = h('div', { class: 'au-lanerows' });
+    const rulerCv = h('canvas', { class: 'au-cv au-rulercv', 'data-lane': 'ruler' });
+    el.laneRows.append(h('div', { class: 'au-row', style: `height:${RULER_H}px` }, h('div', { class: 'au-head' }, ''), rulerCv));
+    L.cv.ruler = rulerCv;
+    for (const lane of M.LANES) {
+      const cv = h('canvas', { class: 'au-cv', 'data-lane': lane.id }); L.cv[lane.id] = cv;
+      el.laneRows.append(h('div', { class: 'au-row', style: `height:${LANE_H}px` }, h('div', { class: 'au-head', title: lane.id }, lane.label), cv));
+    }
+    el.playhead = h('div', { class: 'au-playhead' });
+    el.laneScroll = h('div', { class: 'au-lanescroll' }, el.laneRows, el.playhead);
+    el.lanes = h('div', { class: 'au-lanes', tabindex: '0', 'aria-label': 'Sound lanes. Arrow keys move the selected cue by one frame.', onkeydown: onLaneKey },
+      h('div', { class: 'au-lanearea' }, bar, el.laneScroll));
+    el.mixerHost = h('div', { class: 'au-mixer' });
+    el.bottom.append(el.lanes, el.mixerHost);
+    for (const id of ['ruler', ...M.LANES.map((l) => l.id)]) bindCanvas(L.cv[id], id);
+    el.laneScroll.addEventListener('wheel', onWheel, { passive: false });
+    if (window.ResizeObserver) new ResizeObserver(() => { if (S.plan) { if (L.fittedFor !== S.plan.id) fit(); else scheduleDraw(); } }).observe(el.laneScroll);
+  }
+  const cvWidth = () => (L.cv.ruler ? L.cv.ruler.clientWidth : 0);
+  function fit() { const w = cvWidth(); if (!S.plan || w < 50) return; L.view = { t0: 0, pps: Math.max(MIN_PPS, w / Math.max(S.plan.duration, 1)) }; L.fittedFor = S.plan.id; scheduleDraw(); }
+  function zoom(f, anchorT) { const w = cvWidth(), a = anchorT != null ? anchorT : L.view.t0 + w / L.view.pps / 2; L.view = M.zoomAt(L.view, f, a, { minPps: MIN_PPS, maxPps: MAX_PPS }); scheduleDraw(); }
+  function onWheel(e) {
+    if (!S.plan) return; e.preventDefault();
+    const r = L.cv.ruler.getBoundingClientRect(), x = e.clientX - r.left;
+    if (e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) { L.view = { ...L.view, t0: Math.max(0, L.view.t0 + (e.shiftKey ? e.deltaY : e.deltaX) / L.view.pps) }; scheduleDraw(); return; }
+    zoom(Math.exp(-Math.max(-400, Math.min(400, e.deltaY)) * 0.0015), x >= 0 ? M.xToTime(x, L.view) : undefined);   // proportional: a notch is about 16 %, a trackpad flick is smooth
+  }
+
+  const shown = (c) => (L.drag && L.drag.id === c.id ? { ...c, ...L.drag.patch } : c);
+  function cueAt(laneId, x) {
+    const t = M.xToTime(x, L.view);
+    for (let i = S.plan.cues.length - 1; i >= 0; i--) {
+      const c = shown(S.plan.cues[i]); if (c.track !== laneId) continue;
+      const sp = M.cueSpan(c), pad = 3 / L.view.pps;
+      if (t >= sp.start - pad && t <= sp.end + pad) return S.plan.cues[i];
+    }
+    return null;
+  }
+  function bindCanvas(cv, id) {
+    cv.addEventListener('pointerdown', (e) => {
+      if (!S.plan || e.button !== 0) return;
+      el.lanes.focus({ preventScroll: true });
+      const x = e.clientX - cv.getBoundingClientRect().left;
+      if (id === 'ruler') { L.scrub = true; cv.setPointerCapture(e.pointerId); seek(M.xToTime(x, L.view)); return; }
+      const c = cueAt(id, x);
+      if (!c) { seek(M.xToTime(x, L.view)); return; }
+      if (S.sel !== c.id) selectCue(c.id, false);
+      L.drag = { id: c.id, x0: e.clientX, orig: c, patch: {}, moved: false, cv }; cv.setPointerCapture(e.pointerId);
+    });
+    cv.addEventListener('pointermove', (e) => {
+      if (L.scrub && id === 'ruler') { seek(M.xToTime(e.clientX - cv.getBoundingClientRect().left, L.view)); return; }
+      const d = L.drag; if (!d || d.cv !== cv) return;
+      if (Math.abs(e.clientX - d.x0) > 3) d.moved = true;
+      if (d.moved) { d.patch = M.dragCue(d.orig, (e.clientX - d.x0) / L.view.pps, S.plan, S.plan.cuts || [], 8 / L.view.pps); scheduleDraw(); }
+    });
+    const up = async (e) => {
+      L.scrub = false;
+      const d = L.drag; if (!d || d.cv !== cv) return;
+      L.drag = null;
+      if (d.moved && Object.keys(d.patch).length) { await edit({ cues: [{ id: d.id, ...d.patch }] }, 'Move cue'); const m = cueById(d.id); if (m) say(`Moved ${d.id} to ${M.fmtTC(m.hit_t != null ? m.hit_t : m.t_in || 0, S.plan.fps)}.`); }
+      else scheduleDraw();
+    };
+    cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+  }
+  function seek(t) { if (!S.plan) return; try { el.video.currentTime = Math.min(Math.max(0, t), S.plan.duration); } catch (e) { /* video not ready */ } movePlayhead(); }
+  function onLaneKey(e) {
+    if (!S.plan || !S.sel || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return;
+    e.preventDefault();
+    const c = cueById(S.sel); if (!c) return;
+    const dt = (e.key === 'ArrowLeft' ? -1 : 1) * (e.shiftKey ? 10 : 1) / S.plan.fps;
+    edit({ cues: [{ id: c.id, ...M.dragCue(c, dt, S.plan, [], 0) }] }, 'Nudge cue');
+  }
+  function movePlayhead() {
+    if (!el.playhead || !S.plan) return;
+    const x = M.timeToX(el.video.currentTime || 0, L.view), w = cvWidth();
+    el.playhead.style.display = x >= 0 && x <= w ? 'block' : 'none';
+    el.playhead.style.left = `${HEAD_W + x}px`;
+  }
+
+  function ensurePeaks(c) {
+    const t = M.chosenTake(c); if (!t || L.peaks[t.id] || L.loading.has(t.id) || !S.plan) return;
+    L.loading.add(t.id);
+    call('GET', `/plans/${S.plan.id}/takes/${t.id}/peaks?bins=600`).then((r) => { L.peaks[t.id] = r.peaks; }).catch(() => { L.peaks[t.id] = []; })
+      .finally(() => { L.loading.delete(t.id); scheduleDraw(); });
+  }
+  function colPeak(peaks, a, b) {   // max of the peaks between fractions a and b of the sound, wrapping so a looped bed repeats
+    const n = peaks.length; if (!n) return 0;
+    if (b - a >= 1) return Math.max(...peaks);
+    const fa = ((a % 1) + 1) % 1, i0 = Math.floor(fa * n), i1 = Math.max(i0 + 1, Math.ceil((fa + (b - a)) * n));
+    let m = 0; for (let k = i0; k < i1; k++) { const v = peaks[k % n]; if (v > m) m = v; } return m;
+  }
+
+  function scheduleDraw() { if (L.pending) return; L.pending = setTimeout(() => { L.pending = 0; draw(); }, 0); }
+  function sizeCanvas(cv, hCss) {
+    const dpr = window.devicePixelRatio || 1, w = cv.clientWidth, w2 = Math.round(w * dpr), h2 = Math.round(hCss * dpr);
+    if (cv.width !== w2 || cv.height !== h2) { cv.width = w2; cv.height = h2; }
+    const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); return { g, w };
+  }
+  function drawRuler() {
+    const { g, w } = sizeCanvas(L.cv.ruler, RULER_H), fps = S.plan.fps;
+    g.fillStyle = '#0f1740'; g.fillRect(0, 0, w, RULER_H); g.font = '10px monospace'; g.textBaseline = 'middle';
+    for (const k of M.rulerTicks(L.view, w, fps)) {
+      const x = Math.round(M.timeToX(k.t, L.view)) + 0.5;
+      g.strokeStyle = k.major ? '#5a6bb0' : '#2a3770'; g.beginPath(); g.moveTo(x, k.major ? 8 : 16); g.lineTo(x, RULER_H); g.stroke();
+      if (k.major) { g.fillStyle = '#9aa6d0'; g.fillText(M.fmtTC(k.t, fps).slice(3), x + 3, 8); }
+    }
+    for (const c of S.plan.cuts || []) { const x = M.timeToX(c, L.view); if (x >= 0 && x <= w) { g.fillStyle = '#7aa2ff'; g.fillRect(Math.round(x) - 1, RULER_H - 5, 3, 5); } }
+  }
+  function drawLane(lane) {
+    const { g, w } = sizeCanvas(L.cv[lane.id], LANE_H), p = S.plan, v = L.view, fps = p.fps;
+    g.fillStyle = COL.bg; g.fillRect(0, 0, w, LANE_H);
+    for (const k of M.rulerTicks(v, w, fps)) if (k.major) { g.fillStyle = COL.grid; g.fillRect(Math.round(M.timeToX(k.t, v)), 0, 1, LANE_H); }
+    g.fillStyle = COL.cut; for (const c of p.cuts || []) { const x = M.timeToX(c, v); if (x >= -1 && x <= w + 1) g.fillRect(Math.round(x), 0, 1, LANE_H); }
+    for (const raw of p.cues) {
+      if (raw.track !== lane.id) continue;
+      const c = shown(raw), sp = M.cueSpan(c), x0 = M.timeToX(sp.start, v), x1 = M.timeToX(sp.end, v);
+      if (x1 < 0 || x0 > w) continue;
+      const bw = Math.max(4, x1 - x0), y = 5, bh = LANE_H - 10, sel = S.sel === c.id, take = M.chosenTake(c);
+      const style = c.status === 'ready' ? COL.ready : null, edge = c.status === 'failed' ? COL.failed : c.status === 'needs_pick' ? COL.pick : c.status === 'draft' ? COL.draft : COL.ready[1];
+      g.fillStyle = style ? style[0] : c.status === 'failed' ? 'rgba(242,102,122,.12)' : c.status === 'needs_pick' ? 'rgba(240,177,74,.12)' : 'rgba(106,118,163,.12)';
+      g.fillRect(x0, y, bw, bh);
+      if (take) {
+        ensurePeaks(c);
+        const peaks = L.peaks[take.id];
+        if (peaks && peaks.length) {
+          const off = c.hit_t != null ? (c.anchor === 'peak' ? take.peak_s : take.onset_s) : 0, trim = c.hit_t != null ? Math.max(0, off - c.hit_t) : 0, dur = Math.max(take.duration_s, 0.01);
+          g.fillStyle = COL.wave; g.globalAlpha = 0.85;
+          const from = Math.max(0, Math.floor(x0)), to = Math.min(w, Math.ceil(x0 + bw));
+          for (let x = from; x < to; x += 1) {
+            const ta = M.xToTime(x, v) - sp.start + trim, tb = M.xToTime(x + 1, v) - sp.start + trim, pk = colPeak(peaks, ta / dur, tb / dur), hh = Math.max(1, pk * (bh - 6));
+            g.fillRect(x, y + bh / 2 - hh / 2, 1, hh);
+          }
+          g.globalAlpha = 1;
+        }
+      }
+      g.lineWidth = sel ? 2 : 1; g.strokeStyle = sel ? COL.sel : edge; g.setLineDash(c.status === 'draft' ? [4, 3] : []); g.strokeRect(x0 + 0.5, y + 0.5, bw - 1, bh - 1); g.setLineDash([]);
+      if (c.hit_t != null) { const hx = Math.round(M.timeToX(c.hit_t, v)); g.fillStyle = COL.hit; g.fillRect(hx, y - 3, 2, bh + 6); }
+      g.save(); g.beginPath(); g.rect(x0, y, bw, bh); g.clip(); g.fillStyle = COL.text; g.font = '10px sans-serif'; g.textBaseline = 'top';
+      g.fillText(c.intent || c.kind, Math.max(x0, 0) + 4, y + 2); g.restore();
+    }
+  }
+  function draw() {
+    if (!S.plan || !el.lanes || cvWidth() < 50) return;
+    if (L.fittedFor !== S.plan.id) { fit(); return; }
+    drawRuler(); for (const lane of M.LANES) drawLane(lane);
+    if (el.zoomLabel) el.zoomLabel.textContent = `${Math.round(L.view.pps)} px/s`;
+    movePlayhead();
+  }
+  function renderLanes() { if (!el.lanes) return; if (S.plan) for (const c of S.plan.cues) ensurePeaks(c); scheduleDraw(); }
 
   // ---------- mount / open / close ----------
   function mount() {
@@ -258,9 +418,10 @@
     el.tc = h('span', { class: 'au-tcbig' }, '00:00:00:00');
     el.mon.append(h('div', { class: 'au-monhead' }, el.title, el.badge), h('div', { class: 'au-videowrap' }, el.video),
       h('div', { class: 'au-transport' }, el.tc));
-    el.video.addEventListener('timeupdate', () => { if (S.plan) el.tc.textContent = M.fmtTC(el.video.currentTime, S.plan.fps); });
+    el.video.addEventListener('timeupdate', () => { if (S.plan) { el.tc.textContent = M.fmtTC(el.video.currentTime, S.plan.fps); movePlayhead(); } });
+    el.video.addEventListener('seeked', () => movePlayhead());
     el.insp.append(h('div', { class: 'cf-panel-head' }, 'Cue'), (el.inspBody = h('div', { class: 'au-pane' })));
-    el.bottom.append((el.lanes = h('div', { class: 'au-lanes' })));
+    buildLanes();
     S.mounted = true; paintAll();
   }
   async function open() {
@@ -275,5 +436,5 @@
   }
   function close() { S.open = false; clearTimeout(S.timer); if (el.video) el.video.pause(); }
 
-  window.NLEAudio = { mount, open, close, openVideo, get state() { return S; }, selectCue, reload, call, edit, sourceOne, guard, say, addCueAtPlayhead };
+  window.NLEAudio = { mount, open, close, openVideo, get state() { return S; }, selectCue, reload, call, edit, sourceOne, guard, say, addCueAtPlayhead, fit, zoom, seek, get view() { return L.view; }, get peaks() { return L.peaks; } };
 })();

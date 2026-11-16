@@ -29,7 +29,7 @@
   }
 
   function rulerStep(pps, fps) {
-    const steps = [1 / fps, 2 / fps, 5 / fps, 10 / fps, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600];
+    const steps = [1 / fps, 2 / fps, 4 / fps, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600];   // frame steps only where they divide a second sensibly
     return steps.find((s) => s * pps >= 60) || 600;
   }
   function rulerTicks(v, width, fps) {

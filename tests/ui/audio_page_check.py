@@ -180,7 +180,67 @@ def check_5(tmp):
     print("task 5 OK")
 
 
-CHECKS = {"4": check_4, "5": check_5}
+# ---------------------------------------------------------------- task 6: lanes
+def check_6(tmp):
+    video = make_video(tmp / "cuts6.mp4")
+    with sync_playwright() as pw:
+        s = Session(pw)
+        open_video(s, video)
+        s.page.click("#auSpot")
+        s.page.wait_for_function("document.querySelectorAll('.au-cue').length === 4", timeout=60000)
+        s.page.click("#auSourceAll")
+        s.page.wait_for_function("NLEAudio.state.plan.cues.every(c => c.status !== 'draft')", timeout=240000)
+        s.page.wait_for_function("NLEAudio.state.plan.cues.filter(c => c.status === 'ready').every(c => (NLEAudio.peaks[c.chosen_take] || []).length > 0)", timeout=30000)
+        s.page.wait_for_timeout(300)
+        assert s.ev("document.querySelectorAll('.au-cv').length") == 6, "ruler + five lanes"
+        w = s.ev("document.querySelector('.au-rulercv').clientWidth")
+        assert w > 500, w
+        view = s.ev("NLEAudio.view")
+        assert view["t0"] == 0 and abs(view["pps"] * 8 - w) < 2, ("fitted to the video", view, w)
+        cue = s.ev("NLEAudio.state.plan.cues.find(c => c.id === 'cut_01')")
+        assert cue["status"] == "ready", cue
+        lane_box = s.ev("(() => { const r = document.querySelector('.au-cv[data-lane=sfx]').getBoundingClientRect(); return [r.x, r.y, r.width, r.height]; })()")
+        pixel = lambda lane, x, y: s.ev("([lane, x, y]) => { const cv = document.querySelector(`.au-cv[data-lane=${lane}]`); return [...cv.getContext('2d').getImageData(x * (cv.width / cv.clientWidth), y, 1, 1).data]; }", [lane, x, y])
+        hx = round(cue["hit_t"] * view["pps"])
+        r, g, b, a = pixel("sfx", hx, 26)
+        assert r > 230 and g > 180 and b < 140, ("the yellow hit marker is drawn on the hit", (r, g, b))
+        s.shot("task6_lanes")
+        # clicking the ruler seeks the video and moves the playhead
+        s.page.mouse.click(lane_box[0] + 3.0 * view["pps"], lane_box[1] - 60)
+        t = s.ev("document.querySelector('.au-video').currentTime")
+        assert False if abs(t - 3.0) > 0.35 else True, t
+        # drag the block one second to the right: the hit moves by 1.0 s, snapped to the frame, and is saved
+        x0 = lane_box[0] + cue["hit_t"] * view["pps"] + 6
+        y0 = lane_box[1] + 26
+        s.page.mouse.move(x0, y0)
+        s.page.mouse.down()
+        s.page.mouse.move(x0 + 0.5 * view["pps"], y0, steps=4)
+        s.page.mouse.move(x0 + 1.0 * view["pps"], y0, steps=4)
+        s.page.mouse.up()
+        s.page.wait_for_function("NLEAudio.state.plan.cues.find(c => c.id === 'cut_01').hit_t > 2.9", timeout=15000)
+        moved = cue_on_server(s, "cut_01")["hit_t"]
+        assert abs(moved - 3.0) < 1 / 24 + 1e-6 and abs(moved * 24 - round(moved * 24)) < 1e-6, moved
+        assert s.ev("NLEAudio.state.sel") == "cut_01"
+        # keyboard: one frame right
+        s.page.keyboard.press("ArrowRight")
+        s.page.wait_for_function("b => NLEAudio.state.plan.cues.find(c => c.id === 'cut_01').hit_t > b + 0.01", arg=moved, timeout=15000)
+        assert abs(cue_on_server(s, "cut_01")["hit_t"] - (moved + 1 / 24)) < 1e-3
+        # wheel zoom keeps the time under the cursor
+        cx = lane_box[0] + 4.0 * view["pps"]
+        before = s.ev("(x => NLEAudio.view.t0 + x / NLEAudio.view.pps)(" + str(4.0 * view["pps"]) + ")")
+        s.page.mouse.move(cx, lane_box[1] + 20)
+        s.page.mouse.wheel(0, -300)
+        s.page.wait_for_timeout(200)
+        v2 = s.ev("NLEAudio.view")
+        assert v2["pps"] > view["pps"] * 1.4, v2
+        under = v2["t0"] + (cx - lane_box[0]) / v2["pps"]
+        assert abs(under - before) < 0.05, (under, before)
+        s.shot("task6_zoomed")
+        s.finish()
+    print("task 6 OK")
+
+
+CHECKS = {"4": check_4, "5": check_5, "6": check_6}
 
 if __name__ == "__main__":
     which = sys.argv[1] if len(sys.argv) > 1 else "all"

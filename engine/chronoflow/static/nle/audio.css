@@ -45,3 +45,20 @@
 .au-cand { display: flex; align-items: center; gap: 8px; background: #101a3d; border: 1px solid #222d5e; border-radius: 8px; padding: 6px 8px; }
 .au-cand-info { display: flex; flex-direction: column; min-width: 0; flex: 1; overflow: hidden; }
 .au-cand-info b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.audio-panel { flex-direction: row; }
+.au-lanes { flex: 1; min-width: 0; min-height: 0; display: flex; outline: none; }
+.au-lanes:focus-visible { box-shadow: inset 0 0 0 2px #3b6bf5; }
+.au-lanearea { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.au-lanebar { flex: none; display: flex; align-items: center; gap: 6px; padding: 4px 8px; background: #0f1740; border-bottom: 1px solid #1a2350; }
+.au-mini { padding: 2px 9px; min-width: 28px; }
+.au-hint { color: #6a76a3; font-size: .66rem; }
+.au-right { margin-left: auto; }
+.au-lanescroll { position: relative; flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; }
+.au-lanerows { display: flex; flex-direction: column; }
+.au-row { display: flex; flex: none; border-bottom: 1px solid #141c40; }
+.au-head { flex: 0 0 64px; display: flex; align-items: center; justify-content: center; background: #0f1740; border-right: 1px solid #1a2350; color: #7aa2ff; font-weight: 800; font-size: .7rem; letter-spacing: .05em; }
+.au-cv { flex: 1; min-width: 0; height: 100%; display: block; cursor: default; touch-action: none; }
+.au-rulercv { cursor: col-resize; }
+.au-playhead { position: absolute; top: 0; bottom: 0; width: 2px; background: #ff5d73; pointer-events: none; display: none; box-shadow: 0 0 0 1px rgba(255, 93, 115, .25); }
+.au-mixer { flex: 0 0 300px; border-left: 1px solid #1a2350; background: #0a1128; display: flex; flex-direction: column; min-height: 0; }
