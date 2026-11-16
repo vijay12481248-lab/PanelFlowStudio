@@ -688,6 +688,22 @@
     return { count: items.length };
   }
 
+  /** Spoken script lines (library voice sounds, in order) -> A2 Voice: back to back, or one line per picture cut. Returns how many lines run into the next. */
+  function placeNarration(sounds, o) {
+    if (!ui.jobId || !tl.clips.length) return { error: 'Open a project with clips in the Video Studio first.' };
+    const mode = o && o.mode === 'per_cut' ? 'per_cut' : 'sequential';
+    const at = M.layout(tl).map((l) => l.start).slice(1);   // the picture cuts (the first clip starts at 0)
+    const start = mode === 'per_cut' ? 0 : ui.t;
+    const pos = M.placeLines(sounds.map((s) => s.duration_s), { mode, start, gap: o && o.gap, cuts: at });
+    const items = sounds.map((s, i) => ({ sound: s.id, version: s.current, label: s.name, kind: 'voice', duration: s.duration_s, start: pos[i].start,
+      in: 0, out: s.duration_s, gain_db: 0, fade_in: 0, fade_out: 0 }));
+    placeSounds(`script:${Date.now()}`, items);
+    const over = pos.filter((p) => p.over > 0.05).length;
+    const few = mode === 'per_cut' && at.length + 1 < items.length ? ` (the timeline has ${at.length + 1} picture(s) for ${items.length} lines, so the extra lines follow the last one)` : '';
+    status(`Placed ${items.length} spoken line(s) on A2 Voice${few}${over ? `; ${over} run into the next line, so move the lines or use a faster pace` : ''}.`);
+    return { count: items.length, over };
+  }
+
   /** Audio Studio -> Video Studio: put a library sound on its track at the playhead. */
   function addSound(spec, where) {
     if (!ui.jobId || !tl.clips.length) return { error: 'Open a project with clips in the Video Studio first, then send the sound again.' };
@@ -761,6 +777,7 @@
         <label>Fade in <input type="number" id="inspSFI" min="0" max="${(len / 2).toFixed(2)}" step="0.1" value="${snd.fadeIn}"> s</label>
         <label>Fade out <input type="number" id="inspSFO" min="0" max="${(len / 2).toFixed(2)}" step="0.1" value="${snd.fadeOut}"> s</label>
         <span class="grow" style="flex:1"></span>
+        <button class="nle-btn" id="inspSNew" hidden></button>
         <button class="nle-btn" id="inspSEdit" title="Open this sound in the Audio Studio editor">Edit in Audio Studio</button>
         <button class="nle-btn" id="inspSDel">🗑 Remove</button>`;
       i.querySelector('b').textContent = snd.label;
@@ -771,6 +788,12 @@
       $('#inspSFI', i).onchange = (e) => edit(() => M.updateSound(tl, snd.id, { fadeIn: +e.target.value }));
       $('#inspSFO', i).onchange = (e) => edit(() => M.updateSound(tl, snd.id, { fadeOut: +e.target.value }));
       $('#inspSDel', i).onclick = () => edit(() => { M.removeSound(tl, snd.id); ui.sel = null; });
+      fetch(`${LIB}/sounds/${encodeURIComponent(snd.sound)}`).then((r) => (r.ok ? r.json() : null)).then((s) => {   // edited since it was placed? offer the newer take
+        const b = $('#inspSNew', i);
+        if (!s || !b || !selSnd() || selSnd().id !== snd.id || s.current === snd.version) return;
+        b.hidden = false; b.textContent = `Update to latest (v${s.current})`; b.title = `Placed v${snd.version}; the Audio Studio has v${s.current}. This resets the trim to the whole new take.`;
+        b.onclick = () => edit(() => M.useSoundVersion(tl, snd.id, s.current, s.duration_s));
+      }).catch(() => {});
       $('#inspSEdit', i).onclick = () => { if (typeof window.switchTab === 'function') window.switchTab('audio'); if (window.SoundEditor) window.SoundEditor.open().then(() => window.SoundEditor.openSound(snd.sound)); };
       return;
     }
@@ -1404,7 +1427,7 @@
     selectedClips: () => tl.clips.filter((c) => ui.selIds && ui.selIds.has(c.id)),
     on: (n, f) => (listeners[n] = listeners[n] || []).push(f),
     get tl() { return tl; }, get ui() { return ui; }, get root() { return root; }, cfg, mediaUrl, apiUrl, q, info, selectedClip: selClip,
-    addSound, placeSounds, clipAtPlayhead: () => M.locate(tl, ui.t), poolItems: () => tl.clips.map((c, i) => ({ clip: c, index: i })), renderAll, refreshAt,
+    addSound, placeSounds, placeNarration, clipAtPlayhead: () => M.locate(tl, ui.t), poolItems: () => tl.clips.map((c, i) => ({ clip: c, index: i })), renderAll, refreshAt,
   };
   window.NLE = api;
 })();

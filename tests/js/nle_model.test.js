@@ -171,6 +171,25 @@ test('sounds: add at a frame, move, trim both edges, fades and gain are clamped'
   M.updateSound(tl, a.id, { start: -4 }); assert.equal(a.start, 0);
 });
 
+test('placeLines: back to back, per picture cut, and how far a line runs into the next', () => {
+  const seq = M.placeLines([2, 3, 1], { mode: 'sequential', start: 1, gap: 0.5 });
+  assert.deepEqual(seq.map((p) => p.start), [1, 3.5, 7]);
+  assert.ok(seq.every((p) => p.over === 0));
+  const cut = M.placeLines([4, 1, 1, 1], { mode: 'per_cut', start: 0, gap: 0.5, cuts: [3, 6] });
+  assert.deepEqual(cut.map((p) => p.start), [0, 3, 6, 7.5]);   // line 3 is on the last cut, line 4 follows it
+  near(cut[0].over, 1);                                          // 4 s of speech into a 3 s picture
+  assert.equal(cut[1].over, 0);
+});
+
+test('useSoundVersion points an item at the newer take and resets the trim', () => {
+  const tl = M.create(24);
+  M.addClip(tl, { src: 'a.mp4', srcDur: 4 });
+  const a = M.addSound(tl, { sound: 's', version: 1, track: 'voice', duration: 4, start: 1 });
+  M.updateSound(tl, a.id, { in: 1, fadeIn: 1.5 });
+  M.useSoundVersion(tl, a.id, 3, 2);
+  assert.deepEqual([a.version, a.in, a.out, a.srcDur, a.start, a.fadeIn], [3, 0, 2, 2, 1, 1]);
+});
+
 test('sounds: split, what plays at a time, snapping, removal, EDL with muted tracks left out', () => {
   const tl = M.create(24);
   const a = M.addSound(tl, { sound: 's', track: 'music', duration: 4, start: 2 });

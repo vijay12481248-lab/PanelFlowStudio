@@ -75,6 +75,17 @@ def test_make_voice_and_music_and_the_reasons_when_they_fail(client, store):
     assert down.status_code == 503
 
 
+def test_script_becomes_one_voice_sound_per_paragraph_in_order(client):
+    r = client.post(f"{B}/sounds/script", json={"text": "First line here.\n\nSecond line here.\n\nThird.", "voice": "af_heart"})
+    assert r.status_code == 200
+    s = r.json()["sounds"]
+    assert [x["info"]["line"] for x in s] == [1, 2, 3] and len({x["info"]["script"] for x in s}) == 1
+    assert s[0]["name"].startswith("Line 01: First") and all(x["kind"] == "voice" for x in s)
+    assert client.post(f"{B}/sounds/script", json={"text": "  "}).status_code == 400
+    bad = client.post(f"{B}/sounds/script", json={"text": "One.\n\nTwo.", "voice": "nobody"})
+    assert bad.status_code == 503 and "line 1 of 2" in bad.json()["detail"]
+
+
 def test_effects_are_heard_first_then_kept(client):
     cands = client.post(f"{B}/effects/find", json={"kind": "whoosh", "description": "fast whoosh", "limit": 2}).json()["candidates"]
     assert len(cands) == 2 and client.get(f"{B}/effects/candidates/{cands[0]['id']}/file").status_code == 200

@@ -33,7 +33,7 @@ def _why(providers, cue: Cue) -> str:
 
 
 def make_voice(store: SoundStore, text: str, voice: str = "", provider: str = "kokoro", speed: float = 1.0, language: str = "English",
-               name: str = "", narration: NarrationProvider | None = None) -> Sound:
+               name: str = "", narration: NarrationProvider | None = None, extra_info: dict | None = None) -> Sound:
     text = (text or "").strip()
     if not text:
         raise ValueError("write the words to speak first")
@@ -46,7 +46,26 @@ def make_voice(store: SoundStore, text: str, voice: str = "", provider: str = "k
             raise RuntimeError(_why([nar], cue))
         c = cands[0]
         return store.create_from_file(Path(c.path), name or text[:48], "voice", c.provenance,
-                                      info={"text": text, "voice": voice or c.provenance.author, "provider": cue.provider, "speed": speed, "language": language})
+                                      info={"text": text, "voice": voice or c.provenance.author, "provider": cue.provider, "speed": speed, "language": language, **(extra_info or {})})
+
+
+def make_script(store: SoundStore, text: str, voice: str = "", provider: str = "kokoro", speed: float = 1.0, language: str = "English",
+                narration: NarrationProvider | None = None) -> list[Sound]:
+    """A pasted script -> one voice sound per line (paragraphs, or sentences when it is one paragraph), in order. A line that fails stops the run;
+    the lines already made stay in the library and the error names the failing line."""
+    from engine.audio.studio.script import split_script
+    lines = split_script(text or "")
+    if not lines:
+        raise ValueError("paste the script first")
+    batch = secrets.token_hex(3)
+    nar = narration or NarrationProvider()
+    out = []
+    for i, line in enumerate(lines, 1):
+        try:
+            out.append(make_voice(store, line, voice, provider, speed, language, f"Line {i:02d}: {line[:40]}", narration=nar, extra_info={"script": batch, "line": i}))
+        except (RuntimeError, ValueError) as e:
+            raise RuntimeError(f"line {i} of {len(lines)} failed ({e}); {len(out)} earlier line(s) are in the library") from e
+    return out
 
 
 def make_music(store: SoundStore, description: str, seconds: float = 30.0, bpm: int | None = None, key_scale: str | None = None, name: str = "",
