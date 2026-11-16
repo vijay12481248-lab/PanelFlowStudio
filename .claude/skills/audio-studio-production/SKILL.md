@@ -43,3 +43,11 @@ You drive the Audio Studio through MCP tools named `panelflow_chronoflow_audio_*
 - `qa` renders each hit cue to measure where it lands. The number proves the pipeline is exact; it does not prove the detected onset is what a person hears. Spot-check the loudest hits by eye on a waveform.
 - Library clips are Freesound previews (lossy mp3). Fine for video, not for a master you will re-process heavily.
 - `export` refuses while any cue is `draft`, `needs_pick` or `failed`; use `allow_incomplete` only for a work-in-progress.
+
+
+## Sound library and timeline tracks (agents)
+
+Make and edit single sounds with the `panelflow_audio_library_*` tools: `make_voice`, `make_music` (GPU, minutes), `find_effects` then `keep_effect`, `import`, `ops` (the operations and their
+ranges), `edit` (one operation, optional selection `a`, `b` in seconds; a new version each time), `undo`, `split`, `delete` (trash; emptying the trash is the owner's). Placing sounds
+against the picture is done on the Video Studio timeline (`tl.audio`, lanes A2 voice / A3 music / A4 effects); the quick Audio page's *Send to timeline* puts the Sound Plan's ready cues there.
+Measure what you made (length, level, spectrogram) before saying it is right.

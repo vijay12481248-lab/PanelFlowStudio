@@ -88,18 +88,31 @@ Limits: browser playback is not sample accurate (judge the mix by ear, then use 
 
 Final review of the Audio page (2026-11-16): no critical findings; five important ones fixed with UI checks (`audio_page_check.py 9`): one shared busy flag (now a counter), slow results landing on whichever plan was open (now dropped unless the plan is still open, and the newest plan load wins), "Open in Audio" racing the page's own load, the inspector rebuilding under typed text (now kept, focus follows Tab), and the Effects fader flattening sfx / ambience / foley (now moves them together). Also fixed: seeking while playing resyncs the stems at once, the video is not reloaded when you return to the page, source links are http(s) only. Deferred minors: two simultaneous `POST /preview` calls can collide, held arrow keys lose nudges, a failed drag stays drawn until the next redraw, a cue with both a hit and an end is drawn from `t_in`, shift-wheel can scroll past the end, the meter timer never stops, Space does not play right after clicking a cue row, Delete cue has no undo, the "To" field cannot be cleared, the page layout below 1000 px width is untested.
 
-## Audio Studio screen (2026-11-16)
+## Audio Studio: a sound editor, and audio tracks on the timeline (2026-11-16)
 
-A top-level **Audio Studio** tab (between Image Studio and Gallery). Same code as the Video Studio's quick Audio page (`audio.js` is a factory; the tab instance is `window.AudioStudio`, its element ids start with `as`).
+Design: `docs/superpowers/specs/2026-11-16-audio-editor-and-timeline-audio-design.md`. The first version of the Audio Studio tab showed the video, a cue sheet and a mixer; the owner
+asked for **only the editing of sound** there, with the result going onto the Video Studio timeline. That version was replaced.
 
-- **Header**: the video (plan), Open video, **Use Video Studio timeline**, how sounds are chosen (Auto / Ask me), CC-BY, **Auto sound design** (cuts -> sounds -> preview -> check, one click), **Fix problems** (re-source clipped/silent sounds, push overrunning narration later). A three-step strip shows where you are: 1 Open a video, 2 Add sound, 3 Mix and export.
-- **Create** (left, four tabs, each with a one-line purpose): *Narration* (script -> lines on the Voice lane, voice picker with your recorded voices (Qwen3-TTS, cloned) and built-in voices (Kokoro), speed, pause between lines, back to back or one line per picture cut, Hear a sample, Speak all lines), *Music* (describe, mood chips, tempo, key, length; ACE-Step takes to pick from), *Effects* (describe, kind chips, add at the playhead or on every cut; CC0 recordings first, code-made fallback), *Cues* (everything in time order, QA findings).
-- **Cue** (right): narration lines get words, voice, speed, start time with frame nudges, level, fades, Speak again, Show in Video Studio.
-- **Mixer** (bottom right): Voice / Music / Effects, loudness target (YouTube and Shorts -14, Voice only -16, Cinema -23), keep or mute the video's own sound, Master, Export, **Send mix to Video Studio** (exports the video with the mix and imports it as a new Video Studio project).
-- **Video Studio -> Audio Studio**: "Sound this timeline" in the Video Studio monitor bar renders the timeline and opens it with its clip boundaries as the picture cuts.
+- **Audio Studio tab** (`static/nle/sound-editor.js`, REST `/api/audio/library`, MCP `panelflow_audio_library_*`): a library of sounds (voice, music, effects) with **New sound**
+  (Speak text: Kokoro / Qwen3-TTS; Make music: ACE-Step; Find an effect: code-made or Openverse CC0, heard before keeping; Import a file or a video's sound; Record from the
+  microphone), a large waveform (drag to select, wheel to zoom, Space plays, Delete removes the selection, Ctrl+Z / Ctrl+Y), 20 tools with Preview before Apply (Edit: trim, delete,
+  silence, insert silence, repeat, split, duplicate, join; Volume: gain, normalize (loudness or peak), fades; Time and pitch: speed, pitch, reverse; Effects: EQ presets, reverb, echo,
+  compressor; Clean up: noise reduction, de-ess, hum, shorten silences), a version list (each edit is a new version, nothing overwritten), licence and source line, rename, kind,
+  Delete (to a trash you can restore; emptying it asks), **Send to Video Studio**.
+- **Video Studio timeline**: lanes **A2 Voice, A3 Music, A4 Effects** under the clip sound (A1). Drag, trim, split, fades, gain, per-track mute, waveforms, Web Audio playback with the
+  music ducked under the voice; the Media Pool **Sounds** bin (+ Add at the playhead, or drag onto a lane); Bake Master Cut and Deliver mix them onto the picture
+  (`engine/audio/library/timeline_mix.py` reuses the Sound Plan mixer: ducking, -14 LUFS). Old timelines without `audio` load as before.
+- **Quick Audio page** (Video Studio rail) is unchanged and is the helper that places sounds on picture cuts; its new **Send to timeline** puts every ready cue on A2-A4 (and its take,
+  with licence, into the library). Sending again replaces the earlier send.
+- Narration cues and the review fixes from the first version stay (narration provider, script, fix, `plans/from_timeline`).
 
-Engine additions: narration cues (`text`, `voice`, `provider`, `speed`) sourced by `sources/narration.py` (Kokoro on the CPU by default, Qwen3-TTS through its runner and the GPU slot; both Apache-2.0; voice references are the owner's own recordings), mixed with the video's own sound into the dialogue stem (`keep_original_audio`), QA `narration_overrun` / `narration_past_end` / `narration_too_fast`, `script.py`, `fix.py`, REST `voices`, `narration/sample`, `script`, `add_sound`, `fix`, `plans/from_timeline` (`PANELFLOW_AUDIO_PICTURE_DIR` redirects the rendered picture), MCP `panelflow_chronoflow_audio_{voices,script,narration_sample,add_sound,fix}`.
+Measured (real data): a Kokoro line edited through speed 1.25x (4.175 -> 3.34 s), pitch -3 (length kept), hall reverb, loudness normalize (-15.4 LUFS, peak -1.5), delete 0.6 s;
+noise reduction on that line plus white noise at -34 dBFS needed the noise floor set from the sound itself (ffmpeg default removed 0.2 dB, set from the measured floor it removed
+12 dB light / 40 dB strong), and the filter's 1200-sample delay is compensated; a timeline export with voice, music and effect put the voice at its second, trimmed the effect to
+its part, ducked the music under the voice and landed within 1.5 LU of -14. Checks: pytest 219 (audio library, studio, deliver), node 88, UI checks 4-11 against an isolated engine.
 
-Measured: one 15-word line took Kokoro 10.2 s on the CPU (cold) and was 4.97 s long; Qwen3-TTS took 85.8 s (cold) and was 5.68 s; both spectrograms show normal speech, the Qwen3 line has a small blip near its end. The length estimate (3 words/s plus pauses) said 5.65 s. A real two-clip timeline rendered to a picture in 1.1 s with its cut exactly on the clip boundary. Checks: pytest 175, node 86, UI checks 4-10 against an isolated engine.
-
-Not verified: listening to anything, ACE-Step music inside this screen (the test engine had no ACE-Step server; the music cue failed with that reason, which is the intended behaviour), the Tauri window, Send mix to Video Studio with a real import (the import call was stubbed in the check so no project was created in your output folder).
+Not verified: listening to anything (only measurements and spectrograms), ACE-Step inside the editor (no ACE-Step server on the test engine), Qwen3-TTS inside the editor, microphone
+recording with a real microphone (the browser path was not exercised headless), Web Audio timing against the picture beyond the meter moving, the Tauri window, drag from the
+Media Pool in a real mouse session (Playwright's drag was used). Known limits: sounds on the timeline only play at 1x (shuttle speeds are silent), the timeline stores a sound's
+file version (editing the sound later does not change items already placed), speed and pitch use rubberband when ffmpeg has it and a lower-quality fallback otherwise, UI check 11 leaves
+a project record in the test engine's data (use a fresh data folder).
