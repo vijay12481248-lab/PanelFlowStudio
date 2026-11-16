@@ -266,7 +266,7 @@
         h('button', { type: 'button', class: 'dl-btn', id: 'auDeleteCue', onclick: () => deleteCue(c.id), disabled: !!S.busy }, 'Delete cue')));
   }
   // ---------- lanes: ruler, five lanes of cue blocks with waveforms, picture cuts, playhead ----------
-  const LANE_H = 52, HEAD_W = 64, RULER_H = 24, MIN_PPS = 4, MAX_PPS = 1200;
+  const LANE_H = 52, HEAD_W = 64, RULER_H = 24, MIN_PPS = 0.1, MAX_PPS = 1200;   // 0.1 px/s still fits a three-hour film in a 1200 px lane
   const L = { view: { t0: 0, pps: 40 }, fittedFor: null, peaks: {}, loading: new Set(), drag: null, scrub: false, pending: 0, cv: {} };
   const COL = { bg: '#0a1128', grid: 'rgba(122,162,255,.08)', cut: 'rgba(122,162,255,.35)', ready: ['#1c3f86', '#4f7be8'], wave: '#a9c7ff', hit: '#ffd166', sel: '#ffffff',
     draft: '#6a76a3', failed: '#f2667a', pick: '#f0b14a', text: '#eaf0ff' };
@@ -288,14 +288,32 @@
     el.playhead = h('div', { class: 'au-playhead' });
     el.laneScroll = h('div', { class: 'au-lanescroll' }, el.laneRows, el.playhead);
     el.lanes = h('div', { class: 'au-lanes', tabindex: '0', 'aria-label': 'Sound lanes. Arrow keys move the selected cue by one frame.', onkeydown: onLaneKey },
-      h('div', { class: 'au-lanearea' }, bar, el.laneScroll));
+      h('div', { class: 'au-lanearea' }, bar, el.laneScroll, (el.hscroll = h('div', { class: 'au-hscroll', title: 'Drag to scroll the lanes' }, (el.hthumb = h('div', { class: 'au-hthumb' }))))));
     el.mixerHost = h('div', { class: 'au-mixer' });
     el.bottom.append(el.lanes, el.mixerHost);
     for (const id of ['ruler', ...M.LANES.map((l) => l.id)]) bindCanvas(L.cv[id], id);
     el.laneScroll.addEventListener('wheel', onWheel, { passive: false });
+    bindScrollbar();
     if (window.ResizeObserver) new ResizeObserver(() => { if (S.plan) { if (L.fittedFor !== S.plan.id) fit(); else scheduleDraw(); } }).observe(el.laneScroll);
   }
   const cvWidth = () => (L.cv.ruler ? L.cv.ruler.clientWidth : 0);
+  function paintScroll() {   // thumb = the part of the video that is in view
+    if (!el.hthumb || !S.plan) return;
+    const dur = Math.max(S.plan.duration, 0.01), vis = cvWidth() / L.view.pps, a = Math.min(1, L.view.t0 / dur), b = Math.min(1, (L.view.t0 + vis) / dur);
+    el.hthumb.style.left = `${HEAD_W + a * (el.hscroll.clientWidth - HEAD_W)}px`; el.hthumb.style.width = `${Math.max(14, (b - a) * (el.hscroll.clientWidth - HEAD_W))}px`;
+  }
+  function bindScrollbar() {
+    let grab = null;
+    const at = (e) => { const r = el.hscroll.getBoundingClientRect(); return (e.clientX - r.left - HEAD_W) / Math.max(1, r.width - HEAD_W); };
+    el.hscroll.addEventListener('pointerdown', (e) => {
+      if (!S.plan) return; el.hscroll.setPointerCapture(e.pointerId);
+      const vis = cvWidth() / L.view.pps, f = at(e) * S.plan.duration, onThumb = f >= L.view.t0 && f <= L.view.t0 + vis;
+      grab = onThumb ? f - L.view.t0 : vis / 2;   // clicking outside the thumb centres the view there
+      L.view = { ...L.view, t0: Math.max(0, f - grab) }; scheduleDraw();
+    });
+    el.hscroll.addEventListener('pointermove', (e) => { if (grab == null || !S.plan) return; L.view = { ...L.view, t0: Math.max(0, Math.min(S.plan.duration - 0.1, at(e) * S.plan.duration - grab)) }; scheduleDraw(); });
+    const end = () => { grab = null; }; el.hscroll.addEventListener('pointerup', end); el.hscroll.addEventListener('pointercancel', end);
+  }
   function fit() { const w = cvWidth(); if (!S.plan || w < 50) return; L.view = { t0: 0, pps: Math.max(MIN_PPS, w / Math.max(S.plan.duration, 1)) }; L.fittedFor = S.plan.id; scheduleDraw(); }
   function zoom(f, anchorT) { const w = cvWidth(), a = anchorT != null ? anchorT : L.view.t0 + w / L.view.pps / 2; L.view = M.zoomAt(L.view, f, a, { minPps: MIN_PPS, maxPps: MAX_PPS }); scheduleDraw(); }
   function onWheel(e) {
@@ -429,7 +447,7 @@
   function draw() {
     if (!S.plan || !el.lanes || cvWidth() < 50) return;
     if (L.fittedFor !== S.plan.id) { fit(); return; }
-    drawRuler(); for (const lane of M.LANES) drawLane(lane);
+    drawRuler(); for (const lane of M.LANES) drawLane(lane); paintScroll();
     if (el.zoomLabel) el.zoomLabel.textContent = `${Math.round(L.view.pps)} px/s`;
     movePlayhead();
   }

@@ -92,3 +92,6 @@
 .au-find-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #9aa6d0; }
 .au-dot { width: 8px; height: 8px; border-radius: 50%; background: #f0b14a; }
 .au-find.error .au-dot { background: #f2667a; }
+.au-hscroll { flex: none; position: relative; height: 12px; background: #0a1128; border-top: 1px solid #1a2350; cursor: pointer; touch-action: none; }
+.au-hthumb { position: absolute; top: 2px; bottom: 2px; border-radius: 4px; background: #2c3f86; border: 1px solid #3b6bf5; }
+.au-hscroll:hover .au-hthumb { background: #3b52a8; }

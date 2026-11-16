@@ -205,6 +205,8 @@ def check_6(tmp):
         r, g, b, a = pixel("sfx", hx, 26)
         assert r > 230 and g > 180 and b < 140, ("the yellow hit marker is drawn on the hit", (r, g, b))
         s.shot("task6_lanes")
+        thumb = s.ev("(() => { const t = document.querySelector('.au-hthumb').getBoundingClientRect(), h = document.querySelector('.au-hscroll').getBoundingClientRect(); return [t.width, h.width - 64]; })()")
+        assert abs(thumb[0] - thumb[1]) < 4, ("the scrollbar thumb covers the track when the whole video is in view", thumb)
         # clicking the ruler seeks the video and moves the playhead
         s.page.mouse.click(lane_box[0] + 3.0 * view["pps"], lane_box[1] - 60)
         t = s.ev("document.querySelector('.au-video').currentTime")
@@ -235,6 +237,13 @@ def check_6(tmp):
         assert v2["pps"] > view["pps"] * 1.4, v2
         under = v2["t0"] + (cx - lane_box[0]) / v2["pps"]
         assert abs(under - before) < 0.05, (under, before)
+        thumb2 = s.ev("document.querySelector('.au-hthumb').getBoundingClientRect().width")
+        assert thumb2 < thumb[1] * 0.8, ("zoomed in: the thumb shrinks", thumb2)
+        t0_before = s.ev("NLEAudio.view.t0")
+        hb = s.ev("(() => { const r = document.querySelector('.au-hscroll').getBoundingClientRect(); return [r.x, r.y, r.width, r.height]; })()")
+        s.page.mouse.click(hb[0] + hb[2] - 30, hb[1] + 6)   # click near the right end: the view moves there
+        s.page.wait_for_timeout(300)
+        assert s.ev("NLEAudio.view.t0") > t0_before + 1, "clicking the scrollbar scrolls the lanes"
         s.shot("task6_zoomed")
         s.finish()
     print("task 6 OK")
