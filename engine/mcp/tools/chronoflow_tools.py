@@ -241,7 +241,7 @@ async def panelflow_chronoflow_regenerate_shot(
     name="panelflow_chronoflow_generate_image",
     description=(
         "Generate a high-resolution reference image, character turnaround, or keyframe with PanelFlow's single art workflow "
-        "(Qwen Image 2.1 Turbo, qwen_image_21) - the same engine the Original Stories art step uses. Width and height must be multiples of 16, 256-2048. "
+        "(FLUX.2 klein 4B, flux2_klein_4b) - the same engine the Original Stories art step uses. Width and height must be multiples of 16, 256-2048. "
         "Character lock: pass character_ids (Character Vault ids) and/or ref_images (sheet filenames, paths, or base64 data URLs) to bind "
         "approved reference sheets to the generation so faces follow the locked identity. Never generate an identifiable character's face without it."
     ),
@@ -252,7 +252,7 @@ async def panelflow_chronoflow_regenerate_shot(
             "negative_prompt": {"type": "string", "description": "What to avoid (optional)"},
             "width": {"type": "integer", "description": "Image width, multiple of 16 (default 1024)"},
             "height": {"type": "integer", "description": "Image height, multiple of 16 (default 1024)"},
-            "refine": {"type": "boolean", "description": "Review the picture against the prompt, then repair or redraw it (slower, needs Ollama; default false)"},
+            "refine": {"type": "boolean", "description": "Currently unavailable (the refine loop was built on the retired Qwen model); leave false"},
             "ref_images": {
                 "type": "array",
                 "items": {"type": "string"},
@@ -265,9 +265,9 @@ async def panelflow_chronoflow_regenerate_shot(
             },
             "workflow_id": {
                 "type": "string",
-                "enum": ["qwen_image_21", "minimax_h3_image_edit"],
-                "description": "Image model: qwen_image_21 (default; ~15 s, photographic, supports character lock and refine) or "
-                               "minimax_h3_image_edit (MiniMax H3-Image; ~50 s, painted/illustrated look, no refine)",
+                "enum": ["flux2_klein_4b", "minimax_h3_image_edit"],
+                "description": "Image model: flux2_klein_4b (default; ~7 s, Apache-2.0, supports character lock up to 4 pictures, no refine) or "
+                               "minimax_h3_image_edit (MiniMax H3-Image; ~50 s, painted/illustrated look, no refine; its licence excludes the US, EU, UK and South Korea)",
             },
         },
         "required": ["prompt"],
@@ -282,7 +282,7 @@ async def panelflow_chronoflow_generate_image(
     refine: bool = False,
     ref_images: list[str] | None = None,
     character_ids: list[str] | None = None,
-    workflow_id: str = "qwen_image_21",
+    workflow_id: str = "flux2_klein_4b",
 ) -> dict[str, Any]:
     payload = {
         "workflow_id": workflow_id,

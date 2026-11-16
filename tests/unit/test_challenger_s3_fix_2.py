@@ -256,7 +256,7 @@ class TestComfyUIPatchSlotRegressionDefense:
         data = json.loads(reg_file.read_text(encoding="utf-8"))
         t2i = [w for w in data if isinstance(w, dict) and w.get("purpose") == "text_to_image"]
         assert len(t2i) == 1
-        assert t2i[0]["id"] == "qwen_image_21"
+        assert t2i[0]["id"] == "flux2_klein_4b"
 
     def test_qwen_workflow_omitted_reference_image_succeeds(self):
         """_patch_workflow on qwen_image_21 without reference_image succeeds and cleans DAG."""

@@ -123,6 +123,29 @@ def still_prompt(r: dict, s: dict) -> str:
     return f"{STYLE}. {r['palette']}. Characters: {r['chars']}. Scene: {s['img']}."
 
 
+def anatomy_draw(engine, **kw):
+    """Draw one picture; with REEL_ANATOMY_CHECK=1 through the anatomy review (redraw on confirmed defects, lessons learned), otherwise exactly as before."""
+    from engine.original.anatomy.draw import draw_picture
+    if os.environ.get("REEL_ANATOMY_CHECK") != "1":
+        return draw_picture(engine, **kw)
+    global _ANATOMY
+    if _ANATOMY is None:
+        from engine.comfyui.edit_prompt import release_local_model
+        from engine.config.settings import settings
+        from engine.creative.mistakes import MistakeLedger
+        from engine.llm.registry import llm_registry
+        from engine.original.anatomy.lessons import seed_known_rules
+        from engine.original.anatomy.store import checks_path
+        from engine.original.judges import default_judges
+        ledger = MistakeLedger(file_path=settings.app_data_dir / "config" / "anatomy_lessons.json")
+        seed_known_rules(ledger, IMG_WF)
+        _ANATOMY = dict(check=True, judges=default_judges(llm_registry.get_ollama_provider()), ledger=ledger, record_path=checks_path(), between=release_local_model)
+    return draw_picture(engine, **kw, **_ANATOMY)
+
+
+_ANATOMY = None
+
+
 def stage_art(reels):
     client, reg, ArtEngine = _engine()
     engine = ArtEngine(client, reg)
@@ -130,50 +153,81 @@ def stage_art(reels):
         anchor = rdir(r, "panels", "s1.png")
         for i, s in enumerate(r["scenes"], 1):
             out = rdir(r, "panels", f"s{i}.png")
-            if have(out):
+            if have(out) or s.get("reuse"):  # reuse = replay of another scene's picture
                 continue
             out.parent.mkdir(parents=True, exist_ok=True)
             t0 = time.monotonic()
-            kw = dict(reference_image=anchor) if i > 1 and have(anchor) and i not in NO_REF.get(r['slug'], ()) else {}
-            art = engine.generate(prompt=still_prompt(r, s), negative_prompt=NEGATIVE, width=768, height=1344,
-                                  seed=1000 + 10 * ridx(r) + i, prefix=f"reels/{r['slug']}_s{i}", workflow_id=IMG_WF, **kw)
-            out.write_bytes(art.png)
-            print(f"art {r['slug']} s{i}: {time.monotonic() - t0:.0f}s")
+            takes_ref = engine.accepts_reference(IMG_WF)
+            ref = anchor if takes_ref and i > 1 and have(anchor) and i not in NO_REF.get(r['slug'], ()) else None
+            png, report = anatomy_draw(engine, prompt=still_prompt(r, s), negative_prompt=NEGATIVE, width=768, height=1344, seed=1000 + 10 * ridx(r) + i,
+                                       prefix=f"reels/{r['slug']}_s{i}", workflow_id=IMG_WF, reference_image=ref)
+            out.write_bytes(png)
+            if report:  # REEL_ANATOMY_CHECK=1: what the anatomy review found, beside the picture
+                out.with_suffix(".anatomy.json").write_text(json.dumps(report, indent=1), encoding="utf-8")
+            print(f"art {r['slug']} s{i}: {time.monotonic() - t0:.0f}s" + (f" [anatomy {report['status']}, {report['attempts']} drawn, confirmed {report['confirmed']}]" if report else ""))
 
 
 # ---------------------------------------------------------------- stage 4: H3 clips
+LORA4 = "minimax_h3_fl2v_turbo_4step_v1.0_768p_comfyui_bf16.safetensors"
+CLIP_W, CLIP_H = int(os.environ.get("REEL_CLIP_W", "480")), int(os.environ.get("REEL_CLIP_H", "832"))
+
+
+def turbo_prompt(r: dict, s: dict) -> str:
+    return (f"{r['chars']}. {s['act']}. The camera is a static shot, fixed on a tripod. Only the action of this moment moves; "
+            "everything else stays exactly as drawn in the same flat hand-drawn doodle cartoon style, no new objects appear.")
+
+
+def turbo_clip(panel: Path, prompt: str, seed: int, tag: str) -> bytes:
+    """5 s clip with the 4-step H3 turbo LoRA (the owner's faster path, same graph ChronoFlow uses): the picture is the first frame."""
+    import asyncio
+    import shutil
+    from engine.chronoflow.pipeline import COMFY_INPUT_DIR, ChronoFlowPipeline
+    pipe = ChronoFlowPipeline()
+    name = f"reel_{tag}.png"
+    shutil.copy2(panel, COMFY_INPUT_DIR / name)
+    graph = pipe.build_h3_prompt(prompt=prompt, width=CLIP_W, height=CLIP_H, length=124, steps=4, lora_name=LORA4, workflow_mode="sliding_window",
+                                 first_frame_filename=name, seed=seed, fast_h3=False)
+    return Path(asyncio.run(pipe.execute_prompt(graph))).read_bytes()
+
+
 def stage_clips(reels):
-    from engine.comfyui.art import _patch_workflow
-    from engine.comfyui.service import _history_videos
+    """REEL_CLIP_MODE=turbo4 (default, ~2 min per clip) or fast8 (FastH3 8-step, ~3-5 min)."""
     from engine.original.animate import release_ollama
     release_ollama()
-    client, reg, ArtEngine = _engine()
-    wf_id = "fastvideo_h3_i2v"
-    pre = reg.preflight(wf_id)
-    if not pre.get("ready"):
-        sys.exit(f"H3 preflight failed: {pre}")
-    workflow, _ = reg.load(wf_id)
-    slots = reg.metadata(wf_id)["patch_slots"]
-    engine = ArtEngine(client, reg)
+    mode = os.environ.get("REEL_CLIP_MODE", "turbo4")
+    if mode == "fast8":
+        from engine.comfyui.art import _patch_workflow
+        from engine.comfyui.service import _history_videos
+        client, reg, ArtEngine = _engine()
+        wf_id = "fastvideo_h3_i2v"
+        pre = reg.preflight(wf_id)
+        if not pre.get("ready"):
+            sys.exit(f"H3 preflight failed: {pre}")
+        workflow, _ = reg.load(wf_id)
+        slots = reg.metadata(wf_id)["patch_slots"]
+        engine = ArtEngine(client, reg)
     for r in reels:
         for i, s in enumerate(r["scenes"], 1):
             clip, panel = rdir(r, "clips", f"s{i}.mp4"), rdir(r, "panels", f"s{i}.png")
-            if have(clip) or s.get("still"):  # "still" = an insert shot that is only a picture with camera moves (tools/reels/cine.py)
+            if have(clip) or s.get("still") or s.get("reuse"):  # "still" = an insert shot that is only a picture with camera moves (tools/reels/cine.py)
                 continue
             if not have(panel):
                 sys.exit(f"{panel} missing: run the art stage first")
             clip.parent.mkdir(parents=True, exist_ok=True)
-            prompt = ("For the target video, at 0.00 seconds into the target video, <Picture 1> (from [Shot 1]) is fully referenced.\n"
-                      f"integrated_multimodal_description: [Shot 1] {r['chars']}. {s['act']}. The camera is a Static Shot, fixed on a tripod. "
-                      "Only the action of this moment moves; everything else stays exactly as drawn in the same flat hand-drawn doodle cartoon style.\n\n"
-                      "overall_soundscape: quiet light room tone, no dialogue.\n\nnon_diegetic_music: none.")
-            patched = _patch_workflow(workflow, slots, prompt, negative_prompt="", width=480, height=832,
-                                      seed=2000 + 10 * ridx(r) + i + int(os.environ.get('REEL_SEED_BUMP', '0')), prefix=f"reels/{r['slug']}_clip{i}",
-                                      reference_image=client.upload_image(panel), duration=5.0)
+            seed = 2000 + 10 * ridx(r) + i + int(os.environ.get("REEL_SEED_BUMP", "0"))
             t0 = time.monotonic()
-            raw, _, _ = engine.run(patched, timeout=900.0, collect=_history_videos)
+            if mode == "fast8":
+                prompt = ("For the target video, at 0.00 seconds into the target video, <Picture 1> (from [Shot 1]) is fully referenced.\n"
+                          f"integrated_multimodal_description: [Shot 1] {r['chars']}. {s['act']}. The camera is a Static Shot, fixed on a tripod. "
+                          "Only the action of this moment moves; everything else stays exactly as drawn in the same flat hand-drawn doodle cartoon style.\n\n"
+                          "overall_soundscape: quiet light room tone, no dialogue.\n\nnon_diegetic_music: none.")
+                patched = _patch_workflow(workflow, slots, prompt, negative_prompt="", width=480, height=832, seed=seed,
+                                          prefix=f"reels/{r['slug']}_clip{i}", reference_image=client.upload_image(panel), duration=5.0)
+                raw, _, _ = engine.run(patched, timeout=900.0, collect=_history_videos)
+            else:
+                raw = turbo_clip(panel, turbo_prompt(r, s), seed, f"{OUT.name}_{r['slug']}_s{i}")  # OUT.name keeps two renders of one reel from sharing an input file name in ComfyUI
             clip.write_bytes(raw)
-            print(f"clip {r['slug']} s{i}: {time.monotonic() - t0:.0f}s ({len(raw) // 1024} KB)")
+            print(f"clip {r['slug']} s{i} ({mode}): {time.monotonic() - t0:.0f}s ({len(raw) // 1024} KB)", flush=True)
 
 
 # ---------------------------------------------------------------- stage 5: assemble

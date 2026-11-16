@@ -149,7 +149,7 @@ def seed_for(story: OriginalStory, key: str, attempt: int = 0) -> int:
 
 
 class ComfyRunner:
-    """Text to image through the central ArtEngine (qwen_image_21); the SDXL tools (ControlNet, inpaint, matting, IP-Adapter) run on the same poll loop. Returns PNG bytes."""
+    """Text to image through the central ArtEngine (flux2_klein_4b); the SDXL tools (ControlNet, inpaint, matting, IP-Adapter) run on the same poll loop. Returns PNG bytes."""
 
     def __init__(self, client: ComfyUIClient | None = None, workflow_id: str = "anime_sdxl", ipa_id: str = "anime_sdxl_ipa",
                  ipa2_id: str = "anime_sdxl_ipa2", engine: str | None = None, inpaint_id: str = "anime_sdxl_inpaint",
@@ -162,7 +162,7 @@ class ComfyRunner:
             try:
                 self.art.require_ready()
             except Exception as exc:
-                raise RuntimeError(f"Qwen Image 2.1 ({ART_WORKFLOW_ID}) is not ready: {exc}") from exc
+                raise RuntimeError(f"The art model ({ART_WORKFLOW_ID}) is not ready: {exc}") from exc
             self.engine, self.style = "qwen", "natural"  # a prompt-following model: it reads sentences, so objects and actions in the narration survive
             self.workflow = self.meta = None
         elif engine == "sdxl":

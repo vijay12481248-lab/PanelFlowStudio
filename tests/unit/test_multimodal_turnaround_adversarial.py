@@ -608,14 +608,14 @@ def test_single_art_workflow_invariant_strict():
     t2i_entries = [e for e in entries if e.get("purpose") == "text_to_image"]
     assert len(t2i_entries) == 1, f"Expected exactly 1 text_to_image workflow, found {len(t2i_entries)}: {[e['id'] for e in t2i_entries]}"
     assert t2i_entries[0]["id"] == ART_WORKFLOW_ID
-    assert t2i_entries[0]["id"] == "qwen_image_21"
+    assert t2i_entries[0]["id"] == "flux2_klein_4b"
 
 
 def test_qwen_image_21_schema_and_checksum_integrity():
     """Verify qwen_image_21.api.json SHA-256 matches registry, defines null slot, and has LoadImage."""
     registry = ComfyWorkflowRegistry()
-    meta = registry.metadata(ART_WORKFLOW_ID)
-    wf, actual_sha = registry.load(ART_WORKFLOW_ID)
+    meta = registry.metadata('qwen_image_21')
+    wf, actual_sha = registry.load('qwen_image_21')
 
     # Checksum matches
     assert actual_sha == meta["sha256"]

@@ -46,17 +46,14 @@ def comfy_client(tmp_path, monkeypatch):
     return TestClient(app), queued, monkeypatch
 
 
-def test_comfy_image_job_defaults_to_no_refine_and_passes_it_through_when_asked(comfy_client):
+def test_comfy_image_job_defaults_to_no_refine_and_refuses_refine_while_it_is_retired(comfy_client):
     c, queued, mp = comfy_client
     body = {"prompt": "a lamp on a wooden table"}
     assert c.post("/api/projects/p1/comfyui/image", json=body).status_code == 200
     assert queued["job_input"]["refine"] is False
-    assert c.post("/api/projects/p1/comfyui/image", json={**body, "refine": True}).json()["job_id"] == "job-1"
-    assert queued["job_input"]["refine"] is True
-    seen = {}
-    mp.setattr(comfyui, "generate_image_operation", lambda *a, **kw: seen.update(kw))
-    queued["operation"](None, lambda *_: None, lambda: False)
-    assert seen["refine"] is True  # what the worker runs is what was asked for
+    queued.clear()
+    refused = c.post("/api/projects/p1/comfyui/image", json={**body, "refine": True})
+    assert refused.status_code >= 400 and "retired" in refused.text and not queued  # refine was built on Qwen; nothing is queued for it
 
 
 def test_a_persisted_job_from_before_refine_existed_still_rehydrates_with_it_off(monkeypatch):
@@ -76,18 +73,18 @@ def chrono_client():
     return TestClient(app)
 
 
-def test_chronoflow_generate_image_reports_the_refinement_only_when_it_ran(chrono_client, monkeypatch):
+def test_chronoflow_generate_image_refuses_refine_while_it_is_retired(chrono_client, monkeypatch):
     calls = []
 
-    async def fake(prompt, negative, w, h, seed, refine=False, ref_images=None):
+    async def fake(prompt, negative, w, h, seed, refine=False, ref_images=None, workflow_id=None):
         calls.append(refine)
-        return "art_x.png", ({"status": "accept_low", "repaired": True, "iterations": []} if refine else None)
+        return "art_x.png", None
 
     monkeypatch.setattr(chronoflow.pipeline, "generate_art_image_ex", fake)
     plain = chrono_client.post("/api/chronoflow/generate_image", json={"prompt": "a lamp"}).json()
     assert plain["filename"] == "art_x.png" and "refine" not in plain  # the response shape is unchanged by default
-    refined = chrono_client.post("/api/chronoflow/generate_image", json={"prompt": "a lamp", "refine": True}).json()
-    assert refined["refine"]["status"] == "accept_low" and calls == [False, True]
+    refused = chrono_client.post("/api/chronoflow/generate_image", json={"prompt": "a lamp", "refine": True})
+    assert refused.status_code == 400 and "retired" in refused.json()["detail"] and calls == [False]  # the retired refine loop never reaches the engine
 
 
 def test_generate_art_image_keeps_its_old_return_type():

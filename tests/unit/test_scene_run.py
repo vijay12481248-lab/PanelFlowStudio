@@ -126,7 +126,7 @@ def test_ledger_learns_from_first_attempts_and_feeds_later_runs(tmp_path, monkey
         prompts.append(eng.calls[0]["prompt"])
     assert "fully extended" not in prompts[0] and "fully extended" not in prompts[1]  # one sighting is not a lesson yet
     assert "fully extended" in prompts[2]  # the second sighting made it one
-    assert led.load_mistakes("scene:qwen_image_21:fight")[0].recurrence_count == 3
+    assert led.load_mistakes("scene:flux2_klein_4b:fight")[0].recurrence_count == 3
 
 
 def test_a_draw_failure_after_a_candidate_delivers_the_best_one(tmp_path, monkeypatch):
@@ -163,7 +163,7 @@ def test_an_unverified_first_review_teaches_nothing(tmp_path, monkeypatch):
     for n in range(2):
         script(monkeypatch, review("accept_low", 0.5, [STRIKE], confidence=0.0, reasons=["unverified: the reviewer could not judge any item"]))
         generate_scene(FakeEngine(), None, fight_plan(), ws=tmp_path / f"w{n}", key="k", seed=7, ledger=led)
-    assert led.load_mistakes("scene:qwen_image_21:fight") == []
+    assert led.load_mistakes("scene:flux2_klein_4b:fight") == []
 
 
 def test_the_result_records_the_prompt_seed_and_lessons_of_the_delivered_picture(tmp_path, monkeypatch):

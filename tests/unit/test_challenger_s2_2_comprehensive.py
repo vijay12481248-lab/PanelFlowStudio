@@ -152,7 +152,7 @@ def test_two_stage_scaling_single_art_workflow_invariant():
     # Single text-to-image workflow invariant
     t2i = [w for w in registry if w["purpose"] == "text_to_image"]
     assert len(t2i) == 1
-    assert t2i[0]["id"] == "qwen_image_21"
+    assert t2i[0]["id"] == "flux2_klein_4b"
 
     # qwen_image_21_inpaint workflow invariant
     inpaint = [w for w in registry if w["id"] == "qwen_image_21_inpaint"]

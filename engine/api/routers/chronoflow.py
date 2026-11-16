@@ -38,7 +38,7 @@ from engine.chronoflow import plan_check, plan_fix, plan_import
 from engine.chronoflow import start_modes
 from engine.chronoflow import timeline_ops
 from engine.chronoflow.folder_dialog import pick_native_folder
-from engine.comfyui.art import ART_WORKFLOW_ID, IMAGE_WORKFLOW_IDS, ArtEngine
+from engine.comfyui.art import ART_WORKFLOW_ID, IMAGE_WORKFLOW_IDS, REFINE_RETIRED, ArtEngine
 from engine.chronoflow.reviewer import analyze_video_chunk
 from engine.chronoflow.scene_render import render_scene
 from engine.chronoflow.supervisor import VAULT_DIR, JobSupervisor
@@ -204,15 +204,15 @@ class GenerateImageRequest(BaseModel):
     character_ids: list[str] = Field(default_factory=list)  # character lock: Character Vault ids resolved to their sheets
     location_id: str | None = None
     destination_path: str | None = None
-    workflow_id: str = ART_WORKFLOW_ID  # which image model: qwen_image_21 (default) or minimax_h3_image_edit (text to image, no picture bound)
+    workflow_id: str = ART_WORKFLOW_ID  # which image model: flux2_klein_4b (default) or minimax_h3_image_edit (text to image, no picture bound)
 
 
 # What the Image Studio's model picker shows. Timings/looks are what docs/H3_IMAGE_EDIT.md measured on the RTX 5060 Ti.
 IMAGE_MODELS = [
-    {"id": "qwen_image_21", "label": "Qwen Image 2.1 Turbo", "default": True, "speed": "about 15 s",
-     "summary": "Fast and photographic. Works with Character Lock, reference images and auto-refine."},
+    {"id": "flux2_klein_4b", "label": "FLUX.2 klein 4B", "default": True, "speed": "about 7 s",
+     "summary": "Fast, Apache-2.0 (free for commercial use). Character Lock and reference pictures work (up to 4); no auto-refine yet."},
     {"id": "minimax_h3_image_edit", "label": "MiniMax H3-Image", "default": False, "speed": "about 50 s",
-     "summary": "Slower, painted / illustrated look. No auto-refine; Character Lock is not proven on it."},
+     "summary": "Slower, painted / illustrated look. Its licence excludes the US, EU, UK and South Korea, so check it before publishing. No auto-refine."},
 ]
 
 
@@ -1233,8 +1233,8 @@ async def generate_image(req: GenerateImageRequest) -> dict[str, Any]:
                 locked_characters.append({"id": c.get("id"), "name": c.get("name"), "image": image})
         if req.workflow_id not in IMAGE_WORKFLOW_IDS:
             raise HTTPException(status_code=400, detail=f"Unknown image model '{req.workflow_id}'. Choose one of: {', '.join(IMAGE_WORKFLOW_IDS)}")
-        if req.refine and req.workflow_id != ART_WORKFLOW_ID:
-            raise HTTPException(status_code=400, detail="Auto-refine is built on Qwen Image; turn it off or pick Qwen Image 2.1 Turbo")
+        if req.refine:
+            raise HTTPException(status_code=400, detail=REFINE_RETIRED)
         MAX_REFS = 4  # the approved workflow declares four reference patch slots
         if len(refs) > MAX_REFS:
             raise HTTPException(status_code=400, detail=f"Character lock supports at most {MAX_REFS} reference images (got {len(refs)})")
