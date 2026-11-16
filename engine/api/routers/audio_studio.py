@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import shutil
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Literal
@@ -16,6 +17,7 @@ from engine.audio.studio import mix as mixer
 from engine.audio.studio.engine import AudioEngine
 from engine.audio.studio.peaks import file_peaks
 from engine.audio.studio.plan import Cue, PlanStore, Track, check_id, snap
+from engine.audio.studio.preview import audio_signature, build_preview
 from engine.audio.studio.qa import check_plan
 from engine.audio.studio.sources import music as music_source
 from engine.audio.studio.sources.music import MusicProvider
@@ -227,6 +229,31 @@ def export(plan_id: str, body: RenderBody | None = None, engine: AudioEngine = D
         res = export_plan(plan, out, body.target_lufs, Path(plan.video_path) if body.mux else None, body.allow_incomplete)
         _save_measured(engine, plan_id, plan, "exported")  # keeps the placement errors the export measured
         return {**res, "dir": f"exports/v{plan.version}"}
+
+
+@router.get("/plans/{plan_id}/preview")
+def get_preview(plan_id: str, engine: AudioEngine = Depends(get_engine)) -> dict[str, Any]:
+    """The current preview if it matches the plan's sound, else {"stale": true}."""
+    with _errors():
+        plan = engine.store.load(plan_id)
+        sig = audio_signature(plan)
+        meta = engine.store.plan_dir(plan_id) / "preview" / sig / "preview.json"
+        if not meta.is_file():
+            return {"stale": True}
+        return {**json.loads(meta.read_text(encoding="utf-8")), "stale": False, "dir": f"preview/{sig}"}
+
+
+@router.post("/plans/{plan_id}/preview")
+def make_preview(plan_id: str, engine: AudioEngine = Depends(get_engine)) -> dict[str, Any]:
+    with _errors():
+        plan = engine.store.load(plan_id)
+        root = engine.store.plan_dir(plan_id) / "preview"
+        sig = audio_signature(plan)
+        res = build_preview(plan, root / sig)
+        old = sorted((d for d in root.iterdir() if d.is_dir() and d.name != sig), key=lambda d: d.stat().st_mtime, reverse=True)
+        for d in old[1:]:  # keep the previous one: a page may still be playing it
+            shutil.rmtree(d, ignore_errors=True)
+        return {**res, "stale": False, "dir": f"preview/{sig}"}
 
 
 @router.get("/plans/{plan_id}/video")
