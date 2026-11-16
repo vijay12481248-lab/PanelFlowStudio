@@ -112,7 +112,75 @@ def check_4(tmp):
     print("task 4 OK")
 
 
-CHECKS = {"4": check_4}
+# ---------------------------------------------------------------- task 5: inspector and cue actions
+def server_plan(s):
+    return api("GET", f"/api/audio/studio/plans/{s.ev('NLEAudio.state.plan.id')}")
+
+
+def cue_on_server(s, cid):
+    return next(c for c in server_plan(s)["cues"] if c["id"] == cid)
+
+
+def check_5(tmp):
+    video = make_video(tmp / "cuts5.mp4")
+    with sync_playwright() as pw:
+        s = Session(pw)
+        open_video(s, video)
+        s.page.click("#auSpot")
+        s.page.wait_for_function("document.querySelectorAll('.au-cue').length === 4", timeout=60000)
+        s.page.click(".au-cue[data-cue=cut_01]")
+        assert "Select a cue" not in s.ev("document.getElementById('audioInspector').innerText")
+        s.page.fill(".au-intent", "heavy whoosh swish")
+        s.page.press(".au-intent", "Tab")
+        s.page.wait_for_function("NLEAudio.state.plan.cues.find(c => c.id === 'cut_01').intent === 'heavy whoosh swish'")
+        assert cue_on_server(s, "cut_01")["intent"] == "heavy whoosh swish", "the edit is saved on the server"
+        before = cue_on_server(s, "cut_01")["hit_t"]
+        s.page.click(".au-nudge .dl-btn >> nth=1")
+        s.page.wait_for_function("b => NLEAudio.state.plan.cues.find(c => c.id === 'cut_01').hit_t > b + 0.01", arg=before)
+        assert abs(cue_on_server(s, "cut_01")["hit_t"] - (before + 1 / 24)) < 1e-3, "one frame later"
+        s.page.click("#auAddCue")
+        s.page.wait_for_function("NLEAudio.state.plan.cues.length === 5")
+        new_id = s.ev("NLEAudio.state.sel")
+        assert new_id == "cue_01" and "whoosh swish" in s.ev("document.querySelector('.au-intent').value")
+        s.page.click("#auDeleteCue")
+        s.page.wait_for_function("NLEAudio.state.plan.cues.length === 4")
+        assert all(c["id"] != new_id for c in server_plan(s)["cues"])
+        # source a whoosh cue (Openverse CC0 when reachable, else the code-made effect)
+        s.page.click(".au-cue[data-cue=cut_01]")
+        s.page.click("#auSourceCue")
+        s.page.wait_for_function("NLEAudio.state.plan.cues.find(c => c.id === 'cut_01').status === 'ready'", timeout=120000)
+        txt = s.ev("document.getElementById('audioInspector').innerText")
+        assert "Licence:" in txt and "ready" in txt, txt
+        shot_ready = True
+        # a cue nothing can serve fails with its reason, shown in the inspector
+        s.page.click("#auAddCue")
+        s.page.wait_for_function("NLEAudio.state.plan.cues.length === 5")
+        s.page.fill(".au-intent", "zzzqqxxyy")
+        s.page.press(".au-intent", "Tab")
+        s.page.fill("input[list=auKinds]", "zzzqq")
+        s.page.press("input[list=auKinds]", "Tab")
+        s.page.wait_for_function("NLEAudio.state.plan.cues.find(c => c.id === 'cue_01').kind === 'zzzqq'")
+        s.page.click("#auSourceCue")
+        s.page.wait_for_function("NLEAudio.state.plan.cues.find(c => c.id === 'cue_01').status === 'failed'", timeout=120000)
+        assert "ace-step" in s.ev("document.querySelector('#audioInspector .dl-error').innerText").lower()
+        # Ask me: candidates appear, Pick makes the cue ready
+        s.page.click(".au-cue[data-cue=cut_03]")
+        s.page.select_option("#audioInspector select >> nth=1", "ask") if False else None
+        s.ev("NLEAudio.edit({cues: [{id: 'cut_03', mode: 'ask'}]})")
+        s.page.wait_for_function("NLEAudio.state.plan.cues.find(c => c.id === 'cut_03').mode === 'ask'")
+        s.page.click("#auSourceCue")
+        s.page.wait_for_function("NLEAudio.state.plan.cues.find(c => c.id === 'cut_03').status === 'needs_pick'", timeout=120000)
+        assert s.ev("document.querySelectorAll('.au-cand').length") >= 1
+        s.shot("task5_ask")
+        s.page.click(".au-cand .dl-btn >> nth=0")
+        s.page.wait_for_function("NLEAudio.state.plan.cues.find(c => c.id === 'cut_03').status === 'ready'")
+        s.page.click(".au-cue[data-cue=cut_01]")
+        s.shot("task5_ready")
+        s.finish()
+    print("task 5 OK")
+
+
+CHECKS = {"4": check_4, "5": check_5}
 
 if __name__ == "__main__":
     which = sys.argv[1] if len(sys.argv) > 1 else "all"

@@ -30,3 +30,18 @@
 .au-transport { flex: none; display: flex; align-items: center; justify-content: center; gap: 10px; padding: 6px 10px; background: #0a1128; border-top: 1px solid #1a2350; }
 .au-tcbig { font: 700 1.05rem monospace; color: #eef1ff; letter-spacing: .04em; }
 .au-lanes { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+
+.au-insp-top { display: flex; align-items: center; gap: 8px; }
+.au-insp-top .au-tc { margin-left: auto; }
+.au-two { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.au-three { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.au-num { min-width: 0; }
+.au-intent { resize: vertical; min-height: 40px; font-family: inherit; }
+.au-nudge { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 4px; align-items: center; }
+.au-nudge .dl-btn { padding: 5px 8px; }
+.au-prov { background: #101a3d; border: 1px solid #222d5e; border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 3px; word-break: break-word; }
+.au-link { color: #7aa2ff; font-size: .7rem; }
+.au-cands { display: flex; flex-direction: column; gap: 5px; }
+.au-cand { display: flex; align-items: center; gap: 8px; background: #101a3d; border: 1px solid #222d5e; border-radius: 8px; padding: 6px 8px; }
+.au-cand-info { display: flex; flex-direction: column; min-width: 0; flex: 1; overflow: hidden; }
+.au-cand-info b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
