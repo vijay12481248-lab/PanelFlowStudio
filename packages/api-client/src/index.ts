@@ -3128,7 +3128,7 @@ export class PanelFlowApiClient {
     action_summary?: string;
     start_sec?: number;
     end_sec?: number;
-    mock_if_missing?: boolean;
+    synthetic?: boolean;
   }): Promise<MotionRecordResponse> {
     return this.request<MotionRecordResponse>("/api/motion_bank/extract", {
       method: "POST",
@@ -3186,6 +3186,9 @@ export interface MotionBankStatusResponse {
   status: string;
   storage_dir: string;
   dwpose_ready: boolean;
+  dwpose_providers: string[];
+  motion_count: number;
+  synthetic_count: number;
   manifest: Array<{ id: string; name: string; filename: string; size_bytes: number; url: string }>;
 }
 

@@ -23,6 +23,11 @@ LIMB_COLORS = [
     (255, 0, 170),
 ]
 
+# Keypoints below these confidences are guesses (stylised art, occlusion) and are not drawn.
+BODY_MIN_CONF = 0.3
+HAND_MIN_CONF = 0.3
+FACE_MIN_CONF = 0.3
+
 # Hand finger chains (21 points: 0 is wrist, 1-4 thumb, 5-8 index, 9-12 mid, 13-16 ring, 17-20 pinky)
 HAND_FINGERS = [
     [0, 1, 2, 3, 4],
@@ -60,7 +65,7 @@ def draw_skeleton_frame(
     if body_kpts:
         pts = {}
         for idx, (nx, ny, conf) in enumerate(body_kpts):
-            if conf > 0.05:
+            if conf > BODY_MIN_CONF:
                 pts[idx] = (int(nx * width), int(ny * height))
 
         for limb_idx, (p1, p2) in enumerate(BODY_LIMBS):
@@ -76,7 +81,7 @@ def draw_skeleton_frame(
         if hand_kpts and len(hand_kpts) >= 21:
             hpts = {}
             for hidx, (hx, hy, hconf) in enumerate(hand_kpts):
-                if hconf > 0.05:
+                if hconf > HAND_MIN_CONF:
                     hpts[hidx] = (int(hx * width), int(hy * height))
 
             for finger in HAND_FINGERS:
@@ -91,7 +96,7 @@ def draw_skeleton_frame(
     # 3. Draw Face Landmarks
     if face_kpts:
         for fx, fy, fconf in face_kpts:
-            if fconf > 0.05:
+            if fconf > FACE_MIN_CONF:
                 fpt = (int(fx * width), int(fy * height))
                 cv2.circle(canvas, fpt, radius=max(1, int(scale * 0.8)), color=(255, 255, 255), thickness=-1, lineType=cv2.LINE_AA)
 

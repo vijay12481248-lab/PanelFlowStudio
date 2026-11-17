@@ -86,11 +86,11 @@ class MotionGuideTrainer:
 
         return total_loss / max(1, count)
 
-    def train(self, num_epochs: int = 10, batch_size: int = 16) -> Dict[str, float]:
+    def train(self, num_epochs: int = 10, batch_size: int = 16, include_synthetic: bool = False) -> Dict[str, float]:
         """Executes full training session and saves checkpoint."""
-        dataset = MotionBankDataset(self.storage)
+        dataset = MotionBankDataset(self.storage, include_synthetic=include_synthetic)
         if len(dataset) == 0:
-            return {"status": "error", "message": "No motions in Motion Bank to train on."}
+            return {"status": "error", "message": "No real (non-synthetic) motions in the Motion Bank to train on."}
 
         dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, drop_last=False)
         start_time = time.time()

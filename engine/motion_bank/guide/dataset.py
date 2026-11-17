@@ -37,11 +37,14 @@ class MotionBankDataset(Dataset):
         storage: MotionBankStorage,
         target_seq_len: int = 64,
         text_dim: int = 256,
+        include_synthetic: bool = False,
     ):
         self.storage = storage
         self.target_seq_len = target_seq_len
         self.text_dim = text_dim
-        self.records: List[MotionRecord] = self.storage.list_motions(limit=1000)
+        records = self.storage.list_motions(limit=1000)
+        # Fake skeletons (tests/demos) teach the guide nothing real; keep them out unless asked for.
+        self.records: List[MotionRecord] = [r for r in records if include_synthetic or not r.metadata.get("synthetic")]
 
     def __len__(self) -> int:
         return len(self.records)

@@ -27,6 +27,77 @@ def _generate_yolox_grids_and_strides(
     return np.concatenate(grid_list, axis=0), np.concatenate(stride_list, axis=0)
 
 
+def _iou(a: Tuple[float, float, float, float], b: Tuple[float, float, float, float]) -> float:
+    ix1, iy1 = max(a[0], b[0]), max(a[1], b[1])
+    ix2, iy2 = min(a[2], b[2]), min(a[3], b[3])
+    inter = max(0.0, ix2 - ix1) * max(0.0, iy2 - iy1)
+    union = (a[2] - a[0]) * (a[3] - a[1]) + (b[2] - b[0]) * (b[3] - b[1]) - inter
+    return inter / union if union > 0 else 0.0
+
+
+def _nms(boxes: List[Tuple[float, float, float, float]], scores: List[float], iou_thr: float = 0.45) -> List[Tuple[float, float, float, float]]:
+    """Greedy non-maximum suppression; the detector emits many overlapping boxes for one person."""
+    keep: List[Tuple[float, float, float, float]] = []
+    for i in sorted(range(len(boxes)), key=lambda k: scores[k], reverse=True):
+        if all(_iou(boxes[i], k) < iou_thr for k in keep):
+            keep.append(boxes[i])
+    return keep
+
+
+# COCO-WholeBody (what DWPose emits): 0-16 body (COCO-17), 17-22 feet, 23-90 face (68), 91-111 left hand, 112-132 right hand.
+# Internal layout (what storage, the visualiser and the guide model use): OpenPose-18 body, then hands and face.
+# OpenPose index -> COCO index; None marks the neck, which COCO lacks (midpoint of the shoulders).
+_OPENPOSE18_FROM_COCO17 = [0, None, 6, 8, 10, 5, 7, 9, 12, 14, 16, 11, 13, 15, 2, 1, 4, 3]
+
+
+def wholebody_to_internal(all_kpts: list) -> Tuple[list, Optional[list], Optional[list], Optional[list]]:
+    """Reorder 133 COCO-WholeBody keypoints (x, y, conf) into (body18, left_hand21, right_hand21, face68)."""
+    if len(all_kpts) < 133:
+        return [], None, None, None
+    body = []
+    for src in _OPENPOSE18_FROM_COCO17:
+        if src is None:
+            ls, rs = all_kpts[5], all_kpts[6]
+            body.append(((ls[0] + rs[0]) / 2.0, (ls[1] + rs[1]) / 2.0, min(ls[2], rs[2])))
+        else:
+            body.append(all_kpts[src])
+    return body, all_kpts[91:112], all_kpts[112:133], all_kpts[23:91]
+
+
+def _lerp_points(a: Optional[list], b: Optional[list], t: float) -> Optional[list]:
+    if not a or not b or len(a) != len(b):
+        return None
+    return [(p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t, min(p[2], q[2])) for p, q in zip(a, b)]
+
+
+def fill_short_gaps(poses: List[FramePoseData], max_gap: int) -> List[FramePoseData]:
+    """Interpolate runs of empty frames (detector dropouts) of at most `max_gap` frames between two detected frames."""
+    i = 0
+    n = len(poses)
+    while i < n:
+        if poses[i].body:
+            i += 1
+            continue
+        j = i
+        while j < n and not poses[j].body:
+            j += 1
+        if i > 0 and j < n and (j - i) <= max_gap:
+            a, b = poses[i - 1], poses[j]
+            for k in range(i, j):
+                t = (k - i + 1) / (j - i + 1)
+                poses[k] = FramePoseData(
+                    frame_index=poses[k].frame_index,
+                    timestamp_sec=poses[k].timestamp_sec,
+                    body=_lerp_points(a.body, b.body, t) or [],
+                    left_hand=_lerp_points(a.left_hand, b.left_hand, t),
+                    right_hand=_lerp_points(a.right_hand, b.right_hand, t),
+                    face=_lerp_points(a.face, b.face, t),
+                    bbox=tuple(a.bbox[m] + (b.bbox[m] - a.bbox[m]) * t for m in range(4)) if a.bbox and b.bbox else None,
+                )
+        i = j
+    return poses
+
+
 class DWPoseExtractor:
     """
     Standalone Whole-Body Pose Extractor utilizing ONNX Runtime.
@@ -70,22 +141,36 @@ class DWPoseExtractor:
         self._det_session = ort.InferenceSession(str(self.det_model_path), providers=active_providers)
         self._pose_session = ort.InferenceSession(str(self.pose_model_path), providers=active_providers)
 
+    def providers(self) -> List[str]:
+        """Execution providers the pose session really runs on ([] before the sessions are loaded)."""
+        return list(self._pose_session.get_providers()) if self._pose_session is not None else []
+
     def extract_frame_pose(
         self,
         frame_rgb: np.ndarray,
         frame_index: int,
         timestamp_sec: float,
         mock_if_missing: bool = False,
+        synthetic: bool = False,
+        prev_bbox: Optional[Tuple[float, float, float, float]] = None,
     ) -> FramePoseData:
         """
         Extracts whole-body keypoints from a single RGB frame.
-        If models are not yet downloaded and mock_if_missing is True, returns synthetic kinematic data for testing.
+
+        `synthetic=True` returns the deterministic fake skeleton and never touches a model (tests and demos only;
+        callers must label what they store). `mock_if_missing=True` falls back to that fake skeleton ONLY when the
+        ONNX files are absent; whenever the models are on disk they are used. With neither flag a missing model raises.
+        `prev_bbox` (normalised x1,y1,x2,y2 of the previous frame) keeps the same actor when several people are in shot.
         """
         h, w = frame_rgb.shape[:2]
 
-        if not self.is_ready() or self._det_session is None:
+        if synthetic:
+            return self._generate_synthetic_pose(frame_index, timestamp_sec)
+        if not self.is_ready():
             if mock_if_missing:
                 return self._generate_synthetic_pose(frame_index, timestamp_sec)
+            self.load_sessions()  # raises FileNotFoundError naming the missing files
+        if self._det_session is None:
             self.load_sessions()
 
         # Real ONNX inference
@@ -97,8 +182,9 @@ class DWPoseExtractor:
             # No person detected; return empty pose frame
             return FramePoseData(frame_index=frame_index, timestamp_sec=timestamp_sec, body=[])
 
-        # Pick primary foreground actor (highest confidence * area)
-        primary_box = max(boxes, key=lambda b: (b[2] - b[0]) * (b[3] - b[1]))
+        primary_box = self._pick_actor(boxes, prev_bbox, w, h)
+        if primary_box is None:  # the tracked actor is not in this frame (other people are, but they are not him)
+            return FramePoseData(frame_index=frame_index, timestamp_sec=timestamp_sec, body=[])
         x1, y1, x2, y2 = primary_box
 
         # Crop and estimate pose
@@ -122,36 +208,70 @@ class DWPoseExtractor:
         start_sec: float = 0.0,
         end_sec: Optional[float] = None,
         mock_if_missing: bool = False,
+        synthetic: bool = False,
+        max_gap_frames: int = 8,
+        reacquire_after: int = 30,
     ) -> List[FramePoseData]:
-        """Processes a video file frame-by-frame and returns a list of FramePoseData."""
+        """
+        Processes a video segment frame-by-frame and returns a list of FramePoseData.
+        Follows one actor across frames (IoU with the last box; re-acquired after `reacquire_after` lost frames) and fills detector dropouts of at most
+        `max_gap_frames` by linear interpolation; longer gaps stay empty (body == []).
+        """
         cap = cv2.VideoCapture(str(video_path))
         if not cap.isOpened():
             raise ValueError(f"Could not open video file: {video_path}")
 
         fps = cap.get(cv2.CAP_PROP_FPS) or 24.0
         poses: List[FramePoseData] = []
-        frame_idx = 0
+        frame_idx = int(round(start_sec * fps))
+        if frame_idx > 0:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+        prev_bbox: Optional[Tuple[float, float, float, float]] = None
+        lost = 0
 
         try:
             while True:
+                ts = frame_idx / fps
+                if end_sec is not None and ts > end_sec:
+                    break
                 ret, frame_bgr = cap.read()
                 if not ret:
                     break
-                ts = frame_idx / fps
-                if ts < start_sec:
-                    frame_idx += 1
-                    continue
-                if end_sec is not None and ts > end_sec:
-                    break
 
                 frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
-                pose_data = self.extract_frame_pose(frame_rgb, frame_idx, ts, mock_if_missing=mock_if_missing)
+                pose_data = self.extract_frame_pose(
+                    frame_rgb, frame_idx, ts,
+                    mock_if_missing=mock_if_missing, synthetic=synthetic, prev_bbox=prev_bbox,
+                )
+                if pose_data.bbox is not None:
+                    prev_bbox, lost = pose_data.bbox, 0
+                else:
+                    lost += 1
+                    if lost >= reacquire_after:  # a cut or a long exit: take whoever is the main person now
+                        prev_bbox = None
                 poses.append(pose_data)
                 frame_idx += 1
         finally:
             cap.release()
 
-        return poses
+        return fill_short_gaps(poses, max_gap_frames)
+
+    @staticmethod
+    def _pick_actor(
+        boxes: List[Tuple[float, float, float, float]],
+        prev_bbox: Optional[Tuple[float, float, float, float]],
+        w: int,
+        h: int,
+    ) -> Optional[Tuple[float, float, float, float]]:
+        """
+        The actor to follow. With a previous box: the box that overlaps it most, or None when nobody does (the
+        actor is lost - never jump to a different person mid-take). Without one: the largest person.
+        """
+        if prev_bbox is not None:
+            prev_px = (prev_bbox[0] * w, prev_bbox[1] * h, prev_bbox[2] * w, prev_bbox[3] * h)
+            best = max(boxes, key=lambda b: _iou(b, prev_px))
+            return best if _iou(best, prev_px) > 0.1 else None
+        return max(boxes, key=lambda b: (b[2] - b[0]) * (b[3] - b[1]))
 
     def _generate_synthetic_pose(self, frame_index: int, timestamp_sec: float) -> FramePoseData:
         """Generates deterministic mock kinematic keypoints for offline unit testing."""
@@ -225,6 +345,7 @@ class DWPoseExtractor:
 
         valid_mask = scores > 0.35
         boxes = []
+        box_scores = []
         for idx in np.where(valid_mask)[0]:
             cx, cy = xy[idx]
             bw, bh = wh[idx]
@@ -234,7 +355,8 @@ class DWPoseExtractor:
             y2 = min(float(orig_h), float((cy + bh / 2) / r))
             if (x2 - x1) > 20 and (y2 - y1) > 40:
                 boxes.append((x1, y1, x2, y2))
-        return boxes
+                box_scores.append(float(scores[idx]))
+        return _nms(boxes, box_scores)
 
     def _preprocess_pose(self, img: np.ndarray, bbox: Tuple[float, float, float, float]) -> np.ndarray:
         """Crops and letterboxes person bounding box to 384x288 for DWPose model."""
@@ -275,10 +397,5 @@ class DWPoseExtractor:
             conf = float(confs[i])
             all_kpts.append((float(np.clip(gx, 0.0, 1.0)), float(np.clip(gy, 0.0, 1.0)), conf))
 
-        # Wholebody 133 partitioning: 0-17 Body, 18-38 Left Hand, 39-59 Right Hand, 60-127 Face
-        body = all_kpts[:18] if len(all_kpts) >= 18 else []
-        left_hand = all_kpts[18:39] if len(all_kpts) >= 39 else None
-        right_hand = all_kpts[39:60] if len(all_kpts) >= 60 else None
-        face = all_kpts[60:128] if len(all_kpts) >= 128 else None
-
-        return body, left_hand, right_hand, face
+        # DWPose emits COCO-WholeBody order; convert to the internal OpenPose-18 + hands + face layout.
+        return wholebody_to_internal(all_kpts)

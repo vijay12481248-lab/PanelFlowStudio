@@ -95,7 +95,7 @@ def test_visualizer_draw_skeleton():
 def test_visualizer_render_video(tmp_path: Path):
     """Tests rendering of a sequence of pose keypoints into an MP4 control video."""
     extractor = DWPoseExtractor()
-    poses = [extractor.extract_frame_pose(np.zeros((100, 100, 3), dtype=np.uint8), i, i * 0.04, mock_if_missing=True) for i in range(10)]
+    poses = [extractor.extract_frame_pose(np.zeros((100, 100, 3), dtype=np.uint8), i, i * 0.04, synthetic=True) for i in range(10)]
 
     out_video = tmp_path / "control.mp4"
     render_skeleton_video(poses, out_video, fps=24.0, width=320, height=240)
@@ -107,7 +107,7 @@ def test_dwpose_extractor_synthetic_kinematics():
     """Verifies DWPose extractor fallback/mock kinematics produce valid 133-point wholebody data."""
     extractor = DWPoseExtractor()
     frame = np.zeros((480, 640, 3), dtype=np.uint8)
-    pose = extractor.extract_frame_pose(frame, frame_index=0, timestamp_sec=0.0, mock_if_missing=True)
+    pose = extractor.extract_frame_pose(frame, frame_index=0, timestamp_sec=0.0, synthetic=True)
 
     assert pose.frame_index == 0
     assert len(pose.body) == 18
@@ -124,7 +124,7 @@ def test_motion_bank_storage_and_safetensors(tmp_path: Path):
 
     # Generate 5 frames of mock kinematics
     poses = [
-        extractor.extract_frame_pose(np.zeros((100, 100, 3), dtype=np.uint8), i, i * 0.04, mock_if_missing=True)
+        extractor.extract_frame_pose(np.zeros((100, 100, 3), dtype=np.uint8), i, i * 0.04, synthetic=True)
         for i in range(5)
     ]
 
@@ -168,3 +168,75 @@ def test_motion_bank_storage_and_safetensors(tmp_path: Path):
     results_search = storage.search_motions("dash")
     assert len(results_search) == 1
     assert results_search[0].id == "mot_samurai_slash_001"
+
+
+def test_wholebody_layout_is_converted_to_openpose18():
+    """DWPose emits COCO-WholeBody order; storage/visualiser expect OpenPose-18 + hands + face."""
+    from engine.motion_bank.dwpose_extractor import wholebody_to_internal
+
+    kpts = [(float(i), float(i) * 2, 0.9) for i in range(133)]
+    body, lh, rh, face = wholebody_to_internal(kpts)
+
+    assert len(body) == 18 and len(lh) == 21 and len(rh) == 21 and len(face) == 68
+    assert body[0][0] == 0.0                                  # nose
+    assert body[1][0] == (5 + 6) / 2                          # neck = midpoint of COCO shoulders 5 and 6
+    assert (body[2][0], body[5][0]) == (6.0, 5.0)             # R then L shoulder
+    assert (body[3][0], body[4][0]) == (8.0, 10.0)            # R elbow, R wrist
+    assert (body[8][0], body[11][0]) == (12.0, 11.0)          # R hip, L hip
+    assert (body[10][0], body[13][0]) == (16.0, 15.0)         # R ankle, L ankle
+    assert (body[14][0], body[15][0], body[16][0], body[17][0]) == (2.0, 1.0, 4.0, 3.0)  # R/L eye, R/L ear
+    assert lh[0][0] == 91.0 and rh[0][0] == 112.0 and face[0][0] == 23.0
+    assert wholebody_to_internal(kpts[:50]) == ([], None, None, None)
+
+
+def test_fill_short_gaps_interpolates_only_short_runs():
+    from engine.motion_bank.dwpose_extractor import fill_short_gaps
+
+    def fp(i, x):
+        return FramePoseData(frame_index=i, timestamp_sec=i / 24, body=[(x, 0.5, 0.8)] if x is not None else [])
+
+    seq = [fp(0, 0.0), fp(1, None), fp(2, None), fp(3, 0.3)] + [fp(i, None) for i in range(4, 20)] + [fp(20, 1.0)]
+    out = fill_short_gaps(seq, max_gap=8)
+    assert out[1].body[0][0] == pytest.approx(0.1) and out[2].body[0][0] == pytest.approx(0.2)
+    assert all(not f.body for f in out[4:20])  # a 16-frame dropout is not invented
+
+
+def test_missing_models_raise_unless_fallback_requested(tmp_path: Path):
+    extractor = DWPoseExtractor(det_model_path=tmp_path / "a.onnx", pose_model_path=tmp_path / "b.onnx")
+    frame = np.zeros((120, 160, 3), dtype=np.uint8)
+    with pytest.raises(FileNotFoundError):
+        extractor.extract_frame_pose(frame, 0, 0.0)
+    assert extractor.extract_frame_pose(frame, 0, 0.0, mock_if_missing=True).body  # explicit fallback still works
+
+
+def test_models_on_disk_are_used_even_when_fallback_requested(tmp_path: Path):
+    """The old bug: with the models present, mock_if_missing=True still returned the fake skeleton."""
+    (tmp_path / "a.onnx").write_bytes(b"x")
+    (tmp_path / "b.onnx").write_bytes(b"x")
+    extractor = DWPoseExtractor(det_model_path=tmp_path / "a.onnx", pose_model_path=tmp_path / "b.onnx")
+    frame = np.zeros((120, 160, 3), dtype=np.uint8)
+    with pytest.raises(Exception):  # the stub files are not valid ONNX, so loading the session must fail
+        extractor.extract_frame_pose(frame, 0, 0.0, mock_if_missing=True)
+
+
+def test_guide_dataset_skips_synthetic_motions(tmp_path: Path):
+    from engine.motion_bank.guide.dataset import MotionBankDataset
+
+    storage = MotionBankStorage(tmp_path)
+    for i, synth in enumerate([True, False]):
+        storage.save_motion(MotionRecord(
+            id=f"m{i}", source_uri="x", action_title="t", duration_sec=1, fps=24, frame_count=1, resolution=(10, 10),
+            keypoints_path=str(tmp_path / f"{i}.safetensors"), control_video_path=str(tmp_path / f"{i}.mp4"),
+            metadata={"synthetic": synth},
+        ))
+    assert len(MotionBankDataset(storage)) == 1
+    assert len(MotionBankDataset(storage, include_synthetic=True)) == 2
+
+
+def test_actor_tracking_never_jumps_to_another_person():
+    pick = DWPoseExtractor._pick_actor
+    a, b = (100.0, 100.0, 300.0, 500.0), (500.0, 120.0, 650.0, 460.0)
+    assert pick([a, b], None, 1000, 1000) == a                                   # no lock yet: the largest person
+    assert pick([a, b], (0.11, 0.11, 0.31, 0.51), 1000, 1000) == a               # locked on a: stays on a
+    assert pick([b], (0.1, 0.1, 0.3, 0.5), 1000, 1000) is None                   # a is gone, only b left: lost, not b
+    assert pick([a, b], (0.5, 0.12, 0.65, 0.46), 1000, 1000) == b                # locked on b even though a is bigger
