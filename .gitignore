@@ -24,6 +24,8 @@ apps/desktop/src-tauri/target/
 # Temporary run/render work
 output/
 _render_work/
+app_data/
+tmp/
 *.log
 
 # Environments

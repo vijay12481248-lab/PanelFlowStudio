@@ -3091,7 +3091,163 @@ export class PanelFlowApiClient {
   async checkProductionReadiness(): Promise<ProductionReadinessReportResponse> {
     return this.request<ProductionReadinessReportResponse>("/api/system/readiness");
   }
+
+  // ---------------------------------------------------------------------------
+  // Motion Bank & Guide Model Subsystem
+  // ---------------------------------------------------------------------------
+  async getMotionBankStatus(): Promise<MotionBankStatusResponse> {
+    return this.request<MotionBankStatusResponse>("/api/motion_bank/status");
+  }
+
+  async ingestMotionSource(payload: {
+    source: string;
+    rights: { status: string; license_type?: string; permission_notes?: string };
+    title?: string;
+  }): Promise<MotionIngestResponse> {
+    return this.request<MotionIngestResponse>("/api/motion_bank/ingest", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async segmentMotionVideo(payload: {
+    local_path: string;
+    min_duration_sec?: number;
+    scene_threshold?: number;
+  }): Promise<MotionSegmentResponse[]> {
+    return this.request<MotionSegmentResponse[]>("/api/motion_bank/segment", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async extractMotion(payload: {
+    video_path: string;
+    action_title: string;
+    action_tags?: string[];
+    action_summary?: string;
+    start_sec?: number;
+    end_sec?: number;
+    mock_if_missing?: boolean;
+  }): Promise<MotionRecordResponse> {
+    return this.request<MotionRecordResponse>("/api/motion_bank/extract", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async listMotions(params?: { tag?: string; limit?: number }): Promise<MotionRecordResponse[]> {
+    const q = new URLSearchParams();
+    if (params?.tag) q.set("tag", params.tag);
+    if (params?.limit) q.set("limit", String(params.limit));
+    const qs = q.toString() ? `?${q.toString()}` : "";
+    return this.request<MotionRecordResponse[]>(`/api/motion_bank/motions${qs}`);
+  }
+
+  async getMotion(motionId: string): Promise<MotionRecordResponse> {
+    return this.request<MotionRecordResponse>(`/api/motion_bank/motions/${encodeURIComponent(motionId)}`);
+  }
+
+  async searchMotions(q: string, limit?: number): Promise<MotionRecordResponse[]> {
+    const p = new URLSearchParams({ q });
+    if (limit) p.set("limit", String(limit));
+    return this.request<MotionRecordResponse[]>(`/api/motion_bank/search?${p.toString()}`);
+  }
+
+  async trainMotionGuide(payload?: { num_epochs?: number; batch_size?: number }): Promise<{
+    status: string;
+    epochs?: number;
+    final_loss?: number;
+    duration_sec?: number;
+    checkpoint?: string;
+  }> {
+    return this.request("/api/motion_bank/guide/train", {
+      method: "POST",
+      body: JSON.stringify(payload || {}),
+    });
+  }
+
+  async generateMotionChoreography(payload: {
+    prompt: string;
+    num_frames?: number;
+    fps?: number;
+    width?: number;
+    height?: number;
+    render_video?: boolean;
+  }): Promise<GenerateChoreographyResponse> {
+    return this.request<GenerateChoreographyResponse>("/api/motion_bank/guide/generate", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
 }
+
+export interface MotionBankStatusResponse {
+  status: string;
+  storage_dir: string;
+  dwpose_ready: boolean;
+  manifest: Array<{ id: string; name: string; filename: string; size_bytes: number; url: string }>;
+}
+
+export interface MotionIngestResponse {
+  source_uri: string;
+  source_type: string;
+  local_path: string;
+  sha256: string;
+  title: string;
+  duration_sec: number;
+  width: number;
+  height: number;
+  fps: number;
+  has_audio: boolean;
+}
+
+export interface MotionSegmentResponse {
+  segment_id: string;
+  start_sec: number;
+  end_sec: number;
+  duration_sec: number;
+  fps: number;
+  frame_count: number;
+  score: number;
+}
+
+export interface MotionRecordResponse {
+  id: string;
+  source_uri: string;
+  action_title: string;
+  action_summary: string;
+  action_tags: string[];
+  duration_sec: number;
+  fps: number;
+  frame_count: number;
+  resolution: [number, number];
+  actor_track_id: number;
+  keypoints_path: string;
+  control_video_path: string;
+  preview_video_path?: string | null;
+  thumbnail_path?: string | null;
+  created_at: number;
+  metadata?: Record<string, any>;
+}
+
+export interface GenerateChoreographyResponse {
+  prompt: string;
+  frame_count: number;
+  fps: number;
+  duration_sec: number;
+  control_video_path?: string | null;
+  poses: Array<{
+    frame_index: number;
+    timestamp_sec: number;
+    body: Array<[number, number, number]>;
+    left_hand?: Array<[number, number, number]> | null;
+    right_hand?: Array<[number, number, number]> | null;
+    face?: Array<[number, number, number]> | null;
+    bbox?: [number, number, number, number] | null;
+  }>;
+}
+
 
 export interface CapabilityCheckResponse {
   name: string;

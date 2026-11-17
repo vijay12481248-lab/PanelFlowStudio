@@ -34,19 +34,21 @@ import {
 import { paths, isChronoFlowProject, stageForProject } from "../../app/routes";
 import { AudioLibrary } from "../../components/audio-library";
 import type { AudioToTimelineContract } from "../../components/audio-library/AudioLibrary.types";
+import { MotionStudio } from "../motion_bank/MotionStudio";
 
-type LibraryTab = "audio" | "media" | "voices";
+type LibraryTab = "audio" | "media" | "voices" | "motions";
 
 export const LibraryPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { show } = useToast();
 
-  // Resolve active tab from URL (/library/audio, /library/media, /library/voices)
+  // Resolve active tab from URL (/library/audio, /library/media, /library/voices, /library/motions)
   const initialTab: LibraryTab = useMemo(() => {
     const segment = location.pathname.split("/")[2];
     if (segment === "media" || segment === "images") return "media";
     if (segment === "voices") return "voices";
+    if (segment === "motions" || segment === "motion") return "motions";
     return "audio";
   }, [location.pathname]);
 
@@ -79,6 +81,7 @@ export const LibraryPage: React.FC = () => {
           { value: "audio", label: "🎵 Audio & Music" },
           { value: "media", label: "🖼️ Visual Media & Slices" },
           { value: "voices", label: "🎙️ Voice Cast" },
+          { value: "motions", label: "🕺 Motion Bank & Poses" },
         ]}
       >
         {activeTab === "audio" && (
@@ -90,6 +93,8 @@ export const LibraryPage: React.FC = () => {
         {activeTab === "media" && <ProjectMediaBrowser />}
 
         {activeTab === "voices" && <VoiceCastBrowser />}
+
+        {activeTab === "motions" && <MotionStudio />}
       </Tabs>
     </div>
   );
