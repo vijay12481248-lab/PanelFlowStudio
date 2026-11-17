@@ -19,7 +19,7 @@ def test_stats_shape_when_nothing_was_checked(client):
 
 
 def test_flagging_a_missed_mistake_shows_up_in_the_stats(client):
-    r = client.post("/api/original/anatomy/flag", json={"picture": "hug.png", "model": "flux2_klein_4b", "note": "four arms"})
+    r = client.post("/api/original/anatomy/flag", json={"picture": "hug.png", "model": "hidream_i1_fast", "note": "four arms"})
     assert r.status_code == 200
     s = client.get("/api/original/anatomy/stats").json()
     assert s["owner_flags"] == 1 and s["flagged"][0]["note"] == "four arms"

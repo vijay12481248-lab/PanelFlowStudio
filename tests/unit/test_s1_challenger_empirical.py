@@ -465,8 +465,8 @@ def test_single_art_workflow_invariant_strict():
         if isinstance(w, dict) and w.get("purpose") == "text_to_image"
     ]
 
-    assert text_to_image_workflows == ["flux2_klein_4b"], (
-        f"Single Art Workflow violation: expected only ['flux2_klein_4b'], got {text_to_image_workflows}"
+    assert text_to_image_workflows == ["hidream_i1_fast"], (
+        f"Single Art Workflow violation: expected only ['hidream_i1_fast'], got {text_to_image_workflows}"
     )
 
     # Inpaint workflow must be qwen_image_21_inpaint with purpose 'inpaint'

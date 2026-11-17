@@ -292,7 +292,7 @@ def test_single_art_workflow_invariant_preservation():
 
     t2i_workflows = [w for w in registry if w.get("purpose") == "text_to_image"]
     assert len(t2i_workflows) == 1, f"Expected 1 text_to_image workflow, found {len(t2i_workflows)}: {t2i_workflows}"
-    assert t2i_workflows[0]["id"] == "flux2_klein_4b"
+    assert t2i_workflows[0]["id"] == "hidream_i1_fast"
     assert t2i_workflows[0]["id"] == ART_WORKFLOW_ID
 
     inpaint_workflows = [w for w in registry if w.get("purpose") == "inpaint"]

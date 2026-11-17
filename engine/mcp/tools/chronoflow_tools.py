@@ -69,7 +69,7 @@ async def panelflow_chronoflow_save_character(
 
 @registry.tool(
     name="panelflow_chronoflow_generate_model_sheet",
-    description="Generate a canonical 4-view character turnaround model sheet using FLUX.2 Klein (flux2_klein_4b), slice views, and extract face embeddings.",
+    description="Generate a canonical 4-view character turnaround model sheet using the default art model (hidream_i1_fast), slice views, and extract face embeddings.",
     input_schema={
         "type": "object",
         "properties": {
@@ -114,7 +114,7 @@ async def panelflow_chronoflow_verify_face(
 
 @registry.tool(
     name="panelflow_chronoflow_pin_references",
-    description="Automatically select and bind up to 4 character turnaround views for a shot to prevent character face drift in flux2_klein_4b_ref.",
+    description="Automatically select and bind up to 4 character turnaround views for a shot to prevent character face drift (needs a reference-capable image model; none is installed now).",
     input_schema={
         "type": "object",
         "properties": {
@@ -307,7 +307,7 @@ async def panelflow_chronoflow_regenerate_shot(
     name="panelflow_chronoflow_generate_image",
     description=(
         "Generate a high-resolution reference image, character turnaround, or keyframe with PanelFlow's single art workflow "
-        "(FLUX.2 klein 4B, flux2_klein_4b) - the same engine the Original Stories art step uses. Width and height must be multiples of 16, 256-2048. "
+        "(HiDream-I1 Fast, hidream_i1_fast) - the same engine the Original Stories art step uses. Width and height must be multiples of 16, 256-2048. "
         "Character lock: pass character_ids (Character Vault ids) and/or ref_images (sheet filenames, paths, or base64 data URLs) to bind "
         "approved reference sheets to the generation so faces follow the locked identity. Never generate an identifiable character's face without it."
     ),
@@ -331,8 +331,8 @@ async def panelflow_chronoflow_regenerate_shot(
             },
             "workflow_id": {
                 "type": "string",
-                "enum": ["flux2_klein_4b", "minimax_h3_image_edit"],
-                "description": "Image model: flux2_klein_4b (default; ~7 s, Apache-2.0, supports character lock up to 4 pictures, no refine) or "
+                "enum": ["hidream_i1_fast", "zimage_turbo", "minimax_h3_image_edit"],
+                "description": "Image model: hidream_i1_fast (default; ~45 s, text to image only, no refine), zimage_turbo (fast, text to image only) or "
                                "minimax_h3_image_edit (MiniMax H3-Image; ~50 s, painted/illustrated look, no refine; its licence excludes the US, EU, UK and South Korea)",
             },
         },
@@ -348,7 +348,7 @@ async def panelflow_chronoflow_generate_image(
     refine: bool = False,
     ref_images: list[str] | None = None,
     character_ids: list[str] | None = None,
-    workflow_id: str = "flux2_klein_4b",
+    workflow_id: str = "hidream_i1_fast",
 ) -> dict[str, Any]:
     payload = {
         "workflow_id": workflow_id,

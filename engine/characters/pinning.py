@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from engine.characters.face_verify import FaceIdentityVerifier, FaceVerificationReport
-from engine.comfyui.art import KLEIN_MAX_REFERENCES
+MAX_REFERENCES = 4  # a reference-capable image model takes up to four pictures (HiDream and Z-Image take none; the H3 edit graph takes four)
 from engine.chronoflow.pipeline import COMFY_INPUT_DIR
 
 logger = logging.getLogger(__name__)
@@ -58,7 +58,7 @@ def find_matching_characters(
 def bind_character_references_for_shot(
     scene_or_shot: dict[str, Any],
     characters_vault: list[dict[str, Any]],
-    max_references: int = KLEIN_MAX_REFERENCES,
+    max_references: int = MAX_REFERENCES,
 ) -> list[str]:
     """Retrieve up to `max_references` reference image names for a shot.
     

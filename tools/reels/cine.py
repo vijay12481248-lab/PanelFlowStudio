@@ -183,10 +183,137 @@ def sfx_drumroll(d=1.6):
     return _st(x / np.abs(x).max() * 0.5)
 
 
+
+# ---- comedy set (all synthesized): the cartoon sounds a joke needs, so the same few hits are not heard shot after shot
+def _env(t, a=0.005, r=6.0): return np.minimum(t / a, 1) * np.exp(-t * r)
+
+
+def sfx_boing(d=0.7):
+    t = _t(d)
+    ph = 2 * np.pi * np.cumsum(180 + 420 * np.abs(np.sin(2 * np.pi * 3.2 * t)) * np.exp(-t * 3.5)) / SR
+    return _st(np.sin(ph) * _env(t, 0.004, 3.0) * 0.8)
+
+
+def sfx_slidewhistle(d=0.8):
+    t = _t(d)
+    ph = 2 * np.pi * np.cumsum(500 + 1800 * (t / d) ** 1.5) / SR
+    return _st((np.sin(ph) + 0.25 * np.sin(2 * ph)) * np.minimum(t / 0.02, 1) * np.minimum((d - t) / 0.05, 1) * 0.55)
+
+
+def sfx_sadtrombone(d=2.3):
+    out, notes = np.zeros(int(d * SR)), [(0.0, 0.55, 233), (0.6, 0.55, 220), (1.2, 0.55, 208), (1.8, 0.5, 196)]
+    for t0, ln, f in notes:
+        t = _t(ln)
+        vib = 1 + 0.012 * np.sin(2 * np.pi * 5.5 * t)
+        x = sum(np.sin(2 * np.pi * f * k * np.cumsum(vib) / SR) / k for k in range(1, 7)) * np.minimum(t / 0.05, 1) * np.exp(-t * 1.2)
+        if t0 == 1.8:  # the last note slides down
+            x = sum(np.sin(2 * np.pi * np.cumsum(f * (1 - 0.18 * t / ln) * k * vib) / SR) / k for k in range(1, 7)) * np.minimum(t / 0.05, 1) * np.exp(-t * 0.9)
+        i = int(t0 * SR)
+        out[i:i + x.size] += _lp(x, 1800)[: out.size - i]
+    return _st(out / np.abs(out).max() * 0.6)
+
+
+def sfx_rimshot(d=1.0):
+    out = np.zeros(int(d * SR))
+    for t0, f, g in ((0.0, 190, 0.9), (0.16, 150, 0.9)):   # ba-dum
+        t = _t(0.18)
+        x = (np.sin(2 * np.pi * np.cumsum(f + 120 * np.exp(-t * 40)) / SR) + 0.5 * _bp(rng.standard_normal(t.size), 800, 4000)) * np.exp(-t * 16) * g
+        i = int(t0 * SR)
+        out[i:i + x.size] += x
+    t = _t(0.6)
+    out[int(0.32 * SR):int(0.32 * SR) + t.size] += _hp(rng.standard_normal(t.size), 5000) * np.exp(-t * 6) * 0.5   # tss
+    return _st(out / np.abs(out).max() * 0.7)
+
+
+def sfx_cricket(d=1.6):
+    t = _t(d)
+    gate = (np.sin(2 * np.pi * 14 * t) > 0.2) * (np.sin(2 * np.pi * 1.1 * t) > -0.3)
+    x = np.sin(2 * np.pi * 4300 * t) * gate * 0.5
+    return _st(_lp(x, 6000) * np.minimum(t / 0.1, 1) * np.minimum((d - t) / 0.2, 1), 0.3)
+
+
+def sfx_notify(d=0.5):
+    t = _t(d)
+    x = (np.sin(2 * np.pi * 1320 * t) * (t < 0.09) + np.sin(2 * np.pi * 1760 * np.clip(t - 0.1, 0, None)) * (t >= 0.1)) * np.exp(-np.clip(t - 0.1, 0, None) * 12)
+    return _st(x * 0.6, 0.7)
+
+
+def sfx_creak(d=1.2):
+    t = _t(d)
+    f = 110 + 60 * np.sin(2 * np.pi * 1.3 * t) + 90 * t
+    x = np.sign(np.sin(2 * np.pi * np.cumsum(f) / SR)) * _bp(rng.standard_normal(t.size), 300, 1200) * 1.6
+    return _st(_bp(x, 200, 2500) * np.minimum(t / 0.1, 1) * np.minimum((d - t) / 0.3, 1) * 0.6, 0.35)
+
+
+def sfx_gulp(d=0.45):
+    t = _t(d)
+    x = np.sin(2 * np.pi * np.cumsum(260 - 170 * (t / d) ** 0.6) / SR) * _env(t, 0.01, 7) * 0.8
+    return _st(x)
+
+
+def sfx_wail(d=1.8):
+    t = _t(d)
+    f = 380 + 220 * np.sin(np.pi * t / d) + 30 * np.sin(2 * np.pi * 6 * t)
+    x = (np.sin(2 * np.pi * np.cumsum(f) / SR) + 0.3 * np.sin(4 * np.pi * np.cumsum(f) / SR)) * np.sin(np.pi * t / d) ** 0.8
+    return _sweep_pan(_lp(x, 2500) * 0.5, 0.2, 0.8)
+
+
+def sfx_pop(d=0.2):
+    t = _t(d)
+    return _st(np.sin(2 * np.pi * np.cumsum(900 * np.exp(-t * 28) + 120) / SR) * _env(t, 0.001, 24) * 0.9)
+
+
+# ---- cat + anime set (all synthesized), for the wordless reels
+def sfx_meow(d=0.55):
+    t = _t(d)
+    f = 480 + 420 * np.sin(np.pi * np.clip(t / d, 0, 1) * 0.9) - 120 * (t / d)
+    ph = 2 * np.pi * np.cumsum(f) / SR
+    x = (np.sin(ph) + 0.5 * np.sin(2 * ph + 1.0) + 0.3 * np.sin(3 * ph)) * np.sin(np.pi * np.clip(t / d, 0, 1)) ** 0.7
+    return _st(_bp(x, 350, 3200) * 0.6, 0.45)
+
+
+def sfx_hiss(d=0.7):
+    t = _t(d)
+    return _st(_hp(rng.standard_normal(t.size), 3500) * np.minimum(t / 0.04, 1) * np.exp(-t * 3.2) * 0.55, 0.55)
+
+
+def sfx_purr(d=2.4):
+    t = _t(d)
+    x = _lp(rng.standard_normal(t.size), 380) * (0.55 + 0.45 * np.sin(2 * np.pi * 24 * t)) * np.minimum(t / 0.3, 1) * np.minimum((d - t) / 0.5, 1)
+    return _st(x / np.abs(x).max() * 0.55)
+
+
+def sfx_scream(d=0.8):
+    t = _t(d)
+    f = 1100 + 650 * np.minimum(t / 0.12, 1) + 40 * np.sin(2 * np.pi * 9 * t)
+    ph = 2 * np.pi * np.cumsum(f) / SR
+    x = (np.sin(ph) + 0.4 * np.sin(2 * ph)) * np.minimum(t / 0.01, 1) * np.exp(-np.clip(t - 0.35, 0, None) * 4)
+    return _st(_bp(x, 600, 5000) * 0.55, 0.5)
+
+
+def sfx_sparkle(d=0.9):
+    t = _t(d)
+    x = sum(np.sin(2 * np.pi * f * t) * np.exp(-np.clip(t - t0, 0, None) * 7) * (t >= t0) for f, t0 in ((1568, 0.0), (1976, 0.07), (2349, 0.14), (3136, 0.21), (3951, 0.28)))
+    return _st(x / np.abs(x).max() * 0.5, 0.6)
+
+
+def sfx_snore(d=1.8):
+    t = _t(d)
+    f = 70 + 25 * np.sin(2 * np.pi * 0.55 * t)
+    x = np.sign(np.sin(2 * np.pi * np.cumsum(f) / SR)) * (np.sin(2 * np.pi * 0.55 * t - 1.2) > 0.1) * (0.6 + 0.4 * rng.standard_normal(t.size))
+    return _st(_lp(x, 450) * 0.6, 0.4)
+
+
+def sfx_poof(d=0.5):
+    t = _t(d)
+    return _st(_lp(rng.standard_normal(t.size), 1400) * np.minimum(t / 0.01, 1) * np.exp(-t * 9) * 0.8)
+
 SFX = dict(buzz=sfx_buzz, swarm=sfx_swarm, boom=sfx_boom, thud=sfx_thud, whoosh=sfx_whoosh, swoosh=lambda: sfx_whoosh(0.25, 0.7),
            slap=sfx_slap, click=sfx_click, stinger=sfx_stinger, ding=sfx_ding, heart=sfx_heart, riser=sfx_riser, tada=sfx_tada,
            birds=sfx_birds, crash=sfx_crash, zap=sfx_zap, whistle=sfx_whistle, powerdown=sfx_powerdown, crowd=sfx_crowd, scratch=sfx_scratch,
-           drumroll=sfx_drumroll)
+           drumroll=sfx_drumroll, boing=sfx_boing, slidewhistle=sfx_slidewhistle, sadtrombone=sfx_sadtrombone, rimshot=sfx_rimshot,
+           cricket=sfx_cricket, notify=sfx_notify, creak=sfx_creak, gulp=sfx_gulp, wail=sfx_wail, pop=sfx_pop,
+           meow=sfx_meow, hiss=sfx_hiss, purr=sfx_purr, scream=sfx_scream, sparkle=sfx_sparkle, snore=sfx_snore, poof=sfx_poof)
 _cache: dict = {}
 
 
@@ -489,8 +616,12 @@ def build(r, scale, allow_stills):
         fade = np.clip((n - np.arange(n)) / (1.5 * SR), 0, 1)
         mix += (m * gain * fade)[:, None]
 
+    vary = np.random.default_rng(7)
+
     def put(name, at, g=1.0):
         x = sfx(name) * g
+        r = vary.uniform(0.9, 1.12)   # every use gets its own pitch and level, so the same effect is not heard as the same sample
+        x = np.stack([np.interp(np.arange(0, len(x) - 1, r), np.arange(len(x)), x[:, c]) for c in (0, 1)], 1).astype(np.float32) * vary.uniform(0.85, 1.0)
         i = max(0, int(at * SR))
         mix[i:i + len(x)] += x[: n - i]
 
@@ -498,11 +629,11 @@ def build(r, scale, allow_stills):
     for j, sc in enumerate(plan):
         for name, at in sc.get("sfx", []):
             events.append((name, sc["start"] + at, 0.9))
-        if j and sc["tr"] in TR_SFX:
+        if j and sc["tr"] in TR_SFX and sc.get("autosfx", True):
             nm, off = TR_SFX[sc["tr"]]
             events.append((nm, sc["start"] + off, 0.9 if nm != "boom" else 0.75))
         for mv, fr, _ in sc["cam"]:
-            if mv in ("punch", "punchout"):
+            if mv in ("punch", "punchout") and sc.get("autosfx", True):
                 events.append(("thud", sc["start"] + fr * sc["d"], 0.8))
     for name, at, g in events:
         put(name, at, g)

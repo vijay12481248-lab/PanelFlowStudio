@@ -9,7 +9,7 @@ router = APIRouter(prefix="/api/original/anatomy", tags=["anatomy"])
 
 class FlagRequest(BaseModel):
     picture: str = Field(min_length=1, max_length=500)
-    model: str = Field(default="flux2_klein_4b", max_length=100)
+    model: str = Field(default="hidream_i1_fast", max_length=100)
     note: str = Field(min_length=1, max_length=2000)
 
 

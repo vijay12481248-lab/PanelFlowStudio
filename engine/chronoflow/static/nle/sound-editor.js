@@ -36,6 +36,7 @@
   const fmt = (t) => { t = Math.max(0, t || 0); const m = Math.floor(t / 60), s = t - m * 60; return `${m}:${s.toFixed(2).padStart(5, '0')}`; };
   const sel = () => (S.sel && S.sel.b - S.sel.a > 0.005 ? S.sel : null);
   const fileUrl = (s, v) => `${BASE}/sounds/${s.id}/file?v=${v || s.current}`;
+  const mediaSrc = (u) => { const t = window.NLE && window.NLE.cfg && window.NLE.cfg.token; return t ? `${u}${u.includes('?') ? '&' : '?'}token=${encodeURIComponent(t)}` : u; };
 
   // ---------------------------------------------------------------- library
   async function loadSounds() {
@@ -119,13 +120,23 @@
       const px = Math.round(x(tk.t)) + 0.5; r.beginPath(); r.moveTo(px, tk.major ? 6 : 14); r.lineTo(px, rh); r.stroke();
       if (tk.major) r.fillText(fmt(tk.t), px + 3, 11);
     }
+    const hx = Math.round(x(S.t)) + 0.5;   // the scrubber handle: drag it (or the ruler, or the white line) to move the playhead
+    r.fillStyle = '#ffffff'; r.beginPath(); r.moveTo(hx - 5, 0); r.lineTo(hx + 5, 0); r.lineTo(hx, 10); r.closePath(); r.fill();
     if (el.time) el.time.textContent = `${fmt(S.t)} / ${fmt(S.dur)}`;
     if (el.selRead) el.selRead.textContent = s ? `Selection ${fmt(s.a)} to ${fmt(s.b)} (${(s.b - s.a).toFixed(2)} s)` : 'No selection: tools act on the whole sound';
   }
   function bindWave() {
     const cv = el.wave, tAt = (e) => { const r = cv.getBoundingClientRect(); return Math.min(S.dur, Math.max(0, S.view.t0 + (e.clientX - r.left) / S.view.pps)); };
+    const nearHead = (e) => Math.abs(e.clientX - (cv.getBoundingClientRect().left + (S.t - S.view.t0) * S.view.pps)) <= 7;
+    function scrub(e) {   // drag to move the playhead (while playing too: seek() retargets the audio)
+      cv.setPointerCapture(e.pointerId); seek(tAt(e));
+      cv.onpointermove = (m) => seek(tAt(m));
+      cv.onpointerup = () => { cv.onpointermove = cv.onpointerup = null; };
+    }
+    cv.addEventListener('pointermove', (e) => { if (!cv.onpointerup) cv.style.cursor = S.sound && nearHead(e) ? 'ew-resize' : ''; });
     cv.onpointerdown = (e) => {
       if (!S.sound) return;
+      if (nearHead(e)) return scrub(e);
       cv.setPointerCapture(e.pointerId);
       const t0 = tAt(e), x0 = e.clientX; let dragged = false;
       cv.onpointermove = (m) => {
@@ -143,7 +154,8 @@
       else { const r = cv.getBoundingClientRect(); S.view = M().zoomAt(S.view, e.deltaY < 0 ? 1.25 : 0.8, S.view.t0 + (e.clientX - r.left) / S.view.pps, { minPps: 2, maxPps: 20000 }); }
       draw();
     };
-    el.ruler.onpointerdown = (e) => { if (!S.sound) return; const r = el.ruler.getBoundingClientRect(); seek(Math.max(0, S.view.t0 + (e.clientX - r.left) / S.view.pps)); };
+    el.ruler.style.cursor = 'ew-resize'; el.ruler.title = 'Drag to move the playhead';
+    el.ruler.onpointerdown = (e) => { if (S.sound) scrub(e); };   // same drag as the white line; tAt reads the waveform's box, which is as wide as the ruler
   }
 
   // ---------------------------------------------------------------- playback (one <audio>, a meter from an analyser)
@@ -152,7 +164,8 @@
     if (A) return A;
     const el2 = new Audio(); el2.preload = 'auto';
     A = { el: el2, ctx: null, an: null, until: null };
-    el2.onended = () => stop();
+    // the last animation frame stops a few ms short of the end; park the playhead on the end so the next Play starts from 0 instead of replaying the last few ms
+    el2.onended = () => { if (!A.preview) S.t = S.dur; stop(); draw(); };
     return A;
   }
   function meterSetup() {
@@ -163,8 +176,8 @@
   async function play(range, url) {
     const a = audio(); meterSetup(); if (a.ctx && a.ctx.state === 'suspended') await a.ctx.resume();
     const src = url || (S.sound ? fileUrl(S.sound) : null); if (!src) return;
-    if (a.el.dataset.src !== src) { a.el.src = src; a.el.dataset.src = src; }
-    const from = range ? range.a : (S.t >= S.dur - 0.01 ? 0 : S.t);
+    if (a.el.dataset.src !== src) { a.el.src = src.startsWith('blob:') ? src : mediaSrc(src); a.el.dataset.src = src; }   // an <audio> tag cannot send the token header, so it goes in the URL
+    const from = range ? range.a : (S.t >= S.dur - 0.05 ? 0 : S.t);
     a.until = range ? range.b : null; a.preview = !!url;
     try { a.el.currentTime = url ? 0 : from; await a.el.play(); } catch (e) { say(`Play: ${e.message}`, true); return; }
     S.playing = true; paintTransport(); tick();

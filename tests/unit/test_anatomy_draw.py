@@ -18,7 +18,7 @@ def test_without_the_check_it_is_the_plain_art_engine_call():
     art = Art()
     png, report = draw.draw_picture(art, prompt="a girl", negative_prompt="blurry", width=768, height=1344, seed=5, prefix="p", reference_image="ref.png")
     assert png == b"plain-png" and report is None
-    assert art.calls == [("a girl", "blurry", 5, {"workflow_id": "flux2_klein_4b", "reference_image": "ref.png"})]
+    assert art.calls == [("a girl", "blurry", 5, {"workflow_id": "hidream_i1_fast", "reference_image": "ref.png"})]
 
 
 def test_with_the_check_it_runs_the_redraw_loop_and_returns_a_json_report(monkeypatch):

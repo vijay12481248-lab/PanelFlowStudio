@@ -220,13 +220,15 @@ class GenerateImageRequest(BaseModel):
     character_ids: list[str] = Field(default_factory=list)  # character lock: Character Vault ids resolved to their sheets
     location_id: str | None = None
     destination_path: str | None = None
-    workflow_id: str = ART_WORKFLOW_ID  # which image model: flux2_klein_4b (default) or minimax_h3_image_edit (text to image, no picture bound)
+    workflow_id: str = ART_WORKFLOW_ID  # which image model: hidream_i1_fast (default), zimage_turbo, or minimax_h3_image_edit (text to image, no picture bound)
 
 
 # What the Image Studio's model picker shows. Timings/looks are what docs/H3_IMAGE_EDIT.md measured on the RTX 5060 Ti.
 IMAGE_MODELS = [
-    {"id": "flux2_klein_4b", "label": "FLUX.2 klein 4B", "default": True, "speed": "about 7 s",
-     "summary": "Fast, Apache-2.0 (free for commercial use). Character Lock and reference pictures work (up to 4); no auto-refine yet."},
+    {"id": "hidream_i1_fast", "label": "HiDream-I1 Fast", "default": True, "speed": "about 45 s",
+     "summary": "Default. MIT-licensed transformer, clean detailed pictures. Text to image only: no Character Lock or reference pictures; no auto-refine."},
+    {"id": "zimage_turbo", "label": "Z-Image Turbo", "default": False, "speed": "about 10 s (not measured here yet)",
+     "summary": "Fast second model. Text to image only: no reference pictures; no auto-refine."},
     {"id": "minimax_h3_image_edit", "label": "MiniMax H3-Image", "default": False, "speed": "about 50 s",
      "summary": "Slower, painted / illustrated look. Its licence excludes the US, EU, UK and South Korea, so check it before publishing. No auto-refine."},
 ]
@@ -1231,7 +1233,7 @@ def delete_character(char_id: str) -> dict[str, Any]:
 
 @router.post("/characters/{char_id}/model_sheet")
 async def generate_character_model_sheet_endpoint(char_id: str, seed: int | None = None) -> dict[str, Any]:
-    """Generate a canonical 4-view turnaround model sheet for a character using FLUX.2 Klein (flux2_klein_4b)."""
+    """Generate a canonical 4-view turnaround model sheet for a character using the default art model (hidream_i1_fast)."""
     from engine.characters.modelsheet import generate_character_model_sheet
     chars = load_characters()
     char_entry = next((c for c in chars if c.get("id") == char_id), None)

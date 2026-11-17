@@ -235,7 +235,13 @@ from spec_mosquito import MOSQUITO  # noqa: E402  (cinematic 60 s reel, assemble
 
 from spec_samosa import SAMOSA  # noqa: E402
 
-REELS += [MOSQUITO, SAMOSA]
+from spec_ghost import GHOST  # noqa: E402  (3D-cartoon haunted-house comedy; pictures from hidream_art.py)
+
+from spec_ghost2 import GHOST2  # noqa: E402  (r14: the jokes rewrite of r13)
+
+from spec_ghost3 import GHOSTCAT  # noqa: E402  (r15: wordless anime comedy)
+
+REELS += [MOSQUITO, SAMOSA, GHOST, GHOST2, GHOSTCAT]
 
 # Scenes drawn WITHOUT the scene-1 reference picture, because the setting changes (the reference otherwise drags the old room along).
 NO_REF = {"r06_exam_brain": {2, 3, 4, 5}, "r07_snooze_mafia": {4, 5}, "r09_group_project": {4, 5}, "r10_dad_love": {2, 3, 4, 5},

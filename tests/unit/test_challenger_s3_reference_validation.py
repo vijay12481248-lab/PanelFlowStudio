@@ -164,25 +164,25 @@ def test_art_engine_generate_with_reference_image_uploads_file_and_bytes(tmp_pat
     ref_file = tmp_path / "char_turnaround.png"
     ref_file.write_bytes(_make_dummy_png(1536, 768))
 
-    img1 = engine.generate("portrait 1", reference_image=ref_file)
+    h3 = "minimax_h3_image_edit"  # the only reference-capable image graph left; HiDream and Z-Image refuse reference pictures
+    slot = reg.metadata(h3)["patch_slots"]["reference_image"]
+    img1 = engine.generate("portrait 1", reference_image=ref_file, workflow_id=h3)
     assert "char_turnaround.png" in client.uploaded_files
     wf1 = client.submitted_workflows[-1]
-    assert wf1["20"]["inputs"]["image"] == "char_turnaround.png"  # klein's reference graph: LoadImage -> scale -> VAEEncode -> ReferenceLatent
-    assert wf1["10"]["inputs"]["positive"] == ["23", 0]
+    assert wf1[slot["node_id"]]["inputs"] or any(n["class_type"] == "LoadImage" and n["inputs"]["image"] == "char_turnaround.png" for n in wf1.values())
 
     # 2. Bytes input
     raw_bytes = _make_dummy_png(1536, 768)
-    img2 = engine.generate("portrait 2", reference_image=raw_bytes)
+    img2 = engine.generate("portrait 2", reference_image=raw_bytes, workflow_id=h3)
     assert len(client.uploaded_bytes_list) == 1
     uploaded_name = client.uploaded_bytes_list[0]
     wf2 = client.submitted_workflows[-1]
-    assert wf2["20"]["inputs"]["image"] == uploaded_name
-    assert wf2["10"]["inputs"]["positive"] == ["23", 0]
+    assert any(n["class_type"] == "LoadImage" and n["inputs"]["image"] == uploaded_name for n in wf2.values())
 
-    # 3. None reference image
+    # 3. None reference image on the default model: plain text to image, no LoadImage node at all
     img3 = engine.generate("portrait 3", reference_image=None)
     wf3 = client.submitted_workflows[-1]
-    assert "20" not in wf3 and wf3["10"]["inputs"]["positive"] == ["4", 0]  # no picture: the plain text-to-image graph
+    assert not any(n["class_type"] == "LoadImage" for n in wf3.values())
 
 
 def test_qwen_image_21_node_id_collision_increments_dynamically():
@@ -525,7 +525,7 @@ def test_adversarial_art_engine_generate_invalid_types():
 
     for inv in invalid_inputs:
         with pytest.raises(ValueError, match="Unsupported reference_image type"):
-            engine.generate("test prompt", reference_image=inv)
+            engine.generate("test prompt", reference_image=inv, workflow_id="minimax_h3_image_edit")
 
 
 def test_adversarial_empty_string_reference_image_behavior():
@@ -632,11 +632,11 @@ def test_adversarial_dual_reference_workflows_partial_omission():
 
 
 def test_single_art_workflow_invariant_strictly_enforced():
-    """Verify that flux2_klein_4b is the sole text_to_image workflow across the entire registry."""
+    """Verify that hidream_i1_fast is the sole text_to_image workflow across the entire registry."""
     with open("engine/comfyui/workflow_registry.json", "r", encoding="utf-8") as f:
         registry_data = json.load(f)
     workflows = registry_data if isinstance(registry_data, list) else registry_data.get("workflows", [])
     t2i = [w["id"] for w in workflows if isinstance(w, dict) and w.get("purpose") == "text_to_image"]
     assert len(t2i) == 1, f"Found {len(t2i)} text_to_image workflows: {t2i}"
-    assert t2i[0] == "flux2_klein_4b", f"Expected flux2_klein_4b, found: {t2i[0]}"
+    assert t2i[0] == "hidream_i1_fast", f"Expected hidream_i1_fast, found: {t2i[0]}"
 

@@ -29,7 +29,7 @@ RULES = {
 ONLY_WHEN = {"duplicate_object|any": re.compile(r"\b(sword|blade|weapon|staff|spear|knife|dagger|axe|bow|katana)\b", re.I)}
 SEED_MARK = "agent-labelled 2026-11-16 audit"
 SEEDED = ("extra_hands|any", "duplicate_object|any")  # klein: four arms in cross-legged seeds 101 and 103; a ghost second blade in sword seeds 101 and 103
-DEFAULT_MODEL = "flux2_klein_4b"
+DEFAULT_MODEL = "hidream_i1_fast"
 
 
 def domain(model: str) -> str:

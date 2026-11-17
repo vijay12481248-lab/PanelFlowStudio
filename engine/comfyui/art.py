@@ -1,10 +1,11 @@
-"""The one image-generation engine of PanelFlow Studio.
+"""The image-generation engine of PanelFlow Studio.
 
 Every feature that needs a picture (Original Stories, ChronoFlow, the Comfy image screen, YouTube thumbnails, autopilot) calls
-`ArtEngine.generate`, which runs the single approved text-to-image workflow `flux2_klein_4b` (FLUX.2 klein 4B, Apache-2.0; with reference
-pictures it runs `flux2_klein_4b_ref`). There is no second text-to-image workflow: do not add one, extend this one. The graphs live in
-`workflows/flux2_klein_4b*.api.json` and are registered (checksum, models, patch slots) in `workflow_registry.json`. Qwen Image 2.1 was the art
-model until 2026-11-16 and was retired because its licence is non-commercial.
+`ArtEngine.generate`, which runs the default text-to-image workflow `hidream_i1_fast` (HiDream-I1 Fast, MIT transformer). `zimage_turbo`
+(Z-Image Turbo) is the owner's second approved text-to-image model, picked per job. Both are text to image only (no reference pictures).
+The graphs live in `workflows/*.api.json` and are registered (checksum, models, patch slots) in `workflow_registry.json`.
+FLUX.2 klein was the art model until 2026-11-16 and was removed from disk at the owner's request; Qwen Image 2.1 was retired earlier
+(non-commercial licence). Both ids stay in the registry as `retired_*` entries only.
 
 `ArtEngine.run` is the shared submit -> poll -> download step, also used by the image *edit* tools (inpaint, ControlNet, matting).
 The pure helpers below (`_patch_workflow`, `_history_images`, `_validate_output_dimensions`) live here so that neither this module
@@ -15,6 +16,7 @@ from __future__ import annotations
 import io
 import logging
 import random
+import re
 import time
 from copy import deepcopy
 from dataclasses import dataclass
@@ -25,40 +27,41 @@ from PIL import Image
 
 from engine.comfyui import ComfyUIClient, ComfyWorkflowRegistry
 
-ART_WORKFLOW_ID = "flux2_klein_4b"  # FLUX.2 klein 4B, Apache-2.0: the one text-to-image model. With reference pictures generate() runs ART_REF_WORKFLOW_ID.
-ART_REF_WORKFLOW_ID = "flux2_klein_4b_ref"
+ART_WORKFLOW_ID = "hidream_i1_fast"  # HiDream-I1 Fast: the default text-to-image model.
+ZIMAGE_WORKFLOW_ID = "zimage_turbo"  # Z-Image Turbo: the second text-to-image model, chosen per job.
 # Qwen Image 2.1 Turbo is under the non-commercial Qwen Research Licence, so it stopped being the art model on 2026-11-16. Its id survives only so the
 # opt-in refine / inpaint code that was built on its weights can say clearly that it is gone; it is not an image workflow any more.
 LEGACY_QWEN_WORKFLOW_ID = "qwen_image_21"
 EDIT_WORKFLOW_ID = "minimax_h3_image_edit"  # MiniMax-H3-Image: edit an existing picture from a written instruction
-# What an image job may run. klein is the default everywhere; the H3-Image graph with no picture bound is text to image
+# What an image job may run. HiDream is the default everywhere; the H3-Image graph with no picture bound is text to image
 # (the same registered graph as the edit, not a second text_to_image entry), chosen per job by its caller.
-IMAGE_WORKFLOW_IDS = (ART_WORKFLOW_ID, EDIT_WORKFLOW_ID)
+IMAGE_WORKFLOW_IDS = (ART_WORKFLOW_ID, ZIMAGE_WORKFLOW_ID, EDIT_WORKFLOW_ID)
 REFINE_RETIRED = ("Auto-refine was built on Qwen Image 2.1, which is retired (non-commercial licence); turn it off. "
-                  "It stays off until the review -> repair loop is rebuilt on FLUX.2 klein.")
-KLEIN_MAX_REFERENCES = 4  # BFL: klein takes up to four reference pictures
+                  "It stays off until the review -> repair loop is rebuilt on the current art model.")
 
 
-def _klein_reference_prompt(prompt: str, n: int = 1) -> str:
-    """klein copies the reference unless told what to keep and what to change (measured 2026-11-16): state both."""
-    which = "the reference picture" if n == 1 else "the reference pictures"
-    return (f"Keep exactly the same characters (same faces, hair and clothes), the same art style and the same setting as in {which}. "
-            f"Show a new moment: {prompt}")
+# HiDream-I1 Fast (cfg 1, so the negative prompt is ignored) signs most pictures with a scribble in the bottom-right corner, and a prompt that says "no text" or
+# "no speech bubbles" makes it draw lettering and speech bubbles instead (measured 2026-11-17, tools/intel/hidream_text_probe.py: 4/4 pictures signed, 2/4 with a
+# speech bubble of gibberish; with the phrase removed 0/12 bubbles). Drawing the picture taller to cut the band off made it print poster headlines (5/12 vs 0/12), so
+# instead: drop those negations from the prompt, then trim SIGNATURE_TRIM pixels off the bottom and the matching share off the right edge and scale back to the asked size.
+SIGNATURE_TRIM = 64
+_TEXT_NEGATION = re.compile(r",?\s*\bno (?:text|letters?|numbers?|words?|speech bubbles?|sound effect lettering|watermarks?|logos?|captions?|subtitles?|signatures?)\b", re.I)
 
 
-def _add_klein_references(graph: dict[str, Any], names: list[str]) -> None:
-    """Chain further reference pictures (2nd, 3rd, 4th) onto the registered one-reference graph: LoadImage -> scale -> VAEEncode -> ReferenceLatent
-    on the positive and the negative conditioning, then point the guider at the last link."""
-    guider = graph["10"]["inputs"]
-    for k, name in enumerate(names, start=2):
-        base = 30 + 10 * k
-        load, scale, enc, pos, neg = (str(base + i) for i in range(5))
-        graph[load] = {"class_type": "LoadImage", "inputs": {"image": name}}
-        graph[scale] = {"class_type": "ImageScaleToTotalPixels", "inputs": {"image": [load, 0], "upscale_method": "lanczos", "megapixels": 1.05, "resolution_steps": 16}}
-        graph[enc] = {"class_type": "VAEEncode", "inputs": {"pixels": [scale, 0], "vae": ["3", 0]}}
-        graph[pos] = {"class_type": "ReferenceLatent", "inputs": {"conditioning": guider["positive"], "latent": [enc, 0]}}
-        graph[neg] = {"class_type": "ReferenceLatent", "inputs": {"conditioning": guider["negative"], "latent": [enc, 0]}}
-        guider["positive"], guider["negative"] = [pos, 0], [neg, 0]
+def _drop_text_negations(prompt: str) -> str:
+    return _TEXT_NEGATION.sub("", prompt)
+
+
+def _trim_corner_and_scale(png: bytes, width: int, height: int, trim: int = SIGNATURE_TRIM) -> bytes:
+    """Cut `trim` pixels off the bottom and the same share off the right (the signature sits in that corner), then scale back to width x height (aspect kept)."""
+    if trim * 8 > height:  # too small a picture to lose a corner
+        return png
+    keep_h = height - trim
+    keep_w = round(width * keep_h / height)
+    buf = io.BytesIO()
+    with Image.open(io.BytesIO(png)) as image:
+        image.crop((0, 0, keep_w, keep_h)).resize((width, height), Image.LANCZOS).save(buf, format="PNG")
+    return buf.getvalue()
 
 
 logger = logging.getLogger(__name__)
@@ -336,7 +339,7 @@ class ArtEngine:
         self._ready: set[str] = set()
 
     def accepts_reference(self, workflow_id: str) -> bool:
-        """True when `generate` can bind a reference picture for this image workflow (klein does so through its reference variant)."""
+        """True when `generate` can bind a reference picture for this image workflow (only the H3 edit graph does)."""
         return workflow_id == ART_WORKFLOW_ID or "reference_image" in self.registry.metadata(workflow_id)["patch_slots"]
 
     def require_ready(self, workflow_id: str = ART_WORKFLOW_ID) -> None:
@@ -434,14 +437,6 @@ class ArtEngine:
     ) -> ArtImage:
         if workflow_id not in IMAGE_WORKFLOW_IDS:
             raise ComfyImageGenerationError(f"Image workflows are {IMAGE_WORKFLOW_IDS}; got {workflow_id!r}")
-        klein_extra: list[Path | str | bytes] = []  # klein: the 2nd..4th reference pictures, chained onto the registered one-reference graph
-        if workflow_id == ART_WORKFLOW_ID:
-            given = ([reference_image] if reference_image is not None else []) + list(reference_images or [])
-            if len(given) > KLEIN_MAX_REFERENCES:
-                raise ComfyImageGenerationError(f"{workflow_id} takes at most {KLEIN_MAX_REFERENCES} reference pictures (got {len(given)})")
-            if given:
-                workflow_id, prompt = ART_REF_WORKFLOW_ID, _klein_reference_prompt(prompt, len(given))
-                reference_image, reference_images, klein_extra = given[0], None, given[1:]
         self.require_ready(workflow_id)
         workflow, workflow_sha256 = self.registry.load(workflow_id)
         metadata = self.registry.metadata(workflow_id)
@@ -450,6 +445,8 @@ class ArtEngine:
                                     dimension_policy=policy)  # rejects a request the workflow cannot honour before any GPU time is spent
         if seed is None:
             seed = random.randint(1, 2**31 - 1)
+        if workflow_id == ART_WORKFLOW_ID:
+            prompt = _drop_text_negations(prompt)
 
         if (reference_image is not None or reference_images is not None) and "reference_image" not in metadata["patch_slots"]:
             raise ComfyImageGenerationError(f"Workflow {workflow_id} is text to image only and takes no reference pictures")
@@ -474,8 +471,6 @@ class ArtEngine:
             reference_image=ref_image_name,
             reference_images=ref_image_names,
         )
-        if klein_extra:
-            _add_klein_references(patched, [self._resolve_reference(item) for item in klein_extra])
         if progress:
             progress(0.05, f"Verified workflow {workflow_id}")
         raw, prompt_id, ref = self.run(patched, timeout=timeout, is_cancelled=is_cancelled, progress=progress, client_id=client_id)
@@ -488,6 +483,8 @@ class ArtEngine:
             raise ComfyImageGenerationError("ComfyUI returned an invalid image artifact") from exc
         _validate_output_dimensions(actual_width=actual_width, actual_height=actual_height, requested_width=width, requested_height=height,
                                     dimension_policy=policy)
+        if workflow_id == ART_WORKFLOW_ID:
+            raw = _trim_corner_and_scale(raw, actual_width, actual_height)
         return ArtImage(png=raw, width=actual_width, height=actual_height, prompt_id=prompt_id, workflow_id=workflow_id,
                         workflow_sha256=workflow_sha256, model_files=list(metadata.get("model_files", [])), source_output=ref, seed=seed)
 

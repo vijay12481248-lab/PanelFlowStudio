@@ -3,7 +3,7 @@ from engine.original.anatomy.lessons import domain, record_report, rules_for, se
 from engine.original.anatomy.review import AnatomyReport
 from engine.original.anatomy.rules import Defect
 
-MODEL = "flux2_klein_4b"
+MODEL = "hidream_i1_fast"
 
 
 def report(*defects):

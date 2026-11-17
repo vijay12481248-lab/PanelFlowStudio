@@ -608,7 +608,7 @@ def test_single_art_workflow_invariant_strict():
     t2i_entries = [e for e in entries if e.get("purpose") == "text_to_image"]
     assert len(t2i_entries) == 1, f"Expected exactly 1 text_to_image workflow, found {len(t2i_entries)}: {[e['id'] for e in t2i_entries]}"
     assert t2i_entries[0]["id"] == ART_WORKFLOW_ID
-    assert t2i_entries[0]["id"] == "flux2_klein_4b"
+    assert t2i_entries[0]["id"] == "hidream_i1_fast"
 
 
 def test_qwen_image_21_schema_and_checksum_integrity():

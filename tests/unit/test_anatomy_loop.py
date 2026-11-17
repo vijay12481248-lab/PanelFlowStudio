@@ -95,7 +95,7 @@ def test_the_time_budget_stops_new_attempts(script):
 def test_active_rules_are_appended_to_the_prompt_and_every_attempt_is_recorded(script, tmp_path):
     ledger = MistakeLedger(file_path=tmp_path / "l.json")
     for _ in range(2):
-        record_report(ledger, "flux2_klein_4b", defects())
+        record_report(ledger, "hidream_i1_fast", defects())
     script(CLEAN)
     art, rec = Art(), tmp_path / "c.jsonl"
     r = go(art, ledger=ledger, record_path=rec)
@@ -108,7 +108,7 @@ def test_the_first_attempts_confirmed_defects_become_lessons(script, tmp_path):
     ledger = MistakeLedger(file_path=tmp_path / "l.json")
     script(defects(), CLEAN)
     go(Art(), ledger=ledger)
-    assert ledger.load_mistakes(domain("flux2_klein_4b"))[0].recurrence_count == 1
+    assert ledger.load_mistakes(domain("hidream_i1_fast"))[0].recurrence_count == 1
 
 
 def test_no_ledger_means_the_prompt_is_unchanged(script):

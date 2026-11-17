@@ -149,7 +149,7 @@ def seed_for(story: OriginalStory, key: str, attempt: int = 0) -> int:
 
 
 class ComfyRunner:
-    """Text to image through the central ArtEngine (flux2_klein_4b); the SDXL tools (ControlNet, inpaint, matting, IP-Adapter) run on the same poll loop. Returns PNG bytes."""
+    """Text to image through the central ArtEngine (hidream_i1_fast); the SDXL tools (ControlNet, inpaint, matting, IP-Adapter) run on the same poll loop. Returns PNG bytes."""
 
     def __init__(self, client: ComfyUIClient | None = None, workflow_id: str = "anime_sdxl", ipa_id: str = "anime_sdxl_ipa",
                  ipa2_id: str = "anime_sdxl_ipa2", engine: str | None = None, inpaint_id: str = "anime_sdxl_inpaint",

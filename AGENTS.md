@@ -11,14 +11,14 @@ episodes and original stories into narrated YouTube videos. Everything runs on t
 - Local LLM: Ollama `qwen3.5:9b` (text + vision) on `:11434`. Local-first: never fall back silently to cloud or mock.
 - Images: ComfyUI in `E:\VIJAY SEKAR\ComfyUI` (own venv), start with `venv\Scripts\python.exe main.py --listen 127.0.0.1 --port 8188`;
   set `PANELFLOW_COMFYUI_WORKFLOW_DIR=E:\VIJAY SEKAR\ComfyUI\workflow` so PanelFlow finds the models.
-- **One art workflow: `flux2_klein_4b` (FLUX.2 klein 4B, Apache-2.0; with reference pictures `flux2_klein_4b_ref`), run only by `engine/comfyui/art.py` (`ArtEngine`).**
-  Qwen Image 2.1 was retired on 2026-11-16 because its licence is non-commercial (`qwen_image_21` stays in the registry as `retired_text_to_image`; auto-refine and
-  Image Studio's Qwen inpaint are off with it). Original Stories, ChronoFlow, the Comfy image screen, YouTube thumbnails and autopilot all call `ArtEngine`; do not add a
-  second text-to-image workflow or a private submit/poll loop - extend `ArtEngine`. `tests/unit/test_art_engine.py` fails if the registry gains another `text_to_image`
-  workflow. The owner's one exception (2026-11-13): an image job may name `minimax_h3_image_edit` as its `workflow_id`; that same registered
-  H3-Image graph with no picture bound is text to image (`IMAGE_WORKFLOW_IDS` in `art.py`); its licence excludes the US, EU, UK and South Korea, so check it before
-  publishing. klein is the default everywhere; only the AI Game Studio's image model picker selects H3-Image. The SDXL entries (`purpose: sdxl_conditioning`, `inpaint`, `matting`) are the legacy substrate of the ControlNet / IP-Adapter /
-  inpaint / matting tools, not art workflows. `PANELFLOW_IMAGE_ENGINE` is `qwen` (default) or `sdxl` (for those tools' tests).
+- **Art workflows (owner's choice, 2026-11-16): `hidream_i1_fast` (HiDream-I1 Fast, MIT transformer) is the default, `zimage_turbo` (Z-Image Turbo) the per-job alternative; both run only through
+  `engine/comfyui/art.py` (`ArtEngine`) and are text to image only (no reference pictures, so no Character Lock until a reference-capable model is added).** FLUX.2 klein was removed from disk and
+  retired on 2026-11-16 at the owner's request (`flux2_klein_4b*` stay in the registry as `retired_*`); Qwen Image 2.1 was retired earlier (non-commercial licence). Do not add a private submit/poll loop - extend
+  `ArtEngine`. The registry keeps exactly one `text_to_image` entry (HiDream); Z-Image is `text_to_image_alt` (`tests/unit/test_art_engine.py`). The owner's earlier exception: an image job may name
+  `minimax_h3_image_edit` as its `workflow_id` (same registered H3-Image graph, no picture bound = text to image; licence excludes the US, EU, UK and South Korea). Measured 2026-11-16 (768x1344, RTX 5060 Ti):
+  HiDream 49 s (one run 126 s), Z-Image 88-90 s; HiDream drew stray lettering despite "no text" (cfg 1 ignores negatives: state things positively, check pictures); Z-Image kept the stickman style and drew none.
+  Licences of HiDream's text encoders and of Z-Image were not checked: check before monetising. `ae.safetensors` is needed by both. The SDXL entries (`purpose: sdxl_conditioning`, `inpaint`, `matting`) are the legacy
+  substrate of the ControlNet / IP-Adapter / inpaint / matting tools, not art workflows. `PANELFLOW_IMAGE_ENGINE` is `qwen` (default) or `sdxl` (for those tools' tests).
 - ComfyUI and Ollama together use ~13 GB of VRAM; the job manager holds GPU jobs back when memory is not free (by design).
 
 ## What exists (read these docs first)

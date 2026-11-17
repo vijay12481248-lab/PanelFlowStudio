@@ -285,7 +285,7 @@
     if (el.ccby) { el.ccby.checked = !!(p && p.allow_cc_by); el.ccby.disabled = !p; }
     paintBusy();
   }
-  function paintAll() { paintPlanSelect(); paintHeader(); paintCues(); paintQa(); renderInspector(); renderLanes(); paintMixer(); previewSoon(); }
+  function paintAll() { paintPlanSelect(); paintHeader(); paintCues(); paintQa(); renderInspector(); renderLanes(); paintMixer(); paintTransport(); previewSoon(); }
   function selectCue(id, seek) {
     if (AU && AU.el) { AU.el.pause(); AU.id = null; }
     S.sel = id; paintCues(); renderInspector(); renderLanes();
@@ -642,7 +642,7 @@
   async function play() {
     if (!S.plan) return;
     if (AU.el) { AU.el.pause(); AU.id = null; }
-    if (!P.preview) { say('Nothing to hear yet: press “Preview mix” to render the sound.', true); return; }
+    if (!P.preview) { await renderPreview(); if (!P.preview) return; }   // the stems are what you hear: make them now instead of asking for a second click
     try {
       ensureGraph(); await P.ctx.resume(); applyGains(); syncStems(true);
       await Promise.all([el.video.play(), ...M.STEMS.map((st) => P.els[st].play())]);
@@ -715,12 +715,15 @@
     return edit({ tracks: ids.map((id) => ({ id, gain_db: stem === 'effects' ? Math.round((trackDb(id) + delta) * 100) / 100 : db })) }, 'Fader').finally(() => { delete P.live[stem]; applyGains(); paintMixer(); });
   }
   function buildTransport() {
-    const b = (t, f, title, id) => h('button', { type: 'button', class: 'dl-btn au-mini', id, title, onclick: f }, t);
+    const b = (t, f, title, id) => h('button', { type: 'button', class: 'dl-btn au-mini', id, title, 'data-tip': title || '', onclick: f }, t);
     el.playBtn = b('Play', toggle, 'Play / pause (Space)', 'auPlay');
     el.transport.replaceChildren(b('Start', () => { seek(0); syncStems(true); }, 'Go to the start (Home)', 'auStart'), b('−1f', () => step(-1 / S.plan.fps), 'One frame back (,)'), el.playBtn,
       b('+1f', () => step(1 / S.plan.fps), 'One frame forward (.)'), b('End', () => { seek(S.plan.duration); syncStems(true); }, 'Go to the end (End)'), el.tc);
   }
-  function paintTransport() { if (el.playBtn) el.playBtn.textContent = P.playing ? 'Pause' : 'Play'; }
+  function paintTransport() {
+    if (el.playBtn) el.playBtn.textContent = P.playing ? 'Pause' : 'Play';
+    if (el.transport) for (const b of el.transport.querySelectorAll('button')) { b.disabled = !S.plan; b.title = S.plan ? b.dataset.tip : 'Open a video first'; }
+  }
 
   function buildMixer() {
     for (const st of M.STEMS) { const a = document.createElement('audio'); a.preload = 'auto'; a.crossOrigin = 'anonymous'; P.els[st] = a; }

@@ -27,7 +27,7 @@ import soundfile as sf  # noqa: E402
 from specs import NEGATIVE, NO_REF, REELS, STYLE  # noqa: E402
 
 OUT = ROOT / "output" / os.environ.get("REEL_OUT_DIR", "reels")
-IMG_WF = os.environ.get("REEL_IMG_WORKFLOW", "minimax_h3_image_edit")  # MiniMax-H3-Image (text to image when no picture is bound); set qwen_image_21 for Qwen
+IMG_WF = os.environ.get("REEL_IMG_WORKFLOW", "hidream_i1_fast")  # HiDream (default art model); set zimage_turbo for Z-Image, minimax_h3_image_edit for H3-Image
 SR = 48000
 W, H = 1080, 1920
 QWEN_PY = Path(os.environ.get("PANELFLOW_QWEN3_TTS_PYTHON", r"D:\Tools\Qwen3-TTS\.venv\Scripts\python.exe"))
@@ -70,10 +70,10 @@ def stage_tts(reels):
         sys.exit(f"Qwen3-TTS not found ({QWEN_PY} / {QWEN_RUNNER}); refusing to fall back to another voice")
     tasks = []
     for r in reels:
-        ref = VOICE_DIR / f"{r['voice']}.wav"
-        if not ref.exists():
-            sys.exit(f"voice reference missing: {ref}")
         for i, s in enumerate(r["scenes"], 1):
+            ref = VOICE_DIR / f"{s.get('voice', r['voice'])}.wav"   # a scene may name its own speaker (a dialogue line)
+            if not ref.exists():
+                sys.exit(f"voice reference missing: {ref}")
             target = rdir(r, "audio", f"s{i}.wav")
             if s.get("line") and not have(target):
                 tasks.append(dict(id=f"{r['slug']}_s{i}", text=s["line"], target_path=str(target), ref_audio=str(ref), language="English"))
@@ -174,7 +174,7 @@ CLIP_W, CLIP_H = int(os.environ.get("REEL_CLIP_W", "480")), int(os.environ.get("
 
 def turbo_prompt(r: dict, s: dict) -> str:
     return (f"{r['chars']}. {s['act']}. The camera is a static shot, fixed on a tripod. Only the action of this moment moves; "
-            "everything else stays exactly as drawn in the same flat hand-drawn doodle cartoon style, no new objects appear.")
+            + r.get("clip_style", "everything else stays exactly as drawn in the same flat hand-drawn doodle cartoon style, no new objects appear."))
 
 
 def turbo_clip(panel: Path, prompt: str, seed: int, tag: str) -> bytes:

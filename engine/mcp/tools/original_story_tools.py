@@ -351,7 +351,7 @@ async def panelflow_anatomy_stats() -> dict[str, Any]:
     input_schema={"type": "object", "properties": {"picture": {"type": "string"}, "note": {"type": "string"}, "model": {"type": "string"}}, "required": ["picture", "note"]},
     domain="original",
 )
-async def panelflow_anatomy_flag(picture: str, note: str, model: str = "flux2_klein_4b") -> dict[str, Any]:
+async def panelflow_anatomy_flag(picture: str, note: str, model: str = "hidream_i1_fast") -> dict[str, Any]:
     return await bridge.post("/api/original/anatomy/flag", {"picture": picture, "note": note, "model": model})
 
 

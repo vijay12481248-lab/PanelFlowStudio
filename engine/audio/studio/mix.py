@@ -12,6 +12,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+from engine.audio.studio import autolevel
 from engine.audio.studio.place import Placement, placement_for
 from engine.audio.studio.plan import Cue, SoundPlan, Track
 
@@ -27,10 +28,10 @@ def _pan_filter(pan: float) -> str:
     return f"stereotools=mpan={p:.3f}:bmode_out=power"
 
 
-def _duck_filter(depth_db: float = -8.0, attack_ms: int = 20, release_ms: int = 400) -> str:
+def _duck_filter(depth_db: float = -8.0, attack_ms: int = 20, release_ms: int = 400, threshold: float = 0.05) -> str:
     """Generate dynamic sidechain compression filter string with custom depth and timing."""
     ratio = max(2.0, min(20.0, abs(depth_db)))
-    return f"sidechaincompress=threshold=0.05:ratio={ratio:.1f}:attack={int(attack_ms)}:release={int(release_ms)}"
+    return f"sidechaincompress=threshold={threshold:.5f}:ratio={ratio:.1f}:attack={int(attack_ms)}:release={int(release_ms)}"
 
 
 def _run(cmd: list[str], timeout: int = 900) -> str:
@@ -44,7 +45,7 @@ def _track(plan: SoundPlan, role: str) -> Track:
     return next((t for t in plan.tracks if t.id == role), Track(id=role, role=role))
 
 
-def _cue_chain(plan: SoundPlan, cue: Cue) -> str:
+def _cue_chain(plan: SoundPlan, cue: Cue, trim_db: float = 0.0) -> str:
     take = cue.chosen()
     if take is None:
         raise ValueError(f"cue {cue.id!r} has no chosen take")
@@ -69,8 +70,8 @@ def _cue_chain(plan: SoundPlan, cue: Cue) -> str:
         f.append(f"highpass=f={cue.hpf_hz:g}")
     if cue.lpf_hz and cue.lpf_hz < 22000:
         f.append(f"lowpass=f={cue.lpf_hz:g}")
-    if cue.gain_db:
-        f.append(f"volume={cue.gain_db:g}dB")
+    if cue.gain_db + trim_db:
+        f.append(f"volume={cue.gain_db + trim_db:g}dB")
     if cue.fade_in > 0:
         f.append(f"afade=t=in:d={cue.fade_in:.4f}")
     if cue.fade_out > 0:
@@ -81,14 +82,14 @@ def _cue_chain(plan: SoundPlan, cue: Cue) -> str:
     return ",".join(f)
 
 
-def render_cue(plan: SoundPlan, cue: Cue, out: Path) -> Path:
-    """The cue alone, placed on the timeline: one wav as long as the video."""
+def render_cue(plan: SoundPlan, cue: Cue, out: Path, trim_db: float = 0.0) -> Path:
+    """The cue alone, placed on the timeline: one wav as long as the video. trim_db: the auto-level correction (render_roles), on top of the cue's gain."""
     out = Path(out)
     out.parent.mkdir(parents=True, exist_ok=True)
     take = cue.chosen()
     if take is None:
         raise ValueError(f"cue {cue.id!r} has no chosen take")
-    _run([_FFMPEG, "-v", "error", "-y", "-i", take.path, "-af", _cue_chain(plan, cue),
+    _run([_FFMPEG, "-v", "error", "-y", "-i", take.path, "-af", _cue_chain(plan, cue, trim_db),
           "-ac", "2", "-ar", str(SR), "-c:a", "pcm_f32le", str(out)])
     return out
 
@@ -133,14 +134,20 @@ def render_roles(plan: SoundPlan, out_dir: Path) -> dict[str, Path]:
     D = plan.duration
     has_solo = any(t.solo for t in plan.tracks)
 
-    placed: dict[str, list[tuple[Path, float]]] = {"music": [], "effects": [], "voice": []}
+    placed: dict[str, list[tuple[Path, float]]] = {"music": [], "effects": [], "beds": [], "voice": []}
+    later: list[tuple[Cue, str, float]] = []   # music and effects wait for the dialogue stem: effects are levelled against it
     for cue in plan.cues:
         t = _track(plan, cue.track)
         is_muted = t.mute or (has_solo and not t.solo)
         if cue.chosen() is None or is_muted:
             continue
-        group = "voice" if cue.track == "dialogue" else "music" if cue.track == "music" else "effects"
-        placed[group].append((render_cue(plan, cue, cue_dir / f"{cue.id}.wav"), t.gain_db))
+        if cue.track == "dialogue":
+            placed["voice"].append((render_cue(plan, cue, cue_dir / f"{cue.id}.wav"), t.gain_db))
+        elif cue.track == "music":
+            later.append((cue, "music", t.gain_db))
+        else:   # an ambience track or a long span without a hit point is a bed: it ducks under speech; the rest are hits
+            bed = cue.track == "ambience" or (cue.hit_t is None and cue.t_out is not None and cue.t_out - cue.t_in >= 2.0)
+            later.append((cue, "beds" if bed else "effects", t.gain_db))
 
     dlg_track = _track(plan, "dialogue")
     dialogue = out_dir / "dialogue.wav"
@@ -170,9 +177,19 @@ def render_roles(plan: SoundPlan, out_dir: Path) -> dict[str, Path]:
         release_ms=music_track.ducking_release_ms if music_track.ducking_release_ms is not None else 400
     ) if custom_duck else _DUCK
 
+    voice = autolevel.profile(dialogue) if has_dialogue else None
+    for cue, group, gain in later:
+        trim = autolevel.trim_db(cue, "bed" if group == "beds" else "effects", voice) if group != "music" else 0.0
+        placed[group].append((render_cue(plan, cue, cue_dir / f"{cue.id}.wav", trim), gain))
+
     duck = dialogue if has_dialogue and music_track.duck_under == "dialogue" else None
     music = _sum(out_dir / "music.wav", placed["music"], D, sidechain=duck, duck_filter=duck_str)
-    effects = _sum(out_dir / "effects.wav", placed["effects"], D)
+    effect_items = list(placed["effects"])
+    if placed["beds"]:   # beds sink further under speech than music does, and come back slowly
+        beds = _sum(out_dir / "beds.wav", placed["beds"], D, sidechain=dialogue if has_dialogue else None,
+                     duck_filter=_duck_filter(-10.0, 30, 500, autolevel.duck_threshold(voice) if voice else 0.05))
+        effect_items.append((beds, 0.0))
+    effects = _sum(out_dir / "effects.wav", effect_items, D)
     premix = _sum(out_dir / "premix.wav", [(dialogue, 0.0), (music, 0.0), (effects, 0.0)], D)
     return {"dialogue": dialogue, "music": music, "effects": effects, "premix": premix}
 

@@ -322,7 +322,7 @@ def test_removed_image_engines_fail_loudly_instead_of_falling_back():
     from unittest.mock import MagicMock
 
     for engine in ("flux", "pulid", "manga"):
-        with pytest.raises(ValueError, match="flux2_klein_4b"):
+        with pytest.raises(ValueError, match="hidream_i1_fast"):
             art.ComfyRunner(client=MagicMock(), engine=engine)
 
 

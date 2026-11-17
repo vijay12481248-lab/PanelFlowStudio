@@ -1772,7 +1772,7 @@
   },
   {
     "id": "flux2_klein_4b",
-    "purpose": "text_to_image",
+    "purpose": "retired_text_to_image",
     "filename": "flux2_klein_4b.api.json",
     "sha256": "14e7de83fb64785364ff30d371fd19132b4232d16b0a1925f375f99be0b4e088",
     "requires_gpu": true,
@@ -1834,7 +1834,7 @@
   },
   {
     "id": "flux2_klein_4b_ref",
-    "purpose": "image_edit",
+    "purpose": "retired_image_edit",
     "filename": "flux2_klein_4b_ref.api.json",
     "sha256": "3bdd216cc41634a4742d5ce861325fcc526d3646d70cfdd4f30b5af39de30fb0",
     "requires_gpu": true,
@@ -1894,6 +1894,124 @@
         "node_id": "20",
         "input": "image",
         "class_type": "LoadImage"
+      }
+    },
+    "dimension_policy": {
+      "mode": "exact",
+      "min": 256,
+      "max": 2048,
+      "multiple_of": 16
+    }
+  },
+  {
+    "id": "hidream_i1_fast",
+    "purpose": "text_to_image",
+    "filename": "hidream_i1_fast.api.json",
+    "sha256": "67d70d1dc45b6542ad05fff3cec06dac7e0343298ef1386bb69c6ef0ef164e41",
+    "requires_gpu": true,
+    "gpu_vram_mb": 15000,
+    "model_files": [
+      "hidream_i1_fast_fp8.safetensors",
+      "clip_l_hidream.safetensors",
+      "clip_g_hidream.safetensors",
+      "t5xxl_fp8_e4m3fn_scaled.safetensors",
+      "llama_3.1_8b_instruct_fp8_scaled.safetensors",
+      "ae.safetensors"
+    ],
+    "required_nodes": [
+      "CLIPTextEncode",
+      "EmptySD3LatentImage",
+      "KSampler",
+      "ModelSamplingSD3",
+      "QuadrupleCLIPLoader",
+      "SaveImage",
+      "UNETLoader",
+      "VAEDecode",
+      "VAELoader"
+    ],
+    "patch_slots": {
+      "prompt": {
+        "node_id": "85",
+        "input": "text",
+        "class_type": "CLIPTextEncode"
+      },
+      "seed": {
+        "node_id": "94",
+        "input": "seed",
+        "class_type": "KSampler"
+      },
+      "width": {
+        "node_id": "84",
+        "input": "width",
+        "class_type": "EmptySD3LatentImage"
+      },
+      "height": {
+        "node_id": "84",
+        "input": "height",
+        "class_type": "EmptySD3LatentImage"
+      },
+      "filename_prefix": {
+        "node_id": "88",
+        "input": "filename_prefix",
+        "class_type": "SaveImage"
+      }
+    },
+    "dimension_policy": {
+      "mode": "exact",
+      "min": 256,
+      "max": 2048,
+      "multiple_of": 16
+    }
+  },
+  {
+    "id": "zimage_turbo",
+    "purpose": "text_to_image_alt",
+    "filename": "zimage_turbo.api.json",
+    "sha256": "ab8c5eff31d10ebf592f199da00fc6123050755b3a29d335ba79960b36c0a066",
+    "requires_gpu": true,
+    "gpu_vram_mb": 12000,
+    "model_files": [
+      "z_image_turbo_int8_convrot.safetensors",
+      "qwen_3_4b.safetensors",
+      "ae.safetensors"
+    ],
+    "required_nodes": [
+      "CLIPLoader",
+      "CLIPTextEncode",
+      "ConditioningZeroOut",
+      "EmptySD3LatentImage",
+      "KSampler",
+      "ModelSamplingAuraFlow",
+      "SaveImage",
+      "UNETLoader",
+      "VAEDecode",
+      "VAELoader"
+    ],
+    "patch_slots": {
+      "prompt": {
+        "node_id": "5",
+        "input": "text",
+        "class_type": "CLIPTextEncode"
+      },
+      "seed": {
+        "node_id": "8",
+        "input": "seed",
+        "class_type": "KSampler"
+      },
+      "width": {
+        "node_id": "7",
+        "input": "width",
+        "class_type": "EmptySD3LatentImage"
+      },
+      "height": {
+        "node_id": "7",
+        "input": "height",
+        "class_type": "EmptySD3LatentImage"
+      },
+      "filename_prefix": {
+        "node_id": "10",
+        "input": "filename_prefix",
+        "class_type": "SaveImage"
       }
     },
     "dimension_policy": {

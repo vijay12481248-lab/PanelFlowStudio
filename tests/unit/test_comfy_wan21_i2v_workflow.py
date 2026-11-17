@@ -279,7 +279,7 @@ def test_wan21_preserves_single_text_to_image_invariant():
     entries = json.loads(reg_path.read_text(encoding="utf-8"))
 
     t2i = [e["id"] for e in entries if e.get("purpose") == "text_to_image"]
-    assert t2i == ["flux2_klein_4b"]
+    assert t2i == ["hidream_i1_fast"]
 
     wan_entry = next((e for e in entries if e["id"] == "wan21_14b_i2v"), None)
     assert wan_entry is not None

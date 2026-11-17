@@ -118,7 +118,7 @@ def check_comfyui(endpoint: str = "http://127.0.0.1:8188") -> CapabilityCheck:
 
 
 def check_comfyui_workflows() -> CapabilityCheck:
-    """Verify authorized FLUX.2 Klein 4B workflow files in the registry."""
+    """Verify the text-to-image workflows (HiDream default, Z-Image) are registered."""
     try:
         from engine.comfyui.art import ArtEngine
         from engine.comfyui.client import ComfyUIClient
@@ -128,34 +128,17 @@ def check_comfyui_workflows() -> CapabilityCheck:
         reg = ComfyWorkflowRegistry(client)
         workflows = reg.list_workflows() if hasattr(reg, "list_workflows") else []
 
-        has_klein = "flux2_klein_4b" in workflows or Path("engine/comfyui/workflows/flux2_klein_4b.json").exists()
-        has_klein_ref = "flux2_klein_4b_ref" in workflows or Path("engine/comfyui/workflows/flux2_klein_4b_ref.json").exists()
-
-        if has_klein and has_klein_ref:
-            return CapabilityCheck(
-                name="FLUX.2 Klein 4B Workflows",
-                category="model",
-                status="ok",
-                available=True,
-                details="flux2_klein_4b & flux2_klein_4b_ref verified",
-            )
-        elif has_klein:
-            return CapabilityCheck(
-                name="FLUX.2 Klein 4B Workflows",
-                category="model",
-                status="warning",
-                available=True,
-                details="flux2_klein_4b found, but flux2_klein_4b_ref missing",
-                recommendation="Ensure flux2_klein_4b_ref.json is installed in engine/comfyui/workflows/",
-            )
-        return CapabilityCheck(
-            name="FLUX.2 Klein 4B Workflows",
-            category="model",
-            status="error",
-            available=False,
-            details="Authorized flux2_klein_4b workflow not found",
-            recommendation="Install authorized FLUX.2 Klein 4B workflow JSONs",
-        )
+        found = [w for w in ("hidream_i1_fast", "zimage_turbo") if w in workflows or Path(f"engine/comfyui/workflows/{w}.api.json").exists()]
+        if len(found) == 2:
+            return CapabilityCheck(name="Image Workflows (HiDream, Z-Image)", category="model", status="ok", available=True,
+                                   details="hidream_i1_fast & zimage_turbo registered")
+        if found:
+            return CapabilityCheck(name="Image Workflows (HiDream, Z-Image)", category="model", status="warning", available=True,
+                                   details=f"{found[0]} found, the other text-to-image workflow is missing",
+                                   recommendation="Ensure both hidream_i1_fast.api.json and zimage_turbo.api.json are in engine/comfyui/workflows/")
+        return CapabilityCheck(name="Image Workflows (HiDream, Z-Image)", category="model", status="error", available=False,
+                               details="No text-to-image workflow (hidream_i1_fast) found",
+                               recommendation="Restore engine/comfyui/workflows/hidream_i1_fast.api.json")
     except Exception as exc:
         return CapabilityCheck(
             name="FLUX.2 Klein 4B Workflows",

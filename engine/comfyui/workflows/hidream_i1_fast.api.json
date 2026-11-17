@@ -1,0 +1,112 @@
+{
+  "81": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "ae.safetensors"
+    }
+  },
+  "82": {
+    "class_type": "QuadrupleCLIPLoader",
+    "inputs": {
+      "clip_name1": "clip_l_hidream.safetensors",
+      "clip_name2": "clip_g_hidream.safetensors",
+      "clip_name3": "t5xxl_fp8_e4m3fn_scaled.safetensors",
+      "clip_name4": "llama_3.1_8b_instruct_fp8_scaled.safetensors"
+    }
+  },
+  "93": {
+    "class_type": "UNETLoader",
+    "inputs": {
+      "unet_name": "hidream_i1_fast_fp8.safetensors",
+      "weight_dtype": "default"
+    }
+  },
+  "91": {
+    "class_type": "ModelSamplingSD3",
+    "inputs": {
+      "model": [
+        "93",
+        0
+      ],
+      "shift": 3.0
+    }
+  },
+  "85": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "clip": [
+        "82",
+        0
+      ],
+      "text": "prompt"
+    }
+  },
+  "90": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "clip": [
+        "82",
+        0
+      ],
+      "text": ""
+    }
+  },
+  "84": {
+    "class_type": "EmptySD3LatentImage",
+    "inputs": {
+      "width": 768,
+      "height": 1344,
+      "batch_size": 1
+    }
+  },
+  "94": {
+    "class_type": "KSampler",
+    "inputs": {
+      "model": [
+        "91",
+        0
+      ],
+      "positive": [
+        "85",
+        0
+      ],
+      "negative": [
+        "90",
+        0
+      ],
+      "latent_image": [
+        "84",
+        0
+      ],
+      "seed": 1,
+      "steps": 16,
+      "cfg": 1.0,
+      "sampler_name": "lcm",
+      "scheduler": "normal",
+      "denoise": 1.0
+    }
+  },
+  "86": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": [
+        "94",
+        0
+      ],
+      "vae": [
+        "81",
+        0
+      ]
+    }
+  },
+  "88": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "images": [
+        "86",
+        0
+      ],
+      "filename_prefix": "panelflow_art"
+    }
+  }
+}

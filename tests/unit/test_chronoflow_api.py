@@ -401,11 +401,11 @@ def _fake_art(tmp_path, monkeypatch, seen):
     monkeypatch.setattr(chronoflow.pipeline, "generate_art_image_ex", fake_gen)
 
 
-def test_image_model_defaults_to_klein_and_the_choice_reaches_the_engine(client, tmp_path, monkeypatch):
+def test_image_model_defaults_to_hidream_and_the_choice_reaches_the_engine(client, tmp_path, monkeypatch):
     seen: list = []
     _fake_art(tmp_path, monkeypatch, seen)
     r = client.post("/api/chronoflow/generate_image", json={"prompt": "a cat"}).json()
-    assert r["workflow_id"] == "flux2_klein_4b" and r["model"] == "FLUX.2 klein 4B" and seen[-1][-1] == "flux2_klein_4b"
+    assert r["workflow_id"] == "hidream_i1_fast" and r["model"] == "HiDream-I1 Fast" and seen[-1][-1] == "hidream_i1_fast"
     r = client.post("/api/chronoflow/generate_image", json={"prompt": "a cat", "workflow_id": "minimax_h3_image_edit"}).json()
     assert r["workflow_id"] == "minimax_h3_image_edit" and r["model"] == "MiniMax H3-Image" and seen[-1][-1] == "minimax_h3_image_edit"
 
@@ -420,7 +420,7 @@ def test_unknown_image_model_and_refine_on_h3_are_refused_before_any_gpu_time(cl
     assert not seen, "a refused request must never reach the engine"
 
 
-def test_image_models_lists_both_with_klein_default_even_when_comfyui_is_offline(client, monkeypatch):
+def test_image_models_lists_all_with_hidream_default_even_when_comfyui_is_offline(client, monkeypatch):
     class Offline:
         class registry:
             @staticmethod
@@ -428,5 +428,5 @@ def test_image_models_lists_both_with_klein_default_even_when_comfyui_is_offline
                 return {"comfy_online": False}
     monkeypatch.setattr(chronoflow, "ArtEngine", Offline)
     body = client.get("/api/chronoflow/image_models").json()
-    assert [m["id"] for m in body["models"]] == ["flux2_klein_4b", "minimax_h3_image_edit"] and body["default"] == "flux2_klein_4b"
+    assert [m["id"] for m in body["models"]] == ["hidream_i1_fast", "zimage_turbo", "minimax_h3_image_edit"] and body["default"] == "hidream_i1_fast"
     assert all(m["missing_models"] is None for m in body["models"]), "offline: nothing is disabled, the picker still works"
