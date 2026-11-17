@@ -24,6 +24,7 @@ const GO_TO: Array<[id: string, label: string, to: string, keywords?: string[]]>
   ["create-image", "Create an image", paths.create("image"), ["comfyui", "generate"]],
   ["jobs", "Open jobs", paths.jobs(), ["queue", "running", "failed"]],
   ["library", "Open library", paths.library(), ["audio", "music", "assets"]],
+  ["library-motions", "Open Motion Bank & Poses", paths.library("motions"), ["pose", "skeleton", "motion", "choreographer", "dwpose"]],
   ["settings-engine", "Open engine settings", paths.settings("engine"), ["health", "tools", "models", "restart"]],
   ["settings-models", "Open model settings", paths.settings("models")],
   ["settings-providers", "Open provider settings", paths.settings("providers"), ["ai", "llm", "ollama"]],
