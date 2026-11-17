@@ -6,7 +6,7 @@ from typing import List, Optional, Tuple
 import numpy as np
 import torch
 
-from engine.motion_bank.guide.dataset import embed_text_deterministic
+from engine.motion_bank.guide.text_embed import embed_one
 from engine.motion_bank.guide.motion_dit import MotionChoreographerDiT
 from engine.motion_bank.guide.trainer import DiffusionSchedule
 from engine.motion_bank.models import FramePoseData
@@ -24,9 +24,11 @@ class MotionGenerator:
         self.device = torch.device(device)
         self.model = MotionChoreographerDiT().to(self.device)
         self.schedule = DiffusionSchedule(timesteps=1000, device=self.device)
+        self.embedder = "hash"  # checkpoints from before the embedder was recorded were trained with the hash
         if checkpoint_path and checkpoint_path.is_file():
             ckpt = torch.load(checkpoint_path, map_location=self.device)
             self.model.load_state_dict(ckpt["model_state_dict"])
+            self.embedder = ckpt.get("text_embedder", "hash")
         self.model.eval()
 
     @torch.no_grad()
@@ -42,7 +44,7 @@ class MotionGenerator:
         Synthesizes a 133-point whole-body pose sequence using DDIM reverse diffusion.
         Runs in ~0.3-0.5s on RTX 5060 Ti.
         """
-        text_embed = embed_text_deterministic(prompt, dim=256).to(self.device)[None, :]  # (1, 256)
+        text_embed = embed_one(prompt, self.embedder, dim=256).to(self.device)[None, :]  # (1, 256), same embedder as in training
 
         start_tensor = None
         if start_pose and start_pose.body:

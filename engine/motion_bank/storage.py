@@ -136,6 +136,35 @@ class MotionBankStorage:
             )
             return [self._row_to_record(r) for r in cursor.fetchall()]
 
+    def delete_motion(self, motion_id: str) -> Optional[MotionRecord]:
+        """Removes the row and returns it (None when unknown). Files are the caller's business."""
+        rec = self.get_motion(motion_id)
+        if rec is None:
+            return None
+        with sqlite3.connect(str(self.db_path)) as conn:
+            conn.execute("DELETE FROM motions WHERE id = ?", (motion_id,))
+            conn.commit()
+        return rec
+
+    def update_motion(
+        self,
+        motion_id: str,
+        action_title: Optional[str] = None,
+        action_summary: Optional[str] = None,
+        action_tags: Optional[List[str]] = None,
+    ) -> Optional[MotionRecord]:
+        """Renames / re-describes / re-tags a motion; fields left as None are kept."""
+        rec = self.get_motion(motion_id)
+        if rec is None:
+            return None
+        if action_title is not None:
+            rec.action_title = action_title
+        if action_summary is not None:
+            rec.action_summary = action_summary
+        if action_tags is not None:
+            rec.action_tags = action_tags
+        return self.save_motion(rec)
+
     def load_keypoints_tensor(self, keypoints_path: Path) -> torch.Tensor:
         """Loads kinematic tensor [T, 133, 3] from safetensors."""
         tensors = load_file(str(keypoints_path))

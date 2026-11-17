@@ -276,3 +276,39 @@ test('planBarHtml includes assemble button when videos are rendered', () => {
   assert.doesNotMatch(html, /disabled[^>]*Assemble Video/);
 });
 
+
+
+test('motionRequest needs a motion, a character and a sane range, and uses the card size', () => {
+  const s = { width: 768, height: 1344 };
+  assert.throws(() => NV.motionRequest({ motion: '', character: 'a.png', start: 0, end: 100 }, s), /Choose a motion/);
+  assert.throws(() => NV.motionRequest({ motion: 'mot_1', character: '', start: 0, end: 100 }, s), /Choose the character/);
+  assert.throws(() => NV.motionRequest({ motion: 'mot_1', character: 'a.png', start: 60, end: 40 }, s), /before the end/);
+  assert.throws(() => NV.motionRequest({ motion: 'mot_1', character: 'a.png', start: 0, end: 120 }, s), /before the end/);
+  assert.deepEqual(NV.motionRequest({ motion: 'mot_1', character: 'a.png', start: 10, end: 80, hint: ' x ' }, s),
+    { motion_id: 'mot_1', character_picture: 'a.png', width: 768, height: 1344, start_pct: 0.1, end_pct: 0.8, hint: 'x' });
+  assert.equal(NV.motionRequest({ motion: 'm', character: 'a.png', start: 0, end: 100 }, {}).width, 1344);
+});
+
+test('applyMotionFrames fills first and last, records the motion, resets a rendered card and offers the end picture to the next card', () => {
+  const scenes = [
+    { start_mode: 'first_last', state: 'approved', approved: true, rendered_video: 'v.mp4', prompt: 'p', first_frame: 'old1.png', last_frame: 'old2.png' },
+    { start_mode: 'first_last', state: 'empty', first_frame: '', last_frame: '', prompt: '' },
+  ];
+  const res = { motion_id: 'mot_1', first_frame: 'f.png', last_frame: 'l.png', first_index: 11, last_index: 128, rights: 'USER_OWNED' };
+  NV.applyMotionFrames(scenes, 0, res, { character: 'c.png', start: 5, end: 60 });
+  assert.equal(scenes[0].first_frame, 'f.png');
+  assert.equal(scenes[0].last_frame, 'l.png');
+  assert.deepEqual(scenes[0].motion, { id: 'mot_1', character: 'c.png', start_pct: 0.05, end_pct: 0.6, first_index: 11, last_index: 128, rights: 'USER_OWNED' });
+  assert.equal(scenes[0].approved, false);          // the old clip no longer matches
+  assert.equal(scenes[0].rendered_video, '');
+  assert.equal(scenes[1].first_frame, 'l.png');     // the next first+last card starts where this one ends
+  assert.throws(() => NV.applyMotionFrames(scenes, 0, { motion_id: 'm' }, { character: 'c', start: 0, end: 1 }), /no pictures/);
+});
+
+test('a first + last card shows the Motion row, other modes do not', () => {
+  const ctx = { esc: (v) => String(v), media: (n) => n, scenes: () => [], rerender() {}, save: async () => {}, post: async () => ({}), get: async () => ({}) };
+  const html = (mode, extra = {}) => { NV.__ctx(ctx); return NV.cardHtml([{ start_mode: mode, prompt: 'p', state: 'ready', ref_images: [], ...extra }], 0); };
+  assert.match(html('first_last'), /From motion/);
+  assert.doesNotMatch(html('first'), /From motion/);
+  assert.match(html('first_last', { motion: { id: 'mot_1', start_pct: 0, end_pct: 1 } }), /mot_1/);
+});

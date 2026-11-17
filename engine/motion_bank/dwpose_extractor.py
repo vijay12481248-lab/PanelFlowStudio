@@ -98,6 +98,20 @@ def fill_short_gaps(poses: List[FramePoseData], max_gap: int) -> List[FramePoseD
     return poses
 
 
+def longest_tracked_run(poses: List[FramePoseData]) -> Tuple[int, int]:
+    """[start, end) of the longest stretch of consecutive frames in which the actor was found ((0, 0) when never)."""
+    best = (0, 0)
+    start = None
+    for i, p in enumerate(poses + [FramePoseData(frame_index=-1, timestamp_sec=0.0, body=[])]):
+        if p.body and start is None:
+            start = i
+        elif not p.body and start is not None:
+            if i - start > best[1] - best[0]:
+                best = (start, i)
+            start = None
+    return best
+
+
 class DWPoseExtractor:
     """
     Standalone Whole-Body Pose Extractor utilizing ONNX Runtime.

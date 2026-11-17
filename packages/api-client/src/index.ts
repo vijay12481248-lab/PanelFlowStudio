@@ -3101,7 +3101,7 @@ export class PanelFlowApiClient {
 
   async ingestMotionSource(payload: {
     source: string;
-    rights: { status: string; license_type?: string; permission_notes?: string };
+    rights: MotionRights;
     title?: string;
   }): Promise<MotionIngestResponse> {
     return this.request<MotionIngestResponse>("/api/motion_bank/ingest", {
@@ -3129,6 +3129,7 @@ export class PanelFlowApiClient {
     start_sec?: number;
     end_sec?: number;
     synthetic?: boolean;
+    rights?: MotionRights;
   }): Promise<MotionRecordResponse> {
     return this.request<MotionRecordResponse>("/api/motion_bank/extract", {
       method: "POST",
@@ -3148,13 +3149,35 @@ export class PanelFlowApiClient {
     return this.request<MotionRecordResponse>(`/api/motion_bank/motions/${encodeURIComponent(motionId)}`);
   }
 
+  motionControlVideoUrl(motionId: string): string {
+    return this.resourceUrl(`/api/motion_bank/motions/${encodeURIComponent(motionId)}/control_video`);
+  }
+
+  motionThumbnailUrl(motionId: string): string {
+    return this.resourceUrl(`/api/motion_bank/motions/${encodeURIComponent(motionId)}/thumbnail`);
+  }
+
+  async updateMotion(
+    motionId: string,
+    patch: { action_title?: string; action_summary?: string; action_tags?: string[] },
+  ): Promise<MotionRecordResponse> {
+    return this.request<MotionRecordResponse>(`/api/motion_bank/motions/${encodeURIComponent(motionId)}`, {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    });
+  }
+
+  async deleteMotion(motionId: string): Promise<{ deleted: string }> {
+    return this.request<{ deleted: string }>(`/api/motion_bank/motions/${encodeURIComponent(motionId)}`, { method: "DELETE" });
+  }
+
   async searchMotions(q: string, limit?: number): Promise<MotionRecordResponse[]> {
     const p = new URLSearchParams({ q });
     if (limit) p.set("limit", String(limit));
     return this.request<MotionRecordResponse[]>(`/api/motion_bank/search?${p.toString()}`);
   }
 
-  async trainMotionGuide(payload?: { num_epochs?: number; batch_size?: number }): Promise<{
+  async trainMotionGuide(payload?: { num_epochs?: number; batch_size?: number; include_synthetic?: boolean }): Promise<{
     status: string;
     epochs?: number;
     final_loss?: number;
@@ -3190,6 +3213,14 @@ export interface MotionBankStatusResponse {
   motion_count: number;
   synthetic_count: number;
   manifest: Array<{ id: string; name: string; filename: string; size_bytes: number; url: string }>;
+}
+
+export interface MotionRights {
+  status: string;
+  license_type?: string;
+  license_url?: string;
+  holder?: string;
+  permission_notes?: string;
 }
 
 export interface MotionIngestResponse {
@@ -3240,6 +3271,7 @@ export interface GenerateChoreographyResponse {
   fps: number;
   duration_sec: number;
   control_video_path?: string | null;
+  control_video_url?: string | null;
   poses: Array<{
     frame_index: number;
     timestamp_sec: number;

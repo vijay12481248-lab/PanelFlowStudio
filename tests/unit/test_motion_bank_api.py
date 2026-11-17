@@ -1,6 +1,7 @@
 """API integration tests for Motion Bank router endpoints."""
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 import cv2
 import numpy as np
@@ -97,11 +98,11 @@ def test_motion_bank_guide_endpoints(client: TestClient, tmp_path: Path):
     assert early.status_code == 409
 
     # an empty bank (or one holding only synthetic motions) cannot be trained on
-    assert client.post("/api/motion_bank/guide/train", json={"num_epochs": 1}).status_code == 400
+    assert client.post("/api/motion_bank/guide/train", json={"num_epochs": 1, "text_embedder": "hash"}).status_code == 400
     _add_synthetic_motion(client, tmp_path)
-    assert client.post("/api/motion_bank/guide/train", json={"num_epochs": 1}).status_code == 400
+    assert client.post("/api/motion_bank/guide/train", json={"num_epochs": 1, "text_embedder": "hash"}).status_code == 400
     train_resp = client.post(
-        "/api/motion_bank/guide/train", json={"num_epochs": 1, "batch_size": 2, "include_synthetic": True}
+        "/api/motion_bank/guide/train", json={"num_epochs": 1, "batch_size": 2, "include_synthetic": True, "text_embedder": "hash"}
     )
     assert train_resp.status_code == 200
     train_data = train_resp.json()
@@ -153,7 +154,7 @@ def test_extract_refuses_fake_skeleton_when_models_missing(client: TestClient, t
 
     monkeypatch.setattr(router._extractor, "is_ready", lambda: False)
     video = _make_video(tmp_path / "src.mp4")
-    resp = client.post("/api/motion_bank/extract", json={"video_path": str(video), "action_title": "Kick"})
+    resp = client.post("/api/motion_bank/extract", json={"video_path": str(video), "action_title": "Kick", "rights": {"status": "USER_OWNED"}})
     assert resp.status_code == 503
     assert client.get("/api/motion_bank/motions").json() == []
 
@@ -164,3 +165,108 @@ def test_status_reports_counts_and_providers(client: TestClient, tmp_path: Path)
     assert data["motion_count"] == 1
     assert data["synthetic_count"] == 1
     assert "dwpose_providers" in data
+
+
+def _codec(path_or_bytes: Path) -> str:
+    out = subprocess.run(
+        ["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=codec_name", "-of", "csv=p=0", str(path_or_bytes)],
+        capture_output=True, text=True,
+    )
+    return out.stdout.strip()
+
+
+def test_control_video_is_h264_and_served_with_thumbnail(client: TestClient, tmp_path: Path):
+    motion = _add_synthetic_motion(client, tmp_path)
+    assert _codec(Path(motion["control_video_path"])) == "h264"  # browsers cannot play OpenCV's mpeg4
+
+    video = client.get(f"/api/motion_bank/motions/{motion['id']}/control_video")
+    assert video.status_code == 200 and video.headers["content-type"] == "video/mp4"
+    served = tmp_path / "served.mp4"
+    served.write_bytes(video.content)
+    assert _codec(served) == "h264"
+
+    thumb = client.get(f"/api/motion_bank/motions/{motion['id']}/thumbnail")
+    assert thumb.status_code == 200 and thumb.headers["content-type"] == "image/jpeg"
+    assert thumb.content[:2] == b"\xff\xd8"
+    assert client.get("/api/motion_bank/motions/mot_missing/control_video").status_code == 404
+
+
+def test_rename_retag_and_delete_motion(client: TestClient, tmp_path: Path):
+    motion = _add_synthetic_motion(client, tmp_path)
+    mid = motion["id"]
+    patched = client.patch(f"/api/motion_bank/motions/{mid}", json={"action_title": "Renamed", "action_tags": [" walk ", "", "umbrella"]})
+    assert patched.status_code == 200
+    assert patched.json()["action_title"] == "Renamed" and patched.json()["action_tags"] == ["walk", "umbrella"]
+    assert client.get(f"/api/motion_bank/motions/{mid}").json()["action_summary"] == motion["action_summary"]  # untouched fields kept
+    assert client.patch("/api/motion_bank/motions/nope", json={"action_title": "x"}).status_code == 404
+
+    motion_dir = Path(motion["keypoints_path"]).parent
+    assert motion_dir.is_dir()
+    assert client.delete(f"/api/motion_bank/motions/{mid}").json() == {"deleted": mid}
+    assert not motion_dir.exists()
+    assert client.get(f"/api/motion_bank/motions/{mid}").status_code == 404
+    assert client.delete(f"/api/motion_bank/motions/{mid}").status_code == 404
+
+
+def test_generated_videos_are_served_by_name_only(client: TestClient, tmp_path: Path):
+    _add_synthetic_motion(client, tmp_path)
+    client.post("/api/motion_bank/guide/train", json={"num_epochs": 1, "batch_size": 2, "include_synthetic": True, "text_embedder": "hash"})
+    gen = client.post("/api/motion_bank/guide/generate", json={"prompt": "walk", "num_frames": 16, "width": 320, "height": 240}).json()
+    assert gen["control_video_url"].startswith("/api/motion_bank/generated/gen_")
+    got = client.get(gen["control_video_url"])
+    assert got.status_code == 200 and got.headers["content-type"] == "video/mp4"
+    assert client.get("/api/motion_bank/generated/..%2Fmotion_bank.db").status_code == 404
+    assert client.get("/api/motion_bank/generated/not_a_gen.mp4").status_code == 404
+
+
+def test_extract_needs_a_rights_declaration(client: TestClient, tmp_path: Path):
+    """/extract no longer accepts any path: the video must come from /ingest or carry a declaration (UNKNOWN is refused)."""
+    video = _make_video(tmp_path / "loose.mp4")
+    base = {"video_path": str(video), "action_title": "Loose clip"}
+    assert client.post("/api/motion_bank/extract", json=base).status_code == 400
+    assert client.post("/api/motion_bank/extract", json={**base, "rights": {"status": "UNKNOWN"}}).status_code == 400
+    assert client.post("/api/motion_bank/extract", json={**base, "rights": {"status": "COMMENTARY_REVIEW"}}).status_code == 400
+    assert client.get("/api/motion_bank/motions").json() == []
+
+
+def test_extract_after_ingest_records_the_rights(client: TestClient, tmp_path: Path):
+    video = _make_video(tmp_path / "owned.mp4")
+    ing = client.post("/api/motion_bank/ingest", json={
+        "source": str(video), "title": "Owned clip",
+        "rights": {"status": "USER_OWNED", "holder": "Test Studio", "permission_notes": "own footage"},
+    }).json()
+    res = client.post("/api/motion_bank/extract", json={"video_path": ing["local_path"], "action_title": "Owned", "synthetic": True}).json()
+    assert res["metadata"]["rights"]["status"] == "USER_OWNED"
+    assert res["metadata"]["rights"]["holder"] == "Test Studio"
+    assert res["metadata"]["source_sha256"] == ing["sha256"]
+
+
+def _fake_run(has_flags):
+    from engine.motion_bank.models import FramePoseData
+
+    return [
+        FramePoseData(frame_index=i, timestamp_sec=i / 24, body=[(0.5, 0.5, 0.9)] * 18 if h else [])
+        for i, h in enumerate(has_flags)
+    ]
+
+
+def test_extract_keeps_only_the_longest_tracked_run(client: TestClient, tmp_path: Path, monkeypatch):
+    """A take that contains a cut keeps the part with the actor; a take with no 1 s run is refused."""
+    from engine.api.routers import motion_bank as router
+
+    video = _make_video(tmp_path / "two_scenes.mp4", frames=24)
+    body = {"video_path": str(video), "action_title": "Walk", "rights": {"status": "USER_OWNED"}}
+    monkeypatch.setattr(router._extractor, "is_ready", lambda: True)
+
+    monkeypatch.setattr(router._extractor, "extract_video_stream",
+                        lambda **kw: _fake_run([1] * 30 + [0] * 20 + [1] * 60))
+    ok = client.post("/api/motion_bank/extract", json=body)
+    assert ok.status_code == 200
+    meta = ok.json()["metadata"]
+    assert ok.json()["frame_count"] == 60 and meta["trimmed"] is True and meta["segment_frames"] == 110
+    assert meta["source_start_sec"] == pytest.approx(50 / 24, abs=1e-3)
+
+    monkeypatch.setattr(router._extractor, "extract_video_stream",
+                        lambda **kw: _fake_run([1] * 10 + [0] * 20 + [1] * 10))
+    short = client.post("/api/motion_bank/extract", json=body)
+    assert short.status_code == 422

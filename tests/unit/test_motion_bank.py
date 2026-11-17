@@ -240,3 +240,43 @@ def test_actor_tracking_never_jumps_to_another_person():
     assert pick([a, b], (0.11, 0.11, 0.31, 0.51), 1000, 1000) == a               # locked on a: stays on a
     assert pick([b], (0.1, 0.1, 0.3, 0.5), 1000, 1000) is None                   # a is gone, only b left: lost, not b
     assert pick([a, b], (0.5, 0.12, 0.65, 0.46), 1000, 1000) == b                # locked on b even though a is bigger
+
+
+def test_longest_tracked_run():
+    from engine.motion_bank.dwpose_extractor import longest_tracked_run
+
+    def fp(i, has):
+        return FramePoseData(frame_index=i, timestamp_sec=i / 24, body=[(0.5, 0.5, 0.9)] if has else [])
+
+    seq = [fp(i, h) for i, h in enumerate([1, 1, 0, 0, 0, 1, 1, 1, 1, 0, 1])]
+    assert longest_tracked_run(seq) == (5, 9)
+    assert longest_tracked_run([fp(0, 0), fp(1, 0)]) == (0, 0)
+    assert longest_tracked_run([fp(0, 1), fp(1, 1)]) == (0, 2)
+    assert longest_tracked_run([]) == (0, 0)
+
+
+def _crossfade_video(path: Path) -> Path:
+    """3 s of scene A, a 1 s dissolve, 3 s of scene B (24 fps): no single frame differs much from the last."""
+    rng = np.random.default_rng(1)
+    a = np.zeros((120, 160, 3), np.uint8)
+    b = np.zeros((120, 160, 3), np.uint8)
+    for y in range(0, 120, 20):
+        for x in range(0, 160, 20):
+            a[y:y + 20, x:x + 20] = rng.integers(0, 90, 3)            # dark, bluish-random blocks
+            b[y:y + 20, x:x + 20] = rng.integers(150, 255, 3)         # bright blocks
+    out = cv2.VideoWriter(str(path), cv2.VideoWriter_fourcc(*"mp4v"), 24.0, (160, 120))
+    for i in range(24 * 7):
+        t = min(1.0, max(0.0, (i - 24 * 3) / 24.0))
+        out.write(cv2.addWeighted(a, 1.0 - t, b, t, 0))
+    out.release()
+    return path
+
+
+def test_segmenter_finds_a_dissolve_that_ffmpeg_alone_misses(tmp_path: Path):
+    video = _crossfade_video(tmp_path / "dissolve.mp4")
+    hard_only = detect_cuts(video, include_gradual=False)
+    assert len(hard_only) == 1                      # ffmpeg's frame-to-frame score sees nothing
+    both = detect_cuts(video)
+    assert len(both) == 2
+    assert 2.8 <= both[0].end_sec <= 4.2            # cut lands in the dissolve window
+    assert both[0].end_sec == pytest.approx(both[1].start_sec)

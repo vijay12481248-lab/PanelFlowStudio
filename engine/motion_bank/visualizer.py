@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import math
+import shutil
+import subprocess
 from pathlib import Path
 from typing import List, Optional, Tuple
 import cv2
@@ -103,6 +105,30 @@ def draw_skeleton_frame(
     return canvas
 
 
+def encode_h264(src: Path, dst: Path) -> Path:
+    """Re-encode to H.264 / yuv420p / faststart: OpenCV only writes MPEG-4 part 2, which browsers cannot play."""
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        raise RuntimeError("ffmpeg is required to encode the skeleton video as H.264 but was not found on PATH")
+    r = subprocess.run(
+        [ffmpeg, "-y", "-v", "error", "-i", str(src), "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2",
+         "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "20", "-preset", "fast", "-movflags", "+faststart", str(dst)],
+        capture_output=True, text=True,
+    )
+    if r.returncode != 0:
+        raise RuntimeError(f"ffmpeg H.264 encode failed: {r.stderr.strip()[:300]}")
+    return dst
+
+
+def render_pose_image(pose, width: int, height: int, max_side: int | None = None) -> np.ndarray:
+    """One FramePoseData as an RGB skeleton picture on black (the picture a pose-aware model or a human looks at)."""
+    img = draw_skeleton_frame(width, height, pose.body, pose.left_hand, pose.right_hand, pose.face, background="black")
+    if max_side and max(width, height) > max_side:
+        k = max_side / max(width, height)
+        img = cv2.resize(img, (max(2, int(width * k)), max(2, int(height * k))), interpolation=cv2.INTER_AREA)
+    return img
+
+
 def render_skeleton_video(
     frames_poses: list,
     output_path: Path,
@@ -110,11 +136,13 @@ def render_skeleton_video(
     width: int,
     height: int,
     background: str = "black",
+    h264: bool = True,
 ) -> Path:
-    """Renders a full sequence of FramePoseData into an MP4 video file using OpenCV VideoWriter."""
+    """Renders a full sequence of FramePoseData into an MP4 (H.264 by default, so the desktop UI can play it)."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    raw_path = output_path.with_name(output_path.stem + ".raw.mp4") if h264 else output_path
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-    out = cv2.VideoWriter(str(output_path), fourcc, fps, (width, height))
+    out = cv2.VideoWriter(str(raw_path), fourcc, fps, (width, height))
 
     try:
         for pose in frames_poses:
@@ -128,4 +156,9 @@ def render_skeleton_video(
     finally:
         out.release()
 
+    if h264:
+        try:
+            encode_h264(raw_path, output_path)
+        finally:
+            raw_path.unlink(missing_ok=True)
     return output_path

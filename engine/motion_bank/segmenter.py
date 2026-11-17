@@ -6,18 +6,74 @@ import subprocess
 from pathlib import Path
 from typing import List
 
+import cv2
 from engine.motion_bank.ingest import probe_video
 from engine.motion_bank.models import MotionSegment
+
+
+HIST_SAMPLE_FPS = 10.0
+HIST_STEP_THRESHOLD = 0.18   # Bhattacharyya distance between consecutive samples (0.1 s apart)
+HIST_LAG_THRESHOLD = 0.30    # ... and between samples 0.5 s apart: a dissolve moves slowly but far
+HIST_LAG = 5
+
+
+def detect_gradual_transitions(video_path: Path, fps: float) -> List[float]:
+    """
+    Timestamps of dissolves, fades and soft cuts that ffmpeg's frame-to-frame scene score misses.
+    Colour histograms of 10 fps samples are compared with the previous sample and with the one 0.5 s earlier;
+    only local maxima over a threshold are reported.
+    """
+    cap = cv2.VideoCapture(str(video_path))
+    if not cap.isOpened():
+        return []
+    step = max(1, int(round(fps / HIST_SAMPLE_FPS)))
+    hists: list = []
+    times: List[float] = []
+    i = 0
+    try:
+        while cap.grab():
+            if i % step == 0:
+                ok, frame = cap.retrieve()
+                if ok:
+                    small = cv2.resize(frame, (96, 96))
+                    h = cv2.calcHist([cv2.cvtColor(small, cv2.COLOR_BGR2HSV)], [0, 1, 2], None, [8, 8, 8], [0, 180, 0, 256, 0, 256])
+                    hists.append(cv2.normalize(h, h).flatten())
+                    times.append(i / fps)
+            i += 1
+    finally:
+        cap.release()
+
+    n = len(hists)
+    d1 = [0.0] * n
+    dl = [0.0] * n
+    for k in range(1, n):
+        d1[k] = cv2.compareHist(hists[k - 1], hists[k], cv2.HISTCMP_BHATTACHARYYA)
+    for k in range(HIST_LAG, n):
+        dl[k] = cv2.compareHist(hists[k - HIST_LAG], hists[k], cv2.HISTCMP_BHATTACHARYYA)
+
+    def score(k: int) -> float:
+        return max(d1[k] / HIST_STEP_THRESHOLD, dl[k] / HIST_LAG_THRESHOLD)
+
+    cuts: List[float] = []
+    for k in range(1, n):
+        s = score(k)
+        if s < 1.0:
+            continue
+        window = range(max(1, k - HIST_LAG), min(n, k + HIST_LAG + 1))
+        if s >= max(score(j) for j in window):  # local maximum only
+            cuts.append(times[k])
+    return cuts
 
 
 def detect_cuts(
     video_path: Path,
     min_duration_sec: float = 1.0,
     scene_threshold: float = 0.35,
+    include_gradual: bool = True,
 ) -> List[MotionSegment]:
     """
-    Detects shot transitions/cuts in a video using ffmpeg's scene filter.
-    Returns a list of continuous motion takes suitable for pose harvesting.
+    Detects shot transitions in a video: hard cuts with ffmpeg's scene filter plus (by default) dissolves and fades
+    from colour-histogram differences. Returns a list of continuous takes suitable for pose harvesting.
     """
     if not video_path.is_file():
         raise FileNotFoundError(f"Video file not found: {video_path}")
@@ -36,15 +92,20 @@ def detect_cuts(
     ]
     r = subprocess.run(cmd, capture_output=True, text=True)
 
-    cut_timestamps: List[float] = [0.0]
+    raw_cuts: List[float] = []
     # Parse showinfo output for timestamps: pts_time:12.345
     for line in r.stderr.splitlines():
         if "showinfo" in line and "pts_time:" in line:
             m = re.search(r"pts_time:([0-9.]+)", line)
             if m:
-                ts = float(m.group(1))
-                if ts - cut_timestamps[-1] >= min_duration_sec:
-                    cut_timestamps.append(ts)
+                raw_cuts.append(float(m.group(1)))
+    if include_gradual:
+        raw_cuts.extend(detect_gradual_transitions(video_path, fps))
+
+    cut_timestamps: List[float] = [0.0]
+    for ts in sorted(raw_cuts):
+        if ts - cut_timestamps[-1] >= min_duration_sec:
+            cut_timestamps.append(ts)
 
     if total_duration - cut_timestamps[-1] >= 0.5:
         cut_timestamps.append(total_duration)

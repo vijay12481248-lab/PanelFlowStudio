@@ -148,6 +148,8 @@ class LocalApiSecurityMiddleware(BaseHTTPMiddleware):
             or "/samples/" in path
             or "/chronoflow/" in path
             or path.startswith(("/outputs/", "/inputs/"))
+            or (path.startswith("/api/motion_bank/motions/") and path.endswith(("/control_video", "/thumbnail")))  # <video>/<img> in Motion Studio
+            or path.startswith("/api/motion_bank/generated/")
             or (path.startswith("/api/original/scene/runs/") and path.endswith("/image"))  # the Scene review picture, shown by an <img> tag
             or path == "/api/render/events"
         )

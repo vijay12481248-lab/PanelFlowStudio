@@ -51,6 +51,7 @@ class MotionGuideTrainer:
         self.schedule = DiffusionSchedule(timesteps=1000, device=self.device)
         self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=1e-4, weight_decay=1e-4)
         self.checkpoint_path = self.output_dir / "choreographer_latest.pt"
+        self.embedder = "hash"
 
     def train_epoch(self, dataloader: DataLoader) -> float:
         """Runs a single training epoch and returns mean loss."""
@@ -86,9 +87,10 @@ class MotionGuideTrainer:
 
         return total_loss / max(1, count)
 
-    def train(self, num_epochs: int = 10, batch_size: int = 16, include_synthetic: bool = False) -> Dict[str, float]:
+    def train(self, num_epochs: int = 10, batch_size: int = 16, include_synthetic: bool = False, embedder: str = "hash") -> Dict[str, float]:
         """Executes full training session and saves checkpoint."""
-        dataset = MotionBankDataset(self.storage, include_synthetic=include_synthetic)
+        dataset = MotionBankDataset(self.storage, include_synthetic=include_synthetic, embedder=embedder, random_window=True)
+        self.embedder = embedder
         if len(dataset) == 0:
             return {"status": "error", "message": "No real (non-synthetic) motions in the Motion Bank to train on."}
 
@@ -109,6 +111,8 @@ class MotionGuideTrainer:
             "final_loss": round(losses[-1], 5) if losses else 0.0,
             "duration_sec": duration,
             "checkpoint": str(self.checkpoint_path.resolve()),
+            "text_embedder": embedder,
+            "motions": len(dataset),
         }
 
     def save_checkpoint(self) -> None:
@@ -118,6 +122,7 @@ class MotionGuideTrainer:
             {
                 "model_state_dict": self.model.state_dict(),
                 "optimizer_state_dict": self.optimizer.state_dict(),
+                "text_embedder": self.embedder,
             },
             str(tmp_path),
         )

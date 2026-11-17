@@ -60,6 +60,27 @@
     if (s && n && s.start_mode === 'first_last' && s.last_frame && n.start_mode === 'first_last' && !n.first_frame) n.first_frame = s.last_frame;
   }
 
+  // ---- Motion Bank on a First + last card: pick a harvested motion and a character, get the start and end pictures (engine/chronoflow/motion_frames.py)
+  function motionRequest(sel, s) {
+    if (!sel.motion) throw new Error('Choose a motion first.');
+    if (!sel.character) throw new Error('Choose the character picture first.');
+    const a = Number(sel.start), b = Number(sel.end);
+    if (!(a >= 0 && b <= 100 && a < b)) throw new Error('The start must be before the end (0 to 100 %).');
+    return { motion_id: sel.motion, character_picture: sel.character, width: s.width || 1344, height: s.height || 768,
+      start_pct: a / 100, end_pct: b / 100, hint: (sel.hint || '').trim() };
+  }
+  function applyMotionFrames(scenes, i, res, sel) {
+    const s = scenes[i];
+    if (!res.first_frame || !res.last_frame) throw new Error('The engine returned no pictures.');
+    if (s.state === 'review' || s.state === 'approved' || s.rendered_video) markRedo(scenes, i); // the old clip no longer matches the pictures
+    s.first_frame = res.first_frame;
+    s.last_frame = res.last_frame;
+    s.motion = { id: res.motion_id, character: sel.character, start_pct: Number(sel.start) / 100, end_pct: Number(sel.end) / 100,
+      first_index: res.first_index, last_index: res.last_index, rights: res.rights || '' };
+    if (s.state === 'empty' && (s.prompt || '').trim()) s.state = 'ready';
+    chainKeyframe(scenes, i);
+  }
+
   // ---- plan import: pictures from the picture job and the Render all queue
   function applyPictureItems(scenes, items, slug) {
     let changed = false;
@@ -293,13 +314,16 @@
     const s = scenes[i], e = ctx.esc;
     const opts = Object.keys(MODE_LABEL).map((m) => `<option value="${m}"${m === s.start_mode ? ' selected' : ''}>${MODE_LABEL[m]}</option>`).join('');
     const slots = slotsFor(s.start_mode).filter((k) => k !== 'ref2' || getSlot(s, 'ref1')).map((k) => slotWidget(s, i, k)).join('');
-    const chain = s.inherits_tail && !s.first_frame && s.start_mode !== 'from_video' ? `<div class="nv-note">Continues from the last frame of Shot ${i}</div>` : '';
+    const motionBar = s.start_mode === 'first_last'
+      ? `<div class="nv-slot"><span class="nv-slot-label">Motion</span>${s.motion ? `<span class="nv-note" title="Start and end pose taken from the Motion Bank">🕺 ${e(s.motion.id)} (${Math.round(s.motion.start_pct * 100)}–${Math.round(s.motion.end_pct * 100)} %)</span>` : '<span class="nv-blank">none</span>'}
+        <button type="button" class="btn-tool" onclick="NewVideo.motion(${i})">🕺 From motion…</button></div>` : '';
+    const chain = s.inherits_tail && !s.first_frame && s.start_mode !== 'from_video' ?`<div class="nv-note">Continues from the last frame of Shot ${i}</div>` : '';
     const warn = sizeWarning(s, i), miss = missingInputs(s, i).filter((k) => k !== 'prompt');
     const probs = (s.picture_problems || []).length ? `<div class="nv-warn">Picture check: ${e(s.picture_problems.join('; '))}</div>` : '';
     const narr = s.narration ? `<div class="nv-note" title="The narration for this shot is kept; voice-over is not produced from here yet">🎙 ${e(s.narration)}</div>` : '';
     return `<div class="nv-card">
       <div class="nv-row"><select onchange="NewVideo.onMode(${i}, this.value)" title="Start mode of this shot">${opts}</select><span class="nv-state nv-${displayState(s)}">${STATE_LABEL[displayState(s)]}</span></div>
-      ${chain}${warn ? `<div class="nv-warn">${e(warn)}</div>` : ''}${narr}${probs}${slots}
+      ${chain}${warn ? `<div class="nv-warn">${e(warn)}</div>` : ''}${narr}${probs}${slots}${motionBar}
       <textarea class="nv-prompt" data-i="${i}" rows="3" placeholder="What happens in this shot?" onchange="NewVideo.onPrompt(${i}, this.value)">${e(s.prompt || '')}</textarea>
       ${miss.length ? `<div class="nv-note">Still needs: ${miss.map((k) => SLOT_LABEL[k]).join(', ')}</div>` : ''}
       ${s.error ? `<div class="nv-error">${e(s.error)}</div>` : ''}</div>`;
@@ -345,6 +369,26 @@
   };
   const closePanel = () => { const el = document.getElementById('nvPanel'); if (el) el.style.display = 'none'; pending = null; };
   const thumbs = (items) => `<div class="nv-grid">${items.map((it) => `<button type="button" class="nv-thumb" data-name="${ctx.esc(it.name)}" onclick="NewVideo.pick(this)" title="${ctx.esc(it.label || it.name)}">${it.video ? `<span>${ctx.esc(it.label || it.name)}</span>` : `<img src="${ctx.esc(ctx.media(it.name, 'input'))}" alt="">`}</button>`).join('')}</div>`;
+
+  function drawMotionPanel() {
+    const host = document.getElementById('nvMotion');
+    if (!host || !pending || !pending.motionPanel) return;
+    const e = ctx.esc, sel = pending.sel, L = pending.lists, url = (p) => (ctx.motionMedia ? ctx.motionMedia(p) : p);
+    const motions = L.motions.length ? `<div class="nv-grid">${L.motions.map((m) => `<button type="button" class="nv-thumb${sel.motion === m.id ? ' active' : ''}" style="${sel.motion === m.id ? 'outline:2px solid #46d6a3' : ''}" onclick="NewVideo.motionSelect('motion','${e(m.id)}')" title="${e(m.title)} · ${m.duration_sec}s · rights ${e(m.rights || '?')}">${m.thumbnail ? `<img src="${e(url(m.thumbnail))}" alt="">` : `<span>${e(m.title)}</span>`}</button>`).join('')}</div>`
+      : '<div class="nv-note">No harvested motions yet. Harvest one in Library → Motions (real footage you have the rights to).</div>';
+    const pics = L.pics.length ? `<div class="nv-grid">${L.pics.map((p) => `<button type="button" class="nv-thumb" style="${sel.character === p.name ? 'outline:2px solid #46d6a3' : ''}" onclick="NewVideo.motionSelect('character','${e(p.name)}')" title="${e(p.label || p.name)}"><img src="${e(ctx.media(p.name, 'input'))}" alt=""></button>`).join('')}</div>` : '<div class="nv-note">No pictures yet. Upload one on the card first.</div>';
+    const pv = pending.preview ? `<div class="nv-row" style="gap:8px;margin:6px 0"><img src="${e(ctx.media(pending.preview.ref_first || pending.preview.pose_first, 'input'))}" style="width:48%;background:#000;border-radius:4px" alt="start pose"><img src="${e(ctx.media(pending.preview.ref_last || pending.preview.pose_last, 'input'))}" style="width:48%;background:#000;border-radius:4px" alt="end pose"></div>` : '';
+    host.innerHTML = `<div class="nv-note" style="margin-bottom:6px">Takes the start and end frame of the harvested footage and draws your character in those two poses. The video model then invents the movement between the two pictures.</div>
+      <b style="font-size:.8rem">1. Motion</b>${motions}
+      <b style="font-size:.8rem">2. Character picture</b>${pics}
+      <div class="nv-row" style="gap:8px;margin:8px 0;align-items:center"><label style="font-size:.78rem">Start at <input type="number" min="0" max="99" value="${sel.start}" style="width:56px" onchange="NewVideo.motionField('start',this.value)"> %</label>
+        <label style="font-size:.78rem">End at <input type="number" min="1" max="100" value="${sel.end}" style="width:56px" onchange="NewVideo.motionField('end',this.value)"> %</label></div>
+      <input type="text" value="${e(sel.hint)}" placeholder="Optional: who does what (e.g. the woman in blue armour does the move)" style="width:100%;font-size:.8rem" onchange="NewVideo.motionField('hint',this.value)">
+      ${pv}<div style="min-height:1.2em;font-size:.78rem;color:#9aa6d0;margin:6px 0">${e(pending.msg || '')}</div>
+      <div class="nv-row" style="justify-content:space-between"><button type="button" class="btn-tool" onclick="NewVideo.closePanel()">Cancel</button>
+        <span><button type="button" class="btn-tool" ${pending.busy ? 'disabled' : ''} onclick="NewVideo.motionRun(false)">Preview poses</button>
+        <button type="button" class="btn-primary" style="width:auto;padding:8px 18px" ${pending.busy ? 'disabled' : ''} onclick="NewVideo.motionRun(true)" title="Experimental: look at both pictures before rendering">Build first + last pictures (experimental)</button></span></div>`;
+  }
 
   const cardApi = {
     cardHtml, actionsHtml, render,
@@ -417,6 +461,36 @@
       setSlotChained(s, slot, pic);
       closePanel();
       touch();
+    },
+    async motion(i) {
+      pending = { s: scenesNow()[i], i, motionPanel: true, sel: { motion: '', character: '', start: 0, end: 100, hint: '' }, lists: null, preview: null, busy: false, msg: '' };
+      panel('<h4 style="margin:0 0 8px;color:#f6f8ff">Pose from the Motion Bank</h4><div id="nvMotion" style="max-height:78vh;overflow-y:auto">Loading…</div>');
+      try {
+        const [m, chars, gal] = await Promise.all([ctx.get('/motions'), ctx.get('/characters'), ctx.get('/gallery')]);
+        const pics = [...(chars.characters || []).filter((c) => c.image).map((c) => ({ name: c.image, label: c.name })), ...(gal.images || []).slice().sort((a, b) => b.created_at - a.created_at).slice(0, 40).map((x) => ({ name: x.filename }))];
+        pending.lists = { motions: m.motions || [], pics };
+        drawMotionPanel();
+      } catch (err) { document.getElementById('nvMotion').textContent = err.message; }
+    },
+    motionSelect(kind, value) { if (!pending || !pending.motionPanel) return; pending.sel[kind] = value; pending.preview = null; drawMotionPanel(); },
+    motionField(kind, value) { if (pending && pending.motionPanel) { pending.sel[kind] = value; pending.preview = null; } },
+    async motionRun(stylize) {
+      if (!pending || !pending.motionPanel || pending.busy) return;
+      let body;
+      try { body = { ...motionRequest(pending.sel, pending.s), stylize }; } catch (err) { pending.msg = err.message; return drawMotionPanel(); }
+      pending.busy = true; pending.msg = stylize ? 'Drawing the first and the last picture with your character… this takes a few minutes. Keep this window open.' : 'Drawing the two poses…';
+      drawMotionPanel();
+      try {
+        const res = await ctx.post('/storyboard/motion_frames', body);
+        if (!stylize) { pending.preview = res; pending.msg = `Poses at frames ${res.first_index} and ${res.last_index}.`; }
+        else {
+          applyMotionFrames(scenesNow(), pending.i, res, pending.sel);
+          closePanel();
+          return touch();
+        }
+      } catch (err) { pending.msg = err.message || String(err); }
+      pending.busy = false;
+      drawMotionPanel();
     },
     closePanel,
     async assembleSequence(options = {}) {
@@ -697,6 +771,6 @@
   }
 
   const api = { SEG_SECONDS, MAX_SECONDS, slotsFor, segmentCount, lengthLabel, canRender, prevTail, markRendered, approve, markRedo, mount,
-    applyPictureItems, pictureCounts, renderAllQueue, planResultHtml, planBarHtml, planDraw, planApprovePictures, planRenderAll, planStop() { plan.stop = true; }, renderPlanBar, getSlot, setSlot, relink, newCard, chainKeyframe, displayState, effectiveMode, missingInputs, sizeWarning, setMode, modeLabel: (s, i) => MODE_LABEL[effectiveMode(s, i)], ...cardApi };
+    applyPictureItems, pictureCounts, renderAllQueue, planResultHtml, planBarHtml, planDraw, planApprovePictures, planRenderAll, planStop() { plan.stop = true; }, renderPlanBar, getSlot, setSlot, relink, newCard, chainKeyframe, motionRequest, applyMotionFrames, __ctx(c) { ctx = c; }, displayState, effectiveMode, missingInputs, sizeWarning, setMode, modeLabel: (s, i) => MODE_LABEL[effectiveMode(s, i)], ...cardApi };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.NewVideo = api;
 })(typeof window !== 'undefined' ? window : globalThis);

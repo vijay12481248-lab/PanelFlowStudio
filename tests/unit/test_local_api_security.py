@@ -205,3 +205,16 @@ def test_scene_review_pictures_accept_the_resource_token():
     assert client.get(f"/api/original/scene/runs/abc/image;pf-token={TOKEN}", headers=headers).status_code != 401  # past security
     assert client.get("/api/original/scene/runs/abc/image", headers=headers).status_code == 401  # no token, no picture
     assert client.get("/api/original/scene/runs/abc/image;pf-token=wrong", headers=headers).status_code == 401
+
+
+def test_motion_bank_media_accepts_the_resource_token():
+    app = create_app(engine_token=TOKEN, allowed_origins={APPROVED_ORIGIN}, allow_insecure=False)
+    client = TestClient(app, base_url="http://127.0.0.1:8765")
+    headers = {"Origin": APPROVED_ORIGIN}
+    for path in ("/api/motion_bank/motions/mot_x/control_video", "/api/motion_bank/motions/mot_x/thumbnail",
+                 "/api/motion_bank/generated/gen_ab12_control.mp4"):
+        assert client.get(f"{path};pf-token={TOKEN}", headers=headers).status_code != 401  # past security (404: no such motion)
+        assert client.get(f"{path};pf-token=wrong", headers=headers).status_code == 401
+    # data endpoints are not reachable through a path token (the marker is only stripped on media paths)
+    assert client.get(f"/api/motion_bank/status;pf-token={TOKEN}", headers=headers).status_code == 404
+    assert client.get("/api/motion_bank/status", headers=headers).status_code == 401

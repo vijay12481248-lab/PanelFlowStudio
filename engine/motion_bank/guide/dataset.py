@@ -1,32 +1,20 @@
 """Dataset loader for Motion Bank: paired (action_text, skeleton_trajectory) sequences."""
 from __future__ import annotations
 
-import hashlib
+import random
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 import torch
 from torch.utils.data import Dataset
 
 from engine.motion_bank.models import MotionRecord
+from engine.motion_bank.guide.text_embed import embed_hash, embed_texts
 from engine.motion_bank.storage import MotionBankStorage
 
 
 def embed_text_deterministic(text: str, dim: int = 256) -> torch.Tensor:
-    """
-    Deterministic semantic hash embedding for action prompts.
-    Provides offline, local-first zero-latency vectorization without requiring external weights.
-    """
-    words = text.lower().replace(",", " ").split()
-    vec = torch.zeros(dim, dtype=torch.float32)
-    for word in words:
-        h = int(hashlib.sha256(word.encode("utf-8")).hexdigest(), 16)
-        # Distribute word hash into multiple dimensions with sinusoidal projection
-        for i in range(8):
-            idx = (h >> (i * 8)) % dim
-            sign = 1.0 if ((h >> (i * 8 + 4)) & 1) else -1.0
-            vec[idx] += sign
-    norm = torch.norm(vec)
-    return vec / max(1e-5, float(norm))
+    """The offline hash embedding (kept under its old name; see text_embed.py for the embedders)."""
+    return embed_hash(text, dim)
 
 
 class MotionBankDataset(Dataset):
@@ -38,6 +26,8 @@ class MotionBankDataset(Dataset):
         target_seq_len: int = 64,
         text_dim: int = 256,
         include_synthetic: bool = False,
+        embedder: str = "hash",
+        random_window: bool = False,
     ):
         self.storage = storage
         self.target_seq_len = target_seq_len
@@ -45,6 +35,10 @@ class MotionBankDataset(Dataset):
         records = self.storage.list_motions(limit=1000)
         # Fake skeletons (tests/demos) teach the guide nothing real; keep them out unless asked for.
         self.records: List[MotionRecord] = [r for r in records if include_synthetic or not r.metadata.get("synthetic")]
+        self.embedder = embedder
+        self.random_window = random_window  # training: a random target_seq_len window of long motions, not always the first frames
+        descriptions = [f"{r.action_title} {' '.join(r.action_tags)} {r.action_summary}" for r in self.records]
+        self._text_embeds = embed_texts(descriptions, embedder, text_dim) if descriptions else torch.zeros((0, text_dim))
 
     def __len__(self) -> int:
         return len(self.records)
@@ -61,15 +55,14 @@ class MotionBankDataset(Dataset):
             t_len = raw_tensor.shape[0]
 
             if t_len >= self.target_seq_len:
-                pose_seq = raw_tensor[:self.target_seq_len]
+                offset = random.randint(0, t_len - self.target_seq_len) if self.random_window else 0
+                pose_seq = raw_tensor[offset:offset + self.target_seq_len]
             else:
                 # Pad with last frame
                 padding = raw_tensor[-1:].repeat(self.target_seq_len - t_len, 1, 1)
                 pose_seq = torch.cat([raw_tensor, padding], dim=0)
 
-        # Generate text embedding from title + tags
-        action_desc = f"{rec.action_title} {' '.join(rec.action_tags)} {rec.action_summary}"
-        text_embed = embed_text_deterministic(action_desc, dim=self.text_dim)
+        text_embed = self._text_embeds[idx]
 
         return {
             "pose_seq": pose_seq,  # (target_seq_len, 133, 3)
