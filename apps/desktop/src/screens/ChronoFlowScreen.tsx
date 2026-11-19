@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect, useMemo } from "react";
-import { ArrowLeft, RefreshCw, AlertCircle } from "lucide-react";
+import { ArrowLeft, RefreshCw, AlertCircle, Sparkles } from "lucide-react";
 import { api } from "@panelflow/api-client";
 import { ImageEditorModal, type ImageEditorTarget } from "../components/ImageEditorModal";
+import { WatermarkRemoverModal } from "../components/WatermarkRemoverModal";
 import type { Project } from "@panelflow/shared-types";
 
 interface ChronoFlowScreenProps {
@@ -24,6 +25,8 @@ export const ChronoFlowScreen: React.FC<ChronoFlowScreenProps> = ({ onBack, proj
 
   // A picture the embedded studio asked to edit: it opens in the full-screen Image Studio (AI inpaint, cut, effects, colour, deliver).
   const [editing, setEditing] = useState<{ name: string; url: string } | null>(null);
+  // Video selected for AI watermark removal
+  const [watermarkVideo, setWatermarkVideo] = useState<string | null>(null);
   // The picture the next AI inpaint starts from: it moves to the newest result after each run, so edits chain.
   const baseName = useRef("");
 
@@ -39,6 +42,8 @@ export const ChronoFlowScreen: React.FC<ChronoFlowScreenProps> = ({ onBack, proj
           baseName.current = name;
           setEditing({ name, url: String(e.data.url || `/chronoflow/inputs/${name}`) });
         }
+      } else if (e.data?.type === "chronoflow_remove_watermark") {
+        setWatermarkVideo(String(e.data.videoPath || ""));
       }
     };
     window.addEventListener("message", handleMsg);
@@ -183,20 +188,44 @@ export const ChronoFlowScreen: React.FC<ChronoFlowScreenProps> = ({ onBack, proj
           allow="camera; microphone; clipboard-read; clipboard-write; display-capture"
         />
 
-        {/* Always-visible reload so engine UI updates can be picked up without leaving the screen */}
+        {/* Always-visible actions so engine UI updates and video tools can be picked up without leaving the screen */}
         {!iframeLoading && (
-          <button
-            onClick={handleRefresh}
-            className="absolute bottom-3 right-3 z-20 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-navy/85 hover:bg-flat text-fg-dim hover:text-white text-xs font-semibold border border-edge shadow-md transition-colors"
-            title="Reload the studio UI from the engine (picks up engine-side UI updates)"
-          >
-            <RefreshCw className="w-3.5 h-3.5" aria-hidden="true" />
-            <span>Reload UI</span>
-          </button>
+          <div className="absolute bottom-3 right-3 z-20 flex items-center gap-2">
+            <button
+              onClick={() => {
+                const p = project?.workspace_path;
+                setWatermarkVideo(p && /\.(mp4|mov|mkv|webm|avi)$/i.test(p) ? p : "");
+              }}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-navy/85 hover:bg-flat text-fg-dim hover:text-white text-xs font-semibold border border-edge shadow-md transition-colors"
+              title="Remove watermark or logo from a video"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-indigo-400" aria-hidden="true" />
+              <span>Clean Watermark</span>
+            </button>
+            <button
+              onClick={handleRefresh}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-navy/85 hover:bg-flat text-fg-dim hover:text-white text-xs font-semibold border border-edge shadow-md transition-colors"
+              title="Reload the studio UI from the engine (picks up engine-side UI updates)"
+            >
+              <RefreshCw className="w-3.5 h-3.5" aria-hidden="true" />
+              <span>Reload UI</span>
+            </button>
+          </div>
         )}
       </main>
       {/* mounted only while open: the modal returns before its hooks when closed, so it must not stay mounted and re-open */}
       {editing && <ImageEditorModal isOpen onClose={() => setEditing(null)} target={editTarget} />}
+      {watermarkVideo !== null && (
+        <WatermarkRemoverModal
+          isOpen
+          onClose={() => setWatermarkVideo(null)}
+          videoPath={watermarkVideo}
+          projectId={project?.id || "default"}
+          onComplete={(out) => {
+            console.log("Watermark removed output:", out);
+          }}
+        />
+      )}
     </div>
   );
 };
