@@ -1,4 +1,4 @@
-"""Run make_reel stages for r16 without editing tools/reels/specs.py:  python tools/reels/run_lunch.py <stage> [r16]"""
+"""Run make_reel stages for r17 without editing tools/reels/specs.py:  python tools/reels/run_lunch.py <stage> [r17]"""
 import runpy
 import sys
 from pathlib import Path

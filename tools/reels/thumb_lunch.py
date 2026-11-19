@@ -8,7 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
-OUT = ROOT / "output" / os.environ.get("REEL_OUT_DIR", "intel_test") / "r16_lunch_thief" / "thumb"
+OUT = ROOT / "output" / os.environ.get("REEL_OUT_DIR", "intel_test") / os.environ.get("THUMB_SLUG", "r16_lunch_thief") / "thumb"
 W, H = 1080, 1920
 TITLE, COLOR, TITLE_Y = "LUNCH THIEF!", "#FFE600", 300
 LOOK = ("funny hand-drawn cartoon doodle, simple stick-figure style, thick black marker outlines, ultra saturated flat colors, strong color contrast, "
@@ -21,6 +21,15 @@ HERO = ("Extreme close-up of a smirking stick-figure guy with spiky black hair a
 SPLIT = ("Split-screen divided by a white zigzag line, both halves vertically centered with empty space above and below. LEFT half pale blue: a smirking spiky-haired stick-figure guy in a blue t-shirt "
          "holding a sandwich with a huge glowing red chili. RIGHT half hot orange: a chubby bald stick-figure boss in a green tie with a bright red face and steam shooting from his ears, tongue out, eyes watering.")
 SCENES = {"boss": LOOK + BOSS, "hero": LOOK + HERO, "split": LOOK + SPLIT}
+if os.environ.get("THUMB_STYLE") == "anime":  # same idea in the r17 anime look (cel shaded, adult hero, one bald boss)
+    ANIME = ("high quality modern anime key visual, cel shaded, clean line art, vibrant saturated colors, soft glow and rim light, big shiny eyes, vertical 9:16 composition, "
+             "plain pale blue office background, empty space at the top and bottom, no text, no letters, no numbers, no words. ")
+    SCENES = {"boss": ANIME + "Extreme close-up of a chubby completely bald anime middle-aged boss in a light green shirt and a dark green tie, his whole face bright red, steam shooting out of both ears, "
+              "eyes huge and watering, tongue sticking out, holding half a sandwich with one giant glowing red chili pepper sticking out of it; in the lower corner a smirking tall adult anime man with spiky "
+              "black hair and a blue t-shirt watches him with his arms crossed.",
+              "hero": ANIME + "Extreme close-up of a smirking adult anime man with spiky black hair and a blue t-shirt grinning evilly and holding up a sandwich with one giant glowing red chili pepper sticking out of it, "
+              "tiny flames around the chili, a small chubby bald boss in a green tie peeking hungrily from the lower corner."}
+    SCENES["split"] = SCENES["hero"]
 # tag -> (workflow, seed, scene). a-c were the first round (c = HiDream, not wanted); d-g are the Z-Image round.
 VARIANTS = {"a": ("zimage_turbo", 41, "boss"), "b": ("zimage_turbo", 42, "boss"), "c": ("hidream_i1_fast", 43, "boss"),
             "d": ("zimage_turbo", 44, "boss"), "e": ("zimage_turbo", 45, "hero"), "f": ("zimage_turbo", 46, "hero"), "g": ("zimage_turbo", 47, "split")}

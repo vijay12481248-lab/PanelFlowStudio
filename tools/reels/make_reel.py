@@ -27,7 +27,7 @@ import soundfile as sf  # noqa: E402
 from specs import NEGATIVE, NO_REF, REELS, STYLE  # noqa: E402
 
 OUT = ROOT / "output" / os.environ.get("REEL_OUT_DIR", "reels")
-IMG_WF = os.environ.get("REEL_IMG_WORKFLOW", "hidream_i1_fast")  # HiDream (default art model); set zimage_turbo for Z-Image, minimax_h3_image_edit for H3-Image
+IMG_WF = os.environ.get("REEL_IMG_WORKFLOW", "zimage_turbo")  # reels: Z-Image (one look, no stray text; owner 2026-11-17). hidream_i1_fast = richer art + text check, minimax_h3_image_edit = H3-Image
 SR = 48000
 W, H = 1080, 1920
 QWEN_PY = Path(os.environ.get("PANELFLOW_QWEN3_TTS_PYTHON", r"D:\Tools\Qwen3-TTS\.venv\Scripts\python.exe"))
@@ -120,13 +120,23 @@ def _engine():
 
 
 def still_prompt(r: dict, s: dict) -> str:
-    return f"{STYLE}. {r['palette']}. Characters: {r['chars']}. Scene: {s['img']}."
+    return f"{r.get('style', STYLE)}. {r['palette']}. Characters: {r['chars']}. Scene: {s['img']}."
 
 
 def anatomy_draw(engine, **kw):
     """Draw one picture; with REEL_ANATOMY_CHECK=1 through the anatomy review (redraw on confirmed defects, lessons learned), otherwise exactly as before."""
     from engine.original.anatomy.draw import draw_picture
     if os.environ.get("REEL_ANATOMY_CHECK") != "1":
+        if IMG_WF == "hidream_i1_fast" and os.environ.get("REEL_TEXT_CHECK", "1") != "0":  # HiDream prints stray headlines: judge each picture, redraw while text is found
+            from engine.comfyui.edit_prompt import release_local_model
+            from engine.llm.registry import llm_registry
+            from engine.original.anatomy.text_check import free_comfyui
+            from engine.original.judges import OllamaJudge
+            global _TEXT_JUDGE
+            if _TEXT_JUDGE is None:
+                _TEXT_JUDGE = OllamaJudge(llm_registry.get_ollama_provider())
+            return draw_picture(engine, **kw, check_text=True, text_judge=_TEXT_JUDGE, between=release_local_model, before_judge=free_comfyui,
+                                text_fallback=os.environ.get("REEL_TEXT_FALLBACK", "zimage_turbo") or None)  # Z-Image from the 3rd attempt on (set REEL_TEXT_FALLBACK= to keep HiDream only)
         return draw_picture(engine, **kw)
     global _ANATOMY
     if _ANATOMY is None:
@@ -144,6 +154,7 @@ def anatomy_draw(engine, **kw):
 
 
 _ANATOMY = None
+_TEXT_JUDGE = None
 
 
 def stage_art(reels):
@@ -219,7 +230,7 @@ def stage_clips(reels):
             if mode == "fast8":
                 prompt = ("For the target video, at 0.00 seconds into the target video, <Picture 1> (from [Shot 1]) is fully referenced.\n"
                           f"integrated_multimodal_description: [Shot 1] {r['chars']}. {s['act']}. The camera is a Static Shot, fixed on a tripod. "
-                          "Only the action of this moment moves; everything else stays exactly as drawn in the same flat hand-drawn doodle cartoon style.\n\n"
+                          "Only the action of this moment moves; " + r.get("clip_style", "everything else stays exactly as drawn in the same flat hand-drawn doodle cartoon style.") + "\n\n"
                           "overall_soundscape: quiet light room tone, no dialogue.\n\nnon_diegetic_music: none.")
                 patched = _patch_workflow(workflow, slots, prompt, negative_prompt="", width=480, height=832, seed=seed,
                                           prefix=f"reels/{r['slug']}_clip{i}", reference_image=client.upload_image(panel), duration=5.0)
