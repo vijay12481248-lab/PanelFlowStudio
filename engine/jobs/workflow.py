@@ -26,6 +26,7 @@ def build_operation(job_type: str, project_id: str, job_input: dict) -> Operatio
         from engine.original import queue as _original_queue  # noqa: F401  (registers ORIGINAL_EPISODE)
         from engine.original import scene_job as _scene_job  # noqa: F401  (registers SCENE_GENERATION)
         from engine import studio_audio as _studio_audio  # noqa: F401  (registers STUDIO_MUSIC_GENERATION, STUDIO_SPEECH_GENERATION)
+        from engine.api.routers import video_watermark as _video_watermark  # noqa: F401  (registers VIDEO_WATERMARK_REMOVAL)
         _PROVIDER_FACTORIES_READY = True
     factory = _OPERATION_FACTORIES.get(job_type)
     return factory(project_id, job_input) if factory else None

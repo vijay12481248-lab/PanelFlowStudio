@@ -48,7 +48,7 @@ export function prevStage(stage: Stage): Stage | null {
   return STAGES[STAGES.indexOf(stage) - 1] ?? null;
 }
 
-export type CreateKind = "new" | "stories" | "anime" | "chronoflow" | "image" | "scene";
+export type CreateKind = "new" | "stories" | "anime" | "chronoflow" | "image" | "scene" | "inspector";
 export type SettingsSection = "engine" | "models" | "providers" | "youtube" | "diagnostics";
 
 const id = encodeURIComponent;
@@ -63,6 +63,7 @@ export const paths = {
   chronoflow: ({ projectId, jobId }: { projectId?: string; jobId?: string }) =>
     jobId ? `/create/chronoflow/job/${id(jobId)}` : projectId ? `/create/chronoflow/${id(projectId)}` : "/create/chronoflow",
   scene: (runId?: string) => (runId ? `/create/scene?run=${id(runId)}` : "/create/scene"),
+  inspector: () => "/create/inspector",
   jobs: () => "/jobs",
   library: (kind?: "audio" | "media" | "voices" | "images" | "motions") => (kind ? `/library/${kind}` : "/library"),
   settings: (section: SettingsSection = "engine") => `/settings/${section}`,

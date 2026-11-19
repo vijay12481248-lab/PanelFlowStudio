@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import io
 import logging
+import os
 import random
 import re
 import time
@@ -324,6 +325,7 @@ class ArtImage:
     model_files: list[str]
     source_output: dict[str, str]
     seed: int
+    decision: Any = None
 
 
 def _never() -> bool:
@@ -434,6 +436,8 @@ class ArtEngine:
         progress: Callable[[float, str], None] | None = None,
         client_id: str | None = None,
         workflow_id: str = ART_WORKFLOW_ID,
+        inspect_quality: bool = False,
+        auto_repair: bool = False,
     ) -> ArtImage:
         if workflow_id not in IMAGE_WORKFLOW_IDS:
             raise ComfyImageGenerationError(f"Image workflows are {IMAGE_WORKFLOW_IDS}; got {workflow_id!r}")
@@ -485,8 +489,31 @@ class ArtEngine:
                                     dimension_policy=policy)
         if workflow_id == ART_WORKFLOW_ID:
             raw = _trim_corner_and_scale(raw, actual_width, actual_height)
+
+        decision = None
+        if inspect_quality or auto_repair or os.environ.get("PANELFLOW_QUALITY_CHECK") == "1":
+            try:
+                from engine.inspector.image_inspector import ImageInspector
+                inspector = ImageInspector()
+                decision = inspector.inspect(raw, prompt=prompt)
+                logger.info("Quality inspection: %s (score=%.1f)", decision.status, decision.overall_score)
+
+                if auto_repair and decision.status != "PASS":
+                    logger.info("Auto-repairing defective generated image (%s)...", decision.status)
+                    from engine.inspector.repair import ImageRepairEngine
+                    repair_engine = ImageRepairEngine(art_engine=self, inspector=inspector)
+                    repaired = repair_engine.repair_image(raw, decision=decision, prompt=prompt)
+                    if repaired.success and (repaired.revalidated_decision.status == "PASS" or repaired.score_improvement > 0):
+                        raw = repaired.repaired_png
+                        decision = repaired.revalidated_decision
+                        with Image.open(io.BytesIO(raw)) as image:
+                            actual_width, actual_height = image.size
+                        logger.info("Auto-repair completed: %s (score=%.1f)", decision.status, decision.overall_score)
+            except Exception as e:
+                logger.warning("Quality inspection pass failed: %s", e)
+
         return ArtImage(png=raw, width=actual_width, height=actual_height, prompt_id=prompt_id, workflow_id=workflow_id,
-                        workflow_sha256=workflow_sha256, model_files=list(metadata.get("model_files", [])), source_output=ref, seed=seed)
+                        workflow_sha256=workflow_sha256, model_files=list(metadata.get("model_files", [])), source_output=ref, seed=seed, decision=decision)
 
     def edit(
         self,

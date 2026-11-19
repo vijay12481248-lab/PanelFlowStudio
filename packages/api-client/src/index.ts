@@ -3203,6 +3203,70 @@ export class PanelFlowApiClient {
       body: JSON.stringify(payload),
     });
   }
+
+  // --- Visual Quality Inspector & Auto-Correction API ---
+
+  async inspectorHealth(): Promise<InspectorHealthResponse> {
+    return this.request<InspectorHealthResponse>("/api/inspector/health");
+  }
+
+  async inspectImage(
+    imagePath: string,
+    options?: { characterCount?: number; characterDescription?: string; prompt?: string; enableVlm?: boolean }
+  ): Promise<QualityDecision> {
+    return this.request<QualityDecision>("/api/inspector/image", {
+      method: "POST",
+      body: JSON.stringify({
+        image_path: imagePath,
+        character_count: options?.characterCount,
+        character_description: options?.characterDescription,
+        prompt: options?.prompt,
+        enable_vlm: options?.enableVlm ?? true,
+      }),
+    });
+  }
+
+  async inspectVideo(
+    videoPath: string,
+    options?: { sampleFps?: number; maxFrames?: number }
+  ): Promise<VideoQualityDecision> {
+    return this.request<VideoQualityDecision>("/api/inspector/video", {
+      method: "POST",
+      body: JSON.stringify({
+        video_path: videoPath,
+        sample_fps: options?.sampleFps ?? 2.0,
+        max_frames: options?.maxFrames ?? 120,
+      }),
+    });
+  }
+
+  async repairImage(
+    imagePath: string,
+    prompt?: string,
+    decision?: QualityDecision
+  ): Promise<ImageRepairResponse> {
+    return this.request<ImageRepairResponse>("/api/inspector/repair/image", {
+      method: "POST",
+      body: JSON.stringify({
+        image_path: imagePath,
+        prompt,
+        decision,
+      }),
+    });
+  }
+
+  async repairVideo(
+    videoPath: string,
+    decision?: VideoQualityDecision
+  ): Promise<VideoRepairResponse> {
+    return this.request<VideoRepairResponse>("/api/inspector/repair/video", {
+      method: "POST",
+      body: JSON.stringify({
+        video_path: videoPath,
+        decision,
+      }),
+    });
+  }
 }
 
 export interface MotionBankStatusResponse {
@@ -3449,5 +3513,87 @@ export interface AudioCritiqueReportResponse {
 }
 
 export const api = new PanelFlowApiClient();
+
+export interface DefectRecord {
+  defect_id: string;
+  category: string;
+  bbox?: [number, number, number, number];
+  confidence: number;
+  severity: "minor" | "moderate" | "severe";
+  evidence: string;
+  recommended_action: "inpaint" | "redraw" | "manual";
+  tile: string;
+  details: Record<string, any>;
+}
+
+export interface TemporalDefectRecord {
+  defect_id: string;
+  category: string;
+  start_sec: number;
+  end_sec: number;
+  frame_indices: number[];
+  confidence: number;
+  severity: "minor" | "moderate" | "severe";
+  evidence: string;
+  recommended_action: "inpaint" | "redraw" | "manual";
+  details: Record<string, any>;
+}
+
+export interface QualityDecision {
+  overall_score: number;
+  status: "PASS" | "RETRY" | "MANUAL_REVIEW";
+  clean: boolean;
+  defects: DefectRecord[];
+  people_detected?: number;
+  faces_detected: number;
+  hands_detected?: number;
+  summary: string;
+  seconds: number;
+  timestamp: number;
+  metadata: Record<string, any>;
+}
+
+export interface VideoQualityDecision {
+  overall_score: number;
+  status: "PASS" | "RETRY" | "MANUAL_REVIEW";
+  clean: boolean;
+  defects: TemporalDefectRecord[];
+  duration_sec: number;
+  total_frames: number;
+  fps: number;
+  shots_detected: number;
+  summary: string;
+  seconds: number;
+  timestamp: number;
+  metadata: Record<string, any>;
+}
+
+export interface InspectorHealthResponse {
+  status: "ready" | "degraded";
+  models: Record<string, boolean>;
+  ollama_ready: boolean;
+  licensing: {
+    cv_models: string;
+    inpaint_checkpoint: string;
+    commercial_cleared: boolean;
+  };
+  vram_usage: string;
+}
+
+export interface ImageRepairResponse {
+  repaired_image_path: string;
+  original_image_path: string;
+  revalidated_decision: QualityDecision;
+  attempts: number;
+  actions_taken: string[];
+  success: boolean;
+}
+
+export interface VideoRepairResponse {
+  repaired_video_path: string;
+  revalidated_decision: VideoQualityDecision;
+  metadata: Record<string, any>;
+}
+
 
 

@@ -28,6 +28,8 @@ export const appRoutes: RouteObject[] = [
       { path: "create/anime", ...legacy("AnimeRoute") },
       { path: "create/image", ...legacy("ImageRoute") },
       { path: "create/scene", ...screen(() => import("../features/scene/ScenePage"), "ScenePage") },
+      { path: "create/inspector", ...screen(() => import("../features/inspector/QualityInspectorScreen"), "QualityInspectorScreen") },
+      { path: "inspector", ...screen(() => import("../features/inspector/QualityInspectorScreen"), "QualityInspectorScreen") },
       { path: "create/chronoflow", ...legacy("ChronoFlowRoute") },
       { path: "create/chronoflow/job/:jobId", ...legacy("ChronoFlowRoute") },
       { path: "create/chronoflow/:projectId", ...legacy("ChronoFlowRoute") },

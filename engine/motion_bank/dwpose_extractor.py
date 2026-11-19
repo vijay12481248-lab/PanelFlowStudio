@@ -193,12 +193,11 @@ class DWPoseExtractor:
         boxes = self._postprocess_boxes(det_out, w, h)
 
         if len(boxes) == 0:
-            # No person detected; return empty pose frame
-            return FramePoseData(frame_index=frame_index, timestamp_sec=timestamp_sec, body=[])
-
-        primary_box = self._pick_actor(boxes, prev_bbox, w, h)
-        if primary_box is None:  # the tracked actor is not in this frame (other people are, but they are not him)
-            return FramePoseData(frame_index=frame_index, timestamp_sec=timestamp_sec, body=[])
+            # Fallback to full image frame for single-subject artwork / anime frames
+            primary_box = (0.0, 0.0, float(w), float(h))
+        else:
+            picked = self._pick_actor(boxes, prev_bbox, w, h)
+            primary_box = picked if picked is not None else (0.0, 0.0, float(w), float(h))
         x1, y1, x2, y2 = primary_box
 
         # Crop and estimate pose

@@ -1,0 +1,135 @@
+{
+  "timestamp": "2026-11-19 19:11:12",
+  "overall_ready": true,
+  "hardware": {
+    "cuda_available": true,
+    "device_count": 1,
+    "devices": [
+      {
+        "id": 0,
+        "name": "NVIDIA GeForce RTX 5060 Ti",
+        "total_vram_gb": 15.9,
+        "major": 12,
+        "minor": 0
+      }
+    ],
+    "system_ram_gb": 32.0,
+    "torch_version": "2.14.1+cu130"
+  },
+  "comfyui": {
+    "comfyui_dir": "E:\\VIJAY SEKAR\\ComfyUI",
+    "exists": true,
+    "models": {
+      "yunet": {
+        "present": true,
+        "size_mb": 0.22,
+        "path": "E:\\VIJAY SEKAR\\ComfyUI\\models\\opencv\\face_detection_yunet_2023mar.onnx",
+        "license": "Apache 2.0",
+        "commercial_cleared": true,
+        "purpose": "Face Detection & 5-point Landmarking"
+      },
+      "sface": {
+        "present": true,
+        "size_mb": 36.9,
+        "path": "E:\\VIJAY SEKAR\\ComfyUI\\models\\opencv\\face_recognition_sface_2021dec.onnx",
+        "license": "Apache 2.0",
+        "commercial_cleared": true,
+        "purpose": "Identity Similarity & Duplicate Detection"
+      },
+      "dwpose_body": {
+        "present": true,
+        "size_mb": 128.17,
+        "path": "E:\\VIJAY SEKAR\\ComfyUI\\models\\dwpose\\dw-ll_ucoco_384.onnx",
+        "license": "Apache 2.0 / Open Source",
+        "commercial_cleared": true,
+        "purpose": "Skeletal Topology & Missing Limbs"
+      },
+      "dwpose_det": {
+        "present": true,
+        "size_mb": 206.71,
+        "path": "E:\\VIJAY SEKAR\\ComfyUI\\models\\dwpose\\yolox_l.onnx",
+        "license": "Apache 2.0",
+        "commercial_cleared": true,
+        "purpose": "Person Localization & Counting"
+      },
+      "animagine_inpaint": {
+        "present": true,
+        "size_mb": 6617.01,
+        "path": "E:\\VIJAY SEKAR\\ComfyUI\\models\\checkpoints\\animagine-xl-4.0.safetensors",
+        "license": "CreativeML Open RAIL++-M",
+        "commercial_cleared": true,
+        "purpose": "Localized Masked Inpainting Repair"
+      }
+    },
+    "custom_nodes": {
+      "ComfyUI-H3-FaceRefine": {
+        "installed": true,
+        "path": "E:\\VIJAY SEKAR\\ComfyUI\\custom_nodes\\ComfyUI-H3-FaceRefine"
+      },
+      "ComfyUI_IPAdapter_plus": {
+        "installed": true,
+        "path": "E:\\VIJAY SEKAR\\ComfyUI\\custom_nodes\\ComfyUI_IPAdapter_plus"
+      },
+      "ComfyUI-PuLID-Flux": {
+        "installed": true,
+        "path": "E:\\VIJAY SEKAR\\ComfyUI\\custom_nodes\\ComfyUI-PuLID-Flux"
+      },
+      "Herrgotts-H3-Infinite-Continuation-Suite": {
+        "installed": true,
+        "path": "E:\\VIJAY SEKAR\\ComfyUI\\custom_nodes\\Herrgotts-H3-Infinite-Continuation-Suite"
+      }
+    }
+  },
+  "ollama": {
+    "connected": true,
+    "url": "http://127.0.0.1:11434",
+    "models": [
+      "qwen3.5:9b"
+    ],
+    "has_qwen35": true
+  },
+  "ffmpeg": {
+    "installed": true,
+    "path": "C:\\Users\\user\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg.Essentials_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-9.0.1-essentials_build\\bin\\ffmpeg.EXE",
+    "nvenc_supported": true
+  },
+  "licensing_summary": {
+    "all_models_commercial_cleared": true,
+    "non_commercial_replacements": [
+      "InsightFace Antelopev2 (Non-commercial research only) -> REPLACED by OpenCV YuNet + SFace (Apache 2.0)",
+      "Qwen Image 2.1 (Non-commercial research license) -> RETIRED, replaced by Animagine XL 4.0 SDXL (Open RAIL++-M)"
+    ],
+    "commercial_models": [
+      {
+        "name": "OpenCV YuNet",
+        "license": "Apache 2.0",
+        "status": "Active & Verified"
+      },
+      {
+        "name": "OpenCV SFace",
+        "license": "Apache 2.0",
+        "status": "Active & Verified"
+      },
+      {
+        "name": "DWPose (ONNX)",
+        "license": "Apache 2.0",
+        "status": "Active & Verified"
+      },
+      {
+        "name": "Animagine XL 4.0",
+        "license": "CreativeML Open RAIL++-M",
+        "status": "Active & Verified"
+      },
+      {
+        "name": "HiDream-I1 Fast",
+        "license": "MIT",
+        "status": "Active & Verified"
+      },
+      {
+        "name": "Z-Image Turbo",
+        "license": "Apache 2.0",
+        "status": "Active & Verified"
+      }
+    ]
+  }
+}
