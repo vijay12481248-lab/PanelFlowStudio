@@ -683,7 +683,7 @@ export const WatermarkRemoverModal: React.FC<WatermarkRemoverModalProps> = ({
                 </span>
               ) : (
                 <span className="text-[#6375a6] text-[11px]">
-                  {videoSrc ? "Drag on video to select watermark region, or use presets below" : "Drop video to start"}
+                  {videoSrc ? "" : "Drop video to start"}
                 </span>
               )}
             </div>

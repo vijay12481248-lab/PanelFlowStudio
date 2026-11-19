@@ -87,17 +87,30 @@ def preview_watermark_removal(
             window_box, local_mask = inpainter.compute_window(w, h)
             window_patch = frame[window_box.y : window_box.y2, window_box.x : window_box.x2]
 
-            # Read a few surrounding frames for temporal flow
-            sample_patches = [window_patch]
-            for offset in [-3, -1, 1, 3]:
-                sample_idx = max(0, min(int(cap.get(cv2.CAP_PROP_FRAME_COUNT) - 1), target_frame_idx + offset))
-                cap.set(cv2.CAP_PROP_POS_FRAMES, sample_idx)
-                s_ret, s_frame = cap.read()
-                if s_ret:
-                    sample_patches.append(s_frame[window_box.y : window_box.y2, window_box.x : window_box.x2])
+            # Read a few surrounding frames in chronological order for temporal flow
+            offsets = [-3, -2, -1, 0, 1, 2, 3]
+            sample_patches = []
+            target_pos = 0
+            max_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 1)
+            for off in offsets:
+                sample_idx = max(0, min(max_frames - 1, target_frame_idx + off))
+                if off == 0:
+                    target_pos = len(sample_patches)
+                    sample_patches.append(window_patch)
+                else:
+                    cap.set(cv2.CAP_PROP_POS_FRAMES, sample_idx)
+                    s_ret, s_frame = cap.read()
+                    if s_ret:
+                        sample_patches.append(s_frame[window_box.y : window_box.y2, window_box.x : window_box.x2])
+                    else:
+                        sample_patches.append(window_patch.copy())
 
             cleaned_windows = inpainter.inpaint_window_sequence(sample_patches, local_mask)
-            cleaned_patch = cleaned_windows[0] if cleaned_windows else window_patch
+            cleaned_patch = (
+                cleaned_windows[target_pos]
+                if cleaned_windows and target_pos < len(cleaned_windows)
+                else window_patch
+            )
             cleaned_frame = inpainter.composite_patch(frame, cleaned_patch, window_box)
 
         # Encode preview frames to base64 JPEG

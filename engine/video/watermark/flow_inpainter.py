@@ -168,6 +168,75 @@ class FlowInpainter:
         cleaned_window[by1:by2, bx1:bx2] = np.clip(restored_patch, 0, 255).astype(np.uint8)
         return cleaned_window, backdrop_ratio, backdrop_mask
 
+    def extract_watermark_stroke_mask(
+        self,
+        window_patch: np.ndarray,
+        rel_box: WatermarkBoundingBox,
+    ) -> np.ndarray:
+        """
+        Extracts the precise watermark foreground strokes inside the bounding box,
+        preserving all authentic background pixels (cracks, textures, color transitions).
+        Uses Min-Axis Background Matching: a pixel is background if it matches
+        EITHER vertical OR horizontal surrounding background features.
+        """
+        h_win, w_win = window_patch.shape[:2]
+        bx1 = max(0, min(w_win - 1, rel_box.x))
+        by1 = max(0, min(h_win - 1, rel_box.y))
+        bx2 = max(bx1 + 1, min(w_win, rel_box.x2))
+        by2 = max(by1 + 1, min(h_win, rel_box.y2))
+        bw = bx2 - bx1
+        bh = by2 - by1
+
+        # Border margin around the box to sample ambient background
+        margin = min(6, by1, h_win - by2, bx1, w_win - bx2)
+        margin = max(2, margin)
+
+        top_b = window_patch[max(0, by1 - margin) : by1, bx1:bx2]
+        bot_b = window_patch[by2 : min(h_win, by2 + margin), bx1:bx2]
+        left_b = window_patch[by1:by2, max(0, bx1 - margin) : bx1]
+        right_b = window_patch[by1:by2, bx2 : min(w_win, bx2 + margin)]
+
+        top_p = np.median(top_b, axis=0, keepdims=True) if top_b.size > 0 else np.zeros((1, bw, 3))
+        bot_p = np.median(bot_b, axis=0, keepdims=True) if bot_b.size > 0 else top_p
+        left_p = np.median(left_b, axis=1, keepdims=True) if left_b.size > 0 else np.zeros((bh, 1, 3))
+        right_p = np.median(right_b, axis=1, keepdims=True) if right_b.size > 0 else left_p
+
+        y_w = np.linspace(0, 1, bh).reshape(-1, 1, 1)
+        x_w = np.linspace(0, 1, bw).reshape(1, -1, 1)
+        bg_v = (1.0 - y_w) * top_p + y_w * bot_p
+        bg_h = (1.0 - x_w) * left_p + x_w * right_p
+
+        patch = window_patch[by1:by2, bx1:bx2].astype(float)
+
+        dist_v = np.minimum(np.linalg.norm(patch - top_p, axis=-1), np.linalg.norm(patch - bot_p, axis=-1))
+        dist_v_interp = np.linalg.norm(patch - bg_v, axis=-1)
+        dist_v_min = np.minimum(dist_v, dist_v_interp)
+
+        dist_h = np.minimum(np.linalg.norm(patch - left_p, axis=-1), np.linalg.norm(patch - right_p, axis=-1))
+        dist_h_interp = np.linalg.norm(patch - bg_h, axis=-1)
+        dist_h_min = np.minimum(dist_h, dist_h_interp)
+
+        bg_dist = np.minimum(dist_v_min, dist_h_min)
+
+        gray_patch = cv2.cvtColor(window_patch[by1:by2, bx1:bx2], cv2.COLOR_BGR2GRAY)
+        top_gray = cv2.cvtColor(top_b, cv2.COLOR_BGR2GRAY) if top_b.size > 0 else np.zeros((1, bw), dtype=np.uint8)
+        bot_gray = cv2.cvtColor(bot_b, cv2.COLOR_BGR2GRAY) if bot_b.size > 0 else top_gray
+        gray_bg_v = (1.0 - y_w[:, :, 0]) * np.median(top_gray, axis=0, keepdims=True) + y_w[:, :, 0] * np.median(bot_gray, axis=0, keepdims=True)
+        lum_diff = np.abs(gray_patch.astype(float) - gray_bg_v)
+
+        stroke = ((bg_dist > 22) | (lum_diff > 25)).astype(np.uint8) * 255
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+        dil_stroke = cv2.dilate(stroke, kernel, iterations=2)
+
+        stroke_ratio = np.sum(dil_stroke > 0) / dil_stroke.size
+        local_stroke_mask = np.zeros((h_win, w_win), dtype=np.uint8)
+        if stroke_ratio < 0.005 or stroke_ratio > 0.90:
+            local_stroke_mask[by1:by2, bx1:bx2] = 255
+        else:
+            local_stroke_mask[by1:by2, bx1:bx2] = dil_stroke
+
+        return local_stroke_mask
+
     def restore_stationary_domain_features(
         self,
         cleaned_window: np.ndarray,
@@ -186,73 +255,36 @@ class FlowInpainter:
         bh = by2 - by1
 
         margin_y = min(2, by1, h_win - by2)
-        if margin_y < 1:
-            return cleaned_window
+        if margin_y >= 1:
+            top_clean = np.median(cleaned_window[by1 - margin_y : by1, bx1:bx2], axis=0).astype(float)
+            bot_clean = np.median(cleaned_window[by2 : by2 + margin_y, bx1:bx2], axis=0).astype(float)
+            col_diff = np.linalg.norm(top_clean - bot_clean, axis=-1)
+            is_vertical_pattern = np.mean(col_diff < 15) > 0.85
 
-        top_clean = np.median(cleaned_window[by1 - margin_y : by1, bx1:bx2], axis=0).astype(float)
-        bot_clean = np.median(cleaned_window[by2 : by2 + margin_y, bx1:bx2], axis=0).astype(float)
+            if is_vertical_pattern:
+                patch = cleaned_window[by1:by2, bx1:bx2].astype(float)
+                for x in range(bw):
+                    c_top = top_clean[x]
+                    c_bot = bot_clean[x]
+                    if np.linalg.norm(c_top - c_bot) < 25:
+                        expected_bg = (c_top + c_bot) / 2.0
+                        col_pixels = patch[:, x]
+                        diff_from_bg = np.linalg.norm(col_pixels - expected_bg, axis=-1)
+                        is_text = diff_from_bg > 15
+                        patch[is_text, x] = expected_bg
+                    else:
+                        for y in range(bh):
+                            curr_val = patch[y, x]
+                            d_top = np.linalg.norm(curr_val - c_top)
+                            d_bot = np.linalg.norm(curr_val - c_bot)
+                            if min(d_top, d_bot) > 22:
+                                patch[y, x] = c_top if d_top < d_bot else c_bot
+                out_win = cleaned_window.copy()
+                out_win[by1:by2, bx1:bx2] = np.clip(patch, 0, 255).astype(np.uint8)
+                return out_win
 
-        col_diff = np.linalg.norm(top_clean - bot_clean, axis=-1)
-        is_vertical_pattern = np.mean(col_diff < 15) > 0.85
-
-        if is_vertical_pattern:
-            # Specialized zero-blur column reconstruction for vertical test patterns & stripes
-            patch = cleaned_window[by1:by2, bx1:bx2].astype(float)
-            for x in range(bw):
-                c_top = top_clean[x]
-                c_bot = bot_clean[x]
-
-                if np.linalg.norm(c_top - c_bot) < 25:
-                    expected_bg = (c_top + c_bot) / 2.0
-                    col_pixels = patch[:, x]
-                    diff_from_bg = np.linalg.norm(col_pixels - expected_bg, axis=-1)
-                    is_text = diff_from_bg > 15
-                    patch[is_text, x] = expected_bg
-                else:
-                    for y in range(bh):
-                        curr_val = patch[y, x]
-                        d_top = np.linalg.norm(curr_val - c_top)
-                        d_bot = np.linalg.norm(curr_val - c_bot)
-                        if min(d_top, d_bot) > 22:
-                            patch[y, x] = c_top if d_top < d_bot else c_bot
-
-            out_win = cleaned_window.copy()
-            out_win[by1:by2, bx1:bx2] = np.clip(patch, 0, 255).astype(np.uint8)
-            return out_win
-
-        # Natural video / anime / textured surfaces:
-        # Segment watermark foreground inside box to preserve real background texture
-        pad = min(8, by1, h_win - by2, bx1, w_win - bx2)
-        pad = max(2, pad)
-        top_ctx = cleaned_window[max(0, by1 - pad) : by1, bx1:bx2]
-        bot_ctx = cleaned_window[by2 : min(h_win, by2 + pad), bx1:bx2]
-        left_ctx = cleaned_window[by1:by2, max(0, bx1 - pad) : bx1]
-        right_ctx = cleaned_window[by1:by2, bx2 : min(w_win, bx2 + pad)]
-
-        ctx_list = [s.reshape(-1, 3) for s in [top_ctx, bot_ctx, left_ctx, right_ctx] if s.size > 0]
-        all_ctx = np.vstack(ctx_list) if ctx_list else cleaned_window.reshape(-1, 3)
-        ctx_med = np.median(all_ctx, axis=0)
-
-        patch_u8 = cleaned_window[by1:by2, bx1:bx2]
-        patch_gray = cv2.cvtColor(patch_u8, cv2.COLOR_BGR2GRAY)
-        ambient_gray = float(np.mean(ctx_med))
-
-        dist = np.linalg.norm(patch_u8.astype(float) - ctx_med, axis=-1)
-        lum_diff = np.abs(patch_gray.astype(float) - ambient_gray)
-
-        stroke_mask = ((lum_diff > 25) | (dist > 35)).astype(np.uint8) * 255
-
-        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
-        dilated_stroke = cv2.dilate(stroke_mask, kernel, iterations=2)
-        stroke_ratio = np.sum(dilated_stroke > 0) / dilated_stroke.size
-
-        hole_mask = np.zeros((h_win, w_win), dtype=np.uint8)
-        if stroke_ratio > 0.85 or np.sum(dilated_stroke > 0) == 0:
-            hole_mask[by1:by2, bx1:bx2] = 255
-        else:
-            hole_mask[by1:by2, bx1:bx2] = dilated_stroke
-
-        # Navier-Stokes isophote continuation preserves surrounding texture, cracks, and contours
+        # Min-axis stroke isolation and Navier-Stokes fluid continuation:
+        hole_mask = self.extract_watermark_stroke_mask(cleaned_window, rel_box)
         return cv2.inpaint(cleaned_window, hole_mask, inpaintRadius=4, flags=cv2.INPAINT_NS)
 
     def refine_watermark_mask(
@@ -349,6 +381,8 @@ class FlowInpainter:
             return cleaned_frames
 
         # Moving scene: optical flow temporal propagation
+        stroke_mask = self.extract_watermark_stroke_mask(clean_windows[0], rel_box)
+
         for i in range(n):
             curr_frame = clean_windows[i].copy()
             if self.is_flat_black(curr_frame):
@@ -356,7 +390,7 @@ class FlowInpainter:
                 continue
 
             current_reconstructed = curr_frame.copy()
-            active_mask = local_mask.copy()
+            active_mask = stroke_mask.copy()
 
             neighbor_offsets: list[int] = []
             for r in range(1, temporal_radius + 1):
@@ -377,15 +411,16 @@ class FlowInpainter:
                     current_reconstructed,
                     donor_frame,
                     active_mask,
-                    local_mask,
+                    stroke_mask,
                 )
 
+            # Inpaint remaining stroke pixels along contours using Navier-Stokes (zero cruciform blur!)
             if np.count_nonzero(active_mask) > 0:
                 current_reconstructed = cv2.inpaint(
                     current_reconstructed,
                     active_mask,
                     inpaintRadius=3,
-                    flags=cv2.INPAINT_TELEA,
+                    flags=cv2.INPAINT_NS,
                 )
 
             cleaned_frames.append(current_reconstructed)
